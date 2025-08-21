@@ -60,28 +60,28 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
               <StatsCard
                 title="Total Consumers"
-                value={stats?.totalConsumers?.toLocaleString() || "0"}
+                value={(stats as any)?.totalConsumers?.toLocaleString() || "0"}
                 change="+12%"
                 changeType="positive"
                 icon="fas fa-users"
               />
               <StatsCard
                 title="Active Accounts"
-                value={stats?.activeAccounts?.toLocaleString() || "0"}
+                value={(stats as any)?.activeAccounts?.toLocaleString() || "0"}
                 change="+8%"
                 changeType="positive"
                 icon="fas fa-file-invoice-dollar"
               />
               <StatsCard
                 title="Total Balance"
-                value={`$${stats?.totalBalance?.toLocaleString() || "0"}`}
+                value={`$${(stats as any)?.totalBalance?.toLocaleString() || "0"}`}
                 change="-3%"
                 changeType="negative"
                 icon="fas fa-dollar-sign"
               />
               <StatsCard
                 title="Collection Rate"
-                value={`${stats?.collectionRate || 0}%`}
+                value={`${(stats as any)?.collectionRate || 0}%`}
                 change="+5%"
                 changeType="positive"
                 icon="fas fa-chart-line"
@@ -92,7 +92,7 @@ export default function AdminDashboard() {
 
         {/* Recent Accounts Table */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 mt-8">
-          <AccountsTable accounts={accounts || []} isLoading={accountsLoading} />
+          <AccountsTable accounts={(accounts as any) || []} isLoading={accountsLoading} />
         </div>
       </div>
 

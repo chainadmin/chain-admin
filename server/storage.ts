@@ -5,6 +5,9 @@ import {
   consumers,
   accounts,
   emailTemplates,
+  documents,
+  arrangementOptions,
+  tenantSettings,
   type User,
   type UpsertUser,
   type Tenant,
@@ -17,6 +20,12 @@ import {
   type InsertAccount,
   type EmailTemplate,
   type InsertEmailTemplate,
+  type Document,
+  type InsertDocument,
+  type ArrangementOption,
+  type InsertArrangementOption,
+  type TenantSettings,
+  type InsertTenantSettings,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc } from "drizzle-orm";
@@ -50,6 +59,24 @@ export interface IStorage {
   // Email template operations
   getEmailTemplatesByTenant(tenantId: string): Promise<EmailTemplate[]>;
   createEmailTemplate(template: InsertEmailTemplate): Promise<EmailTemplate>;
+  
+  // Document operations
+  getDocumentsByTenant(tenantId: string): Promise<Document[]>;
+  createDocument(document: InsertDocument): Promise<Document>;
+  deleteDocument(id: string): Promise<void>;
+  
+  // Arrangement options operations
+  getArrangementOptionsByTenant(tenantId: string): Promise<ArrangementOption[]>;
+  createArrangementOption(option: InsertArrangementOption): Promise<ArrangementOption>;
+  updateArrangementOption(id: string, option: Partial<InsertArrangementOption>): Promise<ArrangementOption>;
+  deleteArrangementOption(id: string): Promise<void>;
+  
+  // Tenant settings operations
+  getTenantSettings(tenantId: string): Promise<TenantSettings | undefined>;
+  upsertTenantSettings(settings: InsertTenantSettings): Promise<TenantSettings>;
+  
+  // Tenant setup (for fixing access issues)
+  setupTenantForUser(authId: string, tenantData: InsertTenant): Promise<{ tenant: Tenant; platformUser: PlatformUser }>;
   
   // Stats operations
   getTenantStats(tenantId: string): Promise<{
@@ -178,6 +205,86 @@ export class DatabaseStorage implements IStorage {
   async createEmailTemplate(template: InsertEmailTemplate): Promise<EmailTemplate> {
     const [newTemplate] = await db.insert(emailTemplates).values(template).returning();
     return newTemplate;
+  }
+
+  // Document operations
+  async getDocumentsByTenant(tenantId: string): Promise<Document[]> {
+    return await db.select().from(documents).where(eq(documents.tenantId, tenantId));
+  }
+
+  async createDocument(document: InsertDocument): Promise<Document> {
+    const [newDocument] = await db.insert(documents).values(document).returning();
+    return newDocument;
+  }
+
+  async deleteDocument(id: string): Promise<void> {
+    await db.delete(documents).where(eq(documents.id, id));
+  }
+
+  // Arrangement options operations
+  async getArrangementOptionsByTenant(tenantId: string): Promise<ArrangementOption[]> {
+    return await db.select().from(arrangementOptions).where(and(eq(arrangementOptions.tenantId, tenantId), eq(arrangementOptions.isActive, true)));
+  }
+
+  async createArrangementOption(option: InsertArrangementOption): Promise<ArrangementOption> {
+    const [newOption] = await db.insert(arrangementOptions).values(option).returning();
+    return newOption;
+  }
+
+  async updateArrangementOption(id: string, option: Partial<InsertArrangementOption>): Promise<ArrangementOption> {
+    const [updatedOption] = await db.update(arrangementOptions).set({
+      ...option,
+      updatedAt: new Date(),
+    }).where(eq(arrangementOptions.id, id)).returning();
+    return updatedOption;
+  }
+
+  async deleteArrangementOption(id: string): Promise<void> {
+    await db.delete(arrangementOptions).where(eq(arrangementOptions.id, id));
+  }
+
+  // Tenant settings operations
+  async getTenantSettings(tenantId: string): Promise<TenantSettings | undefined> {
+    const [settings] = await db.select().from(tenantSettings).where(eq(tenantSettings.tenantId, tenantId));
+    return settings;
+  }
+
+  async upsertTenantSettings(settings: InsertTenantSettings): Promise<TenantSettings> {
+    const [upsertedSettings] = await db
+      .insert(tenantSettings)
+      .values(settings)
+      .onConflictDoUpdate({
+        target: tenantSettings.tenantId,
+        set: {
+          ...settings,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return upsertedSettings;
+  }
+
+  // Tenant setup helper
+  async setupTenantForUser(authId: string, tenantData: InsertTenant): Promise<{ tenant: Tenant; platformUser: PlatformUser }> {
+    // Create tenant
+    const [tenant] = await db.insert(tenants).values(tenantData).returning();
+    
+    // Create platform user link
+    const [platformUser] = await db.insert(platformUsers).values({
+      authId,
+      tenantId: tenant.id,
+      role: 'owner', // Default role for tenant creator
+    }).returning();
+
+    // Create default tenant settings
+    await this.upsertTenantSettings({
+      tenantId: tenant.id,
+      showPaymentPlans: true,
+      showDocuments: true,
+      allowSettlementRequests: true,
+    });
+
+    return { tenant, platformUser };
   }
 
   // Stats operations

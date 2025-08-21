@@ -112,13 +112,67 @@ export const senderIdentities = pgTable("sender_identities", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Document uploads (per tenant) - for consumer access
+export const documents = pgTable("documents", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  fileName: text("file_name").notNull(),
+  fileUrl: text("file_url").notNull(),
+  fileSize: bigint("file_size", { mode: "number" }).notNull(),
+  mimeType: text("mime_type").notNull(),
+  isPublic: boolean("is_public").default(true), // Whether consumers can see this document
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Arrangement/Settlement options (per tenant)
+export const arrangementOptions = pgTable("arrangement_options", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(), // e.g., "Standard Payment Plan"
+  description: text("description"),
+  minBalance: bigint("min_balance", { mode: "number" }).notNull(), // In cents
+  maxBalance: bigint("max_balance", { mode: "number" }).notNull(), // In cents
+  monthlyPaymentMin: bigint("monthly_payment_min", { mode: "number" }).notNull(), // In cents
+  monthlyPaymentMax: bigint("monthly_payment_max", { mode: "number" }).notNull(), // In cents
+  maxTermMonths: bigint("max_term_months", { mode: "number" }).default(12),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Tenant privacy and display settings
+export const tenantSettings = pgTable("tenant_settings", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull().unique(),
+  privacyPolicy: text("privacy_policy"),
+  termsOfService: text("terms_of_service"),
+  contactEmail: text("contact_email"),
+  contactPhone: text("contact_phone"),
+  showPaymentPlans: boolean("show_payment_plans").default(true),
+  showDocuments: boolean("show_documents").default(true),
+  allowSettlementRequests: boolean("allow_settlement_requests").default(true),
+  customBranding: jsonb("custom_branding").default(sql`'{}'::jsonb`),
+  consumerPortalSettings: jsonb("consumer_portal_settings").default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Relations
-export const tenantsRelations = relations(tenants, ({ many }) => ({
+export const tenantsRelations = relations(tenants, ({ one, many }) => ({
   platformUsers: many(platformUsers),
   consumers: many(consumers),
   accounts: many(accounts),
   emailTemplates: many(emailTemplates),
   senderIdentities: many(senderIdentities),
+  documents: many(documents),
+  arrangementOptions: many(arrangementOptions),
+  settings: one(tenantSettings, {
+    fields: [tenants.id],
+    references: [tenantSettings.tenantId],
+  }),
 }));
 
 export const platformUsersRelations = relations(platformUsers, ({ one }) => ({
@@ -151,12 +205,37 @@ export const accountsRelations = relations(accounts, ({ one }) => ({
   }),
 }));
 
+// Relations for new tables
+export const documentsRelations = relations(documents, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [documents.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const arrangementOptionsRelations = relations(arrangementOptions, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [arrangementOptions.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const tenantSettingsRelations = relations(tenantSettings, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [tenantSettings.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
 // Insert schemas
 export const insertTenantSchema = createInsertSchema(tenants).omit({ id: true, createdAt: true });
 export const insertPlatformUserSchema = createInsertSchema(platformUsers).omit({ id: true, createdAt: true });
 export const insertConsumerSchema = createInsertSchema(consumers).omit({ id: true, createdAt: true });
 export const insertAccountSchema = createInsertSchema(accounts).omit({ id: true, createdAt: true });
 export const insertEmailTemplateSchema = createInsertSchema(emailTemplates).omit({ id: true, createdAt: true });
+export const insertDocumentSchema = createInsertSchema(documents).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertArrangementOptionSchema = createInsertSchema(arrangementOptions).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertTenantSettingsSchema = createInsertSchema(tenantSettings).omit({ id: true, createdAt: true, updatedAt: true });
 
 // Types
 export type UpsertUser = typeof users.$inferInsert;
@@ -171,3 +250,9 @@ export type Account = typeof accounts.$inferSelect;
 export type InsertAccount = z.infer<typeof insertAccountSchema>;
 export type EmailTemplate = typeof emailTemplates.$inferSelect;
 export type InsertEmailTemplate = z.infer<typeof insertEmailTemplateSchema>;
+export type Document = typeof documents.$inferSelect;
+export type InsertDocument = z.infer<typeof insertDocumentSchema>;
+export type ArrangementOption = typeof arrangementOptions.$inferSelect;
+export type InsertArrangementOption = z.infer<typeof insertArrangementOptionSchema>;
+export type TenantSettings = typeof tenantSettings.$inferSelect;
+export type InsertTenantSettings = z.infer<typeof insertTenantSettingsSchema>;

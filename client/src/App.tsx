@@ -10,10 +10,15 @@ import AdminDashboard from "@/pages/admin-dashboard";
 import Consumers from "@/pages/consumers";
 import Accounts from "@/pages/accounts";
 import ImportData from "@/pages/import-data";
+import Settings from "@/pages/settings";
 import ConsumerPortal from "@/pages/consumer-portal";
+import TenantSetup from "@/components/tenant-setup";
 
 function Router() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
+
+  // Check if user needs tenant setup
+  const needsTenantSetup = isAuthenticated && !(user as any)?.platformUser?.tenantId;
 
   return (
     <Switch>
@@ -22,12 +27,15 @@ function Router() {
           <Route path="/" component={Landing} />
           <Route path="/consumer/:tenantSlug/:email" component={ConsumerPortal} />
         </>
+      ) : needsTenantSetup ? (
+        <Route path="*" component={TenantSetup} />
       ) : (
         <>
           <Route path="/" component={AdminDashboard} />
           <Route path="/consumers" component={Consumers} />
           <Route path="/accounts" component={Accounts} />
           <Route path="/import" component={ImportData} />
+          <Route path="/settings" component={Settings} />
         </>
       )}
       <Route component={NotFound} />

@@ -10,6 +10,15 @@ export default function ConsumerPortal() {
     queryKey: [`/api/consumer/accounts/${email}?tenantSlug=${tenantSlug}`],
   });
 
+  const { data: documents } = useQuery({
+    queryKey: [`/api/consumer/documents/${email}?tenantSlug=${tenantSlug}`],
+  });
+
+  const { data: arrangements } = useQuery({
+    queryKey: [`/api/consumer/arrangements/${email}?tenantSlug=${tenantSlug}&balance=${(data as any)?.accounts?.reduce((sum: number, acc: any) => sum + (acc.balanceCents || 0), 0) || 0}`],
+    enabled: !!(data as any)?.accounts,
+  });
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -37,7 +46,7 @@ export default function ConsumerPortal() {
     );
   }
 
-  const { consumer, accounts } = data || {};
+  const { consumer, accounts } = (data as any) || {};
 
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
@@ -156,6 +165,58 @@ export default function ConsumerPortal() {
             </div>
           )}
         </div>
+
+        {/* Documents Section */}
+        {documents && (documents as any).length > 0 && (
+          <div className="max-w-2xl mx-auto mt-8">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Available Documents</h2>
+            <div className="space-y-3">
+              {(documents as any).map((document: any) => (
+                <div key={document.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <i className="fas fa-file-alt text-blue-500 text-lg"></i>
+                      <div>
+                        <h3 className="font-medium text-gray-900">{document.title}</h3>
+                        <p className="text-sm text-gray-500">{document.description}</p>
+                      </div>
+                    </div>
+                    <Button variant="outline" size="sm">
+                      <i className="fas fa-download mr-2"></i>
+                      Download
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Payment Arrangements Section */}
+        {arrangements && (arrangements as any).length > 0 && (
+          <div className="max-w-2xl mx-auto mt-8">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Available Payment Plans</h2>
+            <div className="space-y-3">
+              {(arrangements as any).map((arrangement: any) => (
+                <div key={arrangement.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-medium text-gray-900">{arrangement.name}</h3>
+                      <p className="text-sm text-gray-500 mt-1">{arrangement.description}</p>
+                      <div className="text-sm text-blue-600 mt-2">
+                        {formatCurrency(arrangement.monthlyPaymentMin)} - {formatCurrency(arrangement.monthlyPaymentMax)} per month
+                        <span className="text-gray-500 ml-2">• Up to {arrangement.maxTermMonths} months</span>
+                      </div>
+                    </div>
+                    <Button className="bg-blue-600 hover:bg-blue-700">
+                      Select Plan
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Footer */}

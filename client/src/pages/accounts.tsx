@@ -18,7 +18,7 @@ export default function Accounts() {
         </div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 mt-8">
-          <AccountsTable accounts={accounts || []} isLoading={isLoading} />
+          <AccountsTable accounts={(accounts as any) || []} isLoading={isLoading} />
         </div>
       </div>
     </AdminLayout>

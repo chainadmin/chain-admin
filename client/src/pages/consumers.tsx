@@ -25,13 +25,13 @@ export default function Consumers() {
             <CardContent>
               {isLoading ? (
                 <div className="text-center py-8">Loading consumers...</div>
-              ) : consumers?.length === 0 ? (
+              ) : (consumers as any)?.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   No consumers found. Import account data to get started.
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {consumers?.map((consumer: any) => (
+                  {(consumers as any)?.map((consumer: any) => (
                     <div key={consumer.id} className="border-b pb-4">
                       <div className="flex items-center">
                         <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">

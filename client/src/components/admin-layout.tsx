@@ -20,6 +20,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     { name: "Consumers", href: "/consumers", icon: "fas fa-users" },
     { name: "Accounts", href: "/accounts", icon: "fas fa-file-invoice-dollar" },
     { name: "Import Data", href: "/import", icon: "fas fa-upload" },
+    { name: "Settings", href: "/settings", icon: "fas fa-cog" },
   ];
 
   const isActiveRoute = (href: string) => {
@@ -42,10 +43,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 </div>
                 <div className="ml-3">
                   <div className="text-lg font-semibold text-gray-900">
-                    {userData?.platformUser?.tenant?.name || "Chain"}
+                    {(userData as any)?.platformUser?.tenant?.name || "Chain"}
                   </div>
                   <div className="text-xs text-gray-500">
-                    {userData?.platformUser?.tenant?.slug || "agency-pro"}
+                    {(userData as any)?.platformUser?.tenant?.slug || "agency-pro"}
                   </div>
                 </div>
               </div>
@@ -77,18 +78,18 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 <div>
                   <img
                     className="inline-block h-9 w-9 rounded-full"
-                    src={user?.profileImageUrl || "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"}
+                    src={(user as any)?.profileImageUrl || "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"}
                     alt="User avatar"
                   />
                 </div>
                 <div className="ml-3">
                   <p className="text-sm font-medium text-gray-700">
-                    {user?.firstName || user?.lastName 
-                      ? `${user.firstName} ${user.lastName}` 
-                      : user?.email}
+                    {(user as any)?.firstName || (user as any)?.lastName 
+                      ? `${(user as any).firstName} ${(user as any).lastName}` 
+                      : (user as any)?.email}
                   </p>
                   <p className="text-xs font-medium text-gray-500">
-                    {userData?.platformUser?.role?.replace('_', ' ') || "User"}
+                    {(userData as any)?.platformUser?.role?.replace('_', ' ') || "User"}
                   </p>
                 </div>
               </div>
