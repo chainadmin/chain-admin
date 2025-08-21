@@ -46,7 +46,7 @@ export default function ConsumerPortal() {
     );
   }
 
-  const { consumer, accounts } = (data as any) || {};
+  const { consumer, accounts, tenantSettings } = (data as any) || {};
 
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
@@ -83,10 +83,18 @@ export default function ConsumerPortal() {
       <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-6">
         <div className="max-w-2xl mx-auto">
           <div className="text-center">
-            <div className="w-16 h-16 bg-white bg-opacity-20 rounded-full mx-auto flex items-center justify-center">
-              <span className="text-white font-semibold text-lg">
-                {getInitials(consumer?.firstName, consumer?.lastName)}
-              </span>
+            <div className="w-16 h-16 bg-white bg-opacity-20 rounded-full mx-auto flex items-center justify-center overflow-hidden">
+              {(tenantSettings as any)?.customBranding?.logoUrl ? (
+                <img 
+                  src={(tenantSettings as any).customBranding.logoUrl} 
+                  alt="Company Logo" 
+                  className="w-full h-full object-contain"
+                />
+              ) : (
+                <span className="text-white font-semibold text-lg">
+                  {getInitials(consumer?.firstName, consumer?.lastName)}
+                </span>
+              )}
             </div>
             <h1 className="text-xl font-semibold text-white mt-4">Your Accounts</h1>
             <p className="text-white mt-1">

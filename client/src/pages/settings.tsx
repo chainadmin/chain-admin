@@ -82,6 +82,28 @@ export default function Settings() {
     },
   });
 
+  const uploadLogoMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append('logo', file);
+      return await apiRequest("POST", "/api/upload/logo", formData);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Logo Updated",
+        description: "Your logo has been uploaded successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Upload Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const createDocumentMutation = useMutation({
     mutationFn: async (data: any) => {
       await apiRequest("POST", "/api/documents", data);
@@ -255,6 +277,55 @@ export default function Settings() {
                   <CardTitle>Consumer Portal Settings</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
+                  {/* Logo Upload Section */}
+                  <div className="space-y-4 border-b pb-6">
+                    <div>
+                      <Label className="text-base font-medium">Company Logo</Label>
+                      <p className="text-sm text-gray-500">
+                        Upload your company logo to display on the consumer portal
+                      </p>
+                    </div>
+                    
+                    <div className="flex items-center space-x-4">
+                      {/* Current Logo Display */}
+                      {(settings as any)?.customBranding?.logoUrl && (
+                        <div className="flex-shrink-0">
+                          <img 
+                            src={(settings as any).customBranding.logoUrl} 
+                            alt="Company Logo" 
+                            className="h-16 w-16 object-contain border rounded-md bg-white"
+                          />
+                        </div>
+                      )}
+                      
+                      {/* Upload Button */}
+                      <div className="flex-1">
+                        <Input
+                          type="file"
+                          accept="image/*"
+                          className="mb-2"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              uploadLogoMutation.mutate(file);
+                            }
+                          }}
+                          disabled={uploadLogoMutation.isPending}
+                        />
+                        <p className="text-xs text-gray-500">
+                          Supported formats: PNG, JPG, GIF. Maximum size: 5MB. Recommended: 200x200px
+                        </p>
+                      </div>
+                    </div>
+                    
+                    {uploadLogoMutation.isPending && (
+                      <div className="text-sm text-blue-600 flex items-center">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                        Uploading logo...
+                      </div>
+                    )}
+                  </div>
+
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
                       <Label>Show Payment Plans</Label>

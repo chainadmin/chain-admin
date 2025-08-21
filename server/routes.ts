@@ -4,6 +4,10 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { insertConsumerSchema, insertAccountSchema } from "@shared/schema";
 import { z } from "zod";
+import multer from "multer";
+import path from "path";
+import { nanoid } from "nanoid";
+import express from "express";
 
 const csvUploadSchema = z.object({
   consumers: z.array(z.object({
@@ -23,9 +27,39 @@ const csvUploadSchema = z.object({
   })),
 });
 
+// Multer configuration for image uploads
+const storage_multer = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'public/uploads/');
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = nanoid();
+    const fileExtension = path.extname(file.originalname);
+    cb(null, `logo-${uniqueSuffix}${fileExtension}`);
+  }
+});
+
+const upload = multer({ 
+  storage: storage_multer,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    // Only allow image files
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(null, false);
+    }
+  }
+});
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
   await setupAuth(app);
+
+  // Serve static files from uploads directory
+  app.use('/uploads', express.static('public/uploads'));
 
   // Auth routes
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
@@ -117,7 +151,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const accounts = await storage.getAccountsByConsumer(consumer.id);
-      res.json({ consumer, accounts });
+      const tenantSettings = await storage.getTenantSettings(tenant.id);
+      res.json({ consumer, accounts, tenantSettings });
     } catch (error) {
       console.error("Error fetching consumer accounts:", error);
       res.status(500).json({ message: "Failed to fetch consumer accounts" });
@@ -386,6 +421,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating settings:", error);
       res.status(500).json({ message: "Failed to update settings" });
+    }
+  });
+
+  // Logo upload route
+  app.post('/api/upload/logo', isAuthenticated, upload.single('logo'), async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+
+      const logoUrl = `/uploads/${req.file.filename}`;
+      
+      // Get current settings
+      const currentSettings = await storage.getTenantSettings(platformUser.tenantId);
+      
+      // Update custom branding with logo URL
+      const customBranding = (currentSettings?.customBranding as any) || {};
+      customBranding.logoUrl = logoUrl;
+      
+      // Update tenant settings
+      const updatedSettings = await storage.upsertTenantSettings({
+        ...currentSettings,
+        tenantId: platformUser.tenantId,
+        customBranding,
+      });
+      
+      res.json({ 
+        message: "Logo uploaded successfully",
+        logoUrl,
+        settings: updatedSettings
+      });
+    } catch (error) {
+      console.error("Error uploading logo:", error);
+      res.status(500).json({ message: "Failed to upload logo" });
     }
   });
 
