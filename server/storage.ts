@@ -250,15 +250,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertTenantSettings(settings: InsertTenantSettings): Promise<TenantSettings> {
+    const { tenantId, ...settingsData } = settings;
     const [upsertedSettings] = await db
       .insert(tenantSettings)
       .values(settings)
       .onConflictDoUpdate({
         target: tenantSettings.tenantId,
-        set: {
-          ...settings,
-          updatedAt: new Date(),
-        },
+        set: settingsData,
       })
       .returning();
     return upsertedSettings;

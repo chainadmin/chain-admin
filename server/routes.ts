@@ -11,6 +11,7 @@ const csvUploadSchema = z.object({
     lastName: z.string(),
     email: z.string().email(),
     phone: z.string().optional(),
+    additionalData: z.record(z.any()).optional(),
   })),
   accounts: z.array(z.object({
     accountNumber: z.string(),
@@ -18,6 +19,7 @@ const csvUploadSchema = z.object({
     balanceCents: z.number(),
     dueDate: z.string().optional(),
     consumerEmail: z.string().email(),
+    additionalData: z.record(z.any()).optional(),
   })),
 });
 
@@ -177,6 +179,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           balanceCents: accountData.balanceCents,
           dueDate: accountData.dueDate || null,
           status: 'active',
+          additionalData: accountData.additionalData || {},
         };
       });
 

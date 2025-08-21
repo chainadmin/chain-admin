@@ -64,6 +64,7 @@ export const consumers = pgTable("consumers", {
   email: text("email"),
   phone: text("phone"),
   contactPrefs: jsonb("contact_prefs").default(sql`'{}'::jsonb`),
+  additionalData: jsonb("additional_data").default(sql`'{}'::jsonb`), // Store custom CSV columns
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -77,6 +78,7 @@ export const accounts = pgTable("accounts", {
   balanceCents: bigint("balance_cents", { mode: "number" }).notNull(),
   status: text("status").default("active"),
   dueDate: date("due_date"),
+  additionalData: jsonb("additional_data").default(sql`'{}'::jsonb`), // Store custom CSV columns
   createdAt: timestamp("created_at").defaultNow(),
 });
 

@@ -70,6 +70,10 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
         const consumers = new Map();
         const accounts = [];
 
+        // Define standard column mappings
+        const standardConsumerFields = ['consumer_first_name', 'first_name', 'consumer_last_name', 'last_name', 'consumer_email', 'email', 'consumer_phone', 'phone'];
+        const standardAccountFields = ['account_number', 'account', 'creditor', 'balance', 'due_date'];
+        
         for (let i = 1; i < lines.length; i++) {
           const values = lines[i].split(',').map(v => v.trim());
           const row: any = {};
@@ -81,22 +85,44 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
           // Extract consumer data
           const consumerKey = row.consumer_email || row.email;
           if (consumerKey && !consumers.has(consumerKey)) {
+            // Extract additional consumer data (any non-standard columns)
+            const additionalConsumerData: any = {};
+            headers.forEach(header => {
+              if (!standardConsumerFields.includes(header) && 
+                  !standardAccountFields.includes(header) && 
+                  row[header] && row[header] !== '') {
+                additionalConsumerData[header] = row[header];
+              }
+            });
+
             consumers.set(consumerKey, {
               firstName: row.consumer_first_name || row.first_name || '',
               lastName: row.consumer_last_name || row.last_name || '',
               email: consumerKey,
               phone: row.consumer_phone || row.phone || '',
+              additionalData: additionalConsumerData,
             });
           }
 
           // Extract account data
           if (row.creditor && row.balance) {
+            // Extract additional account data (any non-standard columns)
+            const additionalAccountData: any = {};
+            headers.forEach(header => {
+              if (!standardConsumerFields.includes(header) && 
+                  !standardAccountFields.includes(header) && 
+                  row[header] && row[header] !== '') {
+                additionalAccountData[header] = row[header];
+              }
+            });
+
             accounts.push({
               accountNumber: row.account_number || row.account || '',
               creditor: row.creditor,
               balanceCents: Math.round(parseFloat(row.balance.replace(/[^0-9.-]/g, '')) * 100),
               dueDate: row.due_date || '',
               consumerEmail: consumerKey,
+              additionalData: additionalAccountData,
             });
           }
         }
@@ -107,9 +133,16 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
         };
 
         setParsedData(data);
+        
+        // Count additional columns
+        const additionalColumns = headers.filter(h => 
+          !standardConsumerFields.includes(h) && !standardAccountFields.includes(h)
+        );
+        
         setValidationResults({
           consumersCount: data.consumers.length,
           accountsCount: data.accounts.length,
+          additionalColumns: additionalColumns,
           isValid: data.consumers.length > 0 && data.accounts.length > 0,
         });
       } catch (error) {
@@ -148,7 +181,7 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
         <div className="space-y-4">
           <p className="text-sm text-gray-500">
             Upload a CSV file containing account information. Make sure your file includes the required columns: 
-            consumer_first_name, consumer_last_name, consumer_email, creditor, balance.
+            consumer_first_name, consumer_last_name, consumer_email, creditor, balance. Additional custom columns will be automatically captured.
           </p>
           
           {/* File Upload Area */}
@@ -226,6 +259,11 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
                     <p>
                       Ready to import {validationResults.accountsCount} accounts for {validationResults.consumersCount} consumers
                     </p>
+                    {validationResults.additionalColumns && validationResults.additionalColumns.length > 0 && (
+                      <p className="mt-1">
+                        Additional fields detected: {validationResults.additionalColumns.join(', ')}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
