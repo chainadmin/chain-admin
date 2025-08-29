@@ -207,6 +207,11 @@ export class DatabaseStorage implements IStorage {
     return newTemplate;
   }
 
+  async deleteEmailTemplate(id: string, tenantId: string): Promise<void> {
+    await db.delete(emailTemplates)
+      .where(and(eq(emailTemplates.id, id), eq(emailTemplates.tenantId, tenantId)));
+  }
+
   // Document operations
   async getDocumentsByTenant(tenantId: string): Promise<Document[]> {
     return await db.select().from(documents).where(eq(documents.tenantId, tenantId));

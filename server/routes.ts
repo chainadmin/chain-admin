@@ -249,6 +249,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post('/api/email-templates', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { name, subject, html } = req.body;
+      
+      if (!name || !subject || !html) {
+        return res.status(400).json({ message: "Name, subject, and HTML content are required" });
+      }
+
+      const template = await storage.createEmailTemplate({
+        tenantId: platformUser.tenantId,
+        name,
+        subject,
+        html,
+        status: 'draft',
+      });
+      
+      res.json(template);
+    } catch (error) {
+      console.error("Error creating email template:", error);
+      res.status(500).json({ message: "Failed to create email template" });
+    }
+  });
+
+  app.delete('/api/email-templates/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { id } = req.params;
+      await storage.deleteEmailTemplate(id, platformUser.tenantId);
+      
+      res.json({ message: "Email template deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting email template:", error);
+      res.status(500).json({ message: "Failed to delete email template" });
+    }
+  });
+
   // Tenant setup route (for fixing access issues)
   app.post('/api/setup-tenant', isAuthenticated, async (req: any, res) => {
     try {
