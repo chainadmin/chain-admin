@@ -13,6 +13,8 @@ import {
   consumerNotifications,
   callbackRequests,
   payments,
+  subscriptions,
+  invoices,
   type User,
   type UpsertUser,
   type Tenant,
@@ -41,6 +43,10 @@ import {
   type InsertCallbackRequest,
   type Payment,
   type InsertPayment,
+  type Subscription,
+  type InsertSubscription,
+  type Invoice,
+  type InsertInvoice,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc } from "drizzle-orm";
@@ -126,6 +132,21 @@ export interface IStorage {
     successfulPayments: number;
     failedPayments: number;
     pendingPayments: number;
+  }>;
+  
+  // Billing operations
+  getSubscriptionByTenant(tenantId: string): Promise<Subscription | undefined>;
+  createSubscription(subscription: InsertSubscription): Promise<Subscription>;
+  updateSubscription(id: string, updates: Partial<Subscription>): Promise<Subscription>;
+  getInvoicesByTenant(tenantId: string): Promise<Invoice[]>;
+  createInvoice(invoice: InsertInvoice): Promise<Invoice>;
+  getCurrentInvoice(tenantId: string): Promise<Invoice | undefined>;
+  getBillingStats(tenantId: string): Promise<{
+    activeConsumers: number;
+    monthlyBase: number;
+    usageCharges: number;
+    totalBill: number;
+    nextBillDate: string;
   }>;
   
   // Company management operations
@@ -565,6 +586,78 @@ export class DatabaseStorage implements IStorage {
       successfulPayments,
       failedPayments,
       pendingPayments,
+    };
+  }
+
+  // Billing operations
+  async getSubscriptionByTenant(tenantId: string): Promise<Subscription | undefined> {
+    const [subscription] = await db.select().from(subscriptions).where(eq(subscriptions.tenantId, tenantId));
+    return subscription;
+  }
+
+  async createSubscription(subscription: InsertSubscription): Promise<Subscription> {
+    const [newSubscription] = await db.insert(subscriptions).values(subscription).returning();
+    return newSubscription;
+  }
+
+  async updateSubscription(id: string, updates: Partial<Subscription>): Promise<Subscription> {
+    const [updatedSubscription] = await db.update(subscriptions).set(updates).where(eq(subscriptions.id, id)).returning();
+    return updatedSubscription;
+  }
+
+  async getInvoicesByTenant(tenantId: string): Promise<Invoice[]> {
+    return await db.select().from(invoices).where(eq(invoices.tenantId, tenantId)).orderBy(desc(invoices.createdAt));
+  }
+
+  async createInvoice(invoice: InsertInvoice): Promise<Invoice> {
+    const [newInvoice] = await db.insert(invoices).values(invoice).returning();
+    return newInvoice;
+  }
+
+  async getCurrentInvoice(tenantId: string): Promise<Invoice | undefined> {
+    const now = new Date();
+    const [currentInvoice] = await db
+      .select()
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.tenantId, tenantId),
+          eq(invoices.status, 'pending')
+        )
+      )
+      .orderBy(desc(invoices.createdAt))
+      .limit(1);
+    return currentInvoice;
+  }
+
+  async getBillingStats(tenantId: string): Promise<{
+    activeConsumers: number;
+    monthlyBase: number;
+    usageCharges: number;
+    totalBill: number;
+    nextBillDate: string;
+  }> {
+    // Get active consumers count
+    const activeConsumersResult = await db.select().from(consumers).where(eq(consumers.tenantId, tenantId));
+    const activeConsumers = activeConsumersResult.length;
+
+    // Get subscription details
+    const subscription = await this.getSubscriptionByTenant(tenantId);
+    const monthlyBase = subscription ? subscription.monthlyBaseCents / 100 : 0;
+    const usageCharges = subscription ? (activeConsumers * subscription.pricePerConsumerCents) / 100 : 0;
+    const totalBill = monthlyBase + usageCharges;
+
+    // Calculate next bill date (end of current billing period)
+    const nextBillDate = subscription 
+      ? new Date(subscription.currentPeriodEnd).toLocaleDateString()
+      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString(); // Default to 30 days from now
+
+    return {
+      activeConsumers,
+      monthlyBase,
+      usageCharges,
+      totalBill,
+      nextBillDate,
     };
   }
 

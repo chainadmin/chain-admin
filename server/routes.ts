@@ -1148,6 +1148,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Billing endpoints
+  app.get('/api/billing/subscription', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const subscription = await storage.getSubscriptionByTenant(platformUser.tenantId);
+      res.json(subscription);
+    } catch (error) {
+      console.error("Error fetching subscription:", error);
+      res.status(500).json({ message: "Failed to fetch subscription" });
+    }
+  });
+
+  app.get('/api/billing/invoices', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const invoices = await storage.getInvoicesByTenant(platformUser.tenantId);
+      res.json(invoices);
+    } catch (error) {
+      console.error("Error fetching invoices:", error);
+      res.status(500).json({ message: "Failed to fetch invoices" });
+    }
+  });
+
+  app.get('/api/billing/stats', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const stats = await storage.getBillingStats(platformUser.tenantId);
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching billing stats:", error);
+      res.status(500).json({ message: "Failed to fetch billing stats" });
+    }
+  });
+
+  app.get('/api/billing/current-invoice', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const currentInvoice = await storage.getCurrentInvoice(platformUser.tenantId);
+      res.json(currentInvoice);
+    } catch (error) {
+      console.error("Error fetching current invoice:", error);
+      res.status(500).json({ message: "Failed to fetch current invoice" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

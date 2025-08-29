@@ -260,6 +260,39 @@ export const payments = pgTable("payments", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Tenant subscriptions (for billing agencies)
+export const subscriptions = pgTable("subscriptions", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull().unique(),
+  plan: text("plan").notNull(), // "starter", "professional", "enterprise"
+  status: text("status").default("active"), // "active", "cancelled", "suspended", "past_due"
+  pricePerConsumerCents: bigint("price_per_consumer_cents", { mode: "number" }).notNull(),
+  monthlyBaseCents: bigint("monthly_base_cents", { mode: "number" }).notNull(),
+  billingEmail: text("billing_email"),
+  currentPeriodStart: timestamp("current_period_start").notNull(),
+  currentPeriodEnd: timestamp("current_period_end").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Tenant invoices (for billing agencies)
+export const invoices = pgTable("invoices", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  subscriptionId: uuid("subscription_id").references(() => subscriptions.id, { onDelete: "cascade" }).notNull(),
+  invoiceNumber: text("invoice_number").notNull().unique(),
+  status: text("status").default("pending"), // "pending", "paid", "overdue", "cancelled"
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  baseAmountCents: bigint("base_amount_cents", { mode: "number" }).notNull(),
+  perConsumerCents: bigint("per_consumer_cents", { mode: "number" }).notNull(),
+  consumerCount: bigint("consumer_count", { mode: "number" }).notNull(),
+  totalAmountCents: bigint("total_amount_cents", { mode: "number" }).notNull(),
+  dueDate: timestamp("due_date").notNull(),
+  paidAt: timestamp("paid_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Relations
 export const tenantsRelations = relations(tenants, ({ one, many }) => ({
   platformUsers: many(platformUsers),
@@ -274,6 +307,11 @@ export const tenantsRelations = relations(tenants, ({ one, many }) => ({
     fields: [tenants.id],
     references: [tenantSettings.tenantId],
   }),
+  subscription: one(subscriptions, {
+    fields: [tenants.id],
+    references: [subscriptions.tenantId],
+  }),
+  invoices: many(invoices),
 }));
 
 export const platformUsersRelations = relations(platformUsers, ({ one }) => ({
@@ -395,6 +433,25 @@ export const paymentsRelations = relations(payments, ({ one }) => ({
   }),
 }));
 
+export const subscriptionsRelations = relations(subscriptions, ({ one, many }) => ({
+  tenant: one(tenants, {
+    fields: [subscriptions.tenantId],
+    references: [tenants.id],
+  }),
+  invoices: many(invoices),
+}));
+
+export const invoicesRelations = relations(invoices, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [invoices.tenantId],
+    references: [tenants.id],
+  }),
+  subscription: one(subscriptions, {
+    fields: [invoices.subscriptionId],
+    references: [subscriptions.id],
+  }),
+}));
+
 // Insert schemas
 export const insertTenantSchema = createInsertSchema(tenants).omit({ id: true, createdAt: true });
 export const insertPlatformUserSchema = createInsertSchema(platformUsers).omit({ id: true, createdAt: true });
@@ -409,6 +466,8 @@ export const insertEmailTrackingSchema = createInsertSchema(emailTracking).omit(
 export const insertConsumerNotificationSchema = createInsertSchema(consumerNotifications).omit({ id: true, createdAt: true });
 export const insertCallbackRequestSchema = createInsertSchema(callbackRequests).omit({ id: true, createdAt: true });
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true });
+export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true, createdAt: true });
 
 // Types
 export type UpsertUser = typeof users.$inferInsert;
@@ -439,3 +498,7 @@ export type CallbackRequest = typeof callbackRequests.$inferSelect;
 export type InsertCallbackRequest = z.infer<typeof insertCallbackRequestSchema>;
 export type Payment = typeof payments.$inferSelect;
 export type InsertPayment = z.infer<typeof insertPaymentSchema>;
+export type Subscription = typeof subscriptions.$inferSelect;
+export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
+export type Invoice = typeof invoices.$inferSelect;
+export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
