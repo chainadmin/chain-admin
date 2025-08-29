@@ -337,13 +337,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (targetGroup === "with-balance") {
         const accounts = await storage.getAccountsByTenant(platformUser.tenantId);
-        const consumerIds = accounts.filter(acc => (acc.balance || 0) > 0).map(acc => acc.consumerId);
+        const consumerIds = accounts.filter(acc => (acc.balanceCents || 0) > 0).map(acc => acc.consumerId);
         targetedConsumers = consumers.filter(c => consumerIds.includes(c.id));
       } else if (targetGroup === "overdue") {
         const accounts = await storage.getAccountsByTenant(platformUser.tenantId);
         const now = new Date();
         const consumerIds = accounts.filter(acc => 
-          (acc.balance || 0) > 0 && 
+          (acc.balanceCents || 0) > 0 && 
           acc.dueDate && 
           new Date(acc.dueDate) < now
         ).map(acc => acc.consumerId);
@@ -490,7 +490,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Verify date of birth (simple verification)
       const providedDOB = new Date(dateOfBirth);
-      const storedDOB = new Date(consumer.dateOfBirth);
+      const storedDOB = consumer.dateOfBirth ? new Date(consumer.dateOfBirth) : null;
+      
+      if (!storedDOB) {
+        return res.status(401).json({ message: "Date of birth verification failed" });
+      }
       
       if (providedDOB.getTime() !== storedDOB.getTime()) {
         return res.status(401).json({ message: "Date of birth verification failed" });
@@ -836,11 +840,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       customBranding.logoUrl = logoUrl;
       
       // Update tenant settings
-      const updatedSettings = await storage.upsertTenantSettings({
-        ...currentSettings,
+      const settingsData = {
         tenantId: platformUser.tenantId,
-        customBranding,
-      });
+        customBranding: customBranding as any,
+        ...(currentSettings ? {
+          privacyPolicy: currentSettings.privacyPolicy,
+          termsOfService: currentSettings.termsOfService,
+          contactEmail: currentSettings.contactEmail,
+          contactPhone: currentSettings.contactPhone,
+          showPaymentPlans: currentSettings.showPaymentPlans,
+          showDocuments: currentSettings.showDocuments,
+          allowSettlementRequests: currentSettings.allowSettlementRequests,
+          consumerPortalSettings: currentSettings.consumerPortalSettings as any,
+        } : {})
+      };
+      
+      const updatedSettings = await storage.upsertTenantSettings(settingsData);
       
       res.json({ 
         message: "Logo uploaded successfully",
@@ -1071,7 +1086,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: processorResponse.success ? 'completed' : 'failed',
         transactionId: processorResponse.transactionId,
         processorResponse: JSON.stringify(processorResponse),
-        processedAt: new Date().toISOString(),
+        processedAt: new Date(),
         notes: `Online payment - ${cardName} ending in ${cardNumber.slice(-4)}`,
       });
 
