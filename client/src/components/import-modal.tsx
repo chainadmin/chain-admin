@@ -195,6 +195,9 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
             <i className="fas fa-upload text-blue-600 mr-3"></i>
             Import Account Data
           </DialogTitle>
+          <p className="text-sm text-gray-500">
+            Upload a CSV file containing account information to import multiple accounts at once.
+          </p>
         </DialogHeader>
         
         <div className="space-y-4">

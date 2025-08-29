@@ -244,6 +244,7 @@ export default function Accounts() {
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Create New Account</DialogTitle>
+              <p className="text-sm text-gray-500">Fill in the details below to create a new consumer account.</p>
             </DialogHeader>
             <form onSubmit={handleCreateSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
