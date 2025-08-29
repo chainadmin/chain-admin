@@ -54,6 +54,49 @@ const upload = multer({
   }
 });
 
+// Helper function to replace email template variables
+function replaceEmailVariables(
+  template: string, 
+  consumer: any, 
+  account: any, 
+  tenant: any,
+  baseUrl: string = process.env.REPLIT_DOMAINS || 'localhost:5000'
+): string {
+  let processedTemplate = template;
+  
+  // Consumer variables
+  processedTemplate = processedTemplate.replace(/\{\{firstName\}\}/g, consumer.firstName || '');
+  processedTemplate = processedTemplate.replace(/\{\{lastName\}\}/g, consumer.lastName || '');
+  processedTemplate = processedTemplate.replace(/\{\{email\}\}/g, consumer.email || '');
+  
+  // Account variables (if account exists)
+  if (account) {
+    processedTemplate = processedTemplate.replace(/\{\{accountNumber\}\}/g, account.accountNumber || '');
+    processedTemplate = processedTemplate.replace(/\{\{creditor\}\}/g, account.creditor || '');
+    processedTemplate = processedTemplate.replace(/\{\{balance\}\}/g, 
+      account.balanceCents ? `$${(account.balanceCents / 100).toFixed(2)}` : '$0.00');
+    processedTemplate = processedTemplate.replace(/\{\{dueDate\}\}/g, 
+      account.dueDate ? new Date(account.dueDate).toLocaleDateString() : '');
+  }
+  
+  // Consumer portal and app download links
+  const consumerPortalUrl = `https://${baseUrl}/consumer/${tenant.slug}/${encodeURIComponent(consumer.email)}`;
+  const appDownloadUrl = `https://${baseUrl}/download`; // Generic app download page
+  
+  processedTemplate = processedTemplate.replace(/\{\{consumerPortalLink\}\}/g, consumerPortalUrl);
+  processedTemplate = processedTemplate.replace(/\{\{appDownloadLink\}\}/g, appDownloadUrl);
+  
+  // Process any additional data from consumer.additionalData (CSV columns)
+  if (consumer.additionalData && typeof consumer.additionalData === 'object') {
+    Object.keys(consumer.additionalData).forEach(key => {
+      const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
+      processedTemplate = processedTemplate.replace(regex, consumer.additionalData[key] || '');
+    });
+  }
+  
+  return processedTemplate;
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
   await setupAuth(app);
@@ -359,7 +402,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: 'sending',
       });
 
-      // TODO: Here you would integrate with your email service provider
+      // Get email template for variable replacement
+      const template = await storage.getEmailTemplate(templateId);
+      if (!template) {
+        return res.status(404).json({ message: "Email template not found" });
+      }
+
+      // Get tenant details for URL generation
+      const tenant = await storage.getTenant(platformUser.tenantId);
+      if (!tenant) {
+        return res.status(404).json({ message: "Tenant not found" });
+      }
+
+      // Process variables for each consumer and prepare email content
+      const accountsData = await storage.getAccountsByTenant(platformUser.tenantId);
+      
+      // TODO: Here you would integrate with your email service provider (SendGrid, etc.)
+      // Example of processing emails with variable replacement:
+      const processedEmails = targetedConsumers.map(consumer => {
+        // Find the primary account for this consumer (could be multiple accounts)
+        const consumerAccount = accountsData.find(acc => acc.consumerId === consumer.id);
+        
+        // Replace variables in both subject and HTML content
+        const processedSubject = replaceEmailVariables(template.subject, consumer, consumerAccount, tenant);
+        const processedHtml = replaceEmailVariables(template.html, consumer, consumerAccount, tenant);
+        
+        return {
+          to: consumer.email,
+          subject: processedSubject,
+          html: processedHtml,
+          consumer: consumer,
+          account: consumerAccount
+        };
+      });
+
+      // Log the processed emails for demonstration (in production, send via email service)
+      console.log(`\n📧 Email Campaign: ${name}`);
+      console.log(`📊 Processed ${processedEmails.length} emails with personalized content`);
+      console.log(`🔗 Each email includes consumer portal links and app download links`);
+      
       // For now, simulate sending process with mock data
       setTimeout(async () => {
         await storage.updateEmailCampaign(campaign.id, {

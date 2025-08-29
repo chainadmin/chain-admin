@@ -223,6 +223,8 @@ export default function Emails() {
                         <div>• {"{{creditor}}"}</div>
                         <div>• {"{{balance}}"}</div>
                         <div>• {"{{dueDate}}"}</div>
+                        <div>• {"{{consumerPortalLink}}"}</div>
+                        <div>• {"{{appDownloadLink}}"}</div>
                         <div>• Plus any additional CSV columns</div>
                       </div>
                     </div>
