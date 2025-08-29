@@ -4,6 +4,7 @@ import {
   platformUsers,
   consumers,
   accounts,
+  folders,
   emailTemplates,
   emailCampaigns,
   emailTracking,
@@ -25,6 +26,8 @@ import {
   type InsertConsumer,
   type Account,
   type InsertAccount,
+  type Folder,
+  type InsertFolder,
   type EmailTemplate,
   type InsertEmailTemplate,
   type EmailCampaign,
@@ -71,8 +74,15 @@ export interface IStorage {
   getConsumer(id: string): Promise<Consumer | undefined>;
   createConsumer(consumer: InsertConsumer): Promise<Consumer>;
   
+  // Folder operations
+  getFoldersByTenant(tenantId: string): Promise<Folder[]>;
+  createFolder(folder: InsertFolder): Promise<Folder>;
+  getDefaultFolder(tenantId: string): Promise<Folder | undefined>;
+  ensureDefaultFolders(tenantId: string): Promise<void>;
+  
   // Account operations
-  getAccountsByTenant(tenantId: string): Promise<(Account & { consumer: Consumer })[]>;
+  getAccountsByTenant(tenantId: string): Promise<(Account & { consumer: Consumer; folder?: Folder })[]>;
+  getAccountsByFolder(folderId: string): Promise<(Account & { consumer: Consumer })[]>;
   getAccountsByConsumer(consumerId: string): Promise<Account[]>;
   createAccount(account: InsertAccount): Promise<Account>;
   bulkCreateAccounts(accounts: InsertAccount[]): Promise<Account[]>;
@@ -244,13 +254,66 @@ export class DatabaseStorage implements IStorage {
     return newConsumer;
   }
 
+  // Folder operations
+  async getFoldersByTenant(tenantId: string): Promise<Folder[]> {
+    return await db.select().from(folders).where(eq(folders.tenantId, tenantId)).orderBy(folders.sortOrder);
+  }
+
+  async createFolder(folder: InsertFolder): Promise<Folder> {
+    const [newFolder] = await db.insert(folders).values(folder).returning();
+    return newFolder;
+  }
+
+  async getDefaultFolder(tenantId: string): Promise<Folder | undefined> {
+    const [folder] = await db.select().from(folders).where(
+      and(eq(folders.tenantId, tenantId), eq(folders.isDefault, true))
+    );
+    return folder;
+  }
+
+  async ensureDefaultFolders(tenantId: string): Promise<void> {
+    // Create default folders if they don't exist
+    const existingFolders = await this.getFoldersByTenant(tenantId);
+    
+    const defaultFolders = [
+      { name: "All Accounts", description: "All imported accounts", color: "#3b82f6", isDefault: true, sortOrder: 0 },
+      { name: "New", description: "New accounts to be contacted", color: "#10b981", isDefault: false, sortOrder: 1 },
+      { name: "Decline", description: "Accounts that declined payment", color: "#ef4444", isDefault: false, sortOrder: 2 },
+      { name: "First Attempt", description: "First contact attempt made", color: "#f59e0b", isDefault: false, sortOrder: 3 },
+      { name: "Second Attempt", description: "Second contact attempt made", color: "#8b5cf6", isDefault: false, sortOrder: 4 }
+    ];
+    
+    for (const folderData of defaultFolders) {
+      const exists = existingFolders.find(f => f.name === folderData.name);
+      if (!exists) {
+        await this.createFolder({ ...folderData, tenantId });
+      }
+    }
+  }
+
   // Account operations
-  async getAccountsByTenant(tenantId: string): Promise<(Account & { consumer: Consumer })[]> {
+  async getAccountsByTenant(tenantId: string): Promise<(Account & { consumer: Consumer; folder?: Folder })[]> {
     const result = await db
       .select()
       .from(accounts)
       .leftJoin(consumers, eq(accounts.consumerId, consumers.id))
+      .leftJoin(folders, eq(accounts.folderId, folders.id))
       .where(eq(accounts.tenantId, tenantId))
+      .orderBy(desc(accounts.createdAt));
+    
+    return result.map(row => ({
+      ...row.accounts,
+      consumer: row.consumers!,
+      folder: row.folders || undefined,
+    }));
+  }
+
+  async getAccountsByFolder(folderId: string): Promise<(Account & { consumer: Consumer })[]> {
+    const result = await db
+      .select()
+      .from(accounts)
+      .leftJoin(consumers, eq(accounts.consumerId, consumers.id))
+      .where(eq(accounts.folderId, folderId))
       .orderBy(desc(accounts.createdAt));
     
     return result.map(row => ({

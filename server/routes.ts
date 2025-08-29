@@ -171,6 +171,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Folder routes
+  app.get('/api/folders', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      // Ensure default folders exist for this tenant
+      await storage.ensureDefaultFolders(platformUser.tenantId);
+      
+      const folders = await storage.getFoldersByTenant(platformUser.tenantId);
+      res.json(folders);
+    } catch (error) {
+      console.error("Error fetching folders:", error);
+      res.status(500).json({ message: "Failed to fetch folders" });
+    }
+  });
+
+  app.post('/api/folders', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { name, description, color } = req.body;
+      
+      if (!name) {
+        return res.status(400).json({ message: "Folder name is required" });
+      }
+
+      const folder = await storage.createFolder({
+        tenantId: platformUser.tenantId,
+        name,
+        description,
+        color: color || "#3b82f6",
+        sortOrder: Date.now(), // Simple ordering by creation time
+      });
+
+      res.json(folder);
+    } catch (error) {
+      console.error("Error creating folder:", error);
+      res.status(500).json({ message: "Failed to create folder" });
+    }
+  });
+
+  app.get('/api/folders/:folderId/accounts', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const accounts = await storage.getAccountsByFolder(req.params.folderId);
+      res.json(accounts);
+    } catch (error) {
+      console.error("Error fetching accounts by folder:", error);
+      res.status(500).json({ message: "Failed to fetch accounts by folder" });
+    }
+  });
+
   // Consumer portal routes
   app.get('/api/consumer/accounts/:email', async (req, res) => {
     try {
@@ -230,7 +298,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const { consumers: consumersData, accounts: accountsData } = csvUploadSchema.parse(req.body);
+      const { consumers: consumersData, accounts: accountsData, folderId } = req.body;
+      
+      // Get default folder if no folder is specified
+      let targetFolderId = folderId;
+      if (!targetFolderId) {
+        await storage.ensureDefaultFolders(platformUser.tenantId);
+        const defaultFolder = await storage.getDefaultFolder(platformUser.tenantId);
+        targetFolderId = defaultFolder?.id;
+      }
       
       // Create consumers first
       const createdConsumers = new Map();
@@ -238,12 +314,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const consumer = await storage.createConsumer({
           ...consumerData,
           tenantId: platformUser.tenantId,
+          folderId: targetFolderId,
         });
         createdConsumers.set(consumer.email, consumer);
       }
 
       // Create accounts
-      const accountsToCreate = accountsData.map(accountData => {
+      const accountsToCreate = accountsData.map((accountData: any) => {
         const consumer = createdConsumers.get(accountData.consumerEmail);
         if (!consumer) {
           throw new Error(`Consumer not found for email: ${accountData.consumerEmail}`);
@@ -252,6 +329,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return {
           tenantId: platformUser.tenantId!,
           consumerId: consumer.id,
+          folderId: targetFolderId,
           accountNumber: accountData.accountNumber,
           creditor: accountData.creditor,
           balanceCents: accountData.balanceCents,
@@ -382,15 +460,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const accounts = await storage.getAccountsByTenant(platformUser.tenantId);
         const consumerIds = accounts.filter(acc => (acc.balanceCents || 0) > 0).map(acc => acc.consumerId);
         targetedConsumers = consumers.filter(c => consumerIds.includes(c.id));
-      } else if (targetGroup === "overdue") {
-        const accounts = await storage.getAccountsByTenant(platformUser.tenantId);
-        const now = new Date();
-        const consumerIds = accounts.filter(acc => 
-          (acc.balanceCents || 0) > 0 && 
-          acc.dueDate && 
-          new Date(acc.dueDate) < now
-        ).map(acc => acc.consumerId);
-        targetedConsumers = consumers.filter(c => consumerIds.includes(c.id));
+      } else if (targetGroup === "decline") {
+        // For decline status, we'll filter consumers based on a decline status field
+        // This could be stored in consumer additionalData or a separate status field
+        targetedConsumers = consumers.filter(c => 
+          (c.additionalData && c.additionalData.status === 'decline') ||
+          (c.additionalData && c.additionalData.folder === 'decline')
+        );
+      } else if (targetGroup === "recent-upload") {
+        // For most recent upload, we'll need to track upload batches
+        // For now, we'll use consumers created in the last 24 hours as a proxy
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        targetedConsumers = consumers.filter(c => 
+          c.createdAt && new Date(c.createdAt) > yesterday
+        );
       }
 
       const campaign = await storage.createEmailCampaign({

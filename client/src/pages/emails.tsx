@@ -304,7 +304,8 @@ export default function Emails() {
                         <SelectContent>
                           <SelectItem value="all">All Consumers ({(consumers as any[])?.length || 0})</SelectItem>
                           <SelectItem value="with-balance">Consumers with Balance</SelectItem>
-                          <SelectItem value="overdue">Overdue Accounts</SelectItem>
+                          <SelectItem value="decline">Decline Status</SelectItem>
+                          <SelectItem value="recent-upload">Most Recent Uploaded File</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>

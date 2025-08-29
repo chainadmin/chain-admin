@@ -65,6 +65,7 @@ export const platformUsers = pgTable("platform_users", {
 export const consumers = pgTable("consumers", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  folderId: uuid("folder_id").references(() => folders.id, { onDelete: "set null" }),
   firstName: text("first_name"),
   lastName: text("last_name"),
   email: text("email"),
@@ -83,11 +84,24 @@ export const consumers = pgTable("consumers", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Folders for organizing accounts
+export const folders = pgTable("folders", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  color: text("color").default("#3b82f6"), // Hex color for folder display
+  isDefault: boolean("is_default").default(false), // Default folder for uploads
+  sortOrder: bigint("sort_order", { mode: "number" }).default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Accounts (debts)
 export const accounts = pgTable("accounts", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
   consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "cascade" }).notNull(),
+  folderId: uuid("folder_id").references(() => folders.id, { onDelete: "set null" }),
   accountNumber: text("account_number"),
   creditor: text("creditor").notNull(),
   balanceCents: bigint("balance_cents", { mode: "number" }).notNull(),
@@ -298,6 +312,7 @@ export const tenantsRelations = relations(tenants, ({ one, many }) => ({
   platformUsers: many(platformUsers),
   consumers: many(consumers),
   accounts: many(accounts),
+  folders: many(folders),
   emailTemplates: many(emailTemplates),
   emailCampaigns: many(emailCampaigns),
   senderIdentities: many(senderIdentities),
@@ -330,6 +345,10 @@ export const consumersRelations = relations(consumers, ({ one, many }) => ({
     fields: [consumers.tenantId],
     references: [tenants.id],
   }),
+  folder: one(folders, {
+    fields: [consumers.folderId],
+    references: [folders.id],
+  }),
   accounts: many(accounts),
   notifications: many(consumerNotifications),
   callbackRequests: many(callbackRequests),
@@ -344,6 +363,10 @@ export const accountsRelations = relations(accounts, ({ one }) => ({
   consumer: one(consumers, {
     fields: [accounts.consumerId],
     references: [consumers.id],
+  }),
+  folder: one(folders, {
+    fields: [accounts.folderId],
+    references: [folders.id],
   }),
 }));
 
@@ -452,6 +475,15 @@ export const invoicesRelations = relations(invoices, ({ one }) => ({
   }),
 }));
 
+export const foldersRelations = relations(folders, ({ one, many }) => ({
+  tenant: one(tenants, {
+    fields: [folders.tenantId],
+    references: [tenants.id],
+  }),
+  consumers: many(consumers),
+  accounts: many(accounts),
+}));
+
 // Insert schemas
 export const insertTenantSchema = createInsertSchema(tenants).omit({ id: true, createdAt: true });
 export const insertPlatformUserSchema = createInsertSchema(platformUsers).omit({ id: true, createdAt: true });
@@ -468,6 +500,7 @@ export const insertCallbackRequestSchema = createInsertSchema(callbackRequests).
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true });
 export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true, createdAt: true });
+export const insertFolderSchema = createInsertSchema(folders).omit({ id: true, createdAt: true });
 
 // Types
 export type UpsertUser = typeof users.$inferInsert;
@@ -502,3 +535,5 @@ export type Subscription = typeof subscriptions.$inferSelect;
 export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
 export type Invoice = typeof invoices.$inferSelect;
 export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
+export type Folder = typeof folders.$inferSelect;
+export type InsertFolder = z.infer<typeof insertFolderSchema>;

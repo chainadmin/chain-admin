@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 interface AccountsTableProps {
   accounts: any[];
   isLoading: boolean;
+  showFolderColumn?: boolean;
 }
 
-export default function AccountsTable({ accounts, isLoading }: AccountsTableProps) {
+export default function AccountsTable({ accounts, isLoading, showFolderColumn = false }: AccountsTableProps) {
   const [statusFilter, setStatusFilter] = useState("all");
 
   const filteredAccounts = accounts.filter(account => {
@@ -116,6 +117,9 @@ export default function AccountsTable({ accounts, isLoading }: AccountsTableProp
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Balance</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  {showFolderColumn && (
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Folder</th>
+                  )}
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
@@ -156,6 +160,21 @@ export default function AccountsTable({ accounts, isLoading }: AccountsTableProp
                         {account.status || 'Unknown'}
                       </span>
                     </td>
+                    {showFolderColumn && (
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {account.folder ? (
+                          <div className="flex items-center">
+                            <div 
+                              className="w-3 h-3 rounded-full mr-2" 
+                              style={{ backgroundColor: account.folder.color }}
+                            />
+                            <span className="text-sm text-gray-900">{account.folder.name}</span>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-gray-500">No folder</span>
+                        )}
+                      </td>
+                    )}
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-900">
                         View

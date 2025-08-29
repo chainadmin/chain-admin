@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -10,6 +10,14 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -20,12 +28,22 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
   const [file, setFile] = useState<File | null>(null);
   const [parsedData, setParsedData] = useState<any>(null);
   const [validationResults, setValidationResults] = useState<any>(null);
+  const [selectedFolderId, setSelectedFolderId] = useState<string>("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // Fetch folders for dropdown
+  const { data: folders } = useQuery({
+    queryKey: ["/api/folders"],
+    enabled: isOpen, // Only fetch when modal is open
+  });
+
   const importMutation = useMutation({
     mutationFn: async (data: any) => {
-      await apiRequest("POST", "/api/import/csv", data);
+      await apiRequest("POST", "/api/import/csv", {
+        ...data,
+        folderId: selectedFolderId || undefined
+      });
     },
     onSuccess: () => {
       toast({
@@ -51,6 +69,7 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
     setFile(null);
     setParsedData(null);
     setValidationResults(null);
+    setSelectedFolderId("");
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -183,6 +202,35 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
             Upload a CSV file containing account information. Make sure your file includes the required columns: 
             consumer_first_name, consumer_last_name, consumer_email, creditor, balance. Additional custom columns will be automatically captured.
           </p>
+
+          {/* Folder Selection */}
+          <div className="space-y-2">
+            <Label htmlFor="folder-select">Destination Folder</Label>
+            <Select value={selectedFolderId} onValueChange={setSelectedFolderId}>
+              <SelectTrigger data-testid="select-folder">
+                <SelectValue placeholder="Select a folder (optional)" />
+              </SelectTrigger>
+              <SelectContent>
+                {(folders as any[])?.map((folder) => (
+                  <SelectItem key={folder.id} value={folder.id}>
+                    <div className="flex items-center">
+                      <div 
+                        className="w-3 h-3 rounded-full mr-2" 
+                        style={{ backgroundColor: folder.color }}
+                      />
+                      {folder.name}
+                      {folder.isDefault && (
+                        <span className="ml-2 text-xs text-gray-500">(Default)</span>
+                      )}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-gray-500">
+              Choose which folder to organize these accounts in. If no folder is selected, accounts will be placed in the default folder.
+            </p>
+          </div>
           
           {/* File Upload Area */}
           <div className="mt-4">
