@@ -86,6 +86,7 @@ export interface IStorage {
   // Folder operations
   getFoldersByTenant(tenantId: string): Promise<Folder[]>;
   createFolder(folder: InsertFolder): Promise<Folder>;
+  deleteFolder(id: string, tenantId: string): Promise<void>;
   getDefaultFolder(tenantId: string): Promise<Folder | undefined>;
   ensureDefaultFolders(tenantId: string): Promise<void>;
   
@@ -289,6 +290,20 @@ export class DatabaseStorage implements IStorage {
   async createFolder(folder: InsertFolder): Promise<Folder> {
     const [newFolder] = await db.insert(folders).values(folder).returning();
     return newFolder;
+  }
+
+  async deleteFolder(id: string, tenantId: string): Promise<void> {
+    // First, move all accounts in this folder to the default folder
+    const defaultFolder = await this.getDefaultFolder(tenantId);
+    if (defaultFolder) {
+      await db.update(accounts)
+        .set({ folderId: defaultFolder.id })
+        .where(and(eq(accounts.folderId, id), eq(accounts.tenantId, tenantId)));
+    }
+    
+    // Then delete the folder
+    await db.delete(folders)
+      .where(and(eq(folders.id, id), eq(folders.tenantId, tenantId), eq(folders.isDefault, false)));
   }
 
   async getDefaultFolder(tenantId: string): Promise<Folder | undefined> {
@@ -581,11 +596,6 @@ export class DatabaseStorage implements IStorage {
       .from(consumers)
       .where(and(eq(consumers.email, email), eq(consumers.tenantId, tenantId)));
     return consumer || undefined;
-  }
-
-  async createAccount(account: InsertAccount): Promise<Account> {
-    const [newAccount] = await db.insert(accounts).values(account).returning();
-    return newAccount;
   }
 
   async deleteAccount(id: string, tenantId: string): Promise<void> {

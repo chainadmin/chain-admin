@@ -17,18 +17,41 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FolderOpen, Folder, Plus, Upload } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { FolderOpen, Folder, Plus, Upload, Settings, Trash2, MoreVertical } from "lucide-react";
 
 export default function Accounts() {
   const [selectedFolderId, setSelectedFolderId] = useState<string>("all");
   const [showImportModal, setShowImportModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
+  const [folderForm, setFolderForm] = useState({
+    name: "",
+    color: "#3B82F6",
+    description: "",
+  });
   const [createForm, setCreateForm] = useState({
     firstName: "",
     lastName: "",
@@ -86,6 +109,52 @@ export default function Accounts() {
     },
   });
 
+  const createFolderMutation = useMutation({
+    mutationFn: (data: any) => apiRequest("/api/folders", "POST", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
+      setShowCreateFolderModal(false);
+      setFolderForm({
+        name: "",
+        color: "#3B82F6",
+        description: "",
+      });
+      toast({
+        title: "Success",
+        description: "Folder created successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create folder",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteFolderMutation = useMutation({
+    mutationFn: (folderId: string) => apiRequest(`/api/folders/${folderId}`, "DELETE"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
+      if (selectedFolderId !== "all") {
+        setSelectedFolderId("all");
+      }
+      toast({
+        title: "Success",
+        description: "Folder deleted successfully. All accounts moved to default folder.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete folder",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Filter accounts by selected folder
   const filteredAccounts = selectedFolderId === "all" 
     ? (accounts as any[]) || []
@@ -130,6 +199,24 @@ export default function Accounts() {
     });
   };
 
+  const handleCreateFolderSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!folderForm.name.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a folder name",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    createFolderMutation.mutate({
+      name: folderForm.name,
+      color: folderForm.color,
+      description: folderForm.description || undefined,
+    });
+  };
+
   const isLoading = accountsLoading || foldersLoading;
 
   return (
@@ -144,6 +231,14 @@ export default function Accounts() {
               </p>
             </div>
             <div className="flex gap-2">
+              <Button
+                onClick={() => setShowCreateFolderModal(true)}
+                variant="outline"
+                data-testid="button-create-folder"
+              >
+                <Folder className="h-4 w-4 mr-2" />
+                New Folder
+              </Button>
               <Button
                 onClick={() => setShowImportModal(true)}
                 variant="outline"
@@ -181,7 +276,7 @@ export default function Accounts() {
                 <TabsTrigger 
                   key={folder.id} 
                   value={folder.id}
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-2 group relative"
                   data-testid={`tab-folder-${folder.name.toLowerCase().replace(/\s+/g, '-')}`}
                 >
                   <div className="flex items-center gap-2">
@@ -191,6 +286,52 @@ export default function Accounts() {
                     />
                     <Folder className="h-4 w-4" />
                     {folder.name} ({folderCounts[folder.id] || 0})
+                    {!folder.isDefault && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-4 w-4 p-0 opacity-0 group-hover:opacity-100 ml-1"
+                            onClick={(e) => e.stopPropagation()}
+                            data-testid={`dropdown-folder-${folder.id}`}
+                          >
+                            <MoreVertical className="h-3 w-3" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <DropdownMenuItem
+                                onSelect={(e) => e.preventDefault()}
+                                className="text-red-600 focus:text-red-600"
+                                data-testid={`delete-folder-${folder.id}`}
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete Folder
+                              </DropdownMenuItem>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Folder</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to delete the "{folder.name}" folder? All accounts in this folder will be moved to the default folder. This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => deleteFolderMutation.mutate(folder.id)}
+                                  className="bg-red-600 hover:bg-red-700"
+                                >
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                   </div>
                 </TabsTrigger>
               ))}
@@ -377,6 +518,73 @@ export default function Accounts() {
                   data-testid="button-save-account"
                 >
                   {createAccountMutation.isPending ? "Creating..." : "Create Account"}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Create Folder Modal */}
+        <Dialog open={showCreateFolderModal} onOpenChange={setShowCreateFolderModal}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Create New Folder</DialogTitle>
+              <p className="text-sm text-gray-500">Create a new folder to organize your accounts.</p>
+            </DialogHeader>
+            <form onSubmit={handleCreateFolderSubmit} className="space-y-4">
+              <div>
+                <Label htmlFor="folderName">Folder Name *</Label>
+                <Input
+                  id="folderName"
+                  data-testid="input-folder-name"
+                  value={folderForm.name}
+                  onChange={(e) => setFolderForm({ ...folderForm, name: e.target.value })}
+                  placeholder="Enter folder name"
+                  required
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="folderColor">Color</Label>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="folderColor"
+                    type="color"
+                    data-testid="input-folder-color"
+                    value={folderForm.color}
+                    onChange={(e) => setFolderForm({ ...folderForm, color: e.target.value })}
+                    className="w-12 h-8 rounded border border-gray-300"
+                  />
+                  <span className="text-sm text-gray-500">{folderForm.color}</span>
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="folderDescription">Description</Label>
+                <Input
+                  id="folderDescription"
+                  data-testid="input-folder-description"
+                  value={folderForm.description}
+                  onChange={(e) => setFolderForm({ ...folderForm, description: e.target.value })}
+                  placeholder="Enter folder description (optional)"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowCreateFolderModal(false)}
+                  data-testid="button-cancel-folder"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={createFolderMutation.isPending}
+                  data-testid="button-save-folder"
+                >
+                  {createFolderMutation.isPending ? "Creating..." : "Create Folder"}
                 </Button>
               </div>
             </form>

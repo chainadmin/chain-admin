@@ -9,7 +9,6 @@ import Landing from "@/pages/landing";
 import AdminDashboard from "@/pages/admin-dashboard";
 import Consumers from "@/pages/consumers";
 import Accounts from "@/pages/accounts";
-import ImportData from "@/pages/import-data";
 import Settings from "@/pages/settings";
 import Communications from "@/pages/communications";
 import Requests from "@/pages/requests";
@@ -45,7 +44,6 @@ function Router() {
           <Route path="/" component={AdminDashboard} />
           <Route path="/consumers" component={Consumers} />
           <Route path="/accounts" component={Accounts} />
-          <Route path="/import" component={ImportData} />
           <Route path="/communications" component={Communications} />
           <Route path="/requests" component={Requests} />
           <Route path="/payments" component={Payments} />

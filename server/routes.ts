@@ -135,6 +135,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post('/api/folders', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { name, color, description } = req.body;
+
+      if (!name || !color) {
+        return res.status(400).json({ message: "Name and color are required" });
+      }
+
+      // Get current folder count for sort order
+      const existingFolders = await storage.getFoldersByTenant(platformUser.tenantId);
+      const sortOrder = existingFolders.length;
+
+      const folder = await storage.createFolder({
+        tenantId: platformUser.tenantId,
+        name,
+        color,
+        description: description || null,
+        isDefault: false,
+        sortOrder,
+      });
+
+      res.status(201).json(folder);
+    } catch (error) {
+      console.error("Error creating folder:", error);
+      res.status(500).json({ message: "Failed to create folder" });
+    }
+  });
+
+  app.delete('/api/folders/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const folderId = req.params.id;
+      await storage.deleteFolder(folderId, platformUser.tenantId);
+      
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting folder:", error);
+      res.status(500).json({ message: "Failed to delete folder" });
+    }
+  });
+
   // Consumer routes
   app.get('/api/consumers', isAuthenticated, async (req: any, res) => {
     try {
