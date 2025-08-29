@@ -1,16 +1,53 @@
 import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Trash2 } from "lucide-react";
 
 interface AccountsTableProps {
   accounts: any[];
   isLoading: boolean;
   showFolderColumn?: boolean;
+  showDeleteButton?: boolean;
 }
 
-export default function AccountsTable({ accounts, isLoading, showFolderColumn = false }: AccountsTableProps) {
+export default function AccountsTable({ accounts, isLoading, showFolderColumn = false, showDeleteButton = false }: AccountsTableProps) {
   const [statusFilter, setStatusFilter] = useState("all");
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const deleteAccountMutation = useMutation({
+    mutationFn: (accountId: string) => apiRequest(`/api/accounts/${accountId}`, "DELETE"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/consumers"] });
+      toast({
+        title: "Success",
+        description: "Account deleted successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete account",
+        variant: "destructive",
+      });
+    },
+  });
 
   const filteredAccounts = accounts.filter(account => {
     if (statusFilter === "all") return true;
@@ -80,7 +117,7 @@ export default function AccountsTable({ accounts, isLoading, showFolderColumn = 
           </div>
           <div className="flex space-x-2">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-40">
+              <SelectTrigger className="w-40" data-testid="select-status-filter">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -176,12 +213,46 @@ export default function AccountsTable({ accounts, isLoading, showFolderColumn = 
                       </td>
                     )}
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-900">
-                        View
-                      </Button>
-                      <Button variant="ghost" size="sm" className="ml-2 text-blue-600 hover:text-blue-900">
-                        Contact
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-900" data-testid={`button-view-account-${account.id}`}>
+                          View
+                        </Button>
+                        <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-900" data-testid={`button-contact-account-${account.id}`}>
+                          Contact
+                        </Button>
+                        {showDeleteButton && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-red-600 hover:text-red-700"
+                                data-testid={`button-delete-account-${account.id}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Account</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to delete this account for {account.consumer?.firstName} {account.consumer?.lastName}? This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel data-testid={`button-cancel-delete-${account.id}`}>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => deleteAccountMutation.mutate(account.id)}
+                                  className="bg-red-600 hover:bg-red-700"
+                                  data-testid={`button-confirm-delete-${account.id}`}
+                                >
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -192,8 +263,8 @@ export default function AccountsTable({ accounts, isLoading, showFolderColumn = 
           {/* Pagination */}
           <div className="bg-white px-4 py-3 border-t border-gray-200 sm:px-6">
             <div className="flex-1 flex justify-between sm:hidden">
-              <Button variant="outline">Previous</Button>
-              <Button variant="outline">Next</Button>
+              <Button variant="outline" data-testid="button-prev-mobile">Previous</Button>
+              <Button variant="outline" data-testid="button-next-mobile">Next</Button>
             </div>
             <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
               <div>
@@ -205,13 +276,13 @@ export default function AccountsTable({ accounts, isLoading, showFolderColumn = 
               </div>
               <div>
                 <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" data-testid="button-prev-desktop">
                     <i className="fas fa-chevron-left h-5 w-5"></i>
                   </Button>
-                  <Button variant="outline" size="sm" className="bg-blue-50 border-blue-500 text-blue-600">
+                  <Button variant="outline" size="sm" className="bg-blue-50 border-blue-500 text-blue-600" data-testid="button-page-1">
                     1
                   </Button>
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" data-testid="button-next-desktop">
                     <i className="fas fa-chevron-right h-5 w-5"></i>
                   </Button>
                 </nav>

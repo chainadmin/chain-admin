@@ -125,7 +125,12 @@ export interface IStorage {
   // Consumer registration operations
   registerConsumer(consumerData: InsertConsumer): Promise<Consumer>;
   getConsumerByEmailAndTenant(email: string, tenantSlug: string): Promise<Consumer | undefined>;
+  getConsumerByEmail(email: string, tenantId: string): Promise<Consumer | undefined>;
   getTenantBySlug(slug: string): Promise<Tenant | undefined>;
+  
+  // Account management operations
+  createAccount(account: InsertAccount): Promise<Account>;
+  deleteAccount(id: string, tenantId: string): Promise<void>;
   
   // Notification operations
   createNotification(notification: InsertConsumerNotification): Promise<ConsumerNotification>;
@@ -569,6 +574,23 @@ export class DatabaseStorage implements IStorage {
       .from(consumers)
       .where(and(eq(consumers.email, email), eq(consumers.tenantId, tenant.id)));
     return consumer || undefined;
+  }
+
+  async getConsumerByEmail(email: string, tenantId: string): Promise<Consumer | undefined> {
+    const [consumer] = await db.select()
+      .from(consumers)
+      .where(and(eq(consumers.email, email), eq(consumers.tenantId, tenantId)));
+    return consumer || undefined;
+  }
+
+  async createAccount(account: InsertAccount): Promise<Account> {
+    const [newAccount] = await db.insert(accounts).values(account).returning();
+    return newAccount;
+  }
+
+  async deleteAccount(id: string, tenantId: string): Promise<void> {
+    await db.delete(accounts)
+      .where(and(eq(accounts.id, id), eq(accounts.tenantId, tenantId)));
   }
 
 

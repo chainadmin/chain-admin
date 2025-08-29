@@ -352,6 +352,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Account management routes
+  app.post('/api/accounts', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { firstName, lastName, email, phone, accountNumber, creditor, balanceCents, folderId } = req.body;
+
+      if (!firstName || !lastName || !email || !creditor || balanceCents === undefined) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+
+      // Check if consumer already exists
+      let consumer = await storage.getConsumerByEmail(email, platformUser.tenantId);
+      
+      if (!consumer) {
+        // Create new consumer
+        consumer = await storage.createConsumer({
+          tenantId: platformUser.tenantId,
+          firstName,
+          lastName,
+          email,
+          phone: phone || null,
+          folderId: folderId || null,
+        });
+      }
+
+      // Create account
+      const account = await storage.createAccount({
+        tenantId: platformUser.tenantId,
+        consumerId: consumer.id,
+        folderId: folderId || null,
+        accountNumber: accountNumber || null,
+        creditor,
+        balanceCents,
+        status: 'active',
+        additionalData: {},
+      });
+
+      res.status(201).json(account);
+    } catch (error) {
+      console.error("Error creating account:", error);
+      res.status(500).json({ message: "Failed to create account" });
+    }
+  });
+
+  app.delete('/api/accounts/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const accountId = req.params.id;
+      await storage.deleteAccount(accountId, platformUser.tenantId);
+      
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting account:", error);
+      res.status(500).json({ message: "Failed to delete account" });
+    }
+  });
+
   // Email template routes
   app.get('/api/email-templates', isAuthenticated, async (req: any, res) => {
     try {

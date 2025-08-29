@@ -40,7 +40,7 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
 
   const importMutation = useMutation({
     mutationFn: async (data: any) => {
-      await apiRequest("POST", "/api/import/csv", {
+      await apiRequest("/api/import/csv", "POST", {
         ...data,
         folderId: selectedFolderId || undefined
       });
