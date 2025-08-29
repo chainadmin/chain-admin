@@ -2,6 +2,22 @@
 
 Chain is a multi-tenant debt collection platform designed for agencies to manage consumer accounts, streamline collections, and facilitate consumer engagement. The system provides administrative dashboards for agencies to import and manage account data, while offering consumer portals for account access. Built as a full-stack web application with real-time data management capabilities, it serves as a comprehensive solution for debt collection agencies to organize their operations and improve consumer interactions.
 
+# Recent Changes
+
+## January 2025
+- **Unified Communications System**: Combined email and SMS functionality into a single "Communications" page
+  - Merged email templates, SMS templates, and callback requests into one interface
+  - Added toggle between email and SMS modes for templates and campaigns
+  - Integrated callback request management within communications workflow
+  - Designed for both web dashboard and mobile app accessibility
+  - Ready for external SMS service integration (Twilio, etc.)
+
+- **Enhanced Folder Organization**: Implemented comprehensive folder system for account management
+  - 5 default folders: All Accounts, New, Decline, First Attempt, Second Attempt
+  - CSV import with folder selection for organizing uploaded accounts
+  - Tabbed interface with color-coded folder display
+  - Improved account organization and workflow management
+
 # User Preferences
 
 Preferred communication style: Simple, everyday language.
