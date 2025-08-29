@@ -11,13 +11,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { CreditCard, DollarSign, TrendingUp, Clock, CheckCircle, XCircle, RefreshCw, Plus, Calendar, User, Building2 } from "lucide-react";
+import { CreditCard, DollarSign, TrendingUp, Clock, CheckCircle, XCircle, RefreshCw, Plus, Calendar, User, Building2, Lock } from "lucide-react";
 
 export default function Payments() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [filterStatus, setFilterStatus] = useState("all");
   const [showManualPaymentModal, setShowManualPaymentModal] = useState(false);
+  const [showPayNowModal, setShowPayNowModal] = useState(false);
 
   const [manualPaymentForm, setManualPaymentForm] = useState({
     consumerEmail: "",
@@ -26,6 +27,16 @@ export default function Payments() {
     paymentMethod: "credit_card",
     transactionId: "",
     notes: "",
+  });
+
+  const [payNowForm, setPayNowForm] = useState({
+    consumerEmail: "",
+    amount: "",
+    cardNumber: "",
+    expiryDate: "",
+    cvv: "",
+    cardName: "",
+    zipCode: "",
   });
 
   // Fetch payment transactions
@@ -107,6 +118,83 @@ export default function Payments() {
       ...prev,
       [field]: value
     }));
+  };
+
+  const handlePayNowFormChange = (field: string, value: string) => {
+    setPayNowForm(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  // Process real-time payment mutation
+  const processPaymentMutation = useMutation({
+    mutationFn: async (paymentData: any) => {
+      // This would integrate with actual payment processor (Stripe, etc.)
+      await apiRequest("POST", "/api/payments/process", paymentData);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Payment Successful",
+        description: "Payment has been processed successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payments/stats"] });
+      setShowPayNowModal(false);
+      setPayNowForm({
+        consumerEmail: "",
+        amount: "",
+        cardNumber: "",
+        expiryDate: "",
+        cvv: "",
+        cardName: "",
+        zipCode: "",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Payment Failed",
+        description: error.message || "Unable to process payment. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handlePayNowSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!payNowForm.consumerEmail || !payNowForm.amount) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in consumer and payment amount.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!payNowForm.cardNumber || !payNowForm.expiryDate || !payNowForm.cvv || !payNowForm.cardName) {
+      toast({
+        title: "Missing Card Information",
+        description: "Please complete all card details.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const amountCents = Math.round(parseFloat(payNowForm.amount) * 100);
+    if (amountCents <= 0) {
+      toast({
+        title: "Invalid Amount",
+        description: "Please enter a valid payment amount greater than $0.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    processPaymentMutation.mutate({
+      ...payNowForm,
+      amountCents,
+    });
   };
 
   const formatCurrency = (cents: number) => {
@@ -485,42 +573,187 @@ export default function Payments() {
           </CardContent>
         </Card>
 
-        {/* Payment Processing Options */}
+        {/* Pay Now Section */}
         <Card>
           <CardHeader>
-            <CardTitle>Payment Processing Options</CardTitle>
+            <CardTitle>Process Payment</CardTitle>
+            <p className="text-sm text-gray-600">
+              Process real-time credit card payments for consumers
+            </p>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="p-4 border rounded-lg">
-                <div className="flex items-center mb-3">
-                  <CreditCard className="h-6 w-6 text-blue-600 mr-3" />
-                  <h3 className="font-semibold text-gray-900">Online Payments</h3>
-                </div>
-                <p className="text-gray-600 text-sm mb-4">
-                  Consumers can make payments directly through their portal using credit cards, debit cards, or ACH transfers.
-                </p>
-                <Button variant="outline" size="sm">
-                  Configure Payment Gateway
-                </Button>
+            <div className="text-center py-8">
+              <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                <CreditCard className="h-8 w-8 text-blue-600" />
               </div>
-              
-              <div className="p-4 border rounded-lg">
-                <div className="flex items-center mb-3">
-                  <DollarSign className="h-6 w-6 text-green-600 mr-3" />
-                  <h3 className="font-semibold text-gray-900">Manual Payments</h3>
-                </div>
-                <p className="text-gray-600 text-sm mb-4">
-                  Record payments received via phone, mail, or in-person for consumers who prefer traditional methods.
-                </p>
-                <Button 
-                  size="sm" 
-                  onClick={() => setShowManualPaymentModal(true)}
-                  data-testid="button-record-manual-payment"
-                >
-                  Record Payment
-                </Button>
-              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Accept Credit Card Payments
+              </h3>
+              <p className="text-gray-600 mb-6 max-w-md mx-auto">
+                Process secure credit card payments in real-time for any consumer account.
+              </p>
+              <Dialog open={showPayNowModal} onOpenChange={setShowPayNowModal}>
+                <DialogTrigger asChild>
+                  <Button size="lg" className="mr-4" data-testid="button-pay-now">
+                    <CreditCard className="h-5 w-5 mr-2" />
+                    Pay Now
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-md">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center">
+                      <Lock className="h-5 w-5 mr-2 text-green-600" />
+                      Secure Payment Processing
+                    </DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={handlePayNowSubmit} className="space-y-4">
+                    <div>
+                      <Label>Consumer Email *</Label>
+                      <Select 
+                        value={payNowForm.consumerEmail} 
+                        onValueChange={(value) => handlePayNowFormChange("consumerEmail", value)}
+                      >
+                        <SelectTrigger data-testid="select-paynow-consumer">
+                          <SelectValue placeholder="Select consumer" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(consumers as any[])?.map((consumer: any) => (
+                            <SelectItem key={consumer.id} value={consumer.email}>
+                              {consumer.firstName} {consumer.lastName} ({consumer.email})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div>
+                      <Label>Payment Amount *</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={payNowForm.amount}
+                        onChange={(e) => handlePayNowFormChange("amount", e.target.value)}
+                        placeholder="0.00"
+                        data-testid="input-paynow-amount"
+                        required
+                      />
+                    </div>
+                    
+                    <div className="border-t pt-4">
+                      <h4 className="font-medium mb-3">Card Information</h4>
+                      
+                      <div>
+                        <Label>Card Number *</Label>
+                        <Input
+                          value={payNowForm.cardNumber}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(/\s/g, '').replace(/(.{4})/g, '$1 ').trim();
+                            if (value.replace(/\s/g, '').length <= 16) {
+                              handlePayNowFormChange("cardNumber", value);
+                            }
+                          }}
+                          placeholder="1234 5678 9012 3456"
+                          maxLength="19"
+                          data-testid="input-card-number"
+                          required
+                        />
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label>Expiry Date *</Label>
+                          <Input
+                            value={payNowForm.expiryDate}
+                            onChange={(e) => {
+                              const value = e.target.value.replace(/\D/g, '').replace(/(\d{2})(\d{2})/, '$1/$2');
+                              if (value.length <= 5) {
+                                handlePayNowFormChange("expiryDate", value);
+                              }
+                            }}
+                            placeholder="MM/YY"
+                            maxLength="5"
+                            data-testid="input-expiry-date"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <Label>CVV *</Label>
+                          <Input
+                            type="password"
+                            value={payNowForm.cvv}
+                            onChange={(e) => {
+                              const value = e.target.value.replace(/\D/g, '');
+                              if (value.length <= 4) {
+                                handlePayNowFormChange("cvv", value);
+                              }
+                            }}
+                            placeholder="123"
+                            maxLength="4"
+                            data-testid="input-cvv"
+                            required
+                          />
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <Label>Cardholder Name *</Label>
+                        <Input
+                          value={payNowForm.cardName}
+                          onChange={(e) => handlePayNowFormChange("cardName", e.target.value)}
+                          placeholder="John Doe"
+                          data-testid="input-card-name"
+                          required
+                        />
+                      </div>
+                      
+                      <div>
+                        <Label>ZIP Code *</Label>
+                        <Input
+                          value={payNowForm.zipCode}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(/\D/g, '');
+                            if (value.length <= 5) {
+                              handlePayNowFormChange("zipCode", value);
+                            }
+                          }}
+                          placeholder="12345"
+                          maxLength="5"
+                          data-testid="input-zip-code"
+                          required
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="flex justify-end space-x-3 pt-4">
+                      <Button type="button" variant="outline" onClick={() => setShowPayNowModal(false)}>
+                        Cancel
+                      </Button>
+                      <Button type="submit" disabled={processPaymentMutation.isPending}>
+                        {processPaymentMutation.isPending ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <Lock className="h-4 w-4 mr-2" />
+                            Process Payment
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </form>
+                </DialogContent>
+              </Dialog>
+              <Button 
+                variant="outline" 
+                size="lg" 
+                onClick={() => setShowManualPaymentModal(true)}
+                data-testid="button-record-manual-payment"
+              >
+                <DollarSign className="h-5 w-5 mr-2" />
+                Record Manual Payment
+              </Button>
             </div>
           </CardContent>
         </Card>

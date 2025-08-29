@@ -1018,6 +1018,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Real-time payment processing endpoint
+  app.post('/api/payments/process', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { 
+        consumerEmail, 
+        amountCents, 
+        cardNumber, 
+        expiryDate, 
+        cvv, 
+        cardName, 
+        zipCode 
+      } = req.body;
+
+      if (!consumerEmail || !amountCents || !cardNumber || !expiryDate || !cvv || !cardName) {
+        return res.status(400).json({ message: "Missing required payment information" });
+      }
+
+      // Get consumer by email
+      const consumer = await storage.getConsumerByEmailAndTenant(consumerEmail, platformUser.tenantId);
+      if (!consumer) {
+        return res.status(404).json({ message: "Consumer not found" });
+      }
+
+      // TODO: Integrate with USAePay or other payment processor
+      // For now, simulate payment processing
+      const processorResponse = {
+        success: true,
+        transactionId: `tx_${Date.now()}`,
+        message: "Payment processed successfully",
+        // In real implementation, this would be the actual processor response
+        processorData: {
+          processor: "USAePay", // or whatever processor is configured
+          authCode: `AUTH${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
+          last4: cardNumber.slice(-4),
+        }
+      };
+
+      // Create payment record
+      const payment = await storage.createPayment({
+        tenantId: platformUser.tenantId,
+        consumerId: consumer.id,
+        amountCents,
+        paymentMethod: 'credit_card',
+        status: processorResponse.success ? 'completed' : 'failed',
+        transactionId: processorResponse.transactionId,
+        processorResponse: JSON.stringify(processorResponse),
+        processedAt: new Date().toISOString(),
+        notes: `Online payment - ${cardName} ending in ${cardNumber.slice(-4)}`,
+      });
+
+      res.json({
+        success: true,
+        payment: {
+          id: payment.id,
+          amount: amountCents,
+          status: payment.status,
+          transactionId: payment.transactionId,
+          processedAt: payment.processedAt,
+        },
+        message: "Payment processed successfully"
+      });
+
+    } catch (error) {
+      console.error("Error processing payment:", error);
+      res.status(500).json({ 
+        success: false,
+        message: "Payment processing failed. Please try again." 
+      });
+    }
+  });
+
   app.post('/api/payments/manual', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;

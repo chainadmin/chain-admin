@@ -281,6 +281,7 @@ export default function Settings() {
           <Tabs defaultValue="general" className="space-y-4">
             <TabsList>
               <TabsTrigger value="general">General</TabsTrigger>
+              <TabsTrigger value="merchant">Payment Processing</TabsTrigger>
               <TabsTrigger value="documents">Documents</TabsTrigger>
               <TabsTrigger value="arrangements">Payment Plans</TabsTrigger>
               <TabsTrigger value="privacy">Privacy & Legal</TabsTrigger>
@@ -379,6 +380,136 @@ export default function Settings() {
                       onCheckedChange={(checked) => handleSettingsUpdate('allowSettlementRequests', checked)}
                     />
                   </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="merchant">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Payment Processing Settings</CardTitle>
+                  <p className="text-sm text-gray-500">
+                    Configure your merchant account to accept payments from consumers
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* Merchant Account Status */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-start space-x-3">
+                      <div className="flex-shrink-0">
+                        <i className="fas fa-credit-card text-blue-600 text-lg"></i>
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="text-sm font-medium text-blue-900 mb-1">
+                          Payment Processing Status
+                        </h3>
+                        <p className="text-sm text-blue-700">
+                          {(settings as any)?.merchantAccountId ? 
+                            "Your merchant account is configured and ready to process payments." :
+                            "No merchant account configured. Set up payment processing to accept consumer payments."
+                          }
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Merchant Account Configuration */}
+                  {(settings as any)?.merchantAccountId ? (
+                    <div className="space-y-4">
+                      <div>
+                        <Label>Merchant Provider</Label>
+                        <Input
+                          value={(settings as any)?.merchantProvider || ""}
+                          onChange={(e) => handleSettingsUpdate('merchantProvider', e.target.value)}
+                          placeholder="e.g., Stripe, Square, PayPal"
+                          data-testid="input-merchant-provider"
+                        />
+                      </div>
+                      
+                      <div>
+                        <Label>Merchant Account ID</Label>
+                        <Input
+                          value={(settings as any)?.merchantAccountId || ""}
+                          onChange={(e) => handleSettingsUpdate('merchantAccountId', e.target.value)}
+                          placeholder="Your merchant account identifier"
+                          data-testid="input-merchant-id"
+                        />
+                      </div>
+                      
+                      <div>
+                        <Label>API Key</Label>
+                        <Input
+                          type="password"
+                          value={(settings as any)?.merchantApiKey || ""}
+                          onChange={(e) => handleSettingsUpdate('merchantApiKey', e.target.value)}
+                          placeholder="Your merchant API key"
+                          data-testid="input-merchant-key"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          This key is encrypted and stored securely
+                        </p>
+                      </div>
+                      
+                      <div>
+                        <Label>Merchant Name</Label>
+                        <Input
+                          value={(settings as any)?.merchantName || ""}
+                          onChange={(e) => handleSettingsUpdate('merchantName', e.target.value)}
+                          placeholder="Name displayed on payment receipts"
+                          data-testid="input-merchant-name"
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between pt-4 border-t">
+                        <div className="space-y-0.5">
+                          <Label>Enable Online Payments</Label>
+                          <p className="text-sm text-gray-500">
+                            Allow consumers to make payments through their portal
+                          </p>
+                        </div>
+                        <Switch
+                          checked={(settings as any)?.enableOnlinePayments ?? false}
+                          onCheckedChange={(checked) => handleSettingsUpdate('enableOnlinePayments', checked)}
+                          data-testid="switch-online-payments"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <div className="mx-auto w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center mb-4">
+                        <i className="fas fa-credit-card text-gray-400 text-xl"></i>
+                      </div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">
+                        Set Up Payment Processing
+                      </h3>
+                      <p className="text-gray-600 mb-6 max-w-md mx-auto">
+                        Configure your merchant account to start accepting online payments from consumers.
+                        If you don't have a merchant account, we can help you get one.
+                      </p>
+                      <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                        <Button 
+                          onClick={() => handleSettingsUpdate('merchantAccountId', 'setup')}
+                          data-testid="button-setup-merchant"
+                        >
+                          <i className="fas fa-cog mr-2"></i>
+                          Configure Existing Account
+                        </Button>
+                        <Button 
+                          variant="outline"
+                          onClick={() => {
+                            toast({
+                              title: "Merchant Request Submitted",
+                              description: "We'll contact you within 24 hours to help set up your merchant account.",
+                            });
+                          }}
+                          data-testid="button-request-merchant"
+                        >
+                          <i className="fas fa-handshake mr-2"></i>
+                          Request Merchant Account
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>

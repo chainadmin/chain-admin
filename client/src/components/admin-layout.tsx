@@ -15,6 +15,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     queryKey: ["/api/auth/user"],
   });
 
+  // Only show company section for platform owners
+  const isOwner = (userData as any)?.platformUser?.role === 'owner';
+  
   const navigationItems = [
     { name: "Dashboard", href: "/", icon: "fas fa-chart-bar" },
     { name: "Consumers", href: "/consumers", icon: "fas fa-users" },
@@ -23,7 +26,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     { name: "Emails", href: "/emails", icon: "fas fa-envelope" },
     { name: "Requests", href: "/requests", icon: "fas fa-phone" },
     { name: "Payments", href: "/payments", icon: "fas fa-credit-card" },
-    { name: "Company", href: "/company", icon: "fas fa-building" },
+    ...(isOwner ? [{ name: "Company", href: "/company", icon: "fas fa-building" }] : []),
     { name: "Settings", href: "/settings", icon: "fas fa-cog" },
   ];
 
