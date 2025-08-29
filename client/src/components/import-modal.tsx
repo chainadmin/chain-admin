@@ -201,10 +201,44 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
         </DialogHeader>
         
         <div className="space-y-4">
-          <p className="text-sm text-gray-500">
-            Upload a CSV file containing account information. Make sure your file includes the required columns: 
-            consumer_first_name, consumer_last_name, consumer_email, creditor, balance. Additional custom columns will be automatically captured.
-          </p>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h4 className="font-medium text-blue-900 mb-2">Required CSV Columns</h4>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <h5 className="font-medium text-blue-800 mb-1">Consumer Information</h5>
+                <ul className="text-blue-700 space-y-1">
+                  <li>• <code className="bg-blue-100 px-1 rounded">consumer_first_name</code> or <code className="bg-blue-100 px-1 rounded">first_name</code></li>
+                  <li>• <code className="bg-blue-100 px-1 rounded">consumer_last_name</code> or <code className="bg-blue-100 px-1 rounded">last_name</code></li>
+                  <li>• <code className="bg-blue-100 px-1 rounded">consumer_email</code> or <code className="bg-blue-100 px-1 rounded">email</code></li>
+                  <li>• <code className="bg-blue-100 px-1 rounded">consumer_phone</code> or <code className="bg-blue-100 px-1 rounded">phone</code> (optional)</li>
+                </ul>
+              </div>
+              <div>
+                <h5 className="font-medium text-blue-800 mb-1">Account Information</h5>
+                <ul className="text-blue-700 space-y-1">
+                  <li>• <code className="bg-blue-100 px-1 rounded">creditor</code> (required)</li>
+                  <li>• <code className="bg-blue-100 px-1 rounded">balance</code> (required, in dollars)</li>
+                  <li>• <code className="bg-blue-100 px-1 rounded">account_number</code> or <code className="bg-blue-100 px-1 rounded">account</code> (optional)</li>
+                  <li>• <code className="bg-blue-100 px-1 rounded">due_date</code> (optional)</li>
+                </ul>
+              </div>
+            </div>
+            <div className="mt-3 pt-3 border-t border-blue-200">
+              <p className="text-xs text-blue-600">
+                <strong>Note:</strong> Any additional columns in your CSV will be automatically captured as custom data. 
+                The balance should be in dollar format (e.g., 1250.50, not cents).
+              </p>
+            </div>
+          </div>
+          
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+            <h5 className="font-medium text-gray-800 mb-2">Example CSV Format</h5>
+            <pre className="text-xs text-gray-600 bg-white p-2 rounded border overflow-x-auto">
+consumer_first_name,consumer_last_name,consumer_email,creditor,balance,account_number
+John,Doe,john.doe@email.com,Credit Card Co,1250.50,ACC123456
+Jane,Smith,jane.smith@email.com,Medical Services,875.25,MED789012
+            </pre>
+          </div>
 
           {/* Folder Selection */}
           <div className="space-y-2">
