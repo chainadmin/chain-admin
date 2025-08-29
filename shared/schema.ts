@@ -238,6 +238,22 @@ export const callbackRequests = pgTable("callback_requests", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Payment transactions
+export const payments = pgTable("payments", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "cascade" }).notNull(),
+  accountId: uuid("account_id").references(() => accounts.id, { onDelete: "cascade" }),
+  amountCents: bigint("amount_cents", { mode: "number" }).notNull(),
+  paymentMethod: text("payment_method").notNull(), // "credit_card", "debit_card", "ach", "check", "cash", etc.
+  status: text("status").default("pending"), // "pending", "processing", "completed", "failed", "refunded"
+  transactionId: text("transaction_id"), // External payment processor transaction ID
+  processorResponse: text("processor_response"), // Response from payment processor
+  notes: text("notes"),
+  processedAt: timestamp("processed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Relations
 export const tenantsRelations = relations(tenants, ({ one, many }) => ({
   platformUsers: many(platformUsers),
@@ -273,6 +289,7 @@ export const consumersRelations = relations(consumers, ({ one, many }) => ({
   accounts: many(accounts),
   notifications: many(consumerNotifications),
   callbackRequests: many(callbackRequests),
+  payments: many(payments),
 }));
 
 export const accountsRelations = relations(accounts, ({ one }) => ({
@@ -357,6 +374,21 @@ export const callbackRequestsRelations = relations(callbackRequests, ({ one }) =
   }),
 }));
 
+export const paymentsRelations = relations(payments, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [payments.tenantId],
+    references: [tenants.id],
+  }),
+  consumer: one(consumers, {
+    fields: [payments.consumerId],
+    references: [consumers.id],
+  }),
+  account: one(accounts, {
+    fields: [payments.accountId],
+    references: [accounts.id],
+  }),
+}));
+
 // Insert schemas
 export const insertTenantSchema = createInsertSchema(tenants).omit({ id: true, createdAt: true });
 export const insertPlatformUserSchema = createInsertSchema(platformUsers).omit({ id: true, createdAt: true });
@@ -370,6 +402,7 @@ export const insertEmailCampaignSchema = createInsertSchema(emailCampaigns).omit
 export const insertEmailTrackingSchema = createInsertSchema(emailTracking).omit({ id: true });
 export const insertConsumerNotificationSchema = createInsertSchema(consumerNotifications).omit({ id: true, createdAt: true });
 export const insertCallbackRequestSchema = createInsertSchema(callbackRequests).omit({ id: true, createdAt: true });
+export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true });
 
 // Types
 export type UpsertUser = typeof users.$inferInsert;
@@ -398,3 +431,5 @@ export type ConsumerNotification = typeof consumerNotifications.$inferSelect;
 export type InsertConsumerNotification = z.infer<typeof insertConsumerNotificationSchema>;
 export type CallbackRequest = typeof callbackRequests.$inferSelect;
 export type InsertCallbackRequest = z.infer<typeof insertCallbackRequestSchema>;
+export type Payment = typeof payments.$inferSelect;
+export type InsertPayment = z.infer<typeof insertPaymentSchema>;

@@ -917,6 +917,144 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Company management routes
+  app.get('/api/company/consumers', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const consumers = await storage.getConsumersByTenant(platformUser.tenantId);
+      
+      // Add account count and total balance for each consumer
+      const consumersWithStats = await Promise.all(
+        consumers.map(async (consumer) => {
+          const accounts = await storage.getAccountsByConsumer(consumer.id);
+          return {
+            ...consumer,
+            accountCount: accounts.length,
+            totalBalanceCents: accounts.reduce((sum, acc) => sum + (acc.balanceCents || 0), 0),
+          };
+        })
+      );
+      
+      res.json(consumersWithStats);
+    } catch (error) {
+      console.error("Error fetching company consumers:", error);
+      res.status(500).json({ message: "Failed to fetch consumers" });
+    }
+  });
+
+  app.get('/api/company/admins', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const admins = await storage.getPlatformUsersByTenant(platformUser.tenantId);
+      res.json(admins);
+    } catch (error) {
+      console.error("Error fetching company admins:", error);
+      res.status(500).json({ message: "Failed to fetch admins" });
+    }
+  });
+
+  app.patch('/api/company/consumers/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      const { id } = req.params;
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const consumer = await storage.updateConsumer(id, req.body);
+      res.json(consumer);
+    } catch (error) {
+      console.error("Error updating consumer:", error);
+      res.status(500).json({ message: "Failed to update consumer" });
+    }
+  });
+
+  // Payment routes
+  app.get('/api/payments', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const payments = await storage.getPaymentsByTenant(platformUser.tenantId);
+      res.json(payments);
+    } catch (error) {
+      console.error("Error fetching payments:", error);
+      res.status(500).json({ message: "Failed to fetch payments" });
+    }
+  });
+
+  app.get('/api/payments/stats', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const stats = await storage.getPaymentStats(platformUser.tenantId);
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching payment stats:", error);
+      res.status(500).json({ message: "Failed to fetch payment stats" });
+    }
+  });
+
+  app.post('/api/payments/manual', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { consumerEmail, accountId, amountCents, paymentMethod, transactionId, notes } = req.body;
+
+      // Get consumer
+      const consumer = await storage.getConsumerByEmailAndTenant(consumerEmail, platformUser.tenantId);
+      if (!consumer) {
+        return res.status(404).json({ message: "Consumer not found" });
+      }
+
+      // Create payment record
+      const payment = await storage.createPayment({
+        tenantId: platformUser.tenantId,
+        consumerId: consumer.id,
+        accountId: accountId || null,
+        amountCents,
+        paymentMethod,
+        transactionId,
+        notes,
+        status: "completed", // Manual payments are immediately completed
+        processedAt: new Date(),
+      });
+
+      res.json(payment);
+    } catch (error) {
+      console.error("Error recording manual payment:", error);
+      res.status(500).json({ message: "Failed to record payment" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

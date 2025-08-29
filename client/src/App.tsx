@@ -13,6 +13,8 @@ import ImportData from "@/pages/import-data";
 import Settings from "@/pages/settings";
 import Emails from "@/pages/emails";
 import Requests from "@/pages/requests";
+import Payments from "@/pages/payments";
+import CompanyManagement from "@/pages/company-management";
 import ConsumerPortal from "@/pages/enhanced-consumer-portal";
 import ConsumerLogin from "@/pages/consumer-login";
 import ConsumerDashboard from "@/pages/consumer-dashboard";
@@ -45,6 +47,8 @@ function Router() {
           <Route path="/import" component={ImportData} />
           <Route path="/emails" component={Emails} />
           <Route path="/requests" component={Requests} />
+          <Route path="/payments" component={Payments} />
+          <Route path="/company" component={CompanyManagement} />
           <Route path="/settings" component={Settings} />
         </>
       )}

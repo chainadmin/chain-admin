@@ -12,6 +12,7 @@ import {
   tenantSettings,
   consumerNotifications,
   callbackRequests,
+  payments,
   type User,
   type UpsertUser,
   type Tenant,
@@ -38,6 +39,8 @@ import {
   type InsertConsumerNotification,
   type CallbackRequest,
   type InsertCallbackRequest,
+  type Payment,
+  type InsertPayment,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc } from "drizzle-orm";
@@ -113,6 +116,21 @@ export interface IStorage {
   
   // Tenant setup (for fixing access issues)
   setupTenantForUser(authId: string, tenantData: InsertTenant): Promise<{ tenant: Tenant; platformUser: PlatformUser }>;
+  
+  // Payment operations
+  getPaymentsByTenant(tenantId: string): Promise<(Payment & { consumerName?: string; consumerEmail?: string; accountCreditor?: string })[]>;
+  createPayment(payment: InsertPayment): Promise<Payment>;
+  getPaymentStats(tenantId: string): Promise<{
+    totalProcessed: number;
+    totalAmountCents: number;
+    successfulPayments: number;
+    failedPayments: number;
+    pendingPayments: number;
+  }>;
+  
+  // Company management operations
+  getPlatformUsersByTenant(tenantId: string): Promise<(PlatformUser & { userDetails?: User })[]>;
+  updateConsumer(id: string, updates: Partial<Consumer>): Promise<Consumer>;
   
   // Stats operations
   getTenantStats(tenantId: string): Promise<{
@@ -501,6 +519,76 @@ export class DatabaseStorage implements IStorage {
     });
 
     return { tenant, platformUser };
+  }
+
+  // Payment operations
+  async getPaymentsByTenant(tenantId: string): Promise<(Payment & { consumerName?: string; consumerEmail?: string; accountCreditor?: string })[]> {
+    const result = await db
+      .select()
+      .from(payments)
+      .leftJoin(consumers, eq(payments.consumerId, consumers.id))
+      .leftJoin(accounts, eq(payments.accountId, accounts.id))
+      .where(eq(payments.tenantId, tenantId))
+      .orderBy(desc(payments.createdAt));
+    
+    return result.map(row => ({
+      ...row.payments,
+      consumerName: row.consumers ? `${row.consumers.firstName} ${row.consumers.lastName}` : undefined,
+      consumerEmail: row.consumers?.email || undefined,
+      accountCreditor: row.accounts?.creditor || undefined,
+    }));
+  }
+
+  async createPayment(payment: InsertPayment): Promise<Payment> {
+    const [newPayment] = await db.insert(payments).values(payment).returning();
+    return newPayment;
+  }
+
+  async getPaymentStats(tenantId: string): Promise<{
+    totalProcessed: number;
+    totalAmountCents: number;
+    successfulPayments: number;
+    failedPayments: number;
+    pendingPayments: number;
+  }> {
+    const tenantPayments = await db.select().from(payments).where(eq(payments.tenantId, tenantId));
+    
+    const totalProcessed = tenantPayments.length;
+    const totalAmountCents = tenantPayments.reduce((sum, payment) => sum + (payment.amountCents || 0), 0);
+    const successfulPayments = tenantPayments.filter(payment => payment.status === 'completed').length;
+    const failedPayments = tenantPayments.filter(payment => payment.status === 'failed').length;
+    const pendingPayments = tenantPayments.filter(payment => ['pending', 'processing'].includes(payment.status || '')).length;
+    
+    return {
+      totalProcessed,
+      totalAmountCents,
+      successfulPayments,
+      failedPayments,
+      pendingPayments,
+    };
+  }
+
+  // Company management operations
+  async getPlatformUsersByTenant(tenantId: string): Promise<(PlatformUser & { userDetails?: User })[]> {
+    const result = await db
+      .select()
+      .from(platformUsers)
+      .leftJoin(users, eq(platformUsers.authId, users.id))
+      .where(eq(platformUsers.tenantId, tenantId))
+      .orderBy(desc(platformUsers.createdAt));
+    
+    return result.map(row => ({
+      ...row.platform_users,
+      userDetails: row.users || undefined,
+    }));
+  }
+
+  async updateConsumer(id: string, updates: Partial<Consumer>): Promise<Consumer> {
+    const [updatedConsumer] = await db.update(consumers)
+      .set(updates)
+      .where(eq(consumers.id, id))
+      .returning();
+    return updatedConsumer;
   }
 
   // Stats operations
