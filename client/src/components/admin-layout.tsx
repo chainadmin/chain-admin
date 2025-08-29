@@ -24,6 +24,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     { name: "Accounts", href: "/accounts", icon: "fas fa-file-invoice-dollar" },
     { name: "Import Data", href: "/import", icon: "fas fa-upload" },
     { name: "Emails", href: "/emails", icon: "fas fa-envelope" },
+    { name: "SMS", href: "/sms", icon: "fas fa-sms" },
     { name: "Requests", href: "/requests", icon: "fas fa-phone" },
     { name: "Payments", href: "/payments", icon: "fas fa-credit-card" },
     { name: "Billing", href: "/billing", icon: "fas fa-receipt" },

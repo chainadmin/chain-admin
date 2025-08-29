@@ -12,6 +12,7 @@ import Accounts from "@/pages/accounts";
 import ImportData from "@/pages/import-data";
 import Settings from "@/pages/settings";
 import Emails from "@/pages/emails";
+import SMS from "@/pages/sms";
 import Requests from "@/pages/requests";
 import Payments from "@/pages/payments";
 import Billing from "@/pages/billing";
@@ -47,6 +48,7 @@ function Router() {
           <Route path="/accounts" component={Accounts} />
           <Route path="/import" component={ImportData} />
           <Route path="/emails" component={Emails} />
+          <Route path="/sms" component={SMS} />
           <Route path="/requests" component={Requests} />
           <Route path="/payments" component={Payments} />
           <Route path="/billing" component={Billing} />

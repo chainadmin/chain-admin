@@ -8,6 +8,9 @@ import {
   emailTemplates,
   emailCampaigns,
   emailTracking,
+  smsTemplates,
+  smsCampaigns,
+  smsTracking,
   documents,
   arrangementOptions,
   tenantSettings,
@@ -34,6 +37,12 @@ import {
   type InsertEmailCampaign,
   type EmailTracking,
   type InsertEmailTracking,
+  type SmsTemplate,
+  type InsertSmsTemplate,
+  type SmsCampaign,
+  type InsertSmsCampaign,
+  type SmsTracking,
+  type InsertSmsTracking,
   type Document,
   type InsertDocument,
   type ArrangementOption,
@@ -99,6 +108,19 @@ export interface IStorage {
   
   // Email metrics operations
   getEmailMetricsByTenant(tenantId: string): Promise<any>;
+  
+  // SMS template operations
+  getSmsTemplatesByTenant(tenantId: string): Promise<SmsTemplate[]>;
+  createSmsTemplate(template: InsertSmsTemplate): Promise<SmsTemplate>;
+  deleteSmsTemplate(id: string, tenantId: string): Promise<void>;
+  
+  // SMS campaign operations
+  getSmsCampaignsByTenant(tenantId: string): Promise<(SmsCampaign & { templateName: string })[]>;
+  createSmsCampaign(campaign: InsertSmsCampaign): Promise<SmsCampaign>;
+  updateSmsCampaign(id: string, updates: Partial<SmsCampaign>): Promise<SmsCampaign>;
+  
+  // SMS metrics operations
+  getSmsMetricsByTenant(tenantId: string): Promise<any>;
   
   // Consumer registration operations
   registerConsumer(consumerData: InsertConsumer): Promise<Consumer>;
@@ -456,6 +478,76 @@ export class DatabaseStorage implements IStorage {
       last30Days: recent30,
       sentThisMonth: recent30,
       bestTemplate: campaigns.length > 0 ? campaigns.sort((a, b) => (b.totalOpened || 0) - (a.totalOpened || 0))[0]?.name || "None yet" : "None yet",
+    };
+  }
+
+  // SMS template operations
+  async getSmsTemplatesByTenant(tenantId: string): Promise<SmsTemplate[]> {
+    return await db.select().from(smsTemplates).where(eq(smsTemplates.tenantId, tenantId));
+  }
+
+  async createSmsTemplate(template: InsertSmsTemplate): Promise<SmsTemplate> {
+    const [newTemplate] = await db.insert(smsTemplates).values(template).returning();
+    return newTemplate;
+  }
+
+  async deleteSmsTemplate(id: string, tenantId: string): Promise<void> {
+    await db.delete(smsTemplates)
+      .where(and(eq(smsTemplates.id, id), eq(smsTemplates.tenantId, tenantId)));
+  }
+
+  // SMS campaign operations
+  async getSmsCampaignsByTenant(tenantId: string): Promise<(SmsCampaign & { templateName: string })[]> {
+    const result = await db
+      .select()
+      .from(smsCampaigns)
+      .leftJoin(smsTemplates, eq(smsCampaigns.templateId, smsTemplates.id))
+      .where(eq(smsCampaigns.tenantId, tenantId))
+      .orderBy(desc(smsCampaigns.createdAt));
+    
+    return result.map(row => ({
+      ...row.sms_campaigns,
+      templateName: row.sms_templates?.name || 'Unknown Template',
+    }));
+  }
+
+  async createSmsCampaign(campaign: InsertSmsCampaign): Promise<SmsCampaign> {
+    const [newCampaign] = await db.insert(smsCampaigns).values(campaign).returning();
+    return newCampaign;
+  }
+
+  async updateSmsCampaign(id: string, updates: Partial<SmsCampaign>): Promise<SmsCampaign> {
+    const [updatedCampaign] = await db.update(smsCampaigns).set(updates).where(eq(smsCampaigns.id, id)).returning();
+    return updatedCampaign;
+  }
+
+  // SMS metrics operations
+  async getSmsMetricsByTenant(tenantId: string): Promise<any> {
+    const campaigns = await db.select().from(smsCampaigns).where(eq(smsCampaigns.tenantId, tenantId));
+    
+    const totalSent = campaigns.reduce((sum, c) => sum + (c.totalSent || 0), 0);
+    const totalDelivered = campaigns.reduce((sum, c) => sum + (c.totalDelivered || 0), 0);
+    const totalErrors = campaigns.reduce((sum, c) => sum + (c.totalErrors || 0), 0);
+    const totalOptOuts = campaigns.reduce((sum, c) => sum + (c.totalOptOuts || 0), 0);
+
+    const now = new Date();
+    const last7Days = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const last30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    const recent7 = campaigns.filter(c => c.createdAt && c.createdAt >= last7Days).reduce((sum, c) => sum + (c.totalSent || 0), 0);
+    const recent30 = campaigns.filter(c => c.createdAt && c.createdAt >= last30Days).reduce((sum, c) => sum + (c.totalSent || 0), 0);
+
+    return {
+      totalSent,
+      totalDelivered,
+      totalErrors,
+      totalOptOuts,
+      deliveryRate: totalSent > 0 ? Math.round((totalDelivered / totalSent) * 100) : 0,
+      optOutRate: totalSent > 0 ? Math.round((totalOptOuts / totalSent) * 100) : 0,
+      last7Days: recent7,
+      last30Days: recent30,
+      sentThisMonth: recent30,
+      bestTemplate: campaigns.length > 0 ? campaigns.sort((a, b) => (b.totalDelivered || 0) - (a.totalDelivered || 0))[0]?.name || "None yet" : "None yet",
     };
   }
 

@@ -165,6 +165,46 @@ export const emailTracking = pgTable("email_tracking", {
   trackingData: jsonb("tracking_data").default(sql`'{}'::jsonb`),
 });
 
+// SMS templates (per tenant)
+export const smsTemplates = pgTable("sms_templates", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  message: text("message").notNull(), // SMS message content (160 char limit recommended)
+  status: text("status").default("draft"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// SMS campaigns
+export const smsCampaigns = pgTable("sms_campaigns", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  templateId: uuid("template_id").references(() => smsTemplates.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  targetGroup: text("target_group").notNull(), // "all", "with-balance", "decline", "recent-upload"
+  status: text("status").default("pending"), // "pending", "sending", "completed", "failed"
+  totalRecipients: bigint("total_recipients", { mode: "number" }).default(0),
+  totalSent: bigint("total_sent", { mode: "number" }).default(0),
+  totalDelivered: bigint("total_delivered", { mode: "number" }).default(0),
+  totalErrors: bigint("total_errors", { mode: "number" }).default(0),
+  totalOptOuts: bigint("total_opt_outs", { mode: "number" }).default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+// SMS tracking for individual SMS sends
+export const smsTracking = pgTable("sms_tracking", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  campaignId: uuid("campaign_id").references(() => smsCampaigns.id, { onDelete: "cascade" }).notNull(),
+  consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "cascade" }).notNull(),
+  phoneNumber: text("phone_number").notNull(),
+  status: text("status").notNull(), // "sent", "delivered", "failed", "opted_out"
+  sentAt: timestamp("sent_at"),
+  deliveredAt: timestamp("delivered_at"),
+  errorMessage: text("error_message"),
+  trackingData: jsonb("tracking_data").default(sql`'{}'::jsonb`),
+});
+
 // Sender identities (per tenant)
 export const senderIdentities = pgTable("sender_identities", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -315,6 +355,8 @@ export const tenantsRelations = relations(tenants, ({ one, many }) => ({
   folders: many(folders),
   emailTemplates: many(emailTemplates),
   emailCampaigns: many(emailCampaigns),
+  smsTemplates: many(smsTemplates),
+  smsCampaigns: many(smsCampaigns),
   senderIdentities: many(senderIdentities),
   documents: many(documents),
   arrangementOptions: many(arrangementOptions),
@@ -484,6 +526,37 @@ export const foldersRelations = relations(folders, ({ one, many }) => ({
   accounts: many(accounts),
 }));
 
+export const smsTemplatesRelations = relations(smsTemplates, ({ one, many }) => ({
+  tenant: one(tenants, {
+    fields: [smsTemplates.tenantId],
+    references: [tenants.id],
+  }),
+  campaigns: many(smsCampaigns),
+}));
+
+export const smsCampaignsRelations = relations(smsCampaigns, ({ one, many }) => ({
+  tenant: one(tenants, {
+    fields: [smsCampaigns.tenantId],
+    references: [tenants.id],
+  }),
+  template: one(smsTemplates, {
+    fields: [smsCampaigns.templateId],
+    references: [smsTemplates.id],
+  }),
+  trackings: many(smsTracking),
+}));
+
+export const smsTrackingRelations = relations(smsTracking, ({ one }) => ({
+  campaign: one(smsCampaigns, {
+    fields: [smsTracking.campaignId],
+    references: [smsCampaigns.id],
+  }),
+  consumer: one(consumers, {
+    fields: [smsTracking.consumerId],
+    references: [consumers.id],
+  }),
+}));
+
 // Insert schemas
 export const insertTenantSchema = createInsertSchema(tenants).omit({ id: true, createdAt: true });
 export const insertPlatformUserSchema = createInsertSchema(platformUsers).omit({ id: true, createdAt: true });
@@ -501,6 +574,9 @@ export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true,
 export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true, createdAt: true });
 export const insertFolderSchema = createInsertSchema(folders).omit({ id: true, createdAt: true });
+export const insertSmsTemplateSchema = createInsertSchema(smsTemplates).omit({ id: true, createdAt: true });
+export const insertSmsCampaignSchema = createInsertSchema(smsCampaigns).omit({ id: true, createdAt: true, completedAt: true });
+export const insertSmsTrackingSchema = createInsertSchema(smsTracking).omit({ id: true });
 
 // Types
 export type UpsertUser = typeof users.$inferInsert;
@@ -537,3 +613,9 @@ export type Invoice = typeof invoices.$inferSelect;
 export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
 export type Folder = typeof folders.$inferSelect;
 export type InsertFolder = z.infer<typeof insertFolderSchema>;
+export type SmsTemplate = typeof smsTemplates.$inferSelect;
+export type InsertSmsTemplate = z.infer<typeof insertSmsTemplateSchema>;
+export type SmsCampaign = typeof smsCampaigns.$inferSelect;
+export type InsertSmsCampaign = z.infer<typeof insertSmsCampaignSchema>;
+export type SmsTracking = typeof smsTracking.$inferSelect;
+export type InsertSmsTracking = z.infer<typeof insertSmsTrackingSchema>;

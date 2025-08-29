@@ -564,6 +564,135 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // SMS template routes
+  app.get('/api/sms-templates', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const templates = await storage.getSmsTemplatesByTenant(platformUser.tenantId);
+      res.json(templates);
+    } catch (error) {
+      console.error("Error fetching SMS templates:", error);
+      res.status(500).json({ message: "Failed to fetch SMS templates" });
+    }
+  });
+
+  app.post('/api/sms-templates', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const insertSmsTemplateSchema = z.object({
+        name: z.string().min(1),
+        message: z.string().min(1).max(1600), // SMS length limit
+        status: z.string().optional().default("draft"),
+      });
+
+      const validatedData = insertSmsTemplateSchema.parse(req.body);
+      
+      const newTemplate = await storage.createSmsTemplate({
+        ...validatedData,
+        tenantId: platformUser.tenantId,
+      });
+      
+      res.status(201).json(newTemplate);
+    } catch (error) {
+      console.error("Error creating SMS template:", error);
+      res.status(500).json({ message: "Failed to create SMS template" });
+    }
+  });
+
+  app.delete('/api/sms-templates/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      await storage.deleteSmsTemplate(req.params.id, platformUser.tenantId);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting SMS template:", error);
+      res.status(500).json({ message: "Failed to delete SMS template" });
+    }
+  });
+
+  // SMS campaign routes
+  app.get('/api/sms-campaigns', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const campaigns = await storage.getSmsCampaignsByTenant(platformUser.tenantId);
+      res.json(campaigns);
+    } catch (error) {
+      console.error("Error fetching SMS campaigns:", error);
+      res.status(500).json({ message: "Failed to fetch SMS campaigns" });
+    }
+  });
+
+  app.post('/api/sms-campaigns', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const insertSmsCampaignSchema = z.object({
+        templateId: z.string().uuid(),
+        name: z.string().min(1),
+        targetGroup: z.enum(["all", "with-balance", "decline", "recent-upload"]),
+      });
+
+      const validatedData = insertSmsCampaignSchema.parse(req.body);
+      
+      const newCampaign = await storage.createSmsCampaign({
+        ...validatedData,
+        tenantId: platformUser.tenantId,
+      });
+      
+      res.status(201).json(newCampaign);
+    } catch (error) {
+      console.error("Error creating SMS campaign:", error);
+      res.status(500).json({ message: "Failed to create SMS campaign" });
+    }
+  });
+
+  // SMS metrics route
+  app.get('/api/sms-metrics', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const metrics = await storage.getSmsMetricsByTenant(platformUser.tenantId);
+      res.json(metrics);
+    } catch (error) {
+      console.error("Error fetching SMS metrics:", error);
+      res.status(500).json({ message: "Failed to fetch SMS metrics" });
+    }
+  });
+
   // Consumer registration route (public)
   app.post('/api/consumer-registration', async (req, res) => {
     try {
