@@ -22,7 +22,6 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     { name: "Dashboard", href: "/", icon: "fas fa-chart-bar" },
     { name: "Consumers", href: "/consumers", icon: "fas fa-users" },
     { name: "Accounts", href: "/accounts", icon: "fas fa-file-invoice-dollar" },
-    { name: "Import Data", href: "/import", icon: "fas fa-upload" },
     { name: "Communications", href: "/communications", icon: "fas fa-comments" },
     { name: "Payments", href: "/payments", icon: "fas fa-credit-card" },
     { name: "Billing", href: "/billing", icon: "fas fa-receipt" },
