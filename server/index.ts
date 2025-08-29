@@ -37,7 +37,7 @@ app.post("/api/db/health", async (_req: Request, res: Response) => {
   if (error) return res.status(500).json({ ok: false, error: error.message });
   res.json({ ok: true, inserted: data });
 });
-const PORT = Number(process.env.PORT) || 3000; // use Replit's port
+const PORT = Number(process.env.PORT) || 8080; // use Replit's port
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`API running on port ${PORT}`);
 });
