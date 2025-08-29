@@ -24,6 +24,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Trash2, Upload, Plus, Save, FileText, CreditCard, Shield, Settings as SettingsIcon, ImageIcon } from "lucide-react";
 
 export default function Settings() {
   const [showDocumentModal, setShowDocumentModal] = useState(false);
@@ -719,13 +732,13 @@ export default function Settings() {
                           <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
                             <h4 className="font-medium text-blue-900 text-sm mb-2">Available Variables:</h4>
                             <div className="text-xs text-blue-800 grid grid-cols-2 gap-1">
-                              <div>• {{firstName}}</div>
-                              <div>• {{lastName}}</div>
-                              <div>• {{email}}</div>
-                              <div>• {{accountNumber}}</div>
-                              <div>• {{creditor}}</div>
-                              <div>• {{balance}}</div>
-                              <div>• {{dueDate}}</div>
+                              <div>• {"{{firstName}}"}</div>
+                              <div>• {"{{lastName}}"}</div>
+                              <div>• {"{{email}}"}</div>
+                              <div>• {"{{accountNumber}}"}</div>
+                              <div>• {"{{creditor}}"}</div>
+                              <div>• {"{{balance}}"}</div>
+                              <div>• {"{{dueDate}}"}</div>
                               <div>• Plus any additional CSV columns</div>
                             </div>
                           </div>
