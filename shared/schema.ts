@@ -63,6 +63,15 @@ export const consumers = pgTable("consumers", {
   lastName: text("last_name"),
   email: text("email"),
   phone: text("phone"),
+  dateOfBirth: text("date_of_birth"), // Format: YYYY-MM-DD
+  ssnLast4: text("ssn_last4"), // Last 4 digits only for security
+  address: text("address"),
+  city: text("city"),
+  state: text("state"),
+  zipCode: text("zip_code"),
+  isRegistered: boolean("is_registered").default(false), // Self-registered vs imported
+  registrationToken: text("registration_token"), // For email verification
+  registrationDate: timestamp("registration_date"),
   contactPrefs: jsonb("contact_prefs").default(sql`'{}'::jsonb`),
   additionalData: jsonb("additional_data").default(sql`'{}'::jsonb`), // Store custom CSV columns
   createdAt: timestamp("created_at").defaultNow(),
@@ -196,6 +205,39 @@ export const tenantSettings = pgTable("tenant_settings", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Consumer notifications (when accounts are added)
+export const consumerNotifications = pgTable("consumer_notifications", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "cascade" }).notNull(),
+  accountId: uuid("account_id").references(() => accounts.id, { onDelete: "cascade" }),
+  type: text("type").notNull(), // "account_added", "payment_due", "settlement_available", etc.
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  isRead: boolean("is_read").default(false),
+  metadata: jsonb("metadata").default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Consumer callback requests 
+export const callbackRequests = pgTable("callback_requests", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "cascade" }).notNull(),
+  requestType: text("request_type").notNull(), // "callback", "email", "information"
+  preferredTime: text("preferred_time"), // "morning", "afternoon", "evening", "anytime"
+  phoneNumber: text("phone_number"),
+  emailAddress: text("email_address"),
+  subject: text("subject"),
+  message: text("message"),
+  status: text("status").default("pending"), // "pending", "in_progress", "completed", "cancelled"
+  priority: text("priority").default("normal"), // "low", "normal", "high", "urgent"
+  assignedTo: text("assigned_to"), // Admin user who took the request
+  adminNotes: text("admin_notes"),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Relations
 export const tenantsRelations = relations(tenants, ({ one, many }) => ({
   platformUsers: many(platformUsers),
@@ -229,6 +271,8 @@ export const consumersRelations = relations(consumers, ({ one, many }) => ({
     references: [tenants.id],
   }),
   accounts: many(accounts),
+  notifications: many(consumerNotifications),
+  callbackRequests: many(callbackRequests),
 }));
 
 export const accountsRelations = relations(accounts, ({ one }) => ({
@@ -287,6 +331,32 @@ export const emailTrackingRelations = relations(emailTracking, ({ one }) => ({
   }),
 }));
 
+export const consumerNotificationsRelations = relations(consumerNotifications, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [consumerNotifications.tenantId],
+    references: [tenants.id],
+  }),
+  consumer: one(consumers, {
+    fields: [consumerNotifications.consumerId],
+    references: [consumers.id],
+  }),
+  account: one(accounts, {
+    fields: [consumerNotifications.accountId],
+    references: [accounts.id],
+  }),
+}));
+
+export const callbackRequestsRelations = relations(callbackRequests, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [callbackRequests.tenantId],
+    references: [tenants.id],
+  }),
+  consumer: one(consumers, {
+    fields: [callbackRequests.consumerId],
+    references: [consumers.id],
+  }),
+}));
+
 // Insert schemas
 export const insertTenantSchema = createInsertSchema(tenants).omit({ id: true, createdAt: true });
 export const insertPlatformUserSchema = createInsertSchema(platformUsers).omit({ id: true, createdAt: true });
@@ -298,6 +368,8 @@ export const insertArrangementOptionSchema = createInsertSchema(arrangementOptio
 export const insertTenantSettingsSchema = createInsertSchema(tenantSettings).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertEmailCampaignSchema = createInsertSchema(emailCampaigns).omit({ id: true, createdAt: true, completedAt: true });
 export const insertEmailTrackingSchema = createInsertSchema(emailTracking).omit({ id: true });
+export const insertConsumerNotificationSchema = createInsertSchema(consumerNotifications).omit({ id: true, createdAt: true });
+export const insertCallbackRequestSchema = createInsertSchema(callbackRequests).omit({ id: true, createdAt: true });
 
 // Types
 export type UpsertUser = typeof users.$inferInsert;
@@ -322,3 +394,7 @@ export type EmailCampaign = typeof emailCampaigns.$inferSelect;
 export type InsertEmailCampaign = z.infer<typeof insertEmailCampaignSchema>;
 export type EmailTracking = typeof emailTracking.$inferSelect;
 export type InsertEmailTracking = z.infer<typeof insertEmailTrackingSchema>;
+export type ConsumerNotification = typeof consumerNotifications.$inferSelect;
+export type InsertConsumerNotification = z.infer<typeof insertConsumerNotificationSchema>;
+export type CallbackRequest = typeof callbackRequests.$inferSelect;
+export type InsertCallbackRequest = z.infer<typeof insertCallbackRequestSchema>;

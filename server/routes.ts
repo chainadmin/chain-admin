@@ -399,6 +399,190 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Consumer registration route (public)
+  app.post('/api/consumer-registration', async (req, res) => {
+    try {
+      const { 
+        tenantSlug, 
+        firstName, 
+        lastName, 
+        email, 
+        phone, 
+        dateOfBirth, 
+        ssnLast4, 
+        address, 
+        city, 
+        state, 
+        zipCode 
+      } = req.body;
+
+      if (!tenantSlug || !firstName || !lastName || !email || !ssnLast4) {
+        return res.status(400).json({ message: "Required fields missing" });
+      }
+
+      // Get tenant
+      const tenant = await storage.getTenantBySlug(tenantSlug);
+      if (!tenant) {
+        return res.status(404).json({ message: "Agency not found" });
+      }
+
+      // Check if consumer already exists
+      const existingConsumer = await storage.getConsumerByEmailAndTenant(email, tenantSlug);
+      if (existingConsumer) {
+        return res.status(409).json({ message: "Consumer already registered with this email" });
+      }
+
+      // Register consumer
+      const consumer = await storage.registerConsumer({
+        tenantId: tenant.id,
+        firstName,
+        lastName,
+        email,
+        phone,
+        dateOfBirth,
+        ssnLast4,
+        address,
+        city,
+        state,
+        zipCode,
+      });
+
+      res.json({ 
+        message: "Registration successful", 
+        consumerId: consumer.id,
+        consumer: {
+          id: consumer.id,
+          firstName: consumer.firstName,
+          lastName: consumer.lastName,
+          email: consumer.email,
+        }
+      });
+    } catch (error) {
+      console.error("Error during consumer registration:", error);
+      res.status(500).json({ message: "Registration failed" });
+    }
+  });
+
+  // Consumer notifications route
+  app.get('/api/consumer-notifications/:email/:tenantSlug', async (req, res) => {
+    try {
+      const { email, tenantSlug } = req.params;
+      
+      const consumer = await storage.getConsumerByEmailAndTenant(email, tenantSlug);
+      if (!consumer) {
+        return res.status(404).json({ message: "Consumer not found" });
+      }
+
+      const notifications = await storage.getNotificationsByConsumer(consumer.id);
+      res.json(notifications);
+    } catch (error) {
+      console.error("Error fetching consumer notifications:", error);
+      res.status(500).json({ message: "Failed to fetch notifications" });
+    }
+  });
+
+  // Mark notification as read
+  app.patch('/api/consumer-notifications/:id/read', async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.markNotificationRead(id);
+      res.json({ message: "Notification marked as read" });
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+      res.status(500).json({ message: "Failed to mark notification as read" });
+    }
+  });
+
+  // Callback request route (public)
+  app.post('/api/callback-request', async (req, res) => {
+    try {
+      const { 
+        tenantSlug, 
+        consumerEmail, 
+        requestType, 
+        preferredTime, 
+        phoneNumber, 
+        emailAddress, 
+        subject, 
+        message 
+      } = req.body;
+
+      if (!tenantSlug || !consumerEmail || !requestType) {
+        return res.status(400).json({ message: "Required fields missing" });
+      }
+
+      const consumer = await storage.getConsumerByEmailAndTenant(consumerEmail, tenantSlug);
+      if (!consumer) {
+        return res.status(404).json({ message: "Consumer not found" });
+      }
+
+      const tenant = await storage.getTenantBySlug(tenantSlug);
+      if (!tenant) {
+        return res.status(404).json({ message: "Agency not found" });
+      }
+
+      const callbackRequest = await storage.createCallbackRequest({
+        tenantId: tenant.id,
+        consumerId: consumer.id,
+        requestType,
+        preferredTime,
+        phoneNumber,
+        emailAddress,
+        subject,
+        message,
+      });
+
+      res.json({ message: "Request submitted successfully", requestId: callbackRequest.id });
+    } catch (error) {
+      console.error("Error creating callback request:", error);
+      res.status(500).json({ message: "Failed to submit request" });
+    }
+  });
+
+  // Admin callback requests route
+  app.get('/api/callback-requests', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const requests = await storage.getCallbackRequestsByTenant(platformUser.tenantId);
+      res.json(requests);
+    } catch (error) {
+      console.error("Error fetching callback requests:", error);
+      res.status(500).json({ message: "Failed to fetch callback requests" });
+    }
+  });
+
+  // Update callback request (admin)
+  app.patch('/api/callback-requests/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { id } = req.params;
+      const updates = req.body;
+
+      // Add resolved timestamp if status is being changed to completed
+      if (updates.status === 'completed' && !updates.resolvedAt) {
+        updates.resolvedAt = new Date();
+      }
+
+      const updatedRequest = await storage.updateCallbackRequest(id, updates);
+      res.json(updatedRequest);
+    } catch (error) {
+      console.error("Error updating callback request:", error);
+      res.status(500).json({ message: "Failed to update callback request" });
+    }
+  });
+
   // Tenant setup route (for fixing access issues)
   app.post('/api/setup-tenant', isAuthenticated, async (req: any, res) => {
     try {

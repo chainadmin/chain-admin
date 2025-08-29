@@ -10,6 +10,8 @@ import {
   documents,
   arrangementOptions,
   tenantSettings,
+  consumerNotifications,
+  callbackRequests,
   type User,
   type UpsertUser,
   type Tenant,
@@ -32,6 +34,10 @@ import {
   type InsertArrangementOption,
   type TenantSettings,
   type InsertTenantSettings,
+  type ConsumerNotification,
+  type InsertConsumerNotification,
+  type CallbackRequest,
+  type InsertCallbackRequest,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc } from "drizzle-orm";
@@ -74,6 +80,21 @@ export interface IStorage {
   
   // Email metrics operations
   getEmailMetricsByTenant(tenantId: string): Promise<any>;
+  
+  // Consumer registration operations
+  registerConsumer(consumerData: InsertConsumer): Promise<Consumer>;
+  getConsumerByEmailAndTenant(email: string, tenantSlug: string): Promise<Consumer | undefined>;
+  getTenantBySlug(slug: string): Promise<Tenant | undefined>;
+  
+  // Notification operations
+  createNotification(notification: InsertConsumerNotification): Promise<ConsumerNotification>;
+  getNotificationsByConsumer(consumerId: string): Promise<ConsumerNotification[]>;
+  markNotificationRead(notificationId: string): Promise<void>;
+  
+  // Callback request operations
+  createCallbackRequest(request: InsertCallbackRequest): Promise<CallbackRequest>;
+  getCallbackRequestsByTenant(tenantId: string): Promise<(CallbackRequest & { consumerName: string })[]>;
+  updateCallbackRequest(id: string, updates: Partial<CallbackRequest>): Promise<CallbackRequest>;
   
   // Document operations
   getDocumentsByTenant(tenantId: string): Promise<Document[]>;
@@ -205,11 +226,58 @@ export class DatabaseStorage implements IStorage {
 
   async createAccount(account: InsertAccount): Promise<Account> {
     const [newAccount] = await db.insert(accounts).values(account).returning();
+    
+    // Check if consumer is registered and send notification
+    await this.notifyConsumerAccountAdded(newAccount);
+    
     return newAccount;
   }
 
   async bulkCreateAccounts(accountsData: InsertAccount[]): Promise<Account[]> {
-    return await db.insert(accounts).values(accountsData).returning();
+    const newAccounts = await db.insert(accounts).values(accountsData).returning();
+    
+    // Send notifications for registered consumers
+    for (const account of newAccounts) {
+      await this.notifyConsumerAccountAdded(account);
+    }
+    
+    return newAccounts;
+  }
+  
+  private async notifyConsumerAccountAdded(account: Account): Promise<void> {
+    try {
+      // Get consumer details
+      const consumer = await this.getConsumer(account.consumerId);
+      if (!consumer || !consumer.isRegistered) {
+        return; // Only notify registered consumers
+      }
+      
+      // Get tenant for company info
+      const tenant = await this.getTenant(account.tenantId);
+      if (!tenant) return;
+      
+      // Create notification
+      await this.createNotification({
+        tenantId: account.tenantId,
+        consumerId: account.consumerId,
+        accountId: account.id,
+        type: 'account_added',
+        title: `New Account Added - ${account.creditor}`,
+        message: `A new account from ${account.creditor} has been added to your profile with a balance of $${((account.balanceCents || 0) / 100).toFixed(2)}. You can now view details and set up payment arrangements.`,
+        metadata: {
+          accountNumber: account.accountNumber,
+          creditor: account.creditor,
+          balance: account.balanceCents,
+          companyName: tenant.name,
+        },
+      });
+      
+      // TODO: Send email notification if consumer has email preferences enabled
+      // This would integrate with your email service provider
+    } catch (error) {
+      console.error('Error sending account notification:', error);
+      // Don't throw - we don't want to fail account creation if notification fails
+    }
   }
 
   // Email template operations
@@ -287,6 +355,74 @@ export class DatabaseStorage implements IStorage {
       sentThisMonth: recent30,
       bestTemplate: campaigns.length > 0 ? campaigns.sort((a, b) => (b.totalOpened || 0) - (a.totalOpened || 0))[0]?.name || "None yet" : "None yet",
     };
+  }
+
+  // Consumer registration operations
+  async registerConsumer(consumerData: InsertConsumer): Promise<Consumer> {
+    const [newConsumer] = await db.insert(consumers).values({
+      ...consumerData,
+      isRegistered: true,
+      registrationDate: new Date(),
+    }).returning();
+    return newConsumer;
+  }
+
+  async getConsumerByEmailAndTenant(email: string, tenantSlug: string): Promise<Consumer | undefined> {
+    const tenant = await this.getTenantBySlug(tenantSlug);
+    if (!tenant) return undefined;
+    
+    const [consumer] = await db.select()
+      .from(consumers)
+      .where(and(eq(consumers.email, email), eq(consumers.tenantId, tenant.id)));
+    return consumer || undefined;
+  }
+
+
+  // Notification operations
+  async createNotification(notification: InsertConsumerNotification): Promise<ConsumerNotification> {
+    const [newNotification] = await db.insert(consumerNotifications).values(notification).returning();
+    return newNotification;
+  }
+
+  async getNotificationsByConsumer(consumerId: string): Promise<ConsumerNotification[]> {
+    return await db.select()
+      .from(consumerNotifications)
+      .where(eq(consumerNotifications.consumerId, consumerId))
+      .orderBy(desc(consumerNotifications.createdAt));
+  }
+
+  async markNotificationRead(notificationId: string): Promise<void> {
+    await db.update(consumerNotifications)
+      .set({ isRead: true })
+      .where(eq(consumerNotifications.id, notificationId));
+  }
+
+  // Callback request operations
+  async createCallbackRequest(request: InsertCallbackRequest): Promise<CallbackRequest> {
+    const [newRequest] = await db.insert(callbackRequests).values(request).returning();
+    return newRequest;
+  }
+
+  async getCallbackRequestsByTenant(tenantId: string): Promise<(CallbackRequest & { consumerName: string })[]> {
+    const result = await db
+      .select()
+      .from(callbackRequests)
+      .leftJoin(consumers, eq(callbackRequests.consumerId, consumers.id))
+      .where(eq(callbackRequests.tenantId, tenantId))
+      .orderBy(desc(callbackRequests.createdAt));
+    
+    return result.map(row => ({
+      ...row.callback_requests,
+      consumerName: row.consumers ? `${row.consumers.firstName} ${row.consumers.lastName}` : 'Unknown Consumer',
+    }));
+  }
+
+  async updateCallbackRequest(id: string, updates: Partial<CallbackRequest>): Promise<CallbackRequest> {
+    const [updatedRequest] = await db.update(callbackRequests)
+      .set(updates)
+      .where(eq(callbackRequests.id, id))
+      .returning();
+    return updatedRequest;
   }
 
   // Document operations

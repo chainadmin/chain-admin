@@ -12,7 +12,9 @@ import Accounts from "@/pages/accounts";
 import ImportData from "@/pages/import-data";
 import Settings from "@/pages/settings";
 import Emails from "@/pages/emails";
-import ConsumerPortal from "@/pages/consumer-portal";
+import Requests from "@/pages/requests";
+import ConsumerPortal from "@/pages/enhanced-consumer-portal";
+import ConsumerRegistration from "@/pages/consumer-registration";
 import TenantSetup from "@/components/tenant-setup";
 
 function Router() {
@@ -27,6 +29,7 @@ function Router() {
         <>
           <Route path="/" component={Landing} />
           <Route path="/consumer/:tenantSlug/:email" component={ConsumerPortal} />
+          <Route path="/register/:tenantSlug" component={ConsumerRegistration} />
         </>
       ) : needsTenantSetup ? (
         <Route path="*" component={TenantSetup} />
@@ -37,6 +40,7 @@ function Router() {
           <Route path="/accounts" component={Accounts} />
           <Route path="/import" component={ImportData} />
           <Route path="/emails" component={Emails} />
+          <Route path="/requests" component={Requests} />
           <Route path="/settings" component={Settings} />
         </>
       )}
