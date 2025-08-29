@@ -68,9 +68,24 @@ export default function Landing() {
           </Card>
         </div>
 
-        <div className="text-center mt-16">
-          <p className="text-gray-500">
-            Need consumer access? Contact your agency for your personalized portal link.
+        {/* Consumer Access Section */}
+        <div className="text-center mt-16 bg-white rounded-xl p-8 shadow-lg">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">Consumer Portal Access</h2>
+          <p className="text-gray-600 mb-6">
+            Already have an account with a collection agency? Access your account information securely.
+          </p>
+          <Button 
+            size="lg"
+            variant="outline" 
+            onClick={() => window.location.href = '/consumer-login'}
+            className="mr-4"
+            data-testid="button-consumer-login"
+          >
+            <i className="fas fa-user mr-2"></i>
+            Consumer Login
+          </Button>
+          <p className="text-sm text-gray-500 mt-4">
+            New consumer? Your agency will provide registration information.
           </p>
         </div>
       </div>

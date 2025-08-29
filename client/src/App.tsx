@@ -14,6 +14,8 @@ import Settings from "@/pages/settings";
 import Emails from "@/pages/emails";
 import Requests from "@/pages/requests";
 import ConsumerPortal from "@/pages/enhanced-consumer-portal";
+import ConsumerLogin from "@/pages/consumer-login";
+import ConsumerDashboard from "@/pages/consumer-dashboard";
 import ConsumerRegistration from "@/pages/consumer-registration";
 import TenantSetup from "@/components/tenant-setup";
 
@@ -28,6 +30,8 @@ function Router() {
       {isLoading || !isAuthenticated ? (
         <>
           <Route path="/" component={Landing} />
+          <Route path="/consumer-login" component={ConsumerLogin} />
+          <Route path="/consumer-dashboard" component={ConsumerDashboard} />
           <Route path="/consumer/:tenantSlug/:email" component={ConsumerPortal} />
           <Route path="/register/:tenantSlug" component={ConsumerRegistration} />
         </>

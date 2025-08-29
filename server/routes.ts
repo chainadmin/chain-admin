@@ -463,6 +463,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Consumer login route
+  app.post('/api/consumer/login', async (req, res) => {
+    try {
+      const { email, tenantSlug, dateOfBirth } = req.body;
+
+      if (!email || !tenantSlug || !dateOfBirth) {
+        return res.status(400).json({ message: "Email, agency, and date of birth are required" });
+      }
+
+      // Get tenant
+      const tenant = await storage.getTenantBySlug(tenantSlug);
+      if (!tenant) {
+        return res.status(404).json({ message: "Agency not found" });
+      }
+
+      // Get consumer
+      const consumer = await storage.getConsumerByEmailAndTenant(email, tenantSlug);
+      if (!consumer) {
+        return res.status(404).json({ message: "Consumer not found. Please register first or contact your agency." });
+      }
+
+      if (!consumer.isRegistered) {
+        return res.status(403).json({ message: "Consumer account is not yet activated. Please contact your agency." });
+      }
+
+      // Verify date of birth (simple verification)
+      const providedDOB = new Date(dateOfBirth);
+      const storedDOB = new Date(consumer.dateOfBirth);
+      
+      if (providedDOB.getTime() !== storedDOB.getTime()) {
+        return res.status(401).json({ message: "Date of birth verification failed" });
+      }
+
+      // Return consumer data (excluding sensitive info)
+      res.json({
+        consumer: {
+          id: consumer.id,
+          firstName: consumer.firstName,
+          lastName: consumer.lastName,
+          email: consumer.email,
+          phone: consumer.phone,
+          tenantId: consumer.tenantId,
+        },
+        tenant: {
+          name: tenant.name,
+          slug: tenant.slug,
+        }
+      });
+    } catch (error) {
+      console.error("Error during consumer login:", error);
+      res.status(500).json({ message: "Login failed" });
+    }
+  });
+
   // Consumer notifications route
   app.get('/api/consumer-notifications/:email/:tenantSlug', async (req, res) => {
     try {
