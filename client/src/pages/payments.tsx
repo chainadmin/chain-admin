@@ -11,23 +11,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { CreditCard, DollarSign, TrendingUp, Clock, CheckCircle, XCircle, RefreshCw, Plus, Calendar, User, Building2, Lock } from "lucide-react";
+import { CreditCard, DollarSign, TrendingUp, Clock, CheckCircle, XCircle, RefreshCw, Calendar, User, Building2, Lock } from "lucide-react";
 
 export default function Payments() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [filterStatus, setFilterStatus] = useState("all");
-  const [showManualPaymentModal, setShowManualPaymentModal] = useState(false);
   const [showPayNowModal, setShowPayNowModal] = useState(false);
 
-  const [manualPaymentForm, setManualPaymentForm] = useState({
-    consumerEmail: "",
-    accountId: "",
-    amount: "",
-    paymentMethod: "credit_card",
-    transactionId: "",
-    notes: "",
-  });
 
   const [payNowForm, setPayNowForm] = useState({
     consumerEmail: "",
@@ -49,76 +40,10 @@ export default function Payments() {
     queryKey: ["/api/payments/stats"],
   });
 
-  // Fetch consumers for manual payment
+  // Fetch consumers for payments
   const { data: consumers } = useQuery({
     queryKey: ["/api/consumers"],
   });
-
-  // Process manual payment mutation
-  const manualPaymentMutation = useMutation({
-    mutationFn: async (paymentData: any) => {
-      await apiRequest("POST", "/api/payments/manual", paymentData);
-    },
-    onSuccess: () => {
-      toast({
-        title: "Payment Recorded",
-        description: "Manual payment has been recorded successfully.",
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/payments/stats"] });
-      setShowManualPaymentModal(false);
-      setManualPaymentForm({
-        consumerEmail: "",
-        accountId: "",
-        amount: "",
-        paymentMethod: "credit_card",
-        transactionId: "",
-        notes: "",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Payment Failed",
-        description: error.message || "Unable to record payment.",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const handleManualPaymentSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!manualPaymentForm.consumerEmail || !manualPaymentForm.amount) {
-      toast({
-        title: "Missing Information",
-        description: "Please fill in consumer email and payment amount.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const amountCents = Math.round(parseFloat(manualPaymentForm.amount) * 100);
-    if (amountCents <= 0) {
-      toast({
-        title: "Invalid Amount",
-        description: "Please enter a valid payment amount greater than $0.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    manualPaymentMutation.mutate({
-      ...manualPaymentForm,
-      amountCents,
-    });
-  };
-
-  const handleInputChange = (field: string, value: string) => {
-    setManualPaymentForm(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
 
   const handlePayNowFormChange = (field: string, value: string) => {
     setPayNowForm(prev => ({
@@ -248,7 +173,7 @@ export default function Payments() {
     return payment.status === filterStatus;
   }) || [];
 
-  const stats = paymentStats || {
+  const stats = (paymentStats as any) || {
     totalProcessed: 0,
     totalAmountCents: 0,
     successfulPayments: 0,
@@ -274,102 +199,9 @@ export default function Payments() {
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Payment Processing</h1>
             <p className="mt-2 text-gray-600">
-              Monitor and manage all payment transactions
+              Monitor and manage all payment transactions via USAePay
             </p>
           </div>
-          <Dialog open={showManualPaymentModal} onOpenChange={setShowManualPaymentModal}>
-            <DialogTrigger asChild>
-              <Button data-testid="button-add-manual-payment">
-                <Plus className="h-4 w-4 mr-2" />
-                Record Manual Payment
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Record Manual Payment</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleManualPaymentSubmit} className="space-y-4">
-                <div>
-                  <Label>Consumer Email *</Label>
-                  <Select value={manualPaymentForm.consumerEmail} onValueChange={(value) => handleInputChange("consumerEmail", value)}>
-                    <SelectTrigger data-testid="select-payment-consumer">
-                      <SelectValue placeholder="Select consumer" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(consumers as any[])?.map((consumer: any) => (
-                        <SelectItem key={consumer.id} value={consumer.email}>
-                          {consumer.firstName} {consumer.lastName} ({consumer.email})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label>Payment Amount *</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={manualPaymentForm.amount}
-                      onChange={(e) => handleInputChange("amount", e.target.value)}
-                      placeholder="0.00"
-                      data-testid="input-payment-amount"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label>Payment Method</Label>
-                    <Select value={manualPaymentForm.paymentMethod} onValueChange={(value) => handleInputChange("paymentMethod", value)}>
-                      <SelectTrigger data-testid="select-payment-method">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="credit_card">Credit Card</SelectItem>
-                        <SelectItem value="debit_card">Debit Card</SelectItem>
-                        <SelectItem value="ach">ACH Transfer</SelectItem>
-                        <SelectItem value="check">Check</SelectItem>
-                        <SelectItem value="cash">Cash</SelectItem>
-                        <SelectItem value="money_order">Money Order</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div>
-                  <Label>Transaction ID</Label>
-                  <Input
-                    value={manualPaymentForm.transactionId}
-                    onChange={(e) => handleInputChange("transactionId", e.target.value)}
-                    placeholder="External transaction reference"
-                    data-testid="input-transaction-id"
-                  />
-                </div>
-                <div>
-                  <Label>Notes</Label>
-                  <Input
-                    value={manualPaymentForm.notes}
-                    onChange={(e) => handleInputChange("notes", e.target.value)}
-                    placeholder="Additional payment details..."
-                    data-testid="input-payment-notes"
-                  />
-                </div>
-                <div className="flex justify-end space-x-3">
-                  <Button type="button" variant="outline" onClick={() => setShowManualPaymentModal(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={manualPaymentMutation.isPending}>
-                    {manualPaymentMutation.isPending ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        Recording...
-                      </>
-                    ) : (
-                      "Record Payment"
-                    )}
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
         </div>
 
         {/* Payment Stats */}
@@ -473,9 +305,9 @@ export default function Payments() {
                     : `No ${filterStatus} payments found.`
                   }
                 </p>
-                <Button className="mt-4" onClick={() => setShowManualPaymentModal(true)}>
-                  Record First Payment
-                </Button>
+                <p className="text-sm text-gray-500 mt-2">
+                  Payments will appear here once processed through USAePay.
+                </p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -745,15 +577,9 @@ export default function Payments() {
                   </form>
                 </DialogContent>
               </Dialog>
-              <Button 
-                variant="outline" 
-                size="lg" 
-                onClick={() => setShowManualPaymentModal(true)}
-                data-testid="button-record-manual-payment"
-              >
-                <DollarSign className="h-5 w-5 mr-2" />
-                Record Manual Payment
-              </Button>
+              <p className="text-sm text-gray-500 text-center">
+                All payments are processed through USAePay integration
+              </p>
             </div>
           </CardContent>
         </Card>
