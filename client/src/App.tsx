@@ -11,6 +11,7 @@ import Consumers from "@/pages/consumers";
 import Accounts from "@/pages/accounts";
 import ImportData from "@/pages/import-data";
 import Settings from "@/pages/settings";
+import Emails from "@/pages/emails";
 import ConsumerPortal from "@/pages/consumer-portal";
 import TenantSetup from "@/components/tenant-setup";
 
@@ -35,6 +36,7 @@ function Router() {
           <Route path="/consumers" component={Consumers} />
           <Route path="/accounts" component={Accounts} />
           <Route path="/import" component={ImportData} />
+          <Route path="/emails" component={Emails} />
           <Route path="/settings" component={Settings} />
         </>
       )}

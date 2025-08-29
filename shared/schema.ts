@@ -102,6 +102,40 @@ export const emailTemplates = pgTable("email_templates", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Email campaigns
+export const emailCampaigns = pgTable("email_campaigns", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  templateId: uuid("template_id").references(() => emailTemplates.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  targetGroup: text("target_group").notNull(), // "all", "with-balance", "overdue"
+  status: text("status").default("pending"), // "pending", "sending", "completed", "failed"
+  totalRecipients: bigint("total_recipients", { mode: "number" }).default(0),
+  totalSent: bigint("total_sent", { mode: "number" }).default(0),
+  totalDelivered: bigint("total_delivered", { mode: "number" }).default(0),
+  totalOpened: bigint("total_opened", { mode: "number" }).default(0),
+  totalClicked: bigint("total_clicked", { mode: "number" }).default(0),
+  totalErrors: bigint("total_errors", { mode: "number" }).default(0),
+  totalOptOuts: bigint("total_opt_outs", { mode: "number" }).default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+// Email tracking for individual email sends
+export const emailTracking = pgTable("email_tracking", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  campaignId: uuid("campaign_id").references(() => emailCampaigns.id, { onDelete: "cascade" }).notNull(),
+  consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "cascade" }).notNull(),
+  emailAddress: text("email_address").notNull(),
+  status: text("status").notNull(), // "sent", "delivered", "opened", "clicked", "bounced", "failed", "opted_out"
+  sentAt: timestamp("sent_at"),
+  deliveredAt: timestamp("delivered_at"),
+  openedAt: timestamp("opened_at"),
+  clickedAt: timestamp("clicked_at"),
+  errorMessage: text("error_message"),
+  trackingData: jsonb("tracking_data").default(sql`'{}'::jsonb`),
+});
+
 // Sender identities (per tenant)
 export const senderIdentities = pgTable("sender_identities", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -168,6 +202,7 @@ export const tenantsRelations = relations(tenants, ({ one, many }) => ({
   consumers: many(consumers),
   accounts: many(accounts),
   emailTemplates: many(emailTemplates),
+  emailCampaigns: many(emailCampaigns),
   senderIdentities: many(senderIdentities),
   documents: many(documents),
   arrangementOptions: many(arrangementOptions),
@@ -229,6 +264,29 @@ export const tenantSettingsRelations = relations(tenantSettings, ({ one }) => ({
   }),
 }));
 
+export const emailCampaignsRelations = relations(emailCampaigns, ({ one, many }) => ({
+  tenant: one(tenants, {
+    fields: [emailCampaigns.tenantId],
+    references: [tenants.id],
+  }),
+  template: one(emailTemplates, {
+    fields: [emailCampaigns.templateId],
+    references: [emailTemplates.id],
+  }),
+  trackings: many(emailTracking),
+}));
+
+export const emailTrackingRelations = relations(emailTracking, ({ one }) => ({
+  campaign: one(emailCampaigns, {
+    fields: [emailTracking.campaignId],
+    references: [emailCampaigns.id],
+  }),
+  consumer: one(consumers, {
+    fields: [emailTracking.consumerId],
+    references: [consumers.id],
+  }),
+}));
+
 // Insert schemas
 export const insertTenantSchema = createInsertSchema(tenants).omit({ id: true, createdAt: true });
 export const insertPlatformUserSchema = createInsertSchema(platformUsers).omit({ id: true, createdAt: true });
@@ -238,6 +296,8 @@ export const insertEmailTemplateSchema = createInsertSchema(emailTemplates).omit
 export const insertDocumentSchema = createInsertSchema(documents).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertArrangementOptionSchema = createInsertSchema(arrangementOptions).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertTenantSettingsSchema = createInsertSchema(tenantSettings).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertEmailCampaignSchema = createInsertSchema(emailCampaigns).omit({ id: true, createdAt: true, completedAt: true });
+export const insertEmailTrackingSchema = createInsertSchema(emailTracking).omit({ id: true });
 
 // Types
 export type UpsertUser = typeof users.$inferInsert;
@@ -258,3 +318,7 @@ export type ArrangementOption = typeof arrangementOptions.$inferSelect;
 export type InsertArrangementOption = z.infer<typeof insertArrangementOptionSchema>;
 export type TenantSettings = typeof tenantSettings.$inferSelect;
 export type InsertTenantSettings = z.infer<typeof insertTenantSettingsSchema>;
+export type EmailCampaign = typeof emailCampaigns.$inferSelect;
+export type InsertEmailCampaign = z.infer<typeof insertEmailCampaignSchema>;
+export type EmailTracking = typeof emailTracking.$inferSelect;
+export type InsertEmailTracking = z.infer<typeof insertEmailTrackingSchema>;

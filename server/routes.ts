@@ -298,6 +298,107 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Email campaign routes
+  app.get('/api/email-campaigns', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const campaigns = await storage.getEmailCampaignsByTenant(platformUser.tenantId);
+      res.json(campaigns);
+    } catch (error) {
+      console.error("Error fetching email campaigns:", error);
+      res.status(500).json({ message: "Failed to fetch email campaigns" });
+    }
+  });
+
+  app.post('/api/email-campaigns', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { name, templateId, targetGroup } = req.body;
+      
+      if (!name || !templateId || !targetGroup) {
+        return res.status(400).json({ message: "Name, template ID, and target group are required" });
+      }
+
+      // Get target consumers count
+      const consumers = await storage.getConsumersByTenant(platformUser.tenantId);
+      let targetedConsumers = consumers;
+      
+      if (targetGroup === "with-balance") {
+        const accounts = await storage.getAccountsByTenant(platformUser.tenantId);
+        const consumerIds = accounts.filter(acc => (acc.balance || 0) > 0).map(acc => acc.consumerId);
+        targetedConsumers = consumers.filter(c => consumerIds.includes(c.id));
+      } else if (targetGroup === "overdue") {
+        const accounts = await storage.getAccountsByTenant(platformUser.tenantId);
+        const now = new Date();
+        const consumerIds = accounts.filter(acc => 
+          (acc.balance || 0) > 0 && 
+          acc.dueDate && 
+          new Date(acc.dueDate) < now
+        ).map(acc => acc.consumerId);
+        targetedConsumers = consumers.filter(c => consumerIds.includes(c.id));
+      }
+
+      const campaign = await storage.createEmailCampaign({
+        tenantId: platformUser.tenantId,
+        name,
+        templateId,
+        targetGroup,
+        totalRecipients: targetedConsumers.length,
+        status: 'sending',
+      });
+
+      // TODO: Here you would integrate with your email service provider
+      // For now, simulate sending process with mock data
+      setTimeout(async () => {
+        await storage.updateEmailCampaign(campaign.id, {
+          status: 'completed',
+          totalSent: targetedConsumers.length,
+          totalDelivered: Math.floor(targetedConsumers.length * 0.95), // 95% delivery rate
+          totalOpened: Math.floor(targetedConsumers.length * 0.25), // 25% open rate
+          totalClicked: Math.floor(targetedConsumers.length * 0.05), // 5% click rate
+          totalErrors: Math.floor(targetedConsumers.length * 0.05), // 5% error rate
+          totalOptOuts: Math.floor(targetedConsumers.length * 0.01), // 1% opt-out rate
+          completedAt: new Date(),
+        });
+      }, 2000);
+      
+      res.json(campaign);
+    } catch (error) {
+      console.error("Error creating email campaign:", error);
+      res.status(500).json({ message: "Failed to create email campaign" });
+    }
+  });
+
+  // Email metrics route
+  app.get('/api/email-metrics', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const metrics = await storage.getEmailMetricsByTenant(platformUser.tenantId);
+      res.json(metrics);
+    } catch (error) {
+      console.error("Error fetching email metrics:", error);
+      res.status(500).json({ message: "Failed to fetch email metrics" });
+    }
+  });
+
   // Tenant setup route (for fixing access issues)
   app.post('/api/setup-tenant', isAuthenticated, async (req: any, res) => {
     try {

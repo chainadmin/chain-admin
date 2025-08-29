@@ -20,6 +20,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     { name: "Consumers", href: "/consumers", icon: "fas fa-users" },
     { name: "Accounts", href: "/accounts", icon: "fas fa-file-invoice-dollar" },
     { name: "Import Data", href: "/import", icon: "fas fa-upload" },
+    { name: "Emails", href: "/emails", icon: "fas fa-envelope" },
     { name: "Settings", href: "/settings", icon: "fas fa-cog" },
   ];
 

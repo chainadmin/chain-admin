@@ -5,6 +5,8 @@ import {
   consumers,
   accounts,
   emailTemplates,
+  emailCampaigns,
+  emailTracking,
   documents,
   arrangementOptions,
   tenantSettings,
@@ -20,6 +22,10 @@ import {
   type InsertAccount,
   type EmailTemplate,
   type InsertEmailTemplate,
+  type EmailCampaign,
+  type InsertEmailCampaign,
+  type EmailTracking,
+  type InsertEmailTracking,
   type Document,
   type InsertDocument,
   type ArrangementOption,
@@ -59,6 +65,15 @@ export interface IStorage {
   // Email template operations
   getEmailTemplatesByTenant(tenantId: string): Promise<EmailTemplate[]>;
   createEmailTemplate(template: InsertEmailTemplate): Promise<EmailTemplate>;
+  deleteEmailTemplate(id: string, tenantId: string): Promise<void>;
+  
+  // Email campaign operations
+  getEmailCampaignsByTenant(tenantId: string): Promise<(EmailCampaign & { templateName: string })[]>;
+  createEmailCampaign(campaign: InsertEmailCampaign): Promise<EmailCampaign>;
+  updateEmailCampaign(id: string, updates: Partial<EmailCampaign>): Promise<EmailCampaign>;
+  
+  // Email metrics operations
+  getEmailMetricsByTenant(tenantId: string): Promise<any>;
   
   // Document operations
   getDocumentsByTenant(tenantId: string): Promise<Document[]>;
@@ -210,6 +225,68 @@ export class DatabaseStorage implements IStorage {
   async deleteEmailTemplate(id: string, tenantId: string): Promise<void> {
     await db.delete(emailTemplates)
       .where(and(eq(emailTemplates.id, id), eq(emailTemplates.tenantId, tenantId)));
+  }
+
+  // Email campaign operations
+  async getEmailCampaignsByTenant(tenantId: string): Promise<(EmailCampaign & { templateName: string })[]> {
+    const result = await db
+      .select()
+      .from(emailCampaigns)
+      .leftJoin(emailTemplates, eq(emailCampaigns.templateId, emailTemplates.id))
+      .where(eq(emailCampaigns.tenantId, tenantId))
+      .orderBy(desc(emailCampaigns.createdAt));
+    
+    return result.map(row => ({
+      ...row.email_campaigns,
+      templateName: row.email_templates?.name || 'Unknown Template',
+    }));
+  }
+
+  async createEmailCampaign(campaign: InsertEmailCampaign): Promise<EmailCampaign> {
+    const [newCampaign] = await db.insert(emailCampaigns).values(campaign).returning();
+    return newCampaign;
+  }
+
+  async updateEmailCampaign(id: string, updates: Partial<EmailCampaign>): Promise<EmailCampaign> {
+    const [updatedCampaign] = await db.update(emailCampaigns).set(updates).where(eq(emailCampaigns.id, id)).returning();
+    return updatedCampaign;
+  }
+
+  // Email metrics operations
+  async getEmailMetricsByTenant(tenantId: string): Promise<any> {
+    const campaigns = await db.select().from(emailCampaigns).where(eq(emailCampaigns.tenantId, tenantId));
+    
+    const totalSent = campaigns.reduce((sum, c) => sum + (c.totalSent || 0), 0);
+    const totalDelivered = campaigns.reduce((sum, c) => sum + (c.totalDelivered || 0), 0);
+    const totalOpened = campaigns.reduce((sum, c) => sum + (c.totalOpened || 0), 0);
+    const totalClicked = campaigns.reduce((sum, c) => sum + (c.totalClicked || 0), 0);
+    const totalErrors = campaigns.reduce((sum, c) => sum + (c.totalErrors || 0), 0);
+    const totalOptOuts = campaigns.reduce((sum, c) => sum + (c.totalOptOuts || 0), 0);
+
+    const now = new Date();
+    const last7Days = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const last30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    const recent7 = campaigns.filter(c => c.createdAt && c.createdAt >= last7Days).reduce((sum, c) => sum + (c.totalSent || 0), 0);
+    const recent30 = campaigns.filter(c => c.createdAt && c.createdAt >= last30Days).reduce((sum, c) => sum + (c.totalSent || 0), 0);
+
+    return {
+      totalSent,
+      totalDelivered,
+      totalOpened,
+      totalClicked,
+      totalErrors,
+      totalOptOuts,
+      openRate: totalSent > 0 ? Math.round((totalOpened / totalSent) * 100) : 0,
+      clickRate: totalSent > 0 ? Math.round((totalClicked / totalSent) * 100) : 0,
+      conversionRate: totalSent > 0 ? Math.round((totalClicked / totalSent) * 100) : 0,
+      optOutRate: totalSent > 0 ? Math.round((totalOptOuts / totalSent) * 100) : 0,
+      deliveryRate: totalSent > 0 ? Math.round((totalDelivered / totalSent) * 100) : 0,
+      last7Days: recent7,
+      last30Days: recent30,
+      sentThisMonth: recent30,
+      bestTemplate: campaigns.length > 0 ? campaigns.sort((a, b) => (b.totalOpened || 0) - (a.totalOpened || 0))[0]?.name || "None yet" : "None yet",
+    };
   }
 
   // Document operations

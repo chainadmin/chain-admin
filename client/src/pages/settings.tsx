@@ -24,7 +24,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,12 +35,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Trash2, Upload, Plus, Save, FileText, CreditCard, Shield, Settings as SettingsIcon, ImageIcon } from "lucide-react";
+import { Trash2, Upload, Plus, Save, CreditCard, Shield, Settings as SettingsIcon, ImageIcon } from "lucide-react";
 
 export default function Settings() {
   const [showDocumentModal, setShowDocumentModal] = useState(false);
   const [showArrangementModal, setShowArrangementModal] = useState(false);
-  const [showEmailModal, setShowEmailModal] = useState(false);
   const [documentForm, setDocumentForm] = useState({
     title: "",
     description: "",
@@ -60,11 +58,6 @@ export default function Settings() {
     monthlyPaymentMax: "",
     maxTermMonths: "12",
   });
-  const [emailForm, setEmailForm] = useState({
-    name: "",
-    subject: "",
-    html: "",
-  });
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -81,9 +74,6 @@ export default function Settings() {
     queryKey: ["/api/arrangement-options"],
   });
 
-  const { data: emailTemplates, isLoading: emailTemplatesLoading } = useQuery({
-    queryKey: ["/api/email-templates"],
-  });
 
   const updateSettingsMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -170,44 +160,7 @@ export default function Settings() {
     },
   });
 
-  const createEmailTemplateMutation = useMutation({
-    mutationFn: async (data: any) => {
-      await apiRequest("POST", "/api/email-templates", data);
-    },
-    onSuccess: () => {
-      toast({
-        title: "Email Template Created",
-        description: "Email template has been created successfully.",
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/email-templates"] });
-      setShowEmailModal(false);
-      setEmailForm({
-        name: "",
-        subject: "",
-        html: "",
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Creation Failed",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
 
-  const deleteEmailTemplateMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/email-templates/${id}`);
-    },
-    onSuccess: () => {
-      toast({
-        title: "Email Template Deleted",
-        description: "Email template has been removed successfully.",
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/email-templates"] });
-    },
-  });
 
   const createArrangementMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -330,7 +283,6 @@ export default function Settings() {
               <TabsTrigger value="general">General</TabsTrigger>
               <TabsTrigger value="documents">Documents</TabsTrigger>
               <TabsTrigger value="arrangements">Payment Plans</TabsTrigger>
-              <TabsTrigger value="emails">Email Templates</TabsTrigger>
               <TabsTrigger value="privacy">Privacy & Legal</TabsTrigger>
             </TabsList>
 
@@ -683,178 +635,7 @@ export default function Settings() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="emails">
-              <Card>
-                <CardHeader>
-                  <div className="flex justify-between items-center">
-                    <CardTitle>Email Templates</CardTitle>
-                    <Dialog open={showEmailModal} onOpenChange={setShowEmailModal}>
-                      <DialogTrigger asChild>
-                        <Button>
-                          <Plus className="h-4 w-4 mr-2" />
-                          Create Template
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-2xl">
-                        <DialogHeader>
-                          <DialogTitle>Create Email Template</DialogTitle>
-                        </DialogHeader>
-                        <div className="space-y-4">
-                          <div>
-                            <Label>Template Name *</Label>
-                            <Input
-                              value={emailForm.name}
-                              onChange={(e) => setEmailForm({...emailForm, name: e.target.value})}
-                              placeholder="e.g., Payment Reminder"
-                            />
-                          </div>
-                          
-                          <div>
-                            <Label>Subject Line *</Label>
-                            <Input
-                              value={emailForm.subject}
-                              onChange={(e) => setEmailForm({...emailForm, subject: e.target.value})}
-                              placeholder="e.g., Payment Required - Account {{accountNumber}}"
-                            />
-                          </div>
-                          
-                          <div>
-                            <Label>Email Content (HTML) *</Label>
-                            <Textarea
-                              rows={10}
-                              value={emailForm.html}
-                              onChange={(e) => setEmailForm({...emailForm, html: e.target.value})}
-                              placeholder="Enter your HTML email content. You can use variables like {{firstName}}, {{lastName}}, {{balance}}, {{creditor}}, etc."
-                              className="font-mono text-sm"
-                            />
-                          </div>
-                          
-                          <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
-                            <h4 className="font-medium text-blue-900 text-sm mb-2">Available Variables:</h4>
-                            <div className="text-xs text-blue-800 grid grid-cols-2 gap-1">
-                              <div>• {"{{firstName}}"}</div>
-                              <div>• {"{{lastName}}"}</div>
-                              <div>• {"{{email}}"}</div>
-                              <div>• {"{{accountNumber}}"}</div>
-                              <div>• {"{{creditor}}"}</div>
-                              <div>• {"{{balance}}"}</div>
-                              <div>• {"{{dueDate}}"}</div>
-                              <div>• Plus any additional CSV columns</div>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        <div className="flex justify-end space-x-3 pt-4">
-                          <Button variant="outline" onClick={() => setShowEmailModal(false)}>
-                            Cancel
-                          </Button>
-                          <Button 
-                            onClick={() => {
-                              if (!emailForm.name || !emailForm.subject || !emailForm.html) {
-                                toast({
-                                  title: "Missing Information",
-                                  description: "Please fill in all required fields.",
-                                  variant: "destructive",
-                                });
-                                return;
-                              }
-                              createEmailTemplateMutation.mutate(emailForm);
-                            }}
-                            disabled={createEmailTemplateMutation.isPending}
-                          >
-                            {createEmailTemplateMutation.isPending ? (
-                              <>
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                                Creating...
-                              </>
-                            ) : (
-                              <>
-                                <Plus className="h-4 w-4 mr-2" />
-                                Create Template
-                              </>
-                            )}
-                          </Button>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {emailTemplatesLoading ? (
-                    <div className="flex justify-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                    </div>
-                  ) : !emailTemplates || (emailTemplates as any[]).length === 0 ? (
-                    <div className="text-center py-8">
-                      <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                      <h3 className="text-lg font-medium text-gray-900 mb-2">No Email Templates</h3>
-                      <p className="text-gray-600 mb-4">
-                        Create email templates to send personalized messages to consumers.
-                      </p>
-                      <Button onClick={() => setShowEmailModal(true)}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Create Your First Template
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {(emailTemplates as any[]).map((template: any) => (
-                        <div key={template.id} className="border rounded-lg p-4">
-                          <div className="flex justify-between items-start">
-                            <div className="flex-1">
-                              <div className="flex items-center space-x-2 mb-2">
-                                <h3 className="font-medium text-gray-900">{template.name}</h3>
-                                <Badge variant={template.status === 'draft' ? 'secondary' : 'default'}>
-                                  {template.status || 'draft'}
-                                </Badge>
-                              </div>
-                              <p className="text-sm text-gray-600 mb-2">
-                                <strong>Subject:</strong> {template.subject}
-                              </p>
-                              <div className="text-xs text-gray-500">
-                                Created: {new Date(template.createdAt).toLocaleDateString()}
-                              </div>
-                            </div>
-                            <div className="flex space-x-2">
-                              <Button variant="outline" size="sm">
-                                <FileText className="h-4 w-4 mr-1" />
-                                Preview
-                              </Button>
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700">
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Delete Email Template</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      Are you sure you want to delete "{template.name}"? This action cannot be undone.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={() => deleteEmailTemplateMutation.mutate(template.id)}
-                                      className="bg-red-600 hover:bg-red-700"
-                                    >
-                                      Delete
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="privacy">
+<TabsContent value="privacy">
               <Card>
                 <CardHeader>
                   <CardTitle>Privacy & Legal Information</CardTitle>
