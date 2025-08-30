@@ -30,13 +30,13 @@ export default function Landing() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center">
-                <i className="fas fa-users text-blue-500 mr-3"></i>
-                Consumer Management
+                <i className="fas fa-eye text-blue-500 mr-3"></i>
+                View Your Accounts
               </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-gray-600">
-                Organize and track all consumer accounts in one unified platform with detailed contact preferences and history.
+                Access all your account information in one place. View balances, payment history, and important details.
               </p>
             </CardContent>
           </Card>
@@ -44,13 +44,13 @@ export default function Landing() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center">
-                <i className="fas fa-upload text-blue-500 mr-3"></i>
-                Bulk Import
+                <i className="fas fa-credit-card text-blue-500 mr-3"></i>
+                Make Payments
               </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-gray-600">
-                Seamlessly import account data via CSV upload with validation and automated consumer profile creation.
+                Securely make payments online at your convenience. Set up payment plans and track your progress.
               </p>
             </CardContent>
           </Card>
@@ -58,29 +58,16 @@ export default function Landing() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center">
-                <i className="fas fa-mobile-alt text-blue-500 mr-3"></i>
-                Consumer Portal
+                <i className="fas fa-comments text-blue-500 mr-3"></i>
+                Stay Connected
               </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-gray-600">
-                Provide consumers with mobile-friendly access to view their accounts, make payments, and communicate securely.
+                Receive important updates about your accounts and communicate securely with your service provider.
               </p>
             </CardContent>
           </Card>
-        </div>
-
-        {/* Agency Access - Bottom Corner */}
-        <div className="fixed bottom-4 right-4">
-          <Button 
-            size="sm"
-            variant="outline" 
-            onClick={() => window.location.href = '/api/login'}
-            className="text-xs"
-            data-testid="button-agency-login"
-          >
-            Agency Login
-          </Button>
         </div>
       </div>
     </div>
