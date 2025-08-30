@@ -1211,7 +1211,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/setup-tenant', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { name, slug } = req.body;
+      const { name, slug } = req.body || {};
       
       // Check if user already has a tenant
       const existingPlatformUser = await storage.getPlatformUser(userId);
