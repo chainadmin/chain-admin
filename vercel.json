@@ -1,13 +1,11 @@
 {
   "version": 2,
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist/public",
-  "functions": {
-    "dist/index.js": {
-      "runtime": "nodejs18.x",
-      "maxDuration": 30
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/node"
     }
-  },
+  ],
   "routes": [
     {
       "handle": "filesystem"
@@ -18,7 +16,7 @@
     },
     {
       "src": "/(.*)",
-      "dest": "/index.html"
+      "dest": "/dist/public/index.html"
     }
   ],
   "env": {
