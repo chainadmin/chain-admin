@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
-import { insertConsumerSchema, insertAccountSchema } from "@shared/schema";
+import { insertConsumerSchema, insertAccountSchema, agencyTrialRegistrationSchema } from "@shared/schema";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
@@ -1042,6 +1042,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error during consumer registration:", error);
       res.status(500).json({ message: "Registration failed" });
+    }
+  });
+
+  // Agency trial registration route (public)
+  app.post('/api/agencies/register', async (req, res) => {
+    try {
+      // Validate the request body
+      const validationResult = agencyTrialRegistrationSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Invalid input data",
+          errors: validationResult.error.errors
+        });
+      }
+
+      const data = validationResult.data;
+
+      // Check if agency with this email already exists
+      const existingTenant = await storage.getTenantByEmail(data.email);
+      if (existingTenant) {
+        return res.status(400).json({ 
+          message: "An agency with this email already exists. Please try logging in instead." 
+        });
+      }
+
+      // Generate a unique slug for the agency
+      const baseSlug = data.businessName.toLowerCase()
+        .replace(/[^a-z0-9]/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+      
+      let slug = baseSlug;
+      let counter = 1;
+      
+      // Ensure slug is unique
+      while (await storage.getTenantBySlug(slug)) {
+        slug = `${baseSlug}-${counter}`;
+        counter++;
+      }
+
+      // Create the trial tenant
+      const tenant = await storage.createTrialTenant({
+        name: data.businessName,
+        slug,
+        ownerFirstName: data.ownerFirstName,
+        ownerLastName: data.ownerLastName,
+        ownerDateOfBirth: data.ownerDateOfBirth,
+        ownerSSN: data.ownerSSN, // In production, this should be encrypted
+        businessName: data.businessName,
+        phoneNumber: data.phoneNumber,
+        email: data.email,
+      });
+
+      // TODO: Add notification system to alert platform owners about new trial registration
+      console.log(`New trial agency registered: ${data.businessName} (${data.email})`);
+
+      res.status(201).json({
+        message: "Trial account created successfully! Our team will contact you soon.",
+        tenantId: tenant.id,
+        slug: tenant.slug,
+        redirectUrl: "/api/login" // They can now log in with their Replit account
+      });
+
+    } catch (error) {
+      console.error("Error during agency registration:", error);
+      res.status(500).json({ message: "Registration failed. Please try again." });
     }
   });
 

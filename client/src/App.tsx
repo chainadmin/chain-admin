@@ -19,6 +19,7 @@ import ConsumerPortal from "@/pages/enhanced-consumer-portal";
 import ConsumerLogin from "@/pages/consumer-login";
 import ConsumerDashboard from "@/pages/consumer-dashboard";
 import ConsumerRegistration from "@/pages/consumer-registration";
+import AgencyRegistration from "@/pages/agency-registration";
 import TenantSetup from "@/components/tenant-setup";
 
 function Router() {
@@ -36,6 +37,7 @@ function Router() {
           <Route path="/consumer-dashboard" component={ConsumerDashboard} />
           <Route path="/consumer/:tenantSlug/:email" component={ConsumerPortal} />
           <Route path="/register/:tenantSlug" component={ConsumerRegistration} />
+          <Route path="/agency-register" component={AgencyRegistration} />
         </>
       ) : needsTenantSetup ? (
         <Route path="*" component={TenantSetup} />

@@ -46,6 +46,18 @@ export const tenants = pgTable("tenants", {
   isActive: boolean("is_active").default(true), // Can be suspended by platform owner
   suspendedAt: timestamp("suspended_at"),
   suspensionReason: text("suspension_reason"),
+  // Trial registration fields
+  isTrialAccount: boolean("is_trial_account").default(true), // New agencies start as trial
+  isPaidAccount: boolean("is_paid_account").default(false), // Upgraded by admin
+  ownerFirstName: text("owner_first_name"),
+  ownerLastName: text("owner_last_name"),
+  ownerDateOfBirth: text("owner_date_of_birth"), // Format: YYYY-MM-DD
+  ownerSSN: text("owner_ssn"), // Encrypted/hashed in production
+  businessName: text("business_name"),
+  phoneNumber: text("phone_number"),
+  email: text("email"),
+  notifiedOwners: boolean("notified_owners").default(false), // Track if owners were notified
+  notificationSentAt: timestamp("notification_sent_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -627,6 +639,23 @@ export const automationExecutionsRelations = relations(automationExecutions, ({ 
 
 // Insert schemas
 export const insertTenantSchema = createInsertSchema(tenants).omit({ id: true, createdAt: true });
+export const agencyTrialRegistrationSchema = createInsertSchema(tenants).pick({
+  ownerFirstName: true,
+  ownerLastName: true,
+  ownerDateOfBirth: true,
+  ownerSSN: true,
+  businessName: true,
+  phoneNumber: true,
+  email: true,
+}).extend({
+  ownerFirstName: z.string().min(1, "First name is required"),
+  ownerLastName: z.string().min(1, "Last name is required"),
+  ownerDateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format"),
+  ownerSSN: z.string().regex(/^\d{9}$/, "SSN must be 9 digits"),
+  businessName: z.string().min(1, "Business name is required"),
+  phoneNumber: z.string().regex(/^\d{10}$/, "Phone number must be 10 digits"),
+  email: z.string().email("Valid email is required"),
+});
 export const insertPlatformUserSchema = createInsertSchema(platformUsers).omit({ id: true, createdAt: true });
 export const insertConsumerSchema = createInsertSchema(consumers).omit({ id: true, createdAt: true });
 export const insertAccountSchema = createInsertSchema(accounts).omit({ id: true, createdAt: true });
@@ -653,6 +682,7 @@ export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type Tenant = typeof tenants.$inferSelect;
 export type InsertTenant = z.infer<typeof insertTenantSchema>;
+export type AgencyTrialRegistration = z.infer<typeof agencyTrialRegistrationSchema>;
 export type PlatformUser = typeof platformUsers.$inferSelect;
 export type InsertPlatformUser = z.infer<typeof insertPlatformUserSchema>;
 export type Consumer = typeof consumers.$inferSelect;

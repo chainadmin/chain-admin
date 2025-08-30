@@ -69,6 +69,31 @@ export default function Landing() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Agency Portal Access - Discrete bottom link */}
+        <div className="text-center mt-16 pt-8 border-t border-gray-200">
+          <p className="text-sm text-gray-500 mb-4">
+            Are you an agency looking to use our platform?
+          </p>
+          <div className="space-x-4">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => window.location.href = '/agency-register'}
+              data-testid="button-agency-register"
+            >
+              Start Free Trial
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={() => window.location.href = '/api/login'}
+              data-testid="button-agency-login"
+            >
+              Agency Login
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   );

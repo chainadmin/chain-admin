@@ -77,7 +77,19 @@ export interface IStorage {
   // Tenant operations
   getTenant(id: string): Promise<Tenant | undefined>;
   getTenantBySlug(slug: string): Promise<Tenant | undefined>;
+  getTenantByEmail(email: string): Promise<Tenant | undefined>;
   createTenant(tenant: InsertTenant): Promise<Tenant>;
+  createTrialTenant(data: {
+    name: string;
+    slug: string;
+    ownerFirstName: string;
+    ownerLastName: string;
+    ownerDateOfBirth: string;
+    ownerSSN: string;
+    businessName: string;
+    phoneNumber: string;
+    email: string;
+  }): Promise<Tenant>;
   
   // Platform user operations
   getPlatformUser(authId: string): Promise<PlatformUser | undefined>;
@@ -254,6 +266,39 @@ export class DatabaseStorage implements IStorage {
 
   async createTenant(tenant: InsertTenant): Promise<Tenant> {
     const [newTenant] = await db.insert(tenants).values(tenant).returning();
+    return newTenant;
+  }
+
+  async getTenantByEmail(email: string): Promise<Tenant | undefined> {
+    const [tenant] = await db.select().from(tenants).where(eq(tenants.email, email));
+    return tenant;
+  }
+
+  async createTrialTenant(data: {
+    name: string;
+    slug: string;
+    ownerFirstName: string;
+    ownerLastName: string;
+    ownerDateOfBirth: string;
+    ownerSSN: string;
+    businessName: string;
+    phoneNumber: string;
+    email: string;
+  }): Promise<Tenant> {
+    const [newTenant] = await db.insert(tenants).values({
+      name: data.name,
+      slug: data.slug,
+      isTrialAccount: true,
+      isPaidAccount: false,
+      ownerFirstName: data.ownerFirstName,
+      ownerLastName: data.ownerLastName,
+      ownerDateOfBirth: data.ownerDateOfBirth,
+      ownerSSN: data.ownerSSN,
+      businessName: data.businessName,
+      phoneNumber: data.phoneNumber,
+      email: data.email,
+      notifiedOwners: false,
+    }).returning();
     return newTenant;
   }
 
