@@ -16,11 +16,13 @@ export default function Landing() {
             Find your account to get started
           </p>
           <Button 
-            size="lg" 
-            onClick={() => window.location.href = '/api/login'}
+            size="lg"
+            onClick={() => window.location.href = '/consumer-login'}
             className="bg-blue-600 hover:bg-blue-700"
+            data-testid="button-consumer-login"
           >
-            Sign In to Your Agency Dashboard
+            <i className="fas fa-user mr-2"></i>
+            Access Your Account
           </Button>
         </div>
 
@@ -68,25 +70,17 @@ export default function Landing() {
           </Card>
         </div>
 
-        {/* Consumer Access Section */}
-        <div className="text-center mt-16 bg-white rounded-xl p-8 shadow-lg">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Consumer Portal Access</h2>
-          <p className="text-gray-600 mb-6">
-            Already have an account?
-          </p>
+        {/* Agency Access - Bottom Corner */}
+        <div className="fixed bottom-4 right-4">
           <Button 
-            size="lg"
+            size="sm"
             variant="outline" 
-            onClick={() => window.location.href = '/consumer-login'}
-            className="mr-4"
-            data-testid="button-consumer-login"
+            onClick={() => window.location.href = '/api/login'}
+            className="text-xs"
+            data-testid="button-agency-login"
           >
-            <i className="fas fa-user mr-2"></i>
-            Consumer Login
+            Agency Login
           </Button>
-          <p className="text-sm text-gray-500 mt-4">
-            New consumer? Your agency will provide registration information.
-          </p>
         </div>
       </div>
     </div>
