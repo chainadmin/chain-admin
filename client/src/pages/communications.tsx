@@ -35,7 +35,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Mail, MessageSquare, Plus, Send, FileText, Trash2, Eye, TrendingUp, Users, AlertCircle, MousePointer, UserMinus, Phone } from "lucide-react";
+import { Mail, MessageSquare, Plus, Send, FileText, Trash2, Eye, TrendingUp, Users, AlertCircle, MousePointer, UserMinus, Phone, Clock, Calendar, Settings } from "lucide-react";
 
 export default function Communications() {
   const [activeTab, setActiveTab] = useState("overview");
@@ -61,6 +61,26 @@ export default function Communications() {
     targetGroup: "all",
   });
 
+  const [automationForm, setAutomationForm] = useState({
+    name: "",
+    description: "",
+    type: "email" as "email" | "sms",
+    templateId: "",
+    triggerType: "schedule" as "schedule" | "event" | "manual",
+    scheduleType: "once" as "once" | "daily" | "weekly" | "monthly",
+    scheduledDate: "",
+    scheduleTime: "",
+    scheduleWeekdays: [] as string[],
+    scheduleDayOfMonth: "",
+    eventType: "account_created" as "account_created" | "payment_overdue" | "custom",
+    eventDelay: "1d",
+    targetType: "all" as "all" | "folder" | "custom",
+    targetFolderIds: [] as string[],
+    targetCustomerIds: [] as string[],
+  });
+
+  const [showAutomationModal, setShowAutomationModal] = useState(false);
+
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -71,6 +91,14 @@ export default function Communications() {
 
   const { data: smsTemplates, isLoading: smsTemplatesLoading } = useQuery({
     queryKey: ["/api/sms-templates"],
+  });
+
+  const { data: automations, isLoading: automationsLoading } = useQuery({
+    queryKey: ["/api/automations"],
+  });
+
+  const { data: folders } = useQuery({
+    queryKey: ["/api/folders"],
   });
 
   const { data: emailCampaigns, isLoading: emailCampaignsLoading } = useQuery({
@@ -188,6 +216,66 @@ export default function Communications() {
     },
   });
 
+  // Automation Mutations
+  const createAutomationMutation = useMutation({
+    mutationFn: (data: any) => apiRequest("/api/automations", "POST", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/automations"] });
+      setShowAutomationModal(false);
+      setAutomationForm({
+        name: "",
+        description: "",
+        type: "email",
+        templateId: "",
+        triggerType: "schedule",
+        scheduleType: "once",
+        scheduledDate: "",
+        scheduleTime: "",
+        scheduleWeekdays: [],
+        scheduleDayOfMonth: "",
+        eventType: "account_created",
+        eventDelay: "1d",
+        targetType: "all",
+        targetFolderIds: [],
+        targetCustomerIds: [],
+      });
+      toast({
+        title: "Success",
+        description: "Automation created successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create automation",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteAutomationMutation = useMutation({
+    mutationFn: (id: string) => apiRequest(`/api/automations/${id}`, "DELETE"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/automations"] });
+      toast({
+        title: "Success",
+        description: "Automation deleted successfully",
+      });
+    },
+  });
+
+  const toggleAutomationMutation = useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) => 
+      apiRequest(`/api/automations/${id}`, "PUT", { isActive }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/automations"] });
+      toast({
+        title: "Success",
+        description: "Automation updated successfully",
+      });
+    },
+  });
+
   const handleTemplateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (communicationType === "email") {
@@ -229,6 +317,28 @@ export default function Communications() {
     } else {
       createSmsCampaignMutation.mutate(campaignForm);
     }
+  };
+
+  const handleAutomationSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!automationForm.name.trim() || !automationForm.templateId) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Format the data for the API
+    const automationData = {
+      ...automationForm,
+      scheduledDate: automationForm.triggerType === "schedule" && automationForm.scheduledDate 
+        ? new Date(automationForm.scheduledDate + "T" + (automationForm.scheduleTime || "09:00")).toISOString()
+        : undefined,
+    };
+
+    createAutomationMutation.mutate(automationData);
   };
 
   const handlePreview = (template: any) => {
@@ -279,10 +389,11 @@ export default function Communications() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="templates">Templates</TabsTrigger>
             <TabsTrigger value="campaigns">Campaigns</TabsTrigger>
+            <TabsTrigger value="automation">Automation</TabsTrigger>
             <TabsTrigger value="requests">Callback Requests</TabsTrigger>
           </TabsList>
 
@@ -922,6 +1033,330 @@ export default function Communications() {
                 ) : (
                   <div className="text-center py-8 text-gray-500">
                     No callback requests yet.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="automation" className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-semibold">Communication Automation</h2>
+              <Dialog open={showAutomationModal} onOpenChange={setShowAutomationModal}>
+                <DialogTrigger asChild>
+                  <Button data-testid="button-create-automation">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Automation
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Create Communication Automation</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={handleAutomationSubmit} className="space-y-6">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="automation-name">Automation Name *</Label>
+                        <Input
+                          id="automation-name"
+                          value={automationForm.name}
+                          onChange={(e) => setAutomationForm(prev => ({ ...prev, name: e.target.value }))}
+                          placeholder="e.g., Welcome Email Series"
+                          data-testid="input-automation-name"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="automation-type">Communication Type *</Label>
+                        <Select 
+                          value={automationForm.type} 
+                          onValueChange={(value: "email" | "sms") => setAutomationForm(prev => ({ ...prev, type: value }))}
+                        >
+                          <SelectTrigger data-testid="select-automation-type">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="email">Email</SelectItem>
+                            <SelectItem value="sms">SMS</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="automation-description">Description</Label>
+                      <Textarea
+                        id="automation-description"
+                        value={automationForm.description}
+                        onChange={(e) => setAutomationForm(prev => ({ ...prev, description: e.target.value }))}
+                        placeholder="Describe what this automation does..."
+                        data-testid="textarea-automation-description"
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="automation-template">Template *</Label>
+                      <Select 
+                        value={automationForm.templateId} 
+                        onValueChange={(value) => setAutomationForm(prev => ({ ...prev, templateId: value }))}
+                      >
+                        <SelectTrigger data-testid="select-automation-template">
+                          <SelectValue placeholder="Choose a template" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {automationForm.type === "email" 
+                            ? emailTemplates?.map((template: any) => (
+                                <SelectItem key={template.id} value={template.id}>
+                                  {template.name}
+                                </SelectItem>
+                              ))
+                            : smsTemplates?.map((template: any) => (
+                                <SelectItem key={template.id} value={template.id}>
+                                  {template.name}
+                                </SelectItem>
+                              ))
+                          }
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <Label>Trigger Type *</Label>
+                      <Select 
+                        value={automationForm.triggerType} 
+                        onValueChange={(value: "schedule" | "event" | "manual") => setAutomationForm(prev => ({ ...prev, triggerType: value }))}
+                      >
+                        <SelectTrigger data-testid="select-trigger-type">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="schedule">Scheduled</SelectItem>
+                          <SelectItem value="event">Event-based</SelectItem>
+                          <SelectItem value="manual">Manual</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {automationForm.triggerType === "schedule" && (
+                      <div className="grid grid-cols-3 gap-4">
+                        <div>
+                          <Label>Schedule Type</Label>
+                          <Select 
+                            value={automationForm.scheduleType} 
+                            onValueChange={(value: "once" | "daily" | "weekly" | "monthly") => setAutomationForm(prev => ({ ...prev, scheduleType: value }))}
+                          >
+                            <SelectTrigger data-testid="select-schedule-type">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="once">One-time</SelectItem>
+                              <SelectItem value="daily">Daily</SelectItem>
+                              <SelectItem value="weekly">Weekly</SelectItem>
+                              <SelectItem value="monthly">Monthly</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label>Date</Label>
+                          <Input
+                            type="date"
+                            value={automationForm.scheduledDate}
+                            onChange={(e) => setAutomationForm(prev => ({ ...prev, scheduledDate: e.target.value }))}
+                            data-testid="input-schedule-date"
+                          />
+                        </div>
+                        <div>
+                          <Label>Time</Label>
+                          <Input
+                            type="time"
+                            value={automationForm.scheduleTime}
+                            onChange={(e) => setAutomationForm(prev => ({ ...prev, scheduleTime: e.target.value }))}
+                            data-testid="input-schedule-time"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {automationForm.triggerType === "event" && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label>Event Type</Label>
+                          <Select 
+                            value={automationForm.eventType} 
+                            onValueChange={(value: "account_created" | "payment_overdue" | "custom") => setAutomationForm(prev => ({ ...prev, eventType: value }))}
+                          >
+                            <SelectTrigger data-testid="select-event-type">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="account_created">Account Created</SelectItem>
+                              <SelectItem value="payment_overdue">Payment Overdue</SelectItem>
+                              <SelectItem value="custom">Custom</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label>Delay</Label>
+                          <Select 
+                            value={automationForm.eventDelay} 
+                            onValueChange={(value) => setAutomationForm(prev => ({ ...prev, eventDelay: value }))}
+                          >
+                            <SelectTrigger data-testid="select-event-delay">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="0">Immediately</SelectItem>
+                              <SelectItem value="1h">1 Hour</SelectItem>
+                              <SelectItem value="1d">1 Day</SelectItem>
+                              <SelectItem value="3d">3 Days</SelectItem>
+                              <SelectItem value="7d">1 Week</SelectItem>
+                              <SelectItem value="30d">1 Month</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <Label>Target Audience</Label>
+                      <Select 
+                        value={automationForm.targetType} 
+                        onValueChange={(value: "all" | "folder" | "custom") => setAutomationForm(prev => ({ ...prev, targetType: value }))}
+                      >
+                        <SelectTrigger data-testid="select-target-type">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Accounts</SelectItem>
+                          <SelectItem value="folder">Specific Folders</SelectItem>
+                          <SelectItem value="custom">Custom Selection</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="flex justify-end gap-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setShowAutomationModal(false)}
+                        data-testid="button-cancel-automation"
+                      >
+                        Cancel
+                      </Button>
+                      <Button 
+                        type="submit" 
+                        disabled={createAutomationMutation.isPending}
+                        data-testid="button-submit-automation"
+                      >
+                        {createAutomationMutation.isPending ? "Creating..." : "Create Automation"}
+                      </Button>
+                    </div>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Clock className="h-5 w-5" />
+                  Active Automations
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {automationsLoading ? (
+                  <div className="text-center py-8">Loading automations...</div>
+                ) : automations?.length > 0 ? (
+                  <div className="space-y-4">
+                    {automations.map((automation: any) => (
+                      <div key={automation.id} className="border rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <h3 className="font-medium">{automation.name}</h3>
+                            <Badge variant={automation.isActive ? "default" : "secondary"}>
+                              {automation.isActive ? "Active" : "Inactive"}
+                            </Badge>
+                            <Badge variant="outline">
+                              {automation.type.toUpperCase()}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => toggleAutomationMutation.mutate({ 
+                                id: automation.id, 
+                                isActive: !automation.isActive 
+                              })}
+                              data-testid={`button-toggle-automation-${automation.id}`}
+                            >
+                              {automation.isActive ? "Pause" : "Resume"}
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="outline" size="sm" data-testid={`button-delete-automation-${automation.id}`}>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete Automation</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you sure you want to delete this automation? This action cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => deleteAutomationMutation.mutate(automation.id)}
+                                  >
+                                    Delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </div>
+                        
+                        {automation.description && (
+                          <p className="text-sm text-gray-600 mb-3">{automation.description}</p>
+                        )}
+                        
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                          <div>
+                            <span className="text-gray-600">Trigger:</span>
+                            <div className="font-medium capitalize">{automation.triggerType}</div>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Template:</span>
+                            <div className="font-medium">
+                              {automation.type === "email" 
+                                ? emailTemplates?.find((t: any) => t.id === automation.templateId)?.name || "Unknown"
+                                : smsTemplates?.find((t: any) => t.id === automation.templateId)?.name || "Unknown"
+                              }
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Target:</span>
+                            <div className="font-medium capitalize">{automation.targetType}</div>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Next Run:</span>
+                            <div className="font-medium">
+                              {automation.nextExecution 
+                                ? new Date(automation.nextExecution).toLocaleDateString()
+                                : "Not scheduled"
+                              }
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <Calendar className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                    <p>No automations created yet.</p>
+                    <p className="text-sm">Create your first automation to start scheduling communications.</p>
                   </div>
                 )}
               </CardContent>

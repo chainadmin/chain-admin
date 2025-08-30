@@ -557,6 +557,72 @@ export const smsTrackingRelations = relations(smsTracking, ({ one }) => ({
   }),
 }));
 
+// Communication Automations
+export const communicationAutomations = pgTable("communication_automations", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  type: text("type", { enum: ['email', 'sms'] }).notNull(),
+  templateId: uuid("template_id").notNull(), // References email or SMS template
+  isActive: boolean("is_active").default(true),
+  
+  // Trigger conditions
+  triggerType: text("trigger_type", { enum: ['schedule', 'event', 'manual'] }).notNull(),
+  
+  // Schedule settings (for scheduled automations)
+  scheduleType: text("schedule_type", { enum: ['once', 'daily', 'weekly', 'monthly'] }),
+  scheduledDate: timestamp("scheduled_date"),
+  scheduleTime: text("schedule_time"), // Format: "HH:MM"
+  scheduleWeekdays: text("schedule_weekdays").array(), // ['monday', 'tuesday', etc.]
+  scheduleDayOfMonth: text("schedule_day_of_month"), // For monthly schedules
+  
+  // Event-based settings (for event-triggered automations)
+  eventType: text("event_type", { enum: ['account_created', 'payment_overdue', 'custom'] }),
+  eventDelay: text("event_delay"), // Format: "7d", "1h", "30m"
+  
+  // Target audience settings
+  targetType: text("target_type", { enum: ['all', 'folder', 'custom'] }).notNull(),
+  targetFolderIds: uuid("target_folder_ids").array(),
+  targetCustomerIds: uuid("target_customer_ids").array(),
+  
+  // Execution tracking
+  lastExecuted: timestamp("last_executed"),
+  nextExecution: timestamp("next_execution"),
+  totalSent: bigint("total_sent", { mode: "number" }).default(0),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Automation execution logs
+export const automationExecutions = pgTable("automation_executions", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  automationId: uuid("automation_id").references(() => communicationAutomations.id, { onDelete: "cascade" }).notNull(),
+  executedAt: timestamp("executed_at").defaultNow(),
+  status: text("status", { enum: ['success', 'failed', 'partial'] }).notNull(),
+  totalSent: bigint("total_sent", { mode: "number" }).default(0),
+  totalFailed: bigint("total_failed", { mode: "number" }).default(0),
+  errorMessage: text("error_message"),
+  executionDetails: jsonb("execution_details"),
+});
+
+// Relations for automations
+export const communicationAutomationsRelations = relations(communicationAutomations, ({ one, many }) => ({
+  tenant: one(tenants, {
+    fields: [communicationAutomations.tenantId],
+    references: [tenants.id],
+  }),
+  executions: many(automationExecutions),
+}));
+
+export const automationExecutionsRelations = relations(automationExecutions, ({ one }) => ({
+  automation: one(communicationAutomations, {
+    fields: [automationExecutions.automationId],
+    references: [communicationAutomations.id],
+  }),
+}));
+
 // Insert schemas
 export const insertTenantSchema = createInsertSchema(tenants).omit({ id: true, createdAt: true });
 export const insertPlatformUserSchema = createInsertSchema(platformUsers).omit({ id: true, createdAt: true });
@@ -577,6 +643,8 @@ export const insertFolderSchema = createInsertSchema(folders).omit({ id: true, c
 export const insertSmsTemplateSchema = createInsertSchema(smsTemplates).omit({ id: true, createdAt: true });
 export const insertSmsCampaignSchema = createInsertSchema(smsCampaigns).omit({ id: true, createdAt: true, completedAt: true });
 export const insertSmsTrackingSchema = createInsertSchema(smsTracking).omit({ id: true });
+export const insertCommunicationAutomationSchema = createInsertSchema(communicationAutomations).omit({ id: true, createdAt: true, updatedAt: true, lastExecuted: true, nextExecution: true, totalSent: true });
+export const insertAutomationExecutionSchema = createInsertSchema(automationExecutions).omit({ id: true, executedAt: true });
 
 // Types
 export type UpsertUser = typeof users.$inferInsert;
@@ -619,3 +687,7 @@ export type SmsCampaign = typeof smsCampaigns.$inferSelect;
 export type InsertSmsCampaign = z.infer<typeof insertSmsCampaignSchema>;
 export type SmsTracking = typeof smsTracking.$inferSelect;
 export type InsertSmsTracking = z.infer<typeof insertSmsTrackingSchema>;
+export type CommunicationAutomation = typeof communicationAutomations.$inferSelect;
+export type InsertCommunicationAutomation = z.infer<typeof insertCommunicationAutomationSchema>;
+export type AutomationExecution = typeof automationExecutions.$inferSelect;
+export type InsertAutomationExecution = z.infer<typeof insertAutomationExecutionSchema>;

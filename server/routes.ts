@@ -816,6 +816,149 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Communication Automation Routes
+  app.get('/api/automations', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const automations = await storage.getAutomationsByTenant(platformUser.tenantId);
+      res.json(automations);
+    } catch (error) {
+      console.error("Error fetching automations:", error);
+      res.status(500).json({ message: "Failed to fetch automations" });
+    }
+  });
+
+  app.post('/api/automations', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const insertAutomationSchema = z.object({
+        name: z.string().min(1),
+        description: z.string().optional(),
+        type: z.enum(['email', 'sms']),
+        templateId: z.string().uuid(),
+        triggerType: z.enum(['schedule', 'event', 'manual']),
+        scheduleType: z.enum(['once', 'daily', 'weekly', 'monthly']).optional(),
+        scheduledDate: z.string().optional(),
+        scheduleTime: z.string().optional(),
+        scheduleWeekdays: z.array(z.string()).optional(),
+        scheduleDayOfMonth: z.string().optional(),
+        eventType: z.enum(['account_created', 'payment_overdue', 'custom']).optional(),
+        eventDelay: z.string().optional(),
+        targetType: z.enum(['all', 'folder', 'custom']),
+        targetFolderIds: z.array(z.string().uuid()).optional(),
+        targetCustomerIds: z.array(z.string().uuid()).optional(),
+      });
+
+      const validatedData = insertAutomationSchema.parse(req.body);
+      
+      // Calculate next execution if it's a scheduled automation
+      let nextExecution = null;
+      if (validatedData.triggerType === 'schedule' && validatedData.scheduledDate) {
+        nextExecution = new Date(validatedData.scheduledDate);
+      }
+
+      const newAutomation = await storage.createAutomation({
+        ...validatedData,
+        tenantId: platformUser.tenantId,
+        nextExecution,
+      });
+      
+      res.status(201).json(newAutomation);
+    } catch (error) {
+      console.error("Error creating automation:", error);
+      res.status(500).json({ message: "Failed to create automation" });
+    }
+  });
+
+  app.put('/api/automations/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const updateAutomationSchema = z.object({
+        name: z.string().min(1).optional(),
+        description: z.string().optional(),
+        isActive: z.boolean().optional(),
+        scheduleType: z.enum(['once', 'daily', 'weekly', 'monthly']).optional(),
+        scheduledDate: z.string().optional(),
+        scheduleTime: z.string().optional(),
+        scheduleWeekdays: z.array(z.string()).optional(),
+        scheduleDayOfMonth: z.string().optional(),
+        targetType: z.enum(['all', 'folder', 'custom']).optional(),
+        targetFolderIds: z.array(z.string().uuid()).optional(),
+        targetCustomerIds: z.array(z.string().uuid()).optional(),
+      });
+
+      const validatedData = updateAutomationSchema.parse(req.body);
+      
+      const updatedAutomation = await storage.updateAutomation(req.params.id, {
+        ...validatedData,
+        updatedAt: new Date(),
+      });
+      
+      res.json(updatedAutomation);
+    } catch (error) {
+      console.error("Error updating automation:", error);
+      res.status(500).json({ message: "Failed to update automation" });
+    }
+  });
+
+  app.delete('/api/automations/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      await storage.deleteAutomation(req.params.id, platformUser.tenantId);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting automation:", error);
+      res.status(500).json({ message: "Failed to delete automation" });
+    }
+  });
+
+  app.get('/api/automations/:id/executions', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      // Verify automation belongs to tenant
+      const automation = await storage.getAutomationById(req.params.id, platformUser.tenantId);
+      if (!automation) {
+        return res.status(404).json({ message: "Automation not found" });
+      }
+
+      const executions = await storage.getAutomationExecutions(req.params.id);
+      res.json(executions);
+    } catch (error) {
+      console.error("Error fetching automation executions:", error);
+      res.status(500).json({ message: "Failed to fetch automation executions" });
+    }
+  });
+
   // Consumer registration route (public)
   app.post('/api/consumer-registration', async (req, res) => {
     try {

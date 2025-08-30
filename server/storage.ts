@@ -11,6 +11,8 @@ import {
   smsTemplates,
   smsCampaigns,
   smsTracking,
+  communicationAutomations,
+  automationExecutions,
   documents,
   arrangementOptions,
   tenantSettings,
@@ -43,6 +45,10 @@ import {
   type InsertSmsCampaign,
   type SmsTracking,
   type InsertSmsTracking,
+  type CommunicationAutomation,
+  type InsertCommunicationAutomation,
+  type AutomationExecution,
+  type InsertAutomationExecution,
   type Document,
   type InsertDocument,
   type ArrangementOption,
@@ -122,6 +128,18 @@ export interface IStorage {
   
   // SMS metrics operations
   getSmsMetricsByTenant(tenantId: string): Promise<any>;
+  
+  // Automation operations
+  getAutomationsByTenant(tenantId: string): Promise<CommunicationAutomation[]>;
+  createAutomation(automation: InsertCommunicationAutomation): Promise<CommunicationAutomation>;
+  updateAutomation(id: string, updates: Partial<CommunicationAutomation>): Promise<CommunicationAutomation>;
+  deleteAutomation(id: string, tenantId: string): Promise<void>;
+  getAutomationById(id: string, tenantId: string): Promise<CommunicationAutomation | undefined>;
+  
+  // Automation execution operations
+  getAutomationExecutions(automationId: string): Promise<AutomationExecution[]>;
+  createAutomationExecution(execution: InsertAutomationExecution): Promise<AutomationExecution>;
+  getActiveAutomations(): Promise<CommunicationAutomation[]>;
   
   // Consumer registration operations
   registerConsumer(consumerData: InsertConsumer): Promise<Consumer>;
@@ -569,6 +587,58 @@ export class DatabaseStorage implements IStorage {
       sentThisMonth: recent30,
       bestTemplate: campaigns.length > 0 ? campaigns.sort((a, b) => (b.totalDelivered || 0) - (a.totalDelivered || 0))[0]?.name || "None yet" : "None yet",
     };
+  }
+
+  // Automation operations
+  async getAutomationsByTenant(tenantId: string): Promise<CommunicationAutomation[]> {
+    return await db.select()
+      .from(communicationAutomations)
+      .where(eq(communicationAutomations.tenantId, tenantId))
+      .orderBy(desc(communicationAutomations.createdAt));
+  }
+
+  async createAutomation(automation: InsertCommunicationAutomation): Promise<CommunicationAutomation> {
+    const [newAutomation] = await db.insert(communicationAutomations).values(automation).returning();
+    return newAutomation;
+  }
+
+  async updateAutomation(id: string, updates: Partial<CommunicationAutomation>): Promise<CommunicationAutomation> {
+    const [updatedAutomation] = await db.update(communicationAutomations)
+      .set(updates)
+      .where(eq(communicationAutomations.id, id))
+      .returning();
+    return updatedAutomation;
+  }
+
+  async deleteAutomation(id: string, tenantId: string): Promise<void> {
+    await db.delete(communicationAutomations)
+      .where(and(eq(communicationAutomations.id, id), eq(communicationAutomations.tenantId, tenantId)));
+  }
+
+  async getAutomationById(id: string, tenantId: string): Promise<CommunicationAutomation | undefined> {
+    const [automation] = await db.select()
+      .from(communicationAutomations)
+      .where(and(eq(communicationAutomations.id, id), eq(communicationAutomations.tenantId, tenantId)));
+    return automation || undefined;
+  }
+
+  // Automation execution operations
+  async getAutomationExecutions(automationId: string): Promise<AutomationExecution[]> {
+    return await db.select()
+      .from(automationExecutions)
+      .where(eq(automationExecutions.automationId, automationId))
+      .orderBy(desc(automationExecutions.executedAt));
+  }
+
+  async createAutomationExecution(execution: InsertAutomationExecution): Promise<AutomationExecution> {
+    const [newExecution] = await db.insert(automationExecutions).values(execution).returning();
+    return newExecution;
+  }
+
+  async getActiveAutomations(): Promise<CommunicationAutomation[]> {
+    return await db.select()
+      .from(communicationAutomations)
+      .where(eq(communicationAutomations.isActive, true));
   }
 
   // Consumer registration operations
