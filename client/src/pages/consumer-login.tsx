@@ -12,7 +12,6 @@ import { Building2, Mail, Lock, ArrowRight, UserCheck } from "lucide-react";
 
 interface LoginForm {
   email: string;
-  tenantSlug: string;
   dateOfBirth: string;
 }
 
@@ -21,7 +20,6 @@ export default function ConsumerLogin() {
   const { toast } = useToast();
   const [form, setForm] = useState<LoginForm>({
     email: "",
-    tenantSlug: "",
     dateOfBirth: "",
   });
 
@@ -31,27 +29,46 @@ export default function ConsumerLogin() {
       return response;
     },
     onSuccess: (data: any) => {
-      toast({
-        title: "Login Successful",
-        description: "Welcome to your account portal!",
-      });
-      
-      // Store consumer session data
-      localStorage.setItem("consumerSession", JSON.stringify({
-        email: form.email,
-        tenantSlug: form.tenantSlug,
-        consumerData: data.consumer,
-      }));
-      
-      // Redirect to consumer portal
-      setLocation(`/consumer-dashboard`);
+      if (data.needsRegistration) {
+        // User found but needs to complete registration
+        toast({
+          title: "Complete Registration",
+          description: data.message,
+        });
+        setLocation(`/consumer-register?email=${form.email}&tenant=${data.tenant.slug}`);
+      } else {
+        // Successful login
+        toast({
+          title: "Login Successful", 
+          description: "Welcome to your account portal!",
+        });
+        
+        // Store consumer session data
+        localStorage.setItem("consumerSession", JSON.stringify({
+          email: form.email,
+          tenantSlug: data.tenant?.slug,
+          consumerData: data.consumer,
+        }));
+        
+        // Redirect to consumer portal
+        setLocation(`/consumer-dashboard`);
+      }
     },
     onError: (error: any) => {
-      toast({
-        title: "Login Failed",
-        description: error.message || "Unable to verify your information. Please check your details and try again.",
-        variant: "destructive",
-      });
+      if (error.status === 404 && error.data?.canRegister) {
+        // No account found, offer to create one
+        toast({
+          title: "No Account Found",
+          description: error.data.message,
+        });
+        setLocation(`/consumer-register?email=${form.email}`);
+      } else {
+        toast({
+          title: "Login Failed",
+          description: error.message || "Unable to verify your information. Please check your details and try again.",
+          variant: "destructive",
+        });
+      }
     },
   });
 
@@ -65,7 +82,7 @@ export default function ConsumerLogin() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!form.email || !form.tenantSlug || !form.dateOfBirth) {
+    if (!form.email || !form.dateOfBirth) {
       toast({
         title: "Missing Information",
         description: "Please fill in all required fields.",
@@ -94,7 +111,7 @@ export default function ConsumerLogin() {
           </div>
           <h1 className="text-3xl font-bold text-gray-900">Consumer Portal</h1>
           <p className="text-gray-600 mt-2">
-            Access your account information securely
+            Find and access your accounts from any collection agency
           </p>
         </div>
 
@@ -125,27 +142,6 @@ export default function ConsumerLogin() {
                 </div>
               </div>
 
-              <div>
-                <Label htmlFor="agency">Your Collection Agency *</Label>
-                <div className="relative">
-                  <Building2 className="absolute left-3 top-3 h-4 w-4 text-gray-400 z-10" />
-                  <Select value={form.tenantSlug} onValueChange={(value) => handleInputChange("tenantSlug", value)}>
-                    <SelectTrigger className="pl-10" data-testid="select-agency">
-                      <SelectValue placeholder="Select your agency" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {commonAgencies.map((agency) => (
-                        <SelectItem key={agency.slug} value={agency.slug}>
-                          {agency.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Don't see your agency? Contact them for the correct portal link.
-                </p>
-              </div>
 
               <div>
                 <Label htmlFor="dob">Date of Birth *</Label>
@@ -191,23 +187,13 @@ export default function ConsumerLogin() {
         {/* Registration Link */}
         <div className="text-center">
           <p className="text-gray-600 text-sm">
-            Don't have an account?{" "}
+            New to the system?{" "}
             <button
-              onClick={() => {
-                if (form.tenantSlug) {
-                  setLocation(`/register/${form.tenantSlug}`);
-                } else {
-                  toast({
-                    title: "Agency Required",
-                    description: "Please select your collection agency first.",
-                    variant: "destructive",
-                  });
-                }
-              }}
+              onClick={() => setLocation("/register")}
               className="text-blue-600 hover:text-blue-800 font-medium"
               data-testid="link-register"
             >
-              Register here
+              Create an account
             </button>
           </p>
         </div>
@@ -219,9 +205,9 @@ export default function ConsumerLogin() {
               <Building2 className="h-5 w-5 text-blue-600" />
             </div>
             <div className="ml-3">
-              <h3 className="text-sm font-medium text-blue-800">Need Help?</h3>
+              <h3 className="text-sm font-medium text-blue-800">How it works</h3>
               <p className="text-sm text-blue-700 mt-1">
-                Contact your collection agency directly if you're having trouble accessing your account or need assistance with your payment arrangements.
+                Simply enter your email and date of birth. We'll search across all agencies to find your accounts and help you get set up if you're new.
               </p>
             </div>
           </div>

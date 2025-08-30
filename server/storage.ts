@@ -87,6 +87,7 @@ export interface IStorage {
   // Consumer operations
   getConsumersByTenant(tenantId: string): Promise<Consumer[]>;
   getConsumer(id: string): Promise<Consumer | undefined>;
+  getConsumerByEmail(email: string): Promise<Consumer | undefined>;
   createConsumer(consumer: InsertConsumer): Promise<Consumer>;
   
   // Folder operations
@@ -661,10 +662,10 @@ export class DatabaseStorage implements IStorage {
     return consumer || undefined;
   }
 
-  async getConsumerByEmail(email: string, tenantId: string): Promise<Consumer | undefined> {
+  async getConsumerByEmail(email: string): Promise<Consumer | undefined> {
     const [consumer] = await db.select()
       .from(consumers)
-      .where(and(eq(consumers.email, email), eq(consumers.tenantId, tenantId)));
+      .where(eq(consumers.email, email));
     return consumer || undefined;
   }
 

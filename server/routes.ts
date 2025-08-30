@@ -1032,41 +1032,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Consumer login route
   app.post('/api/consumer/login', async (req, res) => {
     try {
-      const { email, tenantSlug, dateOfBirth } = req.body;
+      const { email, dateOfBirth } = req.body;
 
-      if (!email || !tenantSlug || !dateOfBirth) {
-        return res.status(400).json({ message: "Email, agency, and date of birth are required" });
+      if (!email || !dateOfBirth) {
+        return res.status(400).json({ message: "Email and date of birth are required" });
       }
 
-      // Get tenant
-      const tenant = await storage.getTenantBySlug(tenantSlug);
-      if (!tenant) {
-        return res.status(404).json({ message: "Agency not found" });
-      }
-
-      // Get consumer
-      const consumer = await storage.getConsumerByEmailAndTenant(email, tenantSlug);
+      // Search for consumer across all tenants
+      const consumer = await storage.getConsumerByEmail(email);
+      
       if (!consumer) {
-        return res.status(404).json({ message: "Consumer not found. Please register first or contact your agency." });
+        // If consumer not found, create a new account opportunity
+        return res.status(404).json({ 
+          message: "No account found with this email. Would you like to create a new account?",
+          canRegister: true,
+          suggestedAction: "register"
+        });
       }
 
-      if (!consumer.isRegistered) {
-        return res.status(403).json({ message: "Consumer account is not yet activated. Please contact your agency." });
+      // Get tenant information
+      const tenant = await storage.getTenant(consumer.tenantId);
+      if (!tenant) {
+        return res.status(500).json({ message: "Account configuration error. Please contact support." });
       }
 
-      // Verify date of birth (simple verification)
-      const providedDOB = new Date(dateOfBirth);
-      const storedDOB = consumer.dateOfBirth ? new Date(consumer.dateOfBirth) : null;
-      
-      if (!storedDOB) {
-        return res.status(401).json({ message: "Date of birth verification failed" });
-      }
-      
-      if (providedDOB.getTime() !== storedDOB.getTime()) {
-        return res.status(401).json({ message: "Date of birth verification failed" });
+      // Verify date of birth if consumer is registered
+      if (consumer.isRegistered) {
+        const providedDOB = new Date(dateOfBirth);
+        const storedDOB = consumer.dateOfBirth ? new Date(consumer.dateOfBirth) : null;
+        
+        if (!storedDOB) {
+          return res.status(401).json({ message: "Date of birth verification required. Please contact your agency." });
+        }
+        
+        if (providedDOB.getTime() !== storedDOB.getTime()) {
+          return res.status(401).json({ message: "Date of birth verification failed. Please check your information." });
+        }
+      } else {
+        // For unregistered consumers, allow them to complete registration
+        return res.status(200).json({
+          message: "Account found but not yet activated. Complete your registration.",
+          needsRegistration: true,
+          consumer: {
+            id: consumer.id,
+            firstName: consumer.firstName,
+            lastName: consumer.lastName,
+            email: consumer.email,
+            tenantId: consumer.tenantId,
+          },
+          tenant: {
+            name: tenant.name,
+            slug: tenant.slug,
+          }
+        });
       }
 
-      // Return consumer data (excluding sensitive info)
+      // Return consumer data for successful login
       res.json({
         consumer: {
           id: consumer.id,
