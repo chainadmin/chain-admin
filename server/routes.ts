@@ -847,7 +847,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         name: z.string().min(1),
         description: z.string().optional(),
         type: z.enum(['email', 'sms']),
-        templateId: z.string().uuid(),
+        templateId: z.string().uuid().optional(), // For single template (one-time)
+        templateIds: z.array(z.string().uuid()).optional(), // For multiple templates (recurring)
         triggerType: z.enum(['schedule', 'event', 'manual']),
         scheduleType: z.enum(['once', 'daily', 'weekly', 'monthly']).optional(),
         scheduledDate: z.string().optional(),
@@ -859,6 +860,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         targetType: z.enum(['all', 'folder', 'custom']),
         targetFolderIds: z.array(z.string().uuid()).optional(),
         targetCustomerIds: z.array(z.string().uuid()).optional(),
+      }).refine(data => {
+        // Either templateId or templateIds must be provided
+        return data.templateId || (data.templateIds && data.templateIds.length > 0);
+      }, {
+        message: "Either templateId or templateIds must be provided"
       });
 
       const validatedData = insertAutomationSchema.parse(req.body);

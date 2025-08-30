@@ -564,7 +564,8 @@ export const communicationAutomations = pgTable("communication_automations", {
   name: text("name").notNull(),
   description: text("description"),
   type: text("type", { enum: ['email', 'sms'] }).notNull(),
-  templateId: uuid("template_id").notNull(), // References email or SMS template
+  templateId: uuid("template_id"), // For single template (one-time schedules)
+  templateIds: uuid("template_ids").array(), // For multiple templates (recurring schedules)
   isActive: boolean("is_active").default(true),
   
   // Trigger conditions
@@ -590,6 +591,7 @@ export const communicationAutomations = pgTable("communication_automations", {
   lastExecuted: timestamp("last_executed"),
   nextExecution: timestamp("next_execution"),
   totalSent: bigint("total_sent", { mode: "number" }).default(0),
+  currentTemplateIndex: bigint("current_template_index", { mode: "number" }).default(0), // For template rotation
   
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -643,7 +645,7 @@ export const insertFolderSchema = createInsertSchema(folders).omit({ id: true, c
 export const insertSmsTemplateSchema = createInsertSchema(smsTemplates).omit({ id: true, createdAt: true });
 export const insertSmsCampaignSchema = createInsertSchema(smsCampaigns).omit({ id: true, createdAt: true, completedAt: true });
 export const insertSmsTrackingSchema = createInsertSchema(smsTracking).omit({ id: true });
-export const insertCommunicationAutomationSchema = createInsertSchema(communicationAutomations).omit({ id: true, createdAt: true, updatedAt: true, lastExecuted: true, nextExecution: true, totalSent: true });
+export const insertCommunicationAutomationSchema = createInsertSchema(communicationAutomations).omit({ id: true, createdAt: true, updatedAt: true, lastExecuted: true, nextExecution: true, totalSent: true, currentTemplateIndex: true });
 export const insertAutomationExecutionSchema = createInsertSchema(automationExecutions).omit({ id: true, executedAt: true });
 
 // Types
