@@ -59,7 +59,7 @@ export default function TenantSetup() {
         <CardHeader>
           <CardTitle className="text-center">Setup Your Agency</CardTitle>
           <p className="text-center text-sm text-gray-600">
-            Configure your debt collection agency to get started
+            Configure your agency to get started
           </p>
         </CardHeader>
         <CardContent className="space-y-4">

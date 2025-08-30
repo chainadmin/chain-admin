@@ -1,6 +1,6 @@
 # Overview
 
-Chain is a multi-tenant debt collection platform designed for agencies to manage consumer accounts, streamline collections, and facilitate consumer engagement. The system provides administrative dashboards for agencies to import and manage account data, while offering consumer portals for account access. Built as a full-stack web application with real-time data management capabilities, it serves as a comprehensive solution for debt collection agencies to organize their operations and improve consumer interactions.
+Chain is a multi-tenant platform designed for agencies to manage consumer accounts, streamline collections, and facilitate consumer engagement. The system provides administrative dashboards for agencies to import and manage account data, while offering consumer portals for account access. Built as a full-stack web application with real-time data management capabilities, it serves as a comprehensive solution for debt collection agencies to organize their operations and improve consumer interactions.
 
 # Recent Changes
 

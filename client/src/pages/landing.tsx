@@ -13,7 +13,7 @@ export default function Landing() {
             <h1 className="text-4xl font-bold text-gray-900 ml-4">Chain</h1>
           </div>
           <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-            Multi-tenant debt collection platform for agencies to manage accounts, engage consumers, and streamline collections
+            Multi-tenant platform for agencies to manage accounts, engage consumers, and streamline collections
           </p>
           <Button 
             size="lg" 
@@ -72,7 +72,7 @@ export default function Landing() {
         <div className="text-center mt-16 bg-white rounded-xl p-8 shadow-lg">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Consumer Portal Access</h2>
           <p className="text-gray-600 mb-6">
-            Already have an account with a collection agency? Access your account information securely.
+            Already have an account with an agency? Access your account information securely.
           </p>
           <Button 
             size="lg"

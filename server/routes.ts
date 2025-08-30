@@ -1035,7 +1035,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // For now, we'll create a pending account that agencies can claim
       // In a real system, you might want to route this differently
       return res.status(404).json({ 
-        message: "No account found with this email and date of birth combination. Please contact your collection agency directly to get set up.",
+        message: "No account found with this email and date of birth combination. Please contact your agency directly to get set up.",
         suggestedAction: "contact_agency"
       });
 

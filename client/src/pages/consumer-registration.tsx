@@ -101,7 +101,7 @@ export default function ConsumerRegistration() {
           <UserPlus className="h-12 w-12 text-blue-600 mx-auto mb-4" />
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Consumer Registration</h1>
           <p className="text-gray-600">
-            Enter your information below. We'll automatically find your collection agency and set up your account.
+            Enter your information below. We'll automatically find your agency and set up your account.
           </p>
         </div>
 
@@ -151,7 +151,7 @@ export default function ConsumerRegistration() {
                   required
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  We'll use this to find your collection agency account
+                  We'll use this to find your agency account
                 </p>
               </div>
 
@@ -288,7 +288,7 @@ export default function ConsumerRegistration() {
                       I agree to the terms of service and privacy policy *
                     </Label>
                     <p className="text-gray-600 mt-1">
-                      By registering, you consent to receive notifications about your accounts and communication from our debt collection agency.
+                      By registering, you consent to receive notifications about your accounts and communication from our agency.
                     </p>
                   </div>
                 </div>
