@@ -4,7 +4,8 @@
   "outputDirectory": "dist/public",
   "functions": {
     "dist/index.js": {
-      "runtime": "nodejs18.x"
+      "runtime": "nodejs18.x",
+      "maxDuration": 30
     }
   },
   "routes": [
