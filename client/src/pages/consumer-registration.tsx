@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { UserPlus, ArrowRight, Shield, Phone, Mail } from "lucide-react";
+import { UserPlus, ArrowRight, Shield, MapPin } from "lucide-react";
 
 export default function ConsumerRegistration() {
   const { tenantSlug } = useParams();
@@ -21,9 +21,7 @@ export default function ConsumerRegistration() {
     firstName: "",
     lastName: "",
     email: "",
-    phone: "",
     dateOfBirth: "",
-    ssnLast4: "",
     address: "",
     city: "",
     state: "",
@@ -33,19 +31,28 @@ export default function ConsumerRegistration() {
 
   const registrationMutation = useMutation({
     mutationFn: async (data: any) => {
-      const response = await apiRequest("POST", "/api/consumer-registration", {
-        ...data,
-        tenantSlug,
-      });
+      const response = await apiRequest("POST", "/api/consumer-registration", data);
       return response;
     },
     onSuccess: (data) => {
-      toast({
-        title: "Registration Successful!",
-        description: "You've been registered successfully. You'll receive notifications when accounts are added to your profile.",
-      });
-      // Redirect to consumer portal
-      navigate(`/consumer/${tenantSlug}/${formData.email}`);
+      if (data.tenant) {
+        toast({
+          title: "Registration Successful!",
+          description: `Your agency (${data.tenant.name}) has been automatically identified. Welcome to your portal!`,
+        });
+        // Store session and redirect to consumer portal
+        localStorage.setItem("consumerSession", JSON.stringify({
+          email: formData.email,
+          tenantSlug: data.tenant.slug,
+          consumerData: data.consumer,
+        }));
+        navigate("/consumer-dashboard");
+      } else {
+        toast({
+          title: "Registration Complete",
+          description: data.message,
+        });
+      }
     },
     onError: (error: any) => {
       toast({
@@ -68,10 +75,10 @@ export default function ConsumerRegistration() {
       return;
     }
 
-    if (!formData.firstName || !formData.lastName || !formData.email || !formData.ssnLast4) {
+    if (!formData.firstName || !formData.lastName || !formData.email || !formData.dateOfBirth || !formData.address) {
       toast({
         title: "Required Fields",
-        description: "Please fill in all required fields.",
+        description: "Please fill in all required fields: name, email, date of birth, and address.",
         variant: "destructive",
       });
       return;
@@ -94,7 +101,7 @@ export default function ConsumerRegistration() {
           <UserPlus className="h-12 w-12 text-blue-600 mx-auto mb-4" />
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Consumer Registration</h1>
           <p className="text-gray-600">
-            Register to receive notifications when accounts are added and access your debt management portal
+            Enter your information below. We'll automatically find your collection agency and set up your account.
           </p>
         </div>
 
@@ -102,7 +109,7 @@ export default function ConsumerRegistration() {
           <CardHeader>
             <CardTitle className="flex items-center">
               <Shield className="h-5 w-5 mr-2" />
-              Personal Information
+              Registration Information
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -131,70 +138,37 @@ export default function ConsumerRegistration() {
                 </div>
               </div>
 
-              {/* Contact Information */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium text-gray-900 flex items-center">
-                  <Mail className="h-4 w-4 mr-2" />
-                  Contact Information
-                </h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="email">Email Address *</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      data-testid="input-email"
-                      value={formData.email}
-                      onChange={(e) => handleInputChange("email", e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="phone">Phone Number</Label>
-                    <Input
-                      id="phone"
-                      type="tel"
-                      data-testid="input-phone"
-                      value={formData.phone}
-                      onChange={(e) => handleInputChange("phone", e.target.value)}
-                      placeholder="(555) 123-4567"
-                    />
-                  </div>
-                </div>
+              {/* Email Address */}
+              <div>
+                <Label htmlFor="email">Email Address *</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  data-testid="input-email"
+                  value={formData.email}
+                  onChange={(e) => handleInputChange("email", e.target.value)}
+                  placeholder="your@email.com"
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  We'll use this to find your collection agency account
+                </p>
               </div>
 
-              {/* Personal Details */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium text-gray-900">Personal Details</h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="dateOfBirth">Date of Birth</Label>
-                    <Input
-                      id="dateOfBirth"
-                      type="date"
-                      data-testid="input-dateOfBirth"
-                      value={formData.dateOfBirth}
-                      onChange={(e) => handleInputChange("dateOfBirth", e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="ssnLast4">Last 4 Digits of SSN *</Label>
-                    <Input
-                      id="ssnLast4"
-                      maxLength={4}
-                      data-testid="input-ssnLast4"
-                      value={formData.ssnLast4}
-                      onChange={(e) => {
-                        const value = e.target.value.replace(/\D/g, "");
-                        handleInputChange("ssnLast4", value);
-                      }}
-                      placeholder="1234"
-                      required
-                    />
-                  </div>
-                </div>
+              {/* Date of Birth */}
+              <div>
+                <Label htmlFor="dateOfBirth">Date of Birth *</Label>
+                <Input
+                  id="dateOfBirth"
+                  type="date"
+                  data-testid="input-dateOfBirth"
+                  value={formData.dateOfBirth}
+                  onChange={(e) => handleInputChange("dateOfBirth", e.target.value)}
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Used for account verification and security
+                </p>
               </div>
 
               {/* Address Information */}
@@ -202,13 +176,14 @@ export default function ConsumerRegistration() {
                 <h3 className="text-lg font-medium text-gray-900">Address Information</h3>
                 
                 <div>
-                  <Label htmlFor="address">Street Address</Label>
+                  <Label htmlFor="address">Street Address *</Label>
                   <Input
                     id="address"
                     data-testid="input-address"
                     value={formData.address}
                     onChange={(e) => handleInputChange("address", e.target.value)}
                     placeholder="123 Main Street"
+                    required
                   />
                 </div>
                 

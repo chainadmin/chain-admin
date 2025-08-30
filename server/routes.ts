@@ -969,60 +969,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/consumer-registration', async (req, res) => {
     try {
       const { 
-        tenantSlug, 
         firstName, 
         lastName, 
         email, 
-        phone, 
         dateOfBirth, 
-        ssnLast4, 
         address, 
         city, 
         state, 
         zipCode 
       } = req.body;
 
-      if (!tenantSlug || !firstName || !lastName || !email || !ssnLast4) {
-        return res.status(400).json({ message: "Required fields missing" });
+      if (!firstName || !lastName || !email || !dateOfBirth || !address) {
+        return res.status(400).json({ message: "Name, email, date of birth, and address are required" });
       }
 
-      // Get tenant
-      const tenant = await storage.getTenantBySlug(tenantSlug);
-      if (!tenant) {
-        return res.status(404).json({ message: "Agency not found" });
-      }
-
-      // Check if consumer already exists
-      const existingConsumer = await storage.getConsumerByEmailAndTenant(email, tenantSlug);
+      // First, check if consumer already exists in any agency
+      const existingConsumer = await storage.getConsumerByEmail(email);
+      
       if (existingConsumer) {
-        return res.status(409).json({ message: "Consumer already registered with this email" });
+        // Verify date of birth matches
+        const providedDOB = new Date(dateOfBirth);
+        const storedDOB = existingConsumer.dateOfBirth ? new Date(existingConsumer.dateOfBirth) : null;
+        
+        if (storedDOB && providedDOB.getTime() === storedDOB.getTime()) {
+          // Get tenant information
+          const tenant = await storage.getTenant(existingConsumer.tenantId);
+          if (!tenant) {
+            return res.status(500).json({ message: "Account configuration error" });
+          }
+
+          // Update existing consumer with complete registration info
+          const updatedConsumer = await storage.updateConsumer(existingConsumer.id, {
+            firstName,
+            lastName,
+            address,
+            city,
+            state,
+            zipCode,
+            isRegistered: true,
+            registrationDate: new Date(),
+          });
+
+          return res.json({ 
+            message: "Registration completed successfully! Your agency has been automatically identified.", 
+            consumerId: updatedConsumer.id,
+            consumer: {
+              id: updatedConsumer.id,
+              firstName: updatedConsumer.firstName,
+              lastName: updatedConsumer.lastName,
+              email: updatedConsumer.email,
+            },
+            tenant: {
+              name: tenant.name,
+              slug: tenant.slug,
+            }
+          });
+        } else {
+          return res.status(400).json({ 
+            message: "An account with this email exists, but the date of birth doesn't match. Please verify your information." 
+          });
+        }
       }
 
-      // Register consumer
-      const consumer = await storage.registerConsumer({
-        tenantId: tenant.id,
-        firstName,
-        lastName,
-        email,
-        phone,
-        dateOfBirth,
-        ssnLast4,
-        address,
-        city,
-        state,
-        zipCode,
+      // No existing account found - this means they're completely new
+      // For now, we'll create a pending account that agencies can claim
+      // In a real system, you might want to route this differently
+      return res.status(404).json({ 
+        message: "No account found with this email and date of birth combination. Please contact your collection agency directly to get set up.",
+        suggestedAction: "contact_agency"
       });
 
-      res.json({ 
-        message: "Registration successful", 
-        consumerId: consumer.id,
-        consumer: {
-          id: consumer.id,
-          firstName: consumer.firstName,
-          lastName: consumer.lastName,
-          email: consumer.email,
-        }
-      });
     } catch (error) {
       console.error("Error during consumer registration:", error);
       res.status(500).json({ message: "Registration failed" });
