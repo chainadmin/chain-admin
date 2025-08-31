@@ -98,6 +98,10 @@ function replaceEmailVariables(
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Body parser middleware
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
+
   // Auth middleware
   await setupAuth(app);
 

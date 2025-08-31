@@ -32,9 +32,9 @@ export default function ConsumerRegistration() {
   const registrationMutation = useMutation({
     mutationFn: async (data: any) => {
       const response = await apiRequest("POST", "/api/consumer-registration", data);
-      return response;
+      return response.json();
     },
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
       if (data.tenant) {
         toast({
           title: "Registration Successful!",
