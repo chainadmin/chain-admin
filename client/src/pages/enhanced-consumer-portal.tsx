@@ -194,7 +194,7 @@ export default function EnhancedConsumerPortal() {
                 )}
               </div>
               <div>
-                <h1 className="text-xl font-semibold text-white">{tenant?.name || "Debt Management Portal"}</h1>
+                <h1 className="text-xl font-semibold text-white">{tenant?.name || "Account Portal"}</h1>
                 <p className="text-blue-100 text-sm">
                   {consumer?.firstName} {consumer?.lastName} • {consumer?.email}
                 </p>
