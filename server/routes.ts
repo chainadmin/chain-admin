@@ -8,6 +8,7 @@ import multer from "multer";
 import path from "path";
 import { nanoid } from "nanoid";
 import express from "express";
+import { emailService } from "./emailService";
 
 const csvUploadSchema = z.object({
   consumers: z.array(z.object({
@@ -629,9 +630,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Process variables for each consumer and prepare email content
       const accountsData = await storage.getAccountsByTenant(platformUser.tenantId);
       
-      // TODO: Here you would integrate with your email service provider (SendGrid, etc.)
-      // Example of processing emails with variable replacement:
-      const processedEmails = targetedConsumers.map(consumer => {
+      // Prepare emails with variable replacement (filter out consumers without emails)
+      const processedEmails = targetedConsumers
+        .filter(consumer => consumer.email) // Only include consumers with valid emails
+        .map(consumer => {
         // Find the primary account for this consumer (could be multiple accounts)
         const consumerAccount = accountsData.find(acc => acc.consumerId === consumer.id);
         
@@ -640,37 +642,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const processedHtml = replaceEmailVariables(template.html, consumer, consumerAccount, tenant);
         
         return {
-          to: consumer.email,
+          to: consumer.email!,
+          from: tenant.email || 'noreply@chainplatform.com', // Use tenant email or default
           subject: processedSubject,
           html: processedHtml,
-          consumer: consumer,
-          account: consumerAccount
+          tag: `campaign-${campaign.id}`,
+          metadata: {
+            campaignId: campaign.id,
+            tenantId: platformUser.tenantId || '',
+            consumerId: consumer.id,
+            templateId: templateId,
+          }
         };
       });
 
-      // Log the processed emails for demonstration (in production, send via email service)
-      console.log(`\n📧 Email Campaign: ${name}`);
-      console.log(`📊 Processed ${processedEmails.length} emails with personalized content`);
-      console.log(`🔗 Each email includes consumer portal links and app download links`);
+      // Send emails via Postmark
+      console.log(`📧 Sending ${processedEmails.length} emails via Postmark...`);
+      const emailResults = await emailService.sendBulkEmails(processedEmails);
       
-      // For now, simulate sending process with mock data
-      setTimeout(async () => {
-        await storage.updateEmailCampaign(campaign.id, {
-          status: 'completed',
-          totalSent: targetedConsumers.length,
-          totalDelivered: Math.floor(targetedConsumers.length * 0.95), // 95% delivery rate
-          totalOpened: Math.floor(targetedConsumers.length * 0.25), // 25% open rate
-          totalClicked: Math.floor(targetedConsumers.length * 0.05), // 5% click rate
-          totalErrors: Math.floor(targetedConsumers.length * 0.05), // 5% error rate
-          totalOptOuts: Math.floor(targetedConsumers.length * 0.01), // 1% opt-out rate
-          completedAt: new Date(),
-        });
-      }, 2000);
+      // Update campaign status
+      await storage.updateEmailCampaign(campaign.id, {
+        status: 'completed',
+        totalSent: emailResults.successful,
+        totalErrors: emailResults.failed,
+        completedAt: new Date(),
+      });
+
+      console.log(`✅ Email campaign completed: ${emailResults.successful} sent, ${emailResults.failed} failed`);
       
-      res.json(campaign);
+      res.json({
+        ...campaign,
+        emailResults: {
+          successful: emailResults.successful,
+          failed: emailResults.failed,
+          totalProcessed: processedEmails.length
+        }
+      });
     } catch (error) {
       console.error("Error creating email campaign:", error);
       res.status(500).json({ message: "Failed to create email campaign" });
+    }
+  });
+
+  // Test email route
+  app.post('/api/test-email', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { to, subject, message } = req.body;
+      
+      if (!to || !subject || !message) {
+        return res.status(400).json({ message: "To, subject, and message are required" });
+      }
+
+      const tenant = await storage.getTenant(platformUser.tenantId);
+      const fromEmail = tenant?.email || 'noreply@chainplatform.com';
+
+      const result = await emailService.sendEmail({
+        to,
+        from: fromEmail,
+        subject,
+        html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>Test Email from ${tenant?.name || 'Chain Platform'}</h2>
+          <p>${message}</p>
+          <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
+          <p style="color: #666; font-size: 12px;">
+            This is a test email sent from the Chain platform.
+          </p>
+        </div>`,
+        tag: 'test-email',
+        metadata: {
+          type: 'test',
+          tenantId: platformUser.tenantId,
+        }
+      });
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error sending test email:", error);
+      res.status(500).json({ message: "Failed to send test email" });
     }
   });
 

@@ -22,6 +22,7 @@ import ConsumerRegistration from "@/pages/consumer-registration";
 import AgencyRegistration from "@/pages/agency-registration";
 import TenantSetup from "@/components/tenant-setup";
 import GlobalAdmin from "@/pages/global-admin";
+import EmailTest from "@/pages/email-test";
 
 function Router() {
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -55,6 +56,7 @@ function Router() {
           <Route path="/company" component={CompanyManagement} />
           <Route path="/settings" component={Settings} />
           <Route path="/admin" component={GlobalAdmin} />
+          <Route path="/email-test" component={EmailTest} />
         </>
       )}
       <Route component={NotFound} />
