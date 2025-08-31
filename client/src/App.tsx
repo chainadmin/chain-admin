@@ -21,6 +21,7 @@ import ConsumerDashboard from "@/pages/consumer-dashboard";
 import ConsumerRegistration from "@/pages/consumer-registration";
 import AgencyRegistration from "@/pages/agency-registration";
 import TenantSetup from "@/components/tenant-setup";
+import GlobalAdmin from "@/pages/global-admin";
 
 function Router() {
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -53,6 +54,7 @@ function Router() {
           <Route path="/billing" component={Billing} />
           <Route path="/company" component={CompanyManagement} />
           <Route path="/settings" component={Settings} />
+          <Route path="/admin" component={GlobalAdmin} />
         </>
       )}
       <Route component={NotFound} />

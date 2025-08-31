@@ -1904,6 +1904,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Global Admin Routes (Platform Owner Only)
+  const isPlatformAdmin = async (req: any, res: any, next: any) => {
+    const userId = req.user.claims.sub;
+    const platformUser = await storage.getPlatformUser(userId);
+    
+    if (!platformUser || platformUser.role !== 'platform_admin') {
+      return res.status(403).json({ message: "Platform admin access required" });
+    }
+    
+    next();
+  };
+
+  // Get all tenants for platform admin overview
+  app.get('/api/admin/tenants', isAuthenticated, isPlatformAdmin, async (req: any, res) => {
+    try {
+      const tenants = await storage.getAllTenants();
+      
+      // Get additional stats for each tenant
+      const tenantsWithStats = await Promise.all(
+        tenants.map(async (tenant) => {
+          const consumerCount = await storage.getConsumerCountByTenant(tenant.id);
+          const accountCount = await storage.getAccountCountByTenant(tenant.id);
+          const totalBalance = await storage.getTotalBalanceByTenant(tenant.id);
+          
+          return {
+            ...tenant,
+            stats: {
+              consumerCount,
+              accountCount,
+              totalBalanceCents: totalBalance,
+            }
+          };
+        })
+      );
+      
+      res.json(tenantsWithStats);
+    } catch (error) {
+      console.error("Error fetching tenants:", error);
+      res.status(500).json({ message: "Failed to fetch tenants" });
+    }
+  });
+
+  // Get platform-wide statistics
+  app.get('/api/admin/stats', isAuthenticated, isPlatformAdmin, async (req: any, res) => {
+    try {
+      const stats = await storage.getPlatformStats();
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching platform stats:", error);
+      res.status(500).json({ message: "Failed to fetch platform stats" });
+    }
+  });
+
+  // Update tenant status (activate/suspend)
+  app.put('/api/admin/tenants/:id/status', isAuthenticated, isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { isActive, suspensionReason } = req.body;
+      
+      const updatedTenant = await storage.updateTenantStatus(req.params.id, {
+        isActive,
+        suspensionReason: isActive ? null : suspensionReason,
+        suspendedAt: isActive ? null : new Date(),
+      });
+      
+      res.json(updatedTenant);
+    } catch (error) {
+      console.error("Error updating tenant status:", error);
+      res.status(500).json({ message: "Failed to update tenant status" });
+    }
+  });
+
+  // Upgrade tenant from trial to paid
+  app.put('/api/admin/tenants/:id/upgrade', isAuthenticated, isPlatformAdmin, async (req: any, res) => {
+    try {
+      const updatedTenant = await storage.upgradeTenantToPaid(req.params.id);
+      res.json(updatedTenant);
+    } catch (error) {
+      console.error("Error upgrading tenant:", error);
+      res.status(500).json({ message: "Failed to upgrade tenant" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

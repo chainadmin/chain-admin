@@ -91,6 +91,15 @@ export interface IStorage {
     email: string;
   }): Promise<Tenant>;
   
+  // Global admin operations
+  getAllTenants(): Promise<Tenant[]>;
+  getConsumerCountByTenant(tenantId: string): Promise<number>;
+  getAccountCountByTenant(tenantId: string): Promise<number>;
+  getTotalBalanceByTenant(tenantId: string): Promise<number>;
+  getPlatformStats(): Promise<any>;
+  updateTenantStatus(id: string, updates: { isActive: boolean; suspensionReason?: string | null; suspendedAt?: Date | null }): Promise<Tenant>;
+  upgradeTenantToPaid(id: string): Promise<Tenant>;
+  
   // Platform user operations
   getPlatformUser(authId: string): Promise<PlatformUser | undefined>;
   getPlatformUserWithTenant(authId: string): Promise<(PlatformUser & { tenant: Tenant }) | undefined>;
@@ -1008,6 +1017,69 @@ export class DatabaseStorage implements IStorage {
       totalBalance,
       collectionRate,
     };
+  }
+
+  // Global admin implementations
+  async getAllTenants(): Promise<Tenant[]> {
+    return await db.select().from(tenants).orderBy(desc(tenants.createdAt));
+  }
+
+  async getConsumerCountByTenant(tenantId: string): Promise<number> {
+    const tenantConsumers = await db.select().from(consumers).where(eq(consumers.tenantId, tenantId));
+    return tenantConsumers.length;
+  }
+
+  async getAccountCountByTenant(tenantId: string): Promise<number> {
+    const tenantAccounts = await db.select().from(accounts).where(eq(accounts.tenantId, tenantId));
+    return tenantAccounts.length;
+  }
+
+  async getTotalBalanceByTenant(tenantId: string): Promise<number> {
+    const tenantAccounts = await db.select().from(accounts).where(eq(accounts.tenantId, tenantId));
+    return tenantAccounts.reduce((sum: number, account: any) => sum + (account.balanceCents || 0), 0);
+  }
+
+  async getPlatformStats(): Promise<any> {
+    const allTenants = await db.select().from(tenants);
+    const allConsumers = await db.select().from(consumers);
+    const allAccounts = await db.select().from(accounts);
+    
+    const totalTenants = allTenants.length;
+    const activeTenants = allTenants.filter(t => t.isActive).length;
+    const trialTenants = allTenants.filter(t => t.isTrialAccount).length;
+    const paidTenants = allTenants.filter(t => t.isPaidAccount).length;
+    const totalConsumers = allConsumers.length;
+    const totalAccounts = allAccounts.length;
+    const totalBalanceCents = allAccounts.reduce((sum: number, account: any) => sum + (account.balanceCents || 0), 0);
+    
+    return {
+      totalTenants,
+      activeTenants,
+      trialTenants,
+      paidTenants,
+      totalConsumers,
+      totalAccounts,
+      totalBalanceCents
+    };
+  }
+
+  async updateTenantStatus(id: string, updates: { isActive: boolean; suspensionReason?: string | null; suspendedAt?: Date | null }): Promise<Tenant> {
+    const [updatedTenant] = await db.update(tenants)
+      .set(updates)
+      .where(eq(tenants.id, id))
+      .returning();
+    return updatedTenant;
+  }
+
+  async upgradeTenantToPaid(id: string): Promise<Tenant> {
+    const [updatedTenant] = await db.update(tenants)
+      .set({
+        isPaidAccount: true,
+        isTrialAccount: false,
+      })
+      .where(eq(tenants.id, id))
+      .returning();
+    return updatedTenant;
   }
 }
 
