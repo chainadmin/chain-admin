@@ -15,15 +15,27 @@ export default function Landing() {
           <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
             Find your account to get started
           </p>
-          <Button 
-            size="lg"
-            onClick={() => window.location.href = '/consumer-login'}
-            className="bg-blue-600 hover:bg-blue-700"
-            data-testid="button-consumer-login"
-          >
-            <i className="fas fa-user mr-2"></i>
-            Access Your Account
-          </Button>
+          <div className="space-x-4">
+            <Button 
+              size="lg"
+              onClick={() => window.location.href = '/consumer-login'}
+              className="bg-blue-600 hover:bg-blue-700"
+              data-testid="button-consumer-login"
+            >
+              <i className="fas fa-user mr-2"></i>
+              Access Your Account
+            </Button>
+            <Button 
+              size="lg"
+              variant="outline"
+              onClick={() => window.location.href = '/consumer-register'}
+              className="border-blue-600 text-blue-600 hover:bg-blue-50"
+              data-testid="button-consumer-register"
+            >
+              <i className="fas fa-user-plus mr-2"></i>
+              Create Account
+            </Button>
+          </div>
         </div>
 
         <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">

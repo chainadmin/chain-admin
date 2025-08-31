@@ -37,6 +37,7 @@ function Router() {
           <Route path="/consumer-dashboard" component={ConsumerDashboard} />
           <Route path="/consumer/:tenantSlug/:email" component={ConsumerPortal} />
           <Route path="/register/:tenantSlug" component={ConsumerRegistration} />
+          <Route path="/consumer-register" component={ConsumerRegistration} />
           <Route path="/agency-register" component={AgencyRegistration} />
         </>
       ) : needsTenantSetup ? (
