@@ -426,8 +426,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Missing required fields" });
       }
 
-      // Check if consumer already exists
-      let consumer = await storage.getConsumerByEmail(email, platformUser.tenantId);
+      // Check if consumer already exists  
+      let consumer = await storage.getConsumerByEmail(email);
       
       if (!consumer) {
         // Create new consumer
@@ -591,8 +591,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // For decline status, we'll filter consumers based on a decline status field
         // This could be stored in consumer additionalData or a separate status field
         targetedConsumers = consumers.filter(c => 
-          (c.additionalData && c.additionalData.status === 'decline') ||
-          (c.additionalData && c.additionalData.folder === 'decline')
+          (c.additionalData && (c.additionalData as any).status === 'decline') ||
+          (c.additionalData && (c.additionalData as any).folder === 'decline')
         );
       } else if (targetGroup === "recent-upload") {
         // For most recent upload, we'll need to track upload batches
@@ -614,7 +614,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       // Get email template for variable replacement
-      const template = await storage.getEmailTemplate(templateId);
+      const templates = await storage.getEmailTemplatesByTenant(platformUser.tenantId);
+      const template = templates.find(t => t.id === templateId);
       if (!template) {
         return res.status(404).json({ message: "Email template not found" });
       }
@@ -879,11 +880,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         nextExecution = new Date(validatedData.scheduledDate);
       }
 
-      const newAutomation = await storage.createAutomation({
+      const automationData: any = {
         ...validatedData,
         tenantId: platformUser.tenantId,
-        nextExecution,
-      });
+      };
+      
+      // Convert scheduledDate string to Date if provided
+      if (automationData.scheduledDate) {
+        automationData.scheduledDate = new Date(automationData.scheduledDate);
+      }
+      
+      const newAutomation = await storage.createAutomation(automationData);
       
       res.status(201).json(newAutomation);
     } catch (error) {
@@ -917,10 +924,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const validatedData = updateAutomationSchema.parse(req.body);
       
-      const updatedAutomation = await storage.updateAutomation(req.params.id, {
+      const updateData: any = {
         ...validatedData,
         updatedAt: new Date(),
-      });
+      };
+      
+      // Convert scheduledDate string to Date if provided
+      if (updateData.scheduledDate) {
+        updateData.scheduledDate = new Date(updateData.scheduledDate);
+      }
+      
+      const updatedAutomation = await storage.updateAutomation(req.params.id, updateData);
       
       res.json(updatedAutomation);
     } catch (error) {
