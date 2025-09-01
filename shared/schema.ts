@@ -56,6 +56,10 @@ export const tenants = pgTable("tenants", {
   businessName: text("business_name"),
   phoneNumber: text("phone_number"),
   email: text("email"),
+  // Postmark integration
+  postmarkServerId: text("postmark_server_id"), // Postmark server ID
+  postmarkServerToken: text("postmark_server_token"), // Postmark server API token for sending emails
+  postmarkServerName: text("postmark_server_name"), // Human-readable server name
   notifiedOwners: boolean("notified_owners").default(false), // Track if owners were notified
   notificationSentAt: timestamp("notification_sent_at"),
   createdAt: timestamp("created_at").defaultNow(),

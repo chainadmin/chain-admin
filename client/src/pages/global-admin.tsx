@@ -1,10 +1,14 @@
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Users, DollarSign, TrendingUp, Eye, Ban, CheckCircle, AlertTriangle } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Building2, Users, DollarSign, TrendingUp, Eye, Ban, CheckCircle, AlertTriangle, Plus, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 // Simple currency formatter
 const formatCurrency = (amount: number) => {
@@ -17,6 +21,11 @@ const formatCurrency = (amount: number) => {
 export default function GlobalAdmin() {
   const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
+  
+  // Form state for creating new agency
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [newAgencyName, setNewAgencyName] = useState('');
+  const [newAgencyEmail, setNewAgencyEmail] = useState('');
 
   // Check if user is platform admin
   const { data: userData } = useQuery({
@@ -80,6 +89,46 @@ export default function GlobalAdmin() {
     }
   });
 
+  // Mutation to create new agency
+  const createAgencyMutation = useMutation({
+    mutationFn: async ({ name, email }: { name: string; email: string }) => {
+      return apiRequest('POST', '/api/admin/agencies', { name, email });
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants'] });
+      setIsCreateDialogOpen(false);
+      setNewAgencyName('');
+      setNewAgencyEmail('');
+      toast({
+        title: "Agency Created Successfully",
+        description: `${data.tenant.name} has been created with dedicated Postmark email server`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to Create Agency",
+        description: error.message || "An error occurred while creating the agency",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const handleCreateAgency = () => {
+    if (!newAgencyName.trim() || !newAgencyEmail.trim()) {
+      toast({
+        title: "Missing Information",
+        description: "Please enter both agency name and email",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    createAgencyMutation.mutate({
+      name: newAgencyName.trim(),
+      email: newAgencyEmail.trim(),
+    });
+  };
+
   if (authLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -108,9 +157,93 @@ export default function GlobalAdmin() {
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900" data-testid="text-global-admin-title">Global Admin Dashboard</h1>
-          <p className="text-gray-600 mt-2">Platform-wide overview and management</p>
+        <div className="mb-8 flex justify-between items-start">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900" data-testid="text-global-admin-title">Global Admin Dashboard</h1>
+            <p className="text-gray-600 mt-2">Platform-wide overview and management</p>
+          </div>
+          
+          {/* Create Agency Button */}
+          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-blue-600 hover:bg-blue-700" data-testid="button-create-agency">
+                <Plus className="h-4 w-4 mr-2" />
+                Create Agency
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle className="flex items-center">
+                  <Building2 className="h-5 w-5 mr-2" />
+                  Create New Agency
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 pt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="agency-name">Agency Name</Label>
+                  <Input
+                    id="agency-name"
+                    value={newAgencyName}
+                    onChange={(e) => setNewAgencyName(e.target.value)}
+                    placeholder="Enter agency name"
+                    data-testid="input-agency-name"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="agency-email">Agency Email</Label>
+                  <Input
+                    id="agency-email"
+                    type="email"
+                    value={newAgencyEmail}
+                    onChange={(e) => setNewAgencyEmail(e.target.value)}
+                    placeholder="contact@agency.com"
+                    data-testid="input-agency-email"
+                  />
+                  <p className="text-sm text-gray-500">This will be used for sending emails from the agency</p>
+                </div>
+
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <div className="flex items-start">
+                    <Mail className="h-5 w-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0" />
+                    <div className="text-sm">
+                      <p className="font-medium text-blue-900">Postmark Integration</p>
+                      <p className="text-blue-700 mt-1">
+                        A dedicated Postmark server will be created for this agency with its own API token for isolated email delivery.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end space-x-3 pt-4">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setIsCreateDialogOpen(false)}
+                    data-testid="button-cancel-create"
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={handleCreateAgency}
+                    disabled={createAgencyMutation.isPending}
+                    data-testid="button-confirm-create"
+                  >
+                    {createAgencyMutation.isPending ? (
+                      <>
+                        <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2" />
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Create Agency
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* Platform Stats */}

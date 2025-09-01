@@ -90,6 +90,13 @@ export interface IStorage {
     phoneNumber: string;
     email: string;
   }): Promise<Tenant>;
+  createTenantWithPostmark(data: {
+    name: string;
+    email: string;
+    postmarkServerId: string;
+    postmarkServerToken: string;
+    postmarkServerName: string;
+  }): Promise<Tenant>;
   
   // Global admin operations
   getAllTenants(): Promise<Tenant[]>;
@@ -308,6 +315,33 @@ export class DatabaseStorage implements IStorage {
       email: data.email,
       notifiedOwners: false,
     }).returning();
+    return newTenant;
+  }
+
+  async createTenantWithPostmark(data: {
+    name: string;
+    email: string;
+    postmarkServerId: string;
+    postmarkServerToken: string;
+    postmarkServerName: string;
+  }): Promise<Tenant> {
+    // Generate slug from name
+    const slug = data.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+    
+    const [newTenant] = await db.insert(tenants).values({
+      name: data.name,
+      slug: slug,
+      email: data.email,
+      isTrialAccount: false, // Created by admin as paid account
+      isPaidAccount: true,
+      postmarkServerId: data.postmarkServerId,
+      postmarkServerToken: data.postmarkServerToken,
+      postmarkServerName: data.postmarkServerName,
+    }).returning();
+    
+    // Ensure default folders are created
+    await this.ensureDefaultFolders(newTenant.id);
+    
     return newTenant;
   }
 

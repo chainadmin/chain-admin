@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
+import { postmarkServerService } from "./postmarkServerService";
 import { insertConsumerSchema, insertAccountSchema, agencyTrialRegistrationSchema } from "@shared/schema";
 import { z } from "zod";
 import multer from "multer";
@@ -2038,6 +2039,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error upgrading tenant:", error);
       res.status(500).json({ message: "Failed to upgrade tenant" });
+    }
+  });
+
+  // Create new agency with Postmark server
+  app.post('/api/admin/agencies', isAuthenticated, isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { name, email } = req.body;
+      
+      if (!name || !email) {
+        return res.status(400).json({ message: "Agency name and email are required" });
+      }
+
+      // Check if agency with this email already exists
+      const existingTenant = await storage.getTenantByEmail(email);
+      if (existingTenant) {
+        return res.status(400).json({ 
+          message: "An agency with this email already exists" 
+        });
+      }
+
+      // Create Postmark server
+      console.log(`Creating Postmark server for agency: ${name}`);
+      const postmarkResult = await postmarkServerService.createServer({
+        name: `${name} - Email Server`,
+        color: 'Purple',
+        trackOpens: true,
+        trackLinks: 'HtmlAndText'
+      });
+
+      if (!postmarkResult.success || !postmarkResult.server) {
+        console.error('Failed to create Postmark server:', postmarkResult.error);
+        return res.status(500).json({ 
+          message: `Failed to create email server: ${postmarkResult.error}` 
+        });
+      }
+
+      const server = postmarkResult.server;
+      console.log(`✅ Postmark server created - ID: ${server.ID}, Token: ${server.ApiTokens[0]?.substring(0, 10)}...`);
+
+      // Create tenant with Postmark integration
+      const tenant = await storage.createTenantWithPostmark({
+        name,
+        email,
+        postmarkServerId: server.ID.toString(),
+        postmarkServerToken: server.ApiTokens[0],
+        postmarkServerName: server.Name,
+      });
+
+      console.log(`✅ Agency created: ${name} with Postmark server ${server.ID}`);
+
+      res.status(201).json({
+        message: "Agency created successfully with dedicated email server",
+        tenant: {
+          id: tenant.id,
+          name: tenant.name,
+          slug: tenant.slug,
+          email: tenant.email,
+          postmarkServerId: tenant.postmarkServerId,
+          postmarkServerName: tenant.postmarkServerName,
+        },
+        postmarkServer: {
+          id: server.ID,
+          name: server.Name,
+          serverLink: server.ServerLink,
+        }
+      });
+
+    } catch (error) {
+      console.error("Error creating agency:", error);
+      res.status(500).json({ message: "Failed to create agency" });
     }
   });
 
