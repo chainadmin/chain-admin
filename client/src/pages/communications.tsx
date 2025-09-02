@@ -42,6 +42,7 @@ export default function Communications() {
   const [communicationType, setCommunicationType] = useState<"email" | "sms">("email");
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showCampaignModal, setShowCampaignModal] = useState(false);
+  const [showCampaignConfirmation, setShowCampaignConfirmation] = useState(false);
   const [previewTemplate, setPreviewTemplate] = useState<any>(null);
   
   const [emailTemplateForm, setEmailTemplateForm] = useState({
@@ -210,6 +211,7 @@ export default function Communications() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/email-campaigns"] });
       setShowCampaignModal(false);
+      setShowCampaignConfirmation(false);
       setCampaignForm({ name: "", templateId: "", targetGroup: "all" });
       toast({
         title: "Success",
@@ -223,6 +225,7 @@ export default function Communications() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sms-campaigns"] });
       setShowCampaignModal(false);
+      setShowCampaignConfirmation(false);
       setCampaignForm({ name: "", templateId: "", targetGroup: "all" });
       toast({
         title: "Success",
@@ -348,11 +351,17 @@ export default function Communications() {
       return;
     }
     
+    // Show confirmation dialog instead of immediately creating campaign
+    setShowCampaignConfirmation(true);
+  };
+
+  const handleCampaignConfirm = () => {
     if (communicationType === "email") {
       createEmailCampaignMutation.mutate(campaignForm);
     } else {
       createSmsCampaignMutation.mutate(campaignForm);
     }
+    setShowCampaignConfirmation(false);
   };
 
   const handleAutomationSubmit = (e: React.FormEvent) => {
@@ -1602,6 +1611,29 @@ export default function Communications() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Campaign Confirmation Dialog */}
+        <AlertDialog open={showCampaignConfirmation} onOpenChange={setShowCampaignConfirmation}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirm Campaign Creation</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to create this {communicationType} campaign? 
+                This will send messages to your selected target group: {campaignForm.targetGroup === "all" ? "All consumers" : campaignForm.targetGroup}.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel data-testid="button-cancel-campaign">Cancel</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={handleCampaignConfirm}
+                data-testid="button-confirm-campaign"
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Yes, Create Campaign
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </AdminLayout>
   );
