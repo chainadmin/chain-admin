@@ -625,6 +625,73 @@ export const automationExecutions = pgTable("automation_executions", {
   executionDetails: jsonb("execution_details"),
 });
 
+// Email sequences for multi-day automation
+export const emailSequences = pgTable("email_sequences", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  isActive: boolean("is_active").default(true),
+  
+  // Trigger settings
+  triggerType: text("trigger_type", { enum: ['immediate', 'scheduled', 'event'] }).notNull().default('immediate'),
+  triggerEvent: text("trigger_event", { enum: ['account_created', 'payment_overdue', 'manual'] }),
+  
+  // Target audience
+  targetType: text("target_type", { enum: ['all', 'folder', 'custom'] }).notNull(),
+  targetFolderIds: uuid("target_folder_ids").array(),
+  targetConsumerIds: uuid("target_consumer_ids").array(),
+  
+  // Tracking
+  totalEnrolled: bigint("total_enrolled", { mode: "number" }).default(0),
+  totalCompleted: bigint("total_completed", { mode: "number" }).default(0),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Individual steps in an email sequence
+export const emailSequenceSteps = pgTable("email_sequence_steps", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  sequenceId: uuid("sequence_id").references(() => emailSequences.id, { onDelete: "cascade" }).notNull(),
+  templateId: uuid("template_id").references(() => emailTemplates.id, { onDelete: "cascade" }).notNull(),
+  
+  stepOrder: bigint("step_order", { mode: "number" }).notNull(), // 1, 2, 3, etc.
+  delayDays: bigint("delay_days", { mode: "number" }).default(0), // Days to wait before sending
+  delayHours: bigint("delay_hours", { mode: "number" }).default(0), // Additional hours to wait
+  
+  // Step conditions (optional)
+  conditions: jsonb("conditions"), // JSON for advanced conditions
+  
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Track individual consumer progress through sequences
+export const emailSequenceEnrollments = pgTable("email_sequence_enrollments", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  sequenceId: uuid("sequence_id").references(() => emailSequences.id, { onDelete: "cascade" }).notNull(),
+  consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "cascade" }).notNull(),
+  
+  // Progress tracking
+  currentStepId: uuid("current_step_id").references(() => emailSequenceSteps.id),
+  currentStepOrder: bigint("current_step_order", { mode: "number" }).default(1),
+  status: text("status", { enum: ['active', 'completed', 'paused', 'cancelled'] }).notNull().default('active'),
+  
+  // Timing
+  enrolledAt: timestamp("enrolled_at").defaultNow(),
+  nextEmailAt: timestamp("next_email_at"), // When the next email should be sent
+  completedAt: timestamp("completed_at"),
+  lastEmailSentAt: timestamp("last_email_sent_at"),
+  
+  // Tracking
+  emailsSent: bigint("emails_sent", { mode: "number" }).default(0),
+  emailsOpened: bigint("emails_opened", { mode: "number" }).default(0),
+  emailsClicked: bigint("emails_clicked", { mode: "number" }).default(0),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Relations for automations
 export const communicationAutomationsRelations = relations(communicationAutomations, ({ one, many }) => ({
   tenant: one(tenants, {
@@ -638,6 +705,42 @@ export const automationExecutionsRelations = relations(automationExecutions, ({ 
   automation: one(communicationAutomations, {
     fields: [automationExecutions.automationId],
     references: [communicationAutomations.id],
+  }),
+}));
+
+// Email sequence relations
+export const emailSequencesRelations = relations(emailSequences, ({ one, many }) => ({
+  tenant: one(tenants, {
+    fields: [emailSequences.tenantId],
+    references: [tenants.id],
+  }),
+  steps: many(emailSequenceSteps),
+  enrollments: many(emailSequenceEnrollments),
+}));
+
+export const emailSequenceStepsRelations = relations(emailSequenceSteps, ({ one }) => ({
+  sequence: one(emailSequences, {
+    fields: [emailSequenceSteps.sequenceId],
+    references: [emailSequences.id],
+  }),
+  template: one(emailTemplates, {
+    fields: [emailSequenceSteps.templateId],
+    references: [emailTemplates.id],
+  }),
+}));
+
+export const emailSequenceEnrollmentsRelations = relations(emailSequenceEnrollments, ({ one }) => ({
+  sequence: one(emailSequences, {
+    fields: [emailSequenceEnrollments.sequenceId],
+    references: [emailSequences.id],
+  }),
+  consumer: one(consumers, {
+    fields: [emailSequenceEnrollments.consumerId],
+    references: [consumers.id],
+  }),
+  currentStep: one(emailSequenceSteps, {
+    fields: [emailSequenceEnrollments.currentStepId],
+    references: [emailSequenceSteps.id],
   }),
 }));
 
@@ -680,6 +783,9 @@ export const insertSmsCampaignSchema = createInsertSchema(smsCampaigns).omit({ i
 export const insertSmsTrackingSchema = createInsertSchema(smsTracking).omit({ id: true });
 export const insertCommunicationAutomationSchema = createInsertSchema(communicationAutomations).omit({ id: true, createdAt: true, updatedAt: true, lastExecuted: true, nextExecution: true, totalSent: true, currentTemplateIndex: true });
 export const insertAutomationExecutionSchema = createInsertSchema(automationExecutions).omit({ id: true, executedAt: true });
+export const insertEmailSequenceSchema = createInsertSchema(emailSequences).omit({ id: true, createdAt: true, updatedAt: true, totalEnrolled: true, totalCompleted: true });
+export const insertEmailSequenceStepSchema = createInsertSchema(emailSequenceSteps).omit({ id: true, createdAt: true });
+export const insertEmailSequenceEnrollmentSchema = createInsertSchema(emailSequenceEnrollments).omit({ id: true, createdAt: true, updatedAt: true, emailsSent: true, emailsOpened: true, emailsClicked: true });
 
 // Types
 export type UpsertUser = typeof users.$inferInsert;
@@ -727,3 +833,9 @@ export type CommunicationAutomation = typeof communicationAutomations.$inferSele
 export type InsertCommunicationAutomation = z.infer<typeof insertCommunicationAutomationSchema>;
 export type AutomationExecution = typeof automationExecutions.$inferSelect;
 export type InsertAutomationExecution = z.infer<typeof insertAutomationExecutionSchema>;
+export type EmailSequence = typeof emailSequences.$inferSelect;
+export type InsertEmailSequence = z.infer<typeof insertEmailSequenceSchema>;
+export type EmailSequenceStep = typeof emailSequenceSteps.$inferSelect;
+export type InsertEmailSequenceStep = z.infer<typeof insertEmailSequenceStepSchema>;
+export type EmailSequenceEnrollment = typeof emailSequenceEnrollments.$inferSelect;
+export type InsertEmailSequenceEnrollment = z.infer<typeof insertEmailSequenceEnrollmentSchema>;
