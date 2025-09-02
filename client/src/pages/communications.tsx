@@ -142,7 +142,7 @@ export default function Communications() {
 
   // Email Mutations
   const createEmailTemplateMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("/api/email-templates", "POST", data),
+    mutationFn: (data: any) => apiRequest("POST", "/api/email-templates", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/email-templates"] });
       setShowTemplateModal(false);
@@ -162,7 +162,7 @@ export default function Communications() {
   });
 
   const deleteEmailTemplateMutation = useMutation({
-    mutationFn: (id: string) => apiRequest(`/api/email-templates/${id}`, "DELETE"),
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/email-templates/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/email-templates"] });
       toast({
@@ -174,7 +174,7 @@ export default function Communications() {
 
   // SMS Mutations
   const createSmsTemplateMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("/api/sms-templates", "POST", data),
+    mutationFn: (data: any) => apiRequest("POST", "/api/sms-templates", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sms-templates"] });
       setShowTemplateModal(false);
@@ -194,7 +194,7 @@ export default function Communications() {
   });
 
   const deleteSmsTemplateMutation = useMutation({
-    mutationFn: (id: string) => apiRequest(`/api/sms-templates/${id}`, "DELETE"),
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/sms-templates/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sms-templates"] });
       toast({
@@ -206,7 +206,7 @@ export default function Communications() {
 
   // Campaign Mutations
   const createEmailCampaignMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("/api/email-campaigns", "POST", data),
+    mutationFn: (data: any) => apiRequest("POST", "/api/email-campaigns", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/email-campaigns"] });
       setShowCampaignModal(false);
@@ -219,7 +219,7 @@ export default function Communications() {
   });
 
   const createSmsCampaignMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("/api/sms-campaigns", "POST", data),
+    mutationFn: (data: any) => apiRequest("POST", "/api/sms-campaigns", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sms-campaigns"] });
       setShowCampaignModal(false);
@@ -233,7 +233,7 @@ export default function Communications() {
 
   // Automation Mutations
   const createAutomationMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("/api/automations", "POST", data),
+    mutationFn: (data: any) => apiRequest("POST", "/api/automations", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/automations"] });
       setShowAutomationModal(false);
@@ -270,7 +270,7 @@ export default function Communications() {
   });
 
   const deleteAutomationMutation = useMutation({
-    mutationFn: (id: string) => apiRequest(`/api/automations/${id}`, "DELETE"),
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/automations/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/automations"] });
       toast({
@@ -294,7 +294,7 @@ export default function Communications() {
 
   // Settings mutation for SMS throttle
   const updateSettingsMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("/api/settings", "PUT", data),
+    mutationFn: (data: any) => apiRequest("PUT", "/api/settings", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/sms-rate-limit-status"] });
