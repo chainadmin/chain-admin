@@ -12,6 +12,7 @@ import path from "path";
 import { nanoid } from "nanoid";
 import express from "express";
 import { emailService } from "./emailService";
+import { smsService } from "./smsService";
 
 const csvUploadSchema = z.object({
   consumers: z.array(z.object({
@@ -876,6 +877,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching SMS metrics:", error);
       res.status(500).json({ message: "Failed to fetch SMS metrics" });
+    }
+  });
+
+  // SMS throttling and queue management routes
+  app.get('/api/sms-rate-limit-status', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const rateLimitStatus = await smsService.getRateLimitStatus(platformUser.tenantId);
+      res.json(rateLimitStatus);
+    } catch (error) {
+      console.error("Error getting SMS rate limit status:", error);
+      res.status(500).json({ message: "Failed to get rate limit status" });
+    }
+  });
+
+  app.get('/api/sms-queue-status', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const queueStatus = smsService.getQueueStatus(platformUser.tenantId);
+      res.json(queueStatus);
+    } catch (error) {
+      console.error("Error getting SMS queue status:", error);
+      res.status(500).json({ message: "Failed to get queue status" });
+    }
+  });
+
+  app.post('/api/send-test-sms', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const platformUser = await storage.getPlatformUser(userId);
+      
+      if (!platformUser?.tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { phoneNumber, message } = req.body;
+
+      if (!phoneNumber || !message) {
+        return res.status(400).json({ message: "Phone number and message are required" });
+      }
+
+      const result = await smsService.sendSms(phoneNumber, message, platformUser.tenantId);
+      res.json(result);
+    } catch (error) {
+      console.error("Error sending test SMS:", error);
+      res.status(500).json({ message: "Failed to send test SMS" });
     }
   });
 

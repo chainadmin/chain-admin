@@ -167,6 +167,9 @@ export interface IStorage {
   // SMS metrics operations
   getSmsMetricsByTenant(tenantId: string): Promise<any>;
   
+  // SMS tracking operations
+  createSmsTracking(tracking: InsertSmsTracking): Promise<SmsTracking>;
+  
   // Automation operations
   getAutomationsByTenant(tenantId: string): Promise<CommunicationAutomation[]>;
   createAutomation(automation: InsertCommunicationAutomation): Promise<CommunicationAutomation>;
@@ -708,6 +711,12 @@ export class DatabaseStorage implements IStorage {
       sentThisMonth: recent30,
       bestTemplate: campaigns.length > 0 ? campaigns.sort((a, b) => (b.totalDelivered || 0) - (a.totalDelivered || 0))[0]?.name || "None yet" : "None yet",
     };
+  }
+
+  // SMS tracking operations
+  async createSmsTracking(tracking: InsertSmsTracking): Promise<SmsTracking> {
+    const [newTracking] = await db.insert(smsTracking).values(tracking).returning();
+    return newTracking;
   }
 
   // Automation operations

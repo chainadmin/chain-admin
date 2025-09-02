@@ -126,6 +126,20 @@ export default function Communications() {
     queryKey: ["/api/callback-requests"],
   });
 
+  const { data: smsRateLimitStatus } = useQuery({
+    queryKey: ["/api/sms-rate-limit-status"],
+    refetchInterval: 5000, // Refresh every 5 seconds for real-time updates
+  });
+
+  const { data: smsQueueStatus } = useQuery({
+    queryKey: ["/api/sms-queue-status"],
+    refetchInterval: 5000,
+  });
+
+  const { data: tenantSettings } = useQuery({
+    queryKey: ["/api/settings"],
+  });
+
   // Email Mutations
   const createEmailTemplateMutation = useMutation({
     mutationFn: (data: any) => apiRequest("/api/email-templates", "POST", data),
@@ -274,6 +288,26 @@ export default function Communications() {
       toast({
         title: "Success",
         description: "Automation updated successfully",
+      });
+    },
+  });
+
+  // Settings mutation for SMS throttle
+  const updateSettingsMutation = useMutation({
+    mutationFn: (data: any) => apiRequest("/api/settings", "PUT", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sms-rate-limit-status"] });
+      toast({
+        title: "Success",
+        description: "SMS throttle settings updated successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update settings",
+        variant: "destructive",
       });
     },
   });
@@ -539,6 +573,96 @@ export default function Communications() {
                 </>
               )}
             </div>
+
+            {/* SMS Throttle Status - Only show for SMS mode */}
+            {communicationType === "sms" && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm font-medium">SMS Rate Limit Status</CardTitle>
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {smsRateLimitStatus ? (
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">Used this minute:</span>
+                          <span className="font-medium">{(smsRateLimitStatus as any).used}/{(smsRateLimitStatus as any).limit}</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className={`h-2 rounded-full ${(smsRateLimitStatus as any).used >= (smsRateLimitStatus as any).limit * 0.8 ? 'bg-red-500' : 'bg-blue-500'}`}
+                            style={{ width: `${Math.min(((smsRateLimitStatus as any).used / (smsRateLimitStatus as any).limit) * 100, 100)}%` }}
+                          ></div>
+                        </div>
+                        <div className="flex justify-between items-center text-xs text-gray-500">
+                          <span>Next reset: {new Date((smsRateLimitStatus as any).resetTime).toLocaleTimeString()}</span>
+                          <Badge variant={(smsRateLimitStatus as any).canSend ? "default" : "destructive"}>
+                            {(smsRateLimitStatus as any).canSend ? "Can Send" : "Rate Limited"}
+                          </Badge>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-4 text-gray-500">Loading status...</div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm font-medium">SMS Queue Status</CardTitle>
+                      <Settings className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {smsQueueStatus ? (
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">Messages in queue:</span>
+                          <span className="font-medium">{(smsQueueStatus as any).queueLength}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">Est. wait time:</span>
+                          <span className="font-medium">{Math.ceil((smsQueueStatus as any).estimatedWaitTime / 60)} min</span>
+                        </div>
+                        <div className="mt-3">
+                          <Label htmlFor="throttle-limit" className="text-sm font-medium">
+                            SMS Per Minute Limit
+                          </Label>
+                          <div className="flex gap-2 mt-1">
+                            <Input
+                              id="throttle-limit"
+                              type="number"
+                              min="1"
+                              max="100"
+                              value={(tenantSettings as any)?.smsThrottleLimit || 10}
+                              onChange={(e) => {
+                                const newLimit = parseInt(e.target.value);
+                                if (newLimit >= 1 && newLimit <= 100) {
+                                  updateSettingsMutation.mutate({
+                                    ...(tenantSettings || {}),
+                                    smsThrottleLimit: newLimit,
+                                  });
+                                }
+                              }}
+                              className="w-20"
+                            />
+                            <span className="text-sm text-gray-500 flex items-center">
+                              texts/min
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-4 text-gray-500">Loading status...</div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
 
             {/* Recent Campaigns */}
             <Card>

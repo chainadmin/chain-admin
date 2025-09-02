@@ -1,0 +1,301 @@
+import twilio from 'twilio';
+import { storage } from './storage';
+
+interface SmsThrottleConfig {
+  maxPerMinute: number;
+  tenantId: string;
+}
+
+interface QueuedSms {
+  to: string;
+  message: string;
+  tenantId: string;
+  campaignId?: string;
+  consumerId?: string;
+  timestamp: Date;
+}
+
+class SmsService {
+  private client: twilio.Twilio | null = null;
+  private sendQueue: QueuedSms[] = [];
+  private processing = false;
+  private sentCounts: Map<string, { count: number; resetTime: number }> = new Map();
+
+  constructor() {
+    this.initializeTwilio();
+    // Start processing queue every 10 seconds
+    setInterval(() => this.processQueue(), 10000);
+    // Reset rate limit counters every minute
+    setInterval(() => this.resetCounters(), 60000);
+  }
+
+  private initializeTwilio() {
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+
+    if (accountSid && authToken) {
+      this.client = twilio(accountSid, authToken);
+      console.log('Twilio SMS service initialized');
+    } else {
+      console.warn('Twilio credentials not found. SMS service will be disabled.');
+    }
+  }
+
+  private resetCounters() {
+    const now = Date.now();
+    const entries = Array.from(this.sentCounts.entries());
+    for (const [tenantId, data] of entries) {
+      if (now >= data.resetTime) {
+        this.sentCounts.set(tenantId, { count: 0, resetTime: now + 60000 });
+      }
+    }
+  }
+
+  private async getThrottleConfig(tenantId: string): Promise<SmsThrottleConfig> {
+    try {
+      const tenantSettings = await storage.getTenantSettings(tenantId);
+      return {
+        maxPerMinute: tenantSettings?.smsThrottleLimit || 10, // Default: 10 SMS per minute
+        tenantId,
+      };
+    } catch (error) {
+      console.error('Error fetching throttle config:', error);
+      return {
+        maxPerMinute: 10, // Safe default
+        tenantId,
+      };
+    }
+  }
+
+  private canSendSms(tenantId: string, maxPerMinute: number): boolean {
+    const now = Date.now();
+    const currentData = this.sentCounts.get(tenantId);
+
+    if (!currentData || now >= currentData.resetTime) {
+      this.sentCounts.set(tenantId, { count: 0, resetTime: now + 60000 });
+      return true;
+    }
+
+    return currentData.count < maxPerMinute;
+  }
+
+  private incrementSentCount(tenantId: string) {
+    const currentData = this.sentCounts.get(tenantId);
+    if (currentData) {
+      currentData.count++;
+    }
+  }
+
+  async sendSms(
+    to: string,
+    message: string,
+    tenantId: string,
+    campaignId?: string,
+    consumerId?: string
+  ): Promise<{ success: boolean; messageId?: string; error?: string; queued?: boolean }> {
+    if (!this.client) {
+      return { success: false, error: 'SMS service not configured' };
+    }
+
+    const throttleConfig = await this.getThrottleConfig(tenantId);
+
+    // Check if we can send immediately
+    if (this.canSendSms(tenantId, throttleConfig.maxPerMinute)) {
+      try {
+        const result = await this.sendImmediately(to, message, tenantId, campaignId, consumerId);
+        if (result.success) {
+          this.incrementSentCount(tenantId);
+        }
+        return result;
+      } catch (error) {
+        console.error('Error sending SMS:', error);
+        return { success: false, error: 'Failed to send SMS' };
+      }
+    } else {
+      // Queue the message for later
+      this.sendQueue.push({
+        to,
+        message,
+        tenantId,
+        campaignId,
+        consumerId,
+        timestamp: new Date(),
+      });
+      return { success: true, queued: true };
+    }
+  }
+
+  private async sendImmediately(
+    to: string,
+    message: string,
+    tenantId: string,
+    campaignId?: string,
+    consumerId?: string
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    try {
+      const fromNumber = process.env.TWILIO_PHONE_NUMBER;
+      if (!fromNumber) {
+        throw new Error('Twilio phone number not configured');
+      }
+
+      const result = await this.client!.messages.create({
+        body: message,
+        from: fromNumber,
+        to: to,
+      });
+
+      // Track the sent SMS
+      if (campaignId && consumerId) {
+        await storage.createSmsTracking({
+          campaignId,
+          consumerId,
+          phoneNumber: to,
+          status: 'sent',
+          sentAt: new Date(),
+          trackingData: { twilioSid: result.sid },
+        });
+      }
+
+      return { success: true, messageId: result.sid };
+    } catch (error: any) {
+      console.error('Twilio SMS error:', error);
+      
+      // Track failed SMS
+      if (campaignId && consumerId) {
+        await storage.createSmsTracking({
+          campaignId,
+          consumerId,
+          phoneNumber: to,
+          status: 'failed',
+          sentAt: new Date(),
+          errorMessage: error.message,
+          trackingData: { error: error.message },
+        });
+      }
+
+      return { success: false, error: error.message };
+    }
+  }
+
+  private async processQueue() {
+    if (this.processing || this.sendQueue.length === 0) {
+      return;
+    }
+
+    this.processing = true;
+
+    try {
+      const processedItems: QueuedSms[] = [];
+
+      for (const queuedSms of this.sendQueue) {
+        const throttleConfig = await this.getThrottleConfig(queuedSms.tenantId);
+
+        if (this.canSendSms(queuedSms.tenantId, throttleConfig.maxPerMinute)) {
+          const result = await this.sendImmediately(
+            queuedSms.to,
+            queuedSms.message,
+            queuedSms.tenantId,
+            queuedSms.campaignId,
+            queuedSms.consumerId
+          );
+
+          if (result.success) {
+            this.incrementSentCount(queuedSms.tenantId);
+            processedItems.push(queuedSms);
+          }
+        }
+      }
+
+      // Remove processed items from queue
+      this.sendQueue = this.sendQueue.filter(item => !processedItems.includes(item));
+
+      // Remove old queued items (older than 1 hour)
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      this.sendQueue = this.sendQueue.filter(item => item.timestamp > oneHourAgo);
+
+    } catch (error) {
+      console.error('Error processing SMS queue:', error);
+    } finally {
+      this.processing = false;
+    }
+  }
+
+  async sendBulkSms(
+    recipients: Array<{ to: string; message: string; consumerId?: string }>,
+    tenantId: string,
+    campaignId?: string
+  ): Promise<{ totalSent: number; totalQueued: number; totalFailed: number }> {
+    let totalSent = 0;
+    let totalQueued = 0;
+    let totalFailed = 0;
+
+    for (const recipient of recipients) {
+      const result = await this.sendSms(
+        recipient.to,
+        recipient.message,
+        tenantId,
+        campaignId,
+        recipient.consumerId
+      );
+
+      if (result.success) {
+        if (result.queued) {
+          totalQueued++;
+        } else {
+          totalSent++;
+        }
+      } else {
+        totalFailed++;
+      }
+
+      // Small delay between sends to be respectful to the API
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    return { totalSent, totalQueued, totalFailed };
+  }
+
+  getQueueStatus(tenantId?: string): { queueLength: number; estimatedWaitTime: number } {
+    const relevantQueue = tenantId 
+      ? this.sendQueue.filter(item => item.tenantId === tenantId)
+      : this.sendQueue;
+
+    // Estimate wait time based on queue length and throttle limits
+    // This is a simplified calculation
+    const estimatedWaitTime = Math.ceil(relevantQueue.length / 10) * 60; // Assuming 10 per minute average
+
+    return {
+      queueLength: relevantQueue.length,
+      estimatedWaitTime,
+    };
+  }
+
+  async getRateLimitStatus(tenantId: string): Promise<{
+    used: number;
+    limit: number;
+    resetTime: number;
+    canSend: boolean;
+  }> {
+    const throttleConfig = await this.getThrottleConfig(tenantId);
+    const currentData = this.sentCounts.get(tenantId);
+    const now = Date.now();
+
+    if (!currentData || now >= currentData.resetTime) {
+      return {
+        used: 0,
+        limit: throttleConfig.maxPerMinute,
+        resetTime: now + 60000,
+        canSend: true,
+      };
+    }
+
+    return {
+      used: currentData.count,
+      limit: throttleConfig.maxPerMinute,
+      resetTime: currentData.resetTime,
+      canSend: currentData.count < throttleConfig.maxPerMinute,
+    };
+  }
+}
+
+export const smsService = new SmsService();

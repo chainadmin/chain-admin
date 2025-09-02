@@ -277,6 +277,7 @@ export const tenantSettings = pgTable("tenant_settings", {
   allowSettlementRequests: boolean("allow_settlement_requests").default(true),
   customBranding: jsonb("custom_branding").default(sql`'{}'::jsonb`),
   consumerPortalSettings: jsonb("consumer_portal_settings").default(sql`'{}'::jsonb`),
+  smsThrottleLimit: bigint("sms_throttle_limit", { mode: "number" }).default(10), // SMS per minute limit
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
