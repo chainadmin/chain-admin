@@ -3,7 +3,9 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { postmarkServerService } from "./postmarkServerService";
-import { insertConsumerSchema, insertAccountSchema, agencyTrialRegistrationSchema } from "@shared/schema";
+import { insertConsumerSchema, insertAccountSchema, agencyTrialRegistrationSchema, platformUsers } from "@shared/schema";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
@@ -1963,9 +1965,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Global Admin Routes (Platform Owner Only)
   const isPlatformAdmin = async (req: any, res: any, next: any) => {
     const userId = req.user.claims.sub;
-    const platformUser = await storage.getPlatformUser(userId);
     
-    if (!platformUser || platformUser.role !== 'platform_admin') {
+    // Check if user has platform_admin role (they might have multiple roles)
+    const platformUsers = await db.select().from(platformUsers).where(eq(platformUsers.authId, userId));
+    const hasPlatformAdminRole = platformUsers.some(user => user.role === 'platform_admin');
+    
+    if (!hasPlatformAdminRole) {
       return res.status(403).json({ message: "Platform admin access required" });
     }
     
