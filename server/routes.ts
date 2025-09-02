@@ -971,8 +971,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         type: z.enum(['email', 'sms']),
         templateId: z.string().uuid().optional(), // For single template (one-time)
         templateIds: z.array(z.string().uuid()).optional(), // For multiple templates (recurring)
+        templateSchedule: z.array(z.object({
+          templateId: z.string().uuid(),
+          dayOffset: z.number().min(0)
+        })).optional(), // For sequence-based scheduling
         triggerType: z.enum(['schedule', 'event', 'manual']),
-        scheduleType: z.enum(['once', 'daily', 'weekly', 'monthly']).optional(),
+        scheduleType: z.enum(['once', 'daily', 'weekly', 'monthly', 'sequence']).optional(),
         scheduledDate: z.string().optional(),
         scheduleTime: z.string().optional(),
         scheduleWeekdays: z.array(z.string()).optional(),
@@ -983,10 +987,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         targetFolderIds: z.array(z.string().uuid()).optional(),
         targetCustomerIds: z.array(z.string().uuid()).optional(),
       }).refine(data => {
-        // Either templateId or templateIds must be provided
-        return data.templateId || (data.templateIds && data.templateIds.length > 0);
+        // Either templateId, templateIds, or templateSchedule must be provided
+        return data.templateId || 
+               (data.templateIds && data.templateIds.length > 0) ||
+               (data.templateSchedule && data.templateSchedule.length > 0);
       }, {
-        message: "Either templateId or templateIds must be provided"
+        message: "Either templateId, templateIds, or templateSchedule must be provided"
+      }).refine(data => {
+        // If scheduleType is 'sequence', templateSchedule must be provided
+        if (data.scheduleType === 'sequence') {
+          return data.templateSchedule && data.templateSchedule.length > 0;
+        }
+        return true;
+      }, {
+        message: "Template sequence is required when scheduleType is 'sequence'"
       });
 
       const validatedData = insertAutomationSchema.parse(req.body);

@@ -583,13 +583,14 @@ export const communicationAutomations = pgTable("communication_automations", {
   type: text("type", { enum: ['email', 'sms'] }).notNull(),
   templateId: uuid("template_id"), // For single template (one-time schedules)
   templateIds: uuid("template_ids").array(), // For multiple templates (recurring schedules)
+  templateSchedule: jsonb("template_schedule").$type<{ templateId: string; dayOffset: number }[]>(), // For sequence-based schedules
   isActive: boolean("is_active").default(true),
   
   // Trigger conditions
   triggerType: text("trigger_type", { enum: ['schedule', 'event', 'manual'] }).notNull(),
   
   // Schedule settings (for scheduled automations)
-  scheduleType: text("schedule_type", { enum: ['once', 'daily', 'weekly', 'monthly'] }),
+  scheduleType: text("schedule_type", { enum: ['once', 'daily', 'weekly', 'monthly', 'sequence'] }),
   scheduledDate: timestamp("scheduled_date"),
   scheduleTime: text("schedule_time"), // Format: "HH:MM"
   scheduleWeekdays: text("schedule_weekdays").array(), // ['monday', 'tuesday', etc.]
