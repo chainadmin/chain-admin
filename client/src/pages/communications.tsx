@@ -60,6 +60,14 @@ export default function Communications() {
     name: "",
     templateId: "",
     targetGroup: "all",
+    targetType: "all" as "all" | "folder" | "custom",
+    targetFolderIds: [] as string[],
+    customFilters: {
+      balanceMin: "",
+      balanceMax: "",
+      status: "",
+      lastContactDays: "",
+    },
   });
 
   const [automationForm, setAutomationForm] = useState({
@@ -212,7 +220,19 @@ export default function Communications() {
       queryClient.invalidateQueries({ queryKey: ["/api/email-campaigns"] });
       setShowCampaignModal(false);
       setShowCampaignConfirmation(false);
-      setCampaignForm({ name: "", templateId: "", targetGroup: "all" });
+      setCampaignForm({ 
+        name: "", 
+        templateId: "", 
+        targetGroup: "all",
+        targetType: "all",
+        targetFolderIds: [],
+        customFilters: {
+          balanceMin: "",
+          balanceMax: "",
+          status: "",
+          lastContactDays: "",
+        },
+      });
       toast({
         title: "Success",
         description: "Email campaign created and scheduled",
@@ -226,7 +246,19 @@ export default function Communications() {
       queryClient.invalidateQueries({ queryKey: ["/api/sms-campaigns"] });
       setShowCampaignModal(false);
       setShowCampaignConfirmation(false);
-      setCampaignForm({ name: "", templateId: "", targetGroup: "all" });
+      setCampaignForm({ 
+        name: "", 
+        templateId: "", 
+        targetGroup: "all",
+        targetType: "all",
+        targetFolderIds: [],
+        customFilters: {
+          balanceMin: "",
+          balanceMax: "",
+          status: "",
+          lastContactDays: "",
+        },
+      });
       toast({
         title: "Success",
         description: "SMS campaign created and scheduled",
@@ -416,8 +448,24 @@ export default function Communications() {
     setPreviewTemplate(template);
   };
 
-  const getTargetGroupLabel = (targetGroup: string) => {
-    switch (targetGroup) {
+  const getTargetGroupLabel = (campaign: any) => {
+    if (campaign.targetType === "folder") {
+      const selectedFolders = (folders as any)?.filter((f: any) => 
+        campaign.targetFolderIds?.includes(f.id)
+      ).map((f: any) => f.name).join(", ") || "Selected folders";
+      return `Folders: ${selectedFolders}`;
+    }
+    
+    if (campaign.targetType === "custom") {
+      const filters = [];
+      if (campaign.customFilters?.balanceMin) filters.push(`Min: $${campaign.customFilters.balanceMin}`);
+      if (campaign.customFilters?.balanceMax) filters.push(`Max: $${campaign.customFilters.balanceMax}`);
+      if (campaign.customFilters?.status) filters.push(`Status: ${campaign.customFilters.status}`);
+      if (campaign.customFilters?.lastContactDays) filters.push(`${campaign.customFilters.lastContactDays} days since contact`);
+      return filters.length > 0 ? `Custom: ${filters.join(", ")}` : "Custom selection";
+    }
+    
+    switch (campaign.targetGroup) {
       case "all":
         return "All Consumers";
       case "with-balance":
@@ -427,7 +475,7 @@ export default function Communications() {
       case "recent-upload":
         return "Most Recent Upload";
       default:
-        return targetGroup;
+        return campaign.targetGroup;
     }
   };
 
@@ -688,7 +736,7 @@ export default function Communications() {
                         <div>
                           <h3 className="font-medium">{campaign.name}</h3>
                           <p className="text-sm text-gray-600">
-                            Target: {getTargetGroupLabel(campaign.targetGroup)} • 
+                            Target: {getTargetGroupLabel(campaign)} • 
                             Template: {campaign.templateName}
                           </p>
                         </div>
@@ -1041,22 +1089,143 @@ export default function Communications() {
                       </Select>
                     </div>
                     <div>
-                      <Label htmlFor="target-group">Target Group</Label>
+                      <Label htmlFor="target-type">Target Type</Label>
                       <Select
-                        value={campaignForm.targetGroup}
-                        onValueChange={(value) => setCampaignForm({ ...campaignForm, targetGroup: value })}
+                        value={campaignForm.targetType}
+                        onValueChange={(value: "all" | "folder" | "custom") => {
+                          setCampaignForm({ 
+                            ...campaignForm, 
+                            targetType: value,
+                            targetGroup: value === "all" ? "all" : campaignForm.targetGroup,
+                            targetFolderIds: value === "folder" ? campaignForm.targetFolderIds : [],
+                          });
+                        }}
                       >
-                        <SelectTrigger data-testid="select-target-group">
+                        <SelectTrigger data-testid="select-target-type">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="all">All Consumers</SelectItem>
-                          <SelectItem value="with-balance">With Outstanding Balance</SelectItem>
-                          <SelectItem value="decline">Decline Status</SelectItem>
-                          <SelectItem value="recent-upload">Most Recent Upload</SelectItem>
+                          <SelectItem value="folder">Specific Folders</SelectItem>
+                          <SelectItem value="custom">Custom Selection</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
+
+                    {campaignForm.targetType === "all" && (
+                      <div>
+                        <Label htmlFor="target-group">Target Group</Label>
+                        <Select
+                          value={campaignForm.targetGroup}
+                          onValueChange={(value) => setCampaignForm({ ...campaignForm, targetGroup: value })}
+                        >
+                          <SelectTrigger data-testid="select-target-group">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Consumers</SelectItem>
+                            <SelectItem value="with-balance">With Outstanding Balance</SelectItem>
+                            <SelectItem value="decline">Decline Status</SelectItem>
+                            <SelectItem value="recent-upload">Most Recent Upload</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    {campaignForm.targetType === "folder" && (
+                      <div>
+                        <Label>Select Folders</Label>
+                        <div className="space-y-2 max-h-40 overflow-y-auto border rounded-md p-3">
+                          {(folders as any)?.map((folder: any) => (
+                            <div key={folder.id} className="flex items-center space-x-2">
+                              <input
+                                type="checkbox"
+                                id={`folder-${folder.id}`}
+                                checked={campaignForm.targetFolderIds.includes(folder.id)}
+                                onChange={(e) => {
+                                  const newFolderIds = e.target.checked
+                                    ? [...campaignForm.targetFolderIds, folder.id]
+                                    : campaignForm.targetFolderIds.filter(id => id !== folder.id);
+                                  setCampaignForm({ ...campaignForm, targetFolderIds: newFolderIds });
+                                }}
+                                className="rounded"
+                              />
+                              <label htmlFor={`folder-${folder.id}`} className="text-sm font-medium">
+                                {folder.name}
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {campaignForm.targetType === "custom" && (
+                      <div className="space-y-4">
+                        <Label>Custom Filters</Label>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="balance-min">Min Balance</Label>
+                            <Input
+                              id="balance-min"
+                              type="number"
+                              placeholder="0.00"
+                              value={campaignForm.customFilters.balanceMin}
+                              onChange={(e) => setCampaignForm({
+                                ...campaignForm,
+                                customFilters: { ...campaignForm.customFilters, balanceMin: e.target.value }
+                              })}
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="balance-max">Max Balance</Label>
+                            <Input
+                              id="balance-max"
+                              type="number"
+                              placeholder="1000.00"
+                              value={campaignForm.customFilters.balanceMax}
+                              onChange={(e) => setCampaignForm({
+                                ...campaignForm,
+                                customFilters: { ...campaignForm.customFilters, balanceMax: e.target.value }
+                              })}
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="status-filter">Account Status</Label>
+                            <Select
+                              value={campaignForm.customFilters.status}
+                              onValueChange={(value) => setCampaignForm({
+                                ...campaignForm,
+                                customFilters: { ...campaignForm.customFilters, status: value }
+                              })}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Any status" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="">Any Status</SelectItem>
+                                <SelectItem value="active">Active</SelectItem>
+                                <SelectItem value="closed">Closed</SelectItem>
+                                <SelectItem value="dispute">In Dispute</SelectItem>
+                                <SelectItem value="payment_plan">Payment Plan</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label htmlFor="last-contact">Days Since Last Contact</Label>
+                            <Input
+                              id="last-contact"
+                              type="number"
+                              placeholder="30"
+                              value={campaignForm.customFilters.lastContactDays}
+                              onChange={(e) => setCampaignForm({
+                                ...campaignForm,
+                                customFilters: { ...campaignForm.customFilters, lastContactDays: e.target.value }
+                              })}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     <div className="flex justify-end gap-2">
                       <Button
                         type="button"
@@ -1103,7 +1272,7 @@ export default function Communications() {
                           </div>
                           <div>
                             <span className="text-gray-600">Target:</span>
-                            <div className="font-medium">{getTargetGroupLabel(campaign.targetGroup)}</div>
+                            <div className="font-medium">{getTargetGroupLabel(campaign)}</div>
                           </div>
                           <div>
                             <span className="text-gray-600">Recipients:</span>
@@ -1619,7 +1788,7 @@ export default function Communications() {
               <AlertDialogTitle>Confirm Campaign Creation</AlertDialogTitle>
               <AlertDialogDescription>
                 Are you sure you want to create this {communicationType} campaign? 
-                This will send messages to your selected target group: {campaignForm.targetGroup === "all" ? "All consumers" : campaignForm.targetGroup}.
+                This will send messages to: {getTargetGroupLabel(campaignForm)}.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
