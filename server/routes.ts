@@ -1619,7 +1619,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         allowSettlementRequests: z.boolean().optional(),
         customBranding: z.any().optional(),
         consumerPortalSettings: z.any().optional(),
-        smsThrottleLimit: z.number().min(1).max(100).optional(),
+        smsThrottleLimit: z.number().min(1).max(1000).optional(),
       });
 
       const validatedData = settingsSchema.parse(req.body);

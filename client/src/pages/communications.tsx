@@ -694,11 +694,11 @@ export default function Communications() {
                               id="throttle-limit"
                               type="number"
                               min="1"
-                              max="100"
+                              max="1000"
                               value={(tenantSettings as any)?.smsThrottleLimit || 10}
                               onChange={(e) => {
                                 const newLimit = parseInt(e.target.value);
-                                if (newLimit >= 1 && newLimit <= 100) {
+                                if (newLimit >= 1 && newLimit <= 1000) {
                                   updateSettingsMutation.mutate({
                                     smsThrottleLimit: newLimit,
                                   });
