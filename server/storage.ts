@@ -1041,7 +1041,10 @@ export class DatabaseStorage implements IStorage {
       .values(settings)
       .onConflictDoUpdate({
         target: tenantSettings.tenantId,
-        set: settingsData,
+        set: {
+          ...settingsData,
+          updatedAt: new Date(),
+        },
       })
       .returning();
     return upsertedSettings;
