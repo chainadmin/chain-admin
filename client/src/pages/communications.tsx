@@ -738,6 +738,9 @@ export default function Communications() {
                 <DialogContent className="max-w-2xl">
                   <DialogHeader>
                     <DialogTitle>Create {communicationType === "email" ? "Email" : "SMS"} Template</DialogTitle>
+                    <p className="text-sm text-muted-foreground">
+                      Create a new {communicationType === "email" ? "email" : "SMS"} template for your campaigns.
+                    </p>
                   </DialogHeader>
                   <form onSubmit={handleTemplateSubmit} className="space-y-4">
                     <div>
@@ -916,6 +919,9 @@ export default function Communications() {
                   <DialogTitle>
                     {communicationType === "email" ? "Email" : "SMS"} Template Preview: {previewTemplate?.name}
                   </DialogTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Preview your template content before using it in campaigns.
+                  </p>
                 </DialogHeader>
                 <div className="space-y-4">
                   {communicationType === "email" ? (
@@ -991,6 +997,9 @@ export default function Communications() {
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>Create {communicationType === "email" ? "Email" : "SMS"} Campaign</DialogTitle>
+                    <p className="text-sm text-muted-foreground">
+                      Create a new campaign to send messages to your target audience.
+                    </p>
                   </DialogHeader>
                   <form onSubmit={handleCampaignSubmit} className="space-y-4">
                     <div>
@@ -1204,6 +1213,9 @@ export default function Communications() {
                 <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>Create Communication Automation</DialogTitle>
+                    <p className="text-sm text-muted-foreground">
+                      Set up automated messaging campaigns based on schedules or events.
+                    </p>
                   </DialogHeader>
                   <form onSubmit={handleAutomationSubmit} className="space-y-6">
                     <div className="grid grid-cols-2 gap-4">
@@ -1259,16 +1271,16 @@ export default function Communications() {
                           </SelectTrigger>
                           <SelectContent>
                             {automationForm.type === "email" 
-                              ? emailTemplates?.map((template: any) => (
+                              ? (emailTemplates as any[])?.map((template: any) => (
                                   <SelectItem key={template.id} value={template.id}>
                                     {template.name}
                                   </SelectItem>
-                                ))
-                              : smsTemplates?.map((template: any) => (
+                                )) || []
+                              : (smsTemplates as any[])?.map((template: any) => (
                                   <SelectItem key={template.id} value={template.id}>
                                     {template.name}
                                   </SelectItem>
-                                ))
+                                )) || []
                             }
                           </SelectContent>
                         </Select>
@@ -1304,7 +1316,7 @@ export default function Communications() {
                                     {template.name}
                                   </Label>
                                 </div>
-                              ))
+                              )) || []
                             : (smsTemplates as any[])?.map((template: any) => (
                                 <div key={template.id} className="flex items-center space-x-2">
                                   <input
@@ -1331,7 +1343,7 @@ export default function Communications() {
                                     {template.name}
                                   </Label>
                                 </div>
-                              ))
+                              )) || []
                           }
                         </div>
                       )}
