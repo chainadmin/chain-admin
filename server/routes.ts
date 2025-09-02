@@ -1608,8 +1608,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
+      // Validate and filter the settings data
+      const settingsSchema = z.object({
+        privacyPolicy: z.string().optional(),
+        termsOfService: z.string().optional(),
+        contactEmail: z.string().email().optional(),
+        contactPhone: z.string().optional(),
+        showPaymentPlans: z.boolean().optional(),
+        showDocuments: z.boolean().optional(),
+        allowSettlementRequests: z.boolean().optional(),
+        customBranding: z.any().optional(),
+        consumerPortalSettings: z.any().optional(),
+        smsThrottleLimit: z.number().min(1).max(100).optional(),
+      });
+
+      const validatedData = settingsSchema.parse(req.body);
+
       const settings = await storage.upsertTenantSettings({
-        ...req.body,
+        ...validatedData,
         tenantId: platformUser.tenantId,
       });
       

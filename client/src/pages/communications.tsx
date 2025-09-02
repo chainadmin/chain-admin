@@ -700,7 +700,6 @@ export default function Communications() {
                                 const newLimit = parseInt(e.target.value);
                                 if (newLimit >= 1 && newLimit <= 100) {
                                   updateSettingsMutation.mutate({
-                                    ...(tenantSettings || {}),
                                     smsThrottleLimit: newLimit,
                                   });
                                 }
