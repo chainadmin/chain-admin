@@ -30,6 +30,8 @@ export class EmailService {
         TextBody: options.text || this.htmlToText(options.html),
         Tag: options.tag,
         Metadata: options.metadata,
+        TrackOpens: true, // Enable open tracking
+        TrackLinks: 'HtmlOnly', // Enable click tracking
       });
 
       return {

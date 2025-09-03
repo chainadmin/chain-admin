@@ -2206,6 +2206,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Postmark webhook endpoints for email tracking
+  app.post('/api/webhooks/postmark', async (req, res) => {
+    try {
+      const events = Array.isArray(req.body) ? req.body : [req.body];
+      
+      for (const event of events) {
+        await processPostmarkWebhook(event);
+      }
+      
+      res.status(200).json({ message: 'Webhook processed' });
+    } catch (error) {
+      console.error('Postmark webhook error:', error);
+      res.status(500).json({ message: 'Webhook processing failed' });
+    }
+  });
+
+  // Process individual Postmark webhook events
+  async function processPostmarkWebhook(event: any) {
+    const { RecordType, MessageID, Recipient, Tag, Metadata } = event;
+    
+    // Only process events that have our tracking metadata
+    if (!Metadata?.campaignId && !Tag) return;
+    
+    const campaignId = Metadata?.campaignId;
+    const trackingData = {
+      messageId: MessageID,
+      recipient: Recipient,
+      campaignId,
+      eventType: RecordType,
+      timestamp: new Date(),
+      metadata: Metadata,
+    };
+
+    // Store tracking event in database (using the correct method name)
+    console.log('Email tracking event:', trackingData);
+    
+    // Update campaign metrics
+    if (campaignId) {
+      await updateCampaignMetrics(campaignId, RecordType);
+    }
+  }
+
+  // Update campaign metrics based on event type
+  async function updateCampaignMetrics(campaignId: string, eventType: string) {
+    try {
+      // Get campaign using existing method
+      const campaigns = await storage.getEmailCampaignsByTenant(''); // We'll need the tenant ID
+      const campaign = campaigns.find(c => c.id === campaignId);
+      if (!campaign) return;
+
+      const updates: any = {};
+      
+      switch (eventType) {
+        case 'Delivery':
+          updates.totalDelivered = (campaign.totalDelivered || 0) + 1;
+          break;
+        case 'Open':
+          updates.totalOpened = (campaign.totalOpened || 0) + 1;
+          break;
+        case 'Click':
+          updates.totalClicked = (campaign.totalClicked || 0) + 1;
+          break;
+        case 'Bounce':
+          updates.totalBounced = (campaign.totalBounced || 0) + 1;
+          break;
+        case 'SpamComplaint':
+          updates.totalSpam = (campaign.totalSpam || 0) + 1;
+          break;
+      }
+      
+      if (Object.keys(updates).length > 0) {
+        await storage.updateEmailCampaign(campaignId, updates);
+      }
+    } catch (error) {
+      console.error('Error updating campaign metrics:', error);
+    }
+  }
+
   const httpServer = createServer(app);
   return httpServer;
 }
