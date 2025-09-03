@@ -67,14 +67,15 @@ async function upsertUser(
 }
 
 export async function setupAuth(app: Express) {
-  app.set("trust proxy", 1);
-  app.use(getSession());
-  app.use(passport.initialize());
-  app.use(passport.session());
+  try {
+    app.set("trust proxy", 1);
+    app.use(getSession());
+    app.use(passport.initialize());
+    app.use(passport.session());
 
-  const config = await getOidcConfig();
+    const config = await getOidcConfig();
 
-  const verify: VerifyFunction = async (
+    const verify: VerifyFunction = async (
     tokens: client.TokenEndpointResponse & client.TokenEndpointResponseHelpers,
     verified: passport.AuthenticateCallback
   ) => {
@@ -102,34 +103,69 @@ export async function setupAuth(app: Express) {
   passport.deserializeUser((user: Express.User, cb) => cb(null, user));
 
   app.get("/api/login", (req, res, next) => {
-    // In development mode, bypass authentication and show helpful message
-    if (req.hostname === 'localhost' || req.hostname.includes('replit.dev')) {
-      return res.status(200).json({
-        message: "Development mode: Agency login will be available once deployed to api.chainsoftwaregroup.com",
-        adminAccess: "Access admin panel directly at /admin",
-        deploymentReady: true
+    try {
+      // In development mode, bypass authentication and show helpful message
+      if (req.hostname === 'localhost' || req.hostname.includes('replit.dev')) {
+        return res.status(200).json({
+          message: "Development mode: Agency login will be available once deployed to api.chainsoftwaregroup.com",
+          adminAccess: "Access admin panel directly at /admin",
+          deploymentReady: true
+        });
+      }
+      
+      // Get available domains from environment
+      const domainsEnv = process.env.REPLIT_DOMAINS;
+      if (!domainsEnv) {
+        console.error("REPLIT_DOMAINS environment variable not set");
+        return res.status(500).json({ 
+          message: "Authentication configuration error",
+          debug: "REPLIT_DOMAINS not configured"
+        });
+      }
+      
+      const domains = domainsEnv.split(",");
+      const strategyDomain = domains[0]; // Use the first available domain
+      
+      console.log(`Login attempt from ${req.hostname}, using strategy: replitauth:${strategyDomain}`);
+      
+      passport.authenticate(`replitauth:${strategyDomain}`, {
+        prompt: "login consent",
+        scope: ["openid", "email", "profile", "offline_access"],
+      })(req, res, next);
+    } catch (error) {
+      console.error("Login endpoint error:", error);
+      res.status(500).json({ 
+        message: "Authentication setup failed",
+        error: error instanceof Error ? error.message : "Unknown error"
       });
     }
-    
-    // For custom domains like chainsoftwaregroup.com, use the replit.dev strategy
-    const domains = process.env.REPLIT_DOMAINS!.split(",");
-    const strategyDomain = domains[0]; // Use the first available domain
-    
-    passport.authenticate(`replitauth:${strategyDomain}`, {
-      prompt: "login consent",
-      scope: ["openid", "email", "profile", "offline_access"],
-    })(req, res, next);
   });
 
   app.get("/api/callback", (req, res, next) => {
-    // For custom domains, use the available replit.dev strategy
-    const domains = process.env.REPLIT_DOMAINS!.split(",");
-    const strategyDomain = domains[0]; // Use the first available domain
-    
-    passport.authenticate(`replitauth:${strategyDomain}`, {
-      successReturnToOrRedirect: "/",
-      failureRedirect: "/api/login",
-    })(req, res, next);
+    try {
+      // For custom domains, use the available replit.dev strategy
+      const domainsEnv = process.env.REPLIT_DOMAINS;
+      if (!domainsEnv) {
+        console.error("REPLIT_DOMAINS environment variable not set");
+        return res.status(500).json({ message: "Authentication configuration error" });
+      }
+      
+      const domains = domainsEnv.split(",");
+      const strategyDomain = domains[0]; // Use the first available domain
+      
+      console.log(`Callback from ${req.hostname}, using strategy: replitauth:${strategyDomain}`);
+      
+      passport.authenticate(`replitauth:${strategyDomain}`, {
+        successReturnToOrRedirect: "/",
+        failureRedirect: "/api/login",
+      })(req, res, next);
+    } catch (error) {
+      console.error("Callback endpoint error:", error);
+      res.status(500).json({ 
+        message: "Authentication callback failed",
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
   });
 
   app.get("/api/logout", (req, res) => {
@@ -142,6 +178,11 @@ export async function setupAuth(app: Express) {
       );
     });
   });
+  
+  } catch (error) {
+    console.error("Authentication setup failed:", error);
+    throw error;
+  }
 }
 
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
