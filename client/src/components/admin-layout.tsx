@@ -61,19 +61,19 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             {/* Navigation */}
             <nav className="mt-8 flex-1 px-2 space-y-1">
               {navigationItems.map((item) => (
-                <Link key={item.name} href={item.href}>
-                  <a
+                <Link key={item.name} href={item.href} data-testid={`nav-${item.name.toLowerCase()}`}>
+                  <div
                     className={`${
                       isActiveRoute(item.href)
                         ? "bg-blue-50 border-r-2 border-blue-500 text-blue-700"
                         : "text-gray-700 hover:bg-gray-50"
-                    } group flex items-center px-2 py-2 text-sm font-medium rounded-l-md`}
+                    } group flex items-center px-2 py-2 text-sm font-medium rounded-l-md cursor-pointer`}
                   >
                     <i className={`${item.icon} ${
                       isActiveRoute(item.href) ? "text-blue-500" : "text-gray-400"
                     } mr-3 text-sm`}></i>
                     {item.name}
-                  </a>
+                  </div>
                 </Link>
               ))}
             </nav>
