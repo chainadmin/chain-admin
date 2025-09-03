@@ -20,6 +20,7 @@ import ConsumerLogin from "@/pages/consumer-login";
 import ConsumerDashboard from "@/pages/consumer-dashboard";
 import ConsumerRegistration from "@/pages/consumer-registration";
 import AgencyRegistration from "@/pages/agency-registration";
+import PrivacyPolicy from "@/pages/privacy-policy";
 import TenantSetup from "@/components/tenant-setup";
 import GlobalAdmin from "@/pages/global-admin";
 import EmailTest from "@/pages/email-test";
@@ -41,6 +42,7 @@ function Router() {
           <Route path="/register/:tenantSlug" component={ConsumerRegistration} />
           <Route path="/consumer-register" component={ConsumerRegistration} />
           <Route path="/agency-register" component={AgencyRegistration} />
+          <Route path="/privacy-policy" component={PrivacyPolicy} />
         </>
       ) : needsTenantSetup ? (
         <Route path="*" component={TenantSetup} />
@@ -57,6 +59,7 @@ function Router() {
           <Route path="/settings" component={Settings} />
           <Route path="/admin" component={GlobalAdmin} />
           <Route path="/email-test" component={EmailTest} />
+          <Route path="/privacy-policy" component={PrivacyPolicy} />
         </>
       )}
       <Route component={NotFound} />
