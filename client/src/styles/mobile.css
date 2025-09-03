@@ -1,0 +1,132 @@
+/* Mobile-specific optimizations */
+.mobile-app {
+  /* Safe area support for iOS */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.mobile-app input,
+.mobile-app textarea,
+.mobile-app button {
+  /* Better touch targets */
+  min-height: 44px;
+  border-radius: 8px;
+}
+
+.mobile-app button {
+  /* Native button feel */
+  transition: all 0.1s ease;
+  transform: scale(1);
+}
+
+.mobile-app button:active {
+  transform: scale(0.97);
+}
+
+/* iOS specific styles */
+.ios .mobile-app {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+}
+
+.ios input,
+.ios textarea {
+  /* iOS-style inputs */
+  background-color: #f2f2f7;
+  border: none;
+  border-radius: 10px;
+}
+
+/* Android specific styles */
+.android .mobile-app {
+  font-family: 'Roboto', sans-serif;
+}
+
+.android button {
+  /* Material Design ripple effect */
+  position: relative;
+  overflow: hidden;
+}
+
+.android button::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  transition: width 0.3s, height 0.3s, top 0.3s, left 0.3s;
+  transform: translate(-50%, -50%);
+}
+
+.android button:active::before {
+  width: 300px;
+  height: 300px;
+}
+
+/* Better scrolling for mobile */
+.mobile-app {
+  -webkit-overflow-scrolling: touch;
+  overflow-scrolling: touch;
+}
+
+/* Disable text selection for native feel */
+.mobile-app * {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Re-enable text selection for input fields */
+.mobile-app input,
+.mobile-app textarea,
+.mobile-app [contenteditable] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Native loading spinner */
+.mobile-loading {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #f3f3f3;
+  border-top: 2px solid #3498db;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Improved touch targets */
+.mobile-app .touch-target {
+  min-height: 44px;
+  min-width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Better card interactions */
+.mobile-app .card {
+  transition: transform 0.1s ease;
+}
+
+.mobile-app .card:active {
+  transform: scale(0.98);
+}
+
+/* Native navigation feel */
+.mobile-app .nav-button {
+  padding: 12px 16px;
+  border-radius: 12px;
+  transition: background-color 0.2s ease;
+}
+
+.mobile-app .nav-button:active {
+  background-color: rgba(0, 0, 0, 0.05);
+}

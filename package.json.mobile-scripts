@@ -1,0 +1,9 @@
+{
+  "scripts": {
+    "mobile:build": "npm run build && npx cap sync",
+    "mobile:ios": "npm run mobile:build && npx cap open ios",
+    "mobile:android": "npm run mobile:build && npx cap open android",
+    "mobile:run:ios": "npm run mobile:build && npx cap run ios",
+    "mobile:run:android": "npm run mobile:build && npx cap run android"
+  }
+}

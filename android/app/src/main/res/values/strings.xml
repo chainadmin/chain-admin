@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Chain</string>
+    <string name="title_activity_main">Chain</string>
+    <string name="package_name">com.chaincomms.chain</string>
+    <string name="custom_url_scheme">com.chaincomms.chain</string>
+</resources>
