@@ -4,7 +4,7 @@ import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
 
-async function main() {
+async function createServer() {
   const server = await registerRoutes(app);
 
   const isProduction = process.env.NODE_ENV === "production";
@@ -14,10 +14,26 @@ async function main() {
     await setupVite(app, server);
   }
 
+  return server;
+}
+
+// For Vercel serverless deployment
+export default async function handler(req: any, res: any) {
+  const server = await createServer();
+  // For serverless, we need to handle the request directly through the Express app
+  return app(req, res);
+}
+
+// For local development
+async function main() {
+  const server = await createServer();
   const PORT = Number(process.env.PORT) || 5000;
   server.listen(PORT, "0.0.0.0", () => {
     log(`serving on port ${PORT}`);
   });
 }
 
-main();
+// Only run main() in development
+if (process.env.NODE_ENV !== "production") {
+  main();
+}
