@@ -35,7 +35,14 @@ function Router() {
 
   return (
     <Switch>
-      {isLoading || !isAuthenticated ? (
+      {isLoading ? (
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading...</p>
+          </div>
+        </div>
+      ) : !isAuthenticated ? (
         <>
           <Route path="/" component={Landing} />
           <Route path="/consumer-login" component={ConsumerLogin} />
@@ -45,6 +52,9 @@ function Router() {
           <Route path="/consumer-register" component={ConsumerRegistration} />
           <Route path="/agency-register" component={AgencyRegistration} />
           <Route path="/privacy-policy" component={PrivacyPolicy} />
+          <Route path="/admin" component={GlobalAdmin} />
+          <Route path="/Admin" component={GlobalAdmin} />
+          <Route component={NotFound} />
         </>
       ) : needsTenantSetup ? (
         <Route path="*" component={TenantSetup} />
