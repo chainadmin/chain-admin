@@ -111,14 +111,22 @@ export async function setupAuth(app: Express) {
       });
     }
     
-    passport.authenticate(`replitauth:${req.hostname}`, {
+    // For custom domains like chainsoftwaregroup.com, use the replit.dev strategy
+    const domains = process.env.REPLIT_DOMAINS!.split(",");
+    const strategyDomain = domains[0]; // Use the first available domain
+    
+    passport.authenticate(`replitauth:${strategyDomain}`, {
       prompt: "login consent",
       scope: ["openid", "email", "profile", "offline_access"],
     })(req, res, next);
   });
 
   app.get("/api/callback", (req, res, next) => {
-    passport.authenticate(`replitauth:${req.hostname}`, {
+    // For custom domains, use the available replit.dev strategy
+    const domains = process.env.REPLIT_DOMAINS!.split(",");
+    const strategyDomain = domains[0]; // Use the first available domain
+    
+    passport.authenticate(`replitauth:${strategyDomain}`, {
       successReturnToOrRedirect: "/",
       failureRedirect: "/api/login",
     })(req, res, next);
