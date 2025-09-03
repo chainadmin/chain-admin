@@ -1,14 +1,14 @@
 import { Client } from 'postmark';
 
-if (!process.env.POSTMARK_API_KEY) {
-  throw new Error('Missing required Postmark API key: POSTMARK_API_KEY');
+if (!process.env.POSTMARK_SERVER_TOKEN) {
+  throw new Error('Missing required Postmark Server Token: POSTMARK_SERVER_TOKEN');
 }
 
-const postmarkClient = new Client(process.env.POSTMARK_API_KEY);
+const postmarkClient = new Client(process.env.POSTMARK_SERVER_TOKEN);
 
 export interface EmailOptions {
   to: string;
-  from: string;
+  from?: string; // Make optional, will default to verified sender
   subject: string;
   html: string;
   text?: string;
@@ -16,11 +16,14 @@ export interface EmailOptions {
   metadata?: Record<string, string>;
 }
 
+// Default sender address - verified in Postmark
+const DEFAULT_FROM_EMAIL = 'support@chainsoftwaregroup.com';
+
 export class EmailService {
   async sendEmail(options: EmailOptions): Promise<{ messageId: string; success: boolean; error?: string }> {
     try {
       const result = await postmarkClient.sendEmail({
-        From: options.from,
+        From: options.from || DEFAULT_FROM_EMAIL,
         To: options.to,
         Subject: options.subject,
         HtmlBody: options.html,

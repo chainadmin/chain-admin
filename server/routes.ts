@@ -705,7 +705,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const tenant = await storage.getTenant(platformUser.tenantId);
-      const fromEmail = tenant?.email || 'noreply@chainplatform.com';
+      const fromEmail = 'support@chainsoftwaregroup.com'; // Use our configured Postmark sender
 
       const result = await emailService.sendEmail({
         to,
