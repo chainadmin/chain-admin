@@ -19,9 +19,15 @@ async function createServer() {
 
 // For Vercel serverless deployment
 export default async function handler(req: any, res: any) {
-  const server = await createServer();
-  // For serverless, we need to handle the request directly through the Express app
-  return app(req, res);
+  try {
+    await registerRoutes(app);
+    
+    // For serverless, we need to handle the request directly through the Express app
+    return app(req, res);
+  } catch (error) {
+    console.error('Serverless handler error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
 }
 
 // For local development
