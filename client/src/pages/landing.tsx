@@ -99,7 +99,14 @@ export default function Landing() {
             <Button 
               variant="ghost" 
               size="sm"
-              onClick={() => window.location.href = '/api/login'}
+              onClick={() => {
+                // In development, show a message about deployment
+                if (window.location.hostname === 'localhost' || window.location.hostname.includes('replit.dev')) {
+                  alert('Agency login will be available once deployed to api.chainsoftwaregroup.com. In development, you can access the admin panel directly at /admin');
+                } else {
+                  window.location.href = '/api/login';
+                }
+              }}
               data-testid="button-agency-login"
             >
               Agency Login
