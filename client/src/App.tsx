@@ -60,6 +60,7 @@ function Router() {
           <Route path="/company" component={CompanyManagement} />
           <Route path="/settings" component={Settings} />
           <Route path="/admin" component={GlobalAdmin} />
+          <Route path="/Admin" component={GlobalAdmin} />
           <Route path="/email-test" component={EmailTest} />
           <Route path="/privacy-policy" component={PrivacyPolicy} />
         </>
