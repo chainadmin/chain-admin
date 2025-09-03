@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Building2, Users, DollarSign, TrendingUp, Eye, Ban, CheckCircle, AlertTriangle, Plus, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import AdminAuth from "@/components/admin-auth";
 // Simple currency formatter
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('en-US', {
@@ -21,11 +22,20 @@ const formatCurrency = (amount: number) => {
 export default function GlobalAdmin() {
   const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   
   // Form state for creating new agency
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newAgencyName, setNewAgencyName] = useState('');
   const [newAgencyEmail, setNewAgencyEmail] = useState('');
+
+  // Check for admin authentication on component mount
+  useEffect(() => {
+    const adminAuth = sessionStorage.getItem("admin_authenticated");
+    if (adminAuth === "true") {
+      setIsAdminAuthenticated(true);
+    }
+  }, []);
 
   // Check if user is platform admin
   const { data: userData } = useQuery({
@@ -128,6 +138,11 @@ export default function GlobalAdmin() {
       email: newAgencyEmail.trim(),
     });
   };
+
+  // Show admin authentication form if not authenticated
+  if (!isAdminAuthenticated) {
+    return <AdminAuth onAuthenticated={() => setIsAdminAuthenticated(true)} />;
+  }
 
   if (authLoading) {
     return (
