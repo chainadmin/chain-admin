@@ -102,6 +102,15 @@ export async function setupAuth(app: Express) {
   passport.deserializeUser((user: Express.User, cb) => cb(null, user));
 
   app.get("/api/login", (req, res, next) => {
+    // In development mode, bypass authentication and show helpful message
+    if (req.hostname === 'localhost' || req.hostname.includes('replit.dev')) {
+      return res.status(200).json({
+        message: "Development mode: Agency login will be available once deployed to api.chainsoftwaregroup.com",
+        adminAccess: "Access admin panel directly at /admin",
+        deploymentReady: true
+      });
+    }
+    
     passport.authenticate(`replitauth:${req.hostname}`, {
       prompt: "login consent",
       scope: ["openid", "email", "profile", "offline_access"],
