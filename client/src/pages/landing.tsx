@@ -100,9 +100,9 @@ export default function Landing() {
               variant="ghost" 
               size="sm"
               onClick={() => {
-                // In development, show a message about deployment
+                // In development, redirect to admin panel directly
                 if (window.location.hostname === 'localhost' || window.location.hostname.includes('replit.dev')) {
-                  alert('Agency login will be available once deployed to api.chainsoftwaregroup.com. In development, you can access the admin panel directly at /admin');
+                  window.location.href = '/admin';
                 } else {
                   window.location.href = '/api/login';
                 }
