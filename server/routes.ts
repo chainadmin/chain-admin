@@ -1242,6 +1242,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         businessName: data.businessName,
         phoneNumber: data.phoneNumber,
         email: data.email,
+        stripeSecretKey: data.stripeSecretKey || null,
+        stripePublishableKey: data.stripePublishableKey || null,
+        stripeMerchantConfigured: (data.stripeSecretKey && data.stripePublishableKey) ? true : false,
       });
 
       // TODO: Add notification system to alert platform owners about new trial registration

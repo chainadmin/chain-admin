@@ -62,6 +62,11 @@ export const tenants = pgTable("tenants", {
   postmarkServerName: text("postmark_server_name"), // Human-readable server name
   notifiedOwners: boolean("notified_owners").default(false), // Track if owners were notified
   notificationSentAt: timestamp("notification_sent_at"),
+  // Stripe merchant integration
+  stripeSecretKey: text("stripe_secret_key"), // Stripe secret API key (encrypted in production)
+  stripePublishableKey: text("stripe_publishable_key"), // Stripe publishable key
+  stripeConnectedAccountId: text("stripe_connected_account_id"), // For Stripe Connect if using platform model
+  stripeMerchantConfigured: boolean("stripe_merchant_configured").default(false), // Track if Stripe is set up
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -756,6 +761,8 @@ export const agencyTrialRegistrationSchema = createInsertSchema(tenants).pick({
   businessName: true,
   phoneNumber: true,
   email: true,
+  stripeSecretKey: true,
+  stripePublishableKey: true,
 }).extend({
   ownerFirstName: z.string().min(1, "First name is required"),
   ownerLastName: z.string().min(1, "Last name is required"),
@@ -764,6 +771,8 @@ export const agencyTrialRegistrationSchema = createInsertSchema(tenants).pick({
   businessName: z.string().min(1, "Business name is required"),
   phoneNumber: z.string().regex(/^\d{10}$/, "Phone number must be 10 digits"),
   email: z.string().email("Valid email is required"),
+  stripeSecretKey: z.string().optional(),
+  stripePublishableKey: z.string().optional(),
 });
 export const insertPlatformUserSchema = createInsertSchema(platformUsers).omit({ id: true, createdAt: true });
 export const insertConsumerSchema = createInsertSchema(consumers).omit({ id: true, createdAt: true });
