@@ -24,6 +24,7 @@ import ConsumerPortal from "@/pages/enhanced-consumer-portal";
 import ConsumerLogin from "@/pages/consumer-login";
 import ConsumerDashboard from "@/pages/consumer-dashboard";
 import ConsumerRegistration from "@/pages/consumer-registration";
+import ConsumerMobileLanding from "@/pages/consumer-mobile-landing";
 import AgencyRegistration from "@/pages/agency-registration";
 import AgencyLanding from "@/pages/agency-landing";
 import PrivacyPolicy from "@/pages/privacy-policy";
@@ -34,11 +35,12 @@ import EmailTest from "@/pages/email-test";
 function Router() {
   const { isAuthenticated, isLoading, user } = useAuth();
   const { toast } = useToast();
+  const isMobileApp = mobileConfig.isNativePlatform;
 
   // Initialize dynamic content for mobile app
   useEffect(() => {
     const initMobileFeatures = async () => {
-      if (mobileConfig.isNativePlatform) {
+      if (isMobileApp) {
         // Initialize dynamic content
         await initializeDynamicContent();
         
@@ -54,11 +56,40 @@ function Router() {
     };
     
     initMobileFeatures();
-  }, [toast]);
+  }, [toast, isMobileApp]);
 
-  // Check if user needs tenant setup
-  const needsTenantSetup = isAuthenticated && !(user as any)?.platformUser?.tenantId;
+  // Check if user needs tenant setup (only for web admin)
+  const needsTenantSetup = !isMobileApp && isAuthenticated && !(user as any)?.platformUser?.tenantId;
 
+  // Mobile app routes - Consumer only
+  if (isMobileApp) {
+    return (
+      <Switch>
+        {isLoading ? (
+          <div className="min-h-screen flex items-center justify-center">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <p className="text-gray-600">Loading...</p>
+            </div>
+          </div>
+        ) : (
+          <>
+            <Route path="/" component={ConsumerMobileLanding} />
+            <Route path="/consumer-login" component={ConsumerLogin} />
+            <Route path="/consumer-dashboard" component={ConsumerDashboard} />
+            <Route path="/consumer/:tenantSlug/:email" component={ConsumerPortal} />
+            <Route path="/register/:tenantSlug" component={ConsumerRegistration} />
+            <Route path="/consumer-register" component={ConsumerRegistration} />
+            <Route path="/agency/:agencySlug" component={AgencyLanding} />
+            <Route path="/privacy-policy" component={PrivacyPolicy} />
+            <Route component={ConsumerMobileLanding} />
+          </>
+        )}
+      </Switch>
+    );
+  }
+
+  // Web app routes - Full admin and consumer features
   return (
     <Switch>
       {isLoading ? (
