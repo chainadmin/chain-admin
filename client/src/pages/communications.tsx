@@ -35,7 +35,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Mail, MessageSquare, Plus, Send, FileText, Trash2, Eye, TrendingUp, Users, AlertCircle, MousePointer, UserMinus, Phone, Clock, Calendar, Settings } from "lucide-react";
+import { Mail, MessageSquare, Plus, Send, FileText, Trash2, Eye, TrendingUp, Users, AlertCircle, MousePointer, UserMinus, Phone, Clock, Calendar, Settings, Copy } from "lucide-react";
 
 export default function Communications() {
   const [activeTab, setActiveTab] = useState("overview");
@@ -94,6 +94,11 @@ export default function Communications() {
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Get user data for agency URL
+  const { data: userData } = useQuery({
+    queryKey: ["/api/auth/user"],
+  });
 
   // Queries
   const { data: emailTemplates, isLoading: emailTemplatesLoading } = useQuery({
@@ -914,6 +919,33 @@ export default function Communications() {
                           {template.message}
                         </p>
                       )}
+                      {/* Agency URL Section */}
+                      <div className="mb-3 p-2 bg-gray-50 rounded-md">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-gray-600 mb-1">Agency URL:</p>
+                            <p className="text-xs text-gray-800 font-mono truncate">
+                              {window.location.origin}/agency/{(userData as any)?.platformUser?.tenant?.slug || 'your-agency'}
+                            </p>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0 ml-2"
+                            onClick={() => {
+                              const url = `${window.location.origin}/agency/${(userData as any)?.platformUser?.tenant?.slug || 'your-agency'}`;
+                              navigator.clipboard.writeText(url);
+                              toast({
+                                title: "URL Copied",
+                                description: "Agency URL has been copied to clipboard.",
+                              });
+                            }}
+                            data-testid={`button-copy-url-${template.id}`}
+                          >
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
                       <div className="flex gap-2">
                         <Button
                           variant="outline"
@@ -1283,6 +1315,13 @@ export default function Communications() {
                             <span className="text-gray-600">Sent:</span>
                             <div className="font-medium">{campaign.totalSent || 0}</div>
                           </div>
+                        </div>
+                        {/* Agency URL for reference */}
+                        <div className="mt-2 pt-2 border-t">
+                          <span className="text-xs text-gray-600">Agency URL: </span>
+                          <span className="text-xs font-mono text-gray-800">
+                            {window.location.origin}/agency/{(userData as any)?.platformUser?.tenant?.slug || 'your-agency'}
+                          </span>
                         </div>
                         {campaign.status === "completed" && (
                           <div className="mt-3 pt-3 border-t grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
