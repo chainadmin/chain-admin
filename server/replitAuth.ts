@@ -104,13 +104,9 @@ export async function setupAuth(app: Express) {
 
   app.get("/api/login", (req, res, next) => {
     try {
-      // In development mode, bypass authentication and show helpful message
+      // In development mode, redirect directly to admin panel
       if (req.hostname === 'localhost' || req.hostname.includes('replit.dev')) {
-        return res.status(200).json({
-          message: "Development mode: Agency login will be available once deployed to chainsoftwaregroup.com",
-          adminAccess: "Access admin panel directly at /admin",
-          deploymentReady: true
-        });
+        return res.redirect('/admin');
       }
       
       // Check if this is the production domain
