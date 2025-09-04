@@ -107,10 +107,15 @@ export async function setupAuth(app: Express) {
       // In development mode, bypass authentication and show helpful message
       if (req.hostname === 'localhost' || req.hostname.includes('replit.dev')) {
         return res.status(200).json({
-          message: "Development mode: Agency login will be available once deployed to api.chainsoftwaregroup.com",
+          message: "Development mode: Agency login will be available once deployed to chainsoftwaregroup.com",
           adminAccess: "Access admin panel directly at /admin",
           deploymentReady: true
         });
+      }
+      
+      // Check if this is the production domain
+      if (req.hostname === 'chainsoftwaregroup.com' || req.hostname === 'www.chainsoftwaregroup.com') {
+        // Production domain - proceed with authentication
       }
       
       // Get available domains from environment

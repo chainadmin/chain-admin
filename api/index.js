@@ -1,7 +1,20 @@
 // Complete serverless function rewrite - no external dependencies
 export default function handler(req, res) {
   // Enable CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // Configure CORS for chainsoftwaregroup.com
+  const allowedOrigins = [
+    'https://chainsoftwaregroup.com',
+    'https://www.chainsoftwaregroup.com',
+    'http://localhost:5000',
+    'http://localhost:3000'
+  ];
+  
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', 'https://chainsoftwaregroup.com');
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
