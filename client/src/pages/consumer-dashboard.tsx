@@ -442,7 +442,7 @@ export default function ConsumerDashboard() {
               <Card>
                 <CardContent className="pt-6 text-center">
                   <div className="text-2xl font-bold text-green-600">
-                    {arrangements?.length || 0}
+                    {(arrangements as any)?.length || 0}
                   </div>
                   <div className="text-sm text-gray-500">Payment Plans Available</div>
                 </CardContent>

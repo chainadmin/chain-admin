@@ -175,11 +175,11 @@ export default function ConsumerPortal() {
         </div>
 
         {/* Documents Section */}
-        {documents && (documents as any).length > 0 && (
+        {documents && Array.isArray(documents) && documents.length > 0 && (
           <div className="max-w-2xl mx-auto mt-8">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Available Documents</h2>
             <div className="space-y-3">
-              {(documents as any).map((document: any) => (
+              {documents.map((document: any) => (
                 <div key={document.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
@@ -201,11 +201,11 @@ export default function ConsumerPortal() {
         )}
 
         {/* Payment Arrangements Section */}
-        {arrangements && (arrangements as any).length > 0 && (
+        {arrangements && Array.isArray(arrangements) && arrangements.length > 0 && (
           <div className="max-w-2xl mx-auto mt-8">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Available Payment Plans</h2>
             <div className="space-y-3">
-              {(arrangements as any).map((arrangement: any) => (
+              {arrangements.map((arrangement: any) => (
                 <div key={arrangement.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
                   <div className="flex items-center justify-between">
                     <div>

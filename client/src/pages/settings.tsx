@@ -342,7 +342,7 @@ export default function Settings() {
                     </p>
                   </div>
 
-                  {/* Logo Upload Section */>
+                  {/* Logo Upload Section */}
                   <div className="space-y-4 border-b pb-6">
                     <div>
                       <Label className="text-base font-medium">Company Logo</Label>
