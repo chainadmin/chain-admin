@@ -1,11 +1,14 @@
 import { Switch, Route } from "wouter";
+import { useEffect } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { MobileOptimizations } from "@/components/mobile-optimizations";
+import { initializeDynamicContent, checkForUpdates, mobileConfig } from "@/lib/mobileConfig";
 import "@/styles/mobile.css";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
 import AdminDashboard from "@/pages/admin-dashboard";
@@ -30,6 +33,28 @@ import EmailTest from "@/pages/email-test";
 
 function Router() {
   const { isAuthenticated, isLoading, user } = useAuth();
+  const { toast } = useToast();
+
+  // Initialize dynamic content for mobile app
+  useEffect(() => {
+    const initMobileFeatures = async () => {
+      if (mobileConfig.isNativePlatform) {
+        // Initialize dynamic content
+        await initializeDynamicContent();
+        
+        // Check for app updates
+        const updateInfo = await checkForUpdates();
+        if (updateInfo.needsUpdate) {
+          toast({
+            title: "Update Available",
+            description: `Version ${updateInfo.version} is available. Please update for the best experience.`
+          });
+        }
+      }
+    };
+    
+    initMobileFeatures();
+  }, [toast]);
 
   // Check if user needs tenant setup
   const needsTenantSetup = isAuthenticated && !(user as any)?.platformUser?.tenantId;

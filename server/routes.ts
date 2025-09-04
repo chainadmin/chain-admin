@@ -2301,6 +2301,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }
 
+  // Mobile app version check endpoint
+  app.get('/api/app-version', (req, res) => {
+    // This would typically check a database or config file
+    // For now, return a static version
+    res.json({
+      version: '1.0.0',
+      minVersion: '1.0.0',
+      forceUpdate: false,
+      updateUrl: 'https://apps.apple.com/app/chain', // Update with real URLs
+      androidUpdateUrl: 'https://play.google.com/store/apps/details?id=com.chaincomms.chain',
+      releaseNotes: 'Bug fixes and performance improvements'
+    });
+  });
+
+  // Dynamic content endpoint for mobile app
+  app.get('/api/dynamic-content', async (req: any, res) => {
+    try {
+      const { type } = req.query;
+      
+      // Based on content type, return different dynamic data
+      switch (type) {
+        case 'templates':
+          // Return template configurations that can be updated without app release
+          res.json({
+            emailTemplates: {
+              welcome: {
+                subject: 'Welcome to {{agencyName}}',
+                body: 'Dynamic welcome message content...'
+              },
+              reminder: {
+                subject: 'Payment Reminder',
+                body: 'Dynamic reminder content...'
+              }
+            },
+            smsTemplates: {
+              reminder: 'Your payment of {{amount}} is due on {{date}}',
+              confirmation: 'Payment received. Thank you!'
+            }
+          });
+          break;
+          
+        case 'branding':
+          // Return branding elements that can change
+          res.json({
+            primaryColor: '#2563eb',
+            secondaryColor: '#10b981',
+            features: {
+              showPaymentPlans: true,
+              showDocuments: true,
+              allowCallbacks: true
+            }
+          });
+          break;
+          
+        case 'settings':
+          // Return app settings that can be toggled remotely
+          res.json({
+            maintenance: false,
+            maintenanceMessage: null,
+            features: {
+              emailCampaigns: true,
+              smsCampaigns: true,
+              automations: true,
+              consumerPortal: true
+            },
+            limits: {
+              maxFileUploadSize: 10485760, // 10MB
+              maxAccountsPerImport: 1000
+            }
+          });
+          break;
+          
+        default:
+          res.status(400).json({ message: 'Invalid content type' });
+      }
+    } catch (error) {
+      console.error('Error fetching dynamic content:', error);
+      res.status(500).json({ message: 'Failed to fetch dynamic content' });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
