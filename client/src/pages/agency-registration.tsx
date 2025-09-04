@@ -9,8 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { agencyTrialRegistrationSchema, type AgencyTrialRegistration } from "@shared/schema";
-import { CheckCircle, Building, User, Phone, Mail, Calendar, CreditCard, Key, Globe, Info } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { CheckCircle, Building, User, Phone, Mail, Calendar, CreditCard } from "lucide-react";
 
 export default function AgencyRegistration() {
   const { toast } = useToast();
@@ -26,8 +25,6 @@ export default function AgencyRegistration() {
       businessName: "",
       phoneNumber: "",
       email: "",
-      stripeSecretKey: "",
-      stripePublishableKey: "",
     },
   });
 
@@ -264,82 +261,6 @@ export default function AgencyRegistration() {
                         </FormItem>
                       )}
                     />
-                  </div>
-                </div>
-
-                {/* Payment Processing (Optional) */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                    <CreditCard className="mr-2 h-5 w-5" />
-                    Payment Processing (Optional)
-                  </h3>
-                  
-                  <Alert className="bg-amber-50 border-amber-200">
-                    <Info className="h-4 w-4 text-amber-600" />
-                    <AlertDescription className="text-amber-800">
-                      You can set up Stripe payment processing now to accept payments from consumers. This is optional and can be configured later in Settings.
-                    </AlertDescription>
-                  </Alert>
-
-                  <div className="space-y-4">
-                    <FormField
-                      control={form.control}
-                      name="stripePublishableKey"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="flex items-center">
-                            <Globe className="mr-2 h-4 w-4" />
-                            Stripe Publishable Key
-                          </FormLabel>
-                          <FormControl>
-                            <Input 
-                              {...field} 
-                              placeholder="pk_test_..."
-                              data-testid="input-stripe-publishable-key"
-                            />
-                          </FormControl>
-                          <p className="text-xs text-gray-500">
-                            Starts with pk_test_ (test mode) or pk_live_ (live mode)
-                          </p>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="stripeSecretKey"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="flex items-center">
-                            <Key className="mr-2 h-4 w-4" />
-                            Stripe Secret Key
-                          </FormLabel>
-                          <FormControl>
-                            <Input 
-                              {...field} 
-                              type="password"
-                              placeholder="sk_test_..."
-                              data-testid="input-stripe-secret-key"
-                            />
-                          </FormControl>
-                          <p className="text-xs text-gray-500">
-                            Starts with sk_test_ (test mode) or sk_live_ (live mode). Keep this secure!
-                          </p>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  <div className="bg-blue-50 p-4 rounded-lg text-sm">
-                    <h5 className="font-semibold text-blue-900 mb-2">How to get your Stripe keys:</h5>
-                    <ol className="text-blue-800 space-y-1">
-                      <li>1. Sign up for a Stripe account at <a href="https://dashboard.stripe.com" target="_blank" rel="noopener noreferrer" className="underline">stripe.com</a></li>
-                      <li>2. Go to the API keys section in your Stripe dashboard</li>
-                      <li>3. Copy your Publishable key (safe to be public)</li>
-                      <li>4. Copy your Secret key (must be kept secure)</li>
-                    </ol>
                   </div>
                 </div>
 
