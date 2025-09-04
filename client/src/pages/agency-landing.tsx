@@ -71,15 +71,15 @@ export default function AgencyLanding() {
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       {/* Header */}
       <div className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex items-center justify-between">
             {logoUrl ? (
-              <img src={logoUrl} alt={agencyName} className="h-12 object-contain" />
+              <img src={logoUrl} alt={agencyName} className="h-20 object-contain" />
             ) : (
-              <div className="flex items-center space-x-3">
-                <img src={chainLogo} alt="Chain" className="h-10 object-contain" />
-                <div className="border-l pl-3">
-                  <h1 className="text-xl font-bold text-gray-900">{agencyName}</h1>
+              <div className="flex items-center space-x-4">
+                <img src={chainLogo} alt="Chain" className="h-16 object-contain" />
+                <div className="border-l pl-4">
+                  <h1 className="text-2xl font-bold text-gray-900">{agencyName}</h1>
                 </div>
               </div>
             )}
