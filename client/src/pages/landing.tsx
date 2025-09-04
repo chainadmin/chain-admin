@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import chainLogo from "@/assets/chain-logo.png";
 
 export default function Landing() {
   return (
@@ -7,10 +8,7 @@ export default function Landing() {
       <div className="container mx-auto px-4 py-16">
         <div className="text-center mb-16">
           <div className="flex items-center justify-center mb-6">
-            <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-              <i className="fas fa-link text-white text-xl"></i>
-            </div>
-            <h1 className="text-4xl font-bold text-gray-900 ml-4">Chain</h1>
+            <img src={chainLogo} alt="Chain Software Group" className="h-16 object-contain" />
           </div>
           <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
             Find your account to get started

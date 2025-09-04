@@ -2,6 +2,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
+import chainLogo from "@/assets/chain-logo.png";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -43,9 +44,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             <div className="flex items-center flex-shrink-0 px-4">
               <div className="flex items-center">
                 <div className="flex-shrink-0">
-                  <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                    <i className="fas fa-link text-white text-sm"></i>
-                  </div>
+                  <img src={chainLogo} alt="Chain Logo" className="w-10 h-10 object-contain" />
                 </div>
                 <div className="ml-3">
                   <div className="text-lg font-semibold text-gray-900">
