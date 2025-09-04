@@ -22,6 +22,7 @@ import ConsumerLogin from "@/pages/consumer-login";
 import ConsumerDashboard from "@/pages/consumer-dashboard";
 import ConsumerRegistration from "@/pages/consumer-registration";
 import AgencyRegistration from "@/pages/agency-registration";
+import AgencyLanding from "@/pages/agency-landing";
 import PrivacyPolicy from "@/pages/privacy-policy";
 import TenantSetup from "@/components/tenant-setup";
 import GlobalAdmin from "@/pages/global-admin";
@@ -51,6 +52,7 @@ function Router() {
           <Route path="/register/:tenantSlug" component={ConsumerRegistration} />
           <Route path="/consumer-register" component={ConsumerRegistration} />
           <Route path="/agency-register" component={AgencyRegistration} />
+          <Route path="/agency/:agencySlug" component={AgencyLanding} />
           <Route path="/privacy-policy" component={PrivacyPolicy} />
           <Route path="/admin" component={GlobalAdmin} />
           <Route path="/Admin" component={GlobalAdmin} />

@@ -1369,6 +1369,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Public agency information route for custom landing pages
+  app.get('/api/public/agency/:agencySlug', async (req, res) => {
+    try {
+      const { agencySlug } = req.params;
+      
+      const tenant = await storage.getTenantBySlug(agencySlug);
+      if (!tenant) {
+        return res.status(404).json({ message: "Agency not found" });
+      }
+
+      // Only return if agency is active
+      if (!tenant.isActive) {
+        return res.status(404).json({ message: "Agency not found" });
+      }
+
+      // Get tenant settings for branding and contact info
+      const tenantSettings = await storage.getTenantSettings(tenant.id);
+
+      // Return public-safe information only
+      res.json({
+        tenant: {
+          id: tenant.id,
+          name: tenant.name,
+          slug: tenant.slug,
+        },
+        tenantSettings: {
+          contactEmail: tenantSettings?.contactEmail,
+          contactPhone: tenantSettings?.contactPhone,
+          privacyPolicy: tenantSettings?.privacyPolicy,
+          termsOfService: tenantSettings?.termsOfService,
+          customBranding: tenantSettings?.customBranding,
+        }
+      });
+    } catch (error) {
+      console.error("Error fetching public agency info:", error);
+      res.status(500).json({ message: "Failed to fetch agency information" });
+    }
+  });
+
   // Callback request route (public)
   app.post('/api/callback-request', async (req, res) => {
     try {

@@ -35,7 +35,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Trash2, Upload, Plus, Save, CreditCard, Shield, Settings as SettingsIcon, ImageIcon } from "lucide-react";
+import { Trash2, Upload, Plus, Save, CreditCard, Shield, Settings as SettingsIcon, ImageIcon, Copy, ExternalLink } from "lucide-react";
 
 export default function Settings() {
   const [showDocumentModal, setShowDocumentModal] = useState(false);
@@ -72,6 +72,10 @@ export default function Settings() {
 
   const { data: arrangementOptions, isLoading: arrangementsLoading } = useQuery({
     queryKey: ["/api/arrangement-options"],
+  });
+
+  const { data: userData } = useQuery({
+    queryKey: ["/api/auth/user"],
   });
 
 
@@ -293,7 +297,52 @@ export default function Settings() {
                   <CardTitle>Consumer Portal Settings</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  {/* Logo Upload Section */}
+                  {/* Custom Agency URL Section */}
+                  <div className="space-y-4 border-b pb-6">
+                    <div>
+                      <Label className="text-base font-medium">Your Custom Consumer URL</Label>
+                      <p className="text-sm text-gray-500">
+                        Share this link with consumers to give them direct access to your agency's portal
+                      </p>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <Input
+                        readOnly
+                        value={`${window.location.origin}/agency/${(userData as any)?.platformUser?.tenant?.slug}`}
+                        className="flex-1 font-mono text-sm"
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          navigator.clipboard.writeText(`${window.location.origin}/agency/${(userData as any)?.platformUser?.tenant?.slug}`);
+                          toast({
+                            title: "URL Copied",
+                            description: "The custom URL has been copied to your clipboard.",
+                          });
+                        }}
+                        data-testid="button-copy-url"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          window.open(`/agency/${(userData as any)?.platformUser?.tenant?.slug}`, '_blank');
+                        }}
+                        data-testid="button-preview-url"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      This link takes consumers directly to a branded page for your agency where they can sign in or create an account.
+                    </p>
+                  </div>
+
+                  {/* Logo Upload Section */>
                   <div className="space-y-4 border-b pb-6">
                     <div>
                       <Label className="text-base font-medium">Company Logo</Label>

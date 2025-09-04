@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Building2, Mail, Lock, ArrowRight, UserCheck } from "lucide-react";
+import chainLogo from "@/assets/chain-logo.png";
 
 interface LoginForm {
   email: string;
@@ -22,6 +23,20 @@ export default function ConsumerLogin() {
     email: "",
     dateOfBirth: "",
   });
+  const [agencyContext, setAgencyContext] = useState<any>(null);
+
+  useEffect(() => {
+    // Check if coming from an agency-specific page
+    const storedContext = sessionStorage.getItem('agencyContext');
+    if (storedContext) {
+      try {
+        const context = JSON.parse(storedContext);
+        setAgencyContext(context);
+      } catch (e) {
+        console.error('Error parsing agency context:', e);
+      }
+    }
+  }, []);
 
   const loginMutation = useMutation({
     mutationFn: async (loginData: LoginForm) => {
@@ -106,13 +121,30 @@ export default function ConsumerLogin() {
       <div className="max-w-md w-full space-y-6">
         {/* Header */}
         <div className="text-center">
-          <div className="w-16 h-16 bg-blue-600 rounded-full mx-auto flex items-center justify-center mb-4">
-            <Building2 className="h-8 w-8 text-white" />
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900">Consumer Portal</h1>
-          <p className="text-gray-600 mt-2">
-            Find and access your accounts from any agency
-          </p>
+          {agencyContext ? (
+            <>
+              <div className="mb-4">
+                <img src={chainLogo} alt="Chain Software Group" className="h-12 object-contain mx-auto mb-2" />
+                <h1 className="text-3xl font-bold text-gray-900">Access Your Account</h1>
+                <p className="text-lg text-blue-600 font-medium mt-2">
+                  {agencyContext.name}
+                </p>
+                <p className="text-gray-600 text-sm">
+                  Sign in to view your account information
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="w-16 h-16 bg-blue-600 rounded-full mx-auto flex items-center justify-center mb-4">
+                <Building2 className="h-8 w-8 text-white" />
+              </div>
+              <h1 className="text-3xl font-bold text-gray-900">Consumer Portal</h1>
+              <p className="text-gray-600 mt-2">
+                Find and access your accounts from any agency
+              </p>
+            </>
+          )}
         </div>
 
         {/* Login Form */}
