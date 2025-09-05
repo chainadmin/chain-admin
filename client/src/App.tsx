@@ -135,9 +135,9 @@ function Router() {
           <Route path="/Admin" component={GlobalAdmin} />
           <Route path="/email-test" component={EmailTest} />
           <Route path="/privacy-policy" component={PrivacyPolicy} />
+          <Route component={NotFound} />
         </>
       )}
-      <Route component={NotFound} />
     </Switch>
   );
 }
