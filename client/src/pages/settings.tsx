@@ -285,6 +285,7 @@ export default function Settings() {
           <Tabs defaultValue="general" className="space-y-4">
             <TabsList>
               <TabsTrigger value="general">General</TabsTrigger>
+              <TabsTrigger value="sms">SMS Configuration</TabsTrigger>
               <TabsTrigger value="merchant">Payment Processing</TabsTrigger>
               <TabsTrigger value="documents">Documents</TabsTrigger>
               <TabsTrigger value="arrangements">Payment Plans</TabsTrigger>
@@ -857,6 +858,102 @@ export default function Settings() {
                       onChange={(e) => handleSettingsUpdate('termsOfService', e.target.value)}
                       placeholder="Enter your terms of service text that consumers will see..."
                     />
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="sms">
+              <Card>
+                <CardHeader>
+                  <CardTitle>SMS/Twilio Configuration</CardTitle>
+                  <p className="text-sm text-gray-500">
+                    Configure your agency's Twilio account for SMS messaging. Each agency needs their own registered Twilio number for compliance.
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <p className="text-sm text-blue-800">
+                      <strong>Important:</strong> Each agency must register their own business and phone number with Twilio for A2P 10DLC compliance. 
+                      Visit <a href="https://console.twilio.com" target="_blank" className="underline">Twilio Console</a> to set up your account.
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label>Twilio Account SID</Label>
+                    <Input
+                      value={(settings as any)?.twilioAccountSid || ""}
+                      onChange={(e) => handleSettingsUpdate('twilioAccountSid', e.target.value)}
+                      placeholder="AC..."
+                      className="font-mono"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Found in your Twilio Console dashboard</p>
+                  </div>
+                  
+                  <div>
+                    <Label>Twilio Auth Token</Label>
+                    <Input
+                      type="password"
+                      value={(settings as any)?.twilioAuthToken || ""}
+                      onChange={(e) => handleSettingsUpdate('twilioAuthToken', e.target.value)}
+                      placeholder="Your auth token"
+                      className="font-mono"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Keep this secret - found in your Twilio Console</p>
+                  </div>
+                  
+                  <div>
+                    <Label>Twilio Phone Number</Label>
+                    <Input
+                      value={(settings as any)?.twilioPhoneNumber || ""}
+                      onChange={(e) => handleSettingsUpdate('twilioPhoneNumber', e.target.value)}
+                      placeholder="+12345678900"
+                      className="font-mono"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Your Twilio phone number with country code</p>
+                  </div>
+
+                  <div>
+                    <Label>Registered Business Name</Label>
+                    <Input
+                      value={(settings as any)?.twilioBusinessName || ""}
+                      onChange={(e) => handleSettingsUpdate('twilioBusinessName', e.target.value)}
+                      placeholder="Your Agency Name"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Business name registered with your A2P 10DLC campaign</p>
+                  </div>
+
+                  <div>
+                    <Label>Campaign ID (Optional)</Label>
+                    <Input
+                      value={(settings as any)?.twilioCampaignId || ""}
+                      onChange={(e) => handleSettingsUpdate('twilioCampaignId', e.target.value)}
+                      placeholder="CMP..."
+                      className="font-mono"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Your A2P 10DLC Campaign ID if registered</p>
+                  </div>
+
+                  <div className="pt-4 border-t">
+                    <Button
+                      onClick={() => updateSettingsMutation.mutate(settings)}
+                      disabled={updateSettingsMutation.isPending}
+                      data-testid="button-save-sms-settings"
+                    >
+                      <Save className="h-4 w-4 mr-2" />
+                      Save SMS Configuration
+                    </Button>
+                  </div>
+
+                  <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+                    <p className="text-sm font-medium text-gray-700">A2P 10DLC Registration Steps:</p>
+                    <ol className="text-sm text-gray-600 list-decimal list-inside space-y-1">
+                      <li>Create a Twilio account and purchase a phone number</li>
+                      <li>Register your business profile in Twilio Console</li>
+                      <li>Create an A2P 10DLC campaign for debt collection</li>
+                      <li>Wait for campaign approval (usually 24-48 hours)</li>
+                      <li>Add your credentials above once approved</li>
+                    </ol>
                   </div>
                 </CardContent>
               </Card>

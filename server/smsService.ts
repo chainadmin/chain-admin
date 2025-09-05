@@ -16,29 +16,69 @@ interface QueuedSms {
 }
 
 class SmsService {
-  private client: twilio.Twilio | null = null;
+  private clients: Map<string, twilio.Twilio> = new Map(); // Store client per tenant
   private sendQueue: QueuedSms[] = [];
   private processing = false;
   private sentCounts: Map<string, { count: number; resetTime: number }> = new Map();
 
   constructor() {
-    this.initializeTwilio();
+    this.initializeDefaultTwilio();
     // Start processing queue every 10 seconds
     setInterval(() => this.processQueue(), 10000);
     // Reset rate limit counters every minute
     setInterval(() => this.resetCounters(), 60000);
   }
 
-  private initializeTwilio() {
+  private initializeDefaultTwilio() {
+    // Initialize with default credentials if available (for backwards compatibility)
     const accountSid = process.env.TWILIO_ACCOUNT_SID;
     const authToken = process.env.TWILIO_AUTH_TOKEN;
 
     if (accountSid && authToken) {
-      this.client = twilio(accountSid, authToken);
+      this.clients.set('default', twilio(accountSid, authToken));
       console.log('Twilio SMS service initialized');
     } else {
       console.warn('Twilio credentials not found. SMS service will be disabled.');
     }
+  }
+
+  private async getTwilioClient(tenantId: string): Promise<twilio.Twilio | null> {
+    // Check if we already have a client for this tenant
+    if (this.clients.has(tenantId)) {
+      return this.clients.get(tenantId)!;
+    }
+
+    try {
+      // Get tenant-specific Twilio credentials from tenants table
+      const tenant = await storage.getTenant(tenantId);
+      
+      if (tenant?.twilioAccountSid && tenant?.twilioAuthToken) {
+        const client = twilio(tenant.twilioAccountSid, tenant.twilioAuthToken);
+        this.clients.set(tenantId, client);
+        return client;
+      }
+    } catch (error) {
+      console.error(`Error getting Twilio credentials for tenant ${tenantId}:`, error);
+    }
+
+    // Fall back to default client if available
+    return this.clients.get('default') || null;
+  }
+
+  private async getTwilioPhoneNumber(tenantId: string): Promise<string | null> {
+    try {
+      // Get tenant-specific phone number from tenants table
+      const tenant = await storage.getTenant(tenantId);
+      
+      if (tenant?.twilioPhoneNumber) {
+        return tenant.twilioPhoneNumber;
+      }
+    } catch (error) {
+      console.error(`Error getting Twilio phone number for tenant ${tenantId}:`, error);
+    }
+
+    // Fall back to default phone number if available
+    return process.env.TWILIO_PHONE_NUMBER || null;
   }
 
   private resetCounters() {
@@ -93,8 +133,9 @@ class SmsService {
     campaignId?: string,
     consumerId?: string
   ): Promise<{ success: boolean; messageId?: string; error?: string; queued?: boolean }> {
-    if (!this.client) {
-      return { success: false, error: 'SMS service not configured' };
+    const client = await this.getTwilioClient(tenantId);
+    if (!client) {
+      return { success: false, error: 'SMS service not configured for this agency. Please add Twilio credentials in Settings.' };
     }
 
     const throttleConfig = await this.getThrottleConfig(tenantId);
@@ -133,12 +174,17 @@ class SmsService {
     consumerId?: string
   ): Promise<{ success: boolean; messageId?: string; error?: string }> {
     try {
-      const fromNumber = process.env.TWILIO_PHONE_NUMBER;
-      if (!fromNumber) {
-        throw new Error('Twilio phone number not configured');
+      const client = await this.getTwilioClient(tenantId);
+      if (!client) {
+        throw new Error('Twilio client not configured for this agency');
       }
 
-      const result = await this.client!.messages.create({
+      const fromNumber = await this.getTwilioPhoneNumber(tenantId);
+      if (!fromNumber) {
+        throw new Error('Twilio phone number not configured for this agency');
+      }
+
+      const result = await client.messages.create({
         body: message,
         from: fromNumber,
         to: to,

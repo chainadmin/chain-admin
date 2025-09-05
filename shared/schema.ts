@@ -60,6 +60,12 @@ export const tenants = pgTable("tenants", {
   postmarkServerId: text("postmark_server_id"), // Postmark server ID
   postmarkServerToken: text("postmark_server_token"), // Postmark server API token for sending emails
   postmarkServerName: text("postmark_server_name"), // Human-readable server name
+  // Twilio integration (each agency has their own)
+  twilioAccountSid: text("twilio_account_sid"), // Twilio Account SID
+  twilioAuthToken: text("twilio_auth_token"), // Twilio Auth Token (encrypted in production)
+  twilioPhoneNumber: text("twilio_phone_number"), // Twilio phone number with country code
+  twilioBusinessName: text("twilio_business_name"), // Business name registered with campaign
+  twilioCampaignId: text("twilio_campaign_id"), // 10DLC Campaign ID if applicable
   notifiedOwners: boolean("notified_owners").default(false), // Track if owners were notified
   notificationSentAt: timestamp("notification_sent_at"),
   createdAt: timestamp("created_at").defaultNow(),

@@ -1644,8 +1644,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
+      // Get settings from both tenant and tenantSettings tables
       const settings = await storage.getTenantSettings(platformUser.tenantId);
-      res.json(settings || {});
+      const tenant = await storage.getTenant(platformUser.tenantId);
+      
+      // Combine settings with Twilio settings from tenant
+      const combinedSettings = {
+        ...(settings || {}),
+        twilioAccountSid: tenant?.twilioAccountSid || '',
+        twilioAuthToken: tenant?.twilioAuthToken || '',
+        twilioPhoneNumber: tenant?.twilioPhoneNumber || '',
+        twilioBusinessName: tenant?.twilioBusinessName || '',
+        twilioCampaignId: tenant?.twilioCampaignId || '',
+      };
+      
+      res.json(combinedSettings);
     } catch (error) {
       console.error("Error fetching settings:", error);
       res.status(500).json({ message: "Failed to fetch settings" });
@@ -1673,12 +1686,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
         customBranding: z.any().optional(),
         consumerPortalSettings: z.any().optional(),
         smsThrottleLimit: z.number().min(1).max(1000).optional(),
+        // Twilio configuration per tenant
+        twilioAccountSid: z.string().optional(),
+        twilioAuthToken: z.string().optional(),
+        twilioPhoneNumber: z.string().optional(),
+        twilioBusinessName: z.string().optional(),
+        twilioCampaignId: z.string().optional(),
       });
 
       const validatedData = settingsSchema.parse(req.body);
 
+      // Separate Twilio settings from other settings
+      const { 
+        twilioAccountSid, 
+        twilioAuthToken, 
+        twilioPhoneNumber, 
+        twilioBusinessName, 
+        twilioCampaignId,
+        ...otherSettings 
+      } = validatedData;
+
+      // Update tenant table with Twilio settings if any provided
+      if (twilioAccountSid !== undefined || 
+          twilioAuthToken !== undefined || 
+          twilioPhoneNumber !== undefined || 
+          twilioBusinessName !== undefined || 
+          twilioCampaignId !== undefined) {
+        await storage.updateTenantTwilioSettings(platformUser.tenantId, {
+          twilioAccountSid: twilioAccountSid || null,
+          twilioAuthToken: twilioAuthToken || null,
+          twilioPhoneNumber: twilioPhoneNumber || null,
+          twilioBusinessName: twilioBusinessName || null,
+          twilioCampaignId: twilioCampaignId || null,
+        });
+      }
+
+      // Update tenant settings table with other settings
       const settings = await storage.upsertTenantSettings({
-        ...validatedData,
+        ...otherSettings,
         tenantId: platformUser.tenantId,
       });
       

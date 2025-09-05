@@ -1300,6 +1300,20 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return updatedTenant;
   }
+
+  async updateTenantTwilioSettings(id: string, twilioSettings: {
+    twilioAccountSid?: string | null;
+    twilioAuthToken?: string | null;
+    twilioPhoneNumber?: string | null;
+    twilioBusinessName?: string | null;
+    twilioCampaignId?: string | null;
+  }): Promise<Tenant> {
+    const [updatedTenant] = await db.update(tenants)
+      .set(twilioSettings)
+      .where(eq(tenants.id, id))
+      .returning();
+    return updatedTenant;
+  }
 }
 
 export const storage = new DatabaseStorage();
