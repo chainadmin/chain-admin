@@ -71,6 +71,22 @@ export const tenants = pgTable("tenants", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Agency credentials (for username/password auth)
+export const agencyCredentials = pgTable("agency_credentials", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  username: text("username").unique().notNull(),
+  passwordHash: text("password_hash").notNull(), // Hashed password using bcrypt
+  email: text("email").notNull(),
+  firstName: text("first_name"),
+  lastName: text("last_name"),
+  role: text("role", { enum: ['owner', 'manager', 'agent', 'viewer', 'uploader'] }).default('owner').notNull(),
+  isActive: boolean("is_active").default(true),
+  lastLoginAt: timestamp("last_login_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Platform users (agency users)
 export const platformUsers = pgTable("platform_users", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -373,6 +389,7 @@ export const invoices = pgTable("invoices", {
 // Relations
 export const tenantsRelations = relations(tenants, ({ one, many }) => ({
   platformUsers: many(platformUsers),
+  agencyCredentials: many(agencyCredentials),
   consumers: many(consumers),
   accounts: many(accounts),
   folders: many(folders),
@@ -392,6 +409,13 @@ export const tenantsRelations = relations(tenants, ({ one, many }) => ({
     references: [subscriptions.tenantId],
   }),
   invoices: many(invoices),
+}));
+
+export const agencyCredentialsRelations = relations(agencyCredentials, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [agencyCredentials.tenantId],
+    references: [tenants.id],
+  }),
 }));
 
 export const platformUsersRelations = relations(platformUsers, ({ one }) => ({
@@ -754,6 +778,12 @@ export const emailSequenceEnrollmentsRelations = relations(emailSequenceEnrollme
 
 // Insert schemas
 export const insertTenantSchema = createInsertSchema(tenants).omit({ id: true, createdAt: true });
+export const insertAgencyCredentialsSchema = createInsertSchema(agencyCredentials).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true,
+  lastLoginAt: true 
+});
 export const agencyTrialRegistrationSchema = createInsertSchema(tenants).pick({
   ownerFirstName: true,
   ownerLastName: true,
