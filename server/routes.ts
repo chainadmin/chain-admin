@@ -110,12 +110,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       'https://chain-admin-ly7dwc69i-chainadmins-projects.vercel.app',
       'https://chain-admin.vercel.app',
       'https://chain-admin-psi.vercel.app',
+      'https://chainsoftwaregroup.com',
+      'https://www.chainsoftwaregroup.com',
       'http://localhost:5173',
       'http://localhost:5000',
       'http://localhost:3000'
-      // Add your custom domain here once configured:
-      // 'https://yourdomain.com',
-      // 'https://www.yourdomain.com'
     ];
     
     const origin = req.headers.origin as string;
