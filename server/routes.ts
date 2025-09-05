@@ -2150,6 +2150,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     next();
   };
 
+  // Update tenant SMS configuration (platform admin only)
+  app.put('/api/admin/tenants/:id/sms-config', isAuthenticated, isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { 
+        twilioAccountSid, 
+        twilioAuthToken, 
+        twilioPhoneNumber, 
+        twilioBusinessName, 
+        twilioCampaignId 
+      } = req.body;
+      
+      // Update tenant Twilio settings
+      await storage.updateTenantTwilioSettings(req.params.id, {
+        twilioAccountSid: twilioAccountSid || null,
+        twilioAuthToken: twilioAuthToken || null,
+        twilioPhoneNumber: twilioPhoneNumber || null,
+        twilioBusinessName: twilioBusinessName || null,
+        twilioCampaignId: twilioCampaignId || null,
+      });
+      
+      res.json({ message: "SMS configuration updated successfully" });
+    } catch (error) {
+      console.error('Error updating SMS configuration:', error);
+      res.status(500).json({ message: "Failed to update SMS configuration" });
+    }
+  });
+
   // Get all tenants for platform admin overview
   app.get('/api/admin/tenants', isAuthenticated, isPlatformAdmin, async (req: any, res) => {
     try {

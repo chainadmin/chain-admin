@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Building2, Users, DollarSign, TrendingUp, Eye, Ban, CheckCircle, AlertTriangle, Plus, Mail } from "lucide-react";
+import { Building2, Users, DollarSign, TrendingUp, Eye, Ban, CheckCircle, AlertTriangle, Plus, Mail, MessageSquare, Phone } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import AdminAuth from "@/components/admin-auth";
 // Simple currency formatter
@@ -28,6 +28,17 @@ export default function GlobalAdmin() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newAgencyName, setNewAgencyName] = useState('');
   const [newAgencyEmail, setNewAgencyEmail] = useState('');
+  
+  // SMS configuration state
+  const [smsConfigDialogOpen, setSmsConfigDialogOpen] = useState(false);
+  const [selectedTenantForSms, setSelectedTenantForSms] = useState<any>(null);
+  const [smsConfig, setSmsConfig] = useState({
+    twilioAccountSid: '',
+    twilioAuthToken: '',
+    twilioPhoneNumber: '',
+    twilioBusinessName: '',
+    twilioCampaignId: ''
+  });
 
   // Check for admin authentication on component mount
   useEffect(() => {
@@ -98,6 +109,35 @@ export default function GlobalAdmin() {
       });
     }
   });
+  
+  // Mutation to update SMS configuration
+  const updateSmsMutation = useMutation({
+    mutationFn: async ({ tenantId, config }: { tenantId: string; config: any }) => {
+      return apiRequest('PUT', `/api/admin/tenants/${tenantId}/sms-config`, config);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants'] });
+      toast({
+        title: "Success",
+        description: "SMS configuration updated successfully"
+      });
+      setSmsConfigDialogOpen(false);
+      setSmsConfig({
+        twilioAccountSid: '',
+        twilioAuthToken: '',
+        twilioPhoneNumber: '',
+        twilioBusinessName: '',
+        twilioCampaignId: ''
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to update SMS configuration",
+        variant: "destructive"
+      });
+    }
+  });
 
   // Mutation to create new agency
   const createAgencyMutation = useMutation({
@@ -136,6 +176,27 @@ export default function GlobalAdmin() {
     createAgencyMutation.mutate({
       name: newAgencyName.trim(),
       email: newAgencyEmail.trim(),
+    });
+  };
+  
+  const handleOpenSmsConfig = (tenant: any) => {
+    setSelectedTenantForSms(tenant);
+    setSmsConfig({
+      twilioAccountSid: tenant.twilioAccountSid || '',
+      twilioAuthToken: tenant.twilioAuthToken || '',
+      twilioPhoneNumber: tenant.twilioPhoneNumber || '',
+      twilioBusinessName: tenant.twilioBusinessName || '',
+      twilioCampaignId: tenant.twilioCampaignId || ''
+    });
+    setSmsConfigDialogOpen(true);
+  };
+  
+  const handleSaveSmsConfig = () => {
+    if (!selectedTenantForSms) return;
+    
+    updateSmsMutation.mutate({
+      tenantId: selectedTenantForSms.id,
+      config: smsConfig
     });
   };
 
@@ -427,6 +488,16 @@ export default function GlobalAdmin() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          onClick={() => handleOpenSmsConfig(tenant)}
+                          data-testid={`button-sms-config-${tenant.id}`}
+                        >
+                          <MessageSquare className="h-4 w-4 mr-2" />
+                          SMS Config
+                        </Button>
+                        
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => window.open(`/${tenant.slug}`, '_blank')}
                           data-testid={`button-view-${tenant.id}`}
                         >
@@ -449,6 +520,116 @@ export default function GlobalAdmin() {
           </CardContent>
         </Card>
       </div>
+      
+      {/* SMS Configuration Dialog */}
+      <Dialog open={smsConfigDialogOpen} onOpenChange={setSmsConfigDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <Phone className="h-5 w-5 mr-2" />
+              SMS Configuration for {selectedTenantForSms?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div className="bg-blue-50 p-4 rounded-lg">
+              <div className="flex items-start">
+                <MessageSquare className="h-5 w-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0" />
+                <div className="text-sm">
+                  <p className="font-medium text-blue-900">Twilio Subaccount Setup</p>
+                  <p className="text-blue-700 mt-1">
+                    Configure the Twilio subaccount credentials for this agency. Each agency uses their own subaccount for SMS compliance.
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="twilio-account-sid">Twilio Account SID</Label>
+              <Input
+                id="twilio-account-sid"
+                value={smsConfig.twilioAccountSid}
+                onChange={(e) => setSmsConfig({ ...smsConfig, twilioAccountSid: e.target.value })}
+                placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                data-testid="input-twilio-account-sid"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="twilio-auth-token">Twilio Auth Token</Label>
+              <Input
+                id="twilio-auth-token"
+                type="password"
+                value={smsConfig.twilioAuthToken}
+                onChange={(e) => setSmsConfig({ ...smsConfig, twilioAuthToken: e.target.value })}
+                placeholder="Enter auth token"
+                data-testid="input-twilio-auth-token"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="twilio-phone-number">Twilio Phone Number</Label>
+              <Input
+                id="twilio-phone-number"
+                value={smsConfig.twilioPhoneNumber}
+                onChange={(e) => setSmsConfig({ ...smsConfig, twilioPhoneNumber: e.target.value })}
+                placeholder="+1234567890"
+                data-testid="input-twilio-phone-number"
+              />
+              <p className="text-sm text-gray-500">Include country code (e.g., +1 for US)</p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="twilio-business-name">Business Name (for A2P 10DLC)</Label>
+              <Input
+                id="twilio-business-name"
+                value={smsConfig.twilioBusinessName}
+                onChange={(e) => setSmsConfig({ ...smsConfig, twilioBusinessName: e.target.value })}
+                placeholder="Agency business name"
+                data-testid="input-twilio-business-name"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="twilio-campaign-id">Campaign ID (Optional)</Label>
+              <Input
+                id="twilio-campaign-id"
+                value={smsConfig.twilioCampaignId}
+                onChange={(e) => setSmsConfig({ ...smsConfig, twilioCampaignId: e.target.value })}
+                placeholder="CMPxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                data-testid="input-twilio-campaign-id"
+              />
+              <p className="text-sm text-gray-500">A2P 10DLC Campaign ID if registered</p>
+            </div>
+            
+            <div className="flex justify-end space-x-3 pt-4">
+              <Button 
+                variant="outline" 
+                onClick={() => setSmsConfigDialogOpen(false)}
+                data-testid="button-cancel-sms-config"
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleSaveSmsConfig}
+                disabled={updateSmsMutation.isPending}
+                data-testid="button-save-sms-config"
+              >
+                {updateSmsMutation.isPending ? (
+                  <>
+                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Phone className="h-4 w-4 mr-2" />
+                    Save Configuration
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
