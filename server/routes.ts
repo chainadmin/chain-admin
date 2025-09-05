@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { postmarkServerService } from "./postmarkServerService";
-import { insertConsumerSchema, insertAccountSchema, agencyTrialRegistrationSchema, platformUsers } from "@shared/schema";
+import { insertConsumerSchema, insertAccountSchema, agencyTrialRegistrationSchema, platformUsers, tenants, consumers, agencyCredentials } from "@shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
@@ -1574,6 +1574,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error marking notification as read:", error);
       res.status(500).json({ message: "Failed to mark notification as read" });
+    }
+  });
+
+  // Test database endpoint for debugging production issues
+  app.get('/api/test-db', async (req, res) => {
+    console.log("Testing database connection...");
+    try {
+      // Try to query the tenants table
+      const testTenants = await db.select().from(tenants).limit(1);
+      console.log("Tenants query successful:", testTenants.length);
+      
+      // Try to query the consumers table  
+      const testConsumers = await db.select().from(consumers).limit(1);
+      console.log("Consumers query successful:", testConsumers.length);
+      
+      // Try to query the agency_credentials table
+      const testCredentials = await db.select().from(agencyCredentials).limit(1);
+      console.log("Agency credentials query successful:", testCredentials.length);
+      
+      res.json({ 
+        status: 'ok',
+        message: 'Database connection successful',
+        tables: {
+          tenants: 'exists',
+          consumers: 'exists', 
+          agencyCredentials: 'exists'
+        }
+      });
+    } catch (error) {
+      console.error("Database test failed:", error);
+      res.status(500).json({ 
+        status: 'error',
+        message: 'Database test failed',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: process.env.NODE_ENV === 'development' && error instanceof Error ? error.stack : undefined
+      });
     }
   });
 
