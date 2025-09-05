@@ -54,12 +54,35 @@ export default function ConsumerRegistration() {
         });
       }
     },
-    onError: (error: any) => {
+    onError: async (error: any) => {
+      // Try to parse error response
+      let errorMessage = "Unable to complete registration. Please try again.";
+      let errorDetails = null;
+      
+      if (error instanceof Response) {
+        try {
+          const errorData = await error.json();
+          if (errorData.errorDetails) {
+            errorDetails = errorData.errorDetails;
+            errorMessage = `${errorData.errorDetails.message}\n\nHint: ${errorData.errorDetails.hint}`;
+          } else {
+            errorMessage = errorData.message || errorMessage;
+          }
+        } catch (e) {
+          // Could not parse error
+        }
+      }
+      
       toast({
         title: "Registration Failed",
-        description: error.message || "Unable to complete registration. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
+      
+      // Log error details to console for debugging
+      if (errorDetails) {
+        console.error("Registration error details:", errorDetails);
+      }
     },
   });
 

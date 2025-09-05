@@ -1257,12 +1257,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("Error message:", error.message);
         console.error("Error stack:", error.stack);
       }
+      
+      // Always return detailed error in production for debugging
+      const errorDetails = {
+        type: error instanceof Error ? error.constructor.name : 'Unknown',
+        message: error instanceof Error ? error.message : 'Unknown error occurred',
+        // Check for specific database errors
+        isDatabaseError: error instanceof Error && (
+          error.message.includes('relation') || 
+          error.message.includes('column') ||
+          error.message.includes('violates') ||
+          error.message.includes('does not exist')
+        ),
+        hint: error instanceof Error && error.message.includes('does not exist') 
+          ? 'Database table or column may be missing. Run npm run db:push --force in production.'
+          : 'Check server configuration and database connection.'
+      };
+      
       res.status(500).json({ 
-        message: "Registration failed",
-        // Include error details in development mode
-        ...(process.env.NODE_ENV === 'development' && { 
-          error: error instanceof Error ? error.message : 'Unknown error' 
-        })
+        message: "Registration failed - See error details below",
+        errorDetails,
+        timestamp: new Date().toISOString()
       });
     }
   });
@@ -1373,11 +1388,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("Error message:", error.message);
         console.error("Error stack:", error.stack);
       }
+      
+      // Always return detailed error in production for debugging
+      const errorDetails = {
+        type: error instanceof Error ? error.constructor.name : 'Unknown',
+        message: error instanceof Error ? error.message : 'Unknown error occurred',
+        // Check for specific database errors
+        isDatabaseError: error instanceof Error && (
+          error.message.includes('relation') || 
+          error.message.includes('column') ||
+          error.message.includes('violates') ||
+          error.message.includes('does not exist')
+        ),
+        hint: error instanceof Error && error.message.includes('does not exist') 
+          ? 'Database table or column may be missing. Run npm run db:push --force in production.'
+          : 'Check server configuration and database connection.'
+      };
+      
       res.status(500).json({ 
-        message: "Registration failed. Please try again.",
-        ...(process.env.NODE_ENV === 'development' && { 
-          error: error instanceof Error ? error.message : 'Unknown error' 
-        })
+        message: "Registration failed - See error details below",
+        errorDetails,
+        timestamp: new Date().toISOString()
       });
     }
   });

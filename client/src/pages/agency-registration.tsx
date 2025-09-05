@@ -57,12 +57,35 @@ export default function AgencyRegistration() {
         description: "Your trial account has been created. Our team will contact you soon!",
       });
     },
-    onError: (error: any) => {
+    onError: async (error: any) => {
+      // Try to parse error response
+      let errorMessage = "Please try again later.";
+      let errorDetails = null;
+      
+      if (error instanceof Response) {
+        try {
+          const errorData = await error.json();
+          if (errorData.errorDetails) {
+            errorDetails = errorData.errorDetails;
+            errorMessage = `${errorData.errorDetails.message}\n\nHint: ${errorData.errorDetails.hint}`;
+          } else {
+            errorMessage = errorData.message || errorMessage;
+          }
+        } catch (e) {
+          // Could not parse error
+        }
+      }
+      
       toast({
         title: "Registration Failed", 
-        description: error.message || "Please try again later.",
+        description: errorMessage,
         variant: "destructive",
       });
+      
+      // Log error details to console for debugging
+      if (errorDetails) {
+        console.error("Agency registration error details:", errorDetails);
+      }
     },
   });
 
