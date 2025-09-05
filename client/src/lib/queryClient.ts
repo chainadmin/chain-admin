@@ -8,7 +8,7 @@ async function throwIfResNotOk(res: Response) {
 }
 
 // Get the API base URL from environment or use relative URLs
-const API_BASE = import.meta.env.VITE_API_BASE || '';
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 function getApiUrl(path: string): string {
   if (path.startsWith('http')) {

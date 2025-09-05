@@ -104,6 +104,32 @@ function replaceEmailVariables(
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // CORS middleware - Allow Vercel frontend to connect
+  app.use((req, res, next) => {
+    const allowedOrigins = [
+      'https://chain-admin-ly7dwc69i-chainadmins-projects.vercel.app',
+      'https://chain-admin.vercel.app',
+      'http://localhost:5173',
+      'http://localhost:5000',
+      'http://localhost:3000'
+    ];
+    
+    const origin = req.headers.origin as string;
+    if (!origin || allowedOrigins.includes(origin) || origin.includes('vercel.app')) {
+      res.header('Access-Control-Allow-Origin', origin || '*');
+    }
+    
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(200);
+    }
+    
+    next();
+  });
+
   // Body parser middleware
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
