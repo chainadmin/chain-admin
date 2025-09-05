@@ -113,6 +113,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       'http://localhost:5173',
       'http://localhost:5000',
       'http://localhost:3000'
+      // Add your custom domain here once configured:
+      // 'https://yourdomain.com',
+      // 'https://www.yourdomain.com'
     ];
     
     const origin = req.headers.origin as string;
