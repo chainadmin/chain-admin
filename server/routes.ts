@@ -1142,12 +1142,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const storedDOB = existingConsumer.dateOfBirth ? new Date(existingConsumer.dateOfBirth) : null;
         
         if (storedDOB && providedDOB.getTime() === storedDOB.getTime()) {
-          // Get tenant information
-          const tenant = await storage.getTenant(existingConsumer.tenantId);
-          if (!tenant) {
-            return res.status(500).json({ message: "Account configuration error" });
-          }
-
           // Update existing consumer with complete registration info
           const updatedConsumer = await storage.updateConsumer(existingConsumer.id, {
             firstName,
@@ -1160,8 +1154,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
             registrationDate: new Date(),
           });
 
+          // Only get tenant info if consumer has a tenantId
+          let tenantInfo = null;
+          if (existingConsumer.tenantId) {
+            const tenant = await storage.getTenant(existingConsumer.tenantId);
+            if (tenant) {
+              tenantInfo = {
+                name: tenant.name,
+                slug: tenant.slug,
+              };
+            }
+          }
+
           return res.json({ 
-            message: "Registration completed successfully! Your agency has been automatically identified.", 
+            message: tenantInfo 
+              ? "Registration completed successfully! Your agency has been automatically identified."
+              : "Registration successful! You'll be notified when your agency adds your account information.", 
             consumerId: updatedConsumer.id,
             consumer: {
               id: updatedConsumer.id,
@@ -1169,10 +1177,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               lastName: updatedConsumer.lastName,
               email: updatedConsumer.email,
             },
-            tenant: {
-              name: tenant.name,
-              slug: tenant.slug,
-            }
+            ...(tenantInfo && { tenant: tenantInfo }),
+            needsAgencyLink: !tenantInfo
           });
         } else {
           return res.status(400).json({ 
