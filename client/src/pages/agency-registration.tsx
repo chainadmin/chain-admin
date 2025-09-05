@@ -9,14 +9,27 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { agencyTrialRegistrationSchema, type AgencyTrialRegistration } from "@shared/schema";
-import { CheckCircle, Building, User, Phone, Mail, Calendar, CreditCard } from "lucide-react";
+import { CheckCircle, Building, User, Phone, Mail, Calendar, CreditCard, Lock, UserCheck } from "lucide-react";
+import { z } from "zod";
+
+// Extend the schema to include username and password
+const registrationWithCredentialsSchema = agencyTrialRegistrationSchema.extend({
+  username: z.string().min(3, "Username must be at least 3 characters").max(50),
+  password: z.string().min(8, "Password must be at least 8 characters").max(100),
+  confirmPassword: z.string(),
+}).refine(data => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
+});
+
+type RegistrationWithCredentials = z.infer<typeof registrationWithCredentialsSchema>;
 
 export default function AgencyRegistration() {
   const { toast } = useToast();
   const [isSubmitted, setIsSubmitted] = useState(false);
 
-  const form = useForm<AgencyTrialRegistration>({
-    resolver: zodResolver(agencyTrialRegistrationSchema),
+  const form = useForm<RegistrationWithCredentials>({
+    resolver: zodResolver(registrationWithCredentialsSchema),
     defaultValues: {
       ownerFirstName: "",
       ownerLastName: "",
@@ -25,12 +38,17 @@ export default function AgencyRegistration() {
       businessName: "",
       phoneNumber: "",
       email: "",
+      username: "",
+      password: "",
+      confirmPassword: "",
     },
   });
 
   const registrationMutation = useMutation({
-    mutationFn: async (data: AgencyTrialRegistration) => {
-      return apiRequest("POST", "/api/agencies/register", data);
+    mutationFn: async (data: RegistrationWithCredentials) => {
+      // Remove confirmPassword before sending to API
+      const { confirmPassword, ...registrationData } = data;
+      return apiRequest("POST", "/api/agencies/register", registrationData);
     },
     onSuccess: () => {
       setIsSubmitted(true);
@@ -48,7 +66,7 @@ export default function AgencyRegistration() {
     },
   });
 
-  const onSubmit = (data: AgencyTrialRegistration) => {
+  const onSubmit = (data: RegistrationWithCredentials) => {
     registrationMutation.mutate(data);
   };
 
@@ -70,11 +88,11 @@ export default function AgencyRegistration() {
               You can now log in to explore the platform with limited access.
             </p>
             <Button 
-              onClick={() => window.location.href = '/api/login'}
+              onClick={() => window.location.href = '/agency-login'}
               className="w-full"
               data-testid="button-login"
             >
-              Go to Dashboard
+              Go to Login
             </Button>
           </CardContent>
         </Card>
@@ -264,6 +282,84 @@ export default function AgencyRegistration() {
                   </div>
                 </div>
 
+                {/* Login Credentials */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                    <Lock className="mr-2 h-5 w-5" />
+                    Login Credentials
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    Create a username and password to access your agency dashboard
+                  </p>
+
+                  <FormField
+                    control={form.control}
+                    name="username"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center">
+                          <UserCheck className="mr-2 h-4 w-4" />
+                          Username
+                        </FormLabel>
+                        <FormControl>
+                          <Input 
+                            {...field} 
+                            placeholder="agency_username"
+                            data-testid="input-username"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="password"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="flex items-center">
+                            <Lock className="mr-2 h-4 w-4" />
+                            Password
+                          </FormLabel>
+                          <FormControl>
+                            <Input 
+                              {...field} 
+                              type="password"
+                              placeholder="••••••••"
+                              data-testid="input-password"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="confirmPassword"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="flex items-center">
+                            <Lock className="mr-2 h-4 w-4" />
+                            Confirm Password
+                          </FormLabel>
+                          <FormControl>
+                            <Input 
+                              {...field} 
+                              type="password"
+                              placeholder="••••••••"
+                              data-testid="input-confirm-password"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+
                 <div className="bg-blue-50 p-4 rounded-lg">
                   <h4 className="font-semibold text-blue-900 mb-2">What happens next?</h4>
                   <ul className="text-sm text-blue-800 space-y-1">
@@ -290,7 +386,7 @@ export default function AgencyRegistration() {
                 Already have an account?{" "}
                 <Button 
                   variant="link" 
-                  onClick={() => window.location.href = '/api/login'}
+                  onClick={() => window.location.href = '/agency-login'}
                   className="p-0 h-auto"
                   data-testid="link-login"
                 >
