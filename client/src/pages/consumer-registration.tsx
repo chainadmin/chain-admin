@@ -59,7 +59,15 @@ export default function ConsumerRegistration() {
       let errorMessage = "Unable to complete registration. Please try again.";
       let errorDetails = null;
       
-      if (error instanceof Response) {
+      console.error("Registration error:", error);
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        // Check if it's a network error
+        if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+          errorMessage = "Unable to connect to the server. Please check your internet connection and try again.";
+        }
+      } else if (error instanceof Response) {
         try {
           const errorData = await error.json();
           if (errorData.errorDetails) {
@@ -70,6 +78,7 @@ export default function ConsumerRegistration() {
           }
         } catch (e) {
           // Could not parse error
+          errorMessage = `Server error: ${error.status} ${error.statusText}`;
         }
       }
       
