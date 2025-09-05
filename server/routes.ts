@@ -13,6 +13,7 @@ import { nanoid } from "nanoid";
 import express from "express";
 import { emailService } from "./emailService";
 import { smsService } from "./smsService";
+import bcrypt from "bcrypt";
 
 const csvUploadSchema = z.object({
   consumers: z.array(z.object({
@@ -1197,8 +1198,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Agency trial registration route (public)
   app.post('/api/agencies/register', async (req, res) => {
     try {
+      // Extend validation to include username and password
+      const registrationWithCredentialsSchema = agencyTrialRegistrationSchema.extend({
+        username: z.string().min(3).max(50),
+        password: z.string().min(8).max(100),
+      });
+      
       // Validate the request body
-      const validationResult = agencyTrialRegistrationSchema.safeParse(req.body);
+      const validationResult = registrationWithCredentialsSchema.safeParse(req.body);
       if (!validationResult.success) {
         return res.status(400).json({ 
           message: "Invalid input data",
@@ -1213,6 +1220,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (existingTenant) {
         return res.status(400).json({ 
           message: "An agency with this email already exists. Please try logging in instead." 
+        });
+      }
+      
+      // Check if username is already taken
+      const existingCredentials = await storage.getAgencyCredentialsByUsername(data.username);
+      if (existingCredentials) {
+        return res.status(400).json({ 
+          message: "This username is already taken. Please choose another one." 
         });
       }
 
@@ -1244,19 +1259,120 @@ export async function registerRoutes(app: Express): Promise<Server> {
         email: data.email,
       });
 
+      // Hash the password
+      const passwordHash = await bcrypt.hash(data.password, 10);
+      
+      // Create agency credentials for username/password login
+      await storage.createAgencyCredentials({
+        tenantId: tenant.id,
+        username: data.username,
+        passwordHash,
+        email: data.email,
+        firstName: data.ownerFirstName,
+        lastName: data.ownerLastName,
+        role: 'owner',
+        isActive: true,
+      });
+
       // TODO: Add notification system to alert platform owners about new trial registration
       console.log(`New trial agency registered: ${data.businessName} (${data.email})`);
 
       res.status(201).json({
-        message: "Trial account created successfully! Our team will contact you soon.",
+        message: "Trial account created successfully! You can now log in with your username and password.",
         tenantId: tenant.id,
         slug: tenant.slug,
-        redirectUrl: "/api/login" // They can now log in with their Replit account
+        redirectUrl: "/agency-login" // Redirect to the new agency login page
       });
 
     } catch (error) {
       console.error("Error during agency registration:", error);
       res.status(500).json({ message: "Registration failed. Please try again." });
+    }
+  });
+
+  // Agency login route (username/password)
+  app.post('/api/agency/login', async (req, res) => {
+    try {
+      const { username, password } = req.body;
+      
+      if (!username || !password) {
+        return res.status(400).json({ message: "Username and password are required" });
+      }
+      
+      // Get agency credentials
+      const credentials = await storage.getAgencyCredentialsByUsername(username);
+      
+      if (!credentials) {
+        return res.status(401).json({ message: "Invalid username or password" });
+      }
+      
+      // Check if account is active
+      if (!credentials.isActive) {
+        return res.status(403).json({ message: "Account has been deactivated. Please contact support." });
+      }
+      
+      // Verify password
+      const validPassword = await bcrypt.compare(password, credentials.passwordHash);
+      
+      if (!validPassword) {
+        return res.status(401).json({ message: "Invalid username or password" });
+      }
+      
+      // Get tenant information
+      const tenant = await storage.getTenant(credentials.tenantId);
+      
+      if (!tenant) {
+        return res.status(500).json({ message: "Agency configuration error. Please contact support." });
+      }
+      
+      // Check if tenant is active
+      if (!tenant.isActive) {
+        return res.status(403).json({ 
+          message: "This agency account has been suspended.", 
+          suspensionReason: tenant.suspensionReason 
+        });
+      }
+      
+      // Update last login time
+      await storage.updateAgencyLoginTime(credentials.id);
+      
+      // Store session data
+      if (!req.session) {
+        req.session = {} as any;
+      }
+      req.session.agencyUser = {
+        id: credentials.id,
+        username: credentials.username,
+        email: credentials.email,
+        firstName: credentials.firstName,
+        lastName: credentials.lastName,
+        role: credentials.role,
+        tenantId: credentials.tenantId,
+      };
+      
+      // Return success with agency data
+      res.json({
+        message: "Login successful",
+        user: {
+          id: credentials.id,
+          username: credentials.username,
+          email: credentials.email,
+          firstName: credentials.firstName,
+          lastName: credentials.lastName,
+          role: credentials.role,
+        },
+        tenant: {
+          id: tenant.id,
+          name: tenant.name,
+          slug: tenant.slug,
+          isTrialAccount: tenant.isTrialAccount,
+          isPaidAccount: tenant.isPaidAccount,
+        }
+      });
+      
+    } catch (error) {
+      console.error("Error during agency login:", error);
+      res.status(500).json({ message: "Login failed" });
     }
   });
 
