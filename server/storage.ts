@@ -2,6 +2,7 @@ import {
   users,
   tenants,
   platformUsers,
+  agencyCredentials,
   consumers,
   accounts,
   folders,
@@ -30,6 +31,8 @@ import {
   type InsertTenant,
   type PlatformUser,
   type InsertPlatformUser,
+  type SelectAgencyCredentials,
+  type InsertAgencyCredentials,
   type Consumer,
   type InsertConsumer,
   type Account,
@@ -120,6 +123,12 @@ export interface IStorage {
   getPlatformUser(authId: string): Promise<PlatformUser | undefined>;
   getPlatformUserWithTenant(authId: string): Promise<(PlatformUser & { tenant: Tenant }) | undefined>;
   createPlatformUser(platformUser: InsertPlatformUser): Promise<PlatformUser>;
+  
+  // Agency credentials operations
+  getAgencyCredentialsByUsername(username: string): Promise<SelectAgencyCredentials | undefined>;
+  getAgencyCredentialsById(id: string): Promise<SelectAgencyCredentials | undefined>;
+  createAgencyCredentials(credentials: InsertAgencyCredentials): Promise<SelectAgencyCredentials>;
+  updateAgencyLoginTime(id: string): Promise<void>;
   
   // Consumer operations
   getConsumersByTenant(tenantId: string): Promise<Consumer[]>;
@@ -407,6 +416,28 @@ export class DatabaseStorage implements IStorage {
   async createPlatformUser(platformUser: InsertPlatformUser): Promise<PlatformUser> {
     const [newPlatformUser] = await db.insert(platformUsers).values(platformUser).returning();
     return newPlatformUser;
+  }
+  
+  // Agency credentials operations
+  async getAgencyCredentialsByUsername(username: string): Promise<SelectAgencyCredentials | undefined> {
+    const [credentials] = await db.select().from(agencyCredentials).where(eq(agencyCredentials.username, username));
+    return credentials;
+  }
+
+  async getAgencyCredentialsById(id: string): Promise<SelectAgencyCredentials | undefined> {
+    const [credentials] = await db.select().from(agencyCredentials).where(eq(agencyCredentials.id, id));
+    return credentials;
+  }
+
+  async createAgencyCredentials(credentials: InsertAgencyCredentials): Promise<SelectAgencyCredentials> {
+    const [newCredentials] = await db.insert(agencyCredentials).values(credentials).returning();
+    return newCredentials;
+  }
+
+  async updateAgencyLoginTime(id: string): Promise<void> {
+    await db.update(agencyCredentials)
+      .set({ lastLoginAt: new Date() })
+      .where(eq(agencyCredentials.id, id));
   }
 
   // Consumer operations
