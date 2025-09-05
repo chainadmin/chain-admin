@@ -32,6 +32,7 @@ import PrivacyPolicy from "@/pages/privacy-policy";
 import TenantSetup from "@/components/tenant-setup";
 import GlobalAdmin from "@/pages/global-admin";
 import EmailTest from "@/pages/email-test";
+import FixDatabase from "@/pages/fix-db";
 
 function Router() {
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -112,6 +113,7 @@ function Router() {
           <Route path="/agency-login" component={AgencyLogin} />
           <Route path="/agency/:agencySlug" component={AgencyLanding} />
           <Route path="/privacy-policy" component={PrivacyPolicy} />
+          <Route path="/fix-db" component={FixDatabase} />
           <Route path="/admin" component={GlobalAdmin} />
           <Route path="/Admin" component={GlobalAdmin} />
           <Route component={NotFound} />

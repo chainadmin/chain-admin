@@ -5,7 +5,7 @@ import { setupAuth, isAuthenticated } from "./replitAuth";
 import { postmarkServerService } from "./postmarkServerService";
 import { insertConsumerSchema, insertAccountSchema, agencyTrialRegistrationSchema, platformUsers, tenants, consumers, agencyCredentials } from "@shared/schema";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
@@ -1640,6 +1640,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: 'Database test failed',
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: process.env.NODE_ENV === 'development' && error instanceof Error ? error.stack : undefined
+      });
+    }
+  });
+
+  // Fix production database schema
+  app.post('/api/fix-production-db', async (req, res) => {
+    try {
+      console.log("Starting production database fix...");
+      
+      // Fix tenants table
+      await db.execute(sql`
+        ALTER TABLE tenants 
+        ADD COLUMN IF NOT EXISTS is_trial_account BOOLEAN DEFAULT true,
+        ADD COLUMN IF NOT EXISTS is_paid_account BOOLEAN DEFAULT false,
+        ADD COLUMN IF NOT EXISTS owner_first_name TEXT,
+        ADD COLUMN IF NOT EXISTS owner_last_name TEXT,
+        ADD COLUMN IF NOT EXISTS owner_date_of_birth TEXT,
+        ADD COLUMN IF NOT EXISTS owner_ssn TEXT,
+        ADD COLUMN IF NOT EXISTS business_name TEXT,
+        ADD COLUMN IF NOT EXISTS phone_number TEXT
+      `);
+      console.log("Fixed tenants table columns");
+      
+      // Fix consumers table
+      await db.execute(sql`
+        ALTER TABLE consumers
+        ADD COLUMN IF NOT EXISTS registration_date TIMESTAMP
+      `);
+      console.log("Fixed consumers table columns");
+      
+      // Create agency_credentials table if missing
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS agency_credentials (
+          id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id VARCHAR NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          username VARCHAR(50) UNIQUE NOT NULL,
+          password_hash TEXT NOT NULL,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW(),
+          last_login TIMESTAMP
+        )
+      `);
+      console.log("Ensured agency_credentials table exists");
+      
+      res.json({ 
+        status: 'success',
+        message: 'Production database schema fixed successfully',
+        fixes: [
+          'Added missing columns to tenants table',
+          'Added missing columns to consumers table',
+          'Ensured agency_credentials table exists'
+        ]
+      });
+    } catch (error) {
+      console.error("Error fixing production database:", error);
+      res.status(500).json({ 
+        status: 'error',
+        message: 'Failed to fix production database',
+        error: error instanceof Error ? error.message : 'Unknown error'
       });
     }
   });
