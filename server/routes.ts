@@ -1269,6 +1269,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Agency trial registration route (public)
   app.post('/api/agencies/register', async (req, res) => {
+    console.log("Agency registration request received:", {
+      email: req.body.email,
+      businessName: req.body.businessName,
+      username: req.body.username,
+      hasBody: !!req.body
+    });
+    
     try {
       // Extend validation to include username and password
       const registrationWithCredentialsSchema = agencyTrialRegistrationSchema.extend({
@@ -1319,6 +1326,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Create the trial tenant
+      console.log("Creating trial tenant with slug:", slug);
       const tenant = await storage.createTrialTenant({
         name: data.businessName,
         slug,
@@ -1332,9 +1340,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       // Hash the password
+      console.log("Hashing password for username:", data.username);
       const passwordHash = await bcrypt.hash(data.password, 10);
+      console.log("Password hashed successfully");
       
       // Create agency credentials for username/password login
+      console.log("Creating agency credentials for tenant:", tenant.id);
       await storage.createAgencyCredentials({
         tenantId: tenant.id,
         username: data.username,
@@ -1358,7 +1369,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     } catch (error) {
       console.error("Error during agency registration:", error);
-      res.status(500).json({ message: "Registration failed. Please try again." });
+      if (error instanceof Error) {
+        console.error("Error message:", error.message);
+        console.error("Error stack:", error.stack);
+      }
+      res.status(500).json({ 
+        message: "Registration failed. Please try again.",
+        ...(process.env.NODE_ENV === 'development' && { 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        })
+      });
     }
   });
 
