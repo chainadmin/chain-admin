@@ -1,40 +1,34 @@
 import express from "express";
-import { createServer } from "http";
 import path from "path";
-import { fileURLToPath } from "url";
 import { registerRoutes } from "./routes.js";
-
-// Fix for ESM modules
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 
 async function main() {
-  // Register API routes FIRST (before static files)
+  // Register API routes FIRST
   const server = await registerRoutes(app);
   
-  // Serve static files from the built frontend
-  const publicPath = path.join(__dirname, "../dist/public");
+  // For production on Railway, serve the built frontend
+  // The dist folder structure after build should be dist/public
+  const publicPath = path.join(process.cwd(), "dist", "public");
   
   // Only serve static files for non-API routes
   app.use((req, res, next) => {
     if (req.path.startsWith('/api')) {
-      // Let API routes handle these
       return next();
     }
     express.static(publicPath)(req, res, next);
   });
   
-  // Handle all other non-API routes with index.html (for SPA routing)
+  // Handle all other non-API routes with index.html
   app.get("*", (req, res) => {
     if (req.path.startsWith('/api')) {
-      // API route not found
       return res.status(404).json({ error: "API endpoint not found" });
     }
     res.sendFile(path.join(publicPath, "index.html"));
   });
   
-  const PORT = Number(process.env.PORT) || 3000;
+  const PORT = process.env.PORT || 3000;
   server.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on port ${PORT}`);
   });
