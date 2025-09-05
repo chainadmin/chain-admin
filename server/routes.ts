@@ -107,9 +107,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // CORS middleware - Allow Vercel frontend to connect
   app.use((req, res, next) => {
     const allowedOrigins = [
-      'https://chain-admin-ly7dwc69i-chainadmins-projects.vercel.app',
-      'https://chain-admin.vercel.app',
-      'https://chain-admin-psi.vercel.app',
       'https://chainsoftwaregroup.com',
       'https://www.chainsoftwaregroup.com',
       'http://localhost:5173',
@@ -118,7 +115,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     ];
     
     const origin = req.headers.origin as string;
-    if (!origin || allowedOrigins.includes(origin) || origin.includes('vercel.app')) {
+    
+    // Allow all Vercel preview deployments and specified origins
+    if (!origin || 
+        allowedOrigins.includes(origin) || 
+        origin.includes('vercel.app') || 
+        origin.includes('vercel.sh')) {
       res.header('Access-Control-Allow-Origin', origin || '*');
     }
     
