@@ -109,6 +109,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const allowedOrigins = [
       'https://chain-admin-ly7dwc69i-chainadmins-projects.vercel.app',
       'https://chain-admin.vercel.app',
+      'https://chain-admin-psi.vercel.app',
       'http://localhost:5173',
       'http://localhost:5000',
       'http://localhost:3000'
