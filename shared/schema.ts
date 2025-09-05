@@ -102,7 +102,7 @@ export const platformUsers = pgTable("platform_users", {
 // Consumers (end users)
 export const consumers = pgTable("consumers", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }), // Nullable to allow independent registration
   folderId: uuid("folder_id").references(() => folders.id, { onDelete: "set null" }),
   firstName: text("first_name"),
   lastName: text("last_name"),

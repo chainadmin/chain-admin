@@ -1181,12 +1181,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // No existing account found - this means they're completely new
-      // For now, we'll create a pending account that agencies can claim
-      // In a real system, you might want to route this differently
-      return res.status(404).json({ 
-        message: "No account found with this email and date of birth combination. Please contact your agency directly to get set up.",
-        suggestedAction: "contact_agency"
+      // No existing account found - create a new unaffiliated consumer record
+      // This consumer can be claimed by an agency later when they add accounts
+      // We'll use a placeholder tenant ID for now (this should be handled better in production)
+      
+      // For unaffiliated consumers, we create them without a tenant
+      // They can later be associated when an agency uploads their account
+      const newConsumer = await storage.createConsumer({
+        tenantId: null, // No tenant yet - they're registering independently
+        firstName,
+        lastName,
+        email,
+        dateOfBirth,
+        address,
+        city,
+        state,
+        zipCode,
+        isRegistered: true,
+        registrationDate: new Date(),
+      });
+
+      return res.json({ 
+        message: "Registration successful! You'll be notified when your agency adds your account information.",
+        consumerId: newConsumer.id,
+        consumer: {
+          id: newConsumer.id,
+          firstName: newConsumer.firstName,
+          lastName: newConsumer.lastName,
+          email: newConsumer.email,
+        },
+        needsAgencyLink: true
       });
 
     } catch (error) {
