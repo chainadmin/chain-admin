@@ -1,68 +1,76 @@
-// Complete serverless function rewrite - no external dependencies
-export default function handler(req, res) {
-  // Enable CORS
-  // Configure CORS for chainsoftwaregroup.com
-  const allowedOrigins = [
-    'https://chainsoftwaregroup.com',
-    'https://www.chainsoftwaregroup.com',
-    'http://localhost:5000',
-    'http://localhost:3000'
-  ];
-  
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  } else {
-    res.setHeader('Access-Control-Allow-Origin', 'https://chainsoftwaregroup.com');
-  }
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+// Vercel serverless function - full backend implementation
+import express from 'express';
+import cors from 'cors';
+import { registerRoutes } from '../server/routes.js';
+import '../server/db.js'; // Initialize database connection
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+const app = express();
 
-  const { url, method } = req;
-  console.log('API Request:', method, url);
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-  // Handle login endpoint
-  if (url.includes('/api/login')) {
-    if (method === 'GET') {
-      return res.status(200).json({
-        message: 'Agency Login Available',
-        action: 'redirect_to_replit_auth',
-        loginUrl: 'https://replit.com/auth',
-        timestamp: new Date().toISOString()
-      });
+// Configure CORS
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or Postman)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = [
+      'https://chain-admin-info10212.replit.app',
+      'https://chainsoftwaregroup.com',
+      'https://www.chainsoftwaregroup.com',
+      'http://localhost:5000',
+      'http://localhost:3000',
+      'http://localhost:5173'
+    ];
+    
+    if (allowedOrigins.includes(origin) || origin.includes('vercel.app')) {
+      callback(null, true);
+    } else {
+      callback(null, true); // Allow all origins for now
     }
-  }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+};
 
-  // Handle agency registration
-  if (url.includes('/api/agencies/register')) {
-    if (method === 'POST') {
-      return res.status(200).json({
-        message: 'Agency registration endpoint working',
-        received: 'POST request',
-        note: 'Full registration logic will be implemented here',
-        timestamp: new Date().toISOString()
-      });
-    }
-  }
+app.use(cors(corsOptions));
 
-  // Handle auth user check
-  if (url.includes('/api/auth/user')) {
-    return res.status(401).json({
-      message: 'Unauthorized',
-      note: 'Authentication not implemented yet'
-    });
-  }
-
-  // Default response for any API route
-  return res.status(200).json({
-    message: 'Chain API Working',
-    endpoint: url,
-    method: method,
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'healthy', 
     timestamp: new Date().toISOString(),
-    status: 'Serverless functions now operational'
+    environment: process.env.NODE_ENV || 'production'
   });
+});
+
+// Register all routes from your existing backend
+try {
+  registerRoutes(app);
+} catch (error) {
+  console.error('Error registering routes:', error);
+  // Continue anyway - some routes may still work
 }
+
+// Error handler
+app.use((err, req, res, next) => {
+  console.error('Server error:', err);
+  res.status(500).json({ 
+    message: 'Internal server error',
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ 
+    message: 'Not found',
+    path: req.path 
+  });
+});
+
+// Export for Vercel
+export default app;
