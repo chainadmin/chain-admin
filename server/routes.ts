@@ -1117,6 +1117,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Consumer registration route (public)
   app.post('/api/consumer-registration', async (req, res) => {
+    console.log("Consumer registration request received:", { 
+      email: req.body.email, 
+      firstName: req.body.firstName,
+      lastName: req.body.lastName,
+      hasBody: !!req.body,
+      bodyKeys: Object.keys(req.body || {})
+    });
+    
     try {
       const { 
         firstName, 
@@ -1134,7 +1142,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // First, check if consumer already exists in any agency
+      console.log("Checking for existing consumer with email:", email);
       const existingConsumer = await storage.getConsumerByEmail(email);
+      console.log("Existing consumer found:", !!existingConsumer);
       
       if (existingConsumer) {
         // Verify date of birth matches
@@ -1224,7 +1234,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log("Note: registrationDate field not available");
       }
       
+      console.log("Creating new consumer with data:", JSON.stringify(consumerData));
       const newConsumer = await storage.createConsumer(consumerData);
+      console.log("New consumer created successfully:", newConsumer.id);
 
       return res.json({ 
         message: "Registration successful! You'll be notified when your agency adds your account information.",
