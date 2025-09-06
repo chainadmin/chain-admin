@@ -7,7 +7,7 @@ import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  username: z.string().min(1),
   password: z.string()
 });
 
@@ -22,14 +22,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Invalid login data' });
     }
 
-    const { email, password } = parsed.data;
+    const { username, password } = parsed.data;
     const db = getDb();
 
-    // Get agency credentials
+    // Get agency credentials (username can be either username or email)
     const [credentials] = await db
       .select()
       .from(agencyCredentials)
-      .where(eq(agencyCredentials.email, email))
+      .where(eq(agencyCredentials.username, username))
       .limit(1);
 
     if (!credentials) {
@@ -42,7 +42,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    // Get or create user
+    // Get or create user  
+    const email = credentials.email;
     let [user] = await db
       .select()
       .from(users)
@@ -55,10 +56,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await db.insert(users).values({
         id: userId,
         email,
-        name: email.split('@')[0],
-        replitId: null,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        firstName: credentials.firstName,
+        lastName: credentials.lastName
       });
       
       [user] = await db
@@ -72,7 +71,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const [platformUser] = await db
       .select()
       .from(platformUsers)
-      .where(eq(platformUsers.userId, user.id))
+      .where(eq(platformUsers.authId, user.id))
       .limit(1);
 
     if (!platformUser) {
@@ -91,7 +90,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Check if tenant is active
-    if (tenant.status !== 'active') {
+    if (!tenant.isActive) {
       return res.status(403).json({ error: 'Agency account is not active' });
     }
 
@@ -104,15 +103,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       user: {
         id: user.id,
         email: user.email,
-        name: user.name,
+        name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
         role: platformUser.role
       },
       tenant: {
         id: tenant.id,
         name: tenant.name,
         slug: tenant.slug,
-        subscriptionTier: tenant.subscriptionTier,
-        subscriptionEndDate: tenant.subscriptionEndDate
+        isTrialAccount: tenant.isTrialAccount,
+        isPaidAccount: tenant.isPaidAccount
       }
     });
   } catch (error) {

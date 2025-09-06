@@ -33,12 +33,20 @@ export default function AgencyLogin() {
 
   const loginMutation = useMutation({
     mutationFn: async (data: LoginData) => {
-      return apiRequest("POST", "/api/agency/login", data);
+      const response = await apiRequest("POST", "/api/agency/login", data);
+      const result = await response.json();
+      
+      // Store the JWT token
+      if (result.token) {
+        localStorage.setItem('authToken', result.token);
+      }
+      
+      return result;
     },
     onSuccess: (data) => {
       toast({
         title: "Login Successful",
-        description: `Welcome back, ${data.user.firstName || data.user.username}!`,
+        description: `Welcome back, ${data.user.name || data.user.email}!`,
       });
       
       // Invalidate queries to refresh authentication state
