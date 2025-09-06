@@ -1,0 +1,71 @@
+import { VercelRequest, VercelResponse } from '@vercel/node';
+import { getDb } from '../../_lib/db';
+import { consumers, accounts, tenants } from '../../../shared/schema';
+import { eq, and } from 'drizzle-orm';
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const email = req.query.email as string;
+    const tenantSlug = req.query.tenantSlug as string;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    const db = getDb();
+    let tenantId = null;
+
+    // Get tenant if slug provided
+    if (tenantSlug) {
+      const [tenant] = await db
+        .select()
+        .from(tenants)
+        .where(eq(tenants.slug, tenantSlug))
+        .limit(1);
+
+      if (!tenant) {
+        return res.status(404).json({ error: 'Agency not found' });
+      }
+      tenantId = tenant.id;
+    }
+
+    // Get consumer
+    const consumerQuery = tenantId
+      ? and(eq(consumers.email, email), eq(consumers.tenantId, tenantId))
+      : eq(consumers.email, email);
+
+    const [consumer] = await db
+      .select()
+      .from(consumers)
+      .where(consumerQuery)
+      .limit(1);
+
+    if (!consumer) {
+      return res.status(404).json({ error: 'Consumer not found' });
+    }
+
+    // Get accounts
+    const accountsData = await db
+      .select()
+      .from(accounts)
+      .where(eq(accounts.consumerId, consumer.id));
+
+    res.status(200).json({
+      consumer: {
+        id: consumer.id,
+        firstName: consumer.firstName,
+        lastName: consumer.lastName,
+        email: consumer.email,
+        phone: consumer.phone
+      },
+      accounts: accountsData
+    });
+  } catch (error) {
+    console.error('Error fetching consumer accounts:', error);
+    res.status(500).json({ error: 'Failed to fetch accounts' });
+  }
+}
