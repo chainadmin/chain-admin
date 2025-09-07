@@ -79,6 +79,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Get tenant info
+    if (!platformUser.tenantId) {
+      return res.status(401).json({ error: 'User not associated with any agency' });
+    }
+    
     const [tenant] = await db
       .select()
       .from(tenants)

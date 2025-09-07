@@ -19,14 +19,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const db = getDb();
 
     // Get tenant by slug
-    let tenant = null;
+    let tenant: typeof tenants.$inferSelect | null = null;
     if (data.tenantId) {
       // If tenantId is provided, assume it's actually a slug
-      [tenant] = await db
+      const [foundTenant] = await db
         .select()
         .from(tenants)
         .where(eq(tenants.slug, data.tenantId))
         .limit(1);
+      tenant = foundTenant || null;
 
       if (!tenant) {
         return res.status(404).json({ error: 'Agency not found' });
@@ -40,10 +41,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .where(
         tenant
           ? and(
-              eq(consumers.email, data.email),
+              eq(consumers.email, data.email!),
               eq(consumers.tenantId, tenant.id)
             )
-          : eq(consumers.email, data.email)
+          : eq(consumers.email, data.email!)
       )
       .limit(1);
 
@@ -71,7 +72,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     // If tenant is provided, get associated accounts
-    let consumerAccounts = [];
+    let consumerAccounts: typeof accounts.$inferSelect[] = [];
     if (tenant) {
       consumerAccounts = await db
         .select()
