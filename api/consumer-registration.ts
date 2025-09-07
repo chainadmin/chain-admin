@@ -1,6 +1,6 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { getDb } from './_lib/db';
-import { insertConsumerSchema, consumers, tenants, accounts, consumerNotifications } from '../shared/schema';
+import { getDb } from './_lib/db.js';
+import { insertConsumerSchema, consumers, tenants, accounts, consumerNotifications } from '../shared/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 
