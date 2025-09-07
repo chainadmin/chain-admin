@@ -2,7 +2,6 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb } from './_lib/db.js';
 import { insertConsumerSchema, consumers, tenants, accounts, consumerNotifications } from '../shared/schema.js';
 import { eq, and } from 'drizzle-orm';
-import { nanoid } from 'nanoid';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -52,10 +51,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Consumer already registered' });
     }
 
-    // Create consumer
-    const consumerId = nanoid();
-    await db.insert(consumers).values({
-      id: consumerId,
+    // Create consumer - let PostgreSQL generate the UUID
+    const [newConsumer] = await db.insert(consumers).values({
       tenantId: tenant?.id,
       firstName: data.firstName,
       lastName: data.lastName,
@@ -69,7 +66,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       zipCode: data.zipCode,
       isRegistered: true,
       registrationDate: new Date()
-    });
+    }).returning();
+    
+    const consumerId = newConsumer.id;
 
     // If tenant is provided, get associated accounts
     let consumerAccounts: typeof accounts.$inferSelect[] = [];

@@ -51,20 +51,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .limit(1);
 
     if (!user) {
-      // Create user if doesn't exist
-      const userId = nanoid();
-      await db.insert(users).values({
-        id: userId,
+      // Create user if doesn't exist - let PostgreSQL generate the UUID
+      [user] = await db.insert(users).values({
         email,
         firstName: credentials.firstName,
         lastName: credentials.lastName
-      });
-      
-      [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.email, email))
-        .limit(1);
+      }).returning();
     }
 
     // Get platform user

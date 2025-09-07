@@ -49,8 +49,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Email already registered' });
     }
 
-    // Create tenant
-    await db.insert(tenants).values({
+    // Create tenant - let PostgreSQL generate the UUID
+    const [newTenant] = await db.insert(tenants).values({
       name: data.businessName,
       slug: slug,
       isTrialAccount: true,
@@ -63,23 +63,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       phoneNumber: data.phoneNumber,
       email: data.email,
       isActive: true
-    });
+    }).returning();
 
-    // Get the created tenant
-    const [newTenant] = await db
-      .select()
-      .from(tenants)
-      .where(eq(tenants.slug, slug))
-      .limit(1);
-
-    // Create user
-    const userId = nanoid();
-    await db.insert(users).values({
-      id: userId,
+    // Create user - let PostgreSQL generate the UUID
+    const [newUser] = await db.insert(users).values({
       email: data.email,
       firstName: data.ownerFirstName,
       lastName: data.ownerLastName
-    });
+    }).returning();
+    
+    const userId = newUser.id;
 
     // Generate a random password for initial setup
     const tempPassword = nanoid(12);
