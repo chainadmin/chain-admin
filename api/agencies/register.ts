@@ -3,7 +3,6 @@ import { getDb } from '../_lib/db.js';
 import { agencyTrialRegistrationSchema, tenants, users, platformUsers, agencyCredentials } from '../../shared/schema.js';
 import { generateToken } from '../_lib/auth.js';
 import bcrypt from 'bcrypt';
-import { nanoid } from 'nanoid';
 import { eq } from 'drizzle-orm';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -74,14 +73,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     const userId = newUser.id;
 
-    // Generate a random password for initial setup
-    const tempPassword = nanoid(12);
-    const hashedPassword = await bcrypt.hash(tempPassword, 10);
+    // Hash the user's password
+    const hashedPassword = await bcrypt.hash(data.password, 10);
 
     // Create agency credentials
     await db.insert(agencyCredentials).values({
       tenantId: newTenant.id,
-      username: data.email,
+      username: data.username,
       email: data.email,
       passwordHash: hashedPassword,
       firstName: data.ownerFirstName,
@@ -113,7 +111,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(201).json({
       success: true,
       token,
-      tempPassword, // Send temporary password to user
       user: {
         id: userId,
         email: data.email,
