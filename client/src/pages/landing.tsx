@@ -102,7 +102,7 @@ export default function Landing() {
                 if (window.location.hostname === 'localhost' || window.location.hostname.includes('replit.dev')) {
                   window.location.href = '/admin';
                 } else {
-                  window.location.href = '/api/login';
+                  window.location.href = '/agency-login';
                 }
               }}
               data-testid="button-agency-login"
