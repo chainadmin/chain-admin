@@ -90,7 +90,18 @@ export default function AgencyRegistration() {
   });
 
   const onSubmit = (data: RegistrationWithCredentials) => {
-    registrationMutation.mutate(data);
+    // Format the data before sending
+    const formattedData = {
+      ...data,
+      // Ensure date is in YYYY-MM-DD format
+      ownerDateOfBirth: data.ownerDateOfBirth,
+      // Remove any non-digit characters from SSN
+      ownerSSN: data.ownerSSN.replace(/\D/g, ''),
+      // Remove any non-digit characters from phone number
+      phoneNumber: data.phoneNumber.replace(/\D/g, ''),
+    };
+    
+    registrationMutation.mutate(formattedData);
   };
 
   if (isSubmitted) {
@@ -228,6 +239,7 @@ export default function AgencyRegistration() {
                           />
                         </FormControl>
                         <FormMessage />
+                        <p className="text-xs text-gray-500 mt-1">Enter 9 digits without dashes</p>
                       </FormItem>
                     )}
                   />
@@ -277,6 +289,7 @@ export default function AgencyRegistration() {
                             />
                           </FormControl>
                           <FormMessage />
+                          <p className="text-xs text-gray-500 mt-1">10 digits without dashes or spaces</p>
                         </FormItem>
                       )}
                     />
