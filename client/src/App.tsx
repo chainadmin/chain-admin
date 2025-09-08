@@ -35,7 +35,7 @@ import EmailTest from "@/pages/email-test";
 import FixDatabase from "@/pages/fix-db";
 
 function Router() {
-  const { isAuthenticated, isLoading, user } = useAuth();
+  const { isAuthenticated, isLoading, user, isJwtAuth } = useAuth();
   const { toast } = useToast();
   const isMobileApp = mobileConfig.isNativePlatform;
 
@@ -101,16 +101,10 @@ function Router() {
             <p className="text-gray-600">Loading...</p>
           </div>
         </div>
-      ) : !isAuthenticated ? (
+      ) : isJwtAuth ? (
+        // JWT authenticated agency users - show admin routes
         <>
-          <Route path="/" component={Landing} />
-          <Route path="/consumer-login" component={ConsumerLogin} />
-          <Route path="/consumer-dashboard" component={ConsumerDashboard} />
-          <Route path="/consumer/:tenantSlug/:email" component={ConsumerPortal} />
-          <Route path="/register/:tenantSlug" component={ConsumerRegistration} />
-          <Route path="/consumer-register" component={ConsumerRegistration} />
-          <Route path="/agency-register" component={AgencyRegistration} />
-          <Route path="/agency-login" component={AgencyLogin} />
+          <Route path="/" component={AdminDashboard} />
           <Route path="/admin-dashboard" component={AdminDashboard} />
           <Route path="/consumers" component={Consumers} />
           <Route path="/accounts" component={Accounts} />
@@ -120,6 +114,25 @@ function Router() {
           <Route path="/billing" component={Billing} />
           <Route path="/company" component={CompanyManagement} />
           <Route path="/settings" component={Settings} />
+          <Route path="/admin" component={GlobalAdmin} />
+          <Route path="/Admin" component={GlobalAdmin} />
+          <Route path="/email-test" component={EmailTest} />
+          <Route path="/privacy-policy" component={PrivacyPolicy} />
+          <Route path="/agency-login" component={AgencyLogin} />
+          <Route path="/agency-register" component={AgencyRegistration} />
+          <Route component={NotFound} />
+        </>
+      ) : !isAuthenticated ? (
+        // Not authenticated - show public routes
+        <>
+          <Route path="/" component={Landing} />
+          <Route path="/consumer-login" component={ConsumerLogin} />
+          <Route path="/consumer-dashboard" component={ConsumerDashboard} />
+          <Route path="/consumer/:tenantSlug/:email" component={ConsumerPortal} />
+          <Route path="/register/:tenantSlug" component={ConsumerRegistration} />
+          <Route path="/consumer-register" component={ConsumerRegistration} />
+          <Route path="/agency-register" component={AgencyRegistration} />
+          <Route path="/agency-login" component={AgencyLogin} />
           <Route path="/agency/:agencySlug" component={AgencyLanding} />
           <Route path="/privacy-policy" component={PrivacyPolicy} />
           <Route path="/fix-db" component={FixDatabase} />
@@ -128,10 +141,13 @@ function Router() {
           <Route component={NotFound} />
         </>
       ) : needsTenantSetup ? (
+        // Replit authenticated but needs tenant setup
         <Route path="*" component={TenantSetup} />
       ) : (
+        // Replit authenticated with tenant - show admin routes
         <>
           <Route path="/" component={AdminDashboard} />
+          <Route path="/admin-dashboard" component={AdminDashboard} />
           <Route path="/consumers" component={Consumers} />
           <Route path="/accounts" component={Accounts} />
           <Route path="/communications" component={Communications} />
