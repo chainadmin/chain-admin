@@ -111,6 +111,15 @@ function Router() {
           <Route path="/consumer-register" component={ConsumerRegistration} />
           <Route path="/agency-register" component={AgencyRegistration} />
           <Route path="/agency-login" component={AgencyLogin} />
+          <Route path="/admin-dashboard" component={AdminDashboard} />
+          <Route path="/consumers" component={Consumers} />
+          <Route path="/accounts" component={Accounts} />
+          <Route path="/communications" component={Communications} />
+          <Route path="/requests" component={Requests} />
+          <Route path="/payments" component={Payments} />
+          <Route path="/billing" component={Billing} />
+          <Route path="/company" component={CompanyManagement} />
+          <Route path="/settings" component={Settings} />
           <Route path="/agency/:agencySlug" component={AgencyLanding} />
           <Route path="/privacy-policy" component={PrivacyPolicy} />
           <Route path="/fix-db" component={FixDatabase} />

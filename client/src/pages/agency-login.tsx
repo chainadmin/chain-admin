@@ -52,9 +52,9 @@ export default function AgencyLogin() {
       // Invalidate queries to refresh authentication state
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       
-      // Redirect to dashboard
+      // Redirect to admin dashboard
       setTimeout(() => {
-        window.location.href = "/";
+        window.location.href = "/admin-dashboard";
       }, 500);
     },
     onError: (error: any) => {
