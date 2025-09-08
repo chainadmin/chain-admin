@@ -800,6 +800,8 @@ export const agencyTrialRegistrationSchema = createInsertSchema(tenants).pick({
   businessName: z.string().min(1, "Business name is required"),
   phoneNumber: z.string().regex(/^\d{10}$/, "Phone number must be 10 digits"),
   email: z.string().email("Valid email is required"),
+  username: z.string().min(3, "Username must be at least 3 characters"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
 });
 export const insertPlatformUserSchema = createInsertSchema(platformUsers).omit({ id: true, createdAt: true });
 export const insertConsumerSchema = createInsertSchema(consumers).omit({ id: true, createdAt: true });
