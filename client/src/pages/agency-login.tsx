@@ -11,6 +11,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Building, Lock, UserCheck } from "lucide-react";
 import { z } from "zod";
 import chainLogo from "../assets/chain-logo.png";
+import { buildAgencyUrl, isSubdomainSupported } from "@shared/utils/subdomain";
 
 const loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
@@ -52,9 +53,18 @@ export default function AgencyLogin() {
       // Invalidate queries to refresh authentication state
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       
-      // Redirect to admin dashboard
+      // Redirect to agency-specific dashboard
       setTimeout(() => {
-        window.location.href = "/admin-dashboard";
+        const agencySlug = data.tenant?.slug;
+        
+        if (agencySlug) {
+          // Build the agency-specific URL
+          const dashboardUrl = buildAgencyUrl(agencySlug, "/dashboard");
+          window.location.href = dashboardUrl;
+        } else {
+          // Fallback to regular dashboard if no agency slug
+          window.location.href = "/admin-dashboard";
+        }
       }, 500);
     },
     onError: (error: any) => {

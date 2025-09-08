@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import chainLogo from "@/assets/chain-logo.png";
+import { useAgencyContext } from "@/hooks/useAgencyContext";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -11,6 +12,7 @@ interface AdminLayoutProps {
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const { user } = useAuth();
   const [location] = useLocation();
+  const { agencySlug, buildAgencyUrl } = useAgencyContext();
   
   const { data: userData } = useQuery({
     queryKey: ["/api/auth/user"],
@@ -19,15 +21,23 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   // Only show company section for platform owners
   const isOwner = (userData as any)?.platformUser?.role === 'owner';
   
+  // Build agency-specific navigation URLs
+  const buildNavHref = (path: string) => {
+    if (agencySlug) {
+      return buildAgencyUrl(path);
+    }
+    return path;
+  };
+  
   const navigationItems = [
-    { name: "Dashboard", href: "/admin-dashboard", icon: "fas fa-chart-bar" },
-    { name: "Consumers", href: "/consumers", icon: "fas fa-users" },
-    { name: "Accounts", href: "/accounts", icon: "fas fa-file-invoice-dollar" },
-    { name: "Communications", href: "/communications", icon: "fas fa-comments" },
-    { name: "Payments", href: "/payments", icon: "fas fa-credit-card" },
-    { name: "Billing", href: "/billing", icon: "fas fa-receipt" },
-    ...(isOwner ? [{ name: "Company", href: "/company", icon: "fas fa-building" }] : []),
-    { name: "Settings", href: "/settings", icon: "fas fa-cog" },
+    { name: "Dashboard", href: buildNavHref("/dashboard"), icon: "fas fa-chart-bar" },
+    { name: "Consumers", href: buildNavHref("/consumers"), icon: "fas fa-users" },
+    { name: "Accounts", href: buildNavHref("/accounts"), icon: "fas fa-file-invoice-dollar" },
+    { name: "Communications", href: buildNavHref("/communications"), icon: "fas fa-comments" },
+    { name: "Payments", href: buildNavHref("/payments"), icon: "fas fa-credit-card" },
+    { name: "Billing", href: buildNavHref("/billing"), icon: "fas fa-receipt" },
+    ...(isOwner ? [{ name: "Company", href: buildNavHref("/company"), icon: "fas fa-building" }] : []),
+    { name: "Settings", href: buildNavHref("/settings"), icon: "fas fa-cog" },
   ];
 
   const isActiveRoute = (href: string) => {

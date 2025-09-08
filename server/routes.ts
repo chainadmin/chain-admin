@@ -14,6 +14,7 @@ import express from "express";
 import { emailService } from "./emailService";
 import { smsService } from "./smsService";
 import bcrypt from "bcrypt";
+import { subdomainMiddleware } from "./middleware/subdomain";
 
 const csvUploadSchema = z.object({
   consumers: z.array(z.object({
@@ -139,6 +140,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
+  // Subdomain detection middleware
+  app.use(subdomainMiddleware);
+
   // Health check endpoint (no auth required)
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -178,6 +182,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching tenant:", error);
       res.status(500).json({ message: "Failed to fetch tenant" });
+    }
+  });
+
+  // Get tenant by slug (for subdomain detection)
+  app.get('/api/tenants/by-slug/:slug', async (req, res) => {
+    try {
+      const { slug } = req.params;
+      const [tenant] = await db
+        .select()
+        .from(tenants)
+        .where(eq(tenants.slug, slug))
+        .limit(1);
+      
+      if (!tenant) {
+        return res.status(404).json({ message: "Agency not found" });
+      }
+      
+      res.json(tenant);
+    } catch (error) {
+      console.error("Error fetching tenant by slug:", error);
+      res.status(500).json({ message: "Failed to fetch agency" });
     }
   });
 
