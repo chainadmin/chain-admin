@@ -20,7 +20,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const isOwner = (userData as any)?.platformUser?.role === 'owner';
   
   const navigationItems = [
-    { name: "Dashboard", href: "/", icon: "fas fa-chart-bar" },
+    { name: "Dashboard", href: "/admin-dashboard", icon: "fas fa-chart-bar" },
     { name: "Consumers", href: "/consumers", icon: "fas fa-users" },
     { name: "Accounts", href: "/accounts", icon: "fas fa-file-invoice-dollar" },
     { name: "Communications", href: "/communications", icon: "fas fa-comments" },
@@ -131,7 +131,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
               </button>
               <Button 
                 variant="ghost" 
-                onClick={() => window.location.href = '/api/logout'}
+                onClick={() => {
+                  localStorage.removeItem('authToken');
+                  window.location.href = '/';
+                }}
                 className="ml-3"
               >
                 <i className="fas fa-sign-out-alt mr-2"></i>

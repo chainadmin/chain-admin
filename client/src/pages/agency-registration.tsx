@@ -50,12 +50,23 @@ export default function AgencyRegistration() {
       const { confirmPassword, ...registrationData } = data;
       return apiRequest("POST", "/api/agencies/register", registrationData);
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       setIsSubmitted(true);
+      
+      // Store the JWT token if provided
+      if (data.token) {
+        localStorage.setItem('authToken', data.token);
+      }
+      
       toast({
         title: "Registration Successful",
-        description: "Your trial account has been created. Our team will contact you soon!",
+        description: "Your trial account has been created. Redirecting to your dashboard...",
       });
+      
+      // Redirect to admin dashboard after successful registration
+      setTimeout(() => {
+        window.location.href = "/admin-dashboard";
+      }, 1500);
     },
     onError: async (error: any) => {
       // Try to parse error response
