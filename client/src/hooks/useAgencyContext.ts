@@ -13,11 +13,11 @@ export function useAgencyContext() {
 
   // Fetch agency details if we have a slug
   const { data: agency, isLoading, error } = useQuery({
-    queryKey: ['/api/tenants/by-slug', agencySlug],
+    queryKey: ['/api/public/agency', agencySlug],
     queryFn: async () => {
       if (!agencySlug) return null;
       
-      const response = await fetch(`/api/tenants/by-slug/${agencySlug}`);
+      const response = await fetch(`/api/public/agency/${agencySlug}`);
       if (!response.ok) {
         if (response.status === 404) {
           return null;
