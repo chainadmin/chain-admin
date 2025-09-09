@@ -5,10 +5,17 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Shield, Clock, CreditCard, Lock, ChevronRight, Building2 } from "lucide-react";
 import chainLogo from "@/assets/chain-logo.png";
+import { getAgencySlugFromRequest } from "@shared/utils/subdomain";
 
 export default function AgencyLanding() {
-  const { agencySlug } = useParams();
+  const { agencySlug: pathSlug } = useParams();
   const [, setLocation] = useLocation();
+  
+  // Get agency slug from subdomain or path
+  const agencySlug = pathSlug || getAgencySlugFromRequest(
+    window.location.hostname,
+    window.location.pathname
+  );
   const [isLoading, setIsLoading] = useState(true);
 
   // Fetch agency information
@@ -96,15 +103,27 @@ export default function AgencyLanding() {
           <p className="text-xl md:text-2xl mb-10 text-blue-100">
             View balances, make payments, & more.
           </p>
-          <Button 
-            size="lg" 
-            className="bg-white text-blue-600 hover:bg-gray-100 text-lg px-10 py-7 h-auto font-semibold shadow-lg hover:shadow-xl transition-all"
-            onClick={handleFindBalance}
-            data-testid="button-find-balance"
-          >
-            Find My Balance
-            <ChevronRight className="ml-2 h-5 w-5" />
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+            <Button 
+              size="lg" 
+              className="bg-white text-blue-600 hover:bg-gray-100 text-lg px-10 py-7 h-auto font-semibold shadow-lg hover:shadow-xl transition-all"
+              onClick={handleFindBalance}
+              data-testid="button-find-balance"
+            >
+              Find My Balance
+              <ChevronRight className="ml-2 h-5 w-5" />
+            </Button>
+            <Button 
+              size="lg" 
+              variant="outline"
+              className="bg-transparent border-2 border-white text-white hover:bg-white hover:text-blue-600 text-lg px-10 py-7 h-auto font-semibold shadow-lg hover:shadow-xl transition-all"
+              onClick={() => setLocation('/consumer-register')}
+              data-testid="button-register"
+            >
+              Create Account
+              <ChevronRight className="ml-2 h-5 w-5" />
+            </Button>
+          </div>
         </div>
       </div>
 

@@ -122,23 +122,31 @@ function Router() {
           <Route path="/privacy-policy" component={PrivacyPolicy} />
           <Route component={NotFound} />
         </>
-      ) : agencySlug && agency ? (
-        // Agency-specific routes (subdomain detected)
+      ) : agencySlug ? (
+        // Agency subdomain detected - show public or admin based on auth
         <>
-          <Route path="/" component={AdminDashboard} />
-          <Route path="/dashboard" component={AdminDashboard} />
-          <Route path="/consumers" component={Consumers} />
-          <Route path="/accounts" component={Accounts} />
-          <Route path="/communications" component={Communications} />
-          <Route path="/requests" component={Requests} />
-          <Route path="/payments" component={Payments} />
-          <Route path="/billing" component={Billing} />
-          <Route path="/company" component={CompanyManagement} />
-          <Route path="/settings" component={Settings} />
-          <Route path="/consumer/:email" component={ConsumerPortal} />
+          {/* Public routes available on agency subdomain */}
+          <Route path="/" component={agency ? (isJwtAuth ? AdminDashboard : AgencyLanding) : AgencyLanding} />
           <Route path="/consumer-login" component={ConsumerLogin} />
           <Route path="/consumer-register" component={ConsumerRegistration} />
+          <Route path="/consumer/:email" component={ConsumerPortal} />
           <Route path="/privacy-policy" component={PrivacyPolicy} />
+          
+          {/* Admin routes only if authenticated */}
+          {(isJwtAuth || agency) && (
+            <>
+              <Route path="/dashboard" component={AdminDashboard} />
+              <Route path="/consumers" component={Consumers} />
+              <Route path="/accounts" component={Accounts} />
+              <Route path="/communications" component={Communications} />
+              <Route path="/requests" component={Requests} />
+              <Route path="/payments" component={Payments} />
+              <Route path="/billing" component={Billing} />
+              <Route path="/company" component={CompanyManagement} />
+              <Route path="/settings" component={Settings} />
+            </>
+          )}
+          
           <Route component={NotFound} />
         </>
       ) : !isAuthenticated ? (

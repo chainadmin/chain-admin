@@ -36,6 +36,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Trash2, Upload, Plus, Save, CreditCard, Shield, Settings as SettingsIcon, ImageIcon, Copy, ExternalLink } from "lucide-react";
+import { isSubdomainSupported } from "@shared/utils/subdomain";
 
 export default function Settings() {
   const [showDocumentModal, setShowDocumentModal] = useState(false);
@@ -307,35 +308,65 @@ export default function Settings() {
                     </div>
                     
                     <div className="flex items-center space-x-2">
-                      <Input
-                        readOnly
-                        value={`${window.location.origin}/agency/${(userData as any)?.platformUser?.tenant?.slug}`}
-                        className="flex-1 font-mono text-sm"
-                      />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          navigator.clipboard.writeText(`${window.location.origin}/agency/${(userData as any)?.platformUser?.tenant?.slug}`);
-                          toast({
-                            title: "URL Copied",
-                            description: "The custom URL has been copied to your clipboard.",
-                          });
-                        }}
-                        data-testid="button-copy-url"
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          window.open(`/agency/${(userData as any)?.platformUser?.tenant?.slug}`, '_blank');
-                        }}
-                        data-testid="button-preview-url"
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                      </Button>
+                      {(() => {
+                        const agencySlug = (userData as any)?.platformUser?.tenant?.slug;
+                        let agencyUrl = '';
+                        
+                        if (isSubdomainSupported() && agencySlug) {
+                          // Production with custom domain - use subdomain
+                          const url = new URL(window.location.origin);
+                          const parts = url.hostname.split('.');
+                          
+                          if (parts.length >= 2) {
+                            // Replace or add subdomain
+                            if (parts[0] === 'www' || parts.length === 2) {
+                              url.hostname = `${agencySlug}.${parts.slice(-2).join('.')}`;
+                            } else {
+                              parts[0] = agencySlug;
+                              url.hostname = parts.join('.');
+                            }
+                          }
+                          
+                          agencyUrl = url.origin;
+                        } else if (agencySlug) {
+                          // Development or no subdomain support - use path-based
+                          agencyUrl = `${window.location.origin}/agency/${agencySlug}`;
+                        }
+                        
+                        return (
+                          <>
+                            <Input
+                              readOnly
+                              value={agencyUrl}
+                              className="flex-1 font-mono text-sm"
+                            />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                navigator.clipboard.writeText(agencyUrl);
+                                toast({
+                                  title: "URL Copied",
+                                  description: "The custom URL has been copied to your clipboard.",
+                                });
+                              }}
+                              data-testid="button-copy-url"
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                window.open(agencyUrl, '_blank');
+                              }}
+                              data-testid="button-preview-url"
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                            </Button>
+                          </>
+                        );
+                      })()}
                     </div>
                     <p className="text-xs text-gray-500">
                       This link takes consumers directly to a branded page for your agency where they can sign in or create an account.
