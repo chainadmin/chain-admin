@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
+import { authenticateUser, getCurrentUser } from "./authMiddleware";
 import { postmarkServerService } from "./postmarkServerService";
 import { insertConsumerSchema, insertAccountSchema, agencyTrialRegistrationSchema, platformUsers, tenants, consumers, agencyCredentials } from "@shared/schema";
 import { db } from "./db";
@@ -154,17 +155,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Serve static files from uploads directory
   app.use('/uploads', express.static('public/uploads'));
 
-  // Auth routes
-  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+  // Auth routes - Updated to support both JWT and Replit auth
+  app.get('/api/auth/user', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      const platformUser = await storage.getPlatformUserWithTenant(userId);
-      
-      res.json({
-        ...user,
-        platformUser,
-      });
+      const userInfo = await getCurrentUser(req);
+      res.json(userInfo);
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
@@ -2129,14 +2124,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Logo upload route
-  app.post('/api/upload/logo', isAuthenticated, upload.single('logo'), async (req: any, res) => {
+  // Logo upload route - Updated to support both JWT and Replit auth
+  app.post('/api/upload/logo', authenticateUser, upload.single('logo'), async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
+      let tenantId: string;
       
-      if (!platformUser?.tenantId) {
-        return res.status(403).json({ message: "No tenant access" });
+      if (req.user.isJwtAuth) {
+        // JWT auth - tenant ID is directly available
+        tenantId = req.user.tenantId;
+      } else {
+        // Replit auth - get from platform user
+        const userId = req.user.claims.sub;
+        const platformUser = await storage.getPlatformUser(userId);
+        
+        if (!platformUser?.tenantId) {
+          return res.status(403).json({ message: "No tenant access" });
+        }
+        tenantId = platformUser.tenantId;
       }
 
       if (!req.file) {
@@ -2146,7 +2150,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const logoUrl = `/uploads/${req.file.filename}`;
       
       // Get current settings
-      const currentSettings = await storage.getTenantSettings(platformUser.tenantId);
+      const currentSettings = await storage.getTenantSettings(tenantId);
       
       // Update custom branding with logo URL
       const customBranding = (currentSettings?.customBranding as any) || {};
@@ -2154,7 +2158,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Update tenant settings
       const settingsData = {
-        tenantId: platformUser.tenantId,
+        tenantId: tenantId,
         customBranding: customBranding as any,
         ...(currentSettings ? {
           privacyPolicy: currentSettings.privacyPolicy,

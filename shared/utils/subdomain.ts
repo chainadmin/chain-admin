@@ -16,20 +16,29 @@ export function extractSubdomain(hostname: string): string | null {
     return null;
   }
 
-  // For production (Vercel with custom domain)
+  // For Vercel preview/deployment URLs - DO NOT treat as agency subdomains
+  if (hostname.includes('.vercel.app') || hostname.includes('.vercel.sh')) {
+    // Vercel URLs should not be treated as agency subdomains
+    return null;
+  }
+
+  // For production (ONLY on custom domain)
   // Example: abc-company.chainsoftwaregroup.com
-  const parts = hostname.split('.');
-  
-  // Must have at least 3 parts for subdomain.domain.tld
-  if (parts.length >= 3) {
-    const subdomain = parts[0];
+  // Only process subdomains on the actual production domain
+  if (hostname.includes('chainsoftwaregroup.com')) {
+    const parts = hostname.split('.');
     
-    // Ignore www
-    if (subdomain === 'www') {
-      return null;
+    // Must have at least 3 parts for subdomain.domain.tld
+    if (parts.length >= 3) {
+      const subdomain = parts[0];
+      
+      // Ignore www
+      if (subdomain === 'www') {
+        return null;
+      }
+      
+      return subdomain;
     }
-    
-    return subdomain;
   }
 
   return null;

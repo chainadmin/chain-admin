@@ -34,7 +34,6 @@ import TenantSetup from "@/components/tenant-setup";
 import GlobalAdmin from "@/pages/global-admin";
 import EmailTest from "@/pages/email-test";
 import FixDatabase from "@/pages/fix-db";
-import DebugSubdomain from "@/pages/debug-subdomain";
 
 function Router() {
   const { isAuthenticated, isLoading, user, isJwtAuth } = useAuth();
@@ -42,20 +41,6 @@ function Router() {
   const { toast } = useToast();
   const isMobileApp = mobileConfig.isNativePlatform;
   
-  // Debug logging for production
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      console.log('Router Debug:', {
-        hostname: window.location.hostname,
-        pathname: window.location.pathname,
-        agencySlug,
-        agencyLoading,
-        agency,
-        isAuthenticated,
-        isJwtAuth
-      });
-    }
-  }, [agencySlug, agencyLoading, agency, isAuthenticated, isJwtAuth]);
 
   // Initialize dynamic content for mobile app
   useEffect(() => {
@@ -149,7 +134,6 @@ function Router() {
           <Route path="/consumer/:email" component={ConsumerPortal} />
           <Route path="/privacy-policy" component={PrivacyPolicy} />
           <Route path="/agency-login" component={AgencyLogin} />
-          <Route path="/debug-subdomain" component={DebugSubdomain} />
           
           {/* Admin routes only if authenticated */}
           {isJwtAuth && (
@@ -184,7 +168,6 @@ function Router() {
           <Route path="/fix-db" component={FixDatabase} />
           <Route path="/admin" component={GlobalAdmin} />
           <Route path="/Admin" component={GlobalAdmin} />
-          <Route path="/debug-subdomain" component={DebugSubdomain} />
           <Route component={NotFound} />
         </>
       ) : needsTenantSetup ? (

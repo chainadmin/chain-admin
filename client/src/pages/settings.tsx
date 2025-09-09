@@ -309,7 +309,17 @@ export default function Settings() {
                     
                     <div className="flex items-center space-x-2">
                       {(() => {
-                        const agencySlug = (userData as any)?.platformUser?.tenant?.slug;
+                        // Handle both JWT and Replit auth structures
+                        let agencySlug = null;
+                        
+                        if ((userData as any)?.isJwtAuth) {
+                          // JWT auth - tenant info is directly on user
+                          agencySlug = (userData as any)?.tenant?.slug;
+                        } else if ((userData as any)?.platformUser) {
+                          // Replit auth - tenant info is under platformUser
+                          agencySlug = (userData as any)?.platformUser?.tenant?.slug;
+                        }
+                        
                         let agencyUrl = '';
                         
                         if (isSubdomainSupported() && agencySlug) {
@@ -331,6 +341,14 @@ export default function Settings() {
                         } else if (agencySlug) {
                           // Development or no subdomain support - use path-based
                           agencyUrl = `${window.location.origin}/agency/${agencySlug}`;
+                        }
+                        
+                        if (!agencySlug) {
+                          return (
+                            <div className="text-sm text-gray-500">
+                              Loading agency information...
+                            </div>
+                          );
                         }
                         
                         return (
