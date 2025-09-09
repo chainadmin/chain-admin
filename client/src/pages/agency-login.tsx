@@ -57,12 +57,26 @@ export default function AgencyLogin() {
       setTimeout(() => {
         const agencySlug = data.tenant?.slug;
         
-        if (agencySlug) {
-          // Build the agency-specific URL
-          const dashboardUrl = buildAgencyUrl(agencySlug, "/dashboard");
-          window.location.href = dashboardUrl;
+        if (agencySlug && isSubdomainSupported()) {
+          // In production with custom domain, use subdomain
+          const baseUrl = window.location.origin;
+          const url = new URL(baseUrl);
+          const parts = url.hostname.split('.');
+          
+          if (parts.length >= 2) {
+            // Replace or add subdomain
+            if (parts[0] === 'www' || parts.length === 2) {
+              url.hostname = `${agencySlug}.${parts.slice(-2).join('.')}`;
+            } else {
+              parts[0] = agencySlug;
+              url.hostname = parts.join('.');
+            }
+          }
+          
+          url.pathname = '/dashboard';
+          window.location.href = url.toString();
         } else {
-          // Fallback to regular dashboard if no agency slug
+          // For development or no subdomain support, use regular dashboard
           window.location.href = "/admin-dashboard";
         }
       }, 500);

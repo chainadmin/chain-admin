@@ -47,19 +47,28 @@ export function getAgencySlugFromRequest(
     return subdomain;
   }
 
-  // Fallback to path-based routing for development/Replit
+  // For production without subdomain, don't try path-based detection
+  // This prevents the root domain from being treated as an agency
+  if (!hostname.includes('localhost') && !hostname.includes('127.0.0.1')) {
+    return null;
+  }
+
+  // Only use path-based routing for development
   // Check if path starts with an agency slug pattern
   const pathParts = pathname.split('/').filter(Boolean);
   
   // Pattern: /agency-slug/dashboard or /agency-slug/consumer/...
-  if (pathParts.length > 0) {
+  // Must have at least 2 parts for agency routing (e.g., /abc-company/dashboard)
+  if (pathParts.length >= 2) {
     const potentialSlug = pathParts[0];
     // Basic validation - agency slugs are lowercase with hyphens
     if (/^[a-z0-9-]+$/.test(potentialSlug)) {
       // Check if this looks like a known route (not an agency slug)
       const knownRoutes = [
         'api', 'admin', 'login', 'register', 'agency-login', 'agency-register',
-        'consumer-login', 'consumer-register', 'privacy-policy', 'assets', 'src'
+        'consumer-login', 'consumer-register', 'privacy-policy', 'assets', 'src',
+        'admin-dashboard', 'consumers', 'accounts', 'communications', 'payments',
+        'billing', 'company', 'settings'
       ];
       
       if (!knownRoutes.includes(potentialSlug)) {

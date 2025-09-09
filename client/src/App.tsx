@@ -96,33 +96,48 @@ function Router() {
   // Web app routes - Full admin and consumer features
   return (
     <Switch>
-      {isLoading || agencyLoading ? (
+      {isLoading ? (
         <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
             <p className="text-gray-600">Loading...</p>
           </div>
         </div>
-      ) : agencySlug && (isJwtAuth || agency) ? (
-        // Agency-specific routes (subdomain or path-based)
+      ) : isJwtAuth ? (
+        // JWT authenticated users - redirect to admin
         <>
           <Route path="/" component={AdminDashboard} />
           <Route path="/dashboard" component={AdminDashboard} />
-          <Route path={`/${agencySlug}`} component={AdminDashboard} />
-          <Route path={`/${agencySlug}/dashboard`} component={AdminDashboard} />
-          <Route path={`/${agencySlug}/consumers`} component={Consumers} />
-          <Route path={`/${agencySlug}/accounts`} component={Accounts} />
-          <Route path={`/${agencySlug}/communications`} component={Communications} />
-          <Route path={`/${agencySlug}/requests`} component={Requests} />
-          <Route path={`/${agencySlug}/payments`} component={Payments} />
-          <Route path={`/${agencySlug}/billing`} component={Billing} />
-          <Route path={`/${agencySlug}/company`} component={CompanyManagement} />
-          <Route path={`/${agencySlug}/settings`} component={Settings} />
-          <Route path={`/${agencySlug}/consumer/:email`} component={ConsumerPortal} />
-          <Route path={`/${agencySlug}/consumer-login`} component={ConsumerLogin} />
-          <Route path={`/${agencySlug}/consumer-register`} component={ConsumerRegistration} />
+          <Route path="/admin-dashboard" component={AdminDashboard} />
+          <Route path="/consumers" component={Consumers} />
+          <Route path="/accounts" component={Accounts} />
+          <Route path="/communications" component={Communications} />
+          <Route path="/requests" component={Requests} />
+          <Route path="/payments" component={Payments} />
+          <Route path="/billing" component={Billing} />
+          <Route path="/company" component={CompanyManagement} />
+          <Route path="/settings" component={Settings} />
           <Route path="/agency-login" component={AgencyLogin} />
           <Route path="/agency-register" component={AgencyRegistration} />
+          <Route path="/privacy-policy" component={PrivacyPolicy} />
+          <Route component={NotFound} />
+        </>
+      ) : agencySlug && agency ? (
+        // Agency-specific routes (subdomain detected)
+        <>
+          <Route path="/" component={AdminDashboard} />
+          <Route path="/dashboard" component={AdminDashboard} />
+          <Route path="/consumers" component={Consumers} />
+          <Route path="/accounts" component={Accounts} />
+          <Route path="/communications" component={Communications} />
+          <Route path="/requests" component={Requests} />
+          <Route path="/payments" component={Payments} />
+          <Route path="/billing" component={Billing} />
+          <Route path="/company" component={CompanyManagement} />
+          <Route path="/settings" component={Settings} />
+          <Route path="/consumer/:email" component={ConsumerPortal} />
+          <Route path="/consumer-login" component={ConsumerLogin} />
+          <Route path="/consumer-register" component={ConsumerRegistration} />
           <Route path="/privacy-policy" component={PrivacyPolicy} />
           <Route component={NotFound} />
         </>
