@@ -123,8 +123,8 @@ function Router() {
           <Route path="/privacy-policy" component={PrivacyPolicy} />
           <Route component={NotFound} />
         </>
-      ) : agencySlug && !agencyLoading ? (
-        // Agency subdomain detected - show public or admin based on auth
+      ) : agencySlug && !agencyLoading && agency ? (
+        // Agency subdomain detected and found - show public or admin based on auth
         <>
           {/* Public routes available on agency subdomain */}
           <Route path="/" component={AgencyLanding} />
