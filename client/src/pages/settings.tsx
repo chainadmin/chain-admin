@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import AdminLayout from "@/components/admin-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -62,6 +63,7 @@ export default function Settings() {
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user: authUser, isLoading: authLoading } = useAuth();
 
   const { data: settings, isLoading: settingsLoading } = useQuery({
     queryKey: ["/api/settings"],
@@ -75,9 +77,11 @@ export default function Settings() {
     queryKey: ["/api/arrangement-options"],
   });
 
+  // Fetch full user data with tenant info if needed
   const { data: userData, isLoading: userLoading, error: userError } = useQuery({
     queryKey: ["/api/auth/user"],
     retry: 1,
+    enabled: !!authUser, // Only fetch if authenticated
   });
 
 
@@ -311,7 +315,7 @@ export default function Settings() {
                     <div className="flex items-center space-x-2">
                       {(() => {
                         // Check if user data is still loading
-                        if (userLoading) {
+                        if (authLoading || userLoading) {
                           return (
                             <div className="text-sm text-gray-500">
                               Loading agency information...
@@ -319,8 +323,11 @@ export default function Settings() {
                           );
                         }
                         
+                        // Use authUser first, then userData as fallback
+                        const user = userData || authUser;
+                        
                         // Check if there was an error loading user data
-                        if (userError || !userData) {
+                        if (!user) {
                           // Try to get agency slug from the current URL as fallback
                           const pathSegments = window.location.pathname.split('/');
                           let fallbackSlug = null;
@@ -389,12 +396,12 @@ export default function Settings() {
                         // Handle both JWT and Replit auth structures
                         let agencySlug = null;
                         
-                        if ((userData as any)?.isJwtAuth) {
+                        if ((user as any)?.isJwtAuth) {
                           // JWT auth - tenant info is directly on user
-                          agencySlug = (userData as any)?.tenant?.slug;
-                        } else if ((userData as any)?.platformUser) {
+                          agencySlug = (user as any)?.tenant?.slug;
+                        } else if ((user as any)?.platformUser) {
                           // Replit auth - tenant info is under platformUser
-                          agencySlug = (userData as any)?.platformUser?.tenant?.slug;
+                          agencySlug = (user as any)?.platformUser?.tenant?.slug;
                         }
                         
                         let agencyUrl = '';
