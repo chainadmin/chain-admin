@@ -118,11 +118,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     const origin = req.headers.origin as string;
     
-    // Allow all Vercel preview deployments and specified origins
-    if (!origin || 
+    // Check if origin is allowed
+    const isAllowed = !origin || 
         allowedOrigins.includes(origin) || 
         origin.includes('vercel.app') || 
-        origin.includes('vercel.sh')) {
+        origin.includes('vercel.sh') ||
+        // Allow all subdomains of chainsoftwaregroup.com (for agency subdomains)
+        origin.endsWith('.chainsoftwaregroup.com');
+    
+    if (isAllowed) {
       res.header('Access-Control-Allow-Origin', origin || '*');
     }
     
