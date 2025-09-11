@@ -1,58 +1,86 @@
 import { StorageClient } from '@supabase/storage-js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   console.warn('Supabase credentials not configured. Logo upload will not work.');
 }
 
+// Use service role key for server-side operations
 const storageClient = new StorageClient(`${SUPABASE_URL}/storage/v1`, {
-  apikey: SUPABASE_ANON_KEY!,
-  Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+  apikey: SUPABASE_SERVICE_ROLE_KEY!,
+  Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
 });
 
 const BUCKET_NAME = 'tenant-logos';
 
-export async function ensureBucketExists() {
+// Initialize bucket once at startup
+let bucketInitialized = false;
+
+export async function initializeBucket() {
+  if (bucketInitialized || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    return;
+  }
+
   try {
-    const { data: buckets } = await storageClient.listBuckets();
+    // Try to list buckets to check if our bucket exists
+    const { data: buckets, error: listError } = await storageClient.listBuckets();
+    
+    if (listError) {
+      console.warn('Could not list buckets (may not have permission):', listError);
+      // Assume bucket exists or will be created manually
+      bucketInitialized = true;
+      return;
+    }
+    
     const bucketExists = buckets?.some(bucket => bucket.name === BUCKET_NAME);
     
     if (!bucketExists) {
+      console.log(`Attempting to create bucket '${BUCKET_NAME}'...`);
       const { error } = await storageClient.createBucket(BUCKET_NAME, {
-        public: true,
+        public: true, // Public read access
         fileSizeLimit: 5242880, // 5MB
         allowedMimeTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml']
       });
       
-      if (error && !error.message?.includes('already exists')) {
-        console.error('Failed to create bucket:', error);
-        throw error;
+      if (error) {
+        if (error.message?.includes('already exists')) {
+          console.log(`Bucket '${BUCKET_NAME}' already exists`);
+        } else {
+          console.warn(`Could not create bucket (may need to be created manually in Supabase dashboard):`, error.message);
+        }
+      } else {
+        console.log(`Bucket '${BUCKET_NAME}' created successfully`);
       }
+    } else {
+      console.log(`Bucket '${BUCKET_NAME}' already exists`);
     }
-  } catch (error) {
-    console.error('Error ensuring bucket exists:', error);
+    
+    bucketInitialized = true;
+  } catch (error: any) {
+    console.warn('Bucket initialization warning:', error.message || error);
+    // Don't fail completely - bucket might exist even if we can't list/create
+    bucketInitialized = true;
   }
 }
 
-export async function uploadLogo(file: Express.Multer.File, tenantId: string): Promise<string | null> {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+export async function uploadLogo(file: Express.Multer.File, tenantId: string): Promise<{ url: string; path: string } | null> {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     console.error('Supabase not configured');
     return null;
   }
 
   try {
-    await ensureBucketExists();
-    
     const fileExt = file.originalname.split('.').pop();
-    const fileName = `${tenantId}_${Date.now()}.${fileExt}`;
+    const fileName = `${tenantId}/${Date.now()}.${fileExt}`;
     
     const { data, error } = await storageClient
       .from(BUCKET_NAME)
       .upload(fileName, file.buffer, {
         contentType: file.mimetype,
-        upsert: true
+        upsert: true,
+        cacheControl: '31536000' // Cache for 1 year
       });
 
     if (error) {
@@ -60,26 +88,37 @@ export async function uploadLogo(file: Express.Multer.File, tenantId: string): P
       return null;
     }
 
-    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET_NAME}/${data.path}`;
-    return publicUrl;
+    // Use getPublicUrl for reliable URL generation
+    const { data: urlData } = storageClient
+      .from(BUCKET_NAME)
+      .getPublicUrl(data.path);
+    
+    return {
+      url: urlData.publicUrl,
+      path: data.path
+    };
   } catch (error) {
     console.error('Error uploading logo:', error);
     return null;
   }
 }
 
-export async function deleteLogo(logoUrl: string): Promise<boolean> {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+export async function deleteLogo(logoPath: string): Promise<boolean> {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     return false;
   }
 
   try {
-    const urlParts = logoUrl.split('/');
-    const fileName = urlParts[urlParts.length - 1];
+    // If it's a full URL, extract the path
+    let path = logoPath;
+    if (logoPath.includes('/storage/v1/object/public/')) {
+      const parts = logoPath.split('/storage/v1/object/public/' + BUCKET_NAME + '/');
+      path = parts.length > 1 ? parts[1] : logoPath;
+    }
     
     const { error } = await storageClient
       .from(BUCKET_NAME)
-      .remove([fileName]);
+      .remove([path]);
 
     if (error) {
       console.error('Delete error:', error);
@@ -92,3 +131,6 @@ export async function deleteLogo(logoUrl: string): Promise<boolean> {
     return false;
   }
 }
+
+// Initialize bucket on module load
+initializeBucket().catch(console.error);

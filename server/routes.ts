@@ -2173,11 +2173,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Upload to Supabase Storage
-      const logoUrl = await uploadLogo(req.file, tenantId);
+      const logoResult = await uploadLogo(req.file, tenantId);
       
-      if (!logoUrl) {
+      if (!logoResult) {
         return res.status(500).json({ message: "Failed to upload logo to storage" });
       }
+
+      const logoUrl = logoResult.url;
       
       // Get current settings
       const currentSettings = await storage.getTenantSettings(tenantId);
