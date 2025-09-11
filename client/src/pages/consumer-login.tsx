@@ -38,38 +38,32 @@ export default function ConsumerLogin() {
     }
   }, []);
 
-  // Helper to get tenant slug from various sources
-  const getTenantSlug = () => {
-    // Try to get from agency context first
-    if (agencyContext?.slug) {
-      return agencyContext.slug;
-    }
-    
-    // Try URL query parameter
-    const urlParams = new URLSearchParams(window.location.search);
-    const tenantParam = urlParams.get('tenant');
-    if (tenantParam) {
-      return tenantParam;
-    }
-    
-    // Use environment variable or default for development
-    const devTenant = import.meta.env.VITE_DEV_TENANT_SLUG || 'agency-pro';
-    console.warn(`Using default tenant slug for development: ${devTenant}`);
-    return devTenant;
-  };
-
   const loginMutation = useMutation({
     mutationFn: async (loginData: LoginForm) => {
-      // Send what backend expects: email and tenantSlug
-      const tenantSlug = getTenantSlug();
+      // Send email and dateOfBirth for consumer verification
       const response = await apiRequest("POST", "/api/consumer/login", {
         email: loginData.email,
-        tenantSlug: tenantSlug
+        dateOfBirth: loginData.dateOfBirth
       });
       return response;
     },
     onSuccess: (data: any) => {
-      if (data.needsRegistration) {
+      if (data.multipleAgencies) {
+        // Consumer has accounts with multiple agencies
+        toast({
+          title: "Multiple Agencies Found",
+          description: data.message,
+        });
+        // TODO: Show agency selection UI
+        // For now, auto-select the first agency
+        const firstAgency = data.agencies[0];
+        toast({
+          title: "Selecting Agency",
+          description: `Logging into ${firstAgency.name}`,
+        });
+        // Re-submit with specific agency
+        // This would need a separate endpoint or modification
+      } else if (data.needsRegistration) {
         // User found but needs to complete registration
         toast({
           title: "Complete Registration",
@@ -100,25 +94,18 @@ export default function ConsumerLogin() {
       }
     },
     onError: (error: any) => {
-      if (error.status === 404 && error.message?.includes('Agency not found')) {
-        // Agency/tenant not found
-        toast({
-          title: "Agency Not Found",
-          description: "The agency could not be found. Please ensure you're using the correct agency link or set VITE_DEV_TENANT_SLUG for development.",
-          variant: "destructive",
-        });
-      } else if (error.status === 404 && error.data?.canRegister) {
-        // No account found, offer to create one
+      if (error.status === 404) {
+        // No account found
         toast({
           title: "No Account Found",
-          description: error.data.message,
+          description: error.data?.message || "No account found with this email. Please contact your agency for account details.",
+          variant: "destructive",
         });
-        setLocation(`/consumer-register?email=${form.email}`);
       } else if (error.status === 401) {
-        // Consumer account not found
+        // Invalid credentials
         toast({
-          title: "Account Not Found",
-          description: "No consumer account found with this email for the selected agency.",
+          title: "Invalid Credentials",
+          description: "Please check your email and date of birth.",
           variant: "destructive",
         });
       } else {
