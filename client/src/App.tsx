@@ -65,6 +65,12 @@ function Router() {
 
   // Check if user needs tenant setup (only for web admin)
   const needsTenantSetup = !isMobileApp && isAuthenticated && !(user as any)?.platformUser?.tenantId;
+  
+  // Check if we're on the main domain (not an agency subdomain)
+  const hostname = window.location.hostname;
+  const isMainDomain = hostname === 'chainsoftwaregroup.com' || 
+                       hostname === 'www.chainsoftwaregroup.com' ||
+                       (!hostname.includes('chainsoftwaregroup.com') && !agencySlug); // Development/Replit without agency subdomain
 
   // Mobile app routes - Consumer only
   if (isMobileApp) {
@@ -104,10 +110,31 @@ function Router() {
             <p className="text-gray-600">Loading...</p>
           </div>
         </div>
-      ) : isJwtAuth ? (
-        // JWT authenticated users - redirect to admin
+      ) : isJwtAuth && !isMainDomain ? (
+        // JWT authenticated users on agency subdomain - show admin
         <>
           <Route path="/" component={AdminDashboard} />
+          <Route path="/dashboard" component={AdminDashboard} />
+          <Route path="/admin-dashboard" component={AdminDashboard} />
+          <Route path="/consumers" component={Consumers} />
+          <Route path="/accounts" component={Accounts} />
+          <Route path="/communications" component={Communications} />
+          <Route path="/requests" component={Requests} />
+          <Route path="/payments" component={Payments} />
+          <Route path="/billing" component={Billing} />
+          <Route path="/company" component={CompanyManagement} />
+          <Route path="/settings" component={Settings} />
+          <Route path="/consumer-dashboard" component={ConsumerDashboard} />
+          <Route path="/consumer-login" component={ConsumerLogin} />
+          <Route path="/agency-login" component={AgencyLogin} />
+          <Route path="/agency-register" component={AgencyRegistration} />
+          <Route path="/privacy-policy" component={PrivacyPolicy} />
+          <Route component={NotFound} />
+        </>
+      ) : isJwtAuth && isMainDomain ? (
+        // JWT authenticated users on main domain - show landing with admin routes available
+        <>
+          <Route path="/" component={Landing} />
           <Route path="/dashboard" component={AdminDashboard} />
           <Route path="/admin-dashboard" component={AdminDashboard} />
           <Route path="/consumers" component={Consumers} />

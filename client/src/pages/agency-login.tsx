@@ -77,7 +77,7 @@ export default function AgencyLogin() {
           window.location.href = url.toString();
         } else {
           // For development or no subdomain support, use regular dashboard
-          window.location.href = "/admin-dashboard";
+          window.location.href = "/dashboard";
         }
       }, 500);
     },
