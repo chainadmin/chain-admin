@@ -90,12 +90,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(403).json({ error: 'Agency account is not active' });
     }
 
-    // Generate JWT token
-    const token = generateToken(user.id, tenant.id);
+    // Generate JWT token with tenant info
+    const token = generateToken(user.id, tenant.id, tenant.slug, tenant.name);
+
+    // Set cookie that works across subdomains
+    const isProduction = process.env.NODE_ENV === 'production';
+    const domain = isProduction ? '.chainsoftwaregroup.com' : undefined;
+    
+    // Set httpOnly cookie for security
+    res.setHeader('Set-Cookie', [
+      `authToken=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}${domain ? `; Domain=${domain}` : ''}`,
+      `tenantSlug=${tenant.slug}; Path=/; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}${domain ? `; Domain=${domain}` : ''}`,
+      `tenantName=${encodeURIComponent(tenant.name)}; Path=/; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}${domain ? `; Domain=${domain}` : ''}`
+    ].join(', '));
 
     res.status(200).json({
       success: true,
-      token,
+      token, // Still return token for backwards compatibility
       user: {
         id: user.id,
         email: user.email,

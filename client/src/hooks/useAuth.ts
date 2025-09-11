@@ -1,14 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { getAuthToken, getCookie } from "@/lib/cookies";
 
 export function useAuth() {
   const [jwtAuth, setJwtAuth] = useState<any>(null);
   const [checkingJwt, setCheckingJwt] = useState(true);
 
-  // Check for JWT token on mount and when localStorage changes
+  // Check for JWT token on mount and when localStorage/cookies change
   useEffect(() => {
     const checkJwtToken = () => {
-      const token = localStorage.getItem('authToken');
+      const token = getAuthToken(); // Checks cookies first, then localStorage
       if (token) {
         // Parse the JWT payload (not secure, but fine for client-side auth check)
         try {
@@ -25,11 +26,15 @@ export function useAuth() {
             localStorage.removeItem('authToken');
             setJwtAuth(null);
           } else {
+            // Get tenant info from cookies
+            const tenantSlug = getCookie('tenantSlug') || payload.tenantSlug;
+            const tenantName = getCookie('tenantName') ? decodeURIComponent(getCookie('tenantName')!) : payload.tenantName;
+            
             setJwtAuth({
               id: payload.userId,
               tenantId: payload.tenantId,
-              tenantSlug: payload.tenantSlug,
-              tenantName: payload.tenantName,
+              tenantSlug: tenantSlug,
+              tenantName: tenantName,
               isJwtAuth: true
             });
           }

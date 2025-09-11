@@ -53,10 +53,32 @@ export default function AgencyLogin() {
       // Invalidate queries to refresh authentication state
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       
-      // Redirect to dashboard without subdomain for now
-      // (localStorage doesn't work across subdomains)
+      // Redirect to agency-specific subdomain dashboard
       setTimeout(() => {
-        window.location.href = "/dashboard";
+        const agencySlug = data.tenant?.slug;
+        
+        if (agencySlug && isSubdomainSupported()) {
+          // In production with custom domain, use subdomain
+          const baseUrl = window.location.origin;
+          const url = new URL(baseUrl);
+          const parts = url.hostname.split('.');
+          
+          if (parts.length >= 2) {
+            // Replace or add subdomain
+            if (parts[0] === 'www' || parts.length === 2) {
+              url.hostname = `${agencySlug}.${parts.slice(-2).join('.')}`;
+            } else {
+              parts[0] = agencySlug;
+              url.hostname = parts.join('.');
+            }
+          }
+          
+          url.pathname = '/dashboard';
+          window.location.href = url.toString();
+        } else {
+          // For development or no subdomain support, use regular dashboard
+          window.location.href = "/dashboard";
+        }
       }, 500);
     },
     onError: (error: any) => {

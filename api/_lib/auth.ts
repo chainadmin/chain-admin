@@ -13,7 +13,19 @@ export interface AuthenticatedRequest extends VercelRequest {
 
 export async function verifyAuth(req: AuthenticatedRequest): Promise<boolean> {
   try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
+    // Check for token in Authorization header or cookies
+    let token = req.headers.authorization?.replace('Bearer ', '');
+    
+    // If no Authorization header, check cookies
+    if (!token && req.headers.cookie) {
+      const cookies = req.headers.cookie.split(';').reduce((acc, cookie) => {
+        const [key, value] = cookie.trim().split('=');
+        acc[key] = value;
+        return acc;
+      }, {} as Record<string, string>);
+      
+      token = cookies.authToken;
+    }
     
     if (!token) {
       return false;
@@ -64,9 +76,14 @@ export function withAuth(handler: (req: AuthenticatedRequest, res: VercelRespons
   };
 }
 
-export function generateToken(userId: string, tenantId?: string): string {
+export function generateToken(userId: string, tenantId?: string, tenantSlug?: string, tenantName?: string): string {
   return jwt.sign(
-    { userId, tenantId },
+    { 
+      userId, 
+      tenantId,
+      tenantSlug,
+      tenantName
+    },
     JWT_SECRET,
     { expiresIn: '7d' }
   );

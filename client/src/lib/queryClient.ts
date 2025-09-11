@@ -1,4 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { getAuthToken } from "./cookies";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -23,7 +24,7 @@ export async function apiRequest(
   data?: unknown | undefined,
 ): Promise<Response> {
   const fullUrl = getApiUrl(url);
-  const token = localStorage.getItem('authToken');
+  const token = getAuthToken(); // Now checks cookies first, then localStorage
   const headers: HeadersInit = {};
   
   if (data) {
@@ -38,7 +39,7 @@ export async function apiRequest(
     method,
     headers,
     body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
+    credentials: "include", // Important for cookies to be sent
   });
 
   await throwIfResNotOk(res);
@@ -52,7 +53,7 @@ export const getQueryFn: <T>(options: {
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
     const url = getApiUrl(queryKey.join("/") as string);
-    const token = localStorage.getItem('authToken');
+    const token = getAuthToken(); // Now checks cookies first, then localStorage
     const headers: HeadersInit = {};
     
     if (token) {
@@ -61,7 +62,7 @@ export const getQueryFn: <T>(options: {
     
     const res = await fetch(url, {
       headers,
-      credentials: "include",
+      credentials: "include", // Important for cookies to be sent
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
