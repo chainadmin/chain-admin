@@ -15,6 +15,7 @@ import express from "express";
 import { emailService } from "./emailService";
 import { smsService } from "./smsService";
 import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
 import { subdomainMiddleware } from "./middleware/subdomain";
 
 const csvUploadSchema = z.object({
@@ -113,7 +114,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       'https://www.chainsoftwaregroup.com',
       'http://localhost:5173',
       'http://localhost:5000',
-      'http://localhost:3000'
+      'http://localhost:3000',
+      'http://127.0.0.1:5173',
+      'http://127.0.0.1:5000',
+      'http://127.0.0.1:3000'
     ];
     
     const origin = req.headers.origin as string;
@@ -123,6 +127,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         allowedOrigins.includes(origin) || 
         origin.includes('vercel.app') || 
         origin.includes('vercel.sh') ||
+        origin.includes('replit.dev') ||
+        origin.includes('replit.app') ||
+        origin.includes('repl.co') ||
         // Allow all subdomains of chainsoftwaregroup.com (for agency subdomains)
         origin.endsWith('.chainsoftwaregroup.com');
     
@@ -1533,9 +1540,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tenantId: credentials.tenantId,
       };
       
-      // Return success with agency data
+      // Generate JWT token with tenant information
+      const token = jwt.sign(
+        {
+          userId: credentials.id,
+          tenantId: tenant.id,
+          tenantSlug: tenant.slug,
+          username: credentials.username,
+          email: credentials.email,
+          role: credentials.role,
+        },
+        process.env.JWT_SECRET || 'your-secret-key',
+        { expiresIn: '7d' }
+      );
+      
+      // Return success with agency data and token
       res.json({
         message: "Login successful",
+        token,
         user: {
           id: credentials.id,
           username: credentials.username,
