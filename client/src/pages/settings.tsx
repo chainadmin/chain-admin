@@ -75,8 +75,9 @@ export default function Settings() {
     queryKey: ["/api/arrangement-options"],
   });
 
-  const { data: userData } = useQuery({
+  const { data: userData, isLoading: userLoading, error: userError } = useQuery({
     queryKey: ["/api/auth/user"],
+    retry: 1,
   });
 
 
@@ -309,6 +310,82 @@ export default function Settings() {
                     
                     <div className="flex items-center space-x-2">
                       {(() => {
+                        // Check if user data is still loading
+                        if (userLoading) {
+                          return (
+                            <div className="text-sm text-gray-500">
+                              Loading agency information...
+                            </div>
+                          );
+                        }
+                        
+                        // Check if there was an error loading user data
+                        if (userError || !userData) {
+                          // Try to get agency slug from the current URL as fallback
+                          const pathSegments = window.location.pathname.split('/');
+                          let fallbackSlug = null;
+                          
+                          // Check if we're in an agency context path
+                          if (pathSegments[1] && pathSegments[1] !== 'admin' && pathSegments[1] !== 'settings') {
+                            fallbackSlug = pathSegments[1];
+                          }
+                          
+                          // Or try to get from sessionStorage (if stored from agency login)
+                          const storedContext = sessionStorage.getItem('agencyContext');
+                          if (storedContext) {
+                            try {
+                              const parsed = JSON.parse(storedContext);
+                              fallbackSlug = parsed.slug;
+                            } catch (e) {}
+                          }
+                          
+                          if (fallbackSlug) {
+                            const agencyUrl = isSubdomainSupported() 
+                              ? `https://${fallbackSlug}.${window.location.hostname.split('.').slice(-2).join('.')}`
+                              : `${window.location.origin}/agency/${fallbackSlug}`;
+                            
+                            return (
+                              <>
+                                <Input
+                                  readOnly
+                                  value={agencyUrl}
+                                  className="flex-1 font-mono text-sm"
+                                />
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(agencyUrl);
+                                    toast({
+                                      title: "URL Copied",
+                                      description: "The custom URL has been copied to your clipboard.",
+                                    });
+                                  }}
+                                  data-testid="button-copy-url"
+                                >
+                                  <Copy className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    window.open(agencyUrl, '_blank');
+                                  }}
+                                  data-testid="button-preview-url"
+                                >
+                                  <ExternalLink className="h-4 w-4" />
+                                </Button>
+                              </>
+                            );
+                          }
+                          
+                          return (
+                            <div className="text-sm text-gray-500">
+                              Unable to load agency information. Please try refreshing the page.
+                            </div>
+                          );
+                        }
+                        
                         // Handle both JWT and Replit auth structures
                         let agencySlug = null;
                         
@@ -344,11 +421,25 @@ export default function Settings() {
                         }
                         
                         if (!agencySlug) {
-                          return (
-                            <div className="text-sm text-gray-500">
-                              Loading agency information...
-                            </div>
-                          );
+                          // Try fallback approach if no slug found
+                          const storedContext = sessionStorage.getItem('agencyContext');
+                          if (storedContext) {
+                            try {
+                              const parsed = JSON.parse(storedContext);
+                              agencySlug = parsed.slug;
+                              agencyUrl = isSubdomainSupported() 
+                                ? `https://${agencySlug}.${window.location.hostname.split('.').slice(-2).join('.')}`
+                                : `${window.location.origin}/agency/${agencySlug}`;
+                            } catch (e) {}
+                          }
+                          
+                          if (!agencySlug) {
+                            return (
+                              <div className="text-sm text-gray-500">
+                                Agency information not available. Please ensure you're logged in to an agency account.
+                              </div>
+                            );
+                          }
                         }
                         
                         return (
