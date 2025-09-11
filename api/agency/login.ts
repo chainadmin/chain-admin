@@ -94,13 +94,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const token = generateToken(user.id, tenant.id, tenant.slug, tenant.name);
 
     // Set cookie that works across subdomains (only in production with custom domain)
-    const hostname = req.headers.host || '';
-    const isCustomDomain = hostname.includes('chainsoftwaregroup.com');
+    // Check multiple headers for the domain (Vercel may use different headers)
+    const hostname = req.headers.host || req.headers['x-forwarded-host'] || '';
+    const origin = req.headers.origin || '';
+    const isCustomDomain = hostname.includes('chainsoftwaregroup.com') || origin.includes('chainsoftwaregroup.com');
     const domain = isCustomDomain ? '.chainsoftwaregroup.com' : undefined;
     
-    // Set httpOnly cookie for security
+    // Set cookies (authToken needs to be readable by JavaScript for authentication check)
     res.setHeader('Set-Cookie', [
-      `authToken=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}${domain ? `; Domain=${domain}` : ''}`,
+      `authToken=${token}; Path=/; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}${domain ? `; Domain=${domain}` : ''}`,
       `tenantSlug=${tenant.slug}; Path=/; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}${domain ? `; Domain=${domain}` : ''}`,
       `tenantName=${encodeURIComponent(tenant.name)}; Path=/; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}${domain ? `; Domain=${domain}` : ''}`
     ].join(', '));
