@@ -126,9 +126,7 @@ export function isSubdomainSupported(): boolean {
 
   const hostname = window.location.hostname;
   
-  // Subdomain support is available in production (not localhost/replit)
-  return !hostname.includes('localhost') && 
-         !hostname.includes('127.0.0.1') && 
-         !hostname.includes('.repl.co') && 
-         !hostname.includes('.replit.dev');
+  // Subdomain support is ONLY available on the actual production domain
+  // Not on localhost, Replit, Vercel, or any other hosting platform
+  return hostname.includes('chainsoftwaregroup.com');
 }
