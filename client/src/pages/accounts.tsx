@@ -80,7 +80,7 @@ export default function Accounts() {
 
   // Mutations
   const createAccountMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("/api/accounts", "POST", data),
+    mutationFn: (data: any) => apiRequest("POST", "/api/accounts", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/consumers"] });
@@ -110,7 +110,7 @@ export default function Accounts() {
   });
 
   const createFolderMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("/api/folders", "POST", data),
+    mutationFn: (data: any) => apiRequest("POST", "/api/folders", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
       setShowCreateFolderModal(false);
@@ -134,7 +134,7 @@ export default function Accounts() {
   });
 
   const deleteFolderMutation = useMutation({
-    mutationFn: (folderId: string) => apiRequest(`/api/folders/${folderId}`, "DELETE"),
+    mutationFn: (folderId: string) => apiRequest("DELETE", `/api/folders/${folderId}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
