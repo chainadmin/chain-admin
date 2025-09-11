@@ -189,7 +189,7 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center">
             <i className="fas fa-upload text-blue-600 mr-3"></i>
@@ -203,23 +203,23 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
         <div className="space-y-4">
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <h4 className="font-medium text-blue-900 mb-2">Required CSV Columns</h4>
-            <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
               <div>
                 <h5 className="font-medium text-blue-800 mb-1">Consumer Information</h5>
                 <ul className="text-blue-700 space-y-1">
-                  <li>• <code className="bg-blue-100 px-1 rounded">consumer_first_name</code> or <code className="bg-blue-100 px-1 rounded">first_name</code></li>
-                  <li>• <code className="bg-blue-100 px-1 rounded">consumer_last_name</code> or <code className="bg-blue-100 px-1 rounded">last_name</code></li>
-                  <li>• <code className="bg-blue-100 px-1 rounded">consumer_email</code> or <code className="bg-blue-100 px-1 rounded">email</code></li>
-                  <li>• <code className="bg-blue-100 px-1 rounded">consumer_phone</code> or <code className="bg-blue-100 px-1 rounded">phone</code> (optional)</li>
+                  <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">consumer_first_name</code> or <code className="bg-blue-100 px-1 rounded text-xs">first_name</code></li>
+                  <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">consumer_last_name</code> or <code className="bg-blue-100 px-1 rounded text-xs">last_name</code></li>
+                  <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">consumer_email</code> or <code className="bg-blue-100 px-1 rounded text-xs">email</code></li>
+                  <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">consumer_phone</code> or <code className="bg-blue-100 px-1 rounded text-xs">phone</code> (optional)</li>
                 </ul>
               </div>
               <div>
                 <h5 className="font-medium text-blue-800 mb-1">Account Information</h5>
                 <ul className="text-blue-700 space-y-1">
-                  <li>• <code className="bg-blue-100 px-1 rounded">creditor</code> (required)</li>
-                  <li>• <code className="bg-blue-100 px-1 rounded">balance</code> (required, in dollars)</li>
-                  <li>• <code className="bg-blue-100 px-1 rounded">account_number</code> or <code className="bg-blue-100 px-1 rounded">account</code> (optional)</li>
-                  <li>• <code className="bg-blue-100 px-1 rounded">due_date</code> (optional)</li>
+                  <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">creditor</code> (required)</li>
+                  <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">balance</code> (required, in dollars)</li>
+                  <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">account_number</code> or <code className="bg-blue-100 px-1 rounded text-xs">account</code> (optional)</li>
+                  <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">due_date</code> (optional)</li>
                 </ul>
               </div>
             </div>
