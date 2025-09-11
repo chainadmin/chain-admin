@@ -28,6 +28,8 @@ export function useAuth() {
             setJwtAuth({
               id: payload.userId,
               tenantId: payload.tenantId,
+              tenantSlug: payload.tenantSlug,
+              tenantName: payload.tenantName,
               isJwtAuth: true
             });
           }

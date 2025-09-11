@@ -1555,6 +1555,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId: credentials.id,
           tenantId: tenant.id,
           tenantSlug: tenant.slug,
+          tenantName: tenant.name,
           username: credentials.username,
           email: credentials.email,
           role: credentials.role,

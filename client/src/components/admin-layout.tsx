@@ -10,16 +10,28 @@ interface AdminLayoutProps {
 }
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
-  const { user } = useAuth();
+  const { user, isJwtAuth } = useAuth();
   const [location] = useLocation();
   const { agencySlug, buildAgencyUrl } = useAgencyContext();
   
   const { data: userData } = useQuery({
     queryKey: ["/api/auth/user"],
+    enabled: !isJwtAuth, // Only fetch if not JWT auth
   });
 
+  // Get tenant information from either JWT or Replit auth
+  const tenantName = isJwtAuth 
+    ? (user as any)?.tenantName || 'Chain'
+    : (userData as any)?.platformUser?.tenant?.name || 'Chain';
+  
+  const tenantSlug = isJwtAuth
+    ? (user as any)?.tenantSlug || 'agency-pro'
+    : (userData as any)?.platformUser?.tenant?.slug || 'agency-pro';
+
   // Only show company section for platform owners
-  const isOwner = (userData as any)?.platformUser?.role === 'owner';
+  const isOwner = isJwtAuth 
+    ? (user as any)?.role === 'owner'
+    : (userData as any)?.platformUser?.role === 'owner';
   
   // Build agency-specific navigation URLs
   const buildNavHref = (path: string) => {
@@ -58,10 +70,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 </div>
                 <div className="ml-3">
                   <div className="text-lg font-semibold text-gray-900">
-                    {(userData as any)?.platformUser?.tenant?.name || "Chain"}
+                    {tenantName}
                   </div>
                   <div className="text-xs text-gray-500">
-                    {(userData as any)?.platformUser?.tenant?.slug || "agency-pro"}
+                    {tenantSlug}
                   </div>
                 </div>
               </div>
@@ -104,7 +116,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                       : (user as any)?.email}
                   </p>
                   <p className="text-xs font-medium text-gray-500">
-                    {(userData as any)?.platformUser?.role?.replace('_', ' ') || "User"}
+                    {isJwtAuth 
+                      ? ((user as any)?.role?.replace('_', ' ') || "User")
+                      : ((userData as any)?.platformUser?.role?.replace('_', ' ') || "User")}
                   </p>
                 </div>
               </div>
