@@ -27,7 +27,8 @@ export async function apiRequest(
   const token = getAuthToken(); // Now checks cookies first, then localStorage
   const headers: HeadersInit = {};
   
-  if (data) {
+  // Only set Content-Type for non-FormData requests
+  if (data && !(data instanceof FormData)) {
     headers["Content-Type"] = "application/json";
   }
   
@@ -38,7 +39,8 @@ export async function apiRequest(
   const res = await fetch(fullUrl, {
     method,
     headers,
-    body: data ? JSON.stringify(data) : undefined,
+    // FormData should be sent as-is, JSON data should be stringified
+    body: data instanceof FormData ? data : (data ? JSON.stringify(data) : undefined),
     credentials: "include", // Important for cookies to be sent
   });
 
