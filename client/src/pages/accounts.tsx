@@ -260,82 +260,84 @@ export default function Accounts() {
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 mt-8">
           <Tabs value={selectedFolderId} onValueChange={setSelectedFolderId} className="w-full">
-            <TabsList className="grid w-full grid-cols-auto gap-1 mb-6" style={{ 
-              gridTemplateColumns: `repeat(${((folders as any[])?.length || 0) + 1}, minmax(0, 1fr))` 
-            }}>
-              <TabsTrigger 
-                value="all" 
-                className="flex items-center gap-2"
-                data-testid="tab-all-accounts"
-              >
-                <FolderOpen className="h-4 w-4" />
-                All Accounts ({((accounts as any[]) || []).length})
-              </TabsTrigger>
-              
-              {((folders as any[]) || []).map((folder: any) => (
+            <div className="overflow-x-auto mb-6">
+              <TabsList className="inline-flex min-w-full sm:grid sm:grid-cols-auto gap-1" style={{ 
+                gridTemplateColumns: window.innerWidth >= 640 ? `repeat(${((folders as any[])?.length || 0) + 1}, minmax(0, 1fr))` : undefined
+              }}>
                 <TabsTrigger 
-                  key={folder.id} 
-                  value={folder.id}
-                  className="flex items-center gap-2 group relative"
-                  data-testid={`tab-folder-${folder.name.toLowerCase().replace(/\s+/g, '-')}`}
+                  value="all" 
+                  className="flex items-center gap-2 whitespace-nowrap"
+                  data-testid="tab-all-accounts"
                 >
-                  <div className="flex items-center gap-2">
-                    <div 
-                      className="w-3 h-3 rounded-full" 
-                      style={{ backgroundColor: folder.color }}
-                    />
-                    <Folder className="h-4 w-4" />
-                    {folder.name} ({folderCounts[folder.id] || 0})
-                    {!folder.isDefault && (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-4 w-4 p-0 opacity-0 group-hover:opacity-100 ml-1"
-                            onClick={(e) => e.stopPropagation()}
-                            data-testid={`dropdown-folder-${folder.id}`}
-                          >
-                            <MoreVertical className="h-3 w-3" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <DropdownMenuItem
-                                onSelect={(e) => e.preventDefault()}
-                                className="text-red-600 focus:text-red-600"
-                                data-testid={`delete-folder-${folder.id}`}
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Delete Folder
-                              </DropdownMenuItem>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Delete Folder</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Are you sure you want to delete the "{folder.name}" folder? All accounts in this folder will be moved to the default folder. This action cannot be undone.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => deleteFolderMutation.mutate(folder.id)}
-                                  className="bg-red-600 hover:bg-red-700"
-                                >
-                                  Delete
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    )}
-                  </div>
+                  <FolderOpen className="h-4 w-4" />
+                  All Accounts ({((accounts as any[]) || []).length})
                 </TabsTrigger>
-              ))}
-            </TabsList>
+                
+                {((folders as any[]) || []).map((folder: any) => (
+                  <TabsTrigger 
+                    key={folder.id} 
+                    value={folder.id}
+                    className="flex items-center gap-2 group relative whitespace-nowrap"
+                    data-testid={`tab-folder-${folder.name.toLowerCase().replace(/\s+/g, '-')}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div 
+                        className="w-3 h-3 rounded-full" 
+                        style={{ backgroundColor: folder.color }}
+                      />
+                      <Folder className="h-4 w-4" />
+                      {folder.name} ({folderCounts[folder.id] || 0})
+                      {!folder.isDefault && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-4 w-4 p-0 opacity-0 group-hover:opacity-100 ml-1"
+                              onClick={(e) => e.stopPropagation()}
+                              data-testid={`dropdown-folder-${folder.id}`}
+                            >
+                              <MoreVertical className="h-3 w-3" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <DropdownMenuItem
+                                  onSelect={(e) => e.preventDefault()}
+                                  className="text-red-600 focus:text-red-600"
+                                  data-testid={`delete-folder-${folder.id}`}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete Folder
+                                </DropdownMenuItem>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete Folder</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you sure you want to delete the "{folder.name}" folder? All accounts in this folder will be moved to the default folder. This action cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => deleteFolderMutation.mutate(folder.id)}
+                                    className="bg-red-600 hover:bg-red-700"
+                                  >
+                                    Delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </div>
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
 
             <TabsContent value="all" className="mt-0">
               <AccountsTable 
