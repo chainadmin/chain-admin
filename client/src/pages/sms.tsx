@@ -73,7 +73,7 @@ export default function SMS() {
 
   // Mutations
   const createTemplateMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("/api/sms-templates", "POST", data),
+    mutationFn: (data: any) => apiRequest("POST", "/api/sms-templates", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sms-templates"] });
       setShowTemplateModal(false);
@@ -93,7 +93,7 @@ export default function SMS() {
   });
 
   const deleteTemplateMutation = useMutation({
-    mutationFn: (id: string) => apiRequest(`/api/sms-templates/${id}`, "DELETE"),
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/sms-templates/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sms-templates"] });
       toast({
@@ -111,7 +111,7 @@ export default function SMS() {
   });
 
   const createCampaignMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("/api/sms-campaigns", "POST", data),
+    mutationFn: (data: any) => apiRequest("POST", "/api/sms-campaigns", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sms-campaigns"] });
       setShowCampaignModal(false);
