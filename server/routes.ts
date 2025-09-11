@@ -14,6 +14,7 @@ import { nanoid } from "nanoid";
 import express from "express";
 import { emailService } from "./emailService";
 import { smsService } from "./smsService";
+import { uploadLogo } from "./supabaseStorage";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { subdomainMiddleware } from "./middleware/subdomain";
@@ -36,20 +37,9 @@ const csvUploadSchema = z.object({
   })),
 });
 
-// Multer configuration for image uploads
-const storage_multer = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'public/uploads/');
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = nanoid();
-    const fileExtension = path.extname(file.originalname);
-    cb(null, `logo-${uniqueSuffix}${fileExtension}`);
-  }
-});
-
+// Multer configuration for image uploads - using memory storage for Supabase
 const upload = multer({ 
-  storage: storage_multer,
+  storage: multer.memoryStorage(),
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB limit
   },
@@ -179,8 +169,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
   await setupAuth(app);
 
-  // Serve static files from uploads directory
-  app.use('/uploads', express.static('public/uploads'));
+  // Note: Logos are now served from Supabase Storage, not local uploads
 
   // Auth routes - Updated to support both JWT and Replit auth
   app.get('/api/auth/user', authenticateUser, async (req: any, res) => {
@@ -1539,7 +1528,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.session) {
         req.session = {} as any;
       }
-      req.session.agencyUser = {
+      (req.session as any).agencyUser = {
         id: credentials.id,
         username: credentials.username,
         email: credentials.email,
@@ -1613,7 +1602,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Get tenant information
-      const tenant = await storage.getTenant(consumer.tenantId);
+      const tenant = consumer.tenantId ? await storage.getTenant(consumer.tenantId) : null;
       if (!tenant) {
         return res.status(500).json({ message: "Account configuration error. Please contact support." });
       }
@@ -2183,7 +2172,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No file uploaded" });
       }
 
-      const logoUrl = `/uploads/${req.file.filename}`;
+      // Upload to Supabase Storage
+      const logoUrl = await uploadLogo(req.file, tenantId);
+      
+      if (!logoUrl) {
+        return res.status(500).json({ message: "Failed to upload logo to storage" });
+      }
       
       // Get current settings
       const currentSettings = await storage.getTenantSettings(tenantId);
