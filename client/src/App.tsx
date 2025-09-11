@@ -118,6 +118,8 @@ function Router() {
           <Route path="/billing" component={Billing} />
           <Route path="/company" component={CompanyManagement} />
           <Route path="/settings" component={Settings} />
+          <Route path="/consumer-dashboard" component={ConsumerDashboard} />
+          <Route path="/consumer-login" component={ConsumerLogin} />
           <Route path="/agency-login" component={AgencyLogin} />
           <Route path="/agency-register" component={AgencyRegistration} />
           <Route path="/privacy-policy" component={PrivacyPolicy} />
@@ -134,6 +136,9 @@ function Router() {
           <Route path="/consumer/:email" component={ConsumerPortal} />
           <Route path="/privacy-policy" component={PrivacyPolicy} />
           <Route path="/agency-login" component={AgencyLogin} />
+          
+          {/* Consumer dashboard route available always on agency subdomain */}
+          <Route path="/consumer-dashboard" component={ConsumerDashboard} />
           
           {/* Admin routes only if authenticated */}
           {isJwtAuth && (

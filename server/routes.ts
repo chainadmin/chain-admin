@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import { storage, type IStorage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { authenticateUser, getCurrentUser } from "./authMiddleware";
 import { postmarkServerService } from "./postmarkServerService";
@@ -104,6 +104,22 @@ function replaceEmailVariables(
   }
   
   return processedTemplate;
+}
+
+// Helper function to get tenantId from either JWT or Replit auth
+async function getTenantId(req: any, storage: IStorage): Promise<string | null> {
+  // If JWT auth, tenantId is directly in the token
+  if (req.user?.isJwtAuth && req.user?.tenantId) {
+    return req.user.tenantId;
+  }
+  
+  // For Replit auth, lookup platformUser
+  if (req.user?.claims?.sub) {
+    const platformUser = await storage.getPlatformUser(req.user.claims.sub);
+    return platformUser?.tenantId || null;
+  }
+  
+  return null;
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -214,10 +230,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/folders', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
+      const tenantId = await getTenantId(req, storage);
       
-      if (!platformUser?.tenantId) {
+      if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
       }
 
@@ -228,11 +243,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Get current folder count for sort order
-      const existingFolders = await storage.getFoldersByTenant(platformUser.tenantId);
+      const existingFolders = await storage.getFoldersByTenant(tenantId);
       const sortOrder = existingFolders.length;
 
       const folder = await storage.createFolder({
-        tenantId: platformUser.tenantId,
+        tenantId: tenantId,
         name,
         color,
         description: description || null,
@@ -249,15 +264,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete('/api/folders/:id', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
+      const tenantId = await getTenantId(req, storage);
       
-      if (!platformUser?.tenantId) {
+      if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
       }
 
       const folderId = req.params.id;
-      await storage.deleteFolder(folderId, platformUser.tenantId);
+      await storage.deleteFolder(folderId, tenantId);
       
       res.status(204).send();
     } catch (error) {
@@ -269,14 +283,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Consumer routes
   app.get('/api/consumers', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
+      const tenantId = await getTenantId(req, storage);
       
-      if (!platformUser?.tenantId) {
+      if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const consumers = await storage.getConsumersByTenant(platformUser.tenantId);
+      const consumers = await storage.getConsumersByTenant(tenantId);
       res.json(consumers);
     } catch (error) {
       console.error("Error fetching consumers:", error);
@@ -287,14 +300,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Account routes
   app.get('/api/accounts', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
+      const tenantId = await getTenantId(req, storage);
       
-      if (!platformUser?.tenantId) {
+      if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const accounts = await storage.getAccountsByTenant(platformUser.tenantId);
+      const accounts = await storage.getAccountsByTenant(tenantId);
       res.json(accounts);
     } catch (error) {
       console.error("Error fetching accounts:", error);
@@ -305,17 +317,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Folder routes
   app.get('/api/folders', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
+      const tenantId = await getTenantId(req, storage);
       
-      if (!platformUser?.tenantId) {
+      if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
       }
 
       // Ensure default folders exist for this tenant
-      await storage.ensureDefaultFolders(platformUser.tenantId);
+      await storage.ensureDefaultFolders(tenantId);
       
-      const folders = await storage.getFoldersByTenant(platformUser.tenantId);
+      const folders = await storage.getFoldersByTenant(tenantId);
       res.json(folders);
     } catch (error) {
       console.error("Error fetching folders:", error);
@@ -325,10 +336,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/folders', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
+      const tenantId = await getTenantId(req, storage);
       
-      if (!platformUser?.tenantId) {
+      if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
       }
 
@@ -339,7 +349,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const folder = await storage.createFolder({
-        tenantId: platformUser.tenantId,
+        tenantId: tenantId,
         name,
         description,
         color: color || "#3b82f6",
@@ -404,14 +414,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Stats routes
   app.get('/api/stats', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
+      const tenantId = await getTenantId(req, storage);
       
-      if (!platformUser?.tenantId) {
+      if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const stats = await storage.getTenantStats(platformUser.tenantId);
+      const stats = await storage.getTenantStats(tenantId);
       res.json(stats);
     } catch (error) {
       console.error("Error fetching stats:", error);
