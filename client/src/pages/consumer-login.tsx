@@ -38,9 +38,34 @@ export default function ConsumerLogin() {
     }
   }, []);
 
+  // Helper to get tenant slug from various sources
+  const getTenantSlug = () => {
+    // Try to get from agency context first
+    if (agencyContext?.slug) {
+      return agencyContext.slug;
+    }
+    
+    // Try URL query parameter
+    const urlParams = new URLSearchParams(window.location.search);
+    const tenantParam = urlParams.get('tenant');
+    if (tenantParam) {
+      return tenantParam;
+    }
+    
+    // Use environment variable or default for development
+    const devTenant = import.meta.env.VITE_DEV_TENANT_SLUG || 'agency-pro';
+    console.warn(`Using default tenant slug for development: ${devTenant}`);
+    return devTenant;
+  };
+
   const loginMutation = useMutation({
     mutationFn: async (loginData: LoginForm) => {
-      const response = await apiRequest("POST", "/api/consumer/login", loginData);
+      // Send what backend expects: email and tenantSlug
+      const tenantSlug = getTenantSlug();
+      const response = await apiRequest("POST", "/api/consumer/login", {
+        email: loginData.email,
+        tenantSlug: tenantSlug
+      });
       return response;
     },
     onSuccess: (data: any) => {
@@ -58,25 +83,44 @@ export default function ConsumerLogin() {
           description: "Welcome to your account portal!",
         });
         
-        // Store consumer session data
+        // Store consumer session data and token
         localStorage.setItem("consumerSession", JSON.stringify({
           email: form.email,
           tenantSlug: data.tenant?.slug,
           consumerData: data.consumer,
         }));
         
+        // Store the token for authenticated requests
+        if (data.token) {
+          localStorage.setItem("consumerToken", data.token);
+        }
+        
         // Redirect to consumer portal
         setLocation(`/consumer-dashboard`);
       }
     },
     onError: (error: any) => {
-      if (error.status === 404 && error.data?.canRegister) {
+      if (error.status === 404 && error.message?.includes('Agency not found')) {
+        // Agency/tenant not found
+        toast({
+          title: "Agency Not Found",
+          description: "The agency could not be found. Please ensure you're using the correct agency link or set VITE_DEV_TENANT_SLUG for development.",
+          variant: "destructive",
+        });
+      } else if (error.status === 404 && error.data?.canRegister) {
         // No account found, offer to create one
         toast({
           title: "No Account Found",
           description: error.data.message,
         });
         setLocation(`/consumer-register?email=${form.email}`);
+      } else if (error.status === 401) {
+        // Consumer account not found
+        toast({
+          title: "Account Not Found",
+          description: "No consumer account found with this email for the selected agency.",
+          variant: "destructive",
+        });
       } else {
         toast({
           title: "Login Failed",
