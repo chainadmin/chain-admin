@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb } from './_lib/db';
 import { withAuth, AuthenticatedRequest } from './_lib/auth';
-import { emailTemplates } from '../shared/schema';
+import { emailTemplates } from './_lib/schema';
 import { eq, and } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 
@@ -44,10 +44,10 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       res.status(200).json(templates);
     } else if (req.method === 'POST') {
       // Create a new email template
-      const { name, subject, body, category, fromEmail, fromName } = req.body;
+      const { name, subject, content, category } = req.body;
 
-      if (!name || !subject || !body) {
-        res.status(400).json({ error: 'Name, subject, and body are required' });
+      if (!name || !subject || !content) {
+        res.status(400).json({ error: 'Name, subject, and content are required' });
         return;
       }
 
@@ -57,10 +57,8 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
           tenantId,
           name,
           subject,
-          body,
+          content,
           category: category || 'general',
-          fromEmail: fromEmail || null,
-          fromName: fromName || null,
         })
         .returning();
 

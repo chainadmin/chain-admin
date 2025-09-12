@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb } from './_lib/db';
 import { withAuth, AuthenticatedRequest } from './_lib/auth';
-import { folders, accounts } from '../shared/schema';
+import { folders, accounts } from './_lib/schema';
 import { eq, and } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 
@@ -44,7 +44,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       res.status(200).json(tenantFolders);
     } else if (req.method === 'POST') {
       // Create a new folder
-      const { name, color, description } = req.body;
+      const { name, color } = req.body;
 
       if (!name) {
         res.status(400).json({ error: 'Folder name is required' });
@@ -57,7 +57,6 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
           tenantId,
           name,
           color: color || '#3B82F6',
-          description: description || null,
           isDefault: false,
         })
         .returning();
