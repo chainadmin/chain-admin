@@ -50,7 +50,7 @@ export async function verifyAuth(req: AuthenticatedRequest): Promise<boolean> {
       const [platformUser] = await db
         .select()
         .from(platformUsers)
-        .where(eq(platformUsers.userId, user.id))
+        .where(eq(platformUsers.authId, user.id))
         .limit(1);
       
       req.platformUser = platformUser;

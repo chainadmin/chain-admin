@@ -1,19 +1,38 @@
 // Re-export schema from shared for Vercel serverless functions
-// This is a workaround for Vercel's isolated function environment
+// This schema exactly matches the database structure
 
 import { sql } from 'drizzle-orm';
-import { pgTable, uuid, text, timestamp, boolean, jsonb, bigint, decimal, serial, integer } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, timestamp, boolean, jsonb, bigint, decimal, serial, integer, varchar, date } from 'drizzle-orm/pg-core';
 
 // Tenants (agencies/organizations)
 export const tenants = pgTable("tenants", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  slug: text("slug").unique().notNull(),
   name: text("name").notNull(),
-  domain: text("domain").unique(),
-  brand: jsonb("brand").default(sql`'{}'::jsonb`),
-  active: boolean("active").default(true),
+  slug: text("slug").notNull().unique(),
   createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+  brand: jsonb("brand").default(sql`'{}'::jsonb`),
+  isActive: boolean("is_active").default(true),
+  suspendedAt: timestamp("suspended_at"),
+  suspensionReason: text("suspension_reason"),
+  isTrialAccount: boolean("is_trial_account").default(true),
+  isPaidAccount: boolean("is_paid_account").default(false),
+  ownerFirstName: text("owner_first_name"),
+  ownerLastName: text("owner_last_name"),
+  ownerDateOfBirth: text("owner_date_of_birth"),
+  ownerSSN: text("owner_ssn"),
+  businessName: text("business_name"),
+  phoneNumber: text("phone_number"),
+  email: text("email"),
+  notifiedOwners: boolean("notified_owners").default(false),
+  notificationSentAt: timestamp("notification_sent_at"),
+  postmarkServerId: text("postmark_server_id"),
+  postmarkServerToken: text("postmark_server_token"),
+  postmarkServerName: text("postmark_server_name"),
+  twilioAccountSid: text("twilio_account_sid"),
+  twilioAuthToken: text("twilio_auth_token"),
+  twilioPhoneNumber: text("twilio_phone_number"),
+  twilioBusinessName: text("twilio_business_name"),
+  twilioCampaignId: text("twilio_campaign_id"),
 });
 
 // Agency credentials for authentication
@@ -34,10 +53,11 @@ export const agencyCredentials = pgTable("agency_credentials", {
 
 // Users
 export const users = pgTable("users", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  email: text("email").unique().notNull(),
-  name: text("name"),
-  replitId: text("replit_id").unique(),
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: varchar("email"),
+  firstName: varchar("first_name"),
+  lastName: varchar("last_name"),
+  profileImageUrl: varchar("profile_image_url"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -45,10 +65,11 @@ export const users = pgTable("users", {
 // Platform users (associates users with tenants)
 export const platformUsers = pgTable("platform_users", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
-  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
-  role: text("role").default("member"),
-  active: boolean("active").default(true),
+  authId: varchar("auth_id").notNull(),
+  tenantId: uuid("tenant_id"),
+  role: text("role").notNull(),
+  permissions: jsonb("permissions").default(sql`'{}'::jsonb`),
+  isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -76,10 +97,11 @@ export const folders = pgTable("folders", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
   name: text("name").notNull(),
+  description: text("description"),
   color: text("color").default("#6b7280"),
   isDefault: boolean("is_default").default(false),
+  sortOrder: bigint("sort_order", { mode: "number" }),
   createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // Accounts (debt accounts)
@@ -87,18 +109,14 @@ export const accounts = pgTable("accounts", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
   consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "cascade" }).notNull(),
-  folderId: uuid("folder_id").references(() => folders.id, { onDelete: "set null" }),
   accountNumber: text("account_number").notNull(),
-  originalCreditor: text("original_creditor"),
-  currentBalance: decimal("current_balance", { precision: 10, scale: 2 }).notNull(),
-  originalBalance: decimal("original_balance", { precision: 10, scale: 2 }),
+  creditor: text("creditor"),
+  balanceCents: bigint("balance_cents", { mode: "number" }),
   status: text("status").default("active"),
-  dateOpened: timestamp("date_opened"),
-  dateCharged: timestamp("date_charged"),
-  lastPaymentDate: timestamp("last_payment_date"),
-  lastPaymentAmount: decimal("last_payment_amount", { precision: 10, scale: 2 }),
   createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+  folderId: uuid("folder_id").references(() => folders.id, { onDelete: "set null" }),
+  dueDate: date("due_date"),
+  additionalData: jsonb("additional_data"),
 });
 
 // Email templates
@@ -107,12 +125,9 @@ export const emailTemplates = pgTable("email_templates", {
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
   name: text("name").notNull(),
   subject: text("subject").notNull(),
-  content: text("content").notNull(),
-  category: text("category").default("general"),
-  variables: jsonb("variables").default(sql`'[]'::jsonb`),
-  isActive: boolean("is_active").default(true),
+  html: text("html").notNull(),
+  status: text("status").default("active"),
   createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // SMS templates
@@ -120,12 +135,9 @@ export const smsTemplates = pgTable("sms_templates", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
   name: text("name").notNull(),
-  content: text("content").notNull(),
-  category: text("category").default("general"),
-  variables: jsonb("variables").default(sql`'[]'::jsonb`),
-  isActive: boolean("is_active").default(true),
+  message: text("message").notNull(),
+  status: text("status").default("active"),
   createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // Tenant settings
@@ -141,9 +153,9 @@ export const tenantSettings = pgTable("tenant_settings", {
   allowSettlementRequests: boolean("allow_settlement_requests").default(true),
   customBranding: jsonb("custom_branding").default(sql`'{}'::jsonb`),
   consumerPortalSettings: jsonb("consumer_portal_settings").default(sql`'{}'::jsonb`),
-  smsThrottleLimit: bigint("sms_throttle_limit", { mode: "number" }).default(10),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  smsThrottleLimit: bigint("sms_throttle_limit", { mode: "number" }).default(10),
 });
 
 // Callback requests

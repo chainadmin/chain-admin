@@ -52,10 +52,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!user) {
       // Create user if doesn't exist - let PostgreSQL generate the UUID
-      const fullName = `${credentials.firstName || ''} ${credentials.lastName || ''}`.trim() || email;
       [user] = await db.insert(users).values({
         email,
-        name: fullName
+        firstName: credentials.firstName,
+        lastName: credentials.lastName
       }).returning();
     }
 
@@ -63,7 +63,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const [platformUser] = await db
       .select()
       .from(platformUsers)
-      .where(eq(platformUsers.userId, user.id))
+      .where(eq(platformUsers.authId, user.id))
       .limit(1);
 
     if (!platformUser) {
@@ -86,7 +86,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Check if tenant is active
-    if (!tenant.active) {
+    if (!tenant.isActive) {
       return res.status(403).json({ error: 'Agency account is not active' });
     }
 
@@ -113,14 +113,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       user: {
         id: user.id,
         email: user.email,
-        name: user.name || user.email,
+        name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
         role: platformUser.role
       },
       tenant: {
         id: tenant.id,
         name: tenant.name,
         slug: tenant.slug,
-        active: tenant.active
+        isActive: tenant.isActive,
+        isTrialAccount: tenant.isTrialAccount,
+        isPaidAccount: tenant.isPaidAccount
       }
     });
   } catch (error) {

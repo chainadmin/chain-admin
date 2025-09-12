@@ -63,14 +63,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const [newTenant] = await db.insert(tenants).values({
       name: data.businessName,
       slug: slug,
-      active: true
+      isActive: true,
+      isTrialAccount: true,
+      isPaidAccount: false
     }).returning();
 
     // Create user - let PostgreSQL generate the UUID
-    const fullName = `${data.firstName} ${data.lastName}`.trim();
     const [newUser] = await db.insert(users).values({
       email: data.email,
-      name: fullName
+      firstName: data.firstName,
+      lastName: data.lastName
     }).returning();
     
     const userId = newUser.id;
@@ -92,10 +94,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Create platform user association
     await db.insert(platformUsers).values({
-      userId: userId,
+      authId: userId,
       tenantId: newTenant.id,
       role: 'owner',
-      active: true
+      isActive: true
     });
 
     // Generate JWT token
