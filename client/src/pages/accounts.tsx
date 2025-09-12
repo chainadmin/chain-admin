@@ -47,6 +47,10 @@ export default function Accounts() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
+  const [deleteFolderDialog, setDeleteFolderDialog] = useState<{ open: boolean; folder: any }>({
+    open: false,
+    folder: null,
+  });
   const [folderForm, setFolderForm] = useState({
     name: "",
     color: "#3B82F6",
@@ -301,35 +305,14 @@ export default function Accounts() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <DropdownMenuItem
-                                  onSelect={(e) => e.preventDefault()}
-                                  className="text-red-600 focus:text-red-600"
-                                  data-testid={`delete-folder-${folder.id}`}
-                                >
-                                  <Trash2 className="h-4 w-4 mr-2" />
-                                  Delete Folder
-                                </DropdownMenuItem>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Delete Folder</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    Are you sure you want to delete the "{folder.name}" folder? All accounts in this folder will be moved to the default folder. This action cannot be undone.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    onClick={() => deleteFolderMutation.mutate(folder.id)}
-                                    className="bg-red-600 hover:bg-red-700"
-                                  >
-                                    Delete
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
+                            <DropdownMenuItem
+                              onClick={() => setDeleteFolderDialog({ open: true, folder })}
+                              className="text-red-600 focus:text-red-600"
+                              data-testid={`delete-folder-${folder.id}`}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete Folder
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       )}
@@ -592,6 +575,35 @@ export default function Accounts() {
             </form>
           </DialogContent>
         </Dialog>
+
+        {/* Delete Folder Dialog */}
+        <AlertDialog 
+          open={deleteFolderDialog.open} 
+          onOpenChange={(open) => setDeleteFolderDialog({ open, folder: open ? deleteFolderDialog.folder : null })}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Folder</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete the "{deleteFolderDialog.folder?.name}" folder? All accounts in this folder will be moved to the default folder. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  if (deleteFolderDialog.folder) {
+                    deleteFolderMutation.mutate(deleteFolderDialog.folder.id);
+                    setDeleteFolderDialog({ open: false, folder: null });
+                  }
+                }}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </AdminLayout>
   );
