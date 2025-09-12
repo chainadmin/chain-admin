@@ -83,6 +83,46 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       }));
 
       res.status(200).json(consumersWithCounts);
+    } else if (req.method === 'PATCH') {
+      // Update consumer information
+      const consumerId = req.url?.split('/').pop();
+      
+      if (!consumerId || consumerId === 'consumers') {
+        res.status(400).json({ error: 'Consumer ID is required' });
+        return;
+      }
+      
+      const updates = req.body;
+      
+      // Verify consumer belongs to tenant
+      const [existingConsumer] = await db
+        .select()
+        .from(consumers)
+        .where(and(
+          eq(consumers.id, consumerId),
+          eq(consumers.tenantId, tenantId)
+        ))
+        .limit(1);
+      
+      if (!existingConsumer) {
+        res.status(404).json({ error: 'Consumer not found' });
+        return;
+      }
+      
+      // Update the consumer
+      const [updatedConsumer] = await db
+        .update(consumers)
+        .set({
+          ...updates,
+          updatedAt: new Date(),
+        })
+        .where(and(
+          eq(consumers.id, consumerId),
+          eq(consumers.tenantId, tenantId)
+        ))
+        .returning();
+      
+      res.status(200).json(updatedConsumer);
     } else if (req.method === 'DELETE') {
       // Handle consumer deletion
       // Can accept either a single ID or an array of IDs
