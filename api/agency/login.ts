@@ -105,7 +105,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       `authToken=${token}; Path=/; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}${domain ? `; Domain=${domain}` : ''}`,
       `tenantSlug=${tenant.slug}; Path=/; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}${domain ? `; Domain=${domain}` : ''}`,
       `tenantName=${encodeURIComponent(tenant.name)}; Path=/; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}${domain ? `; Domain=${domain}` : ''}`
-    ].join(', '));
+    ]);
 
     res.status(200).json({
       success: true,

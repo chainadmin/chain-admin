@@ -6,7 +6,7 @@
     "api/**/*.ts": {
       "runtime": "@vercel/node@3.0.0",
       "maxDuration": 30,
-      "includeFiles": "**"
+      "includeFiles": "{shared/**,api/_lib/**}"
     }
   },
   "rewrites": [
