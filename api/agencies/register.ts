@@ -1,9 +1,20 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { getDb } from '../_lib/db.js';
-import { agencyTrialRegistrationSchema, tenants, users, platformUsers, agencyCredentials } from '../../shared/schema.js';
-import { generateToken } from '../_lib/auth.js';
+import { getDb } from '../_lib/db';
+import { tenants, users, platformUsers, agencyCredentials } from '../_lib/schema';
+import { generateToken } from '../_lib/auth';
 import bcrypt from 'bcrypt';
 import { eq } from 'drizzle-orm';
+import { z } from 'zod';
+
+// Define the registration schema here
+const agencyTrialRegistrationSchema = z.object({
+  businessName: z.string().min(1),
+  email: z.string().email(),
+  password: z.string().min(8),
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  phone: z.string().optional()
+});
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -52,23 +63,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const [newTenant] = await db.insert(tenants).values({
       name: data.businessName,
       slug: slug,
-      isTrialAccount: true,
-      isPaidAccount: false,
-      ownerFirstName: data.ownerFirstName,
-      ownerLastName: data.ownerLastName,
-      ownerDateOfBirth: data.ownerDateOfBirth,
-      ownerSSN: data.ownerSSN,
-      businessName: data.businessName,
-      phoneNumber: data.phoneNumber,
-      email: data.email,
-      isActive: true
+      active: true
     }).returning();
 
     // Create user - let PostgreSQL generate the UUID
+    const fullName = `${data.firstName} ${data.lastName}`.trim();
     const [newUser] = await db.insert(users).values({
       email: data.email,
-      firstName: data.ownerFirstName,
-      lastName: data.ownerLastName
+      name: fullName
     }).returning();
     
     const userId = newUser.id;
@@ -79,30 +81,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Create agency credentials
     await db.insert(agencyCredentials).values({
       tenantId: newTenant.id,
-      username: data.username,
+      username: data.email, // Use email as username
       email: data.email,
       passwordHash: hashedPassword,
-      firstName: data.ownerFirstName,
-      lastName: data.ownerLastName,
+      firstName: data.firstName,
+      lastName: data.lastName,
       role: 'owner',
       isActive: true
     });
 
     // Create platform user association
     await db.insert(platformUsers).values({
-      authId: userId,
+      userId: userId,
       tenantId: newTenant.id,
       role: 'owner',
-      permissions: {
-        canManageAgency: true,
-        canManageUsers: true,
-        canManageAccounts: true,
-        canManageBilling: true,
-        canViewReports: true,
-        canManageAutomations: true,
-        canManageIntegrations: true
-      },
-      isActive: true
+      active: true
     });
 
     // Generate JWT token
@@ -114,7 +107,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       user: {
         id: userId,
         email: data.email,
-        name: `${data.ownerFirstName} ${data.ownerLastName}`
+        name: `${data.firstName} ${data.lastName}`
       },
       tenant: {
         id: newTenant.id,

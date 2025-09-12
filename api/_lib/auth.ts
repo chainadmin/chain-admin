@@ -1,6 +1,6 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { getDb } from './db.js';
-import { platformUsers, users } from '../../shared/schema.js';
+import { getDb } from './db';
+import { platformUsers, users } from './schema';
 import { eq } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 
@@ -50,7 +50,7 @@ export async function verifyAuth(req: AuthenticatedRequest): Promise<boolean> {
       const [platformUser] = await db
         .select()
         .from(platformUsers)
-        .where(eq(platformUsers.authId, user.id))
+        .where(eq(platformUsers.userId, user.id))
         .limit(1);
       
       req.platformUser = platformUser;

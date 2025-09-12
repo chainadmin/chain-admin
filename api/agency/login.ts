@@ -1,7 +1,7 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { getDb } from '../_lib/db.js';
-import { agencyCredentials, users, platformUsers, tenants } from '../../shared/schema.js';
-import { generateToken } from '../_lib/auth.js';
+import { getDb } from '../_lib/db';
+import { agencyCredentials, users, platformUsers, tenants } from '../_lib/schema';
+import { generateToken } from '../_lib/auth';
 import bcrypt from 'bcrypt';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
@@ -52,10 +52,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!user) {
       // Create user if doesn't exist - let PostgreSQL generate the UUID
+      const fullName = `${credentials.firstName || ''} ${credentials.lastName || ''}`.trim() || email;
       [user] = await db.insert(users).values({
         email,
-        firstName: credentials.firstName,
-        lastName: credentials.lastName
+        name: fullName
       }).returning();
     }
 
@@ -63,7 +63,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const [platformUser] = await db
       .select()
       .from(platformUsers)
-      .where(eq(platformUsers.authId, user.id))
+      .where(eq(platformUsers.userId, user.id))
       .limit(1);
 
     if (!platformUser) {
@@ -86,7 +86,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Check if tenant is active
-    if (!tenant.isActive) {
+    if (!tenant.active) {
       return res.status(403).json({ error: 'Agency account is not active' });
     }
 
@@ -113,15 +113,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       user: {
         id: user.id,
         email: user.email,
-        name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+        name: user.name || user.email,
         role: platformUser.role
       },
       tenant: {
         id: tenant.id,
         name: tenant.name,
         slug: tenant.slug,
-        isTrialAccount: tenant.isTrialAccount,
-        isPaidAccount: tenant.isPaidAccount
+        active: tenant.active
       }
     });
   } catch (error) {
