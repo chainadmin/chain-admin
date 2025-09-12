@@ -1,7 +1,7 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { getDb } from '../_lib/db';
-import { tenants, users, platformUsers, agencyCredentials } from '../../shared/schema';
-import { generateToken } from '../_lib/auth';
+import { getDb } from '../_lib/db.js';
+import { tenants, users, platformUsers, agencyCredentials } from '../../shared/schema.js';
+import { generateToken } from '../_lib/auth.js';
 import bcrypt from 'bcryptjs';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
