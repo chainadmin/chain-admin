@@ -130,7 +130,7 @@ export const emailTemplates = pgTable("email_templates", {
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
   name: text("name").notNull(),
   subject: text("subject").notNull(),
-  content: text("content").notNull(),
+  html: text("html").notNull(),
   category: text("category").default("general"),
   status: text("status").default("active"),
   createdAt: timestamp("created_at").defaultNow(),

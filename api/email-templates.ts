@@ -58,7 +58,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
           tenantId,
           name,
           subject,
-          content: html,  // Map 'html' from frontend to 'content' in database
+          html,  // Now using 'html' directly to match database
           category: category || 'general',
         })
         .returning();
