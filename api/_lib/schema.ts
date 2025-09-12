@@ -78,6 +78,7 @@ export const platformUsers = pgTable("platform_users", {
 export const consumers = pgTable("consumers", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  folderId: uuid("folder_id").references(() => folders.id, { onDelete: "set null" }),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
   email: text("email"),
@@ -88,6 +89,10 @@ export const consumers = pgTable("consumers", {
   city: text("city"),
   state: text("state"),
   zipCode: text("zip_code"),
+  isRegistered: boolean("is_registered").default(false),
+  registrationDate: timestamp("registration_date"),
+  contactPrefs: jsonb("contact_prefs").default(sql`'{}'::jsonb`),
+  additionalData: jsonb("additional_data").default(sql`'{}'::jsonb`),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -125,7 +130,8 @@ export const emailTemplates = pgTable("email_templates", {
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
   name: text("name").notNull(),
   subject: text("subject").notNull(),
-  html: text("html").notNull(),
+  content: text("content").notNull(),
+  category: text("category").default("general"),
   status: text("status").default("active"),
   createdAt: timestamp("created_at").defaultNow(),
 });
