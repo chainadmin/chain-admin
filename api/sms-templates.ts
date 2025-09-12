@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb } from './_lib/db.js';
 import { withAuth, AuthenticatedRequest } from './_lib/auth.js';
 import { smsTemplates } from './_lib/schema.js';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-jwt-secret-key-change-this-in-production';
@@ -39,7 +39,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         .select()
         .from(smsTemplates)
         .where(eq(smsTemplates.tenantId, tenantId))
-        .orderBy(smsTemplates.createdAt);
+        .orderBy(desc(smsTemplates.createdAt));
 
       res.status(200).json(templates);
     } else if (req.method === 'POST') {

@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb } from './_lib/db.js';
 import { withAuth, AuthenticatedRequest } from './_lib/auth.js';
 import { emailTemplates } from './_lib/schema.js';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-jwt-secret-key-change-this-in-production';
@@ -39,14 +39,15 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         .select()
         .from(emailTemplates)
         .where(eq(emailTemplates.tenantId, tenantId))
-        .orderBy(emailTemplates.createdAt);
+        .orderBy(desc(emailTemplates.createdAt));
 
       res.status(200).json(templates);
     } else if (req.method === 'POST') {
       // Create a new email template
-      const { name, subject, content, category } = req.body;
+      // Frontend sends 'html' field, backend stores it as 'content'
+      const { name, subject, html, category } = req.body;
 
-      if (!name || !subject || !content) {
+      if (!name || !subject || !html) {
         res.status(400).json({ error: 'Name, subject, and content are required' });
         return;
       }
@@ -57,7 +58,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
           tenantId,
           name,
           subject,
-          content,
+          content: html,  // Map 'html' from frontend to 'content' in database
           category: category || 'general',
         })
         .returning();
