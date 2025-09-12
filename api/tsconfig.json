@@ -13,7 +13,6 @@
     "moduleResolution": "node",
     "noEmit": false,
     "outDir": "../dist/api",
-    "rootDir": ".",
     "allowImportingTsExtensions": false,
     "baseUrl": ".",
     "paths": {
