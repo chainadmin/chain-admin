@@ -1,8 +1,8 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb } from '../_lib/db';
-import { agencyCredentials, users, platformUsers, tenants } from '../_lib/schema';
+import { agencyCredentials, users, platformUsers, tenants } from '../../shared/schema';
 import { generateToken } from '../_lib/auth';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 
@@ -105,7 +105,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       `authToken=${token}; Path=/; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}${domain ? `; Domain=${domain}` : ''}`,
       `tenantSlug=${tenant.slug}; Path=/; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}${domain ? `; Domain=${domain}` : ''}`,
       `tenantName=${encodeURIComponent(tenant.name)}; Path=/; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}${domain ? `; Domain=${domain}` : ''}`
-    ]);
+    ].join(', '));
 
     res.status(200).json({
       success: true,
@@ -120,7 +120,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         id: tenant.id,
         name: tenant.name,
         slug: tenant.slug,
-        isActive: tenant.isActive,
         isTrialAccount: tenant.isTrialAccount,
         isPaidAccount: tenant.isPaidAccount
       }

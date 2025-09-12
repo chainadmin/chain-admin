@@ -1,6 +1,6 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb } from '../_lib/db';
-import { consumers, tenants } from '../_lib/schema';
+import { consumers, tenants } from '../../shared/schema';
 import { eq, and } from 'drizzle-orm';
 import { z } from 'zod';
 import jwt from 'jsonwebtoken';
