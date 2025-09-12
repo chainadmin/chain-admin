@@ -15,7 +15,7 @@ import express from "express";
 import { emailService } from "./emailService";
 import { smsService } from "./smsService";
 import { uploadLogo } from "./supabaseStorage";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { subdomainMiddleware } from "./middleware/subdomain";
 
