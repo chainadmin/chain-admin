@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { getDb } from '../_lib/db.js';
+import { getDb } from '../_lib/db';
 import { consumers, tenants } from '../_lib/schema';
 import { eq, and } from 'drizzle-orm';
 import { z } from 'zod';
