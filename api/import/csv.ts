@@ -78,7 +78,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         .limit(1);
 
       if (!existingConsumer) {
-        // Create new consumer
+        // Create new consumer with all available fields
         const [newConsumer] = await db
           .insert(consumers)
           .values({
@@ -88,6 +88,11 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
             lastName: csvConsumer.lastName,
             email: csvConsumer.email,
             phone: csvConsumer.phone || null,
+            dateOfBirth: csvConsumer.dateOfBirth || null,
+            address: csvConsumer.address || null,
+            city: csvConsumer.city || null,
+            state: csvConsumer.state || null,
+            zipCode: csvConsumer.zipCode || null,
             additionalData: csvConsumer.additionalData || {},
             isRegistered: false,
           })

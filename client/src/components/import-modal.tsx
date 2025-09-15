@@ -90,7 +90,17 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
         const accounts = [];
 
         // Define standard column mappings
-        const standardConsumerFields = ['consumer_first_name', 'first_name', 'consumer_last_name', 'last_name', 'consumer_email', 'email', 'consumer_phone', 'phone'];
+        const standardConsumerFields = [
+          'consumer_first_name', 'first_name', 
+          'consumer_last_name', 'last_name', 
+          'consumer_email', 'email', 
+          'consumer_phone', 'phone',
+          'date_of_birth', 'dob', 'dateofbirth', 'consumer_dob', 'consumer_date_of_birth',
+          'address', 'consumer_address',
+          'city', 'consumer_city',
+          'state', 'consumer_state',
+          'zip_code', 'zipcode', 'zip', 'consumer_zip', 'consumer_zip_code'
+        ];
         const standardAccountFields = ['account_number', 'account', 'creditor', 'balance', 'due_date'];
         
         for (let i = 1; i < lines.length; i++) {
@@ -104,6 +114,17 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
           // Extract consumer data
           const consumerKey = row.consumer_email || row.email;
           if (consumerKey && !consumers.has(consumerKey)) {
+            // Extract date of birth from various possible column names
+            const dobValue = row.date_of_birth || row.dob || row.dateofbirth || 
+                           row.consumer_dob || row.consumer_date_of_birth || '';
+            
+            // Extract address fields
+            const addressValue = row.address || row.consumer_address || '';
+            const cityValue = row.city || row.consumer_city || '';
+            const stateValue = row.state || row.consumer_state || '';
+            const zipValue = row.zip_code || row.zipcode || row.zip || 
+                           row.consumer_zip || row.consumer_zip_code || '';
+            
             // Extract additional consumer data (any non-standard columns)
             const additionalConsumerData: any = {};
             headers.forEach(header => {
@@ -119,6 +140,11 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
               lastName: row.consumer_last_name || row.last_name || '',
               email: consumerKey,
               phone: row.consumer_phone || row.phone || '',
+              dateOfBirth: dobValue,
+              address: addressValue,
+              city: cityValue,
+              state: stateValue,
+              zipCode: zipValue,
               additionalData: additionalConsumerData,
             });
           }
@@ -211,6 +237,9 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
                   <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">consumer_last_name</code> or <code className="bg-blue-100 px-1 rounded text-xs">last_name</code></li>
                   <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">consumer_email</code> or <code className="bg-blue-100 px-1 rounded text-xs">email</code></li>
                   <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">consumer_phone</code> or <code className="bg-blue-100 px-1 rounded text-xs">phone</code> (optional)</li>
+                  <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">date_of_birth</code> or <code className="bg-blue-100 px-1 rounded text-xs">dob</code> (optional)</li>
+                  <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">address</code> (optional)</li>
+                  <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">city</code>, <code className="bg-blue-100 px-1 rounded text-xs">state</code>, <code className="bg-blue-100 px-1 rounded text-xs">zip_code</code> (optional)</li>
                 </ul>
               </div>
               <div>
