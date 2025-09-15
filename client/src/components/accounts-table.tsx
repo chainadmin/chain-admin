@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,6 +28,8 @@ interface AccountsTableProps {
 
 export default function AccountsTable({ accounts, isLoading, showFolderColumn = false, showDeleteButton = false }: AccountsTableProps) {
   const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -49,10 +52,55 @@ export default function AccountsTable({ accounts, isLoading, showFolderColumn = 
     },
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: (accountIds: string[]) => apiRequest("/api/accounts/bulk-delete", "DELETE", { ids: accountIds }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/consumers"] });
+      setSelectedAccounts(new Set());
+      setShowBulkDeleteDialog(false);
+      toast({
+        title: "Success",
+        description: `${selectedAccounts.size} accounts deleted successfully`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete accounts",
+        variant: "destructive",
+      });
+    },
+  });
+
   const filteredAccounts = accounts.filter(account => {
     if (statusFilter === "all") return true;
     return account.status?.toLowerCase() === statusFilter.toLowerCase();
   });
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedAccounts(new Set(filteredAccounts.map(a => a.id)));
+    } else {
+      setSelectedAccounts(new Set());
+    }
+  };
+
+  const handleSelectAccount = (accountId: string, checked: boolean) => {
+    const newSelected = new Set(selectedAccounts);
+    if (checked) {
+      newSelected.add(accountId);
+    } else {
+      newSelected.delete(accountId);
+    }
+    setSelectedAccounts(newSelected);
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedAccounts.size > 0) {
+      bulkDeleteMutation.mutate(Array.from(selectedAccounts));
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
@@ -113,9 +161,23 @@ export default function AccountsTable({ accounts, isLoading, showFolderColumn = 
         <div className="flex justify-between items-center">
           <div>
             <h3 className="text-lg leading-6 font-medium text-gray-900">Recent Accounts</h3>
-            <p className="mt-1 max-w-2xl text-sm text-gray-500">Latest imported and updated accounts</p>
+            <p className="mt-1 max-w-2xl text-sm text-gray-500">
+              {selectedAccounts.size > 0 
+                ? `${selectedAccounts.size} account${selectedAccounts.size > 1 ? 's' : ''} selected` 
+                : 'Latest imported and updated accounts'}
+            </p>
           </div>
           <div className="flex space-x-2">
+            {selectedAccounts.size > 0 && (
+              <Button
+                variant="destructive"
+                onClick={() => setShowBulkDeleteDialog(true)}
+                data-testid="button-delete-selected"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Selected ({selectedAccounts.size})
+              </Button>
+            )}
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-40" data-testid="select-status-filter">
                 <SelectValue />
@@ -148,6 +210,15 @@ export default function AccountsTable({ accounts, isLoading, showFolderColumn = 
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
+                  {showDeleteButton && (
+                    <th className="px-6 py-3 text-left">
+                      <Checkbox
+                        checked={selectedAccounts.size === filteredAccounts.length && filteredAccounts.length > 0}
+                        onCheckedChange={handleSelectAll}
+                        data-testid="checkbox-select-all"
+                      />
+                    </th>
+                  )}
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Consumer</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Account</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Creditor</th>
@@ -163,6 +234,15 @@ export default function AccountsTable({ accounts, isLoading, showFolderColumn = 
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredAccounts.map((account) => (
                   <tr key={account.id} className="hover:bg-gray-50">
+                    {showDeleteButton && (
+                      <td className="px-6 py-4">
+                        <Checkbox
+                          checked={selectedAccounts.has(account.id)}
+                          onCheckedChange={(checked) => handleSelectAccount(account.id, checked as boolean)}
+                          data-testid={`checkbox-account-${account.id}`}
+                        />
+                      </td>
+                    )}
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className="flex-shrink-0 h-8 w-8">
@@ -291,6 +371,29 @@ export default function AccountsTable({ accounts, isLoading, showFolderColumn = 
           </div>
         </>
       )}
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <AlertDialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Selected Accounts</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {selectedAccounts.size} selected account{selectedAccounts.size > 1 ? 's' : ''}? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-bulk-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              className="bg-red-600 hover:bg-red-700"
+              data-testid="button-confirm-bulk-delete"
+              disabled={bulkDeleteMutation.isPending}
+            >
+              {bulkDeleteMutation.isPending ? "Deleting..." : `Delete ${selectedAccounts.size} Account${selectedAccounts.size > 1 ? 's' : ''}`}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
