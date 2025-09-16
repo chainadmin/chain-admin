@@ -34,7 +34,7 @@ export default function AccountsTable({ accounts, isLoading, showFolderColumn = 
   const queryClient = useQueryClient();
 
   const deleteAccountMutation = useMutation({
-    mutationFn: (accountId: string) => apiRequest(`/api/accounts/${accountId}`, "DELETE"),
+    mutationFn: (accountId: string) => apiRequest("DELETE", `/api/accounts/${accountId}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/consumers"] });
@@ -53,7 +53,7 @@ export default function AccountsTable({ accounts, isLoading, showFolderColumn = 
   });
 
   const bulkDeleteMutation = useMutation({
-    mutationFn: (accountIds: string[]) => apiRequest("/api/accounts/bulk-delete", "DELETE", { ids: accountIds }),
+    mutationFn: (accountIds: string[]) => apiRequest("DELETE", "/api/accounts/bulk-delete", { ids: accountIds }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/consumers"] });
