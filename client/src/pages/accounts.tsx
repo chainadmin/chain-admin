@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -40,10 +41,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { FolderOpen, Folder, Plus, Upload, Settings, Trash2, MoreVertical } from "lucide-react";
+import { FolderOpen, Folder, Plus, Upload, Settings, Trash2, MoreVertical, Users, FileText, Eye, Phone, Edit, Mail, MapPin, Calendar } from "lucide-react";
 
 export default function Accounts() {
   const [selectedFolderId, setSelectedFolderId] = useState<string>("all");
+  const [activeMainTab, setActiveMainTab] = useState<string>("accounts");
   const [showImportModal, setShowImportModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
@@ -80,6 +82,24 @@ export default function Accounts() {
 
   const { data: consumers } = useQuery({
     queryKey: ["/api/consumers"],
+  });
+
+  // Consumer-related state
+  const [selectedConsumer, setSelectedConsumer] = useState<any>(null);
+  const [showConsumerEditDialog, setShowConsumerEditDialog] = useState(false);
+  const [showConsumerViewDialog, setShowConsumerViewDialog] = useState(false);
+  const [showConsumerDeleteDialog, setShowConsumerDeleteDialog] = useState(false);
+  const [deleteConsumerId, setDeleteConsumerId] = useState<string | null>(null);
+  const [consumerEditForm, setConsumerEditForm] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    dateOfBirth: "",
+    address: "",
+    city: "",
+    state: "",
+    zipCode: "",
   });
 
   // Mutations
@@ -132,6 +152,51 @@ export default function Accounts() {
       toast({
         title: "Error",
         description: error.message || "Failed to create folder",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Consumer mutations
+  const updateConsumerMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      return apiRequest("PATCH", `/api/consumers/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/consumers"] });
+      setShowConsumerEditDialog(false);
+      toast({
+        title: "Success",
+        description: "Consumer information updated successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update consumer",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteConsumerMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("DELETE", "/api/consumers", { id });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/consumers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
+      setShowConsumerDeleteDialog(false);
+      setDeleteConsumerId(null);
+      toast({
+        title: "Success",
+        description: "Consumer and all associated accounts deleted successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete consumer",
         variant: "destructive",
       });
     },
@@ -223,139 +288,272 @@ export default function Accounts() {
 
   const isLoading = accountsLoading || foldersLoading;
 
+  // Consumer handlers
+  const handleConsumerEdit = (consumer: any) => {
+    setSelectedConsumer(consumer);
+    setConsumerEditForm({
+      firstName: consumer.firstName || "",
+      lastName: consumer.lastName || "",
+      email: consumer.email || "",
+      phone: consumer.phone || "",
+      dateOfBirth: consumer.dateOfBirth || "",
+      address: consumer.address || "",
+      city: consumer.city || "",
+      state: consumer.state || "",
+      zipCode: consumer.zipCode || "",
+    });
+    setShowConsumerEditDialog(true);
+  };
+
+  const handleConsumerView = (consumer: any) => {
+    setSelectedConsumer(consumer);
+    setShowConsumerViewDialog(true);
+  };
+
+  const handleConsumerDelete = (consumerId: string) => {
+    setDeleteConsumerId(consumerId);
+    setShowConsumerDeleteDialog(true);
+  };
+
+  const handleConsumerUpdateSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (selectedConsumer) {
+      updateConsumerMutation.mutate({
+        id: selectedConsumer.id,
+        data: consumerEditForm,
+      });
+    }
+  };
+
   return (
     <AdminLayout>
       <div className="py-6">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Accounts</h1>
+              <h1 className="text-2xl font-bold text-gray-900">Accounts & Consumers</h1>
               <p className="mt-1 text-sm text-gray-500">
-                Manage all consumer accounts organized by folders
+                Manage all consumer records and their associated accounts
               </p>
             </div>
             <div className="flex gap-2">
-              <Button
-                onClick={() => setShowCreateFolderModal(true)}
-                variant="outline"
-                data-testid="button-create-folder"
-              >
-                <Folder className="h-4 w-4 mr-2" />
-                New Folder
-              </Button>
-              <Button
-                onClick={() => setShowImportModal(true)}
-                variant="outline"
-                data-testid="button-import-accounts"
-              >
-                <Upload className="h-4 w-4 mr-2" />
-                Import CSV
-              </Button>
-              <Button
-                onClick={() => setShowCreateModal(true)}
-                data-testid="button-create-account"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Create Account
-              </Button>
+              {activeMainTab === "accounts" && (
+                <>
+                  <Button
+                    onClick={() => setShowCreateFolderModal(true)}
+                    variant="outline"
+                    data-testid="button-create-folder"
+                  >
+                    <Folder className="h-4 w-4 mr-2" />
+                    New Folder
+                  </Button>
+                  <Button
+                    onClick={() => setShowImportModal(true)}
+                    variant="outline"
+                    data-testid="button-import-accounts"
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Import CSV
+                  </Button>
+                  <Button
+                    onClick={() => setShowCreateModal(true)}
+                    data-testid="button-create-account"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Account
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 mt-8">
-          <Tabs value={selectedFolderId} onValueChange={setSelectedFolderId} className="w-full">
-            <div className="overflow-x-auto mb-6">
-              <TabsList className="inline-flex min-w-full sm:grid sm:grid-cols-auto gap-1" style={{ 
-                gridTemplateColumns: window.innerWidth >= 640 ? `repeat(${((folders as any[])?.length || 0) + 1}, minmax(0, 1fr))` : undefined
-              }}>
-                <TabsTrigger 
-                  value="all" 
-                  className="flex items-center gap-2 whitespace-nowrap"
-                  data-testid="tab-all-accounts"
-                >
-                  <FolderOpen className="h-4 w-4" />
-                  All Accounts ({((accounts as any[]) || []).length})
-                </TabsTrigger>
-                
-                {((folders as any[]) || []).map((folder: any) => (
-                  <TabsTrigger 
-                    key={folder.id} 
-                    value={folder.id}
-                    className="flex items-center gap-2 group relative whitespace-nowrap"
-                    data-testid={`tab-folder-${folder.name.toLowerCase().replace(/\s+/g, '-')}`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div 
-                        className="w-3 h-3 rounded-full" 
-                        style={{ backgroundColor: folder.color }}
-                      />
-                      <Folder className="h-4 w-4" />
-                      {folder.name} ({folderCounts[folder.id] || 0})
-                      {!folder.isDefault && (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-4 w-4 p-0 opacity-0 group-hover:opacity-100 ml-1"
-                              onClick={(e) => e.stopPropagation()}
-                              data-testid={`dropdown-folder-${folder.id}`}
-                            >
-                              <MoreVertical className="h-3 w-3" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent>
-                            <DropdownMenuItem
-                              onClick={() => setDeleteFolderDialog({ open: true, folder })}
-                              className="text-red-600 focus:text-red-600"
-                              data-testid={`delete-folder-${folder.id}`}
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Delete Folder
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
-                    </div>
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </div>
+          {/* Main tabs for Accounts and Consumers */}
+          <Tabs value={activeMainTab} onValueChange={setActiveMainTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-2 mb-6">
+              <TabsTrigger value="accounts" className="flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Accounts ({((accounts as any[]) || []).length})
+              </TabsTrigger>
+              <TabsTrigger value="consumers" className="flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Consumers ({((consumers as any[]) || []).length})
+              </TabsTrigger>
+            </TabsList>
 
-            <TabsContent value="all" className="mt-0">
-              <AccountsTable 
-                accounts={filteredAccounts} 
-                isLoading={isLoading} 
-                showFolderColumn={true}
-                showDeleteButton={true}
-              />
+            {/* Accounts Tab Content */}
+            <TabsContent value="accounts" className="mt-0">
+              <Tabs value={selectedFolderId} onValueChange={setSelectedFolderId} className="w-full">
+                <div className="overflow-x-auto mb-6">
+                  <TabsList className="inline-flex min-w-full sm:grid sm:grid-cols-auto gap-1" style={{ 
+                    gridTemplateColumns: window.innerWidth >= 640 ? `repeat(${((folders as any[])?.length || 0) + 1}, minmax(0, 1fr))` : undefined
+                  }}>
+                    <TabsTrigger 
+                      value="all" 
+                      className="flex items-center gap-2 whitespace-nowrap"
+                      data-testid="tab-all-accounts"
+                    >
+                      <FolderOpen className="h-4 w-4" />
+                      All Accounts ({((accounts as any[]) || []).length})
+                    </TabsTrigger>
+                    
+                    {((folders as any[]) || []).map((folder: any) => (
+                      <TabsTrigger 
+                        key={folder.id} 
+                        value={folder.id}
+                        className="flex items-center gap-2 group relative whitespace-nowrap"
+                        data-testid={`tab-folder-${folder.name.toLowerCase().replace(/\s+/g, '-')}`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <div 
+                            className="w-3 h-3 rounded-full" 
+                            style={{ backgroundColor: folder.color }}
+                          />
+                          <Folder className="h-4 w-4" />
+                          {folder.name} ({folderCounts[folder.id] || 0})
+                          {!folder.isDefault && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-4 w-4 p-0 opacity-0 group-hover:opacity-100 ml-1"
+                                  onClick={(e) => e.stopPropagation()}
+                                  data-testid={`dropdown-folder-${folder.id}`}
+                                >
+                                  <MoreVertical className="h-3 w-3" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent>
+                                <DropdownMenuItem
+                                  onClick={() => setDeleteFolderDialog({ open: true, folder })}
+                                  className="text-red-600 focus:text-red-600"
+                                  data-testid={`delete-folder-${folder.id}`}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete Folder
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                        </div>
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </div>
+
+                <TabsContent value="all" className="mt-0">
+                  <AccountsTable 
+                    accounts={filteredAccounts} 
+                    isLoading={isLoading} 
+                    showFolderColumn={true}
+                    showDeleteButton={true}
+                  />
+                </TabsContent>
+
+                {((folders as any[]) || []).map((folder: any) => (
+                  <TabsContent key={folder.id} value={folder.id} className="mt-0">
+                    <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                      <div className="flex items-center gap-3">
+                        <div 
+                          className="w-4 h-4 rounded-full" 
+                          style={{ backgroundColor: folder.color }}
+                        />
+                        <div>
+                          <h3 className="font-medium text-gray-900">{folder.name}</h3>
+                          {folder.description && (
+                            <p className="text-sm text-gray-500">{folder.description}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <AccountsTable 
+                      accounts={filteredAccounts} 
+                      isLoading={isLoading}
+                      showFolderColumn={false}
+                      showDeleteButton={true}
+                    />
+                  </TabsContent>
+                ))}
+              </Tabs>
             </TabsContent>
 
-            {((folders as any[]) || []).map((folder: any) => (
-              <TabsContent key={folder.id} value={folder.id} className="mt-0">
-                <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                  <div className="flex items-center gap-3">
-                    <div 
-                      className="w-4 h-4 rounded-full" 
-                      style={{ backgroundColor: folder.color }}
-                    />
-                    <div>
-                      <h3 className="font-medium text-gray-900">{folder.name}</h3>
-                      {folder.description && (
-                        <p className="text-sm text-gray-500">{folder.description}</p>
-                      )}
+            {/* Consumers Tab Content */}
+            <TabsContent value="consumers" className="mt-0">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Consumer List</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {isLoading ? (
+                    <div className="text-center py-8">Loading consumers...</div>
+                  ) : (consumers as any)?.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      No consumers found. Import account data to get started.
                     </div>
-                  </div>
-                </div>
-                
-                <AccountsTable 
-                  accounts={filteredAccounts} 
-                  isLoading={isLoading}
-                  showFolderColumn={false}
-                  showDeleteButton={true}
-                />
-              </TabsContent>
-            ))}
+                  ) : (
+                    <div className="space-y-4">
+                      {(consumers as any)?.map((consumer: any) => (
+                        <div key={consumer.id} className="border-b pb-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center">
+                              <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
+                                <span className="text-sm font-medium text-gray-700">
+                                  {consumer.firstName?.[0]}{consumer.lastName?.[0]}
+                                </span>
+                              </div>
+                              <div className="ml-4">
+                                <p className="text-sm font-medium text-gray-900">
+                                  {consumer.firstName} {consumer.lastName}
+                                </p>
+                                <p className="text-sm text-gray-500">{consumer.email}</p>
+                                {consumer.phone && (
+                                  <p className="text-sm text-gray-500">{consumer.phone}</p>
+                                )}
+                                {consumer.accountCount > 0 && (
+                                  <p className="text-xs text-gray-400 mt-1">
+                                    {consumer.accountCount} account{consumer.accountCount !== 1 ? 's' : ''}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleConsumerView(consumer)}
+                                data-testid={`button-view-${consumer.id}`}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleConsumerEdit(consumer)}
+                                data-testid={`button-edit-${consumer.id}`}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-red-600 hover:text-red-700"
+                                onClick={() => handleConsumerDelete(consumer.id)}
+                                data-testid={`button-delete-${consumer.id}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
           </Tabs>
         </div>
 
@@ -600,6 +798,235 @@ export default function Accounts() {
                 className="bg-red-600 hover:bg-red-700"
               >
                 Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Consumer View Dialog */}
+        <Dialog open={showConsumerViewDialog} onOpenChange={setShowConsumerViewDialog}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Consumer Details</DialogTitle>
+            </DialogHeader>
+            {selectedConsumer && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm text-gray-500">Name</Label>
+                    <p className="font-medium">
+                      {selectedConsumer.firstName} {selectedConsumer.lastName}
+                    </p>
+                  </div>
+                  {selectedConsumer.email && (
+                    <div>
+                      <Label className="text-sm text-gray-500">Email</Label>
+                      <p className="font-medium flex items-center gap-1">
+                        <Mail className="h-4 w-4" />
+                        {selectedConsumer.email}
+                      </p>
+                    </div>
+                  )}
+                  {selectedConsumer.phone && (
+                    <div>
+                      <Label className="text-sm text-gray-500">Phone</Label>
+                      <p className="font-medium flex items-center gap-1">
+                        <Phone className="h-4 w-4" />
+                        {selectedConsumer.phone}
+                      </p>
+                    </div>
+                  )}
+                  {selectedConsumer.dateOfBirth && (
+                    <div>
+                      <Label className="text-sm text-gray-500">Date of Birth</Label>
+                      <p className="font-medium flex items-center gap-1">
+                        <Calendar className="h-4 w-4" />
+                        {selectedConsumer.dateOfBirth}
+                      </p>
+                    </div>
+                  )}
+                  {(selectedConsumer.address || selectedConsumer.city || selectedConsumer.state || selectedConsumer.zipCode) && (
+                    <div className="col-span-2">
+                      <Label className="text-sm text-gray-500">Address</Label>
+                      <p className="font-medium flex items-center gap-1">
+                        <MapPin className="h-4 w-4" />
+                        {[
+                          selectedConsumer.address,
+                          selectedConsumer.city,
+                          selectedConsumer.state,
+                          selectedConsumer.zipCode
+                        ].filter(Boolean).join(", ")}
+                      </p>
+                    </div>
+                  )}
+                  <div>
+                    <Label className="text-sm text-gray-500">Registration Status</Label>
+                    <p className="font-medium">
+                      {selectedConsumer.isRegistered ? (
+                        <span className="text-green-600">Registered</span>
+                      ) : (
+                        <span className="text-gray-500">Not Registered</span>
+                      )}
+                    </p>
+                  </div>
+                  {selectedConsumer.folder && (
+                    <div>
+                      <Label className="text-sm text-gray-500">Folder</Label>
+                      <p className="font-medium flex items-center gap-2">
+                        <div 
+                          className="w-3 h-3 rounded-full" 
+                          style={{ backgroundColor: selectedConsumer.folder.color }}
+                        />
+                        {selectedConsumer.folder.name}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Consumer Edit Dialog */}
+        <Dialog open={showConsumerEditDialog} onOpenChange={setShowConsumerEditDialog}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Edit Consumer Information</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleConsumerUpdateSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="editFirstName">First Name</Label>
+                  <Input
+                    id="editFirstName"
+                    value={consumerEditForm.firstName}
+                    onChange={(e) => setConsumerEditForm({ ...consumerEditForm, firstName: e.target.value })}
+                    placeholder="Enter first name"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="editLastName">Last Name</Label>
+                  <Input
+                    id="editLastName"
+                    value={consumerEditForm.lastName}
+                    onChange={(e) => setConsumerEditForm({ ...consumerEditForm, lastName: e.target.value })}
+                    placeholder="Enter last name"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="editEmail">Email</Label>
+                  <Input
+                    id="editEmail"
+                    type="email"
+                    value={consumerEditForm.email}
+                    onChange={(e) => setConsumerEditForm({ ...consumerEditForm, email: e.target.value })}
+                    placeholder="Enter email"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="editPhone">Phone</Label>
+                  <Input
+                    id="editPhone"
+                    value={consumerEditForm.phone}
+                    onChange={(e) => setConsumerEditForm({ ...consumerEditForm, phone: e.target.value })}
+                    placeholder="Enter phone"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="editDob">Date of Birth</Label>
+                  <Input
+                    id="editDob"
+                    type="date"
+                    value={consumerEditForm.dateOfBirth}
+                    onChange={(e) => setConsumerEditForm({ ...consumerEditForm, dateOfBirth: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="editAddress">Street Address</Label>
+                  <Input
+                    id="editAddress"
+                    value={consumerEditForm.address}
+                    onChange={(e) => setConsumerEditForm({ ...consumerEditForm, address: e.target.value })}
+                    placeholder="Enter address"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label htmlFor="editCity">City</Label>
+                  <Input
+                    id="editCity"
+                    value={consumerEditForm.city}
+                    onChange={(e) => setConsumerEditForm({ ...consumerEditForm, city: e.target.value })}
+                    placeholder="Enter city"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="editState">State</Label>
+                  <Input
+                    id="editState"
+                    value={consumerEditForm.state}
+                    onChange={(e) => setConsumerEditForm({ ...consumerEditForm, state: e.target.value })}
+                    placeholder="Enter state"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="editZip">ZIP Code</Label>
+                  <Input
+                    id="editZip"
+                    value={consumerEditForm.zipCode}
+                    onChange={(e) => setConsumerEditForm({ ...consumerEditForm, zipCode: e.target.value })}
+                    placeholder="Enter ZIP"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowConsumerEditDialog(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={updateConsumerMutation.isPending}
+                >
+                  {updateConsumerMutation.isPending ? "Saving..." : "Save Changes"}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Consumer Delete Dialog */}
+        <AlertDialog open={showConsumerDeleteDialog} onOpenChange={setShowConsumerDeleteDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Consumer</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete this consumer? This will also delete all accounts associated with this consumer. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  if (deleteConsumerId) {
+                    deleteConsumerMutation.mutate(deleteConsumerId);
+                  }
+                }}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Delete Consumer & Accounts
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
