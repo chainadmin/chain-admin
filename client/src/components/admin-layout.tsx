@@ -43,7 +43,6 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   
   const navigationItems = [
     { name: "Dashboard", href: buildNavHref("/dashboard"), icon: "fas fa-chart-bar" },
-    { name: "Consumers", href: buildNavHref("/consumers"), icon: "fas fa-users" },
     { name: "Accounts", href: buildNavHref("/accounts"), icon: "fas fa-file-invoice-dollar" },
     { name: "Communications", href: buildNavHref("/communications"), icon: "fas fa-comments" },
     { name: "Payments", href: buildNavHref("/payments"), icon: "fas fa-credit-card" },

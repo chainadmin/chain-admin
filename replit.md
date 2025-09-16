@@ -5,6 +5,13 @@ Chain is a multi-tenant platform designed for agencies to manage consumer accoun
 # Recent Changes
 
 ## January 2025
+- **Account Management Improvements**: Fixed critical account and consumer management issues
+  - Fixed bulk delete functionality for accounts with correct API endpoint routing
+  - Created individual account deletion endpoint with proper authorization
+  - Unified consumers and accounts into single tabbed interface for better workflow
+  - Implemented cascade delete for consumer-account relationships
+  - Individual account creation form already available without CSV import
+
 - **Unified Communications System**: Combined email and SMS functionality into a single "Communications" page
   - Merged email templates, SMS templates, and callback requests into one interface
   - Added toggle between email and SMS modes for templates and campaigns
