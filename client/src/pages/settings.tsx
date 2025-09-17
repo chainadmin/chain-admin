@@ -434,7 +434,8 @@ export default function Settings() {
                         
                         if ((user as any)?.isJwtAuth) {
                           // JWT auth - tenant info is directly on user
-                          agencySlug = (user as any)?.tenant?.slug;
+                          // Check both tenantSlug and tenant.slug
+                          agencySlug = (user as any)?.tenantSlug || (user as any)?.tenant?.slug;
                         } else if ((user as any)?.platformUser) {
                           // Replit auth - tenant info is under platformUser
                           agencySlug = (user as any)?.platformUser?.tenant?.slug;
