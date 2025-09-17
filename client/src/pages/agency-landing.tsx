@@ -11,17 +11,26 @@ export default function AgencyLanding() {
   const { agencySlug: pathSlug } = useParams();
   const [, setLocation] = useLocation();
   
-  // Get agency slug from subdomain or path
-  const agencySlug = pathSlug || getAgencySlugFromRequest(
-    window.location.hostname,
-    window.location.pathname
-  );
+  // Get agency slug from URL path first (for /agency/slug routes)
+  // or from subdomain if on production domain
+  let agencySlug = pathSlug;
+  
+  if (!agencySlug) {
+    // Only try subdomain extraction if we're on the production domain
+    const hostname = window.location.hostname;
+    if (hostname.includes('chainsoftwaregroup.com')) {
+      const extractedSlug = getAgencySlugFromRequest(hostname, window.location.pathname);
+      agencySlug = extractedSlug || undefined;
+    }
+  }
+  
   const [isLoading, setIsLoading] = useState(true);
 
   // Fetch agency information
   const { data: agencyData, isLoading: agencyLoading, error } = useQuery({
     queryKey: [`/api/public/agency/${agencySlug}`],
     enabled: !!agencySlug,
+    retry: 1, // Only retry once to avoid excessive requests
   });
 
   useEffect(() => {

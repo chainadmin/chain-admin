@@ -110,7 +110,7 @@ function Router() {
             <p className="text-gray-600">Loading...</p>
           </div>
         </div>
-      ) : !isMainDomain ? (
+      ) : agencySlug && !isMainDomain ? (
         // On agency subdomain - ALWAYS show consumer portal by default, regardless of auth or loading state
         <>
           {/* Public consumer routes - always accessible on agency subdomain */}
