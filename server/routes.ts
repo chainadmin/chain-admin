@@ -448,19 +448,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const { firstName, lastName, email, phone, accountNumber, creditor, balanceCents, folderId } = req.body;
+      const { firstName, lastName, email, phone, dateOfBirth, accountNumber, creditor, balanceCents, folderId } = req.body;
 
       if (!firstName || !lastName || !email || !creditor || balanceCents === undefined) {
         return res.status(400).json({ message: "Missing required fields" });
       }
 
-      // Find or create consumer
+      // Find or create consumer with date of birth for better matching
       const consumer = await storage.findOrCreateConsumer({
         tenantId: tenantId,
         firstName,
         lastName,
         email,
         phone: phone || null,
+        dateOfBirth: dateOfBirth || null,
         folderId: folderId || null,
       });
 
