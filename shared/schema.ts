@@ -302,6 +302,12 @@ export const tenantSettings = pgTable("tenant_settings", {
   smsThrottleLimit: bigint("sms_throttle_limit", { mode: "number" }).default(10), // SMS per minute limit
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  // Payment processor fields
+  merchantProvider: text("merchant_provider"),
+  merchantAccountId: text("merchant_account_id"),
+  merchantApiKey: text("merchant_api_key"),
+  merchantName: text("merchant_name"),
+  enableOnlinePayments: boolean("enable_online_payments").default(false),
 });
 
 // Consumer notifications (when accounts are added)
