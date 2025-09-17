@@ -94,7 +94,6 @@ export const consumers = pgTable("consumers", {
   contactPrefs: jsonb("contact_prefs").default(sql`'{}'::jsonb`),
   additionalData: jsonb("additional_data").default(sql`'{}'::jsonb`),
   createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // Folders for organizing accounts
