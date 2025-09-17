@@ -73,11 +73,14 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         continue;
       }
       // Check if consumer already exists
+      // Match by email, firstName, lastName to ensure it's the same person
       let [existingConsumer] = await db
         .select()
         .from(consumers)
         .where(and(
           eq(consumers.email, csvConsumer.email),
+          eq(consumers.firstName, csvConsumer.firstName),
+          eq(consumers.lastName, csvConsumer.lastName),
           eq(consumers.tenantId, tenantId)
         ))
         .limit(1);
@@ -93,7 +96,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
             lastName: csvConsumer.lastName,
             email: csvConsumer.email,
             phone: csvConsumer.phone || null,
-            dateOfBirth: new Date(csvConsumer.dateOfBirth),
+            dateOfBirth: csvConsumer.dateOfBirth,
             address: csvConsumer.address || null,
             city: csvConsumer.city || null,
             state: csvConsumer.state || null,

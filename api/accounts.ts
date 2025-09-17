@@ -83,11 +83,14 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       }
 
       // Check if consumer exists or create new one
+      // Match by email, firstName, lastName, and dateOfBirth to ensure it's the same person
       let [consumer] = await db
         .select()
         .from(consumers)
         .where(and(
           eq(consumers.email, email),
+          eq(consumers.firstName, firstName),
+          eq(consumers.lastName, lastName),
           eq(consumers.tenantId, tenantId)
         ))
         .limit(1);
@@ -120,7 +123,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
             lastName,
             email,
             phone: phone || null,
-            dateOfBirth: new Date(dateOfBirth),
+            dateOfBirth: dateOfBirth,
             address: address || null,
             city: city || null,
             state: state || null,
