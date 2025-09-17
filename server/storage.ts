@@ -455,6 +455,27 @@ export class DatabaseStorage implements IStorage {
     return newConsumer;
   }
 
+  async findOrCreateConsumer(consumerData: InsertConsumer): Promise<Consumer> {
+    // Try to find existing consumer by email, firstName, lastName, and tenantId
+    const [existingConsumer] = await db.select()
+      .from(consumers)
+      .where(
+        and(
+          eq(consumers.email, consumerData.email!),
+          eq(consumers.firstName, consumerData.firstName!),
+          eq(consumers.lastName, consumerData.lastName!),
+          eq(consumers.tenantId, consumerData.tenantId!)
+        )
+      );
+    
+    if (existingConsumer) {
+      return existingConsumer;
+    }
+    
+    // If not found, create new consumer
+    return await this.createConsumer(consumerData);
+  }
+
   // Folder operations
   async getFoldersByTenant(tenantId: string): Promise<Folder[]> {
     return await db.select().from(folders).where(eq(folders.tenantId, tenantId)).orderBy(folders.sortOrder);

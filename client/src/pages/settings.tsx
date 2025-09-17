@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import AdminLayout from "@/components/admin-layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -60,6 +60,8 @@ export default function Settings() {
     monthlyPaymentMax: "",
     maxTermMonths: "12",
   });
+  const [localSettings, setLocalSettings] = useState<any>({});
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -84,6 +86,12 @@ export default function Settings() {
     enabled: !!authUser, // Only fetch if authenticated
   });
 
+  // Initialize local settings when data loads
+  useEffect(() => {
+    if (settings && !hasUnsavedChanges) {
+      setLocalSettings(settings);
+    }
+  }, [settings]);
 
   const updateSettingsMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -231,9 +239,22 @@ export default function Settings() {
   });
 
   const handleSettingsUpdate = (field: string, value: any) => {
-    updateSettingsMutation.mutate({
-      ...(settings as any),
+    setLocalSettings((prev: any) => ({
+      ...prev,
       [field]: value,
+    }));
+    setHasUnsavedChanges(true);
+  };
+
+  const handleSaveSettings = () => {
+    updateSettingsMutation.mutate(localSettings, {
+      onSuccess: () => {
+        setHasUnsavedChanges(false);
+        toast({
+          title: "Settings Saved",
+          description: "Your changes have been saved successfully.",
+        });
+      },
     });
   };
 
@@ -561,7 +582,7 @@ export default function Settings() {
                       </p>
                     </div>
                     <Switch
-                      checked={(settings as any)?.showPaymentPlans ?? true}
+                      checked={localSettings?.showPaymentPlans ?? true}
                       onCheckedChange={(checked) => handleSettingsUpdate('showPaymentPlans', checked)}
                     />
                   </div>
@@ -574,7 +595,7 @@ export default function Settings() {
                       </p>
                     </div>
                     <Switch
-                      checked={(settings as any)?.showDocuments ?? true}
+                      checked={localSettings?.showDocuments ?? true}
                       onCheckedChange={(checked) => handleSettingsUpdate('showDocuments', checked)}
                     />
                   </div>
@@ -587,11 +608,22 @@ export default function Settings() {
                       </p>
                     </div>
                     <Switch
-                      checked={(settings as any)?.allowSettlementRequests ?? true}
+                      checked={localSettings?.allowSettlementRequests ?? true}
                       onCheckedChange={(checked) => handleSettingsUpdate('allowSettlementRequests', checked)}
                     />
                   </div>
                 </CardContent>
+                {hasUnsavedChanges && (
+                  <CardFooter>
+                    <Button 
+                      onClick={handleSaveSettings} 
+                      disabled={updateSettingsMutation.isPending}
+                      className="ml-auto"
+                    >
+                      {updateSettingsMutation.isPending ? "Saving..." : "Save Changes"}
+                    </Button>
+                  </CardFooter>
+                )}
               </Card>
             </TabsContent>
 
@@ -630,7 +662,7 @@ export default function Settings() {
                       <div>
                         <Label>Merchant Provider</Label>
                         <Input
-                          value={(settings as any)?.merchantProvider || ""}
+                          value={localSettings?.merchantProvider || ""}
                           onChange={(e) => handleSettingsUpdate('merchantProvider', e.target.value)}
                           placeholder="e.g., Stripe, Square, PayPal"
                           data-testid="input-merchant-provider"
@@ -640,7 +672,7 @@ export default function Settings() {
                       <div>
                         <Label>Merchant Account ID</Label>
                         <Input
-                          value={(settings as any)?.merchantAccountId || ""}
+                          value={localSettings?.merchantAccountId || ""}
                           onChange={(e) => handleSettingsUpdate('merchantAccountId', e.target.value)}
                           placeholder="Your merchant account identifier"
                           data-testid="input-merchant-id"
@@ -651,7 +683,7 @@ export default function Settings() {
                         <Label>API Key</Label>
                         <Input
                           type="password"
-                          value={(settings as any)?.merchantApiKey || ""}
+                          value={localSettings?.merchantApiKey || ""}
                           onChange={(e) => handleSettingsUpdate('merchantApiKey', e.target.value)}
                           placeholder="Your merchant API key"
                           data-testid="input-merchant-key"
@@ -664,7 +696,7 @@ export default function Settings() {
                       <div>
                         <Label>Merchant Name</Label>
                         <Input
-                          value={(settings as any)?.merchantName || ""}
+                          value={localSettings?.merchantName || ""}
                           onChange={(e) => handleSettingsUpdate('merchantName', e.target.value)}
                           placeholder="Name displayed on payment receipts"
                           data-testid="input-merchant-name"
@@ -679,7 +711,7 @@ export default function Settings() {
                           </p>
                         </div>
                         <Switch
-                          checked={(settings as any)?.enableOnlinePayments ?? false}
+                          checked={localSettings?.enableOnlinePayments ?? false}
                           onCheckedChange={(checked) => handleSettingsUpdate('enableOnlinePayments', checked)}
                           data-testid="switch-online-payments"
                         />
@@ -722,6 +754,17 @@ export default function Settings() {
                     </div>
                   )}
                 </CardContent>
+                {hasUnsavedChanges && (
+                  <CardFooter>
+                    <Button 
+                      onClick={handleSaveSettings} 
+                      disabled={updateSettingsMutation.isPending}
+                      className="ml-auto"
+                    >
+                      {updateSettingsMutation.isPending ? "Saving..." : "Save Changes"}
+                    </Button>
+                  </CardFooter>
+                )}
               </Card>
             </TabsContent>
 
@@ -986,7 +1029,7 @@ export default function Settings() {
                   <div>
                     <Label>Contact Email</Label>
                     <Input
-                      value={(settings as any)?.contactEmail || ""}
+                      value={localSettings?.contactEmail || ""}
                       onChange={(e) => handleSettingsUpdate('contactEmail', e.target.value)}
                       placeholder="support@youragency.com"
                     />
@@ -995,7 +1038,7 @@ export default function Settings() {
                   <div>
                     <Label>Contact Phone</Label>
                     <Input
-                      value={(settings as any)?.contactPhone || ""}
+                      value={localSettings?.contactPhone || ""}
                       onChange={(e) => handleSettingsUpdate('contactPhone', e.target.value)}
                       placeholder="(555) 123-4567"
                     />
@@ -1005,7 +1048,7 @@ export default function Settings() {
                     <Label>Privacy Policy</Label>
                     <Textarea
                       rows={6}
-                      value={(settings as any)?.privacyPolicy || ""}
+                      value={localSettings?.privacyPolicy || ""}
                       onChange={(e) => handleSettingsUpdate('privacyPolicy', e.target.value)}
                       placeholder="Enter your privacy policy text that consumers will see..."
                     />
@@ -1015,12 +1058,23 @@ export default function Settings() {
                     <Label>Terms of Service</Label>
                     <Textarea
                       rows={6}
-                      value={(settings as any)?.termsOfService || ""}
+                      value={localSettings?.termsOfService || ""}
                       onChange={(e) => handleSettingsUpdate('termsOfService', e.target.value)}
                       placeholder="Enter your terms of service text that consumers will see..."
                     />
                   </div>
                 </CardContent>
+                {hasUnsavedChanges && (
+                  <CardFooter>
+                    <Button 
+                      onClick={handleSaveSettings} 
+                      disabled={updateSettingsMutation.isPending}
+                      className="ml-auto"
+                    >
+                      {updateSettingsMutation.isPending ? "Saving..." : "Save Changes"}
+                    </Button>
+                  </CardFooter>
+                )}
               </Card>
             </TabsContent>
 

@@ -418,12 +418,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // CSV Import route
-  app.post('/api/import/csv', isAuthenticated, async (req: any, res) => {
+  app.post('/api/import/csv', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
+      const tenantId = req.user.tenantId;
       
-      if (!platformUser?.tenantId) {
+      if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
       }
 
@@ -432,17 +431,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get default folder if no folder is specified
       let targetFolderId = folderId;
       if (!targetFolderId) {
-        await storage.ensureDefaultFolders(platformUser.tenantId);
-        const defaultFolder = await storage.getDefaultFolder(platformUser.tenantId);
+        await storage.ensureDefaultFolders(tenantId);
+        const defaultFolder = await storage.getDefaultFolder(tenantId);
         targetFolderId = defaultFolder?.id;
       }
       
-      // Create consumers first
+      // Find or create consumers
       const createdConsumers = new Map();
       for (const consumerData of consumersData) {
-        const consumer = await storage.createConsumer({
+        const consumer = await storage.findOrCreateConsumer({
           ...consumerData,
-          tenantId: platformUser.tenantId,
+          tenantId: tenantId,
           folderId: targetFolderId,
         });
         createdConsumers.set(consumer.email, consumer);
@@ -456,7 +455,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         return {
-          tenantId: platformUser.tenantId!,
+          tenantId: tenantId,
           consumerId: consumer.id,
           folderId: targetFolderId,
           accountNumber: accountData.accountNumber,
@@ -482,12 +481,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Account management routes
-  app.post('/api/accounts', isAuthenticated, async (req: any, res) => {
+  app.post('/api/accounts', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
+      const tenantId = req.user.tenantId;
       
-      if (!platformUser?.tenantId) {
+      if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
       }
 
@@ -497,24 +495,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Missing required fields" });
       }
 
-      // Check if consumer already exists  
-      let consumer = await storage.getConsumerByEmail(email);
-      
-      if (!consumer) {
-        // Create new consumer
-        consumer = await storage.createConsumer({
-          tenantId: platformUser.tenantId,
-          firstName,
-          lastName,
-          email,
-          phone: phone || null,
-          folderId: folderId || null,
-        });
-      }
+      // Find or create consumer
+      const consumer = await storage.findOrCreateConsumer({
+        tenantId: tenantId,
+        firstName,
+        lastName,
+        email,
+        phone: phone || null,
+        folderId: folderId || null,
+      });
 
       // Create account
       const account = await storage.createAccount({
-        tenantId: platformUser.tenantId,
+        tenantId: tenantId,
         consumerId: consumer.id,
         folderId: folderId || null,
         accountNumber: accountNumber || null,
@@ -1942,22 +1935,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Document routes
-  app.get('/api/documents', isAuthenticated, async (req: any, res) => {
+  app.get('/api/documents', authenticateUser, async (req: any, res) => {
     try {
-      let tenantId: string;
+      const tenantId = req.user.tenantId;
       
-      if (req.user.isJwtAuth) {
-        // JWT auth - tenant ID is directly on user
-        tenantId = req.user.tenantId;
-      } else {
-        // Replit auth - need to look up platform user
-        const userId = req.user.claims.sub;
-        const platformUser = await storage.getPlatformUser(userId);
-        
-        if (!platformUser?.tenantId) {
-          return res.status(403).json({ message: "No tenant access" });
-        }
-        tenantId = platformUser.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
       }
 
       const documents = await storage.getDocumentsByTenant(tenantId);
@@ -1968,22 +1951,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/documents', isAuthenticated, async (req: any, res) => {
+  app.post('/api/documents', authenticateUser, async (req: any, res) => {
     try {
-      let tenantId: string;
+      const tenantId = req.user.tenantId;
       
-      if (req.user.isJwtAuth) {
-        // JWT auth - tenant ID is directly on user
-        tenantId = req.user.tenantId;
-      } else {
-        // Replit auth - need to look up platform user
-        const userId = req.user.claims.sub;
-        const platformUser = await storage.getPlatformUser(userId);
-        
-        if (!platformUser?.tenantId) {
-          return res.status(403).json({ message: "No tenant access" });
-        }
-        tenantId = platformUser.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
       }
 
       const document = await storage.createDocument({
@@ -1998,7 +1971,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/documents/:id', isAuthenticated, async (req: any, res) => {
+  app.delete('/api/documents/:id', authenticateUser, async (req: any, res) => {
     try {
       await storage.deleteDocument(req.params.id);
       res.json({ message: "Document deleted successfully" });
@@ -2009,22 +1982,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Arrangement options routes
-  app.get('/api/arrangement-options', isAuthenticated, async (req: any, res) => {
+  app.get('/api/arrangement-options', authenticateUser, async (req: any, res) => {
     try {
-      let tenantId: string;
+      const tenantId = req.user.tenantId;
       
-      if (req.user.isJwtAuth) {
-        // JWT auth - tenant ID is directly on user
-        tenantId = req.user.tenantId;
-      } else {
-        // Replit auth - need to look up platform user
-        const userId = req.user.claims.sub;
-        const platformUser = await storage.getPlatformUser(userId);
-        
-        if (!platformUser?.tenantId) {
-          return res.status(403).json({ message: "No tenant access" });
-        }
-        tenantId = platformUser.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
       }
 
       const options = await storage.getArrangementOptionsByTenant(tenantId);
@@ -2035,22 +1998,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/arrangement-options', isAuthenticated, async (req: any, res) => {
+  app.post('/api/arrangement-options', authenticateUser, async (req: any, res) => {
     try {
-      let tenantId: string;
+      const tenantId = req.user.tenantId;
       
-      if (req.user.isJwtAuth) {
-        // JWT auth - tenant ID is directly on user
-        tenantId = req.user.tenantId;
-      } else {
-        // Replit auth - need to look up platform user
-        const userId = req.user.claims.sub;
-        const platformUser = await storage.getPlatformUser(userId);
-        
-        if (!platformUser?.tenantId) {
-          return res.status(403).json({ message: "No tenant access" });
-        }
-        tenantId = platformUser.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
       }
 
       const option = await storage.createArrangementOption({
@@ -2065,7 +2018,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/arrangement-options/:id', isAuthenticated, async (req: any, res) => {
+  app.put('/api/arrangement-options/:id', authenticateUser, async (req: any, res) => {
     try {
       const option = await storage.updateArrangementOption(req.params.id, req.body);
       res.json(option);
@@ -2075,7 +2028,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/arrangement-options/:id', isAuthenticated, async (req: any, res) => {
+  app.delete('/api/arrangement-options/:id', authenticateUser, async (req: any, res) => {
     try {
       await storage.deleteArrangementOption(req.params.id);
       res.json({ message: "Arrangement option deleted successfully" });
@@ -2086,27 +2039,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Tenant settings routes
-  app.get('/api/settings', isAuthenticated, async (req: any, res) => {
+  app.get('/api/settings', authenticateUser, async (req: any, res) => {
     try {
-      let tenantId: string;
+      const tenantId = req.user.tenantId;
       
-      if (req.user.isJwtAuth) {
-        // JWT auth - tenant ID is directly on user
-        tenantId = req.user.tenantId;
-      } else {
-        // Replit auth - need to look up platform user
-        const userId = req.user.claims.sub;
-        const platformUser = await storage.getPlatformUser(userId);
-        
-        if (!platformUser?.tenantId) {
-          return res.status(403).json({ message: "No tenant access" });
-        }
-        tenantId = platformUser.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
       }
 
       // Get settings from both tenant and tenantSettings tables
-      const settings = await storage.getTenantSettings(platformUser.tenantId);
-      const tenant = await storage.getTenant(platformUser.tenantId);
+      const settings = await storage.getTenantSettings(tenantId);
+      const tenant = await storage.getTenant(tenantId);
       
       // Combine settings with Twilio settings from tenant
       const combinedSettings = {
@@ -2125,12 +2068,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/settings', isAuthenticated, async (req: any, res) => {
+  app.put('/api/settings', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
+      const tenantId = req.user.tenantId;
       
-      if (!platformUser?.tenantId) {
+      if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
       }
 
@@ -2172,7 +2114,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           twilioPhoneNumber !== undefined || 
           twilioBusinessName !== undefined || 
           twilioCampaignId !== undefined) {
-        await storage.updateTenantTwilioSettings(platformUser.tenantId, {
+        await storage.updateTenantTwilioSettings(tenantId, {
           twilioAccountSid: twilioAccountSid || null,
           twilioAuthToken: twilioAuthToken || null,
           twilioPhoneNumber: twilioPhoneNumber || null,
@@ -2184,7 +2126,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update tenant settings table with other settings
       const settings = await storage.upsertTenantSettings({
         ...otherSettings,
-        tenantId: platformUser.tenantId,
+        tenantId: tenantId,
       });
       
       res.json(settings);
@@ -2194,23 +2136,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Logo upload route - Updated to support both JWT and Replit auth
+  // Logo upload route
   app.post('/api/upload/logo', authenticateUser, upload.single('logo'), async (req: any, res) => {
     try {
-      let tenantId: string;
+      const tenantId = req.user.tenantId;
       
-      if (req.user.isJwtAuth) {
-        // JWT auth - tenant ID is directly available
-        tenantId = req.user.tenantId;
-      } else {
-        // Replit auth - get from platform user
-        const userId = req.user.claims.sub;
-        const platformUser = await storage.getPlatformUser(userId);
-        
-        if (!platformUser?.tenantId) {
-          return res.status(403).json({ message: "No tenant access" });
-        }
-        tenantId = platformUser.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
       }
 
       if (!req.file) {
