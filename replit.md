@@ -20,6 +20,14 @@ Chain is a multi-tenant platform designed for agencies to manage consumer accoun
   - Designed for both web dashboard and mobile app accessibility
   - Ready for external SMS service integration (Twilio, etc.)
 
+- **Phase 3 Communications Implementation**: Created campaign and automation endpoints
+  - Implemented email campaign API endpoints with target group selection (all, with-balance, overdue)
+  - Created SMS campaign API endpoints with throttle rate control
+  - Built automation system for scheduled and event-triggered communications
+  - Added proper error handling to prevent 500 errors
+  - Support for both one-time and recurring schedules
+  - Automatic removal on payment can be triggered through event-based automations
+
 - **Enhanced Folder Organization**: Implemented comprehensive folder system for account management
   - 5 default folders: All Accounts, New, Decline, First Attempt, Second Attempt
   - CSV import with folder selection for organizing uploaded accounts
