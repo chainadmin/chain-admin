@@ -84,7 +84,7 @@ export const consumers = pgTable("consumers", {
   email: text("email"),
   phone: text("phone"),
   dateOfBirth: text("date_of_birth"),
-  ssn: text("ssn"),
+  ssnLast4: text("ssn_last4"),
   address: text("address"),
   city: text("city"),
   state: text("state"),
