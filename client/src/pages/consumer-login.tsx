@@ -252,7 +252,7 @@ export default function ConsumerLogin() {
           <p className="text-gray-600 text-sm">
             New to the system?{" "}
             <button
-              onClick={() => setLocation("/register")}
+              onClick={() => setLocation("/consumer-register")}
               className="text-blue-600 hover:text-blue-800 font-medium"
               data-testid="link-register"
             >
