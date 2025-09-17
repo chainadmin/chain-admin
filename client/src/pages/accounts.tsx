@@ -753,7 +753,7 @@ export default function Accounts() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="dateOfBirth">Date of Birth *</Label>
+                  <Label htmlFor="dateOfBirth">Date of Birth</Label>
                   <Input
                     id="dateOfBirth"
                     type="date"
@@ -761,7 +761,49 @@ export default function Accounts() {
                     value={createForm.dateOfBirth}
                     onChange={(e) => setCreateForm({ ...createForm, dateOfBirth: e.target.value })}
                     placeholder="Select date of birth"
-                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="address">Address</Label>
+                  <Input
+                    id="address"
+                    data-testid="input-address"
+                    value={createForm.address}
+                    onChange={(e) => setCreateForm({ ...createForm, address: e.target.value })}
+                    placeholder="Enter address"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label htmlFor="city">City</Label>
+                  <Input
+                    id="city"
+                    data-testid="input-city"
+                    value={createForm.city}
+                    onChange={(e) => setCreateForm({ ...createForm, city: e.target.value })}
+                    placeholder="Enter city"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="state">State</Label>
+                  <Input
+                    id="state"
+                    data-testid="input-state"
+                    value={createForm.state}
+                    onChange={(e) => setCreateForm({ ...createForm, state: e.target.value })}
+                    placeholder="Enter state"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="zipCode">Zip Code</Label>
+                  <Input
+                    id="zipCode"
+                    data-testid="input-zip-code"
+                    value={createForm.zipCode}
+                    onChange={(e) => setCreateForm({ ...createForm, zipCode: e.target.value })}
+                    placeholder="Enter zip code"
                   />
                 </div>
               </div>

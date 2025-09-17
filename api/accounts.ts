@@ -70,10 +70,15 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       res.status(200).json(tenantAccounts);
     } else if (req.method === 'POST') {
       // Create a new account
-      const { firstName, lastName, email, phone, accountNumber, creditor, balanceCents, folderId, dateOfBirth } = req.body;
+      const { 
+        firstName, lastName, email, phone, 
+        accountNumber, creditor, balanceCents, folderId, 
+        dateOfBirth, address, city, state, zipCode,
+        additionalData, dueDate
+      } = req.body;
 
-      if (!firstName || !lastName || !email || !creditor || balanceCents === undefined || !dateOfBirth) {
-        res.status(400).json({ error: 'Missing required fields (including date of birth)' });
+      if (!firstName || !lastName || !email || !creditor || balanceCents === undefined) {
+        res.status(400).json({ error: 'Missing required fields' });
         return;
       }
 
@@ -115,7 +120,12 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
             lastName,
             email,
             phone: phone || null,
-            dateOfBirth: new Date(dateOfBirth),
+            dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
+            address: address || null,
+            city: city || null,
+            state: state || null,
+            zipCode: zipCode || null,
+            additionalData: additionalData || {},
             isRegistered: false,
           })
           .returning();
@@ -132,7 +142,9 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
           accountNumber: accountNumber || '',
           creditor,
           balanceCents,
+          dueDate: dueDate || null,
           status: 'active',
+          additionalData: additionalData || {},
         })
         .returning();
 
