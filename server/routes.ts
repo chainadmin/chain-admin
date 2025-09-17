@@ -1,7 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage, type IStorage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
 import { authenticateUser, getCurrentUser } from "./authMiddleware";
 import { postmarkServerService } from "./postmarkServerService";
 import { insertConsumerSchema, insertAccountSchema, agencyTrialRegistrationSchema, platformUsers, tenants, consumers, agencyCredentials } from "@shared/schema";
@@ -96,17 +95,11 @@ function replaceEmailVariables(
   return processedTemplate;
 }
 
-// Helper function to get tenantId from either JWT or Replit auth
+// Helper function to get tenantId from JWT auth
 async function getTenantId(req: any, storage: IStorage): Promise<string | null> {
-  // If JWT auth, tenantId is directly in the token
-  if (req.user?.isJwtAuth && req.user?.tenantId) {
+  // JWT auth - tenantId is directly in the token
+  if (req.user?.tenantId) {
     return req.user.tenantId;
-  }
-  
-  // For Replit auth, lookup platformUser
-  if (req.user?.claims?.sub) {
-    const platformUser = await storage.getPlatformUser(req.user.claims.sub);
-    return platformUser?.tenantId || null;
   }
   
   return null;
@@ -166,9 +159,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
-  // Auth middleware
-  await setupAuth(app);
-
   // Note: Logos are now served from Supabase Storage, not local uploads
 
   // Auth routes - Updated to support both JWT and Replit auth
@@ -183,7 +173,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Tenant routes
-  app.get('/api/tenants/:id', isAuthenticated, async (req: any, res) => {
+  app.get('/api/tenants/:id', authenticateUser, async (req: any, res) => {
     try {
       const tenant = await storage.getTenant(req.params.id);
       if (!tenant) {
@@ -217,7 +207,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/folders', isAuthenticated, async (req: any, res) => {
+  app.post('/api/folders', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = await getTenantId(req, storage);
       
@@ -251,7 +241,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/folders/:id', isAuthenticated, async (req: any, res) => {
+  app.delete('/api/folders/:id', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = await getTenantId(req, storage);
       
@@ -270,7 +260,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Consumer routes
-  app.get('/api/consumers', isAuthenticated, async (req: any, res) => {
+  app.get('/api/consumers', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = await getTenantId(req, storage);
       
@@ -287,7 +277,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Account routes
-  app.get('/api/accounts', isAuthenticated, async (req: any, res) => {
+  app.get('/api/accounts', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = await getTenantId(req, storage);
       
@@ -304,7 +294,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Folder routes
-  app.get('/api/folders', isAuthenticated, async (req: any, res) => {
+  app.get('/api/folders', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = await getTenantId(req, storage);
       
@@ -323,41 +313,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/folders', isAuthenticated, async (req: any, res) => {
+  app.get('/api/folders/:folderId/accounts', authenticateUser, async (req: any, res) => {
     try {
-      const tenantId = await getTenantId(req, storage);
-      
-      if (!tenantId) {
-        return res.status(403).json({ message: "No tenant access" });
-      }
-
-      const { name, description, color } = req.body;
-      
-      if (!name) {
-        return res.status(400).json({ message: "Folder name is required" });
-      }
-
-      const folder = await storage.createFolder({
-        tenantId: tenantId,
-        name,
-        description,
-        color: color || "#3b82f6",
-        sortOrder: Date.now(), // Simple ordering by creation time
-      });
-
-      res.json(folder);
-    } catch (error) {
-      console.error("Error creating folder:", error);
-      res.status(500).json({ message: "Failed to create folder" });
-    }
-  });
-
-  app.get('/api/folders/:folderId/accounts', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
@@ -401,7 +360,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Stats routes
-  app.get('/api/stats', isAuthenticated, async (req: any, res) => {
+  app.get('/api/stats', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = await getTenantId(req, storage);
       
@@ -524,17 +483,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/accounts/:id', isAuthenticated, async (req: any, res) => {
+  app.delete('/api/accounts/:id', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
       const accountId = req.params.id;
-      await storage.deleteAccount(accountId, platformUser.tenantId);
+      await storage.deleteAccount(accountId, tenantId);
       
       res.status(204).send();
     } catch (error) {
@@ -544,16 +501,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Email template routes
-  app.get('/api/email-templates', isAuthenticated, async (req: any, res) => {
+  app.get('/api/email-templates', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const templates = await storage.getEmailTemplatesByTenant(platformUser.tenantId);
+      const templates = await storage.getEmailTemplatesByTenant(tenantId);
       res.json(templates);
     } catch (error) {
       console.error("Error fetching email templates:", error);
@@ -561,12 +516,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/email-templates', isAuthenticated, async (req: any, res) => {
+  app.post('/api/email-templates', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
@@ -577,7 +530,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const template = await storage.createEmailTemplate({
-        tenantId: platformUser.tenantId,
+        tenantId: tenantId,
         name,
         subject,
         html,
@@ -591,17 +544,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/email-templates/:id', isAuthenticated, async (req: any, res) => {
+  app.delete('/api/email-templates/:id', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
       const { id } = req.params;
-      await storage.deleteEmailTemplate(id, platformUser.tenantId);
+      await storage.deleteEmailTemplate(id, tenantId);
       
       res.json({ message: "Email template deleted successfully" });
     } catch (error) {
@@ -611,16 +562,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Email campaign routes
-  app.get('/api/email-campaigns', isAuthenticated, async (req: any, res) => {
+  app.get('/api/email-campaigns', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const campaigns = await storage.getEmailCampaignsByTenant(platformUser.tenantId);
+      const campaigns = await storage.getEmailCampaignsByTenant(tenantId);
       res.json(campaigns);
     } catch (error) {
       console.error("Error fetching email campaigns:", error);
@@ -628,12 +577,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/email-campaigns', isAuthenticated, async (req: any, res) => {
+  app.post('/api/email-campaigns', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
@@ -644,11 +591,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Get target consumers count
-      const consumers = await storage.getConsumersByTenant(platformUser.tenantId);
+      const consumers = await storage.getConsumersByTenant(tenantId);
       let targetedConsumers = consumers;
       
       if (targetGroup === "with-balance") {
-        const accounts = await storage.getAccountsByTenant(platformUser.tenantId);
+        const accounts = await storage.getAccountsByTenant(tenantId);
         const consumerIds = accounts.filter(acc => (acc.balanceCents || 0) > 0).map(acc => acc.consumerId);
         targetedConsumers = consumers.filter(c => consumerIds.includes(c.id));
       } else if (targetGroup === "decline") {
@@ -669,7 +616,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const campaign = await storage.createEmailCampaign({
-        tenantId: platformUser.tenantId,
+        tenantId: tenantId,
         name,
         templateId,
         targetGroup,
@@ -678,20 +625,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       // Get email template for variable replacement
-      const templates = await storage.getEmailTemplatesByTenant(platformUser.tenantId);
+      const templates = await storage.getEmailTemplatesByTenant(tenantId);
       const template = templates.find(t => t.id === templateId);
       if (!template) {
         return res.status(404).json({ message: "Email template not found" });
       }
 
       // Get tenant details for URL generation
-      const tenant = await storage.getTenant(platformUser.tenantId);
+      const tenant = await storage.getTenant(tenantId);
       if (!tenant) {
         return res.status(404).json({ message: "Tenant not found" });
       }
 
       // Process variables for each consumer and prepare email content
-      const accountsData = await storage.getAccountsByTenant(platformUser.tenantId);
+      const accountsData = await storage.getAccountsByTenant(tenantId);
       
       // Prepare emails with variable replacement (filter out consumers without emails)
       const processedEmails = targetedConsumers
@@ -712,7 +659,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           tag: `campaign-${campaign.id}`,
           metadata: {
             campaignId: campaign.id,
-            tenantId: platformUser.tenantId || '',
+            tenantId: tenantId || '',
             consumerId: consumer.id,
             templateId: templateId,
           }
@@ -748,12 +695,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Test email route
-  app.post('/api/test-email', isAuthenticated, async (req: any, res) => {
+  app.post('/api/test-email', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
@@ -763,7 +708,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "To, subject, and message are required" });
       }
 
-      const tenant = await storage.getTenant(platformUser.tenantId);
+      const tenant = await storage.getTenant(tenantId);
       const fromEmail = 'support@chainsoftwaregroup.com'; // Use our configured Postmark sender
 
       const result = await emailService.sendEmail({
@@ -781,7 +726,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tag: 'test-email',
         metadata: {
           type: 'test',
-          tenantId: platformUser.tenantId,
+          tenantId: tenantId,
         }
       });
 
@@ -793,16 +738,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Email metrics route
-  app.get('/api/email-metrics', isAuthenticated, async (req: any, res) => {
+  app.get('/api/email-metrics', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const metrics = await storage.getEmailMetricsByTenant(platformUser.tenantId);
+      const metrics = await storage.getEmailMetricsByTenant(tenantId);
       res.json(metrics);
     } catch (error) {
       console.error("Error fetching email metrics:", error);
@@ -811,16 +754,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // SMS template routes
-  app.get('/api/sms-templates', isAuthenticated, async (req: any, res) => {
+  app.get('/api/sms-templates', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const templates = await storage.getSmsTemplatesByTenant(platformUser.tenantId);
+      const templates = await storage.getSmsTemplatesByTenant(tenantId);
       res.json(templates);
     } catch (error) {
       console.error("Error fetching SMS templates:", error);
@@ -828,12 +769,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/sms-templates', isAuthenticated, async (req: any, res) => {
+  app.post('/api/sms-templates', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
@@ -847,7 +786,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const newTemplate = await storage.createSmsTemplate({
         ...validatedData,
-        tenantId: platformUser.tenantId,
+        tenantId: tenantId,
       });
       
       res.status(201).json(newTemplate);
@@ -857,16 +796,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/sms-templates/:id', isAuthenticated, async (req: any, res) => {
+  app.delete('/api/sms-templates/:id', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      await storage.deleteSmsTemplate(req.params.id, platformUser.tenantId);
+      await storage.deleteSmsTemplate(req.params.id, tenantId);
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting SMS template:", error);
@@ -875,16 +812,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // SMS campaign routes
-  app.get('/api/sms-campaigns', isAuthenticated, async (req: any, res) => {
+  app.get('/api/sms-campaigns', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const campaigns = await storage.getSmsCampaignsByTenant(platformUser.tenantId);
+      const campaigns = await storage.getSmsCampaignsByTenant(tenantId);
       res.json(campaigns);
     } catch (error) {
       console.error("Error fetching SMS campaigns:", error);
@@ -892,12 +827,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/sms-campaigns', isAuthenticated, async (req: any, res) => {
+  app.post('/api/sms-campaigns', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
@@ -911,7 +844,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const newCampaign = await storage.createSmsCampaign({
         ...validatedData,
-        tenantId: platformUser.tenantId,
+        tenantId: tenantId,
       });
       
       res.status(201).json(newCampaign);
@@ -922,16 +855,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // SMS metrics route
-  app.get('/api/sms-metrics', isAuthenticated, async (req: any, res) => {
+  app.get('/api/sms-metrics', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const metrics = await storage.getSmsMetricsByTenant(platformUser.tenantId);
+      const metrics = await storage.getSmsMetricsByTenant(tenantId);
       res.json(metrics);
     } catch (error) {
       console.error("Error fetching SMS metrics:", error);
@@ -940,16 +871,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // SMS throttling and queue management routes
-  app.get('/api/sms-rate-limit-status', isAuthenticated, async (req: any, res) => {
+  app.get('/api/sms-rate-limit-status', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const rateLimitStatus = await smsService.getRateLimitStatus(platformUser.tenantId);
+      const rateLimitStatus = await smsService.getRateLimitStatus(tenantId);
       res.json(rateLimitStatus);
     } catch (error) {
       console.error("Error getting SMS rate limit status:", error);
@@ -957,16 +886,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/sms-queue-status', isAuthenticated, async (req: any, res) => {
+  app.get('/api/sms-queue-status', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const queueStatus = smsService.getQueueStatus(platformUser.tenantId);
+      const queueStatus = smsService.getQueueStatus(tenantId);
       res.json(queueStatus);
     } catch (error) {
       console.error("Error getting SMS queue status:", error);
@@ -974,12 +901,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/send-test-sms', isAuthenticated, async (req: any, res) => {
+  app.post('/api/send-test-sms', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
@@ -989,7 +914,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Phone number and message are required" });
       }
 
-      const result = await smsService.sendSms(phoneNumber, message, platformUser.tenantId);
+      const result = await smsService.sendSms(phoneNumber, message, tenantId);
       res.json(result);
     } catch (error) {
       console.error("Error sending test SMS:", error);
@@ -998,16 +923,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Communication Automation Routes
-  app.get('/api/automations', isAuthenticated, async (req: any, res) => {
+  app.get('/api/automations', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const automations = await storage.getAutomationsByTenant(platformUser.tenantId);
+      const automations = await storage.getAutomationsByTenant(tenantId);
       res.json(automations);
     } catch (error) {
       console.error("Error fetching automations:", error);
@@ -1015,12 +938,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/automations', isAuthenticated, async (req: any, res) => {
+  app.post('/api/automations', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
@@ -1072,7 +993,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const automationData: any = {
         ...validatedData,
-        tenantId: platformUser.tenantId,
+        tenantId: tenantId,
       };
       
       // Convert scheduledDate string to Date if provided
@@ -1089,12 +1010,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/automations/:id', isAuthenticated, async (req: any, res) => {
+  app.put('/api/automations/:id', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
@@ -1133,16 +1052,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/automations/:id', isAuthenticated, async (req: any, res) => {
+  app.delete('/api/automations/:id', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      await storage.deleteAutomation(req.params.id, platformUser.tenantId);
+      await storage.deleteAutomation(req.params.id, tenantId);
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting automation:", error);
@@ -1150,17 +1067,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/automations/:id/executions', isAuthenticated, async (req: any, res) => {
+  app.get('/api/automations/:id/executions', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
       // Verify automation belongs to tenant
-      const automation = await storage.getAutomationById(req.params.id, platformUser.tenantId);
+      const automation = await storage.getAutomationById(req.params.id, tenantId);
       if (!automation) {
         return res.status(404).json({ message: "Automation not found" });
       }
@@ -1863,16 +1778,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin callback requests route
-  app.get('/api/callback-requests', isAuthenticated, async (req: any, res) => {
+  app.get('/api/callback-requests', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const requests = await storage.getCallbackRequestsByTenant(platformUser.tenantId);
+      const requests = await storage.getCallbackRequestsByTenant(tenantId);
       res.json(requests);
     } catch (error) {
       console.error("Error fetching callback requests:", error);
@@ -1881,12 +1794,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update callback request (admin)
-  app.patch('/api/callback-requests/:id', isAuthenticated, async (req: any, res) => {
+  app.patch('/api/callback-requests/:id', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
@@ -1907,9 +1818,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Tenant setup route (for fixing access issues)
-  app.post('/api/setup-tenant', isAuthenticated, async (req: any, res) => {
+  app.post('/api/setup-tenant', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.userId;
       const { name, slug } = req.body || {};
       
       // Check if user already has a tenant
@@ -2259,16 +2170,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Company management routes
-  app.get('/api/company/consumers', isAuthenticated, async (req: any, res) => {
+  app.get('/api/company/consumers', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const consumers = await storage.getConsumersByTenant(platformUser.tenantId);
+      const consumers = await storage.getConsumersByTenant(tenantId);
       
       // Add account count and total balance for each consumer
       const consumersWithStats = await Promise.all(
@@ -2289,16 +2198,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/company/admins', isAuthenticated, async (req: any, res) => {
+  app.get('/api/company/admins', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const admins = await storage.getPlatformUsersByTenant(platformUser.tenantId);
+      const admins = await storage.getPlatformUsersByTenant(tenantId);
       res.json(admins);
     } catch (error) {
       console.error("Error fetching company admins:", error);
@@ -2306,15 +2213,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch('/api/company/consumers/:id', isAuthenticated, async (req: any, res) => {
+  app.patch('/api/company/consumers/:id', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      const { id } = req.params;
-      
-      if (!platformUser?.tenantId) {
-        return res.status(403).json({ message: "No tenant access" });
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" }); 
       }
+      const { id } = req.params;
 
       const consumer = await storage.updateConsumer(id, req.body);
       res.json(consumer);
@@ -2325,16 +2230,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Payment routes
-  app.get('/api/payments', isAuthenticated, async (req: any, res) => {
+  app.get('/api/payments', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const payments = await storage.getPaymentsByTenant(platformUser.tenantId);
+      const payments = await storage.getPaymentsByTenant(tenantId);
       res.json(payments);
     } catch (error) {
       console.error("Error fetching payments:", error);
@@ -2342,16 +2245,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/payments/stats', isAuthenticated, async (req: any, res) => {
+  app.get('/api/payments/stats', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const stats = await storage.getPaymentStats(platformUser.tenantId);
+      const stats = await storage.getPaymentStats(tenantId);
       res.json(stats);
     } catch (error) {
       console.error("Error fetching payment stats:", error);
@@ -2360,12 +2261,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Real-time payment processing endpoint
-  app.post('/api/payments/process', isAuthenticated, async (req: any, res) => {
+  app.post('/api/payments/process', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
@@ -2384,7 +2283,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Get consumer by email
-      const consumer = await storage.getConsumerByEmailAndTenant(consumerEmail, platformUser.tenantId);
+      const consumer = await storage.getConsumerByEmailAndTenant(consumerEmail, tenantId);
       if (!consumer) {
         return res.status(404).json({ message: "Consumer not found" });
       }
@@ -2405,7 +2304,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Create payment record
       const payment = await storage.createPayment({
-        tenantId: platformUser.tenantId,
+        tenantId: tenantId,
         consumerId: consumer.id,
         amountCents,
         paymentMethod: 'credit_card',
@@ -2437,26 +2336,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/payments/manual', isAuthenticated, async (req: any, res) => {
+  app.post('/api/payments/manual', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
       const { consumerEmail, accountId, amountCents, paymentMethod, transactionId, notes } = req.body;
 
       // Get consumer
-      const consumer = await storage.getConsumerByEmailAndTenant(consumerEmail, platformUser.tenantId);
+      const consumer = await storage.getConsumerByEmailAndTenant(consumerEmail, tenantId);
       if (!consumer) {
         return res.status(404).json({ message: "Consumer not found" });
       }
 
       // Create payment record
       const payment = await storage.createPayment({
-        tenantId: platformUser.tenantId,
+        tenantId: tenantId,
         consumerId: consumer.id,
         accountId: accountId || null,
         amountCents,
@@ -2475,16 +2372,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Billing endpoints
-  app.get('/api/billing/subscription', isAuthenticated, async (req: any, res) => {
+  app.get('/api/billing/subscription', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const subscription = await storage.getSubscriptionByTenant(platformUser.tenantId);
+      const subscription = await storage.getSubscriptionByTenant(tenantId);
       res.json(subscription);
     } catch (error) {
       console.error("Error fetching subscription:", error);
@@ -2492,16 +2387,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/billing/invoices', isAuthenticated, async (req: any, res) => {
+  app.get('/api/billing/invoices', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const invoices = await storage.getInvoicesByTenant(platformUser.tenantId);
+      const invoices = await storage.getInvoicesByTenant(tenantId);
       res.json(invoices);
     } catch (error) {
       console.error("Error fetching invoices:", error);
@@ -2509,16 +2402,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/billing/stats', isAuthenticated, async (req: any, res) => {
+  app.get('/api/billing/stats', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const stats = await storage.getBillingStats(platformUser.tenantId);
+      const stats = await storage.getBillingStats(tenantId);
       res.json(stats);
     } catch (error) {
       console.error("Error fetching billing stats:", error);
@@ -2526,16 +2417,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/billing/current-invoice', isAuthenticated, async (req: any, res) => {
+  app.get('/api/billing/current-invoice', authenticateUser, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
-      
-      if (!platformUser?.tenantId) {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const currentInvoice = await storage.getCurrentInvoice(platformUser.tenantId);
+      const currentInvoice = await storage.getCurrentInvoice(tenantId);
       res.json(currentInvoice);
     } catch (error) {
       console.error("Error fetching current invoice:", error);
@@ -2545,7 +2434,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Global Admin Routes (Platform Owner Only)
   const isPlatformAdmin = async (req: any, res: any, next: any) => {
-    const userId = req.user.claims.sub;
+    const userId = req.user?.userId;
     
     // Check if user has platform_admin role (they might have multiple roles)
     const userRoles = await db.select().from(platformUsers).where(eq(platformUsers.authId, userId));
@@ -2559,7 +2448,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   };
 
   // Update tenant SMS configuration (platform admin only)
-  app.put('/api/admin/tenants/:id/sms-config', isAuthenticated, isPlatformAdmin, async (req: any, res) => {
+  app.put('/api/admin/tenants/:id/sms-config', authenticateUser, isPlatformAdmin, async (req: any, res) => {
     try {
       const { 
         twilioAccountSid, 
@@ -2586,7 +2475,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get all tenants for platform admin overview
-  app.get('/api/admin/tenants', isAuthenticated, isPlatformAdmin, async (req: any, res) => {
+  app.get('/api/admin/tenants', authenticateUser, isPlatformAdmin, async (req: any, res) => {
     try {
       const tenants = await storage.getAllTenants();
       
@@ -2616,7 +2505,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get platform-wide statistics
-  app.get('/api/admin/stats', isAuthenticated, isPlatformAdmin, async (req: any, res) => {
+  app.get('/api/admin/stats', authenticateUser, isPlatformAdmin, async (req: any, res) => {
     try {
       const stats = await storage.getPlatformStats();
       res.json(stats);
@@ -2627,7 +2516,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update tenant status (activate/suspend)
-  app.put('/api/admin/tenants/:id/status', isAuthenticated, isPlatformAdmin, async (req: any, res) => {
+  app.put('/api/admin/tenants/:id/status', authenticateUser, isPlatformAdmin, async (req: any, res) => {
     try {
       const { isActive, suspensionReason } = req.body;
       
@@ -2645,7 +2534,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Upgrade tenant from trial to paid
-  app.put('/api/admin/tenants/:id/upgrade', isAuthenticated, isPlatformAdmin, async (req: any, res) => {
+  app.put('/api/admin/tenants/:id/upgrade', authenticateUser, isPlatformAdmin, async (req: any, res) => {
     try {
       const updatedTenant = await storage.upgradeTenantToPaid(req.params.id);
       res.json(updatedTenant);
@@ -2656,7 +2545,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create new agency with Postmark server
-  app.post('/api/admin/agencies', isAuthenticated, isPlatformAdmin, async (req: any, res) => {
+  app.post('/api/admin/agencies', authenticateUser, isPlatformAdmin, async (req: any, res) => {
     try {
       const { name, email } = req.body;
       

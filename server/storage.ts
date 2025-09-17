@@ -135,6 +135,7 @@ export interface IStorage {
   getConsumer(id: string): Promise<Consumer | undefined>;
   getConsumerByEmail(email: string): Promise<Consumer | undefined>;
   createConsumer(consumer: InsertConsumer): Promise<Consumer>;
+  findOrCreateConsumer(consumerData: InsertConsumer): Promise<Consumer>;
   
   // Folder operations
   getFoldersByTenant(tenantId: string): Promise<Folder[]>;
