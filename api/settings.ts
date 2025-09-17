@@ -13,6 +13,17 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
     return;
   }
 
+  // Mask sensitive data before returning
+  const maskSensitiveData = (settings: any) => {
+    if (!settings) return settings;
+    const masked = { ...settings };
+    // Never return the actual API key to frontend
+    if (masked.merchantApiKey) {
+      masked.merchantApiKey = masked.merchantApiKey ? '****' + masked.merchantApiKey.slice(-4) : null;
+    }
+    return masked;
+  };
+
   try {
     const db = getDb();
     
@@ -56,9 +67,9 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
           })
           .returning();
 
-        res.status(200).json(newSettings);
+        res.status(200).json(maskSensitiveData(newSettings));
       } else {
-        res.status(200).json(settings);
+        res.status(200).json(maskSensitiveData(settings));
       }
     } else if (req.method === 'PUT' || req.method === 'PATCH') {
       // Update tenant settings
@@ -86,6 +97,12 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         if (updates.smsThrottleLimit !== undefined) updateData.smsThrottleLimit = updates.smsThrottleLimit;
         if (updates.customBranding !== undefined) updateData.customBranding = updates.customBranding;
         if (updates.consumerPortalSettings !== undefined) updateData.consumerPortalSettings = updates.consumerPortalSettings;
+        // Payment processor fields
+        if (updates.merchantProvider !== undefined) updateData.merchantProvider = updates.merchantProvider;
+        if (updates.merchantAccountId !== undefined) updateData.merchantAccountId = updates.merchantAccountId;
+        if (updates.merchantApiKey !== undefined) updateData.merchantApiKey = updates.merchantApiKey;
+        if (updates.merchantName !== undefined) updateData.merchantName = updates.merchantName;
+        if (updates.enableOnlinePayments !== undefined) updateData.enableOnlinePayments = updates.enableOnlinePayments;
 
         const [updatedSettings] = await db
           .update(tenantSettings)
@@ -93,7 +110,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
           .where(eq(tenantSettings.tenantId, tenantId))
           .returning();
 
-        res.status(200).json(updatedSettings);
+        res.status(200).json(maskSensitiveData(updatedSettings));
       } else {
         // Create new settings
         const [newSettings] = await db
@@ -110,10 +127,16 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
             smsThrottleLimit: updates.smsThrottleLimit || 10,
             customBranding: updates.customBranding || {},
             consumerPortalSettings: updates.consumerPortalSettings || {},
+            // Payment processor fields
+            merchantProvider: updates.merchantProvider || null,
+            merchantAccountId: updates.merchantAccountId || null,
+            merchantApiKey: updates.merchantApiKey || null,
+            merchantName: updates.merchantName || null,
+            enableOnlinePayments: updates.enableOnlinePayments || false,
           })
           .returning();
 
-        res.status(200).json(newSettings);
+        res.status(200).json(maskSensitiveData(newSettings));
       }
 
       // If updating brand settings (logo), update tenant table

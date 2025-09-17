@@ -1,10 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb } from '../_lib/db.js';
 import { withAuth, AuthenticatedRequest } from '../_lib/auth.js';
-import { tenants } from '../../shared/schema.js';
+import { tenants, tenantSettings } from '../_lib/schema.js';
 import { eq } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 import { createClient } from '@supabase/supabase-js';
+import { writeFile } from 'fs/promises';
+import { join } from 'path';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-jwt-secret-key-change-this-in-production';
 const SUPABASE_URL = process.env.SUPABASE_URL!;
@@ -49,64 +51,64 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       return;
     }
 
-    // Parse the request body to get the file data
-    // Note: In production, you might need to use a library like formidable or multer
-    const contentType = req.headers['content-type'] || '';
+    // Handle base64 image data from frontend
+    // Frontend sends FormData but we'll convert to base64
+    const { image, filename } = req.body;
     
-    if (!contentType.includes('multipart/form-data')) {
-      res.status(400).json({ error: 'Expected multipart/form-data' });
+    if (!image) {
+      res.status(400).json({ error: 'No image data provided' });
       return;
     }
-
-    // For Vercel, we need to handle the file upload differently
-    // The file should be sent as base64 or use a library to parse multipart
-    // For now, let's assume the client sends the file as base64
-    const { file, filename, mimeType } = req.body;
     
-    if (!file || !filename) {
-      res.status(400).json({ error: 'No file provided' });
-      return;
+    // Extract base64 data from data URL if present
+    let base64Data = image;
+    let mimeType = 'image/png';
+    
+    if (image.startsWith('data:')) {
+      const matches = image.match(/^data:([^;]+);base64,(.+)$/);
+      if (matches) {
+        mimeType = matches[1];
+        base64Data = matches[2];
+      }
     }
 
-    // Initialize Supabase client
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
-    // Convert base64 to buffer
-    const buffer = Buffer.from(file, 'base64');
+    // For development/Replit, store logo as base64 in database
+    // In production with Vercel, you'd upload to object storage
+    const logoDataUrl = image.startsWith('data:') ? image : `data:${mimeType};base64,${base64Data}`;
     
-    // Upload to Supabase Storage
-    const fileName = `${tenantId}_${Date.now()}_${filename}`;
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('tenant-logos')
-      .upload(fileName, buffer, {
-        contentType: mimeType || 'image/png',
-        upsert: true
-      });
-
-    if (uploadError) {
-      console.error('Upload error:', uploadError);
-      res.status(500).json({ error: 'Failed to upload logo' });
-      return;
+    // Check if settings exist
+    const [existingSettings] = await db
+      .select()
+      .from(tenantSettings)
+      .where(eq(tenantSettings.tenantId, tenantId))
+      .limit(1);
+    
+    if (existingSettings) {
+      // Update existing settings
+      await db
+        .update(tenantSettings)
+        .set({
+          customBranding: {
+            ...(existingSettings.customBranding as any || {}),
+            logoUrl: logoDataUrl
+          }
+        })
+        .where(eq(tenantSettings.tenantId, tenantId));
+    } else {
+      // Create new settings with logo
+      await db
+        .insert(tenantSettings)
+        .values({
+          tenantId,
+          customBranding: {
+            logoUrl: logoDataUrl
+          }
+        });
     }
-
-    // Get public URL
-    const { data: { publicUrl } } = supabase.storage
-      .from('tenant-logos')
-      .getPublicUrl(fileName);
-
-    // Update tenant record with logo URL
-    await db
-      .update(tenants)
-      .set({ 
-        brand: {
-          logoUrl: publicUrl
-        }
-      })
-      .where(eq(tenants.id, tenantId));
 
     res.status(200).json({
       success: true,
-      url: publicUrl,
+      url: logoDataUrl,
       message: 'Logo uploaded successfully'
     });
   } catch (error: any) {
@@ -118,4 +120,4 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   }
 }
 
-export default withAuth(handler);
+export default handler;

@@ -161,6 +161,43 @@ export const tenantSettings = pgTable("tenant_settings", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
   smsThrottleLimit: bigint("sms_throttle_limit", { mode: "number" }).default(10),
+  // Payment processor fields
+  merchantProvider: text("merchant_provider"),
+  merchantAccountId: text("merchant_account_id"),
+  merchantApiKey: text("merchant_api_key"),
+  merchantName: text("merchant_name"),
+  enableOnlinePayments: boolean("enable_online_payments").default(false),
+});
+
+// Documents for consumer access
+export const documents = pgTable("documents", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  fileName: text("file_name").notNull(),
+  fileUrl: text("file_url").notNull(),
+  fileSize: bigint("file_size", { mode: "number" }),
+  mimeType: text("mime_type"),
+  isPublic: boolean("is_public").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Payment arrangement options
+export const arrangementOptions = pgTable("arrangement_options", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  minBalance: bigint("min_balance", { mode: "number" }).notNull(),
+  maxBalance: bigint("max_balance", { mode: "number" }).notNull(),
+  monthlyPaymentMin: bigint("monthly_payment_min", { mode: "number" }).notNull(),
+  monthlyPaymentMax: bigint("monthly_payment_max", { mode: "number" }).notNull(),
+  maxTermMonths: integer("max_term_months").notNull().default(12),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // Callback requests

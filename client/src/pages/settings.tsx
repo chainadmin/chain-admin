@@ -107,9 +107,24 @@ export default function Settings() {
 
   const uploadLogoMutation = useMutation({
     mutationFn: async (file: File) => {
-      const formData = new FormData();
-      formData.append('logo', file);
-      return await apiRequest("POST", "/api/upload/logo", formData);
+      // Convert file to base64
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          try {
+            const base64 = reader.result as string;
+            const result = await apiRequest("POST", "/api/upload/logo", {
+              image: base64,
+              filename: file.name
+            });
+            resolve(result);
+          } catch (error) {
+            reject(error);
+          }
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
     },
     onSuccess: () => {
       toast({
