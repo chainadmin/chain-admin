@@ -159,6 +159,7 @@ function Router() {
           <Route path="/consumer-login" component={ConsumerLogin} />
           <Route path="/agency-login" component={AgencyLogin} />
           <Route path="/agency-register" component={AgencyRegistration} />
+          <Route path="/agency/:agencySlug" component={AgencyLanding} />
           <Route path="/privacy-policy" component={PrivacyPolicy} />
           <Route component={NotFound} />
         </>
@@ -199,6 +200,7 @@ function Router() {
           <Route path="/admin" component={GlobalAdmin} />
           <Route path="/Admin" component={GlobalAdmin} />
           <Route path="/email-test" component={EmailTest} />
+          <Route path="/agency/:agencySlug" component={AgencyLanding} />
           <Route path="/privacy-policy" component={PrivacyPolicy} />
           <Route component={NotFound} />
         </>
