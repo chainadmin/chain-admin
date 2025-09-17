@@ -270,6 +270,7 @@ export default function Accounts() {
       creditor: createForm.creditor,
       balanceCents,
       folderId: createForm.folderId || null,
+      dateOfBirth: createForm.dateOfBirth,
     });
   };
 
@@ -747,6 +748,21 @@ export default function Accounts() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="dateOfBirth">Date of Birth *</Label>
+                  <Input
+                    id="dateOfBirth"
+                    type="date"
+                    data-testid="input-date-of-birth"
+                    value={createForm.dateOfBirth}
+                    onChange={(e) => setCreateForm({ ...createForm, dateOfBirth: e.target.value })}
+                    placeholder="Select date of birth"
+                    required
+                  />
                 </div>
               </div>
 
