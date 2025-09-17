@@ -110,25 +110,35 @@ function Router() {
             <p className="text-gray-600">Loading...</p>
           </div>
         </div>
-      ) : isJwtAuth && !isMainDomain ? (
-        // JWT authenticated users on agency subdomain - show admin
+      ) : !isMainDomain ? (
+        // On agency subdomain - ALWAYS show consumer portal by default, regardless of auth or loading state
         <>
-          <Route path="/" component={AdminDashboard} />
-          <Route path="/dashboard" component={AdminDashboard} />
-          <Route path="/admin-dashboard" component={AdminDashboard} />
-          <Route path="/consumers" component={Consumers} />
-          <Route path="/accounts" component={Accounts} />
-          <Route path="/communications" component={Communications} />
-          <Route path="/requests" component={Requests} />
-          <Route path="/payments" component={Payments} />
-          <Route path="/billing" component={Billing} />
-          <Route path="/company" component={CompanyManagement} />
-          <Route path="/settings" component={Settings} />
-          <Route path="/consumer-dashboard" component={ConsumerDashboard} />
+          {/* Public consumer routes - always accessible on agency subdomain */}
+          <Route path="/" component={AgencyLanding} />
           <Route path="/consumer-login" component={ConsumerLogin} />
-          <Route path="/agency-login" component={AgencyLogin} />
-          <Route path="/agency-register" component={AgencyRegistration} />
+          <Route path="/consumer-register" component={ConsumerRegistration} />
+          <Route path="/consumer/:email" component={ConsumerPortal} />
+          <Route path="/consumer-dashboard" component={ConsumerDashboard} />
           <Route path="/privacy-policy" component={PrivacyPolicy} />
+          <Route path="/agency-login" component={AgencyLogin} />
+          
+          {/* Admin routes - require explicit paths and JWT auth */}
+          <Route path="/dashboard" component={isJwtAuth ? AdminDashboard : AgencyLogin} />
+          <Route path="/admin-dashboard" component={isJwtAuth ? AdminDashboard : AgencyLogin} />
+          
+          {isJwtAuth && (
+            <>
+              <Route path="/consumers" component={Consumers} />
+              <Route path="/accounts" component={Accounts} />
+              <Route path="/communications" component={Communications} />
+              <Route path="/requests" component={Requests} />
+              <Route path="/payments" component={Payments} />
+              <Route path="/billing" component={Billing} />
+              <Route path="/company" component={CompanyManagement} />
+              <Route path="/settings" component={Settings} />
+            </>
+          )}
+          
           <Route component={NotFound} />
         </>
       ) : isJwtAuth && isMainDomain ? (
@@ -150,38 +160,6 @@ function Router() {
           <Route path="/agency-login" component={AgencyLogin} />
           <Route path="/agency-register" component={AgencyRegistration} />
           <Route path="/privacy-policy" component={PrivacyPolicy} />
-          <Route component={NotFound} />
-        </>
-      ) : agencySlug && !agencyLoading && agency ? (
-        // Agency subdomain detected and found - show public or admin based on auth
-        <>
-          {/* Public routes available on agency subdomain */}
-          <Route path="/" component={AgencyLanding} />
-          <Route path="/dashboard" component={isJwtAuth ? AdminDashboard : AgencyLogin} />
-          <Route path="/consumer-login" component={ConsumerLogin} />
-          <Route path="/consumer-register" component={ConsumerRegistration} />
-          <Route path="/consumer/:email" component={ConsumerPortal} />
-          <Route path="/privacy-policy" component={PrivacyPolicy} />
-          <Route path="/agency-login" component={AgencyLogin} />
-          
-          {/* Consumer dashboard route available always on agency subdomain */}
-          <Route path="/consumer-dashboard" component={ConsumerDashboard} />
-          
-          {/* Admin routes only if authenticated */}
-          {isJwtAuth && (
-            <>
-              <Route path="/admin-dashboard" component={AdminDashboard} />
-              <Route path="/consumers" component={Consumers} />
-              <Route path="/accounts" component={Accounts} />
-              <Route path="/communications" component={Communications} />
-              <Route path="/requests" component={Requests} />
-              <Route path="/payments" component={Payments} />
-              <Route path="/billing" component={Billing} />
-              <Route path="/company" component={CompanyManagement} />
-              <Route path="/settings" component={Settings} />
-            </>
-          )}
-          
           <Route component={NotFound} />
         </>
       ) : !isAuthenticated ? (
