@@ -1944,14 +1944,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Document routes
   app.get('/api/documents', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
+      let tenantId: string;
       
-      if (!platformUser?.tenantId) {
-        return res.status(403).json({ message: "No tenant access" });
+      if (req.user.isJwtAuth) {
+        // JWT auth - tenant ID is directly on user
+        tenantId = req.user.tenantId;
+      } else {
+        // Replit auth - need to look up platform user
+        const userId = req.user.claims.sub;
+        const platformUser = await storage.getPlatformUser(userId);
+        
+        if (!platformUser?.tenantId) {
+          return res.status(403).json({ message: "No tenant access" });
+        }
+        tenantId = platformUser.tenantId;
       }
 
-      const documents = await storage.getDocumentsByTenant(platformUser.tenantId);
+      const documents = await storage.getDocumentsByTenant(tenantId);
       res.json(documents);
     } catch (error) {
       console.error("Error fetching documents:", error);
@@ -1961,16 +1970,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/documents', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
+      let tenantId: string;
       
-      if (!platformUser?.tenantId) {
-        return res.status(403).json({ message: "No tenant access" });
+      if (req.user.isJwtAuth) {
+        // JWT auth - tenant ID is directly on user
+        tenantId = req.user.tenantId;
+      } else {
+        // Replit auth - need to look up platform user
+        const userId = req.user.claims.sub;
+        const platformUser = await storage.getPlatformUser(userId);
+        
+        if (!platformUser?.tenantId) {
+          return res.status(403).json({ message: "No tenant access" });
+        }
+        tenantId = platformUser.tenantId;
       }
 
       const document = await storage.createDocument({
         ...req.body,
-        tenantId: platformUser.tenantId,
+        tenantId: tenantId,
       });
       
       res.json(document);
@@ -1993,14 +2011,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Arrangement options routes
   app.get('/api/arrangement-options', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
+      let tenantId: string;
       
-      if (!platformUser?.tenantId) {
-        return res.status(403).json({ message: "No tenant access" });
+      if (req.user.isJwtAuth) {
+        // JWT auth - tenant ID is directly on user
+        tenantId = req.user.tenantId;
+      } else {
+        // Replit auth - need to look up platform user
+        const userId = req.user.claims.sub;
+        const platformUser = await storage.getPlatformUser(userId);
+        
+        if (!platformUser?.tenantId) {
+          return res.status(403).json({ message: "No tenant access" });
+        }
+        tenantId = platformUser.tenantId;
       }
 
-      const options = await storage.getArrangementOptionsByTenant(platformUser.tenantId);
+      const options = await storage.getArrangementOptionsByTenant(tenantId);
       res.json(options);
     } catch (error) {
       console.error("Error fetching arrangement options:", error);
@@ -2010,16 +2037,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/arrangement-options', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
+      let tenantId: string;
       
-      if (!platformUser?.tenantId) {
-        return res.status(403).json({ message: "No tenant access" });
+      if (req.user.isJwtAuth) {
+        // JWT auth - tenant ID is directly on user
+        tenantId = req.user.tenantId;
+      } else {
+        // Replit auth - need to look up platform user
+        const userId = req.user.claims.sub;
+        const platformUser = await storage.getPlatformUser(userId);
+        
+        if (!platformUser?.tenantId) {
+          return res.status(403).json({ message: "No tenant access" });
+        }
+        tenantId = platformUser.tenantId;
       }
 
       const option = await storage.createArrangementOption({
         ...req.body,
-        tenantId: platformUser.tenantId,
+        tenantId: tenantId,
       });
       
       res.json(option);
@@ -2052,11 +2088,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Tenant settings routes
   app.get('/api/settings', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformUser = await storage.getPlatformUser(userId);
+      let tenantId: string;
       
-      if (!platformUser?.tenantId) {
-        return res.status(403).json({ message: "No tenant access" });
+      if (req.user.isJwtAuth) {
+        // JWT auth - tenant ID is directly on user
+        tenantId = req.user.tenantId;
+      } else {
+        // Replit auth - need to look up platform user
+        const userId = req.user.claims.sub;
+        const platformUser = await storage.getPlatformUser(userId);
+        
+        if (!platformUser?.tenantId) {
+          return res.status(403).json({ message: "No tenant access" });
+        }
+        tenantId = platformUser.tenantId;
       }
 
       // Get settings from both tenant and tenantSettings tables
