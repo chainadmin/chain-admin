@@ -3,9 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import AdminLayout from "@/components/admin-layout";
-import AccountsTable from "@/components/accounts-table";
 import ImportModal from "@/components/import-modal";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,7 +13,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -26,7 +23,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
   Select,
@@ -41,14 +37,21 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { FolderOpen, Folder, Plus, Upload, Settings, Trash2, MoreVertical, Users, FileText, Eye, Phone, Edit, Mail, MapPin, Calendar } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { FolderOpen, Folder, Plus, Upload, Settings, Trash2, MoreVertical, Eye, Edit, Mail, Phone, MapPin, Calendar } from "lucide-react";
 
 export default function Accounts() {
   const [selectedFolderId, setSelectedFolderId] = useState<string>("all");
-  const [activeMainTab, setActiveMainTab] = useState<string>("accounts");
   const [showImportModal, setShowImportModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
+  const [selectedAccount, setSelectedAccount] = useState<any>(null);
+  const [statusFilter, setStatusFilter] = useState("all");
   const [deleteFolderDialog, setDeleteFolderDialog] = useState<{ open: boolean; folder: any }>({
     open: false,
     folder: null,
@@ -67,6 +70,25 @@ export default function Accounts() {
     creditor: "",
     balance: "",
     folderId: "",
+    dateOfBirth: "",
+    address: "",
+    city: "",
+    state: "",
+    zipCode: "",
+  });
+  const [editForm, setEditForm] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    accountNumber: "",
+    creditor: "",
+    balance: "",
+    dateOfBirth: "",
+    address: "",
+    city: "",
+    state: "",
+    zipCode: "",
   });
 
   const { toast } = useToast();
@@ -82,24 +104,6 @@ export default function Accounts() {
 
   const { data: consumers } = useQuery({
     queryKey: ["/api/consumers"],
-  });
-
-  // Consumer-related state
-  const [selectedConsumer, setSelectedConsumer] = useState<any>(null);
-  const [showConsumerEditDialog, setShowConsumerEditDialog] = useState(false);
-  const [showConsumerViewDialog, setShowConsumerViewDialog] = useState(false);
-  const [showConsumerDeleteDialog, setShowConsumerDeleteDialog] = useState(false);
-  const [deleteConsumerId, setDeleteConsumerId] = useState<string | null>(null);
-  const [consumerEditForm, setConsumerEditForm] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-    dateOfBirth: "",
-    address: "",
-    city: "",
-    state: "",
-    zipCode: "",
   });
 
   // Mutations
@@ -118,6 +122,11 @@ export default function Accounts() {
         creditor: "",
         balance: "",
         folderId: "",
+        dateOfBirth: "",
+        address: "",
+        city: "",
+        state: "",
+        zipCode: "",
       });
       toast({
         title: "Success",
@@ -133,16 +142,86 @@ export default function Accounts() {
     },
   });
 
+  const updateAccountMutation = useMutation({
+    mutationFn: (data: any) => {
+      const consumerId = selectedAccount?.consumer?.id || selectedAccount?.consumerId;
+      if (consumerId) {
+        // Update consumer info if we have a consumerId
+        return apiRequest("PATCH", `/api/consumers/${consumerId}`, {
+          firstName: data.firstName,
+          lastName: data.lastName,
+          email: data.email,
+          phone: data.phone,
+        });
+      }
+      return Promise.resolve();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/consumers"] });
+      setShowEditModal(false);
+      toast({
+        title: "Success",
+        description: "Account updated successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update account",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteAccountMutation = useMutation({
+    mutationFn: (accountId: string) => apiRequest("DELETE", `/api/accounts/${accountId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/consumers"] });
+      setShowDeleteDialog(false);
+      setSelectedAccount(null);
+      toast({
+        title: "Success",
+        description: "Account deleted successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete account",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: (accountIds: string[]) => apiRequest("DELETE", "/api/accounts/bulk-delete", { ids: accountIds }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/consumers"] });
+      setSelectedAccounts(new Set());
+      setShowBulkDeleteDialog(false);
+      toast({
+        title: "Success",
+        description: `${selectedAccounts.size} accounts deleted successfully`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete accounts",
+        variant: "destructive",
+      });
+    },
+  });
+
   const createFolderMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/folders", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
       setShowCreateFolderModal(false);
-      setFolderForm({
-        name: "",
-        color: "#3B82F6",
-        description: "",
-      });
+      setFolderForm({ name: "", color: "#3B82F6", description: "" });
       toast({
         title: "Success",
         description: "Folder created successfully",
@@ -157,62 +236,15 @@ export default function Accounts() {
     },
   });
 
-  // Consumer mutations
-  const updateConsumerMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      return apiRequest("PATCH", `/api/consumers/${id}`, data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/consumers"] });
-      setShowConsumerEditDialog(false);
-      toast({
-        title: "Success",
-        description: "Consumer information updated successfully.",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update consumer",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const deleteConsumerMutation = useMutation({
-    mutationFn: async (id: string) => {
-      return apiRequest("DELETE", "/api/consumers", { id });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/consumers"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
-      setShowConsumerDeleteDialog(false);
-      setDeleteConsumerId(null);
-      toast({
-        title: "Success",
-        description: "Consumer and all associated accounts deleted successfully.",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to delete consumer",
-        variant: "destructive",
-      });
-    },
-  });
-
   const deleteFolderMutation = useMutation({
     mutationFn: (folderId: string) => apiRequest("DELETE", `/api/folders/${folderId}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
-      if (selectedFolderId !== "all") {
-        setSelectedFolderId("all");
-      }
+      setDeleteFolderDialog({ open: false, folder: null });
       toast({
         title: "Success",
-        description: "Folder deleted successfully. All accounts moved to default folder.",
+        description: "Folder deleted successfully",
       });
     },
     onError: (error: any) => {
@@ -224,338 +256,378 @@ export default function Accounts() {
     },
   });
 
-  // Filter accounts by selected folder
-  const filteredAccounts = selectedFolderId === "all" 
-    ? (accounts as any[]) || []
-    : ((accounts as any[]) || []).filter((account: any) => account.folder?.id === selectedFolderId);
-
-  // Group accounts by folder for display counts
-  const folderCounts = ((folders as any[]) || []).reduce((acc: any, folder: any) => {
-    acc[folder.id] = ((accounts as any[]) || []).filter((account: any) => account.folder?.id === folder.id).length;
-    return acc;
-  }, {});
-
+  // Handlers
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!createForm.firstName.trim() || !createForm.lastName.trim() || !createForm.email.trim() || !createForm.creditor.trim() || !createForm.balance.trim()) {
-      toast({
-        title: "Error",
-        description: "Please fill in all required fields",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const balanceCents = Math.round(parseFloat(createForm.balance) * 100);
-    if (isNaN(balanceCents)) {
-      toast({
-        title: "Error",
-        description: "Please enter a valid balance amount",
-        variant: "destructive",
-      });
-      return;
-    }
-
+    const balanceCents = Math.round(parseFloat(createForm.balance || "0") * 100);
+    
     createAccountMutation.mutate({
       firstName: createForm.firstName,
       lastName: createForm.lastName,
       email: createForm.email,
-      phone: createForm.phone || undefined,
-      accountNumber: createForm.accountNumber || undefined,
+      phone: createForm.phone || null,
+      accountNumber: createForm.accountNumber || "",
       creditor: createForm.creditor,
       balanceCents,
-      folderId: createForm.folderId || undefined,
+      folderId: createForm.folderId || null,
     });
   };
 
-  const handleCreateFolderSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!folderForm.name.trim()) {
-      toast({
-        title: "Error",
-        description: "Please enter a folder name",
-        variant: "destructive",
-      });
-      return;
-    }
+  const handleEdit = (account: any) => {
+    setSelectedAccount(account);
+    setEditForm({
+      firstName: account.consumer?.firstName || "",
+      lastName: account.consumer?.lastName || "",
+      email: account.consumer?.email || "",
+      phone: account.consumer?.phone || "",
+      accountNumber: account.accountNumber || "",
+      creditor: account.creditor || "",
+      balance: account.balanceCents ? (account.balanceCents / 100).toString() : "",
+      dateOfBirth: "",
+      address: "",
+      city: "",
+      state: "",
+      zipCode: "",
+    });
+    setShowEditModal(true);
+  };
 
-    createFolderMutation.mutate({
-      name: folderForm.name,
-      color: folderForm.color,
-      description: folderForm.description || undefined,
+  const handleView = (account: any) => {
+    setSelectedAccount(account);
+    setShowViewModal(true);
+  };
+
+  const handleDelete = (account: any) => {
+    setSelectedAccount(account);
+    setShowDeleteDialog(true);
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedAccounts.size > 0) {
+      bulkDeleteMutation.mutate(Array.from(selectedAccounts));
+    }
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedAccounts(new Set(filteredAccounts.map((a: any) => a.id)));
+    } else {
+      setSelectedAccounts(new Set());
+    }
+  };
+
+  const handleSelectAccount = (accountId: string, checked: boolean) => {
+    const newSelected = new Set(selectedAccounts);
+    if (checked) {
+      newSelected.add(accountId);
+    } else {
+      newSelected.delete(accountId);
+    }
+    setSelectedAccounts(newSelected);
+  };
+
+  // Filtering
+  const filteredAccounts = (accounts as any[])?.filter(account => {
+    const matchesFolder = selectedFolderId === "all" || account.consumer?.folderId === selectedFolderId;
+    const matchesStatus = statusFilter === "all" || account.status?.toLowerCase() === statusFilter.toLowerCase();
+    return matchesFolder && matchesStatus;
+  }) || [];
+
+  const getStatusColor = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case 'active':
+        return 'bg-green-100 text-green-800';
+      case 'overdue':
+        return 'bg-red-100 text-red-800';
+      case 'settled':
+        return 'bg-gray-100 text-gray-800';
+      default:
+        return 'bg-yellow-100 text-yellow-800';
+    }
+  };
+
+  const formatCurrency = (cents: number) => {
+    return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
     });
   };
 
   const isLoading = accountsLoading || foldersLoading;
 
-  // Consumer handlers
-  const handleConsumerEdit = (consumer: any) => {
-    setSelectedConsumer(consumer);
-    setConsumerEditForm({
-      firstName: consumer.firstName || "",
-      lastName: consumer.lastName || "",
-      email: consumer.email || "",
-      phone: consumer.phone || "",
-      dateOfBirth: consumer.dateOfBirth || "",
-      address: consumer.address || "",
-      city: consumer.city || "",
-      state: consumer.state || "",
-      zipCode: consumer.zipCode || "",
-    });
-    setShowConsumerEditDialog(true);
-  };
-
-  const handleConsumerView = (consumer: any) => {
-    setSelectedConsumer(consumer);
-    setShowConsumerViewDialog(true);
-  };
-
-  const handleConsumerDelete = (consumerId: string) => {
-    setDeleteConsumerId(consumerId);
-    setShowConsumerDeleteDialog(true);
-  };
-
-  const handleConsumerUpdateSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (selectedConsumer) {
-      updateConsumerMutation.mutate({
-        id: selectedConsumer.id,
-        data: consumerEditForm,
-      });
-    }
-  };
-
   return (
     <AdminLayout>
-      <div className="py-6">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Accounts & Consumers</h1>
-              <p className="mt-1 text-sm text-gray-500">
-                Manage all consumer records and their associated accounts
-              </p>
-            </div>
+      <div className="p-6">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">Accounts Management</h1>
+          <p className="text-sm text-gray-600 mt-1">Manage all consumer accounts in one place</p>
+        </div>
+
+        {/* Folder Navigation */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-gray-700">FOLDERS</h2>
             <div className="flex gap-2">
-              {activeMainTab === "accounts" && (
-                <>
-                  <Button
-                    onClick={() => setShowCreateFolderModal(true)}
-                    variant="outline"
-                    data-testid="button-create-folder"
-                  >
-                    <Folder className="h-4 w-4 mr-2" />
-                    New Folder
-                  </Button>
-                  <Button
-                    onClick={() => setShowImportModal(true)}
-                    variant="outline"
-                    data-testid="button-import-accounts"
-                  >
-                    <Upload className="h-4 w-4 mr-2" />
-                    Import CSV
-                  </Button>
-                  <Button
-                    onClick={() => setShowCreateModal(true)}
-                    data-testid="button-create-account"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create Account
-                  </Button>
-                </>
-              )}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowCreateFolderModal(true)}
+                data-testid="button-create-folder"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                New Folder
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowImportModal(true)}
+                data-testid="button-import"
+              >
+                <Upload className="h-4 w-4 mr-1" />
+                Import CSV
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => setShowCreateModal(true)}
+                data-testid="button-create-account"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Create Account
+              </Button>
             </div>
+          </div>
+
+          {/* Folder tabs */}
+          <div className="flex gap-2 overflow-x-auto pb-2">
+            <Button
+              variant={selectedFolderId === "all" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSelectedFolderId("all")}
+              className="flex items-center gap-1"
+              data-testid="folder-all"
+            >
+              <FolderOpen className="h-4 w-4" />
+              All Accounts
+              <span className="ml-1 text-xs bg-white/20 px-1.5 py-0.5 rounded">
+                {(accounts as any[])?.length || 0}
+              </span>
+            </Button>
+            
+            {(folders as any[])?.map((folder: any) => (
+              <div key={folder.id} className="relative group">
+                <Button
+                  variant={selectedFolderId === folder.id ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedFolderId(folder.id)}
+                  className="flex items-center gap-1"
+                  style={{
+                    borderColor: selectedFolderId === folder.id ? folder.color : undefined,
+                    backgroundColor: selectedFolderId === folder.id ? folder.color : undefined,
+                  }}
+                  data-testid={`folder-${folder.id}`}
+                >
+                  <Folder className="h-4 w-4" />
+                  {folder.name}
+                  <span className="ml-1 text-xs bg-white/20 px-1.5 py-0.5 rounded">
+                    {(accounts as any[])?.filter((a: any) => a.consumer?.folderId === folder.id).length || 0}
+                  </span>
+                </Button>
+                {!folder.isDefault && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="absolute -top-1 -right-1 h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteFolderDialog({ open: true, folder });
+                    }}
+                    data-testid={`delete-folder-${folder.id}`}
+                  >
+                    <Trash2 className="h-3 w-3 text-red-500" />
+                  </Button>
+                )}
+              </div>
+            ))}
           </div>
         </div>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 mt-8">
-          {/* Main tabs for Accounts and Consumers */}
-          <Tabs value={activeMainTab} onValueChange={setActiveMainTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-6">
-              <TabsTrigger value="accounts" className="flex items-center gap-2">
-                <FileText className="h-4 w-4" />
-                Accounts ({((accounts as any[]) || []).length})
-              </TabsTrigger>
-              <TabsTrigger value="consumers" className="flex items-center gap-2">
-                <Users className="h-4 w-4" />
-                Consumers ({((consumers as any[]) || []).length})
-              </TabsTrigger>
-            </TabsList>
-
-            {/* Accounts Tab Content */}
-            <TabsContent value="accounts" className="mt-0">
-              <Tabs value={selectedFolderId} onValueChange={setSelectedFolderId} className="w-full">
-                <div className="overflow-x-auto mb-6">
-                  <TabsList className="inline-flex min-w-full sm:grid sm:grid-cols-auto gap-1" style={{ 
-                    gridTemplateColumns: window.innerWidth >= 640 ? `repeat(${((folders as any[])?.length || 0) + 1}, minmax(0, 1fr))` : undefined
-                  }}>
-                    <TabsTrigger 
-                      value="all" 
-                      className="flex items-center gap-2 whitespace-nowrap"
-                      data-testid="tab-all-accounts"
-                    >
-                      <FolderOpen className="h-4 w-4" />
-                      All Accounts ({((accounts as any[]) || []).length})
-                    </TabsTrigger>
-                    
-                    {((folders as any[]) || []).map((folder: any) => (
-                      <TabsTrigger 
-                        key={folder.id} 
-                        value={folder.id}
-                        className="flex items-center gap-2 group relative whitespace-nowrap"
-                        data-testid={`tab-folder-${folder.name.toLowerCase().replace(/\s+/g, '-')}`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <div 
-                            className="w-3 h-3 rounded-full" 
-                            style={{ backgroundColor: folder.color }}
-                          />
-                          <Folder className="h-4 w-4" />
-                          {folder.name} ({folderCounts[folder.id] || 0})
-                          {!folder.isDefault && (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-4 w-4 p-0 opacity-0 group-hover:opacity-100 ml-1"
-                                  onClick={(e) => e.stopPropagation()}
-                                  data-testid={`dropdown-folder-${folder.id}`}
-                                >
-                                  <MoreVertical className="h-3 w-3" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent>
-                                <DropdownMenuItem
-                                  onClick={() => setDeleteFolderDialog({ open: true, folder })}
-                                  className="text-red-600 focus:text-red-600"
-                                  data-testid={`delete-folder-${folder.id}`}
-                                >
-                                  <Trash2 className="h-4 w-4 mr-2" />
-                                  Delete Folder
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
-                        </div>
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </div>
-
-                <TabsContent value="all" className="mt-0">
-                  <AccountsTable 
-                    accounts={filteredAccounts} 
-                    isLoading={isLoading} 
-                    showFolderColumn={true}
-                    showDeleteButton={true}
-                  />
-                </TabsContent>
-
-                {((folders as any[]) || []).map((folder: any) => (
-                  <TabsContent key={folder.id} value={folder.id} className="mt-0">
-                    <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                      <div className="flex items-center gap-3">
-                        <div 
-                          className="w-4 h-4 rounded-full" 
-                          style={{ backgroundColor: folder.color }}
-                        />
-                        <div>
-                          <h3 className="font-medium text-gray-900">{folder.name}</h3>
-                          {folder.description && (
-                            <p className="text-sm text-gray-500">{folder.description}</p>
-                          )}
-                        </div>
-                      </div>
+        {/* Accounts Table */}
+        <Card>
+          <CardHeader>
+            <div className="flex justify-between items-center">
+              <CardTitle>Accounts</CardTitle>
+              <div className="flex gap-2">
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-[150px]" data-testid="select-status-filter">
+                    <SelectValue placeholder="Filter by status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="overdue">Overdue</SelectItem>
+                    <SelectItem value="settled">Settled</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                  </SelectContent>
+                </Select>
+                {selectedAccounts.size > 0 && (
+                  <Button
+                    variant="destructive"
+                    onClick={() => setShowBulkDeleteDialog(true)}
+                    data-testid="button-delete-selected"
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Delete ({selectedAccounts.size})
+                  </Button>
+                )}
+              </div>
+            </div>
+            {selectedAccounts.size > 0 && (
+              <p className="text-sm text-gray-500 mt-2">
+                {selectedAccounts.size} account{selectedAccounts.size > 1 ? 's' : ''} selected
+              </p>
+            )}
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="animate-pulse">
+                <div className="h-4 bg-gray-200 rounded w-1/4 mb-4"></div>
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="flex space-x-4 mb-4">
+                    <div className="h-10 w-10 bg-gray-200 rounded-full"></div>
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                      <div className="h-3 bg-gray-200 rounded w-1/2"></div>
                     </div>
-                    
-                    <AccountsTable 
-                      accounts={filteredAccounts} 
-                      isLoading={isLoading}
-                      showFolderColumn={false}
-                      showDeleteButton={true}
-                    />
-                  </TabsContent>
+                  </div>
                 ))}
-              </Tabs>
-            </TabsContent>
-
-            {/* Consumers Tab Content */}
-            <TabsContent value="consumers" className="mt-0">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Consumer List</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {isLoading ? (
-                    <div className="text-center py-8">Loading consumers...</div>
-                  ) : (consumers as any)?.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">
-                      No consumers found. Import account data to get started.
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {(consumers as any)?.map((consumer: any) => (
-                        <div key={consumer.id} className="border-b pb-4">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center">
+              </div>
+            ) : filteredAccounts.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                No accounts found. Import data or create an account to get started.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <Checkbox
+                          checked={selectedAccounts.size === filteredAccounts.length && filteredAccounts.length > 0}
+                          onCheckedChange={handleSelectAll}
+                          data-testid="checkbox-select-all"
+                        />
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Consumer
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Account #
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Creditor
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Balance
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredAccounts.map((account: any) => (
+                      <tr key={account.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <Checkbox
+                            checked={selectedAccounts.has(account.id)}
+                            onCheckedChange={(checked) => handleSelectAccount(account.id, checked as boolean)}
+                            data-testid={`checkbox-${account.id}`}
+                          />
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="flex-shrink-0 h-10 w-10">
                               <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
                                 <span className="text-sm font-medium text-gray-700">
-                                  {consumer.firstName?.[0]}{consumer.lastName?.[0]}
+                                  {account.consumer?.firstName?.[0]}{account.consumer?.lastName?.[0]}
                                 </span>
                               </div>
-                              <div className="ml-4">
-                                <p className="text-sm font-medium text-gray-900">
-                                  {consumer.firstName} {consumer.lastName}
-                                </p>
-                                <p className="text-sm text-gray-500">{consumer.email}</p>
-                                {consumer.phone && (
-                                  <p className="text-sm text-gray-500">{consumer.phone}</p>
-                                )}
-                                {consumer.accountCount > 0 && (
-                                  <p className="text-xs text-gray-400 mt-1">
-                                    {consumer.accountCount} account{consumer.accountCount !== 1 ? 's' : ''}
-                                  </p>
-                                )}
-                              </div>
                             </div>
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleConsumerView(consumer)}
-                                data-testid={`button-view-${consumer.id}`}
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleConsumerEdit(consumer)}
-                                data-testid={`button-edit-${consumer.id}`}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="text-red-600 hover:text-red-700"
-                                onClick={() => handleConsumerDelete(consumer.id)}
-                                data-testid={`button-delete-${consumer.id}`}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                            <div className="ml-4">
+                              <div className="text-sm font-medium text-gray-900">
+                                {account.consumer?.firstName} {account.consumer?.lastName}
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                {account.consumer?.email}
+                              </div>
+                              {account.consumer?.phone && (
+                                <div className="text-xs text-gray-400">
+                                  {account.consumer?.phone}
+                                </div>
+                              )}
                             </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
-        </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {account.accountNumber || '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {account.creditor}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {formatCurrency(account.balanceCents || 0)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(account.status)}`}>
+                            {account.status || 'Pending'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                data-testid={`button-actions-${account.id}`}
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handleView(account)}>
+                                <Eye className="h-4 w-4 mr-2" />
+                                View Details
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleEdit(account)}>
+                                <Edit className="h-4 w-4 mr-2" />
+                                Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem 
+                                onClick={() => handleDelete(account)}
+                                className="text-red-600"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Import Modal */}
         <ImportModal
@@ -568,7 +640,6 @@ export default function Accounts() {
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Create New Account</DialogTitle>
-              <p className="text-sm text-gray-500">Fill in the details below to create a new consumer account.</p>
             </DialogHeader>
             <form onSubmit={handleCreateSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -652,11 +723,10 @@ export default function Accounts() {
                     id="balance"
                     type="number"
                     step="0.01"
-                    min="0"
                     data-testid="input-balance"
                     value={createForm.balance}
                     onChange={(e) => setCreateForm({ ...createForm, balance: e.target.value })}
-                    placeholder="Enter balance amount"
+                    placeholder="Enter balance"
                     required
                   />
                 </div>
@@ -667,18 +737,12 @@ export default function Accounts() {
                     onValueChange={(value) => setCreateForm({ ...createForm, folderId: value })}
                   >
                     <SelectTrigger data-testid="select-folder">
-                      <SelectValue placeholder="Select a folder (optional)" />
+                      <SelectValue placeholder="Select folder" />
                     </SelectTrigger>
                     <SelectContent>
-                      {((folders as any[]) || []).map((folder: any) => (
+                      {(folders as any[])?.map((folder: any) => (
                         <SelectItem key={folder.id} value={folder.id}>
-                          <div className="flex items-center gap-2">
-                            <div 
-                              className="w-3 h-3 rounded-full" 
-                              style={{ backgroundColor: folder.color }}
-                            />
-                            {folder.name}
-                          </div>
+                          {folder.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -686,20 +750,11 @@ export default function Accounts() {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowCreateModal(false)}
-                  data-testid="button-cancel-create"
-                >
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setShowCreateModal(false)}>
                   Cancel
                 </Button>
-                <Button
-                  type="submit"
-                  disabled={createAccountMutation.isPending}
-                  data-testid="button-save-account"
-                >
+                <Button type="submit" disabled={createAccountMutation.isPending} data-testid="button-submit-create">
                   {createAccountMutation.isPending ? "Creating..." : "Create Account"}
                 </Button>
               </div>
@@ -707,94 +762,144 @@ export default function Accounts() {
           </DialogContent>
         </Dialog>
 
-        {/* Create Folder Modal */}
-        <Dialog open={showCreateFolderModal} onOpenChange={setShowCreateFolderModal}>
-          <DialogContent className="max-w-md">
+        {/* Edit Account Modal */}
+        <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Create New Folder</DialogTitle>
-              <p className="text-sm text-gray-500">Create a new folder to organize your accounts.</p>
+              <DialogTitle>Edit Account</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleCreateFolderSubmit} className="space-y-4">
-              <div>
-                <Label htmlFor="folderName">Folder Name *</Label>
-                <Input
-                  id="folderName"
-                  data-testid="input-folder-name"
-                  value={folderForm.name}
-                  onChange={(e) => setFolderForm({ ...folderForm, name: e.target.value })}
-                  placeholder="Enter folder name"
-                  required
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="folderColor">Color</Label>
-                <div className="flex items-center gap-2">
-                  <input
-                    id="folderColor"
-                    type="color"
-                    data-testid="input-folder-color"
-                    value={folderForm.color}
-                    onChange={(e) => setFolderForm({ ...folderForm, color: e.target.value })}
-                    className="w-12 h-8 rounded border border-gray-300"
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              updateAccountMutation.mutate(editForm);
+            }} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="edit-firstName">First Name</Label>
+                  <Input
+                    id="edit-firstName"
+                    value={editForm.firstName}
+                    onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
                   />
-                  <span className="text-sm text-gray-500">{folderForm.color}</span>
+                </div>
+                <div>
+                  <Label htmlFor="edit-lastName">Last Name</Label>
+                  <Input
+                    id="edit-lastName"
+                    value={editForm.lastName}
+                    onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
+                  />
                 </div>
               </div>
 
-              <div>
-                <Label htmlFor="folderDescription">Description</Label>
-                <Input
-                  id="folderDescription"
-                  data-testid="input-folder-description"
-                  value={folderForm.description}
-                  onChange={(e) => setFolderForm({ ...folderForm, description: e.target.value })}
-                  placeholder="Enter folder description (optional)"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="edit-email">Email</Label>
+                  <Input
+                    id="edit-email"
+                    type="email"
+                    value={editForm.email}
+                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-phone">Phone</Label>
+                  <Input
+                    id="edit-phone"
+                    value={editForm.phone}
+                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                  />
+                </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowCreateFolderModal(false)}
-                  data-testid="button-cancel-folder"
-                >
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setShowEditModal(false)}>
                   Cancel
                 </Button>
-                <Button
-                  type="submit"
-                  disabled={createFolderMutation.isPending}
-                  data-testid="button-save-folder"
-                >
-                  {createFolderMutation.isPending ? "Creating..." : "Create Folder"}
+                <Button type="submit" disabled={updateAccountMutation.isPending}>
+                  {updateAccountMutation.isPending ? "Saving..." : "Save Changes"}
                 </Button>
               </div>
             </form>
           </DialogContent>
         </Dialog>
 
-        {/* Delete Folder Dialog */}
-        <AlertDialog 
-          open={deleteFolderDialog.open} 
-          onOpenChange={(open) => setDeleteFolderDialog({ open, folder: open ? deleteFolderDialog.folder : null })}
-        >
+        {/* View Account Modal */}
+        <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Account Details</DialogTitle>
+            </DialogHeader>
+            {selectedAccount && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-500">Name</p>
+                    <p className="font-medium">
+                      {selectedAccount.consumer?.firstName} {selectedAccount.consumer?.lastName}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Email</p>
+                    <p className="font-medium">{selectedAccount.consumer?.email}</p>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-500">Phone</p>
+                    <p className="font-medium">{selectedAccount.consumer?.phone || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Account Number</p>
+                    <p className="font-medium">{selectedAccount.accountNumber || '-'}</p>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-500">Creditor</p>
+                    <p className="font-medium">{selectedAccount.creditor}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Balance</p>
+                    <p className="font-medium">{formatCurrency(selectedAccount.balanceCents || 0)}</p>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-500">Status</p>
+                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(selectedAccount.status)}`}>
+                      {selectedAccount.status || 'Pending'}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Created</p>
+                    <p className="font-medium">{formatDate(selectedAccount.createdAt)}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div className="flex justify-end mt-4">
+              <Button onClick={() => setShowViewModal(false)}>Close</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Account Confirmation */}
+        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete Folder</AlertDialogTitle>
+              <AlertDialogTitle>Delete Account</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to delete the "{deleteFolderDialog.folder?.name}" folder? All accounts in this folder will be moved to the default folder. This action cannot be undone.
+                Are you sure you want to delete this account for {selectedAccount?.consumer?.firstName} {selectedAccount?.consumer?.lastName}? 
+                This action cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
               <AlertDialogAction
-                onClick={() => {
-                  if (deleteFolderDialog.folder) {
-                    deleteFolderMutation.mutate(deleteFolderDialog.folder.id);
-                    setDeleteFolderDialog({ open: false, folder: null });
-                  }
-                }}
+                onClick={() => selectedAccount && deleteAccountMutation.mutate(selectedAccount.id)}
                 className="bg-red-600 hover:bg-red-700"
               >
                 Delete
@@ -803,234 +908,102 @@ export default function Accounts() {
           </AlertDialogContent>
         </AlertDialog>
 
-        {/* Consumer View Dialog */}
-        <Dialog open={showConsumerViewDialog} onOpenChange={setShowConsumerViewDialog}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Consumer Details</DialogTitle>
-            </DialogHeader>
-            {selectedConsumer && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-sm text-gray-500">Name</Label>
-                    <p className="font-medium">
-                      {selectedConsumer.firstName} {selectedConsumer.lastName}
-                    </p>
-                  </div>
-                  {selectedConsumer.email && (
-                    <div>
-                      <Label className="text-sm text-gray-500">Email</Label>
-                      <p className="font-medium flex items-center gap-1">
-                        <Mail className="h-4 w-4" />
-                        {selectedConsumer.email}
-                      </p>
-                    </div>
-                  )}
-                  {selectedConsumer.phone && (
-                    <div>
-                      <Label className="text-sm text-gray-500">Phone</Label>
-                      <p className="font-medium flex items-center gap-1">
-                        <Phone className="h-4 w-4" />
-                        {selectedConsumer.phone}
-                      </p>
-                    </div>
-                  )}
-                  {selectedConsumer.dateOfBirth && (
-                    <div>
-                      <Label className="text-sm text-gray-500">Date of Birth</Label>
-                      <p className="font-medium flex items-center gap-1">
-                        <Calendar className="h-4 w-4" />
-                        {selectedConsumer.dateOfBirth}
-                      </p>
-                    </div>
-                  )}
-                  {(selectedConsumer.address || selectedConsumer.city || selectedConsumer.state || selectedConsumer.zipCode) && (
-                    <div className="col-span-2">
-                      <Label className="text-sm text-gray-500">Address</Label>
-                      <p className="font-medium flex items-center gap-1">
-                        <MapPin className="h-4 w-4" />
-                        {[
-                          selectedConsumer.address,
-                          selectedConsumer.city,
-                          selectedConsumer.state,
-                          selectedConsumer.zipCode
-                        ].filter(Boolean).join(", ")}
-                      </p>
-                    </div>
-                  )}
-                  <div>
-                    <Label className="text-sm text-gray-500">Registration Status</Label>
-                    <p className="font-medium">
-                      {selectedConsumer.isRegistered ? (
-                        <span className="text-green-600">Registered</span>
-                      ) : (
-                        <span className="text-gray-500">Not Registered</span>
-                      )}
-                    </p>
-                  </div>
-                  {selectedConsumer.folder && (
-                    <div>
-                      <Label className="text-sm text-gray-500">Folder</Label>
-                      <p className="font-medium flex items-center gap-2">
-                        <div 
-                          className="w-3 h-3 rounded-full" 
-                          style={{ backgroundColor: selectedConsumer.folder.color }}
-                        />
-                        {selectedConsumer.folder.name}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
-
-        {/* Consumer Edit Dialog */}
-        <Dialog open={showConsumerEditDialog} onOpenChange={setShowConsumerEditDialog}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Edit Consumer Information</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleConsumerUpdateSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="editFirstName">First Name</Label>
-                  <Input
-                    id="editFirstName"
-                    value={consumerEditForm.firstName}
-                    onChange={(e) => setConsumerEditForm({ ...consumerEditForm, firstName: e.target.value })}
-                    placeholder="Enter first name"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="editLastName">Last Name</Label>
-                  <Input
-                    id="editLastName"
-                    value={consumerEditForm.lastName}
-                    onChange={(e) => setConsumerEditForm({ ...consumerEditForm, lastName: e.target.value })}
-                    placeholder="Enter last name"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="editEmail">Email</Label>
-                  <Input
-                    id="editEmail"
-                    type="email"
-                    value={consumerEditForm.email}
-                    onChange={(e) => setConsumerEditForm({ ...consumerEditForm, email: e.target.value })}
-                    placeholder="Enter email"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="editPhone">Phone</Label>
-                  <Input
-                    id="editPhone"
-                    value={consumerEditForm.phone}
-                    onChange={(e) => setConsumerEditForm({ ...consumerEditForm, phone: e.target.value })}
-                    placeholder="Enter phone"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="editDob">Date of Birth</Label>
-                  <Input
-                    id="editDob"
-                    type="date"
-                    value={consumerEditForm.dateOfBirth}
-                    onChange={(e) => setConsumerEditForm({ ...consumerEditForm, dateOfBirth: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="editAddress">Street Address</Label>
-                  <Input
-                    id="editAddress"
-                    value={consumerEditForm.address}
-                    onChange={(e) => setConsumerEditForm({ ...consumerEditForm, address: e.target.value })}
-                    placeholder="Enter address"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <Label htmlFor="editCity">City</Label>
-                  <Input
-                    id="editCity"
-                    value={consumerEditForm.city}
-                    onChange={(e) => setConsumerEditForm({ ...consumerEditForm, city: e.target.value })}
-                    placeholder="Enter city"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="editState">State</Label>
-                  <Input
-                    id="editState"
-                    value={consumerEditForm.state}
-                    onChange={(e) => setConsumerEditForm({ ...consumerEditForm, state: e.target.value })}
-                    placeholder="Enter state"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="editZip">ZIP Code</Label>
-                  <Input
-                    id="editZip"
-                    value={consumerEditForm.zipCode}
-                    onChange={(e) => setConsumerEditForm({ ...consumerEditForm, zipCode: e.target.value })}
-                    placeholder="Enter ZIP"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowConsumerEditDialog(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={updateConsumerMutation.isPending}
-                >
-                  {updateConsumerMutation.isPending ? "Saving..." : "Save Changes"}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
-
-        {/* Consumer Delete Dialog */}
-        <AlertDialog open={showConsumerDeleteDialog} onOpenChange={setShowConsumerDeleteDialog}>
+        {/* Bulk Delete Confirmation */}
+        <AlertDialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete Consumer</AlertDialogTitle>
+              <AlertDialogTitle>Delete Multiple Accounts</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to delete this consumer? This will also delete all accounts associated with this consumer. This action cannot be undone.
+                Are you sure you want to delete {selectedAccounts.size} selected accounts? 
+                This action cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
               <AlertDialogAction
-                onClick={() => {
-                  if (deleteConsumerId) {
-                    deleteConsumerMutation.mutate(deleteConsumerId);
-                  }
-                }}
+                onClick={handleBulkDelete}
                 className="bg-red-600 hover:bg-red-700"
               >
-                Delete Consumer & Accounts
+                Delete {selectedAccounts.size} Accounts
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Delete Folder Confirmation */}
+        <AlertDialog open={deleteFolderDialog.open} onOpenChange={(open) => setDeleteFolderDialog({ open, folder: null })}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Folder</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete the folder "{deleteFolderDialog.folder?.name}"? 
+                Accounts in this folder will be moved to the default folder.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => deleteFolderDialog.folder && deleteFolderMutation.mutate(deleteFolderDialog.folder.id)}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Delete Folder
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Create Folder Modal */}
+        <Dialog open={showCreateFolderModal} onOpenChange={setShowCreateFolderModal}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Create New Folder</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              createFolderMutation.mutate(folderForm);
+            }} className="space-y-4">
+              <div>
+                <Label htmlFor="folder-name">Folder Name *</Label>
+                <Input
+                  id="folder-name"
+                  value={folderForm.name}
+                  onChange={(e) => setFolderForm({ ...folderForm, name: e.target.value })}
+                  placeholder="Enter folder name"
+                  required
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="folder-color">Color</Label>
+                <Input
+                  id="folder-color"
+                  type="color"
+                  value={folderForm.color}
+                  onChange={(e) => setFolderForm({ ...folderForm, color: e.target.value })}
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="folder-description">Description</Label>
+                <Input
+                  id="folder-description"
+                  value={folderForm.description}
+                  onChange={(e) => setFolderForm({ ...folderForm, description: e.target.value })}
+                  placeholder="Enter folder description"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setShowCreateFolderModal(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={createFolderMutation.isPending}>
+                  {createFolderMutation.isPending ? "Creating..." : "Create Folder"}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
     </AdminLayout>
   );
