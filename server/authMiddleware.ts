@@ -51,25 +51,13 @@ export const authenticateUser: RequestHandler = async (req: any, res, next) => {
 
 // Get current user with tenant information
 export const getCurrentUser = async (req: any) => {
-  if (req.user.isJwtAuth) {
-    // For JWT auth, fetch the tenant info
-    const tenant = await storage.getTenant(req.user.tenantId);
-    return {
-      id: req.user.id,
-      tenantId: req.user.tenantId,
-      tenant: tenant,
-      isJwtAuth: true
-    };
-  } else {
-    // For Replit auth, get full user and platform user info
-    const userId = req.user.claims.sub;
-    const user = await storage.getUser(userId);
-    const platformUser = await storage.getPlatformUserWithTenant(userId);
-    
-    return {
-      ...user,
-      platformUser,
-      isReplitAuth: true
-    };
-  }
+  // JWT auth - fetch the full tenant info including slug
+  const tenant = await storage.getTenant(req.user.tenantId);
+  return {
+    id: req.user.id,
+    tenantId: req.user.tenantId,
+    tenantSlug: req.user.tenantSlug || tenant?.slug, // Include slug from token or tenant
+    tenant: tenant,
+    isJwtAuth: true
+  };
 };
