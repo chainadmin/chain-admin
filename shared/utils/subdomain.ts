@@ -12,7 +12,32 @@ export function extractSubdomain(hostname: string): string | null {
 
   // For Replit preview URLs (*.repl.co or *.replit.dev)
   if (hostname.includes('.repl.co') || hostname.includes('.replit.dev')) {
-    // Replit URLs don't support custom subdomains, use path-based routing
+    // Check if we have a subdomain-like prefix in Replit URL
+    // e.g., waypoint-solutions-d78b0a8b-f33c-4616-a4c9-a60daecc4e66.replit.dev
+    const parts = hostname.split('.');
+    const firstPart = parts[0];
+    
+    // Check if first part contains the Replit workspace ID pattern
+    if (firstPart && firstPart.includes('-')) {
+      // Look for agency slug at the beginning (before the Replit ID)
+      const segments = firstPart.split('-');
+      
+      // If we have more than 5 segments, it likely includes an agency slug
+      // Pattern: agency-slug-replit-workspace-id
+      if (segments.length > 5) {
+        // Try to extract agency slug (everything before the UUID-like pattern)
+        // UUID pattern typically has 5 groups of alphanumeric characters
+        const potentialUuidStart = segments.length - 5;
+        const potentialSlug = segments.slice(0, potentialUuidStart).join('-');
+        
+        // Basic validation - agency slugs should be reasonable length
+        if (potentialSlug && potentialSlug.length > 2 && potentialSlug.length < 50) {
+          return potentialSlug;
+        }
+      }
+    }
+    
+    // Fall back to null for standard Replit URLs
     return null;
   }
 
