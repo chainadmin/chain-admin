@@ -145,16 +145,16 @@ export default function Accounts() {
   const updateAccountMutation = useMutation({
     mutationFn: (data: any) => {
       const consumerId = selectedAccount?.consumer?.id || selectedAccount?.consumerId;
-      if (consumerId) {
-        // Update consumer info if we have a consumerId
-        return apiRequest("PATCH", `/api/consumers/${consumerId}`, {
-          firstName: data.firstName,
-          lastName: data.lastName,
-          email: data.email,
-          phone: data.phone,
-        });
+      if (!consumerId) {
+        return Promise.reject(new Error("No consumer ID found"));
       }
-      return Promise.resolve();
+      // Update consumer info
+      return apiRequest("PATCH", `/api/consumers/${consumerId}`, {
+        firstName: data.firstName,
+        lastName: data.lastName,
+        email: data.email,
+        phone: data.phone,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
