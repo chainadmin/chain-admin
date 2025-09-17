@@ -77,7 +77,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         additionalData, dueDate
       } = req.body;
 
-      if (!firstName || !lastName || !email || !creditor || balanceCents === undefined) {
+      if (!firstName || !lastName || !email || !creditor || balanceCents === undefined || !dateOfBirth) {
         res.status(400).json({ error: 'Missing required fields' });
         return;
       }
@@ -120,7 +120,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
             lastName,
             email,
             phone: phone || null,
-            dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
+            dateOfBirth: new Date(dateOfBirth),
             address: address || null,
             city: city || null,
             state: state || null,

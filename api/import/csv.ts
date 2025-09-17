@@ -67,6 +67,11 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
 
     // Process each consumer
     for (const csvConsumer of csvConsumers) {
+      // Validate required fields
+      if (!csvConsumer.firstName || !csvConsumer.lastName || !csvConsumer.email || !csvConsumer.dateOfBirth) {
+        console.error(`Skipping consumer: missing required fields`, csvConsumer);
+        continue;
+      }
       // Check if consumer already exists
       let [existingConsumer] = await db
         .select()
@@ -88,7 +93,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
             lastName: csvConsumer.lastName,
             email: csvConsumer.email,
             phone: csvConsumer.phone || null,
-            dateOfBirth: csvConsumer.dateOfBirth || null,
+            dateOfBirth: new Date(csvConsumer.dateOfBirth),
             address: csvConsumer.address || null,
             city: csvConsumer.city || null,
             state: csvConsumer.state || null,

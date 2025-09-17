@@ -271,6 +271,10 @@ export default function Accounts() {
       balanceCents,
       folderId: createForm.folderId || null,
       dateOfBirth: createForm.dateOfBirth,
+      address: createForm.address || null,
+      city: createForm.city || null,
+      state: createForm.state || null,
+      zipCode: createForm.zipCode || null,
     });
   };
 
@@ -753,7 +757,7 @@ export default function Accounts() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="dateOfBirth">Date of Birth</Label>
+                  <Label htmlFor="dateOfBirth">Date of Birth *</Label>
                   <Input
                     id="dateOfBirth"
                     type="date"
@@ -761,6 +765,7 @@ export default function Accounts() {
                     value={createForm.dateOfBirth}
                     onChange={(e) => setCreateForm({ ...createForm, dateOfBirth: e.target.value })}
                     placeholder="Select date of birth"
+                    required
                   />
                 </div>
                 <div>
