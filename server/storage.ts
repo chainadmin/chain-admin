@@ -457,54 +457,31 @@ export class DatabaseStorage implements IStorage {
   }
 
   async findOrCreateConsumer(consumerData: InsertConsumer): Promise<Consumer> {
-    // Email is mandatory for matching
-    if (!consumerData.email) {
-      // If no email provided, always create a new consumer
+    // All fields are required for matching: email, DOB, firstName, lastName
+    if (!consumerData.email || !consumerData.dateOfBirth || !consumerData.firstName || !consumerData.lastName) {
+      // If any required field is missing, create a new consumer
       return await this.createConsumer(consumerData);
     }
     
-    // Match by tenantId + email only (case-insensitive)
-    // Email is the primary identifier
+    // Match by ALL fields with case-insensitive comparison
     const [existingConsumer] = await db.select()
       .from(consumers)
       .where(
         and(
           eq(consumers.tenantId, consumerData.tenantId!),
-          sql`LOWER(${consumers.email}) = LOWER(${consumerData.email})`
+          sql`LOWER(${consumers.email}) = LOWER(${consumerData.email})`,
+          sql`LOWER(${consumers.firstName}) = LOWER(${consumerData.firstName})`,
+          sql`LOWER(${consumers.lastName}) = LOWER(${consumerData.lastName})`,
+          eq(consumers.dateOfBirth, consumerData.dateOfBirth)
         )
       );
     
     if (existingConsumer) {
-      // Found existing consumer by email
-      // Optionally update firstName, lastName, phone, dateOfBirth if they differ
-      const updates: any = {};
-      
-      if (consumerData.firstName && existingConsumer.firstName?.toLowerCase() !== consumerData.firstName.toLowerCase()) {
-        updates.firstName = consumerData.firstName;
-      }
-      if (consumerData.lastName && existingConsumer.lastName?.toLowerCase() !== consumerData.lastName.toLowerCase()) {
-        updates.lastName = consumerData.lastName;
-      }
-      if (consumerData.phone && existingConsumer.phone !== consumerData.phone) {
-        updates.phone = consumerData.phone;
-      }
-      if (consumerData.dateOfBirth && existingConsumer.dateOfBirth !== consumerData.dateOfBirth) {
-        updates.dateOfBirth = consumerData.dateOfBirth;
-      }
-      
-      // Only update if there are changes
-      if (Object.keys(updates).length > 0) {
-        const [updatedConsumer] = await db.update(consumers)
-          .set(updates)
-          .where(eq(consumers.id, existingConsumer.id))
-          .returning();
-        return updatedConsumer;
-      }
-      
+      // Found exact match - return existing consumer
       return existingConsumer;
     }
     
-    // If not found, create new consumer
+    // No exact match found - create new consumer
     return await this.createConsumer(consumerData);
   }
 
