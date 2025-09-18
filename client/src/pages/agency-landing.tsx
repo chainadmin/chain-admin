@@ -26,6 +26,9 @@ export default function AgencyLanding() {
   
   const [isLoading, setIsLoading] = useState(true);
 
+  // Debug logging
+  console.log('AgencyLanding - agencySlug:', agencySlug, 'pathSlug:', pathSlug);
+
   // Fetch agency information
   const { data: agencyData, isLoading: agencyLoading, error } = useQuery({
     queryKey: [`/api/public/agency/${agencySlug}`],
