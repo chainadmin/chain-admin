@@ -70,6 +70,14 @@ export default function ConsumerLogin() {
           description: data.message,
         });
         setLocation(`/consumer-register?email=${form.email}&tenant=${data.tenant.slug}`);
+      } else if (data.needsAgencyLink) {
+        // User exists but not linked to an agency
+        toast({
+          title: "Agency Link Required",
+          description: data.message,
+        });
+        // Redirect to registration with email pre-filled
+        setLocation(`/consumer-register?email=${form.email}`);
       } else {
         // Successful login
         toast({

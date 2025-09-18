@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -10,16 +10,33 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { UserPlus, ArrowRight, Shield, MapPin } from "lucide-react";
+import { UserPlus, ArrowRight, Shield, MapPin, AlertTriangle } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function ConsumerRegistration() {
   const { tenantSlug } = useParams();
   const [, navigate] = useLocation();
   const { toast } = useToast();
 
-  // Also check sessionStorage for agency context as fallback
+  // Parse query parameters for email and tenant
+  const getQueryParams = () => {
+    const params = new URLSearchParams(window.location.search);
+    return {
+      email: params.get('email') || '',
+      tenant: params.get('tenant') || ''
+    };
+  };
+
+  // Get agency context from multiple sources
   const getAgencyContext = () => {
+    // 1. First check URL path parameter
     if (tenantSlug) return tenantSlug;
+    
+    // 2. Check query parameter
+    const queryParams = getQueryParams();
+    if (queryParams.tenant) return queryParams.tenant;
+    
+    // 3. Check sessionStorage for agency context
     try {
       const context = sessionStorage.getItem('agencyContext');
       if (context) {
@@ -29,15 +46,17 @@ export default function ConsumerRegistration() {
     } catch (e) {
       console.error('Error reading agency context:', e);
     }
+    
     return null;
   };
 
   const effectiveTenantSlug = getAgencyContext();
+  const queryParams = getQueryParams();
 
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
-    email: "",
+    email: queryParams.email || "",
     dateOfBirth: "",
     address: "",
     city: "",
@@ -49,7 +68,7 @@ export default function ConsumerRegistration() {
   const registrationMutation = useMutation({
     mutationFn: async (data: any) => {
       const response = await apiRequest("POST", "/api/consumer-registration", data);
-      return response.json();
+      return response;
     },
     onSuccess: (data: any) => {
       if (data.tenant) {
@@ -115,6 +134,16 @@ export default function ConsumerRegistration() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Check if agency is selected
+    if (!effectiveTenantSlug) {
+      toast({
+        title: "Agency Required",
+        description: "You must select an agency to complete registration. Please go to your agency's website to register.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     if (!formData.agreeToTerms) {
       toast({
         title: "Terms Required",
@@ -167,6 +196,17 @@ export default function ConsumerRegistration() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Warning if no agency selected */}
+              {!effectiveTenantSlug && (
+                <Alert className="bg-yellow-50 border-yellow-200">
+                  <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                  <AlertDescription className="text-yellow-800">
+                    <strong>Agency Required:</strong> You must select an agency to complete registration. 
+                    Please go to your agency's website to register.
+                  </AlertDescription>
+                </Alert>
+              )}
+              
               {/* Basic Information */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>

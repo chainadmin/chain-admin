@@ -1089,6 +1089,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Public agency branding endpoint
+  app.get('/api/public/agency-branding', async (req, res) => {
+    const { slug } = req.query;
+    
+    if (!slug || typeof slug !== 'string') {
+      return res.status(400).json({ error: 'Agency slug is required' });
+    }
+
+    try {
+      const tenant = await storage.getTenantBySlug(slug);
+      
+      if (!tenant) {
+        return res.status(404).json({ error: 'Agency not found' });
+      }
+
+      // Get tenant settings for additional branding
+      const settings = await storage.getTenantSettings(tenant.id);
+
+      // Combine branding information
+      const customBranding = settings?.customBranding as any;
+      const branding = {
+        agencyName: tenant.name,
+        agencySlug: tenant.slug,
+        logoUrl: customBranding?.logoUrl || (tenant.brand as any)?.logoUrl || null,
+        primaryColor: customBranding?.primaryColor || '#3B82F6',
+        secondaryColor: customBranding?.secondaryColor || '#1E40AF',
+        contactEmail: settings?.contactEmail || null,
+        contactPhone: settings?.contactPhone || null,
+        hasPrivacyPolicy: !!settings?.privacyPolicy,
+        hasTermsOfService: !!settings?.termsOfService,
+      };
+
+      res.status(200).json(branding);
+    } catch (error) {
+      console.error('Agency branding API error:', error);
+      res.status(500).json({ error: 'Failed to fetch agency branding' });
+    }
+  });
+
   // Consumer registration route (public)
   app.post('/api/consumer-registration', async (req, res) => {
     console.log("Consumer registration request received:", { 
@@ -1194,7 +1233,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // No existing account found - create a new consumer record
-      // If tenantSlug is provided, associate with that agency
+      // Tenant is REQUIRED for new consumer registration
       
       let tenantId = null;
       let tenantInfo = null;
@@ -1211,6 +1250,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      // Reject registration if no valid tenant found
+      if (!tenantId) {
+        return res.status(400).json({ 
+          message: "Agency selection is required for registration. Please select your agency and try again.",
+          needsAgencyLink: true,
+          suggestedAction: "select-agency"
+        });
+      }
+      
       // Build the consumer object with required fields
       const consumerData: any = {
         firstName,
@@ -1222,7 +1270,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         state,
         zipCode,
         isRegistered: true,
-        ...(tenantId && { tenantId }) // Only include tenantId if we found a valid tenant
+        tenantId // Always include tenantId since it's now required
       };
       
       // Only add optional fields if they're supported
@@ -1540,10 +1588,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Get tenant information
+      // Get tenant information if consumer has one
       const tenant = consumer.tenantId ? await storage.getTenant(consumer.tenantId) : null;
+      
+      // If consumer doesn't have a tenant, suggest they complete registration
       if (!tenant) {
-        return res.status(500).json({ message: "Account configuration error. Please contact support." });
+        return res.status(200).json({ 
+          message: "Your account needs to be linked to an agency. Please complete registration.",
+          needsAgencyLink: true,
+          consumer: {
+            id: consumer.id,
+            firstName: consumer.firstName,
+            lastName: consumer.lastName,
+            email: consumer.email,
+          },
+          suggestedAction: "register"
+        });
       }
 
       // Verify date of birth if consumer is registered
