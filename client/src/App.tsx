@@ -41,15 +41,6 @@ function Router() {
   const { toast } = useToast();
   const isMobileApp = mobileConfig.isNativePlatform;
   
-  // Debug logging
-  console.log('Router state:', {
-    isAuthenticated,
-    isLoading, 
-    isJwtAuth,
-    agencySlug,
-    agencyLoading,
-    pathname: window.location.pathname
-  });
 
   // Initialize dynamic content for mobile app
   useEffect(() => {
