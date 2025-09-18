@@ -14,6 +14,18 @@ import { Shield, Clock, CreditCard, Lock, ChevronRight, Building2 } from "lucide
 import chainLogo from "@/assets/chain-logo.png";
 import { getAgencySlugFromRequest } from "@shared/utils/subdomain";
 
+interface AgencyBranding {
+  agencyName: string;
+  agencySlug: string;
+  logoUrl: string | null;
+  primaryColor: string;
+  secondaryColor: string;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  hasPrivacyPolicy: boolean;
+  hasTermsOfService: boolean;
+}
+
 export default function AgencyLanding() {
   const { agencySlug: pathSlug } = useParams();
   const [, setLocation] = useLocation();
@@ -42,7 +54,7 @@ export default function AgencyLanding() {
   console.log('AgencyLanding rendering with slug:', agencySlug);
 
   // Fetch agency information
-  const { data: agencyData, isLoading: agencyLoading, error } = useQuery({
+  const { data: agencyData, isLoading: agencyLoading, error } = useQuery<AgencyBranding>({
     queryKey: [`/api/public/agency-branding?slug=${agencySlug}`],
     enabled: !!agencySlug,
     retry: 1, // Only retry once to avoid excessive requests
@@ -58,12 +70,10 @@ export default function AgencyLanding() {
     
     // Store agency context for the login page
     if (agencyData) {
-      const { tenant } = agencyData as any;
       sessionStorage.setItem('agencyContext', JSON.stringify({
-        slug: tenant.slug,
-        name: tenant.name,
-        id: tenant.id,
-        logoUrl: (agencyData as any).tenantSettings?.customBranding?.logoUrl
+        slug: agencyData.agencySlug,
+        name: agencyData.agencyName,
+        logoUrl: agencyData.logoUrl
       }));
     }
   }, [agencyLoading, agencyData, error]);
@@ -224,13 +234,13 @@ export default function AgencyLanding() {
       );
   }
 
-  const { tenant, tenantSettings } = agencyData as any;
-  const agencyName = tenant.name;
-  const logoUrl = tenantSettings?.customBranding?.logoUrl;
-  const hasTermsOfService = !!tenantSettings?.termsOfService;
-  const hasPrivacyPolicy = !!tenantSettings?.privacyPolicy;
-  const contactEmail = tenantSettings?.contactEmail;
-  const contactPhone = tenantSettings?.contactPhone;
+  // Use the flat structure from the API response
+  const agencyName = agencyData.agencyName;
+  const logoUrl = agencyData.logoUrl;
+  const hasTermsOfService = agencyData.hasTermsOfService;
+  const hasPrivacyPolicy = agencyData.hasPrivacyPolicy;
+  const contactEmail = agencyData.contactEmail;
+  const contactPhone = agencyData.contactPhone;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
@@ -421,10 +431,7 @@ export default function AgencyLanding() {
                 </button>
                 {hasTermsOfService && (
                   <button 
-                    onClick={() => {
-                      // Show terms modal or navigate to terms page
-                      alert(tenantSettings.termsOfService);
-                    }}
+                    onClick={() => setShowTermsDialog(true)}
                     className="hover:text-blue-400 transition-colors"
                     data-testid="link-terms"
                   >
@@ -433,10 +440,7 @@ export default function AgencyLanding() {
                 )}
                 {hasPrivacyPolicy && (
                   <button 
-                    onClick={() => {
-                      // Show privacy modal or navigate to privacy page
-                      alert(tenantSettings.privacyPolicy);
-                    }}
+                    onClick={() => setShowPrivacyDialog(true)}
                     className="hover:text-blue-400 transition-colors"
                     data-testid="link-privacy"
                   >
@@ -477,7 +481,7 @@ export default function AgencyLanding() {
           <DialogHeader>
             <DialogTitle>Terms of Service</DialogTitle>
             <DialogDescription className="mt-4 whitespace-pre-wrap">
-              {tenantSettings?.termsOfService || "Terms of Service content will be displayed here."}
+              Terms of Service content will be displayed here.
             </DialogDescription>
           </DialogHeader>
         </DialogContent>
@@ -489,7 +493,7 @@ export default function AgencyLanding() {
           <DialogHeader>
             <DialogTitle>Privacy Policy</DialogTitle>
             <DialogDescription className="mt-4 whitespace-pre-wrap">
-              {tenantSettings?.privacyPolicy || "Privacy Policy content will be displayed here."}
+              Privacy Policy content will be displayed here.
             </DialogDescription>
           </DialogHeader>
         </DialogContent>
