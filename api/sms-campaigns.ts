@@ -103,11 +103,11 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
           name,
           targetGroup,
           status: 'pending',
-          throttleRate: throttleRate || 10, // Default 10 messages per minute
           totalRecipients: recipientCount,
           totalSent: 0,
           totalDelivered: 0,
-          totalFailed: 0,
+          totalErrors: 0,
+          totalOptOuts: 0,
         })
         .returning();
 

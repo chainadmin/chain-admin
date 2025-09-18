@@ -56,12 +56,13 @@ async function handler(req: VercelRequest, res: VercelResponse) {
       .limit(1);
 
     // Combine branding information
+    const customBranding = settings?.customBranding as any;
     const branding = {
       agencyName: tenant.name,
       agencySlug: tenant.slug,
-      logoUrl: settings?.customBranding?.logoUrl || (tenant.brand as any)?.logoUrl || null,
-      primaryColor: settings?.customBranding?.primaryColor || '#3B82F6',
-      secondaryColor: settings?.customBranding?.secondaryColor || '#1E40AF',
+      logoUrl: customBranding?.logoUrl || (tenant.brand as any)?.logoUrl || null,
+      primaryColor: customBranding?.primaryColor || '#3B82F6',
+      secondaryColor: customBranding?.secondaryColor || '#1E40AF',
       contactEmail: settings?.contactEmail || null,
       contactPhone: settings?.contactPhone || null,
       hasPrivacyPolicy: !!settings?.privacyPolicy,
