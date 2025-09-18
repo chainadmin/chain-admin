@@ -17,6 +17,23 @@ export default function ConsumerRegistration() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
 
+  // Also check sessionStorage for agency context as fallback
+  const getAgencyContext = () => {
+    if (tenantSlug) return tenantSlug;
+    try {
+      const context = sessionStorage.getItem('agencyContext');
+      if (context) {
+        const parsed = JSON.parse(context);
+        return parsed.slug;
+      }
+    } catch (e) {
+      console.error('Error reading agency context:', e);
+    }
+    return null;
+  };
+
+  const effectiveTenantSlug = getAgencyContext();
+
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -116,7 +133,11 @@ export default function ConsumerRegistration() {
       return;
     }
 
-    registrationMutation.mutate(formData);
+    // Include the tenant slug in the registration data
+    registrationMutation.mutate({
+      ...formData,
+      tenantSlug: effectiveTenantSlug
+    });
   };
 
   const handleInputChange = (field: string, value: any) => {

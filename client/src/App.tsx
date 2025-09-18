@@ -90,7 +90,7 @@ function Router() {
             <Route path="/consumer-dashboard" component={ConsumerDashboard} />
             <Route path="/consumer/:tenantSlug/:email" component={ConsumerPortal} />
             <Route path="/register/:tenantSlug" component={ConsumerRegistration} />
-            <Route path="/consumer-register" component={ConsumerRegistration} />
+            <Route path="/consumer-register/:tenantSlug?" component={ConsumerRegistration} />
             <Route path="/agency/:agencySlug" component={AgencyLanding} />
             <Route path="/privacy-policy" component={PrivacyPolicy} />
             <Route component={ConsumerMobileLanding} />
@@ -116,7 +116,7 @@ function Router() {
           {/* Public consumer routes - always accessible on agency subdomain */}
           <Route path="/" component={AgencyLanding} />
           <Route path="/consumer-login" component={ConsumerLogin} />
-          <Route path="/consumer-register" component={ConsumerRegistration} />
+          <Route path="/consumer-register/:tenantSlug?" component={ConsumerRegistration} />
           <Route path="/consumer/:email" component={ConsumerPortal} />
           <Route path="/consumer-dashboard" component={ConsumerDashboard} />
           <Route path="/privacy-policy" component={PrivacyPolicy} />
@@ -171,7 +171,7 @@ function Router() {
           <Route path="/consumer-dashboard" component={ConsumerDashboard} />
           <Route path="/consumer/:tenantSlug/:email" component={ConsumerPortal} />
           <Route path="/register/:tenantSlug" component={ConsumerRegistration} />
-          <Route path="/consumer-register" component={ConsumerRegistration} />
+          <Route path="/consumer-register/:tenantSlug?" component={ConsumerRegistration} />
           <Route path="/agency-register" component={AgencyRegistration} />
           <Route path="/agency-login" component={AgencyLogin} />
           <Route path="/agency/:agencySlug" component={AgencyLanding} />

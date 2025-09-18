@@ -3,6 +3,13 @@ import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Shield, Clock, CreditCard, Lock, ChevronRight, Building2 } from "lucide-react";
 import chainLogo from "@/assets/chain-logo.png";
 import { getAgencySlugFromRequest } from "@shared/utils/subdomain";
@@ -30,12 +37,14 @@ export default function AgencyLanding() {
   }
   
   const [isLoading, setIsLoading] = useState(true);
+  const [showTermsDialog, setShowTermsDialog] = useState(false);
+  const [showPrivacyDialog, setShowPrivacyDialog] = useState(false);
 
   console.log('AgencyLanding rendering with slug:', agencySlug);
 
   // Fetch agency information
   const { data: agencyData, isLoading: agencyLoading, error } = useQuery({
-    queryKey: ['/api/public/agency', agencySlug],
+    queryKey: [`/api/public/agency-branding?slug=${agencySlug}`],
     enabled: !!agencySlug,
     retry: 1, // Only retry once to avoid excessive requests
   });
@@ -100,6 +109,10 @@ export default function AgencyLanding() {
       const { tenant, tenantSettings } = fallbackData;
       const agencyName = tenant.name;
       const logoUrl = (tenantSettings?.customBranding as any)?.logoUrl;
+      const hasTermsOfService = !!(tenantSettings as any)?.termsOfService;
+      const hasPrivacyPolicy = !!(tenantSettings as any)?.privacyPolicy;
+      const contactEmail = (tenantSettings as any)?.contactEmail;
+      const contactPhone = (tenantSettings as any)?.contactPhone;
 
       return (
         <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
@@ -140,7 +153,7 @@ export default function AgencyLanding() {
                   size="lg" 
                   variant="outline"
                   className="bg-transparent border-2 border-white text-white hover:bg-white hover:text-blue-600 text-lg px-10 py-7 h-auto font-semibold shadow-lg hover:shadow-xl transition-all"
-                  onClick={() => setLocation('/consumer-register')}
+                  onClick={() => setLocation(`/consumer-register/${agencySlug}`)}
                   data-testid="button-register"
                 >
                   Create Account
@@ -151,7 +164,69 @@ export default function AgencyLanding() {
           </div>
 
           {/* Features Section - Coming soon */}
-          {/* Footer - Coming soon */}
+          
+          {/* Footer */}
+          <div className="bg-gray-900 text-white py-12 mt-20">
+            <div className="max-w-6xl mx-auto px-4">
+              <div className="flex flex-col md:flex-row justify-between items-center">
+                <div className="mb-6 md:mb-0">
+                  <p className="text-gray-400">© 2025 {agencyName}. All rights reserved.</p>
+                  <p className="text-sm text-gray-500 mt-1">Powered by Chain Software Group</p>
+                </div>
+                <div className="flex flex-col md:flex-row items-center gap-6">
+                  <div className="flex flex-wrap justify-center gap-6 text-sm">
+                    <button 
+                      onClick={handleFindBalance}
+                      className="hover:text-blue-400 transition-colors"
+                      data-testid="link-account-summary"
+                    >
+                      Account Summary
+                    </button>
+                    {hasTermsOfService && (
+                      <button 
+                        onClick={() => setShowTermsDialog(true)}
+                        className="hover:text-blue-400 transition-colors"
+                        data-testid="link-terms"
+                      >
+                        Terms of Service
+                      </button>
+                    )}
+                    {hasPrivacyPolicy && (
+                      <button 
+                        onClick={() => setShowPrivacyDialog(true)}
+                        className="hover:text-blue-400 transition-colors"
+                        data-testid="link-privacy"
+                      >
+                        Privacy Policy
+                      </button>
+                    )}
+                    {(contactEmail || contactPhone) && (
+                      <button 
+                        onClick={() => {
+                          if (contactEmail) {
+                            window.location.href = `mailto:${contactEmail}`;
+                          } else if (contactPhone) {
+                            window.location.href = `tel:${contactPhone}`;
+                          }
+                        }}
+                        className="hover:text-blue-400 transition-colors"
+                        data-testid="link-contact"
+                      >
+                        Contact Us
+                      </button>
+                    )}
+                    <button 
+                      onClick={handleFindBalance}
+                      className="hover:text-blue-400 transition-colors"
+                      data-testid="link-sign-in"
+                    >
+                      Sign In
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       );
     }
@@ -175,6 +250,10 @@ export default function AgencyLanding() {
   const { tenant, tenantSettings } = agencyData as any;
   const agencyName = tenant.name;
   const logoUrl = tenantSettings?.customBranding?.logoUrl;
+  const hasTermsOfService = !!tenantSettings?.termsOfService;
+  const hasPrivacyPolicy = !!tenantSettings?.privacyPolicy;
+  const contactEmail = tenantSettings?.contactEmail;
+  const contactPhone = tenantSettings?.contactPhone;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
@@ -219,7 +298,7 @@ export default function AgencyLanding() {
               size="lg" 
               variant="outline"
               className="bg-transparent border-2 border-white text-white hover:bg-white hover:text-blue-600 text-lg px-10 py-7 h-auto font-semibold shadow-lg hover:shadow-xl transition-all"
-              onClick={() => setLocation('/consumer-register')}
+              onClick={() => setLocation(`/consumer-register/${agencySlug}`)}
               data-testid="button-register"
             >
               Create Account
@@ -354,32 +433,90 @@ export default function AgencyLanding() {
               <p className="text-gray-400">© 2025 {agencyName}. All rights reserved.</p>
               <p className="text-sm text-gray-500 mt-1">Powered by Chain Software Group</p>
             </div>
-            <div className="flex flex-wrap justify-center gap-6 text-sm">
-              <button 
-                onClick={handleFindBalance}
-                className="hover:text-blue-400 transition-colors"
-                data-testid="link-account-summary"
-              >
-                Account Summary
-              </button>
-              <button 
-                onClick={handleFindBalance}
-                className="hover:text-blue-400 transition-colors"
-                data-testid="link-contact"
-              >
-                Contact Us
-              </button>
-              <button 
-                onClick={handleFindBalance}
-                className="hover:text-blue-400 transition-colors"
-                data-testid="link-sign-in"
-              >
-                Sign In
-              </button>
+            <div className="flex flex-col md:flex-row items-center gap-6">
+              <div className="flex flex-wrap justify-center gap-6 text-sm">
+                <button 
+                  onClick={handleFindBalance}
+                  className="hover:text-blue-400 transition-colors"
+                  data-testid="link-account-summary"
+                >
+                  Account Summary
+                </button>
+                {hasTermsOfService && (
+                  <button 
+                    onClick={() => {
+                      // Show terms modal or navigate to terms page
+                      alert(tenantSettings.termsOfService);
+                    }}
+                    className="hover:text-blue-400 transition-colors"
+                    data-testid="link-terms"
+                  >
+                    Terms of Service
+                  </button>
+                )}
+                {hasPrivacyPolicy && (
+                  <button 
+                    onClick={() => {
+                      // Show privacy modal or navigate to privacy page
+                      alert(tenantSettings.privacyPolicy);
+                    }}
+                    className="hover:text-blue-400 transition-colors"
+                    data-testid="link-privacy"
+                  >
+                    Privacy Policy
+                  </button>
+                )}
+                {(contactEmail || contactPhone) && (
+                  <button 
+                    onClick={() => {
+                      if (contactEmail) {
+                        window.location.href = `mailto:${contactEmail}`;
+                      } else if (contactPhone) {
+                        window.location.href = `tel:${contactPhone}`;
+                      }
+                    }}
+                    className="hover:text-blue-400 transition-colors"
+                    data-testid="link-contact"
+                  >
+                    Contact Us
+                  </button>
+                )}
+                <button 
+                  onClick={handleFindBalance}
+                  className="hover:text-blue-400 transition-colors"
+                  data-testid="link-sign-in"
+                >
+                  Sign In
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Terms of Service Dialog */}
+      <Dialog open={showTermsDialog} onOpenChange={setShowTermsDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Terms of Service</DialogTitle>
+            <DialogDescription className="mt-4 whitespace-pre-wrap">
+              {tenantSettings?.termsOfService || "Terms of Service content will be displayed here."}
+            </DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
+
+      {/* Privacy Policy Dialog */}
+      <Dialog open={showPrivacyDialog} onOpenChange={setShowPrivacyDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Privacy Policy</DialogTitle>
+            <DialogDescription className="mt-4 whitespace-pre-wrap">
+              {tenantSettings?.privacyPolicy || "Privacy Policy content will be displayed here."}
+            </DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -9,7 +9,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const parsed = insertConsumerSchema.safeParse(req.body);
+    // Parse the request body, allowing additional fields like tenantSlug
+    const { tenantSlug, ...consumerData } = req.body;
+    const parsed = insertConsumerSchema.safeParse(consumerData);
     if (!parsed.success) {
       return res.status(400).json({ error: 'Invalid registration data', details: parsed.error.errors });
     }
@@ -19,12 +21,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Get tenant by slug
     let tenant: typeof tenants.$inferSelect | null = null;
-    if (data.tenantId) {
-      // If tenantId is provided, assume it's actually a slug
+    // Check both tenantSlug (from new client) and tenantId (legacy/backwards compatibility)
+    const agencySlug = tenantSlug || data.tenantId;
+    if (agencySlug) {
+      // If slug is provided, look up the tenant
       const [foundTenant] = await db
         .select()
         .from(tenants)
-        .where(eq(tenants.slug, data.tenantId))
+        .where(eq(tenants.slug, agencySlug))
         .limit(1);
       tenant = foundTenant || null;
 

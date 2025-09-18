@@ -1095,6 +1095,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       email: req.body.email, 
       firstName: req.body.firstName,
       lastName: req.body.lastName,
+      tenantSlug: req.body.tenantSlug,
       hasBody: !!req.body,
       bodyKeys: Object.keys(req.body || {})
     });
@@ -1108,7 +1109,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         address, 
         city, 
         state, 
-        zipCode 
+        zipCode,
+        tenantSlug 
       } = req.body;
 
       if (!firstName || !lastName || !email || !dateOfBirth || !address) {
@@ -1126,6 +1128,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const storedDOB = existingConsumer.dateOfBirth ? new Date(existingConsumer.dateOfBirth) : null;
         
         if (storedDOB && providedDOB.getTime() === storedDOB.getTime()) {
+          // If a tenantSlug is provided and the consumer doesn't have a tenant yet, associate them
+          let shouldUpdateTenant = false;
+          if (tenantSlug && !existingConsumer.tenantId) {
+            const tenant = await storage.getTenantBySlug(tenantSlug);
+            if (tenant && tenant.isActive) {
+              shouldUpdateTenant = true;
+              existingConsumer.tenantId = tenant.id;
+            }
+          }
+          
           // Update existing consumer with complete registration info
           const updateData: any = {
             firstName,
@@ -1135,6 +1147,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             state,
             zipCode,
             isRegistered: true,
+            ...(shouldUpdateTenant && { tenantId: existingConsumer.tenantId })
           };
           
           // Only add registrationDate if the field is supported
@@ -1180,12 +1193,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // No existing account found - create a new unaffiliated consumer record
-      // This consumer can be claimed by an agency later when they add accounts
+      // No existing account found - create a new consumer record
+      // If tenantSlug is provided, associate with that agency
       
-      // For unaffiliated consumers, we create them without a tenant
-      // They can later be associated when an agency uploads their account
-      // Build the consumer object with required fields only
+      let tenantId = null;
+      let tenantInfo = null;
+      
+      if (tenantSlug) {
+        // Look up the tenant by slug
+        const tenant = await storage.getTenantBySlug(tenantSlug);
+        if (tenant && tenant.isActive) {
+          tenantId = tenant.id;
+          tenantInfo = {
+            name: tenant.name,
+            slug: tenant.slug,
+          };
+        }
+      }
+      
+      // Build the consumer object with required fields
       const consumerData: any = {
         firstName,
         lastName,
@@ -1196,6 +1222,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         state,
         zipCode,
         isRegistered: true,
+        ...(tenantId && { tenantId }) // Only include tenantId if we found a valid tenant
       };
       
       // Only add optional fields if they're supported
@@ -1213,8 +1240,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("New consumer created successfully:", newConsumer.id);
 
       return res.json({ 
-        message: "Registration successful! You'll be notified when your agency adds your account information.",
+        message: tenantInfo 
+          ? `Registration successful! You are now registered with ${tenantInfo.name}.`
+          : "Registration successful! You'll be notified when your agency adds your account information.",
         consumerId: newConsumer.id,
+        ...(tenantInfo && { tenant: tenantInfo }),
         consumer: {
           id: newConsumer.id,
           firstName: newConsumer.firstName,
