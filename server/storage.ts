@@ -994,10 +994,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getConsumerByEmail(email: string): Promise<Consumer | undefined> {
-    const [consumer] = await db.select()
+    // Get all consumers with this email
+    const allConsumers = await db.select()
       .from(consumers)
       .where(eq(consumers.email, email));
-    return consumer || undefined;
+    
+    // Prioritize consumers WITH a tenantId over those without
+    // This ensures we return linked consumers first
+    const linkedConsumer = allConsumers.find(c => c.tenantId);
+    if (linkedConsumer) {
+      return linkedConsumer;
+    }
+    
+    // If no linked consumer found, return the first one (if any)
+    return allConsumers[0] || undefined;
   }
 
   async deleteAccount(id: string, tenantId: string): Promise<void> {

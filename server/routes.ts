@@ -1571,13 +1571,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/consumer/login', async (req, res) => {
     try {
       const { email, dateOfBirth } = req.body;
+      
+      console.log("Consumer login attempt:", { email, dateOfBirth });
 
       if (!email || !dateOfBirth) {
         return res.status(400).json({ message: "Email and date of birth are required" });
       }
 
-      // Search for consumer across all tenants
+      // Search for consumer across all tenants (prioritizes linked consumers)
       const consumer = await storage.getConsumerByEmail(email);
+      console.log("Found consumer:", consumer ? { id: consumer.id, email: consumer.email, tenantId: consumer.tenantId } : null);
       
       if (!consumer) {
         // If consumer not found, create a new account opportunity
