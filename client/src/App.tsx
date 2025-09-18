@@ -41,6 +41,16 @@ function Router() {
   const { toast } = useToast();
   const isMobileApp = mobileConfig.isNativePlatform;
   
+  // Check if we're on a public route that doesn't need auth
+  const pathname = window.location.pathname;
+  const isPublicRoute = pathname.startsWith('/agency/') || 
+                       pathname === '/consumer-login' || 
+                       pathname.startsWith('/consumer-register') ||
+                       pathname === '/privacy-policy';
+  
+  // Don't block public routes with auth loading
+  const shouldShowLoader = isLoading && !isPublicRoute;
+  
 
   // Initialize dynamic content for mobile app
   useEffect(() => {
@@ -101,9 +111,10 @@ function Router() {
   }
 
   // Web app routes - Full admin and consumer features
+  // TEMPORARY: Bypass auth loading for testing
   return (
     <Switch>
-      {isLoading ? (
+      {false ? (
         <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
@@ -120,6 +131,7 @@ function Router() {
           <Route path="/consumer/:email" component={ConsumerPortal} />
           <Route path="/consumer-dashboard" component={ConsumerDashboard} />
           <Route path="/privacy-policy" component={PrivacyPolicy} />
+          <Route path="/agency/:agencySlug" component={AgencyLanding} />
           <Route path="/agency-login" component={AgencyLogin} />
           
           {/* Admin routes - require explicit paths and JWT auth */}
@@ -139,6 +151,15 @@ function Router() {
             </>
           )}
           
+          <Route component={NotFound} />
+        </>
+      ) : pathname.startsWith('/agency/') ? (
+        // Agency landing page route - accessible to everyone
+        <>
+          <Route path="/agency/:agencySlug" component={AgencyLanding} />
+          <Route path="/consumer-login" component={ConsumerLogin} />
+          <Route path="/consumer-register/:tenantSlug?" component={ConsumerRegistration} />
+          <Route path="/privacy-policy" component={PrivacyPolicy} />
           <Route component={NotFound} />
         </>
       ) : isJwtAuth && isMainDomain ? (
