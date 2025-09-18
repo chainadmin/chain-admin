@@ -145,6 +145,36 @@ export const smsTemplates = pgTable("sms_templates", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// SMS campaigns
+export const smsCampaigns = pgTable("sms_campaigns", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  templateId: uuid("template_id").references(() => smsTemplates.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  targetGroup: text("target_group").notNull(), // "all", "with-balance", "decline", "recent-upload"
+  status: text("status").default("pending"), // "pending", "sending", "completed", "failed"
+  totalRecipients: bigint("total_recipients", { mode: "number" }).default(0),
+  totalSent: bigint("total_sent", { mode: "number" }).default(0),
+  totalDelivered: bigint("total_delivered", { mode: "number" }).default(0),
+  totalErrors: bigint("total_errors", { mode: "number" }).default(0),
+  totalOptOuts: bigint("total_opt_outs", { mode: "number" }).default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+// SMS tracking for individual SMS sends
+export const smsTracking = pgTable("sms_tracking", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  campaignId: uuid("campaign_id").references(() => smsCampaigns.id, { onDelete: "cascade" }).notNull(),
+  consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "cascade" }).notNull(),
+  phoneNumber: text("phone_number").notNull(),
+  status: text("status").notNull(), // "sent", "delivered", "failed", "opted_out"
+  sentAt: timestamp("sent_at"),
+  deliveredAt: timestamp("delivered_at"),
+  errorMessage: text("error_message"),
+  trackingData: jsonb("tracking_data").default(sql`'{}'::jsonb`),
+});
+
 // Tenant settings
 export const tenantSettings = pgTable("tenant_settings", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
