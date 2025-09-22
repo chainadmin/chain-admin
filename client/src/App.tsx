@@ -155,7 +155,7 @@ function Router() {
             </>
           )}
           
-          <Route path="/:rest*" component={NotFound} />
+          <Route component={NotFound} />
         </>
       ) : pathname.startsWith('/agency/') ? (
         // Agency landing page route - accessible to everyone
@@ -165,7 +165,7 @@ function Router() {
           <Route path="/consumer-register/:tenantSlug?" component={ConsumerRegistration} />
           <Route path="/privacy-policy" component={PrivacyPolicy} />
           <Route path="/terms-of-service" component={TermsOfService} />
-          <Route path="/:rest*" component={NotFound} />
+          <Route component={NotFound} />
         </>
       ) : isJwtAuth && isMainDomain ? (
         // JWT authenticated users on main domain - show landing with admin routes available
@@ -188,7 +188,7 @@ function Router() {
           <Route path="/agency/:agencySlug" component={AgencyLanding} />
           <Route path="/privacy-policy" component={PrivacyPolicy} />
           <Route path="/terms-of-service" component={TermsOfService} />
-          <Route path="/:rest*" component={NotFound} />
+          <Route component={NotFound} />
         </>
       ) : !isAuthenticated ? (
         // Not authenticated - show public routes
@@ -207,7 +207,7 @@ function Router() {
           <Route path="/fix-db" component={FixDatabase} />
           <Route path="/admin" component={GlobalAdmin} />
           <Route path="/Admin" component={GlobalAdmin} />
-          <Route path="/:rest*" component={NotFound} />
+          <Route component={NotFound} />
         </>
       ) : needsTenantSetup ? (
         // Replit authenticated but needs tenant setup
@@ -231,7 +231,7 @@ function Router() {
           <Route path="/agency/:agencySlug" component={AgencyLanding} />
           <Route path="/privacy-policy" component={PrivacyPolicy} />
           <Route path="/terms-of-service" component={TermsOfService} />
-          <Route path="/:rest*" component={NotFound} />
+          <Route component={NotFound} />
         </>
       )}
     </Switch>
