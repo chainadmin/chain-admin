@@ -172,6 +172,134 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Consumer routes - Protected by consumer JWT authentication
+  app.get('/api/consumer/accounts/:email', authenticateConsumer, async (req: any, res) => {
+    try {
+      // Get consumer info from JWT token (already verified by authenticateConsumer)
+      const { email: tokenEmail, tenantId } = req.consumer;
+      const requestedEmail = req.params.email;
+      
+      // Ensure consumer can only access their own data
+      if (tokenEmail !== requestedEmail) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      // Get consumer record
+      const consumer = await storage.getConsumerByEmailAndTenant(tokenEmail, tenantId);
+      if (!consumer) {
+        return res.status(404).json({ message: "Consumer not found" });
+      }
+
+      // Get consumer's accounts
+      const accountsList = await storage.getAccountsByConsumer(consumer.id);
+
+      // Get tenant info for display
+      const tenant = await storage.getTenant(tenantId);
+      
+      // Get tenant settings
+      const tenantSettings = await storage.getTenantSettings(tenantId);
+
+      res.json({
+        consumer: {
+          id: consumer.id,
+          firstName: consumer.firstName,
+          lastName: consumer.lastName,
+          email: consumer.email,
+          phone: consumer.phone
+        },
+        accounts: accountsList,
+        tenant: {
+          id: tenant?.id,
+          name: tenant?.name,
+          slug: tenant?.slug
+        },
+        tenantSettings: tenantSettings
+      });
+    } catch (error) {
+      console.error("Error fetching consumer accounts:", error);
+      res.status(500).json({ message: "Failed to fetch accounts" });
+    }
+  });
+
+  // Consumer login endpoint
+  app.post('/api/consumer/login', async (req, res) => {
+    try {
+      const { email, dateOfBirth, tenantSlug } = req.body;
+      
+      if (!email || !dateOfBirth) {
+        return res.status(400).json({ message: "Email and date of birth are required" });
+      }
+
+      // Find consumer(s) by email across all tenants
+      const consumersFound = await storage.getConsumersByEmail(email);
+      
+      if (consumersFound.length === 0) {
+        return res.status(404).json({ 
+          message: "No account found with this email. Please contact your agency for account details."
+        });
+      }
+
+      // TODO: Verify dateOfBirth against consumer record when field is added
+      
+      if (consumersFound.length === 1) {
+        // Single agency - proceed with login
+        const consumer = consumersFound[0];
+        const tenant = await storage.getTenant(consumer.tenantId);
+        
+        // Generate consumer JWT token
+        const token = jwt.sign(
+          { 
+            consumerId: consumer.id,
+            email: consumer.email,
+            tenantId: consumer.tenantId,
+            tenantSlug: tenant?.slug,
+            type: 'consumer'
+          },
+          process.env.JWT_SECRET || 'your-secret-key',
+          { expiresIn: '30d' }
+        );
+
+        res.json({
+          success: true,
+          token,
+          consumer: {
+            id: consumer.id,
+            email: consumer.email,
+            firstName: consumer.firstName,
+            lastName: consumer.lastName
+          },
+          tenant: {
+            id: tenant?.id,
+            name: tenant?.name,
+            slug: tenant?.slug
+          }
+        });
+      } else {
+        // Multiple agencies - let consumer choose
+        const agencies = await Promise.all(
+          consumersFound.map(async (consumer: any) => {
+            const tenant = await storage.getTenant(consumer.tenantId);
+            return {
+              id: tenant?.id,
+              name: tenant?.name,
+              slug: tenant?.slug
+            };
+          })
+        );
+
+        res.json({
+          multipleAgencies: true,
+          message: 'Your account is registered with multiple agencies. Please select one:',
+          agencies,
+          email
+        });
+      }
+    } catch (error) {
+      console.error("Consumer login error:", error);
+      res.status(500).json({ message: "Failed to login" });
+    }
+  });
+
   // Tenant routes
   app.get('/api/tenants/:id', authenticateUser, async (req: any, res) => {
     try {

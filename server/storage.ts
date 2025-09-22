@@ -134,6 +134,8 @@ export interface IStorage {
   getConsumersByTenant(tenantId: string): Promise<Consumer[]>;
   getConsumer(id: string): Promise<Consumer | undefined>;
   getConsumerByEmail(email: string): Promise<Consumer | undefined>;
+  getConsumersByEmail(email: string): Promise<Consumer[]>;
+  getConsumerByEmailAndTenant(email: string, tenantId: string): Promise<Consumer | undefined>;
   createConsumer(consumer: InsertConsumer): Promise<Consumer>;
   findOrCreateConsumer(consumerData: InsertConsumer): Promise<Consumer>;
   
@@ -449,6 +451,13 @@ export class DatabaseStorage implements IStorage {
   async getConsumer(id: string): Promise<Consumer | undefined> {
     const [consumer] = await db.select().from(consumers).where(eq(consumers.id, id));
     return consumer;
+  }
+
+  async getConsumersByEmail(email: string): Promise<Consumer[]> {
+    // Get all consumers with this email across all tenants
+    return await db.select()
+      .from(consumers)
+      .where(eq(consumers.email, email));
   }
 
   async createConsumer(consumer: InsertConsumer): Promise<Consumer> {
