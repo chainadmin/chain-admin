@@ -378,7 +378,7 @@ export default function ConsumerRegistration() {
                   />
                   <div className="text-sm">
                     <Label htmlFor="agreeToTerms" className="font-medium">
-                      I agree to the terms of service and privacy policy *
+                      I agree to the <a href="/terms-of-service" target="_blank" className="text-blue-600 hover:underline">Terms of Service</a> and <a href="/privacy-policy" target="_blank" className="text-blue-600 hover:underline">Privacy Policy</a> *
                     </Label>
                     <p className="text-gray-600 mt-1">
                       By registering, you consent to receive notifications about your accounts and communication from our agency.
@@ -409,6 +409,19 @@ export default function ConsumerRegistration() {
             </form>
           </CardContent>
         </Card>
+        
+        {/* Footer Links */}
+        <div className="mt-8 text-center border-t pt-4">
+          <div className="text-sm text-gray-600 space-x-4">
+            <a href="/terms-of-service" className="hover:text-blue-600 hover:underline">
+              Terms of Service
+            </a>
+            <span>•</span>
+            <a href="/privacy-policy" className="hover:text-blue-600 hover:underline">
+              Privacy Policy
+            </a>
+          </div>
+        </div>
       </div>
     </div>
   );

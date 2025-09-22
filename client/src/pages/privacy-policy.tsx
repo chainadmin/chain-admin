@@ -1,150 +1,78 @@
 import { Button } from "@/components/ui/button";
-import { Link } from "wouter";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ArrowLeft } from "lucide-react";
+import { useLocation } from "wouter";
 
 export default function PrivacyPolicy() {
+  const [, navigate] = useLocation();
+
   return (
-    <div className="min-h-screen bg-gray-50 py-12">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="bg-white shadow-lg rounded-lg p-8">
-          <div className="mb-8">
-            <Link href="/">
-              <Button variant="outline" className="mb-4">
-                ← Back to Home
-              </Button>
-            </Link>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Privacy Policy</h1>
-            <p className="text-gray-600">Last updated: {new Date().toLocaleDateString()}</p>
-          </div>
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="container mx-auto px-4 max-w-4xl">
+        <Button 
+          onClick={() => window.history.back()} 
+          variant="ghost" 
+          className="mb-4"
+          data-testid="button-back"
+        >
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back
+        </Button>
+        
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-2xl">Privacy Notice</CardTitle>
+            <p className="text-sm text-gray-600">Last updated: January 2025</p>
+          </CardHeader>
+          <CardContent className="prose prose-gray max-w-none">
+            <div className="space-y-6 text-gray-700">
+              <div>
+                <h3 className="text-lg font-semibold mb-2">Controller/Processor Roles</h3>
+                <p>Chain operates the platform and generally acts as a processor/service provider for participating agencies, who are responsible for the debts and related notices. For some operations (e.g., App analytics, account creation) Chain may act as an independent controller.</p>
+              </div>
 
-          <div className="prose max-w-none space-y-6">
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">1. Information We Collect</h2>
-              <p className="text-gray-700 mb-4">
-                Our communications platform collects and processes the following types of information:
-              </p>
-              <ul className="list-disc pl-6 space-y-2 text-gray-700">
-                <li><strong>Account Information:</strong> Name, email address, organization details</li>
-                <li><strong>Consumer Data:</strong> Contact information, account details, communication preferences</li>
-                <li><strong>Communication Data:</strong> Email and SMS templates, campaign data, delivery tracking</li>
-                <li><strong>Usage Data:</strong> Platform activity, feature usage, system logs</li>
-                <li><strong>Technical Data:</strong> IP addresses, browser information, device identifiers</li>
-              </ul>
-            </section>
+              <div>
+                <h3 className="text-lg font-semibold mb-2">What We Collect</h3>
+                <p>Identifiers (name, email, phone), account references provided by agencies, device data, app usage, communication preferences, consent logs.</p>
+                <p className="mt-2">Payment details are processed by integrated processors; we store only tokens/metadata where needed (no full card or bank numbers).</p>
+              </div>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">2. How We Use Your Information</h2>
-              <p className="text-gray-700 mb-4">We use collected information for:</p>
-              <ul className="list-disc pl-6 space-y-2 text-gray-700">
-                <li>Providing and maintaining our communication services</li>
-                <li>Processing and delivering email and SMS campaigns</li>
-                <li>Managing user accounts and platform access</li>
-                <li>Analyzing platform usage and improving our services</li>
-                <li>Ensuring platform security and preventing fraud</li>
-                <li>Complying with legal obligations and industry regulations</li>
-              </ul>
-            </section>
+              <div>
+                <h3 className="text-lg font-semibold mb-2">Why We Use Data</h3>
+                <p>Provide and secure the Service, show account details, deliver communications (SMS/email/push), support, prevent fraud, comply with law.</p>
+              </div>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">3. Information Sharing</h2>
-              <p className="text-gray-700 mb-4">
-                We do not sell, trade, or rent your personal information. We may share information in the following circumstances:
-              </p>
-              <ul className="list-disc pl-6 space-y-2 text-gray-700">
-                <li><strong>Service Providers:</strong> Third-party services that help us operate our platform (email/SMS providers, hosting services)</li>
-                <li><strong>Legal Requirements:</strong> When required by law, regulation, or legal process</li>
-                <li><strong>Business Transfers:</strong> In connection with mergers, acquisitions, or asset sales</li>
-                <li><strong>Consent:</strong> When you explicitly authorize information sharing</li>
-              </ul>
-            </section>
+              <div>
+                <h3 className="text-lg font-semibold mb-2">Communications (SMS/Email/Push) & Consent</h3>
+                <p>By opting in within the App, you agree to receive account-related messages by SMS, email, and push. Message & data rates may apply. Frequency varies. Reply STOP to SMS to opt out; use unsubscribe links for email; disable push in device/App settings. Consent is not required to obtain services. We log all consent and opt-out events.</p>
+              </div>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">4. Data Security</h2>
-              <p className="text-gray-700 mb-4">
-                We implement industry-standard security measures to protect your information:
-              </p>
-              <ul className="list-disc pl-6 space-y-2 text-gray-700">
-                <li>Encryption of data in transit and at rest</li>
-                <li>Secure authentication and access controls</li>
-                <li>Regular security audits and monitoring</li>
-                <li>Limited access to personal information on a need-to-know basis</li>
-                <li>Secure hosting infrastructure with backup and recovery systems</li>
-              </ul>
-            </section>
+              <div>
+                <h3 className="text-lg font-semibold mb-2">Sharing</h3>
+                <p>With the agency responsible for your account; with vendors (hosting, messaging, analytics, payment); as required by law; during a merger or acquisition with notice.</p>
+              </div>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">5. Your Rights</h2>
-              <p className="text-gray-700 mb-4">You have the following rights regarding your personal information:</p>
-              <ul className="list-disc pl-6 space-y-2 text-gray-700">
-                <li><strong>Access:</strong> Request access to your personal information</li>
-                <li><strong>Correction:</strong> Request correction of inaccurate information</li>
-                <li><strong>Deletion:</strong> Request deletion of your personal information</li>
-                <li><strong>Portability:</strong> Request transfer of your data in a structured format</li>
-                <li><strong>Objection:</strong> Object to processing of your personal information</li>
-                <li><strong>Restriction:</strong> Request restriction of processing activities</li>
-              </ul>
-            </section>
+              <div>
+                <h3 className="text-lg font-semibold mb-2">Your Choices</h3>
+                <p>Manage notification preferences in the App; opt out of SMS by replying STOP; request copies or deletion of data (subject to legal retention) via support@chainsoftwaregroup.com.</p>
+              </div>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">6. Data Retention</h2>
-              <p className="text-gray-700 mb-4">
-                We retain personal information for as long as necessary to provide our services and comply with legal obligations. 
-                Specific retention periods vary based on data type and applicable regulations.
-              </p>
-            </section>
+              <div>
+                <h3 className="text-lg font-semibold mb-2">Data Security & Retention</h3>
+                <p>We use industry safeguards (e.g., encryption in transit, role-based access). Data is retained as long as needed for the purposes above or as required by law/agency contracts.</p>
+              </div>
 
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">7. Cookies and Tracking</h2>
-              <p className="text-gray-700 mb-4">
-                Our platform uses cookies and similar technologies to enhance user experience, analyze usage patterns, 
-                and maintain secure sessions. You can control cookie preferences through your browser settings.
-              </p>
-            </section>
-
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">8. Third-Party Services</h2>
-              <p className="text-gray-700 mb-4">
-                Our platform integrates with third-party services for email delivery, SMS messaging, and analytics. 
-                These services have their own privacy policies and data handling practices.
-              </p>
-            </section>
-
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">9. International Data Transfers</h2>
-              <p className="text-gray-700 mb-4">
-                Your information may be processed and stored in countries other than your own. We ensure appropriate 
-                safeguards are in place for international data transfers in compliance with applicable laws.
-              </p>
-            </section>
-
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">10. Changes to This Policy</h2>
-              <p className="text-gray-700 mb-4">
-                We may update this privacy policy periodically. Material changes will be communicated through our platform 
-                or via email. Continued use of our services constitutes acceptance of the updated policy.
-              </p>
-            </section>
-
-            <section>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">11. Contact Information</h2>
-              <p className="text-gray-700 mb-4">
-                For questions about this privacy policy or to exercise your rights, please contact us:
-              </p>
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <p className="text-gray-700">
-                  <strong>Email:</strong> privacy@yourcompany.com<br />
-                  <strong>Address:</strong> [Your Company Address]<br />
-                  <strong>Phone:</strong> [Your Phone Number]
+              <div>
+                <h3 className="text-lg font-semibold mb-2">Contact</h3>
+                <p>
+                  <strong>Email:</strong> support@chainsoftwaregroup.com<br />
+                  <strong>Phone:</strong> (716) 534-3086<br />
+                  <strong>Mail:</strong> 1845 Cleveland Ave, Niagara Falls, NY
                 </p>
               </div>
-            </section>
-          </div>
-
-          <div className="mt-8 pt-8 border-t border-gray-200">
-            <p className="text-sm text-gray-500 text-center">
-              This privacy policy is effective as of {new Date().toLocaleDateString()} and applies to all users of our communications platform.
-            </p>
-          </div>
-        </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

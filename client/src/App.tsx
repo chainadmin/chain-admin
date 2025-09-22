@@ -30,6 +30,7 @@ import AgencyRegistration from "@/pages/agency-registration";
 import AgencyLogin from "@/pages/agency-login";
 import AgencyLanding from "@/pages/agency-landing";
 import PrivacyPolicy from "@/pages/privacy-policy";
+import TermsOfService from "@/pages/terms-of-service";
 import TenantSetup from "@/components/tenant-setup";
 import GlobalAdmin from "@/pages/global-admin";
 import EmailTest from "@/pages/email-test";
@@ -46,7 +47,8 @@ function Router() {
   const isPublicRoute = pathname.startsWith('/agency/') || 
                        pathname === '/consumer-login' || 
                        pathname.startsWith('/consumer-register') ||
-                       pathname === '/privacy-policy';
+                       pathname === '/privacy-policy' ||
+                       pathname === '/terms-of-service';
   
   // Don't block public routes with auth loading
   const shouldShowLoader = isLoading && !isPublicRoute;
@@ -103,6 +105,7 @@ function Router() {
             <Route path="/consumer-register/:tenantSlug?" component={ConsumerRegistration} />
             <Route path="/agency/:agencySlug" component={AgencyLanding} />
             <Route path="/privacy-policy" component={PrivacyPolicy} />
+            <Route path="/terms-of-service" component={TermsOfService} />
             <Route component={ConsumerMobileLanding} />
           </>
         )}
@@ -131,6 +134,7 @@ function Router() {
           <Route path="/consumer/:email" component={ConsumerPortal} />
           <Route path="/consumer-dashboard" component={ConsumerDashboard} />
           <Route path="/privacy-policy" component={PrivacyPolicy} />
+          <Route path="/terms-of-service" component={TermsOfService} />
           <Route path="/agency/:agencySlug" component={AgencyLanding} />
           <Route path="/agency-login" component={AgencyLogin} />
           
@@ -160,6 +164,7 @@ function Router() {
           <Route path="/consumer-login" component={ConsumerLogin} />
           <Route path="/consumer-register/:tenantSlug?" component={ConsumerRegistration} />
           <Route path="/privacy-policy" component={PrivacyPolicy} />
+          <Route path="/terms-of-service" component={TermsOfService} />
           <Route component={NotFound} />
         </>
       ) : isJwtAuth && isMainDomain ? (
@@ -182,6 +187,7 @@ function Router() {
           <Route path="/agency-register" component={AgencyRegistration} />
           <Route path="/agency/:agencySlug" component={AgencyLanding} />
           <Route path="/privacy-policy" component={PrivacyPolicy} />
+          <Route path="/terms-of-service" component={TermsOfService} />
           <Route component={NotFound} />
         </>
       ) : !isAuthenticated ? (
@@ -197,6 +203,7 @@ function Router() {
           <Route path="/agency-login" component={AgencyLogin} />
           <Route path="/agency/:agencySlug" component={AgencyLanding} />
           <Route path="/privacy-policy" component={PrivacyPolicy} />
+          <Route path="/terms-of-service" component={TermsOfService} />
           <Route path="/fix-db" component={FixDatabase} />
           <Route path="/admin" component={GlobalAdmin} />
           <Route path="/Admin" component={GlobalAdmin} />
@@ -223,6 +230,7 @@ function Router() {
           <Route path="/email-test" component={EmailTest} />
           <Route path="/agency/:agencySlug" component={AgencyLanding} />
           <Route path="/privacy-policy" component={PrivacyPolicy} />
+          <Route path="/terms-of-service" component={TermsOfService} />
           <Route component={NotFound} />
         </>
       )}

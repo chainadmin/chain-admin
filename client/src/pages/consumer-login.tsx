@@ -283,6 +283,19 @@ export default function ConsumerLogin() {
             </div>
           </div>
         </div>
+
+        {/* Footer Links */}
+        <div className="mt-8 text-center border-t pt-4">
+          <div className="text-sm text-gray-600 space-x-4">
+            <a href="/terms-of-service" className="hover:text-blue-600 hover:underline">
+              Terms of Service
+            </a>
+            <span>•</span>
+            <a href="/privacy-policy" className="hover:text-blue-600 hover:underline">
+              Privacy Policy
+            </a>
+          </div>
+        </div>
       </div>
     </div>
   );
