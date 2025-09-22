@@ -58,8 +58,8 @@ export default function ConsumerDashboard() {
 
   // Fetch consumer data
   const { data, isLoading, error } = useQuery({
-    queryKey: [`/api/consumer/accounts/${consumerSession?.email}?tenantSlug=${consumerSession?.tenantSlug}`],
-    enabled: !!consumerSession?.email && !!consumerSession?.tenantSlug,
+    queryKey: [`/api/consumer/accounts/${consumerSession?.email}`],
+    enabled: !!consumerSession?.email,
   });
 
   // Fetch notifications
@@ -70,13 +70,22 @@ export default function ConsumerDashboard() {
 
   // Fetch documents
   const { data: documents } = useQuery({
-    queryKey: [`/api/consumer/documents/${consumerSession?.email}?tenantSlug=${consumerSession?.tenantSlug}`],
+    queryKey: [`/api/consumer/documents/${consumerSession?.email}`],
+    queryFn: async () => {
+      const response = await apiRequest("GET", `/api/consumer/documents/${consumerSession?.email}?tenantSlug=${consumerSession?.tenantSlug}`);
+      return response.json();
+    },
     enabled: !!consumerSession?.email && !!consumerSession?.tenantSlug,
   });
 
   // Fetch payment arrangements
   const { data: arrangements } = useQuery({
-    queryKey: [`/api/consumer/arrangements/${consumerSession?.email}?tenantSlug=${consumerSession?.tenantSlug}&balance=${(data as any)?.accounts?.reduce((sum: number, acc: any) => sum + (acc.balanceCents || 0), 0) || 0}`],
+    queryKey: [`/api/consumer/arrangements/${consumerSession?.email}`],
+    queryFn: async () => {
+      const balance = (data as any)?.accounts?.reduce((sum: number, acc: any) => sum + (acc.balanceCents || 0), 0) || 0;
+      const response = await apiRequest("GET", `/api/consumer/arrangements/${consumerSession?.email}?tenantSlug=${consumerSession?.tenantSlug}&balance=${balance}`);
+      return response.json();
+    },
     enabled: !!(data as any)?.accounts && !!consumerSession?.email,
   });
 
