@@ -49,6 +49,38 @@ export const authenticateUser: RequestHandler = async (req: any, res, next) => {
   return res.status(401).json({ message: "Unauthorized" });
 };
 
+// Consumer authentication middleware
+export const authenticateConsumer: RequestHandler = async (req: any, res, next) => {
+  const authHeader = req.headers.authorization;
+  
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ message: "No consumer token provided" });
+  }
+  
+  const token = authHeader.slice(7);
+  
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
+    
+    // Verify this is a consumer token
+    if (decoded.type !== 'consumer') {
+      return res.status(401).json({ message: "Invalid token type" });
+    }
+    
+    // Attach consumer info to request
+    req.consumer = {
+      id: decoded.consumerId,
+      email: decoded.email,
+      tenantId: decoded.tenantId,
+      tenantSlug: decoded.tenantSlug
+    };
+    
+    return next();
+  } catch (error) {
+    return res.status(401).json({ message: "Invalid consumer token" });
+  }
+};
+
 // Get current user with tenant information
 export const getCurrentUser = async (req: any) => {
   // JWT auth - fetch the full tenant info including slug

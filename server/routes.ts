@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage, type IStorage } from "./storage";
-import { authenticateUser, getCurrentUser } from "./authMiddleware";
+import { authenticateUser, authenticateConsumer, getCurrentUser } from "./authMiddleware";
 import { postmarkServerService } from "./postmarkServerService";
 import { insertConsumerSchema, insertAccountSchema, agencyTrialRegistrationSchema, platformUsers, tenants, consumers, agencyCredentials } from "@shared/schema";
 import { db } from "./db";
@@ -328,23 +328,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Consumer portal routes
-  app.get('/api/consumer/accounts/:email', async (req, res) => {
+  // Consumer portal routes - now with authentication
+  app.get('/api/consumer/accounts/:email', authenticateConsumer, async (req: any, res) => {
     try {
       const { email } = req.params;
-      const { tenantSlug } = req.query;
       
-      if (!tenantSlug) {
-        return res.status(400).json({ message: "Tenant slug required" });
+      // Verify the email in the URL matches the authenticated consumer's email
+      if (email !== req.consumer.email) {
+        return res.status(403).json({ message: "Access denied to this account" });
       }
-
-      const tenant = await storage.getTenantBySlug(tenantSlug as string);
+      
+      // Get tenant from the authenticated consumer's tenantId
+      const tenant = await storage.getTenant(req.consumer.tenantId);
       if (!tenant) {
         return res.status(404).json({ message: "Tenant not found" });
       }
 
+      // Get the consumer data
       const consumers = await storage.getConsumersByTenant(tenant.id);
-      const consumer = consumers.find(c => c.email === email);
+      const consumer = consumers.find(c => c.id === req.consumer.id);
       
       if (!consumer) {
         return res.status(404).json({ message: "Consumer not found" });
@@ -1642,8 +1644,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Return consumer data for successful login
+      // Generate JWT token for consumer authentication
+      const token = jwt.sign(
+        {
+          consumerId: consumer.id,
+          email: consumer.email,
+          tenantId: consumer.tenantId,
+          tenantSlug: tenant.slug,
+          type: 'consumer'
+        },
+        process.env.JWT_SECRET || 'your-secret-key',
+        { expiresIn: '7d' }
+      );
+      
+      // Return consumer data with authentication token for successful login
       res.json({
+        token,
         consumer: {
           id: consumer.id,
           firstName: consumer.firstName,

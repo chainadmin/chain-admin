@@ -83,7 +83,7 @@ export default function ConsumerDashboard() {
   // Submit callback request mutation
   const callbackRequestMutation = useMutation({
     mutationFn: async (requestData: any) => {
-      await apiRequest("POST", "/api/callback-request", {
+      await apiRequest("POST", "/api/callback-requests", {
         ...requestData,
         tenantSlug: consumerSession?.tenantSlug,
         consumerEmail: consumerSession?.email,

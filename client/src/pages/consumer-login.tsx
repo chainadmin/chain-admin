@@ -40,12 +40,18 @@ export default function ConsumerLogin() {
 
   const loginMutation = useMutation({
     mutationFn: async (loginData: LoginForm) => {
+      // Get tenant slug from URL path (e.g., /waypoint-solutions/consumer)
+      const pathname = window.location.pathname;
+      const pathSegments = pathname.split('/').filter(Boolean);
+      const tenantSlug = pathSegments[0]; // First segment is the tenant slug
+      
       // Send email and dateOfBirth for consumer verification
       const response = await apiRequest("POST", "/api/consumer/login", {
         email: loginData.email,
-        dateOfBirth: loginData.dateOfBirth
+        dateOfBirth: loginData.dateOfBirth,
+        tenantSlug: tenantSlug || agencyContext?.slug
       });
-      return response;
+      return response.json();
     },
     onSuccess: (data: any) => {
       if (data.multipleAgencies) {

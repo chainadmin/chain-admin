@@ -25,6 +25,7 @@ export async function apiRequest(
 ): Promise<Response> {
   const fullUrl = getApiUrl(url);
   const token = getAuthToken(); // Now checks cookies first, then localStorage
+  const consumerToken = localStorage.getItem('consumerToken'); // Check for consumer token
   const headers: HeadersInit = {};
   
   // Only set Content-Type for non-FormData requests
@@ -32,7 +33,10 @@ export async function apiRequest(
     headers["Content-Type"] = "application/json";
   }
   
-  if (token) {
+  // Use consumer token for consumer endpoints, otherwise use admin token
+  if (url.includes('/consumer/') && consumerToken) {
+    headers["Authorization"] = `Bearer ${consumerToken}`;
+  } else if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
   
@@ -56,9 +60,13 @@ export const getQueryFn: <T>(options: {
   async ({ queryKey }) => {
     const url = getApiUrl(queryKey.join("/") as string);
     const token = getAuthToken(); // Now checks cookies first, then localStorage
+    const consumerToken = localStorage.getItem('consumerToken'); // Check for consumer token
     const headers: HeadersInit = {};
     
-    if (token) {
+    // Use consumer token for consumer endpoints, otherwise use admin token
+    if (url.includes('/consumer/') && consumerToken) {
+      headers["Authorization"] = `Bearer ${consumerToken}`;
+    } else if (token) {
       headers["Authorization"] = `Bearer ${token}`;
     }
     
