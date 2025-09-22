@@ -352,7 +352,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const accounts = await storage.getAccountsByConsumer(consumer.id);
       const tenantSettings = await storage.getTenantSettings(tenant.id);
-      res.json({ consumer, accounts, tenantSettings });
+      res.json({ consumer, accounts, tenant, tenantSettings });
     } catch (error) {
       console.error("Error fetching consumer accounts:", error);
       res.status(500).json({ message: "Failed to fetch consumer accounts" });
