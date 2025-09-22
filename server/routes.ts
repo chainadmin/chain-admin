@@ -463,6 +463,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         phone: phone || null,
         dateOfBirth: dateOfBirth || null,
         folderId: folderId || null,
+        isRegistered: true,  // Mark as registered when created from admin panel
+        registrationDate: new Date(),
       });
 
       // Create account

@@ -457,31 +457,62 @@ export class DatabaseStorage implements IStorage {
   }
 
   async findOrCreateConsumer(consumerData: InsertConsumer): Promise<Consumer> {
-    // All fields are required for matching: email, DOB, firstName, lastName
-    if (!consumerData.email || !consumerData.dateOfBirth || !consumerData.firstName || !consumerData.lastName) {
-      // If any required field is missing, create a new consumer
+    // Check for existing consumer by email and tenant (unique within tenant)
+    if (!consumerData.email || !consumerData.tenantId) {
+      // If email or tenant is missing, create a new consumer
       return await this.createConsumer(consumerData);
     }
     
-    // Match by ALL fields with case-insensitive comparison
+    // Match by email and tenant only (prevent duplicates within same agency)
     const [existingConsumer] = await db.select()
       .from(consumers)
       .where(
         and(
-          eq(consumers.tenantId, consumerData.tenantId!),
-          sql`LOWER(${consumers.email}) = LOWER(${consumerData.email})`,
-          sql`LOWER(${consumers.firstName}) = LOWER(${consumerData.firstName})`,
-          sql`LOWER(${consumers.lastName}) = LOWER(${consumerData.lastName})`,
-          eq(consumers.dateOfBirth, consumerData.dateOfBirth)
+          eq(consumers.tenantId, consumerData.tenantId),
+          sql`LOWER(${consumers.email}) = LOWER(${consumerData.email})`
         )
       );
     
     if (existingConsumer) {
-      // Found exact match - return existing consumer
+      // Update existing consumer with any new information provided
+      const updates: any = {};
+      if (consumerData.firstName && consumerData.firstName !== existingConsumer.firstName) {
+        updates.firstName = consumerData.firstName;
+      }
+      if (consumerData.lastName && consumerData.lastName !== existingConsumer.lastName) {
+        updates.lastName = consumerData.lastName;
+      }
+      if (consumerData.dateOfBirth && consumerData.dateOfBirth !== existingConsumer.dateOfBirth) {
+        updates.dateOfBirth = consumerData.dateOfBirth;
+      }
+      if (consumerData.phone && consumerData.phone !== existingConsumer.phone) {
+        updates.phone = consumerData.phone;
+      }
+      if (consumerData.folderId && consumerData.folderId !== existingConsumer.folderId) {
+        updates.folderId = consumerData.folderId;
+      }
+      // Update registration status if provided
+      if (consumerData.isRegistered !== undefined && consumerData.isRegistered !== existingConsumer.isRegistered) {
+        updates.isRegistered = consumerData.isRegistered;
+      }
+      if (consumerData.registrationDate && !existingConsumer.registrationDate) {
+        updates.registrationDate = consumerData.registrationDate;
+      }
+      
+      // If there are updates, apply them
+      if (Object.keys(updates).length > 0) {
+        const [updatedConsumer] = await db.update(consumers)
+          .set(updates)
+          .where(eq(consumers.id, existingConsumer.id))
+          .returning();
+        return updatedConsumer;
+      }
+      
+      // Return existing consumer if no updates
       return existingConsumer;
     }
     
-    // No exact match found - create new consumer
+    // No existing consumer found - create new one
     return await this.createConsumer(consumerData);
   }
 
