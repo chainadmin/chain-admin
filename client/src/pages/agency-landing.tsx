@@ -1,8 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -10,9 +9,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Shield, Clock, CreditCard, Lock, ChevronRight, Building2 } from "lucide-react";
+import { Shield, Clock, CreditCard, Lock, ChevronRight } from "lucide-react";
 import chainLogo from "@/assets/chain-logo.png";
 import { getAgencySlugFromRequest } from "@shared/utils/subdomain";
+import { resolvePolicyContent } from "./agency-policy-utils";
 
 interface AgencyBranding {
   agencyName: string;
@@ -24,6 +24,8 @@ interface AgencyBranding {
   contactPhone: string | null;
   hasPrivacyPolicy: boolean;
   hasTermsOfService: boolean;
+  privacyPolicy: string | null;
+  termsOfService: string | null;
 }
 
 export default function AgencyLanding() {
@@ -50,6 +52,28 @@ export default function AgencyLanding() {
   
   const [showTermsDialog, setShowTermsDialog] = useState(false);
   const [showPrivacyDialog, setShowPrivacyDialog] = useState(false);
+  const [termsContent, setTermsContent] = useState("");
+  const [privacyContent, setPrivacyContent] = useState("");
+
+  const fallbackBranding = useMemo(() => {
+    const resolvedSlug = agencySlug || "test-agency";
+    const fallbackName = resolvedSlug === "waypoint-solutions" ? "Waypoint Solutions" : "Test Agency";
+
+    return {
+      tenant: {
+        id: "fallback-id",
+        name: fallbackName,
+        slug: resolvedSlug,
+      },
+      tenantSettings: {
+        contactEmail: "info@example.com",
+        contactPhone: "1234567890",
+        customBranding: {},
+        termsOfService: "",
+        privacyPolicy: "",
+      },
+    };
+  }, [agencySlug]);
 
   console.log('AgencyLanding rendering with slug:', agencySlug);
 
@@ -61,13 +85,13 @@ export default function AgencyLanding() {
   });
 
   useEffect(() => {
-    console.log('AgencyLanding data status:', { 
-      agencyLoading, 
-      error, 
+    console.log('AgencyLanding data status:', {
+      agencyLoading,
+      error,
       hasData: !!agencyData,
       agencyData
     });
-    
+
     // Store agency context for the login page
     if (agencyData) {
       sessionStorage.setItem('agencyContext', JSON.stringify({
@@ -77,6 +101,39 @@ export default function AgencyLanding() {
       }));
     }
   }, [agencyLoading, agencyData, error]);
+
+  useEffect(() => {
+    const fallbackSource = {
+      termsOfService: ((fallbackBranding.tenantSettings as any)?.termsOfService as string | undefined) ?? "",
+      privacyPolicy: ((fallbackBranding.tenantSettings as any)?.privacyPolicy as string | undefined) ?? "",
+    };
+
+    const { termsContent: resolvedTerms, privacyContent: resolvedPrivacy } = resolvePolicyContent({
+      primary: agencyData
+        ? {
+            termsOfService: agencyData.termsOfService,
+            privacyPolicy: agencyData.privacyPolicy,
+          }
+        : undefined,
+      fallback: fallbackSource,
+    });
+
+    setTermsContent(resolvedTerms);
+    setPrivacyContent(resolvedPrivacy);
+  }, [agencyData, fallbackBranding]);
+
+  const hasTermsContent = termsContent.trim().length > 0;
+  const hasPrivacyContent = privacyContent.trim().length > 0;
+
+  useEffect(() => {
+    if (!hasTermsContent && showTermsDialog) {
+      setShowTermsDialog(false);
+    }
+
+    if (!hasPrivacyContent && showPrivacyDialog) {
+      setShowPrivacyDialog(false);
+    }
+  }, [hasTermsContent, hasPrivacyContent, showTermsDialog, showPrivacyDialog]);
 
   const handleFindBalance = () => {
     // Navigate to consumer login with agency context
@@ -94,30 +151,14 @@ export default function AgencyLanding() {
   // Use fallback data if API fetch fails
   if (error || !agencyData) {
     console.log(`Using fallback data for ${agencySlug}`);
-    // Use hardcoded fallback data for testing
-    const fallbackData = {
-      tenant: {
-        id: "fallback-id",
-        name: agencySlug === 'waypoint-solutions' ? "Waypoint Solutions" : "Test Agency",
-        slug: agencySlug || "test-agency"
-      },
-      tenantSettings: {
-        contactEmail: "info@example.com",
-        contactPhone: "1234567890",
-        customBranding: {}
-      }
-    };
-    
     // Always use fallback data when API fails
-    const { tenant, tenantSettings } = fallbackData;
+    const { tenant, tenantSettings } = fallbackBranding;
     const agencyName = tenant.name;
     const logoUrl = (tenantSettings?.customBranding as any)?.logoUrl;
-    const hasTermsOfService = !!(tenantSettings as any)?.termsOfService;
-    const hasPrivacyPolicy = !!(tenantSettings as any)?.privacyPolicy;
     const contactEmail = (tenantSettings as any)?.contactEmail;
     const contactPhone = (tenantSettings as any)?.contactPhone;
 
-      return (
+    return (
         <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
           {/* Header */}
           <div className="bg-white border-b">
@@ -178,15 +219,15 @@ export default function AgencyLanding() {
                 </div>
                 <div className="flex flex-col md:flex-row items-center gap-6">
                   <div className="flex flex-wrap justify-center gap-6 text-sm">
-                    <button 
+                    <button
                       onClick={handleFindBalance}
                       className="hover:text-blue-400 transition-colors"
                       data-testid="link-account-summary"
                     >
                       Account Summary
                     </button>
-                    {hasTermsOfService && (
-                      <button 
+                    {hasTermsContent && (
+                      <button
                         onClick={() => setShowTermsDialog(true)}
                         className="hover:text-blue-400 transition-colors"
                         data-testid="link-terms"
@@ -194,8 +235,8 @@ export default function AgencyLanding() {
                         Terms of Service
                       </button>
                     )}
-                    {hasPrivacyPolicy && (
-                      <button 
+                    {hasPrivacyContent && (
+                      <button
                         onClick={() => setShowPrivacyDialog(true)}
                         className="hover:text-blue-400 transition-colors"
                         data-testid="link-privacy"
@@ -237,8 +278,6 @@ export default function AgencyLanding() {
   // Use the flat structure from the API response
   const agencyName = agencyData.agencyName;
   const logoUrl = agencyData.logoUrl;
-  const hasTermsOfService = agencyData.hasTermsOfService;
-  const hasPrivacyPolicy = agencyData.hasPrivacyPolicy;
   const contactEmail = agencyData.contactEmail;
   const contactPhone = agencyData.contactPhone;
 
@@ -429,8 +468,8 @@ export default function AgencyLanding() {
                 >
                   Account Summary
                 </button>
-                {hasTermsOfService && (
-                  <button 
+                {hasTermsContent && (
+                  <button
                     onClick={() => setShowTermsDialog(true)}
                     className="hover:text-blue-400 transition-colors"
                     data-testid="link-terms"
@@ -438,8 +477,8 @@ export default function AgencyLanding() {
                     Terms of Service
                   </button>
                 )}
-                {hasPrivacyPolicy && (
-                  <button 
+                {hasPrivacyContent && (
+                  <button
                     onClick={() => setShowPrivacyDialog(true)}
                     className="hover:text-blue-400 transition-colors"
                     data-testid="link-privacy"
@@ -481,7 +520,7 @@ export default function AgencyLanding() {
           <DialogHeader>
             <DialogTitle>Terms of Service</DialogTitle>
             <DialogDescription className="mt-4 whitespace-pre-wrap">
-              Terms of Service content will be displayed here.
+              {termsContent}
             </DialogDescription>
           </DialogHeader>
         </DialogContent>
@@ -493,7 +532,7 @@ export default function AgencyLanding() {
           <DialogHeader>
             <DialogTitle>Privacy Policy</DialogTitle>
             <DialogDescription className="mt-4 whitespace-pre-wrap">
-              Privacy Policy content will be displayed here.
+              {privacyContent}
             </DialogDescription>
           </DialogHeader>
         </DialogContent>

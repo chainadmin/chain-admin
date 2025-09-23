@@ -32,6 +32,7 @@ async function handler(req: VercelRequest, res: VercelResponse) {
         name: tenants.name,
         slug: tenants.slug,
         brand: tenants.brand,
+        isActive: tenants.isActive,
       })
       .from(tenants)
       .where(eq(tenants.slug, slug))
@@ -39,6 +40,11 @@ async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!tenant) {
       res.status(404).json({ error: 'Agency not found' });
+      return;
+    }
+
+    if (!tenant.isActive) {
+      res.status(403).json({ error: 'Agency is not active' });
       return;
     }
 
@@ -67,6 +73,8 @@ async function handler(req: VercelRequest, res: VercelResponse) {
       contactPhone: settings?.contactPhone || null,
       hasPrivacyPolicy: !!settings?.privacyPolicy,
       hasTermsOfService: !!settings?.termsOfService,
+      privacyPolicy: settings?.privacyPolicy || null,
+      termsOfService: settings?.termsOfService || null,
     };
 
     res.status(200).json(branding);
