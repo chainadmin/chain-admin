@@ -1956,33 +1956,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Consumer login route
   app.post('/api/consumer/login', async (req, res) => {
     try {
-      const { email, dateOfBirth } = req.body;
-      
-      console.log("Consumer login attempt:", { email, dateOfBirth });
+      const { email, dateOfBirth, tenantSlug: bodyTenantSlug } = req.body;
+      const tenantSlug = bodyTenantSlug || (req as any).agencySlug;
+
+      console.log("Consumer login attempt:", { email, dateOfBirth, tenantSlug });
 
       if (!email || !dateOfBirth) {
         return res.status(400).json({ message: "Email and date of birth are required" });
       }
 
-      // Search for consumer across all tenants (prioritizes linked consumers)
-      const consumer = await storage.getConsumerByEmail(email);
+      let tenant = null;
+      let consumer = null;
+
+      if (tenantSlug) {
+        tenant = await storage.getTenantBySlug(tenantSlug);
+
+        if (!tenant) {
+          return res.status(404).json({ message: "Agency not found" });
+        }
+
+        consumer = await storage.getConsumerByEmailAndTenant(email, tenant.slug);
+      } else {
+        consumer = await storage.getConsumerByEmail(email);
+      }
+
+      if (!tenant && consumer?.tenantId) {
+        tenant = await storage.getTenant(consumer.tenantId);
+      }
+
       console.log("Found consumer:", consumer ? { id: consumer.id, email: consumer.email, tenantId: consumer.tenantId } : null);
-      
+
       if (!consumer) {
         // If consumer not found, create a new account opportunity
-        return res.status(404).json({ 
-          message: "No account found with this email. Would you like to create a new account?",
+        return res.status(404).json({
+          message: tenantSlug
+            ? "No account found with this email for this agency. Would you like to create a new account?"
+            : "No account found with this email. Would you like to create a new account?",
           canRegister: true,
           suggestedAction: "register"
         });
       }
 
-      // Get tenant information if consumer has one
-      const tenant = consumer.tenantId ? await storage.getTenant(consumer.tenantId) : null;
-      
       // If consumer doesn't have a tenant, suggest they complete registration
       if (!tenant) {
-        return res.status(200).json({ 
+        return res.status(200).json({
           message: "Your account needs to be linked to an agency. Please complete registration.",
           needsAgencyLink: true,
           consumer: {
