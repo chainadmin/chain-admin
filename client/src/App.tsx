@@ -1,5 +1,6 @@
 import { Switch, Route } from "wouter";
 import { useEffect } from "react";
+import type { JSX } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -85,158 +86,229 @@ function Router() {
                        (!hostname.includes('chainsoftwaregroup.com') && !agencySlug); // Development/Replit without agency subdomain
 
   // Mobile app routes - Consumer only
+  const LoadingScreen = () => (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+        <p className="text-gray-600">Loading...</p>
+      </div>
+    </div>
+  );
+
   if (isMobileApp) {
+    const mobileRoutes: JSX.Element[] = [];
+
+    if (isLoading) {
+      mobileRoutes.push(
+        <Route key="mobile-loading" path="/:rest*" component={LoadingScreen} />
+      );
+    } else {
+      mobileRoutes.push(
+        <Route key="mobile-home" path="/" component={ConsumerMobileLanding} />,
+        <Route key="mobile-consumer-login" path="/consumer-login" component={ConsumerLogin} />,
+        <Route key="mobile-consumer-dashboard" path="/consumer-dashboard" component={ConsumerDashboard} />,
+        <Route
+          key="mobile-consumer-portal"
+          path="/consumer/:tenantSlug/:email"
+          component={ConsumerPortal}
+        />,
+        <Route
+          key="mobile-register"
+          path="/register/:tenantSlug"
+          component={ConsumerRegistration}
+        />,
+        <Route
+          key="mobile-consumer-register"
+          path="/consumer-register/:tenantSlug?"
+          component={ConsumerRegistration}
+        />,
+        <Route key="mobile-agency" path="/agency/:agencySlug" component={AgencyLanding} />,
+        <Route key="mobile-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
+        <Route key="mobile-terms" path="/terms-of-service" component={TermsOfService} />
+      );
+
+      mobileRoutes.push(
+        <Route key="mobile-fallback" path="/:rest*" component={ConsumerMobileLanding} />
+      );
+    }
+
+    return <Switch>{mobileRoutes}</Switch>;
+  }
+
+  if (shouldShowLoader) {
     return (
       <Switch>
-        {isLoading ? (
-          <div className="min-h-screen flex items-center justify-center">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-              <p className="text-gray-600">Loading...</p>
-            </div>
-          </div>
-        ) : (
-          <>
-            <Route path="/" component={ConsumerMobileLanding} />
-            <Route path="/consumer-login" component={ConsumerLogin} />
-            <Route path="/consumer-dashboard" component={ConsumerDashboard} />
-            <Route path="/consumer/:tenantSlug/:email" component={ConsumerPortal} />
-            <Route path="/register/:tenantSlug" component={ConsumerRegistration} />
-            <Route path="/consumer-register/:tenantSlug?" component={ConsumerRegistration} />
-            <Route path="/agency/:agencySlug" component={AgencyLanding} />
-            <Route path="/privacy-policy" component={PrivacyPolicy} />
-            <Route path="/terms-of-service" component={TermsOfService} />
-            <Route path="/:rest*" component={ConsumerMobileLanding} />
-          </>
-        )}
+        <Route key="web-loading" path="/:rest*" component={LoadingScreen} />
       </Switch>
     );
   }
 
-  // Web app routes - Full admin and consumer features
-  // TEMPORARY: Bypass auth loading for testing
-  return (
-    <Switch>
-      {false ? (
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading...</p>
-          </div>
-        </div>
-      ) : agencySlug && !isMainDomain ? (
-        // On agency subdomain - ALWAYS show consumer portal by default, regardless of auth or loading state
-        <>
-          {/* Public consumer routes - always accessible on agency subdomain */}
-          <Route path="/" component={AgencyLanding} />
-          <Route path="/consumer" component={ConsumerLogin} />
-          <Route path="/consumer-login" component={ConsumerLogin} />
-          <Route path="/consumer-register/:tenantSlug?" component={ConsumerRegistration} />
-          <Route path="/consumer/:email" component={ConsumerPortal} />
-          <Route path="/consumer-dashboard" component={ConsumerDashboard} />
-          <Route path="/privacy-policy" component={PrivacyPolicy} />
-          <Route path="/terms-of-service" component={TermsOfService} />
-          <Route path="/agency/:agencySlug" component={AgencyLanding} />
-          <Route path="/agency-login" component={AgencyLogin} />
-          
-          {/* Admin routes - require explicit paths and JWT auth */}
-          <Route path="/dashboard" component={isJwtAuth ? AdminDashboard : AgencyLogin} />
-          <Route path="/admin-dashboard" component={isJwtAuth ? AdminDashboard : AgencyLogin} />
-          
-          {isJwtAuth && (
-            <>
-              <Route path="/consumers" component={Consumers} />
-              <Route path="/accounts" component={Accounts} />
-              <Route path="/communications" component={Communications} />
-              <Route path="/requests" component={Requests} />
-              <Route path="/payments" component={Payments} />
-              <Route path="/billing" component={Billing} />
-              <Route path="/company" component={CompanyManagement} />
-              <Route path="/settings" component={Settings} />
-            </>
-          )}
-          
-          <Route path="/:rest*" component={NotFound} />
-        </>
-      ) : pathname.startsWith('/agency/') ? (
-        // Agency landing page route - accessible to everyone
-        <>
-          <Route path="/agency/:agencySlug" component={AgencyLanding} />
-          <Route path="/consumer-login" component={ConsumerLogin} />
-          <Route path="/consumer-register/:tenantSlug?" component={ConsumerRegistration} />
-          <Route path="/privacy-policy" component={PrivacyPolicy} />
-          <Route path="/terms-of-service" component={TermsOfService} />
-          <Route path="/:rest*" component={NotFound} />
-        </>
-      ) : isJwtAuth && isMainDomain ? (
-        // JWT authenticated users on main domain - show landing with admin routes available
-        <>
-          <Route path="/" component={Landing} />
-          <Route path="/dashboard" component={AdminDashboard} />
-          <Route path="/admin-dashboard" component={AdminDashboard} />
-          <Route path="/consumers" component={Consumers} />
-          <Route path="/accounts" component={Accounts} />
-          <Route path="/communications" component={Communications} />
-          <Route path="/requests" component={Requests} />
-          <Route path="/payments" component={Payments} />
-          <Route path="/billing" component={Billing} />
-          <Route path="/company" component={CompanyManagement} />
-          <Route path="/settings" component={Settings} />
-          <Route path="/consumer-dashboard" component={ConsumerDashboard} />
-          <Route path="/consumer-login" component={ConsumerLogin} />
-          <Route path="/agency-login" component={AgencyLogin} />
-          <Route path="/agency-register" component={AgencyRegistration} />
-          <Route path="/agency/:agencySlug" component={AgencyLanding} />
-          <Route path="/privacy-policy" component={PrivacyPolicy} />
-          <Route path="/terms-of-service" component={TermsOfService} />
-          <Route path="/:rest*" component={NotFound} />
-        </>
-      ) : !isAuthenticated ? (
-        // Not authenticated - show public routes
-        <>
-          <Route path="/" component={Landing} />
-          <Route path="/consumer-login" component={ConsumerLogin} />
-          <Route path="/consumer-dashboard" component={ConsumerDashboard} />
-          <Route path="/consumer/:tenantSlug/:email" component={ConsumerPortal} />
-          <Route path="/register/:tenantSlug" component={ConsumerRegistration} />
-          <Route path="/consumer-register/:tenantSlug?" component={ConsumerRegistration} />
-          <Route path="/agency-register" component={AgencyRegistration} />
-          <Route path="/agency-login" component={AgencyLogin} />
-          <Route path="/agency/:agencySlug" component={AgencyLanding} />
-          <Route path="/privacy-policy" component={PrivacyPolicy} />
-          <Route path="/terms-of-service" component={TermsOfService} />
-          <Route path="/fix-db" component={FixDatabase} />
-          <Route path="/admin" component={GlobalAdmin} />
-          <Route path="/Admin" component={GlobalAdmin} />
-          <Route path="/:rest*" component={NotFound} />
-        </>
-      ) : needsTenantSetup ? (
-        // Replit authenticated but needs tenant setup
-        <Route path="*" component={TenantSetup} />
-      ) : (
-        // Replit authenticated with tenant - show admin routes
-        <>
-          <Route path="/" component={AdminDashboard} />
-          <Route path="/admin-dashboard" component={AdminDashboard} />
-          <Route path="/consumers" component={Consumers} />
-          <Route path="/accounts" component={Accounts} />
-          <Route path="/communications" component={Communications} />
-          <Route path="/requests" component={Requests} />
-          <Route path="/payments" component={Payments} />
-          <Route path="/billing" component={Billing} />
-          <Route path="/company" component={CompanyManagement} />
-          <Route path="/settings" component={Settings} />
-          <Route path="/admin" component={GlobalAdmin} />
-          <Route path="/Admin" component={GlobalAdmin} />
-          <Route path="/email-test" component={EmailTest} />
-          <Route path="/agency/:agencySlug" component={AgencyLanding} />
-          <Route path="/privacy-policy" component={PrivacyPolicy} />
-          <Route path="/terms-of-service" component={TermsOfService} />
-          <Route path="/:rest*" component={NotFound} />
-        </>
-      )}
-    </Switch>
-  );
+  if (agencySlug && !isMainDomain) {
+    const agencySubdomainRoutes: JSX.Element[] = [
+      <Route key="agency-home" path="/" component={AgencyLanding} />,
+      <Route key="agency-consumer" path="/consumer" component={ConsumerLogin} />,
+      <Route key="agency-consumer-login" path="/consumer-login" component={ConsumerLogin} />,
+      <Route
+        key="agency-consumer-register"
+        path="/consumer-register/:tenantSlug?"
+        component={ConsumerRegistration}
+      />,
+      <Route key="agency-consumer-portal" path="/consumer/:email" component={ConsumerPortal} />,
+      <Route
+        key="agency-consumer-dashboard"
+        path="/consumer-dashboard"
+        component={ConsumerDashboard}
+      />,
+      <Route key="agency-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
+      <Route key="agency-terms" path="/terms-of-service" component={TermsOfService} />,
+      <Route key="agency-landing" path="/agency/:agencySlug" component={AgencyLanding} />,
+      <Route key="agency-login" path="/agency-login" component={AgencyLogin} />,
+      <Route
+        key="agency-dashboard"
+        path="/dashboard"
+        component={isJwtAuth ? AdminDashboard : AgencyLogin}
+      />,
+      <Route
+        key="agency-admin-dashboard"
+        path="/admin-dashboard"
+        component={isJwtAuth ? AdminDashboard : AgencyLogin}
+      />
+    ];
+
+    if (isJwtAuth) {
+      agencySubdomainRoutes.push(
+        <Route key="agency-consumers" path="/consumers" component={Consumers} />,
+        <Route key="agency-accounts" path="/accounts" component={Accounts} />,
+        <Route
+          key="agency-communications"
+          path="/communications"
+          component={Communications}
+        />,
+        <Route key="agency-requests" path="/requests" component={Requests} />,
+        <Route key="agency-payments" path="/payments" component={Payments} />,
+        <Route key="agency-billing" path="/billing" component={Billing} />,
+        <Route key="agency-company" path="/company" component={CompanyManagement} />,
+        <Route key="agency-settings" path="/settings" component={Settings} />
+      );
+    }
+
+    agencySubdomainRoutes.push(
+      <Route key="agency-fallback" path="/:rest*" component={NotFound} />
+    );
+
+    return <Switch>{agencySubdomainRoutes}</Switch>;
+  }
+
+  if (pathname.startsWith('/agency/')) {
+    const agencyLandingRoutes: JSX.Element[] = [
+      <Route key="landing-agency" path="/agency/:agencySlug" component={AgencyLanding} />,
+      <Route key="landing-consumer-login" path="/consumer-login" component={ConsumerLogin} />,
+      <Route
+        key="landing-consumer-register"
+        path="/consumer-register/:tenantSlug?"
+        component={ConsumerRegistration}
+      />,
+      <Route key="landing-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
+      <Route key="landing-terms" path="/terms-of-service" component={TermsOfService} />,
+      <Route key="landing-fallback" path="/:rest*" component={NotFound} />
+    ];
+
+    return <Switch>{agencyLandingRoutes}</Switch>;
+  }
+
+  if (isJwtAuth && isMainDomain) {
+    const authenticatedMainDomainRoutes: JSX.Element[] = [
+      <Route key="main-home" path="/" component={Landing} />,
+      <Route key="main-dashboard" path="/dashboard" component={AdminDashboard} />,
+      <Route key="main-admin-dashboard" path="/admin-dashboard" component={AdminDashboard} />,
+      <Route key="main-consumers" path="/consumers" component={Consumers} />,
+      <Route key="main-accounts" path="/accounts" component={Accounts} />,
+      <Route key="main-communications" path="/communications" component={Communications} />,
+      <Route key="main-requests" path="/requests" component={Requests} />,
+      <Route key="main-payments" path="/payments" component={Payments} />,
+      <Route key="main-billing" path="/billing" component={Billing} />,
+      <Route key="main-company" path="/company" component={CompanyManagement} />,
+      <Route key="main-settings" path="/settings" component={Settings} />,
+      <Route
+        key="main-consumer-dashboard"
+        path="/consumer-dashboard"
+        component={ConsumerDashboard}
+      />,
+      <Route key="main-consumer-login" path="/consumer-login" component={ConsumerLogin} />,
+      <Route key="main-agency-login" path="/agency-login" component={AgencyLogin} />,
+      <Route key="main-agency-register" path="/agency-register" component={AgencyRegistration} />,
+      <Route key="main-agency" path="/agency/:agencySlug" component={AgencyLanding} />,
+      <Route key="main-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
+      <Route key="main-terms" path="/terms-of-service" component={TermsOfService} />,
+      <Route key="main-fallback" path="/:rest*" component={NotFound} />
+    ];
+
+    return <Switch>{authenticatedMainDomainRoutes}</Switch>;
+  }
+
+  if (!isAuthenticated) {
+    const publicRoutes: JSX.Element[] = [
+      <Route key="public-home" path="/" component={Landing} />,
+      <Route key="public-consumer-login" path="/consumer-login" component={ConsumerLogin} />,
+      <Route key="public-consumer-dashboard" path="/consumer-dashboard" component={ConsumerDashboard} />,
+      <Route
+        key="public-consumer-portal"
+        path="/consumer/:tenantSlug/:email"
+        component={ConsumerPortal}
+      />,
+      <Route
+        key="public-register"
+        path="/register/:tenantSlug"
+        component={ConsumerRegistration}
+      />,
+      <Route
+        key="public-consumer-register"
+        path="/consumer-register/:tenantSlug?"
+        component={ConsumerRegistration}
+      />,
+      <Route key="public-agency-register" path="/agency-register" component={AgencyRegistration} />,
+      <Route key="public-agency-login" path="/agency-login" component={AgencyLogin} />,
+      <Route key="public-agency" path="/agency/:agencySlug" component={AgencyLanding} />,
+      <Route key="public-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
+      <Route key="public-terms" path="/terms-of-service" component={TermsOfService} />,
+      <Route key="public-fix-db" path="/fix-db" component={FixDatabase} />,
+      <Route key="public-admin" path="/admin" component={GlobalAdmin} />,
+      <Route key="public-admin-cap" path="/Admin" component={GlobalAdmin} />,
+      <Route key="public-fallback" path="/:rest*" component={NotFound} />
+    ];
+
+    return <Switch>{publicRoutes}</Switch>;
+  }
+
+  if (needsTenantSetup) {
+    return (
+      <Switch>
+        <Route key="tenant-setup" path="/:rest*" component={TenantSetup} />
+      </Switch>
+    );
+  }
+
+  const authenticatedRoutes: JSX.Element[] = [
+    <Route key="auth-home" path="/" component={AdminDashboard} />,
+    <Route key="auth-admin-dashboard" path="/admin-dashboard" component={AdminDashboard} />,
+    <Route key="auth-consumers" path="/consumers" component={Consumers} />,
+    <Route key="auth-accounts" path="/accounts" component={Accounts} />,
+    <Route key="auth-communications" path="/communications" component={Communications} />,
+    <Route key="auth-requests" path="/requests" component={Requests} />,
+    <Route key="auth-payments" path="/payments" component={Payments} />,
+    <Route key="auth-billing" path="/billing" component={Billing} />,
+    <Route key="auth-company" path="/company" component={CompanyManagement} />,
+    <Route key="auth-settings" path="/settings" component={Settings} />,
+    <Route key="auth-admin" path="/admin" component={GlobalAdmin} />,
+    <Route key="auth-admin-cap" path="/Admin" component={GlobalAdmin} />,
+    <Route key="auth-email-test" path="/email-test" component={EmailTest} />,
+    <Route key="auth-agency" path="/agency/:agencySlug" component={AgencyLanding} />,
+    <Route key="auth-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
+    <Route key="auth-terms" path="/terms-of-service" component={TermsOfService} />,
+    <Route key="auth-fallback" path="/:rest*" component={NotFound} />
+  ];
+
+  return <Switch>{authenticatedRoutes}</Switch>;
 }
 
 function App() {
