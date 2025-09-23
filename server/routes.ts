@@ -596,12 +596,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/accounts', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
-      
+
       if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const { firstName, lastName, email, phone, dateOfBirth, accountNumber, creditor, balanceCents, folderId } = req.body;
+      const {
+        firstName,
+        lastName,
+        email,
+        phone,
+        dateOfBirth,
+        accountNumber,
+        creditor,
+        balanceCents,
+        folderId,
+        address,
+        city,
+        state,
+        zipCode,
+        dueDate,
+      } = req.body;
 
       if (!firstName || !lastName || !email || !creditor || balanceCents === undefined) {
         return res.status(400).json({ message: "Missing required fields" });
@@ -615,6 +630,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         email,
         phone: phone || null,
         dateOfBirth: dateOfBirth || null,
+        address: address || null,
+        city: city || null,
+        state: state || null,
+        zipCode: zipCode || null,
         folderId: folderId || null,
         isRegistered: true,  // Mark as registered when created from admin panel
         registrationDate: new Date(),
@@ -630,6 +649,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         balanceCents,
         status: 'active',
         additionalData: {},
+        dueDate: dueDate || null,
       });
 
       res.status(201).json(account);
@@ -639,10 +659,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch('/api/accounts/:id', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = await getTenantId(req, storage);
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { id } = req.params;
+      const account = await storage.getAccount(id);
+
+      if (!account || account.tenantId !== tenantId) {
+        return res.status(404).json({ message: "Account not found" });
+      }
+
+      const {
+        firstName,
+        lastName,
+        email,
+        phone,
+        accountNumber,
+        creditor,
+        balanceCents,
+        folderId,
+        dateOfBirth,
+        address,
+        city,
+        state,
+        zipCode,
+        dueDate,
+      } = req.body;
+
+      const consumerUpdates: any = {};
+      if (firstName !== undefined) consumerUpdates.firstName = firstName;
+      if (lastName !== undefined) consumerUpdates.lastName = lastName;
+      if (email !== undefined) consumerUpdates.email = email;
+      if (phone !== undefined) consumerUpdates.phone = phone;
+      if (folderId !== undefined) consumerUpdates.folderId = folderId || null;
+      if (dateOfBirth !== undefined) consumerUpdates.dateOfBirth = dateOfBirth || null;
+      if (address !== undefined) consumerUpdates.address = address || null;
+      if (city !== undefined) consumerUpdates.city = city || null;
+      if (state !== undefined) consumerUpdates.state = state || null;
+      if (zipCode !== undefined) consumerUpdates.zipCode = zipCode || null;
+
+      if (Object.keys(consumerUpdates).length > 0) {
+        await storage.updateConsumer(account.consumerId, consumerUpdates);
+      }
+
+      const accountUpdates: any = {};
+      if (accountNumber !== undefined) accountUpdates.accountNumber = accountNumber || null;
+      if (creditor !== undefined) accountUpdates.creditor = creditor;
+      if (balanceCents !== undefined && !Number.isNaN(Number(balanceCents))) {
+        accountUpdates.balanceCents = Number(balanceCents);
+      }
+      if (folderId !== undefined) accountUpdates.folderId = folderId || null;
+      if (dueDate !== undefined) {
+        accountUpdates.dueDate = dueDate || null;
+      }
+
+      if (Object.keys(accountUpdates).length > 0) {
+        await storage.updateAccount(id, accountUpdates);
+      }
+
+      const updatedAccount = await storage.getAccount(id);
+      res.json(updatedAccount);
+    } catch (error) {
+      console.error("Error updating account:", error);
+      res.status(500).json({ message: "Failed to update account" });
+    }
+  });
+
   app.delete('/api/accounts/:id', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
-      if (!tenantId) { 
+      if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
       }
 
