@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -9,7 +11,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Shield, Clock, CreditCard, Lock, ChevronRight } from "lucide-react";
+import {
+  ArrowRight,
+  CheckCircle2,
+  Clock,
+  CreditCard,
+  Lock,
+  Mail,
+  MessageSquare,
+  Phone,
+  Shield,
+  Sparkles,
+} from "lucide-react";
 import chainLogo from "@/assets/chain-logo.png";
 import { getAgencySlugFromRequest } from "@shared/utils/subdomain";
 import { resolvePolicyContent } from "./agency-policy-utils";
@@ -24,106 +37,89 @@ interface AgencyBranding {
   contactPhone: string | null;
   hasPrivacyPolicy: boolean;
   hasTermsOfService: boolean;
-  privacyPolicy: string | null;
-  termsOfService: string | null;
+  privacyPolicy?: string | null;
+  termsOfService?: string | null;
 }
 
 export default function AgencyLanding() {
   const { agencySlug: pathSlug } = useParams();
   const [, setLocation] = useLocation();
-  
-  // Get agency slug from URL path (for /agency/slug routes) 
+
   let agencySlug = pathSlug;
-  
-  // If no path slug, check for subdomain on production
+
   if (!agencySlug) {
     const hostname = window.location.hostname;
-    if (hostname.includes('chainsoftwaregroup.com')) {
+    if (hostname.includes("chainsoftwaregroup.com")) {
       const extractedSlug = getAgencySlugFromRequest(hostname, window.location.pathname);
       agencySlug = extractedSlug || undefined;
     }
   }
-  
-  // If still no agency slug, default to waypoint-solutions for testing
+
   if (!agencySlug) {
-    console.log('Warning: No agency slug found, using default waypoint-solutions');
-    agencySlug = 'waypoint-solutions';
+    agencySlug = "waypoint-solutions";
   }
-  
+
   const [showTermsDialog, setShowTermsDialog] = useState(false);
   const [showPrivacyDialog, setShowPrivacyDialog] = useState(false);
-  const [termsContent, setTermsContent] = useState("");
-  const [privacyContent, setPrivacyContent] = useState("");
 
-  const fallbackBranding = useMemo(() => {
-    const resolvedSlug = agencySlug || "test-agency";
-    const fallbackName = resolvedSlug === "waypoint-solutions" ? "Waypoint Solutions" : "Test Agency";
+  const fallbackBranding = useMemo<AgencyBranding>(() => {
+    const resolvedSlug = agencySlug || "waypoint-solutions";
+    const fallbackName = resolvedSlug === "waypoint-solutions" ? "Waypoint Solutions" : "Chain Partner";
 
     return {
-      tenant: {
-        id: "fallback-id",
-        name: fallbackName,
-        slug: resolvedSlug,
-      },
-      tenantSettings: {
-        contactEmail: "info@example.com",
-        contactPhone: "1234567890",
-        customBranding: {},
-        termsOfService: "",
-        privacyPolicy: "",
-      },
+      agencyName: fallbackName,
+      agencySlug: resolvedSlug,
+      logoUrl: null,
+      primaryColor: "#2563eb",
+      secondaryColor: "#4f46e5",
+      contactEmail: "support@chainsoftwaregroup.com",
+      contactPhone: null,
+      hasPrivacyPolicy: false,
+      hasTermsOfService: false,
+      privacyPolicy: "",
+      termsOfService: "",
     };
   }, [agencySlug]);
 
-  console.log('AgencyLanding rendering with slug:', agencySlug);
-
-  // Fetch agency information
   const { data: agencyData, isLoading: agencyLoading, error } = useQuery<AgencyBranding>({
     queryKey: [`/api/public/agency-branding?slug=${agencySlug}`],
     enabled: !!agencySlug,
-    retry: 1, // Only retry once to avoid excessive requests
+    retry: 1,
   });
 
-  useEffect(() => {
-    console.log('AgencyLanding data status:', {
-      agencyLoading,
-      error,
-      hasData: !!agencyData,
-      agencyData
-    });
+  const resolvedBranding = agencyData ?? fallbackBranding;
 
-    // Store agency context for the login page
+  useEffect(() => {
     if (agencyData) {
-      sessionStorage.setItem('agencyContext', JSON.stringify({
-        slug: agencyData.agencySlug,
-        name: agencyData.agencyName,
-        logoUrl: agencyData.logoUrl
-      }));
+      sessionStorage.setItem(
+        "agencyContext",
+        JSON.stringify({
+          slug: agencyData.agencySlug,
+          name: agencyData.agencyName,
+          logoUrl: agencyData.logoUrl,
+        }),
+      );
+    } else if (!agencyLoading && fallbackBranding) {
+      sessionStorage.setItem(
+        "agencyContext",
+        JSON.stringify({
+          slug: fallbackBranding.agencySlug,
+          name: fallbackBranding.agencyName,
+          logoUrl: fallbackBranding.logoUrl,
+        }),
+      );
     }
-  }, [agencyLoading, agencyData, error]);
+  }, [agencyData, agencyLoading, fallbackBranding]);
 
-  useEffect(() => {
-    const fallbackSource = {
-      termsOfService: ((fallbackBranding.tenantSettings as any)?.termsOfService as string | undefined) ?? "",
-      privacyPolicy: ((fallbackBranding.tenantSettings as any)?.privacyPolicy as string | undefined) ?? "",
-    };
-
-    const { termsContent: resolvedTerms, privacyContent: resolvedPrivacy } = resolvePolicyContent({
-      primary: agencyData
-        ? {
-            termsOfService: agencyData.termsOfService,
-            privacyPolicy: agencyData.privacyPolicy,
-          }
-        : undefined,
-      fallback: fallbackSource,
-    });
-
-    setTermsContent(resolvedTerms);
-    setPrivacyContent(resolvedPrivacy);
-  }, [agencyData, fallbackBranding]);
-
-  const hasTermsContent = termsContent.trim().length > 0;
-  const hasPrivacyContent = privacyContent.trim().length > 0;
+  const { termsContent, privacyContent, hasTermsContent, hasPrivacyContent } = resolvePolicyContent({
+    primary: agencyData
+      ? {
+          termsOfService: agencyData.termsOfService,
+          privacyPolicy: agencyData.privacyPolicy,
+        }
+      : undefined,
+    fallback: fallbackBranding,
+  });
 
   useEffect(() => {
     if (!hasTermsContent && showTermsDialog) {
@@ -136,402 +132,387 @@ export default function AgencyLanding() {
   }, [hasTermsContent, hasPrivacyContent, showTermsDialog, showPrivacyDialog]);
 
   const handleFindBalance = () => {
-    // Navigate to consumer login with agency context
-    setLocation('/consumer-login');
+    setLocation("/consumer-login");
   };
 
   if (agencyLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="mx-auto h-12 w-12 rounded-full border-2 border-blue-500 border-b-transparent animate-spin" />
+          <p className="text-sm text-blue-100/80">Loading your branded portal...</p>
+        </div>
       </div>
     );
   }
 
-  // Use fallback data if API fetch fails
-  if (error || !agencyData) {
-    console.log(`Using fallback data for ${agencySlug}`);
-    // Always use fallback data when API fails
-    const { tenant, tenantSettings } = fallbackBranding;
-    const agencyName = tenant.name;
-    const logoUrl = (tenantSettings?.customBranding as any)?.logoUrl;
-    const contactEmail = (tenantSettings as any)?.contactEmail;
-    const contactPhone = (tenantSettings as any)?.contactPhone;
+  if (error) {
+    console.warn("Agency branding failed to load, using fallback", error);
+  }
 
-    return (
-        <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
-          {/* Header */}
-          <div className="bg-white border-b">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
-                  <img src={chainLogo} alt="Chain" className="h-16 object-contain" />
-                  <div className="border-l pl-4">
-                    <h1 className="text-2xl font-bold text-gray-900">{agencyName}</h1>
-                  </div>
-                </div>
+  const accentColor = resolvedBranding.primaryColor || "#2563eb";
+  const accentSecondary = resolvedBranding.secondaryColor || "#4f46e5";
+  const accentGradient = {
+    background: `linear-gradient(135deg, ${accentColor}, ${accentSecondary})`,
+  };
+
+  const featureCards = [
+    {
+      icon: CreditCard,
+      title: "Frictionless payments",
+      description:
+        "Make secure one-time payments or set up convenient plans with just a few taps—day or night.",
+    },
+    {
+      icon: MessageSquare,
+      title: "Stay informed",
+      description:
+        "Track balances, download documents, and receive updates instantly so there are no surprises.",
+    },
+    {
+      icon: Shield,
+      title: "Built to protect",
+      description:
+        "Bank-level encryption, verified access, and security protocols that keep your information private.",
+    },
+  ];
+
+  const steps = [
+    {
+      title: "Verify your details",
+      description: "Use your account information to securely locate your records in seconds.",
+    },
+    {
+      title: "Review everything",
+      description: `See balances, statements, and payment options from ${resolvedBranding.agencyName} in one place.`,
+    },
+    {
+      title: "Take the next step",
+      description: "Submit a payment, explore plans, or reach out for help without waiting on hold.",
+    },
+  ];
+
+  return (
+    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-white">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -top-32 right-0 h-80 w-80 rounded-full bg-blue-500/30 blur-3xl" />
+        <div className="absolute bottom-0 left-0 h-[26rem] w-[26rem] rounded-full bg-indigo-500/20 blur-3xl" />
+      </div>
+
+      <div className="relative">
+        <header className="border-b border-white/10 bg-slate-950/70 backdrop-blur">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-6">
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/10 bg-white/5">
+                <img
+                  src={resolvedBranding.logoUrl || chainLogo}
+                  alt={resolvedBranding.agencyName}
+                  className="h-8 w-auto"
+                />
+              </div>
+              <div>
+                <p className="text-sm uppercase tracking-[0.2em] text-blue-200/80">Secure portal</p>
+                <p className="text-lg font-semibold text-white">{resolvedBranding.agencyName}</p>
               </div>
             </div>
+            <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                className="text-blue-100 hover:bg-white/10"
+                onClick={handleFindBalance}
+                data-testid="link-sign-in"
+              >
+                Sign in
+              </Button>
+              <Button
+                className="rounded-full bg-blue-500 px-6 text-white hover:bg-blue-400"
+                onClick={() => setLocation(`/consumer-register/${resolvedBranding.agencySlug}`)}
+                data-testid="button-register"
+              >
+                Create account
+              </Button>
+            </div>
           </div>
+        </header>
 
-          {/* Hero Section */}
-          <div className="bg-blue-600 text-white py-20">
-            <div className="max-w-4xl mx-auto px-4 text-center">
-              <h1 className="text-4xl md:text-5xl font-bold mb-6">
-                Welcome to the self-service portal for {agencyName}
+        <main className="px-6 py-12 sm:py-20">
+          <section className="mx-auto grid max-w-6xl gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+            <div>
+              <Badge
+                variant="outline"
+                className="border-blue-400/50 bg-blue-500/10 text-blue-100"
+              >
+                Powered by Chain Software Group
+              </Badge>
+              <h1 className="mt-6 text-4xl font-semibold tracking-tight text-white sm:text-5xl">
+                {resolvedBranding.agencyName} gives you a smarter way to stay current
               </h1>
-              <p className="text-xl md:text-2xl mb-10 text-blue-100">
-                View balances, make payments, & more.
+              <p className="mt-6 max-w-xl text-lg text-blue-100/80">
+                Access your secure portal to review balances, explore payment plans, and stay in control every step of the way.
+                Available 24/7 from any device.
               </p>
-              <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-                <Button 
-                  size="lg" 
-                  className="bg-white text-blue-600 hover:bg-gray-100 text-lg px-10 py-7 h-auto font-semibold shadow-lg hover:shadow-xl transition-all"
+              <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center">
+                <Button
+                  size="lg"
+                  className="h-12 rounded-full bg-blue-500 px-8 text-base font-medium hover:bg-blue-400"
                   onClick={handleFindBalance}
                   data-testid="button-find-balance"
                 >
-                  Find My Balance
-                  <ChevronRight className="ml-2 h-5 w-5" />
+                  Find my balance
+                  <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
-                <Button 
-                  size="lg" 
+                <Button
+                  size="lg"
                   variant="outline"
-                  className="bg-transparent border-2 border-white text-white hover:bg-white hover:text-blue-600 text-lg px-10 py-7 h-auto font-semibold shadow-lg hover:shadow-xl transition-all"
-                  onClick={() => setLocation(`/consumer-register/${agencySlug}`)}
-                  data-testid="button-register"
+                  className="h-12 rounded-full border-white/30 bg-white/5 px-8 text-base text-white hover:bg-white/10"
+                  onClick={() => setLocation(`/consumer-register/${resolvedBranding.agencySlug}`)}
+                  data-testid="button-consumer-register"
                 >
-                  Create Account
-                  <ChevronRight className="ml-2 h-5 w-5" />
+                  Create an account
                 </Button>
               </div>
-            </div>
-          </div>
 
-          {/* Features Section - Coming soon */}
-          
-          {/* Footer */}
-          <div className="bg-gray-900 text-white py-12 mt-20">
-            <div className="max-w-6xl mx-auto px-4">
-              <div className="flex flex-col md:flex-row justify-between items-center">
-                <div className="mb-6 md:mb-0">
-                  <p className="text-gray-400">© 2025 {agencyName}. All rights reserved.</p>
-                  <p className="text-sm text-gray-500 mt-1">Powered by Chain Software Group</p>
+              <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Card className="border-white/10 bg-white/5 backdrop-blur">
+                  <CardContent className="flex h-full flex-col justify-between gap-2 p-5">
+                    <p className="text-sm uppercase tracking-wide text-blue-200/80">Fast access</p>
+                    <p className="text-3xl font-semibold text-white">60 seconds</p>
+                    <p className="text-xs text-blue-100/70">Average time to locate your account</p>
+                  </CardContent>
+                </Card>
+                <Card className="border-white/10 bg-white/5 backdrop-blur">
+                  <CardContent className="flex h-full flex-col justify-between gap-2 p-5">
+                    <p className="text-sm uppercase tracking-wide text-blue-200/80">Always available</p>
+                    <p className="text-3xl font-semibold text-white">24/7</p>
+                    <p className="text-xs text-blue-100/70">Manage balances from any device</p>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+
+            <div className="relative">
+              <div className="absolute -top-6 -right-6 h-32 w-32 rounded-full bg-blue-500/20 blur-3xl" />
+              <Card className="border-white/10 bg-white/10 backdrop-blur">
+                <CardContent className="space-y-6 p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-blue-100/70">Enterprise-grade protection</p>
+                      <p className="text-2xl font-semibold text-white">Secure by design</p>
+                    </div>
+                    <Shield className="h-10 w-10 text-blue-200" />
+                  </div>
+                  <div className="space-y-4 text-sm text-blue-100/80">
+                    <p className="flex items-center gap-3">
+                      <CheckCircle2 className="h-5 w-5 text-blue-300" />
+                      Bank-level encryption safeguards every payment and update.
+                    </p>
+                    <p className="flex items-center gap-3">
+                      <CheckCircle2 className="h-5 w-5 text-blue-300" />
+                      Two-factor verification keeps your profile and balances private.
+                    </p>
+                    <p className="flex items-center gap-3">
+                      <CheckCircle2 className="h-5 w-5 text-blue-300" />
+                      Real people ready to help when you need a hand.
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+                    <p className="text-sm text-blue-100/80">
+                      {`"The ${resolvedBranding.agencyName} portal powered by Chain makes it simple. I can review everything and confirm my payments without waiting on hold."`}
+                    </p>
+                    <p className="mt-3 text-xs uppercase tracking-wide text-blue-200">Verified consumer feedback</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </section>
+
+          <section className="mx-auto mt-20 max-w-6xl">
+            <div className="grid gap-6 md:grid-cols-3">
+              {featureCards.map((feature) => (
+                <Card key={feature.title} className="border-white/10 bg-slate-900/60 backdrop-blur">
+                  <CardContent className="space-y-3 p-6">
+                    <feature.icon className="h-10 w-10 text-blue-300" />
+                    <h3 className="text-xl font-semibold text-white">{feature.title}</h3>
+                    <p className="text-sm text-blue-100/80">{feature.description}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </section>
+
+          <section className="mx-auto mt-20 max-w-5xl rounded-3xl border border-white/10 bg-white/5 p-8 backdrop-blur">
+            <div className="flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
+              <div className="max-w-xl">
+                <h2 className="text-3xl font-semibold text-white">Know exactly what to expect</h2>
+                <p className="mt-3 text-base text-blue-100/80">
+                  The portal guides you through every step so you can get answers fast and stay confident about what comes next.
+                </p>
+              </div>
+              <Sparkles className="hidden h-20 w-20 text-blue-200 lg:block" />
+            </div>
+            <div className="mt-8 grid gap-6 md:grid-cols-3">
+              {steps.map((step) => (
+                <div key={step.title} className="rounded-2xl border border-white/10 bg-slate-950/60 p-6">
+                  <h3 className="text-lg font-semibold text-white">{step.title}</h3>
+                  <p className="mt-3 text-sm text-blue-100/80">{step.description}</p>
                 </div>
-                <div className="flex flex-col md:flex-row items-center gap-6">
-                  <div className="flex flex-wrap justify-center gap-6 text-sm">
+              ))}
+            </div>
+          </section>
+
+          <section className="mx-auto mt-20 grid max-w-6xl gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+            <Card className="border-white/10 bg-slate-900/60 backdrop-blur">
+              <CardContent className="space-y-4 p-6">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-full bg-blue-500/20 p-2" style={accentGradient}>
+                    <Lock className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-blue-100/70">Private &amp; protected</p>
+                    <p className="text-xl font-semibold text-white">Security that matches your expectations</p>
+                  </div>
+                </div>
+                <p className="text-sm text-blue-100/80">
+                  Every interaction is encrypted end-to-end. Only verified consumers can access account details, and every payment is tokenized to keep your data secure.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-blue-100/80">
+                    <p className="font-medium text-white">Instant notifications</p>
+                    <p className="mt-1 text-xs text-blue-100/70">Get updates the moment something changes.</p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-blue-100/80">
+                    <p className="font-medium text-white">Flexible options</p>
+                    <p className="mt-1 text-xs text-blue-100/70">Explore plans tailored to your situation.</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-white/10 bg-white/5 backdrop-blur">
+              <CardContent className="space-y-5 p-6">
+                <div className="flex items-center gap-3">
+                  <Clock className="h-6 w-6 text-blue-200" />
+                  <div>
+                    <p className="text-sm text-blue-100/70">Need assistance?</p>
+                    <p className="text-xl font-semibold text-white">We're here for you</p>
+                  </div>
+                </div>
+                <p className="text-sm text-blue-100/80">
+                  Whether you have a question about your balance or want to talk through options, we're only a tap away.
+                </p>
+                <div className="space-y-3 text-sm text-blue-100/80">
+                  {resolvedBranding.contactEmail && (
                     <button
-                      onClick={handleFindBalance}
-                      className="hover:text-blue-400 transition-colors"
-                      data-testid="link-account-summary"
+                      onClick={() => (window.location.href = `mailto:${resolvedBranding.contactEmail}`)}
+                      className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-left transition hover:bg-slate-900"
+                      data-testid="link-contact-email"
                     >
-                      Account Summary
+                      <span className="flex items-center gap-3">
+                        <Mail className="h-5 w-5 text-blue-200" />
+                        {resolvedBranding.contactEmail}
+                      </span>
+                      <ArrowRight className="h-4 w-4 text-blue-200" />
                     </button>
-                    {hasTermsContent && (
-                      <button
-                        onClick={() => setShowTermsDialog(true)}
-                        className="hover:text-blue-400 transition-colors"
-                        data-testid="link-terms"
-                      >
-                        Terms of Service
-                      </button>
-                    )}
-                    {hasPrivacyContent && (
-                      <button
-                        onClick={() => setShowPrivacyDialog(true)}
-                        className="hover:text-blue-400 transition-colors"
-                        data-testid="link-privacy"
-                      >
-                        Privacy Policy
-                      </button>
-                    )}
-                    {(contactEmail || contactPhone) && (
-                      <button 
-                        onClick={() => {
-                          if (contactEmail) {
-                            window.location.href = `mailto:${contactEmail}`;
-                          } else if (contactPhone) {
-                            window.location.href = `tel:${contactPhone}`;
-                          }
-                        }}
-                        className="hover:text-blue-400 transition-colors"
-                        data-testid="link-contact"
-                      >
-                        Contact Us
-                      </button>
-                    )}
-                    <button 
-                      onClick={handleFindBalance}
-                      className="hover:text-blue-400 transition-colors"
-                      data-testid="link-sign-in"
+                  )}
+                  {resolvedBranding.contactPhone && (
+                    <button
+                      onClick={() => (window.location.href = `tel:${resolvedBranding.contactPhone}`)}
+                      className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-left transition hover:bg-slate-900"
+                      data-testid="link-contact-phone"
                     >
-                      Sign In
+                      <span className="flex items-center gap-3">
+                        <Phone className="h-5 w-5 text-blue-200" />
+                        {resolvedBranding.contactPhone}
+                      </span>
+                      <ArrowRight className="h-4 w-4 text-blue-200" />
                     </button>
-                  </div>
+                  )}
+                  {!resolvedBranding.contactEmail && !resolvedBranding.contactPhone && (
+                    <p className="rounded-xl border border-dashed border-white/20 bg-slate-950/60 p-4 text-center text-xs text-blue-100/70">
+                      {`Contact information will appear here once provided by ${resolvedBranding.agencyName}.`}
+                    </p>
+                  )}
                 </div>
-              </div>
+              </CardContent>
+            </Card>
+          </section>
+        </main>
+
+        <footer className="border-t border-white/10 bg-slate-950/70 py-10">
+          <div className="mx-auto flex max-w-6xl flex-col gap-8 px-6 text-sm text-blue-100/70 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-blue-100/80">© {new Date().getFullYear()} {resolvedBranding.agencyName}. All rights reserved.</p>
+              <p className="text-xs text-blue-100/60">Powered by Chain Software Group</p>
             </div>
-          </div>
-        </div>
-      );
-  }
-
-  // Use the flat structure from the API response
-  const agencyName = agencyData.agencyName;
-  const logoUrl = agencyData.logoUrl;
-  const contactEmail = agencyData.contactEmail;
-  const contactPhone = agencyData.contactPhone;
-
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
-      {/* Header */}
-      <div className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex items-center justify-between">
-            {logoUrl ? (
-              <img src={logoUrl} alt={agencyName} className="h-20 object-contain" />
-            ) : (
-              <div className="flex items-center space-x-4">
-                <img src={chainLogo} alt="Chain" className="h-16 object-contain" />
-                <div className="border-l pl-4">
-                  <h1 className="text-2xl font-bold text-gray-900">{agencyName}</h1>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Hero Section */}
-      <div className="bg-blue-600 text-white py-20">
-        <div className="max-w-4xl mx-auto px-4 text-center">
-          <h1 className="text-4xl md:text-5xl font-bold mb-6">
-            Welcome to the self-service portal for {agencyName}
-          </h1>
-          <p className="text-xl md:text-2xl mb-10 text-blue-100">
-            View balances, make payments, & more.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <Button 
-              size="lg" 
-              className="bg-white text-blue-600 hover:bg-gray-100 text-lg px-10 py-7 h-auto font-semibold shadow-lg hover:shadow-xl transition-all"
-              onClick={handleFindBalance}
-              data-testid="button-find-balance"
-            >
-              Find My Balance
-              <ChevronRight className="ml-2 h-5 w-5" />
-            </Button>
-            <Button 
-              size="lg" 
-              variant="outline"
-              className="bg-transparent border-2 border-white text-white hover:bg-white hover:text-blue-600 text-lg px-10 py-7 h-auto font-semibold shadow-lg hover:shadow-xl transition-all"
-              onClick={() => setLocation(`/consumer-register/${agencySlug}`)}
-              data-testid="button-register"
-            >
-              Create Account
-              <ChevronRight className="ml-2 h-5 w-5" />
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Features Section */}
-      <div className="py-20 bg-white">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="grid md:grid-cols-2 gap-10">
-            <div className="flex space-x-6">
-              <div className="flex-shrink-0">
-                <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center">
-                  <Lock className="h-8 w-8 text-blue-600" />
-                </div>
-              </div>
-              <div>
-                <h3 className="text-2xl font-bold mb-3 text-gray-900">Secure online payments</h3>
-                <p className="text-gray-600 leading-relaxed">
-                  Your security is our highest priority. All payment information is fully encrypted and never shared. 
-                  We've partnered with industry leaders to provide bank-level protection.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex space-x-6">
-              <div className="flex-shrink-0">
-                <div className="w-16 h-16 bg-green-100 rounded-2xl flex items-center justify-center">
-                  <Clock className="h-8 w-8 text-green-600" />
-                </div>
-              </div>
-              <div>
-                <h3 className="text-2xl font-bold mb-3 text-gray-900">Flexible payment plans</h3>
-                <p className="text-gray-600 leading-relaxed">
-                  Payment plan options may be available for certain balances. These plans allow balances to be paid off 
-                  quickly or over time with a lower monthly payment.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* CTA Section */}
-      <div className="bg-gray-50 py-20">
-        <div className="max-w-5xl mx-auto px-4 text-center">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-12">
-            Paying bills is hard enough. Our clean and simple platform makes it easier.
-          </h2>
-          <div className="flex justify-center">
-            <div className="bg-white rounded-2xl shadow-2xl overflow-hidden max-w-3xl">
-              <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex space-x-2">
-                    <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                    <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                  </div>
-                  <div className="text-white text-sm font-medium">Secure Portal</div>
-                </div>
-              </div>
-              <div className="p-8 bg-gradient-to-br from-gray-50 to-white">
-                <div className="space-y-4">
-                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                  <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-                  <div className="grid grid-cols-2 gap-4 mt-8">
-                    <div className="bg-blue-50 rounded-lg p-6 text-center">
-                      <CreditCard className="h-8 w-8 text-blue-600 mx-auto mb-2" />
-                      <div className="text-sm font-medium">Easy Payments</div>
-                    </div>
-                    <div className="bg-green-50 rounded-lg p-6 text-center">
-                      <Shield className="h-8 w-8 text-green-600 mx-auto mb-2" />
-                      <div className="text-sm font-medium">Secure & Safe</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Info Section */}
-      <div className="py-20 bg-white">
-        <div className="max-w-4xl mx-auto px-4">
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-3xl p-10 md:p-16">
-            <h2 className="text-3xl font-bold text-gray-900 mb-6">
-              First time here? This is what you'll need to know.
-            </h2>
-            <p className="text-gray-700 mb-6 leading-relaxed text-lg">
-              To locate your balance, you'll be asked for some basic pieces of personal information. 
-              This might include things like your name, date of birth, or ZIP code. This allows our 
-              system to quickly and securely identify you and your balances.
-            </p>
-            <p className="text-gray-700 leading-relaxed text-lg">
-              In addition to making sure your personal and financial information is always secure and 
-              private, we strive to give you the best payment experience possible. After accessing your 
-              balance, you'll find several convenient ways to pay including flexible payment options.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Trust Badges */}
-      <div className="bg-gray-50 py-16 border-t">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="flex flex-wrap justify-center items-center gap-12 text-gray-600">
-            <div className="flex items-center space-x-3">
-              <Shield className="h-10 w-10 text-gray-400" />
-              <span className="font-medium">Bank-Level Security</span>
-            </div>
-            <div className="flex items-center space-x-3">
-              <Lock className="h-10 w-10 text-gray-400" />
-              <span className="font-medium">SSL Encrypted</span>
-            </div>
-            <div className="flex items-center space-x-3">
-              <CreditCard className="h-10 w-10 text-gray-400" />
-              <span className="font-medium">PCI Compliant</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div className="bg-gray-900 text-white py-12">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="flex flex-col md:flex-row justify-between items-center">
-            <div className="mb-6 md:mb-0">
-              <p className="text-gray-400">© 2025 {agencyName}. All rights reserved.</p>
-              <p className="text-sm text-gray-500 mt-1">Powered by Chain Software Group</p>
-            </div>
-            <div className="flex flex-col md:flex-row items-center gap-6">
-              <div className="flex flex-wrap justify-center gap-6 text-sm">
-                <button 
-                  onClick={handleFindBalance}
-                  className="hover:text-blue-400 transition-colors"
-                  data-testid="link-account-summary"
+            <div className="flex flex-wrap gap-4">
+              <button
+                onClick={handleFindBalance}
+                className="transition-colors hover:text-blue-200"
+                data-testid="link-account-summary"
+              >
+                Account summary
+              </button>
+              {hasTermsContent && (
+                <button
+                  onClick={() => setShowTermsDialog(true)}
+                  className="transition-colors hover:text-blue-200"
+                  data-testid="link-terms"
                 >
-                  Account Summary
+                  Terms of Service
                 </button>
-                {hasTermsContent && (
-                  <button
-                    onClick={() => setShowTermsDialog(true)}
-                    className="hover:text-blue-400 transition-colors"
-                    data-testid="link-terms"
-                  >
-                    Terms of Service
-                  </button>
-                )}
-                {hasPrivacyContent && (
-                  <button
-                    onClick={() => setShowPrivacyDialog(true)}
-                    className="hover:text-blue-400 transition-colors"
-                    data-testid="link-privacy"
-                  >
-                    Privacy Policy
-                  </button>
-                )}
-                {(contactEmail || contactPhone) && (
-                  <button 
-                    onClick={() => {
-                      if (contactEmail) {
-                        window.location.href = `mailto:${contactEmail}`;
-                      } else if (contactPhone) {
-                        window.location.href = `tel:${contactPhone}`;
-                      }
-                    }}
-                    className="hover:text-blue-400 transition-colors"
-                    data-testid="link-contact"
-                  >
-                    Contact Us
-                  </button>
-                )}
-                <button 
-                  onClick={handleFindBalance}
-                  className="hover:text-blue-400 transition-colors"
-                  data-testid="link-sign-in"
+              )}
+              {hasPrivacyContent && (
+                <button
+                  onClick={() => setShowPrivacyDialog(true)}
+                  className="transition-colors hover:text-blue-200"
+                  data-testid="link-privacy"
                 >
-                  Sign In
+                  Privacy Policy
                 </button>
-              </div>
+              )}
+              {(resolvedBranding.contactEmail || resolvedBranding.contactPhone) && (
+                <button
+                  onClick={() => {
+                    if (resolvedBranding.contactEmail) {
+                      window.location.href = `mailto:${resolvedBranding.contactEmail}`;
+                    } else if (resolvedBranding.contactPhone) {
+                      window.location.href = `tel:${resolvedBranding.contactPhone}`;
+                    }
+                  }}
+                  className="transition-colors hover:text-blue-200"
+                  data-testid="link-contact"
+                >
+                  Contact us
+                </button>
+              )}
+              <button
+                onClick={() => setLocation("/agency-login")}
+                className="transition-colors hover:text-blue-200"
+                data-testid="link-agency-login"
+              >
+                Agency sign in
+              </button>
             </div>
           </div>
-        </div>
+        </footer>
       </div>
 
-      {/* Terms of Service Dialog */}
       <Dialog open={showTermsDialog} onOpenChange={setShowTermsDialog}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto bg-slate-950 text-blue-100">
           <DialogHeader>
             <DialogTitle>Terms of Service</DialogTitle>
-            <DialogDescription className="mt-4 whitespace-pre-wrap">
+            <DialogDescription className="mt-4 whitespace-pre-wrap text-blue-100/80">
               {termsContent}
             </DialogDescription>
           </DialogHeader>
         </DialogContent>
       </Dialog>
 
-      {/* Privacy Policy Dialog */}
       <Dialog open={showPrivacyDialog} onOpenChange={setShowPrivacyDialog}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto bg-slate-950 text-blue-100">
           <DialogHeader>
             <DialogTitle>Privacy Policy</DialogTitle>
-            <DialogDescription className="mt-4 whitespace-pre-wrap">
+            <DialogDescription className="mt-4 whitespace-pre-wrap text-blue-100/80">
               {privacyContent}
             </DialogDescription>
           </DialogHeader>
