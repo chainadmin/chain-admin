@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { getDb } from '../_lib/db.js';
 import { arrangementOptions } from '../_lib/schema.js';
 import { JWT_SECRET } from '../_lib/auth.js';
+import { eq, and } from 'drizzle-orm';
 
 interface AuthenticatedRequest extends VercelRequest {
   method: string;
