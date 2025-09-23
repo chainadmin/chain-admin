@@ -19,6 +19,7 @@ import {
   emailSequenceEnrollments,
   documents,
   arrangementOptions,
+  consumerArrangements,
   tenantSettings,
   consumerNotifications,
   callbackRequests,
@@ -65,6 +66,8 @@ import {
   type InsertDocument,
   type ArrangementOption,
   type InsertArrangementOption,
+  type ConsumerArrangement,
+  type InsertConsumerArrangement,
   type TenantSettings,
   type InsertTenantSettings,
   type ConsumerNotification,
@@ -80,6 +83,20 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, sql } from "drizzle-orm";
+import { ensureTenantAccountOwnership } from "./arrangements/helpers";
+
+type ArrangementWithOption = (ConsumerArrangement & { option?: ArrangementOption | null }) | null;
+type AccountWithRelations = Account & { consumer: Consumer; folder?: Folder; arrangement?: ArrangementWithOption };
+type AccountWithArrangement = Account & { arrangement?: ArrangementWithOption };
+
+type ArrangementAssignmentPayload = {
+  arrangementOptionId?: string | null;
+  customMonthlyPaymentCents?: number | null;
+  customTermMonths?: number | null;
+  customDownPaymentCents?: number | null;
+  notes?: string | null;
+  status?: ConsumerArrangement["status"];
+};
 
 export interface IStorage {
   // User operations (mandatory for Replit Auth)
@@ -147,13 +164,17 @@ export interface IStorage {
   ensureDefaultFolders(tenantId: string): Promise<void>;
   
   // Account operations
-  getAccount(id: string): Promise<(Account & { consumer?: Consumer; folder?: Folder }) | undefined>;
-  getAccountsByTenant(tenantId: string): Promise<(Account & { consumer: Consumer; folder?: Folder })[]>;
-  getAccountsByFolder(folderId: string): Promise<(Account & { consumer: Consumer })[]>;
-  getAccountsByConsumer(consumerId: string): Promise<Account[]>;
+  getAccount(id: string): Promise<(Account & { consumer?: Consumer; folder?: Folder; arrangement?: ArrangementWithOption }) | undefined>;
+  getAccountsByTenant(tenantId: string): Promise<AccountWithRelations[]>;
+  getAccountsByFolder(folderId: string): Promise<(Account & { consumer: Consumer; arrangement?: ArrangementWithOption })[]>;
+  getAccountsByConsumer(consumerId: string): Promise<AccountWithArrangement[]>;
   createAccount(account: InsertAccount): Promise<Account>;
   updateAccount(id: string, updates: Partial<Account>): Promise<Account>;
   bulkCreateAccounts(accounts: InsertAccount[]): Promise<Account[]>;
+  getAccountArrangement(accountId: string, tenantId: string): Promise<ArrangementWithOption | undefined>;
+  assignAccountArrangement(accountId: string, tenantId: string, payload: ArrangementAssignmentPayload): Promise<ArrangementWithOption>;
+  updateAccountArrangement(accountId: string, tenantId: string, payload: ArrangementAssignmentPayload): Promise<ArrangementWithOption>;
+  removeAccountArrangement(accountId: string, tenantId: string): Promise<void>;
   
   // Email template operations
   getEmailTemplatesByTenant(tenantId: string): Promise<EmailTemplate[]>;
@@ -591,46 +612,65 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Account operations
-  async getAccountsByTenant(tenantId: string): Promise<(Account & { consumer: Consumer; folder?: Folder })[]> {
+  async getAccountsByTenant(tenantId: string): Promise<AccountWithRelations[]> {
     const result = await db
       .select()
       .from(accounts)
       .leftJoin(consumers, eq(accounts.consumerId, consumers.id))
       .leftJoin(folders, eq(accounts.folderId, folders.id))
+      .leftJoin(consumerArrangements, eq(consumerArrangements.accountId, accounts.id))
+      .leftJoin(arrangementOptions, eq(consumerArrangements.arrangementOptionId, arrangementOptions.id))
       .where(eq(accounts.tenantId, tenantId))
       .orderBy(desc(accounts.createdAt));
-    
+
     return result.map(row => ({
       ...row.accounts,
       consumer: row.consumers!,
       folder: row.folders || undefined,
+      arrangement: this.mapArrangementRecord(row.consumer_arrangements, row.arrangement_options),
     }));
   }
 
-  async getAccountsByFolder(folderId: string): Promise<(Account & { consumer: Consumer })[]> {
+  async getAccountsByFolder(folderId: string): Promise<(Account & { consumer: Consumer; arrangement?: ArrangementWithOption })[]> {
     const result = await db
       .select()
       .from(accounts)
       .leftJoin(consumers, eq(accounts.consumerId, consumers.id))
+      .leftJoin(consumerArrangements, eq(consumerArrangements.accountId, accounts.id))
+      .leftJoin(arrangementOptions, eq(consumerArrangements.arrangementOptionId, arrangementOptions.id))
       .where(eq(accounts.folderId, folderId))
       .orderBy(desc(accounts.createdAt));
-    
+
     return result.map(row => ({
       ...row.accounts,
       consumer: row.consumers!,
+      arrangement: this.mapArrangementRecord(row.consumer_arrangements, row.arrangement_options),
     }));
   }
 
-  async getAccountsByConsumer(consumerId: string): Promise<Account[]> {
-    return await db.select().from(accounts).where(eq(accounts.consumerId, consumerId));
+  async getAccountsByConsumer(consumerId: string): Promise<AccountWithArrangement[]> {
+    const result = await db
+      .select()
+      .from(accounts)
+      .leftJoin(consumerArrangements, eq(consumerArrangements.accountId, accounts.id))
+      .leftJoin(arrangementOptions, eq(consumerArrangements.arrangementOptionId, arrangementOptions.id))
+      .where(eq(accounts.consumerId, consumerId))
+      .orderBy(desc(accounts.createdAt));
+
+    return result.map(row => ({
+      ...row.accounts,
+      arrangement: this.mapArrangementRecord(row.consumer_arrangements, row.arrangement_options),
+    }));
   }
 
-  async getAccount(id: string): Promise<(Account & { consumer?: Consumer; folder?: Folder }) | undefined> {
+  async getAccount(id: string): Promise<(Account & { consumer?: Consumer; folder?: Folder; arrangement?: ArrangementWithOption }) | undefined> {
     const [result] = await db
       .select()
       .from(accounts)
       .leftJoin(consumers, eq(accounts.consumerId, consumers.id))
       .leftJoin(folders, eq(accounts.folderId, folders.id))
+      .leftJoin(consumerArrangements, eq(consumerArrangements.accountId, accounts.id))
+      .leftJoin(arrangementOptions, eq(consumerArrangements.arrangementOptionId, arrangementOptions.id))
       .where(eq(accounts.id, id));
 
     if (!result) {
@@ -641,6 +681,7 @@ export class DatabaseStorage implements IStorage {
       ...result.accounts,
       consumer: result.consumers || undefined,
       folder: result.folders || undefined,
+      arrangement: this.mapArrangementRecord(result.consumer_arrangements, result.arrangement_options),
     };
   }
 
@@ -665,15 +706,182 @@ export class DatabaseStorage implements IStorage {
 
   async bulkCreateAccounts(accountsData: InsertAccount[]): Promise<Account[]> {
     const newAccounts = await db.insert(accounts).values(accountsData).returning();
-    
+
     // Send notifications for registered consumers
     for (const account of newAccounts) {
       await this.notifyConsumerAccountAdded(account);
     }
-    
+
     return newAccounts;
   }
-  
+
+  private mapArrangementRecord(arrangement?: ConsumerArrangement | null, option?: ArrangementOption | null): ArrangementWithOption | undefined {
+    if (!arrangement) {
+      return undefined;
+    }
+
+    return { ...arrangement, option: option || undefined };
+  }
+
+  async getAccountArrangement(accountId: string, tenantId: string): Promise<ArrangementWithOption | undefined> {
+    const [row] = await db
+      .select()
+      .from(consumerArrangements)
+      .leftJoin(arrangementOptions, eq(consumerArrangements.arrangementOptionId, arrangementOptions.id))
+      .where(and(eq(consumerArrangements.accountId, accountId), eq(consumerArrangements.tenantId, tenantId)));
+
+    if (!row?.consumer_arrangements) {
+      return undefined;
+    }
+
+    return this.mapArrangementRecord(row.consumer_arrangements, row.arrangement_options);
+  }
+
+  async assignAccountArrangement(accountId: string, tenantId: string, payload: ArrangementAssignmentPayload): Promise<ArrangementWithOption> {
+    const account = await this.getAccount(accountId);
+    if (!account) {
+      throw new Error("Account not found");
+    }
+
+    if (!account.consumerId) {
+      throw new Error("Account is not linked to a consumer");
+    }
+
+    ensureTenantAccountOwnership(account.tenantId, tenantId);
+
+    if (payload.arrangementOptionId) {
+      const [option] = await db
+        .select()
+        .from(arrangementOptions)
+        .where(and(eq(arrangementOptions.id, payload.arrangementOptionId), eq(arrangementOptions.tenantId, tenantId)));
+
+      if (!option) {
+        throw new Error("Arrangement option not found");
+      }
+    }
+
+    const [existing] = await db
+      .select()
+      .from(consumerArrangements)
+      .where(eq(consumerArrangements.accountId, accountId));
+
+    const now = new Date();
+    const previousStatus = existing?.status ?? null;
+    const resolvedStatus = payload.status ?? previousStatus ?? "active";
+    const statusChanged = resolvedStatus !== previousStatus;
+
+    const arrangementOptionId =
+      payload.arrangementOptionId !== undefined
+        ? payload.arrangementOptionId
+        : existing?.arrangementOptionId ?? null;
+    const customMonthlyPaymentCents =
+      payload.customMonthlyPaymentCents !== undefined
+        ? payload.customMonthlyPaymentCents
+        : existing?.customMonthlyPaymentCents ?? null;
+    const customTermMonths =
+      payload.customTermMonths !== undefined
+        ? payload.customTermMonths
+        : existing?.customTermMonths ?? null;
+    const customDownPaymentCents =
+      payload.customDownPaymentCents !== undefined
+        ? payload.customDownPaymentCents
+        : existing?.customDownPaymentCents ?? null;
+    const notes =
+      payload.notes !== undefined
+        ? payload.notes
+        : existing?.notes ?? null;
+
+    const assignedAt = existing?.assignedAt ?? now;
+
+    let activatedAt = existing?.activatedAt ?? null;
+    if (resolvedStatus === "active") {
+      activatedAt = existing?.activatedAt ?? now;
+    }
+
+    let completedAt = existing?.completedAt ?? null;
+    if (resolvedStatus === "completed") {
+      completedAt = existing?.completedAt ?? now;
+    } else if (statusChanged && previousStatus === "completed") {
+      completedAt = null;
+    }
+
+    let cancelledAt = existing?.cancelledAt ?? null;
+    if (resolvedStatus === "cancelled") {
+      cancelledAt = existing?.cancelledAt ?? now;
+    } else if (statusChanged && previousStatus === "cancelled") {
+      cancelledAt = null;
+    }
+
+    const statusChangedAt = statusChanged ? now : existing?.statusChangedAt ?? now;
+
+    const baseValues = {
+      arrangementOptionId,
+      customMonthlyPaymentCents,
+      customTermMonths,
+      customDownPaymentCents,
+      notes,
+      status: resolvedStatus,
+      assignedAt,
+      activatedAt,
+      completedAt,
+      cancelledAt,
+      statusChangedAt,
+      updatedAt: now,
+    } satisfies Partial<InsertConsumerArrangement>;
+
+    if (existing) {
+      await db
+        .update(consumerArrangements)
+        .set({
+          ...baseValues,
+          tenantId,
+          consumerId: account.consumerId,
+        })
+        .where(eq(consumerArrangements.id, existing.id));
+    } else {
+      await db.insert(consumerArrangements).values({
+        tenantId,
+        consumerId: account.consumerId,
+        accountId,
+        ...baseValues,
+      });
+    }
+
+    const arrangement = await this.getAccountArrangement(accountId, tenantId);
+    if (!arrangement) {
+      throw new Error("Failed to assign arrangement");
+    }
+
+    return arrangement;
+  }
+
+  async updateAccountArrangement(accountId: string, tenantId: string, payload: ArrangementAssignmentPayload): Promise<ArrangementWithOption> {
+    const existing = await this.getAccountArrangement(accountId, tenantId);
+    if (!existing) {
+      throw new Error("No arrangement assigned to account");
+    }
+
+    return this.assignAccountArrangement(accountId, tenantId, payload);
+  }
+
+  async removeAccountArrangement(accountId: string, tenantId: string): Promise<void> {
+    const existing = await this.getAccountArrangement(accountId, tenantId);
+    if (!existing) {
+      return;
+    }
+
+    const now = new Date();
+    await db
+      .update(consumerArrangements)
+      .set({
+        status: "cancelled",
+        cancelledAt: now,
+        statusChangedAt: now,
+        updatedAt: now,
+      })
+      .where(and(eq(consumerArrangements.id, existing.id), eq(consumerArrangements.tenantId, tenantId)));
+  }
+
   private async notifyConsumerAccountAdded(account: Account): Promise<void> {
     try {
       // Get consumer details

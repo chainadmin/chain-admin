@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useParams } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 export default function ConsumerPortal() {
   const { tenantSlug, email } = useParams();
@@ -14,10 +15,13 @@ export default function ConsumerPortal() {
     queryKey: [`/api/consumer/documents/${email}?tenantSlug=${tenantSlug}`],
   });
 
-  const { data: arrangements } = useQuery({
+  const { data: arrangementData } = useQuery({
     queryKey: [`/api/consumer/arrangements/${email}?tenantSlug=${tenantSlug}&balance=${(data as any)?.accounts?.reduce((sum: number, acc: any) => sum + (acc.balanceCents || 0), 0) || 0}`],
     enabled: !!(data as any)?.accounts,
   });
+
+  const assignedArrangement = (arrangementData as any)?.assigned;
+  const availableArrangements = ((arrangementData as any)?.available as any[]) || [];
 
   if (isLoading) {
     return (
@@ -76,6 +80,14 @@ export default function ConsumerPortal() {
   };
 
   const totalBalance = accounts?.reduce((sum: number, account: any) => sum + (account.balanceCents || 0), 0) || 0;
+
+  const handlePortionRequest = () => {
+    if (tenantSettings?.contactEmail) {
+      window.location.href = `mailto:${tenantSettings.contactEmail}`;
+    } else if (tenantSettings?.contactPhone) {
+      window.location.href = `tel:${tenantSettings.contactPhone}`;
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -200,12 +212,46 @@ export default function ConsumerPortal() {
           </div>
         )}
 
-        {/* Payment Arrangements Section */}
-        {arrangements && Array.isArray(arrangements) && arrangements.length > 0 && (
+        {/* Assigned Payment Arrangement */}
+        {assignedArrangement && (
           <div className="max-w-2xl mx-auto mt-8">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Your Assigned Plan</h2>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-medium text-gray-900">{assignedArrangement.option?.name || 'Custom plan'}</h3>
+                  <p className="text-sm text-gray-600 mt-1">{assignedArrangement.option?.description || 'This plan was tailored for you.'}</p>
+                  <div className="mt-3 text-sm text-blue-700">
+                    {assignedArrangement.customMonthlyPaymentCents
+                      ? formatCurrency(assignedArrangement.customMonthlyPaymentCents)
+                      : `${formatCurrency(assignedArrangement.option?.monthlyPaymentMin || 0)} - ${formatCurrency(assignedArrangement.option?.monthlyPaymentMax || 0)}`} per month
+                    <span className="text-gray-600 ml-2">
+                      • {assignedArrangement.customTermMonths || assignedArrangement.option?.maxTermMonths || 'Flexible'} months
+                    </span>
+                  </div>
+                </div>
+                <Badge variant="secondary" className="uppercase">
+                  {assignedArrangement.status}
+                </Badge>
+              </div>
+              {assignedArrangement.notes && (
+                <p className="mt-4 text-sm text-gray-600">{assignedArrangement.notes}</p>
+              )}
+              <div className="mt-4 flex justify-end">
+                <Button className="bg-blue-600 hover:bg-blue-700" onClick={handlePortionRequest}>
+                  Portion Plan
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Payment Arrangements Section */}
+        {availableArrangements.length > 0 && (
+          <div className="max-w-2xl mx-auto mt-8" id="payment-plans">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Available Payment Plans</h2>
             <div className="space-y-3">
-              {arrangements.map((arrangement: any) => (
+              {availableArrangements.map((arrangement: any) => (
                 <div key={arrangement.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
                   <div className="flex items-center justify-between">
                     <div>

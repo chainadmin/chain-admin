@@ -79,7 +79,7 @@ export default function ConsumerDashboard() {
   });
 
   // Fetch payment arrangements
-  const { data: arrangements } = useQuery({
+  const { data: arrangementData } = useQuery({
     queryKey: [`/api/consumer/arrangements/${consumerSession?.email}`],
     queryFn: async () => {
       const balance = (data as any)?.accounts?.reduce((sum: number, acc: any) => sum + (acc.balanceCents || 0), 0) || 0;
@@ -88,6 +88,10 @@ export default function ConsumerDashboard() {
     },
     enabled: !!(data as any)?.accounts && !!consumerSession?.email,
   });
+
+  const assignedArrangement = (arrangementData as any)?.assigned;
+  const availableArrangements = ((arrangementData as any)?.available as any[]) || [];
+  const totalArrangements = availableArrangements.length + (assignedArrangement ? 1 : 0);
 
   // Submit callback request mutation
   const callbackRequestMutation = useMutation({
@@ -451,7 +455,7 @@ export default function ConsumerDashboard() {
               <Card>
                 <CardContent className="pt-6 text-center">
                   <div className="text-2xl font-bold text-green-600">
-                    {(arrangements as any)?.length || 0}
+                    {totalArrangements}
                   </div>
                   <div className="text-sm text-gray-500">Payment Plans Available</div>
                 </CardContent>
@@ -500,7 +504,7 @@ export default function ConsumerDashboard() {
                         </div>
                         <div>
                           <div className="text-lg font-medium text-blue-600">
-                            {(arrangements as any[])?.length || 0}
+                            {totalArrangements}
                           </div>
                           <div className="text-xs text-gray-500">Plans Available</div>
                         </div>
@@ -565,7 +569,7 @@ export default function ConsumerDashboard() {
           </TabsContent>
 
           <TabsContent value="payments" className="mt-6">
-            {!arrangements || (arrangements as any).length === 0 ? (
+            {totalArrangements === 0 ? (
               <Card>
                 <CardContent className="pt-6 text-center">
                   <CreditCard className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -580,7 +584,47 @@ export default function ConsumerDashboard() {
               </Card>
             ) : (
               <div className="space-y-4">
-                {(arrangements as any).map((arrangement: any) => (
+                {assignedArrangement && (
+                  <Card className="border-blue-200 bg-blue-50">
+                    <CardContent className="pt-6">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <h3 className="text-lg font-semibold text-gray-900">{assignedArrangement.option?.name || 'Custom plan'}</h3>
+                          <p className="text-gray-600 mt-2">{assignedArrangement.option?.description || 'This plan was tailored for you.'}</p>
+                          <div className="mt-4 space-y-2">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-600">Monthly Payment:</span>
+                              <span className="font-medium">
+                                {assignedArrangement.customMonthlyPaymentCents
+                                  ? formatCurrency(assignedArrangement.customMonthlyPaymentCents)
+                                  : `${formatCurrency(assignedArrangement.option?.monthlyPaymentMin || 0)} - ${formatCurrency(assignedArrangement.option?.monthlyPaymentMax || 0)}`}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-600">Term:</span>
+                              <span className="font-medium">
+                                {assignedArrangement.customTermMonths || assignedArrangement.option?.maxTermMonths || 'Flexible'} months
+                              </span>
+                            </div>
+                            {assignedArrangement.notes && (
+                              <div className="text-sm text-gray-600">{assignedArrangement.notes}</div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="ml-6 text-right">
+                          <Badge variant="secondary" className="uppercase mb-3">
+                            {assignedArrangement.status}
+                          </Badge>
+                          <Button onClick={() => setShowCallbackModal(true)}>
+                            Portion Plan
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {availableArrangements.map((arrangement: any) => (
                   <Card key={arrangement.id}>
                     <CardContent className="pt-6">
                       <div className="flex justify-between items-start">

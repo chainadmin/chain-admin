@@ -17,6 +17,7 @@ import { uploadLogo } from "./supabaseStorage";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { subdomainMiddleware } from "./middleware/subdomain";
+import { buildConsumerArrangementVisibility } from "./arrangements/helpers";
 
 const csvUploadSchema = z.object({
   consumers: z.array(z.object({
@@ -62,6 +63,50 @@ function formatCurrency(cents: number | string | null | undefined): string {
   const numericValue = typeof cents === 'number' ? cents : Number(cents);
   if (Number.isNaN(numericValue)) return '';
   return `$${(numericValue / 100).toFixed(2)}`;
+}
+
+function parseCurrencyToCents(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  if (typeof value === 'number') {
+    if (Number.isNaN(value)) {
+      return null;
+    }
+    return Math.round(value * 100);
+  }
+
+  const parsed = parseFloat(String(value));
+  if (Number.isNaN(parsed)) {
+    return null;
+  }
+
+  return Math.round(parsed * 100);
+}
+
+function parseInteger(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  const parsed = Number(value);
+  if (Number.isNaN(parsed)) {
+    return null;
+  }
+
+  return Math.round(parsed);
+}
+
+function resolveCents(explicitCents: unknown, currencyValue: unknown): number | null {
+  if (explicitCents !== undefined && explicitCents !== null && explicitCents !== '') {
+    const numeric = Number(explicitCents);
+    if (!Number.isNaN(numeric)) {
+      return Math.round(numeric);
+    }
+  }
+
+  return parseCurrencyToCents(currencyValue);
 }
 
 function applyTemplateReplacement(template: string, key: string, value: string): string {
@@ -304,6 +349,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (consumersFound.length === 1) {
         // Single agency - proceed with login
         const consumer = consumersFound[0];
+        if (!consumer.tenantId) {
+          return res.status(500).json({ message: "Consumer tenant missing" });
+        }
+
         const tenant = await storage.getTenant(consumer.tenantId);
         
         // Generate consumer JWT token
@@ -712,7 +761,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dueDate: dueDate || null,
       });
 
-      res.status(201).json(account);
+      const fullAccount = await storage.getAccount(account.id);
+      res.status(201).json(fullAccount ?? account);
     } catch (error) {
       console.error("Error creating account:", error);
       res.status(500).json({ message: "Failed to create account" });
@@ -787,6 +837,109 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating account:", error);
       res.status(500).json({ message: "Failed to update account" });
+    }
+  });
+
+  app.post('/api/accounts/:id/arrangement', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = await getTenantId(req, storage);
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { id } = req.params;
+      const account = await storage.getAccount(id);
+
+      if (!account || account.tenantId !== tenantId) {
+        return res.status(404).json({ message: "Account not found" });
+      }
+
+      const arrangementOptionId = typeof req.body.arrangementOptionId === 'string' && req.body.arrangementOptionId.trim()
+        ? req.body.arrangementOptionId.trim()
+        : null;
+
+      const arrangement = await storage.assignAccountArrangement(id, tenantId, {
+        arrangementOptionId,
+        customMonthlyPaymentCents: resolveCents(req.body.customMonthlyPaymentCents, req.body.customMonthlyPayment),
+        customTermMonths: parseInteger(req.body.customTermMonths),
+        customDownPaymentCents: resolveCents(req.body.customDownPaymentCents, req.body.customDownPayment),
+        notes: typeof req.body.notes === 'string' && req.body.notes.trim() ? req.body.notes.trim() : null,
+        status: typeof req.body.status === 'string' && req.body.status.trim() ? req.body.status.trim() : undefined,
+      });
+
+      res.status(201).json(arrangement);
+    } catch (error) {
+      console.error("Error assigning arrangement:", error);
+      res.status(500).json({ message: "Failed to assign arrangement" });
+    }
+  });
+
+  app.put('/api/accounts/:id/arrangement', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = await getTenantId(req, storage);
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { id } = req.params;
+      const account = await storage.getAccount(id);
+
+      if (!account || account.tenantId !== tenantId) {
+        return res.status(404).json({ message: "Account not found" });
+      }
+
+      const existing = await storage.getAccountArrangement(id, tenantId);
+      if (!existing) {
+        return res.status(404).json({ message: "No arrangement assigned" });
+      }
+
+      const arrangementOptionId = typeof req.body.arrangementOptionId === 'string' && req.body.arrangementOptionId.trim()
+        ? req.body.arrangementOptionId.trim()
+        : null;
+
+      const arrangement = await storage.updateAccountArrangement(id, tenantId, {
+        arrangementOptionId,
+        customMonthlyPaymentCents: resolveCents(req.body.customMonthlyPaymentCents, req.body.customMonthlyPayment),
+        customTermMonths: parseInteger(req.body.customTermMonths),
+        customDownPaymentCents: resolveCents(req.body.customDownPaymentCents, req.body.customDownPayment),
+        notes: typeof req.body.notes === 'string' && req.body.notes.trim() ? req.body.notes.trim() : null,
+        status: typeof req.body.status === 'string' && req.body.status.trim() ? req.body.status.trim() : undefined,
+      });
+
+      res.json(arrangement);
+    } catch (error) {
+      console.error("Error updating arrangement:", error);
+      res.status(500).json({ message: "Failed to update arrangement" });
+    }
+  });
+
+  app.delete('/api/accounts/:id/arrangement', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = await getTenantId(req, storage);
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { id } = req.params;
+      const account = await storage.getAccount(id);
+
+      if (!account || account.tenantId !== tenantId) {
+        return res.status(404).json({ message: "Account not found" });
+      }
+
+      const existing = await storage.getAccountArrangement(id, tenantId);
+      if (!existing) {
+        return res.status(204).send();
+      }
+
+      await storage.removeAccountArrangement(id, tenantId);
+      res.json({ arrangement: null });
+    } catch (error) {
+      console.error("Error removing arrangement:", error);
+      res.status(500).json({ message: "Failed to remove arrangement" });
     }
   });
 
@@ -2629,34 +2782,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/consumer/arrangements/:email', async (req, res) => {
+  app.get('/api/consumer/arrangements/:email', authenticateConsumer, async (req: any, res) => {
     try {
-      const { email } = req.params;
+      const { email: tokenEmail, tenantId } = req.consumer;
+      const requestedEmail = req.params.email;
       const { tenantSlug, balance } = req.query;
-      
-      if (!tenantSlug) {
-        return res.status(400).json({ message: "Tenant slug required" });
+
+      if (tokenEmail !== requestedEmail) {
+        return res.status(403).json({ message: "Access denied" });
       }
 
-      const tenant = await storage.getTenantBySlug(tenantSlug as string);
+      const tenant = await storage.getTenant(tenantId);
       if (!tenant) {
         return res.status(404).json({ message: "Tenant not found" });
       }
 
-      const settings = await storage.getTenantSettings(tenant.id);
-      if (!settings?.showPaymentPlans) {
-        return res.json([]);
+      if (tenantSlug && tenant.slug && tenant.slug !== tenantSlug) {
+        return res.status(403).json({ message: "Access denied" });
       }
 
-      const balanceCents = parseInt(balance as string) || 0;
+      const consumer = await storage.getConsumerByEmailAndTenant(tokenEmail, tenantId);
+      if (!consumer) {
+        return res.status(404).json({ message: "Consumer not found" });
+      }
+
+      const settings = await storage.getTenantSettings(tenant.id);
+      if (!settings?.showPaymentPlans) {
+        return res.json({ assigned: null, available: [] });
+      }
+
+      const balanceCents = typeof balance === 'string' ? parseInt(balance, 10) || 0 : 0;
       const options = await storage.getArrangementOptionsByTenant(tenant.id);
-      
-      // Filter options based on balance range
-      const applicableOptions = options.filter(option => 
+
+      const applicableOptions = options.filter(option =>
         balanceCents >= option.minBalance && balanceCents <= option.maxBalance
       );
-      
-      res.json(applicableOptions);
+
+      const accounts = await storage.getAccountsByConsumer(consumer.id);
+      const arrangementView = buildConsumerArrangementVisibility(accounts, applicableOptions);
+
+      res.json(arrangementView);
     } catch (error) {
       console.error("Error fetching arrangement options:", error);
       res.status(500).json({ message: "Failed to fetch arrangement options" });

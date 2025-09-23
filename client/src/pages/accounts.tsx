@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -38,7 +38,30 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { FolderOpen, Folder, Plus, Upload, Settings, Trash2, MoreVertical, Eye, Edit, Mail, Phone, MapPin, Calendar } from "lucide-react";
+
+const ARRANGEMENT_STATUSES = ['active', 'pending', 'paused', 'completed', 'cancelled'] as const;
+type ArrangementStatus = (typeof ARRANGEMENT_STATUSES)[number];
+
+type ArrangementFormState = {
+  arrangementOptionId: string;
+  monthlyPayment: string;
+  termMonths: string;
+  downPayment: string;
+  notes: string;
+  status: ArrangementStatus;
+};
+
+const ARRANGEMENT_DEFAULTS: ArrangementFormState = {
+  arrangementOptionId: '',
+  monthlyPayment: '',
+  termMonths: '',
+  downPayment: '',
+  notes: '',
+  status: 'active',
+};
 
 export default function Accounts() {
   const [selectedFolderId, setSelectedFolderId] = useState<string>("all");
@@ -91,6 +114,7 @@ export default function Accounts() {
     state: "",
     zipCode: "",
   });
+  const [arrangementForm, setArrangementForm] = useState<ArrangementFormState>({ ...ARRANGEMENT_DEFAULTS });
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -105,6 +129,10 @@ export default function Accounts() {
 
   const { data: consumers } = useQuery({
     queryKey: ["/api/consumers"],
+  });
+
+  const { data: arrangementOptions } = useQuery({
+    queryKey: ["/api/arrangement-options"],
   });
 
   // Mutations
@@ -154,7 +182,7 @@ export default function Accounts() {
         ? Math.round(parseFloat(balanceValue) * 100)
         : undefined;
 
-      return apiRequest("PATCH", `/api/accounts/${selectedAccount.id}`, {
+      const response = await apiRequest("PATCH", `/api/accounts/${selectedAccount.id}`, {
         firstName: data.firstName,
         lastName: data.lastName,
         email: data.email,
@@ -169,6 +197,8 @@ export default function Accounts() {
         state: data.state || null,
         zipCode: data.zipCode || null,
       });
+
+      return await response.json();
     },
     onSuccess: (updatedAccount: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
@@ -207,6 +237,19 @@ export default function Accounts() {
         description: error.message || "Failed to delete account",
         variant: "destructive",
       });
+    },
+  });
+
+  const saveArrangementMutation = useMutation({
+    mutationFn: async ({ accountId, payload, method }: { accountId: string; payload: any; method: "POST" | "PUT" }) => {
+      const response = await apiRequest(method, `/api/accounts/${accountId}/arrangement`, payload);
+      return await response.json();
+    },
+  });
+
+  const removeArrangementMutation = useMutation({
+    mutationFn: async (accountId: string) => {
+      await apiRequest("DELETE", `/api/accounts/${accountId}/arrangement`);
     },
   });
 
@@ -347,6 +390,96 @@ export default function Accounts() {
     setSelectedAccounts(newSelected);
   };
 
+  const handleArrangementSave = async () => {
+    if (!selectedAccount?.id) {
+      toast({
+        title: "No account selected",
+        description: "Select an account before assigning a plan.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    let termMonths = arrangementForm.termMonths ? Number(arrangementForm.termMonths) : null;
+    if (termMonths !== null && Number.isNaN(termMonths)) {
+      termMonths = null;
+    }
+
+    const payload = {
+      arrangementOptionId: arrangementForm.arrangementOptionId || null,
+      customMonthlyPaymentCents: parseAmountField(arrangementForm.monthlyPayment),
+      customTermMonths: termMonths,
+      customDownPaymentCents: parseAmountField(arrangementForm.downPayment),
+      notes: arrangementForm.notes?.trim() ? arrangementForm.notes.trim() : null,
+      status: arrangementForm.status || 'active',
+    };
+
+    const method: "POST" | "PUT" = activeArrangement ? "PUT" : "POST";
+
+    try {
+      const arrangement = await saveArrangementMutation.mutateAsync({
+        accountId: selectedAccount.id,
+        payload,
+        method,
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
+      const description = activeArrangement
+        ? "Payment arrangement updated for this account."
+        : "Payment arrangement assigned to this account.";
+
+      setSelectedAccount((prev: any) => (prev ? { ...prev, arrangement } : prev));
+      setArrangementForm({
+        arrangementOptionId: arrangement.arrangementOptionId ?? '',
+        monthlyPayment: centsToAmountInput(arrangement.customMonthlyPaymentCents),
+        termMonths: arrangement.customTermMonths ? String(arrangement.customTermMonths) : '',
+        downPayment: centsToAmountInput(arrangement.customDownPaymentCents),
+        notes: arrangement.notes ?? '',
+        status: arrangement.status ?? 'active',
+      });
+
+      toast({
+        title: "Success",
+        description,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to save arrangement",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleArrangementRemove = async () => {
+    if (!selectedAccount?.id) {
+      toast({
+        title: "No account selected",
+        description: "Select an account before removing a plan.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      await removeArrangementMutation.mutateAsync(selectedAccount.id);
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
+      setSelectedAccount((prev: any) => (prev ? { ...prev, arrangement: null } : prev));
+      setArrangementForm({ ...ARRANGEMENT_DEFAULTS });
+
+      toast({
+        title: "Arrangement removed",
+        description: "The payment arrangement has been removed for this account.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to remove arrangement",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Filtering
   const filteredAccounts = (accounts as any[])?.filter(account => {
     const matchesFolder = selectedFolderId === "all" || account.consumer?.folderId === selectedFolderId;
@@ -370,6 +503,63 @@ export default function Accounts() {
   const formatCurrency = (cents: number) => {
     return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
   };
+
+  const parseAmountField = (value: string) => {
+    if (!value) {
+      return null;
+    }
+
+    const parsed = parseFloat(value);
+    if (Number.isNaN(parsed)) {
+      return null;
+    }
+
+    return Math.round(parsed * 100);
+  };
+
+  const centsToAmountInput = (value?: number | null) => {
+    if (value === null || value === undefined) {
+      return '';
+    }
+
+    return (value / 100).toFixed(2);
+  };
+
+  const activeArrangement = useMemo(() => {
+    if (!selectedAccount?.arrangement) {
+      return null;
+    }
+
+    return selectedAccount.arrangement.status === 'cancelled' ? null : selectedAccount.arrangement;
+  }, [selectedAccount]);
+
+  const selectedArrangementOption = useMemo(() => {
+    if (!Array.isArray(arrangementOptions)) {
+      return null;
+    }
+
+    const optionId = arrangementForm.arrangementOptionId || activeArrangement?.arrangementOptionId;
+    if (!optionId) {
+      return null;
+    }
+
+    return (arrangementOptions as any[]).find((option: any) => option.id === optionId) || null;
+  }, [arrangementOptions, arrangementForm.arrangementOptionId, activeArrangement?.arrangementOptionId]);
+
+  useEffect(() => {
+    if (activeArrangement) {
+      setArrangementForm({
+        arrangementOptionId: activeArrangement.arrangementOptionId ?? '',
+        monthlyPayment: centsToAmountInput(activeArrangement.customMonthlyPaymentCents),
+        termMonths: activeArrangement.customTermMonths ? String(activeArrangement.customTermMonths) : '',
+        downPayment: centsToAmountInput(activeArrangement.customDownPaymentCents),
+        notes: activeArrangement.notes ?? '',
+        status: activeArrangement.status ?? 'active',
+      });
+    } else {
+      setArrangementForm({ ...ARRANGEMENT_DEFAULTS });
+    }
+  }, [activeArrangement, selectedAccount]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -601,7 +791,15 @@ export default function Accounts() {
                           {account.accountNumber || '-'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {account.creditor}
+                          <div className="font-medium text-gray-900">{account.creditor}</div>
+                          {account.arrangement && account.arrangement.status !== 'cancelled' && (
+                            <div className="mt-1 inline-flex items-center gap-2 text-xs text-blue-600">
+                              <Badge variant="outline" className="text-[10px] uppercase">
+                                Plan
+                              </Badge>
+                              <span>{account.arrangement.option?.name || 'Custom plan'}</span>
+                            </div>
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {formatCurrency(account.balanceCents || 0)}
@@ -1085,6 +1283,183 @@ export default function Accounts() {
                   <div>
                     <p className="text-sm text-gray-500">Created</p>
                     <p className="font-medium">{formatDate(selectedAccount.createdAt)}</p>
+                  </div>
+                </div>
+
+                <div className="mt-2 border-t pt-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-500">Payment Arrangement</p>
+                      {activeArrangement ? (
+                        <p className="font-medium">{activeArrangement.option?.name || 'Custom plan'}</p>
+                      ) : (
+                        <p className="text-sm text-gray-500">No plan assigned</p>
+                      )}
+                    </div>
+                    {activeArrangement && (
+                      <Badge variant="secondary" className="uppercase">
+                        {activeArrangement.status}
+                      </Badge>
+                    )}
+                  </div>
+
+                  {activeArrangement ? (
+                    <div className="space-y-3 text-sm text-gray-600">
+                      {activeArrangement.option?.description && (
+                        <p>{activeArrangement.option.description}</p>
+                      )}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-xs text-gray-500">Monthly Payment</p>
+                          <p className="font-medium">
+                            {activeArrangement.customMonthlyPaymentCents
+                              ? formatCurrency(activeArrangement.customMonthlyPaymentCents)
+                              : activeArrangement.option
+                              ? `${formatCurrency(activeArrangement.option.monthlyPaymentMin)} - ${formatCurrency(activeArrangement.option.monthlyPaymentMax)}`
+                              : 'Not specified'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Term</p>
+                          <p className="font-medium">
+                            {activeArrangement.customTermMonths || activeArrangement.option?.maxTermMonths
+                              ? `${activeArrangement.customTermMonths ?? activeArrangement.option?.maxTermMonths} months`
+                              : 'Not specified'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Down Payment</p>
+                          <p className="font-medium">
+                            {activeArrangement.customDownPaymentCents
+                              ? formatCurrency(activeArrangement.customDownPaymentCents)
+                              : 'Not specified'}
+                          </p>
+                        </div>
+                      </div>
+                      {activeArrangement.notes && (
+                        <div className="rounded-md border bg-gray-50 p-3 text-sm text-gray-600">
+                          {activeArrangement.notes}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500">
+                      Assign a payment plan to highlight it in the consumer portal.
+                    </p>
+                  )}
+
+                  <div className="space-y-3">
+                    <div>
+                      <Label className="text-sm font-medium">Arrangement Option</Label>
+                      <Select
+                        value={arrangementForm.arrangementOptionId}
+                        onValueChange={(value) => setArrangementForm(prev => ({ ...prev, arrangementOptionId: value }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select plan or choose custom terms" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">Custom terms</SelectItem>
+                          {(arrangementOptions as any[])?.map((option: any) => (
+                            <SelectItem key={option.id} value={option.id}>
+                              {option.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {selectedArrangementOption?.description && (
+                        <p className="mt-2 text-xs text-gray-500">
+                          {selectedArrangementOption.description}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <Label className="text-sm font-medium">Monthly Payment</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="e.g. 150.00"
+                          value={arrangementForm.monthlyPayment}
+                          onChange={(e) => setArrangementForm(prev => ({ ...prev, monthlyPayment: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium">Term (months)</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          placeholder="Optional"
+                          value={arrangementForm.termMonths}
+                          onChange={(e) => setArrangementForm(prev => ({ ...prev, termMonths: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium">Down Payment</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="Optional"
+                          value={arrangementForm.downPayment}
+                          onChange={(e) => setArrangementForm(prev => ({ ...prev, downPayment: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-sm font-medium">Status</Label>
+                        <Select
+                          value={arrangementForm.status}
+                          onValueChange={(value) => setArrangementForm(prev => ({ ...prev, status: value as ArrangementStatus }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ARRANGEMENT_STATUSES.map(status => (
+                              <SelectItem key={status} value={status}>
+                                {status.charAt(0).toUpperCase() + status.slice(1)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium">Notes</Label>
+                        <Textarea
+                          placeholder="Optional internal notes"
+                          value={arrangementForm.notes}
+                          onChange={(e) => setArrangementForm(prev => ({ ...prev, notes: e.target.value }))}
+                          rows={3}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-2">
+                      {activeArrangement && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={handleArrangementRemove}
+                          disabled={removeArrangementMutation.isPending}
+                        >
+                          {removeArrangementMutation.isPending ? 'Removing...' : 'Remove Plan'}
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        onClick={handleArrangementSave}
+                        disabled={saveArrangementMutation.isPending}
+                      >
+                        {saveArrangementMutation.isPending
+                          ? 'Saving...'
+                          : activeArrangement
+                          ? 'Update Plan'
+                          : 'Assign Plan'}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>

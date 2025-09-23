@@ -11,6 +11,7 @@ import {
   date,
   boolean,
   uuid,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -286,6 +287,34 @@ export const arrangementOptions = pgTable("arrangement_options", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Assigned consumer arrangements (per account)
+export const consumerArrangements = pgTable(
+  "consumer_arrangements",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+    consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "cascade" }).notNull(),
+    accountId: uuid("account_id").references(() => accounts.id, { onDelete: "cascade" }).notNull(),
+    arrangementOptionId: uuid("arrangement_option_id").references(() => arrangementOptions.id, { onDelete: "set null" }),
+    customMonthlyPaymentCents: bigint("custom_monthly_payment_cents", { mode: "number" }),
+    customTermMonths: bigint("custom_term_months", { mode: "number" }),
+    customDownPaymentCents: bigint("custom_down_payment_cents", { mode: "number" }),
+    status: text("status", { enum: ['active', 'pending', 'paused', 'completed', 'cancelled'] }).default('active').notNull(),
+    notes: text("notes"),
+    assignedAt: timestamp("assigned_at").defaultNow(),
+    activatedAt: timestamp("activated_at"),
+    completedAt: timestamp("completed_at"),
+    cancelledAt: timestamp("cancelled_at"),
+    statusChangedAt: timestamp("status_changed_at").defaultNow(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("consumer_arrangements_account_unique").on(table.accountId),
+    index("consumer_arrangements_tenant_idx").on(table.tenantId),
+  ],
+);
+
 // Tenant privacy and display settings
 export const tenantSettings = pgTable("tenant_settings", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -406,6 +435,7 @@ export const tenantsRelations = relations(tenants, ({ one, many }) => ({
   senderIdentities: many(senderIdentities),
   documents: many(documents),
   arrangementOptions: many(arrangementOptions),
+  consumerArrangements: many(consumerArrangements),
   settings: one(tenantSettings, {
     fields: [tenants.id],
     references: [tenantSettings.tenantId],
@@ -448,6 +478,7 @@ export const consumersRelations = relations(consumers, ({ one, many }) => ({
   notifications: many(consumerNotifications),
   callbackRequests: many(callbackRequests),
   payments: many(payments),
+  arrangements: many(consumerArrangements),
 }));
 
 export const accountsRelations = relations(accounts, ({ one }) => ({
@@ -463,6 +494,10 @@ export const accountsRelations = relations(accounts, ({ one }) => ({
     fields: [accounts.folderId],
     references: [folders.id],
   }),
+  arrangement: one(consumerArrangements, {
+    fields: [accounts.id],
+    references: [consumerArrangements.accountId],
+  }),
 }));
 
 // Relations for new tables
@@ -477,6 +512,25 @@ export const arrangementOptionsRelations = relations(arrangementOptions, ({ one 
   tenant: one(tenants, {
     fields: [arrangementOptions.tenantId],
     references: [tenants.id],
+  }),
+}));
+
+export const consumerArrangementsRelations = relations(consumerArrangements, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [consumerArrangements.tenantId],
+    references: [tenants.id],
+  }),
+  consumer: one(consumers, {
+    fields: [consumerArrangements.consumerId],
+    references: [consumers.id],
+  }),
+  account: one(accounts, {
+    fields: [consumerArrangements.accountId],
+    references: [accounts.id],
+  }),
+  option: one(arrangementOptions, {
+    fields: [consumerArrangements.arrangementOptionId],
+    references: [arrangementOptions.id],
   }),
 }));
 
@@ -815,6 +869,10 @@ export const insertAccountSchema = createInsertSchema(accounts).omit({ id: true,
 export const insertEmailTemplateSchema = createInsertSchema(emailTemplates).omit({ id: true, createdAt: true });
 export const insertDocumentSchema = createInsertSchema(documents).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertArrangementOptionSchema = createInsertSchema(arrangementOptions).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertConsumerArrangementSchema = createInsertSchema(consumerArrangements).omit({
+  id: true,
+  createdAt: true,
+});
 export const insertTenantSettingsSchema = createInsertSchema(tenantSettings).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertEmailCampaignSchema = createInsertSchema(emailCampaigns).omit({ id: true, createdAt: true, completedAt: true });
 export const insertEmailTrackingSchema = createInsertSchema(emailTracking).omit({ id: true });
@@ -853,6 +911,8 @@ export type Document = typeof documents.$inferSelect;
 export type InsertDocument = z.infer<typeof insertDocumentSchema>;
 export type ArrangementOption = typeof arrangementOptions.$inferSelect;
 export type InsertArrangementOption = z.infer<typeof insertArrangementOptionSchema>;
+export type ConsumerArrangement = typeof consumerArrangements.$inferSelect;
+export type InsertConsumerArrangement = z.infer<typeof insertConsumerArrangementSchema>;
 export type TenantSettings = typeof tenantSettings.$inferSelect;
 export type InsertTenantSettings = z.infer<typeof insertTenantSettingsSchema>;
 export type EmailCampaign = typeof emailCampaigns.$inferSelect;
