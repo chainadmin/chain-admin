@@ -2671,8 +2671,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
+      const { id } = req.params;
+
+      const existingOption = await storage.getArrangementOptionById(id, tenantId);
+
+      if (!existingOption) {
+        return res.status(404).json({ message: "Arrangement option not found" });
+      }
+
       const payload = buildArrangementOptionPayload(req.body, tenantId);
-      const option = await storage.updateArrangementOption(req.params.id, tenantId, payload);
+      const option = await storage.updateArrangementOption(id, tenantId, payload);
 
       if (!option) {
         return res.status(404).json({ message: "Arrangement option not found" });
@@ -2699,7 +2707,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const deleted = await storage.deleteArrangementOption(req.params.id, tenantId);
+      const { id } = req.params;
+
+      const option = await storage.getArrangementOptionById(id, tenantId);
+
+      if (!option) {
+        return res.status(404).json({ message: "Arrangement option not found" });
+      }
+
+      const deleted = await storage.deleteArrangementOption(id, tenantId);
 
       if (!deleted) {
         return res.status(404).json({ message: "Arrangement option not found" });

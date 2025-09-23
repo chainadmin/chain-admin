@@ -26,6 +26,7 @@ type FakeDbState = {
   lastSet?: Record<string, unknown>;
   lastUpdateParams?: WhereParams;
   lastDeleteParams?: WhereParams;
+  lastSelectParams?: WhereParams;
 };
 
 function extractWhereParams(condition: unknown): WhereParams {
@@ -71,6 +72,7 @@ function extractWhereParams(condition: unknown): WhereParams {
 }
 
 function createFakeArrangementDb(initialData: ArrangementOptionRecord[]): {
+  select: typeof db.select;
   update: typeof db.update;
   delete: typeof db.delete;
   state: FakeDbState;
@@ -78,6 +80,21 @@ function createFakeArrangementDb(initialData: ArrangementOptionRecord[]): {
   const state: FakeDbState = {
     data: initialData.map((option) => ({ ...option })),
   };
+
+  const select = (() => ({
+    from: (..._args: any[]) => ({
+      where: async (condition: unknown) => {
+        const params = extractWhereParams(condition);
+        state.lastSelectParams = params;
+
+        const match = state.data.find(
+          (option) => option.id === params.id && option.tenantId === params.tenantId,
+        );
+
+        return match ? [match] : [];
+      },
+    }),
+  })) as typeof db.select;
 
   const update = (() => ({
     set: (updates: Record<string, unknown>) => ({
@@ -128,8 +145,49 @@ function createFakeArrangementDb(initialData: ArrangementOptionRecord[]): {
     }),
   })) as typeof db.delete;
 
-  return { update, delete: remove, state };
+  return { select, update, delete: remove, state };
 }
+
+test("getArrangementOptionById returns matching option for tenant", async () => {
+  const initial = [
+    { id: "option-1", tenantId: "tenant-1", name: "Option 1" },
+    { id: "option-2", tenantId: "tenant-2", name: "Option 2" },
+  ];
+  const { select, state } = createFakeArrangementDb(initial);
+  mock.method(db, "select", select);
+
+  const storage = new DatabaseStorage();
+
+  try {
+    const result = await storage.getArrangementOptionById("option-1", "tenant-1");
+
+    assert.ok(result);
+    assert.strictEqual(result.id, "option-1");
+    assert.strictEqual(result.tenantId, "tenant-1");
+    assert.deepStrictEqual(state.lastSelectParams, { id: "option-1", tenantId: "tenant-1" });
+  } finally {
+    mock.restoreAll();
+  }
+});
+
+test("getArrangementOptionById returns undefined when tenant does not match", async () => {
+  const initial = [
+    { id: "option-1", tenantId: "tenant-1", name: "Option 1" },
+    { id: "option-2", tenantId: "tenant-2", name: "Option 2" },
+  ];
+  const { select } = createFakeArrangementDb(initial);
+  mock.method(db, "select", select);
+
+  const storage = new DatabaseStorage();
+
+  try {
+    const result = await storage.getArrangementOptionById("option-1", "tenant-2");
+
+    assert.strictEqual(result, undefined);
+  } finally {
+    mock.restoreAll();
+  }
+});
 
 test("updateArrangementOption updates matching tenant and ignores tenantId", async () => {
   const initial = [

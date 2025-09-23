@@ -250,6 +250,7 @@ export interface IStorage {
   deleteDocument(id: string): Promise<void>;
   
   // Arrangement options operations
+  getArrangementOptionById(id: string, tenantId: string): Promise<ArrangementOption | undefined>;
   getArrangementOptionsByTenant(tenantId: string): Promise<ArrangementOption[]>;
   createArrangementOption(option: InsertArrangementOption): Promise<ArrangementOption>;
   updateArrangementOption(
@@ -1204,6 +1205,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Arrangement options operations
+  async getArrangementOptionById(id: string, tenantId: string): Promise<ArrangementOption | undefined> {
+    const [option] = await db
+      .select()
+      .from(arrangementOptions)
+      .where(and(eq(arrangementOptions.id, id), eq(arrangementOptions.tenantId, tenantId)));
+
+    return option;
+  }
+
   async getArrangementOptionsByTenant(tenantId: string): Promise<ArrangementOption[]> {
     return await db.select().from(arrangementOptions).where(and(eq(arrangementOptions.tenantId, tenantId), eq(arrangementOptions.isActive, true)));
   }
