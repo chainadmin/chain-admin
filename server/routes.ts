@@ -1247,16 +1247,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Public agency branding endpoint
   app.get('/api/public/agency-branding', async (req, res) => {
     const { slug } = req.query;
-    
+
     if (!slug || typeof slug !== 'string') {
       return res.status(400).json({ error: 'Agency slug is required' });
     }
 
     try {
       const tenant = await storage.getTenantBySlug(slug);
-      
+
       if (!tenant) {
         return res.status(404).json({ error: 'Agency not found' });
+      }
+
+      if (!tenant.isActive) {
+        return res.status(403).json({ error: 'Agency is not active' });
       }
 
       // Get tenant settings for additional branding
@@ -1274,6 +1278,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         contactPhone: settings?.contactPhone || null,
         hasPrivacyPolicy: !!settings?.privacyPolicy,
         hasTermsOfService: !!settings?.termsOfService,
+        privacyPolicy: settings?.privacyPolicy || null,
+        termsOfService: settings?.termsOfService || null,
       };
 
       res.status(200).json(branding);
