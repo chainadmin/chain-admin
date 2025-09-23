@@ -306,37 +306,32 @@ export const communicationAutomations = pgTable("communication_automations", {
   templateIds: uuid("template_ids").array(), // For multiple templates (recurring schedules)
   templateSchedule: jsonb("template_schedule").$type<{ templateId: string; dayOffset: number }[]>(), // For sequence-based schedules
   isActive: boolean("is_active").default(true),
-  
+
   // Trigger conditions
   triggerType: text("trigger_type").notNull(), // 'schedule', 'event', 'manual'
-  
+
   // Schedule settings (for scheduled automations)
   scheduleType: text("schedule_type"), // 'once', 'daily', 'weekly', 'monthly', 'sequence'
-  scheduledTime: text("scheduled_time"), // Time of day for recurring schedules
   scheduledDate: timestamp("scheduled_date"), // For one-time schedules
-  scheduledDaysOfWeek: text("scheduled_days_of_week").array(), // For weekly schedules
-  scheduledDayOfMonth: integer("scheduled_day_of_month"), // For monthly schedules
-  
+  scheduleTime: text("schedule_time"), // Time of day for recurring schedules
+  scheduleWeekdays: text("schedule_weekdays").array(), // For weekly schedules
+  scheduleDayOfMonth: text("schedule_day_of_month"), // For monthly schedules
+
   // Event settings (for event-triggered automations)
   eventType: text("event_type"), // 'account_added', 'payment_received', 'balance_updated'
-  eventConditions: jsonb("event_conditions").$type<any>(), // Specific conditions for the event
-  
-  // Target settings  
-  targetType: text("target_type").notNull(), // 'all', 'segment', 'individual'
-  targetSegment: text("target_segment"), // 'with-balance', 'overdue', 'new-accounts', etc.
-  targetFilters: jsonb("target_filters").$type<any>(), // Advanced filtering conditions
-  targetConsumerIds: uuid("target_consumer_ids").array(), // For individual targeting
-  
-  // Execution settings
-  throttleRate: integer("throttle_rate").default(10), // Messages per second
-  removeOnPayment: boolean("remove_on_payment").default(false), // Stop if payment received
-  respectOptOuts: boolean("respect_opt_outs").default(true), // Skip opted-out consumers
-  
+  eventDelay: text("event_delay"), // Delay before sending after event
+
+  // Target settings
+  targetType: text("target_type").notNull(), // 'all', 'folder', 'custom'
+  targetFolderIds: uuid("target_folder_ids").array(),
+  targetCustomerIds: uuid("target_customer_ids").array(),
+
   // Tracking
-  lastExecutedAt: timestamp("last_executed_at"),
-  nextExecutionAt: timestamp("next_execution_at"),
-  executionCount: bigint("execution_count", { mode: "number" }).default(0),
-  
+  lastExecuted: timestamp("last_executed"),
+  nextExecution: timestamp("next_execution"),
+  totalSent: bigint("total_sent", { mode: "number" }).default(0),
+  currentTemplateIndex: bigint("current_template_index", { mode: "number" }).default(0),
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
