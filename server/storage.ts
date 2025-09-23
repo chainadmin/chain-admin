@@ -252,8 +252,12 @@ export interface IStorage {
   // Arrangement options operations
   getArrangementOptionsByTenant(tenantId: string): Promise<ArrangementOption[]>;
   createArrangementOption(option: InsertArrangementOption): Promise<ArrangementOption>;
-  updateArrangementOption(id: string, option: Partial<InsertArrangementOption>): Promise<ArrangementOption>;
-  deleteArrangementOption(id: string): Promise<void>;
+  updateArrangementOption(
+    id: string,
+    tenantId: string,
+    option: Partial<InsertArrangementOption>,
+  ): Promise<ArrangementOption | undefined>;
+  deleteArrangementOption(id: string, tenantId: string): Promise<boolean>;
   
   // Tenant settings operations
   getTenantSettings(tenantId: string): Promise<TenantSettings | undefined>;
@@ -1209,16 +1213,32 @@ export class DatabaseStorage implements IStorage {
     return newOption;
   }
 
-  async updateArrangementOption(id: string, option: Partial<InsertArrangementOption>): Promise<ArrangementOption> {
-    const [updatedOption] = await db.update(arrangementOptions).set({
-      ...option,
-      updatedAt: new Date(),
-    }).where(eq(arrangementOptions.id, id)).returning();
+  async updateArrangementOption(
+    id: string,
+    tenantId: string,
+    option: Partial<InsertArrangementOption>,
+  ): Promise<ArrangementOption | undefined> {
+    const { tenantId: _ignoredTenantId, ...updates } = option;
+
+    const [updatedOption] = await db
+      .update(arrangementOptions)
+      .set({
+        ...updates,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(arrangementOptions.id, id), eq(arrangementOptions.tenantId, tenantId)))
+      .returning();
+
     return updatedOption;
   }
 
-  async deleteArrangementOption(id: string): Promise<void> {
-    await db.delete(arrangementOptions).where(eq(arrangementOptions.id, id));
+  async deleteArrangementOption(id: string, tenantId: string): Promise<boolean> {
+    const deletedOptions = await db
+      .delete(arrangementOptions)
+      .where(and(eq(arrangementOptions.id, id), eq(arrangementOptions.tenantId, tenantId)))
+      .returning();
+
+    return deletedOptions.length > 0;
   }
 
   // Tenant settings operations

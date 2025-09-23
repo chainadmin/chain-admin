@@ -2672,7 +2672,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const payload = buildArrangementOptionPayload(req.body, tenantId);
-      const option = await storage.updateArrangementOption(req.params.id, payload);
+      const option = await storage.updateArrangementOption(req.params.id, tenantId, payload);
+
+      if (!option) {
+        return res.status(404).json({ message: "Arrangement option not found" });
+      }
+
       res.json(option);
     } catch (error) {
       console.error("Error updating arrangement option:", error);
@@ -2688,7 +2693,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete('/api/arrangement-options/:id', authenticateUser, async (req: any, res) => {
     try {
-      await storage.deleteArrangementOption(req.params.id);
+      const tenantId = req.user.tenantId;
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const deleted = await storage.deleteArrangementOption(req.params.id, tenantId);
+
+      if (!deleted) {
+        return res.status(404).json({ message: "Arrangement option not found" });
+      }
+
       res.json({ message: "Arrangement option deleted successfully" });
     } catch (error) {
       console.error("Error deleting arrangement option:", error);
