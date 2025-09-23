@@ -1,0 +1,5 @@
+git apply --3way --index codex.patch
+
+git commit -m "Apply Codex patch"
+git push origin main
+
