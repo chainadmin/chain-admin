@@ -136,7 +136,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
           triggerType,
           scheduleType,
           scheduledDate,
-          scheduleTime,
+          scheduledTime: scheduleTime,
           scheduleWeekdays,
           scheduleDayOfMonth,
           eventType,
