@@ -4,13 +4,12 @@ import { consumers, tenants } from '../../shared/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { z } from 'zod';
 import jwt from 'jsonwebtoken';
+import { JWT_SECRET } from '../_lib/auth.js';
 
 const loginSchema = z.object({
   email: z.string().email(),
   dateOfBirth: z.string()  // Consumer verifies with DOB
 });
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-jwt-secret-key-change-this-in-production';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {

@@ -4,7 +4,7 @@ import { platformUsers, users } from '../../shared/schema.js';
 import { eq } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-jwt-secret-key-change-this-in-production';
+export const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
 export interface AuthenticatedRequest extends VercelRequest {
   user?: any;
