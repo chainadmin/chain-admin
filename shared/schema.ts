@@ -271,6 +271,15 @@ export const documents = pgTable("documents", {
 });
 
 // Arrangement/Settlement options (per tenant)
+export const arrangementPlanTypes = [
+  "range",
+  "fixed_monthly",
+  "pay_in_full",
+  "custom_terms",
+] as const;
+
+export type ArrangementPlanType = (typeof arrangementPlanTypes)[number];
+
 export const arrangementOptions = pgTable("arrangement_options", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
@@ -278,8 +287,13 @@ export const arrangementOptions = pgTable("arrangement_options", {
   description: text("description"),
   minBalance: bigint("min_balance", { mode: "number" }).notNull(), // In cents
   maxBalance: bigint("max_balance", { mode: "number" }).notNull(), // In cents
-  monthlyPaymentMin: bigint("monthly_payment_min", { mode: "number" }).notNull(), // In cents
-  monthlyPaymentMax: bigint("monthly_payment_max", { mode: "number" }).notNull(), // In cents
+  planType: text("plan_type", { enum: arrangementPlanTypes }).default("range").notNull(),
+  monthlyPaymentMin: bigint("monthly_payment_min", { mode: "number" }), // In cents
+  monthlyPaymentMax: bigint("monthly_payment_max", { mode: "number" }), // In cents
+  fixedMonthlyPayment: bigint("fixed_monthly_payment", { mode: "number" }), // In cents
+  payInFullAmount: bigint("pay_in_full_amount", { mode: "number" }), // In cents
+  payoffText: text("payoff_text"),
+  customTermsText: text("custom_terms_text"),
   maxTermMonths: bigint("max_term_months", { mode: "number" }).default(12),
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
@@ -814,7 +828,103 @@ export const insertConsumerSchema = createInsertSchema(consumers).omit({ id: tru
 export const insertAccountSchema = createInsertSchema(accounts).omit({ id: true, createdAt: true });
 export const insertEmailTemplateSchema = createInsertSchema(emailTemplates).omit({ id: true, createdAt: true });
 export const insertDocumentSchema = createInsertSchema(documents).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertArrangementOptionSchema = createInsertSchema(arrangementOptions).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertArrangementOptionSchema = createInsertSchema(arrangementOptions)
+  .omit({ id: true, createdAt: true, updatedAt: true })
+  .superRefine((data, ctx) => {
+    if (data.minBalance == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["minBalance"],
+        message: "Minimum balance is required",
+      });
+    }
+
+    if (data.maxBalance == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["maxBalance"],
+        message: "Maximum balance is required",
+      });
+    }
+
+    if (data.minBalance != null && data.maxBalance != null && data.minBalance > data.maxBalance) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["maxBalance"],
+        message: "Maximum balance must be greater than or equal to minimum balance",
+      });
+    }
+
+    switch (data.planType) {
+      case "range": {
+        if (data.monthlyPaymentMin == null || data.monthlyPaymentMax == null) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["monthlyPaymentMin"],
+            message: "Monthly payment range is required",
+          });
+        }
+
+        if (
+          data.monthlyPaymentMin != null &&
+          data.monthlyPaymentMax != null &&
+          data.monthlyPaymentMin > data.monthlyPaymentMax
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["monthlyPaymentMax"],
+            message: "Maximum monthly payment must be greater than or equal to the minimum",
+          });
+        }
+        break;
+      }
+      case "fixed_monthly": {
+        if (data.fixedMonthlyPayment == null) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["fixedMonthlyPayment"],
+            message: "Monthly payment amount is required",
+          });
+        }
+        break;
+      }
+      case "pay_in_full": {
+        if (data.payInFullAmount == null && !data.payoffText) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["payInFullAmount"],
+            message: "Provide a payoff amount or custom payoff text",
+          });
+        }
+        break;
+      }
+      case "custom_terms": {
+        if (!data.customTermsText) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["customTermsText"],
+            message: "Custom terms copy is required",
+          });
+        }
+        break;
+      }
+      default: {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["planType"],
+          message: "Unsupported plan type",
+        });
+      }
+    }
+
+    if (data.maxTermMonths != null && data.maxTermMonths < 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["maxTermMonths"],
+        message: "Max term must be positive",
+      });
+    }
+  });
 export const insertTenantSettingsSchema = createInsertSchema(tenantSettings).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertEmailCampaignSchema = createInsertSchema(emailCampaigns).omit({ id: true, createdAt: true, completedAt: true });
 export const insertEmailTrackingSchema = createInsertSchema(emailTracking).omit({ id: true });

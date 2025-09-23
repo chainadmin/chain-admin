@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Trash2, Upload, Plus, Save, CreditCard, Shield, Settings as SettingsIcon, ImageIcon, Copy, ExternalLink } from "lucide-react";
 import { isSubdomainSupported } from "@shared/utils/subdomain";
+import { getArrangementSummary, getPlanTypeLabel, formatCurrencyFromCents } from "@/lib/arrangements";
 
 export default function Settings() {
   const [showDocumentModal, setShowDocumentModal] = useState(false);
@@ -51,15 +52,37 @@ export default function Settings() {
     mimeType: "",
     isPublic: true,
   });
-  const [arrangementForm, setArrangementForm] = useState({
+  type ArrangementFormState = {
+    name: string;
+    description: string;
+    minBalance: string;
+    maxBalance: string;
+    planType: "range" | "fixed_monthly" | "pay_in_full" | "custom_terms";
+    monthlyPaymentMin: string;
+    monthlyPaymentMax: string;
+    fixedMonthlyPayment: string;
+    payInFullAmount: string;
+    payoffText: string;
+    customTermsText: string;
+    maxTermMonths: string;
+  };
+
+  const emptyArrangementForm: ArrangementFormState = {
     name: "",
     description: "",
     minBalance: "",
     maxBalance: "",
+    planType: "range",
     monthlyPaymentMin: "",
     monthlyPaymentMax: "",
+    fixedMonthlyPayment: "",
+    payInFullAmount: "",
+    payoffText: "",
+    customTermsText: "",
     maxTermMonths: "12",
-  });
+  } as const;
+
+  const [arrangementForm, setArrangementForm] = useState<ArrangementFormState>({ ...emptyArrangementForm });
   const [localSettings, setLocalSettings] = useState<any>({});
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
@@ -206,15 +229,7 @@ export default function Settings() {
       });
       queryClient.invalidateQueries({ queryKey: ["/api/arrangement-options"] });
       setShowArrangementModal(false);
-      setArrangementForm({
-        name: "",
-        description: "",
-        minBalance: "",
-        maxBalance: "",
-        monthlyPaymentMin: "",
-        monthlyPaymentMax: "",
-        maxTermMonths: "12",
-      });
+      setArrangementForm({ ...emptyArrangementForm });
     },
     onError: (error) => {
       toast({
@@ -289,28 +304,166 @@ export default function Settings() {
     createDocumentMutation.mutate(documentForm);
   };
 
+  const parseCurrencyInput = (value: string): number | null => {
+    if (value === undefined || value === null) {
+      return null;
+    }
+    const trimmed = value.toString().trim();
+    if (!trimmed) {
+      return null;
+    }
+    const numeric = Number(trimmed);
+    if (Number.isNaN(numeric)) {
+      return null;
+    }
+    return Math.round(numeric * 100);
+  };
+
+  const parseMaxTermValue = (value: string): number | null => {
+    if (!value || value === "until_paid") {
+      return null;
+    }
+
+    const numeric = Number(value);
+    if (Number.isNaN(numeric)) {
+      return null;
+    }
+
+    return Math.trunc(numeric);
+  };
+
   const handleSubmitArrangement = () => {
-    if (!arrangementForm.name || !arrangementForm.minBalance || !arrangementForm.maxBalance) {
+    const name = arrangementForm.name.trim();
+    const planType = arrangementForm.planType;
+
+    const minBalance = parseCurrencyInput(arrangementForm.minBalance);
+    const maxBalance = parseCurrencyInput(arrangementForm.maxBalance);
+
+    if (!name || minBalance === null || maxBalance === null) {
       toast({
         title: "Missing Information",
-        description: "Please fill in all required fields.",
+        description: "Provide a name and valid balance range for this plan.",
         variant: "destructive",
       });
       return;
     }
 
-    createArrangementMutation.mutate({
-      ...arrangementForm,
-      minBalance: Math.round(parseFloat(arrangementForm.minBalance) * 100),
-      maxBalance: Math.round(parseFloat(arrangementForm.maxBalance) * 100),
-      monthlyPaymentMin: Math.round(parseFloat(arrangementForm.monthlyPaymentMin) * 100),
-      monthlyPaymentMax: Math.round(parseFloat(arrangementForm.monthlyPaymentMax) * 100),
-      maxTermMonths: parseInt(arrangementForm.maxTermMonths),
-    });
-  };
+    if (minBalance < 0 || maxBalance < 0 || minBalance > maxBalance) {
+      toast({
+        title: "Invalid Balance Range",
+        description: "Balance amounts must be positive and the minimum cannot exceed the maximum.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-  const formatCurrency = (cents: number) => {
-    return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+    const payload: any = {
+      name,
+      description: arrangementForm.description.trim() || undefined,
+      minBalance,
+      maxBalance,
+      planType,
+    };
+
+    const maxTermMonths = parseMaxTermValue(arrangementForm.maxTermMonths);
+
+    if (planType === "range") {
+      const monthlyMin = parseCurrencyInput(arrangementForm.monthlyPaymentMin);
+      const monthlyMax = parseCurrencyInput(arrangementForm.monthlyPaymentMax);
+
+      if (monthlyMin === null || monthlyMax === null) {
+        toast({
+          title: "Missing Monthly Range",
+          description: "Provide both minimum and maximum monthly payment amounts.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (monthlyMin < 0 || monthlyMax < 0 || monthlyMin > monthlyMax) {
+        toast({
+          title: "Invalid Monthly Range",
+          description: "Monthly amounts must be positive and the minimum cannot exceed the maximum.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (maxTermMonths !== null && maxTermMonths <= 0) {
+        toast({
+          title: "Invalid Term",
+          description: "Max term must be a positive number of months.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      payload.monthlyPaymentMin = monthlyMin;
+      payload.monthlyPaymentMax = monthlyMax;
+      payload.maxTermMonths = maxTermMonths ?? 12;
+    } else if (planType === "fixed_monthly") {
+      const fixedMonthly = parseCurrencyInput(arrangementForm.fixedMonthlyPayment);
+      if (fixedMonthly === null || fixedMonthly <= 0) {
+        toast({
+          title: "Monthly Amount Required",
+          description: "Enter a valid monthly payment amount for this plan.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (maxTermMonths !== null && maxTermMonths <= 0) {
+        toast({
+          title: "Invalid Term",
+          description: "Max term must be a positive number of months or set to until paid in full.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      payload.fixedMonthlyPayment = fixedMonthly;
+      payload.maxTermMonths = maxTermMonths ?? null;
+    } else if (planType === "pay_in_full") {
+      const payInFullAmount = parseCurrencyInput(arrangementForm.payInFullAmount);
+      const payoffText = arrangementForm.payoffText.trim();
+
+      if ((payInFullAmount === null || payInFullAmount <= 0) && !payoffText) {
+        toast({
+          title: "Payoff Details Required",
+          description: "Provide a payoff amount or custom payoff instructions.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (payInFullAmount !== null && payInFullAmount <= 0) {
+        toast({
+          title: "Invalid Payoff Amount",
+          description: "Payoff amount must be greater than zero.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      payload.payInFullAmount = payInFullAmount ?? undefined;
+      payload.payoffText = payoffText || undefined;
+      payload.maxTermMonths = null;
+    } else if (planType === "custom_terms") {
+      const customText = arrangementForm.customTermsText.trim();
+      if (!customText) {
+        toast({
+          title: "Custom Copy Required",
+          description: "Provide the copy that describes your custom terms.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      payload.customTermsText = customText;
+      payload.maxTermMonths = null;
+    }
+
+    createArrangementMutation.mutate(payload);
   };
 
   return (
@@ -915,7 +1068,7 @@ export default function Settings() {
                                 type="number"
                                 step="0.01"
                                 value={arrangementForm.minBalance}
-                                onChange={(e) => setArrangementForm({...arrangementForm, minBalance: e.target.value})}
+                                onChange={(e) => setArrangementForm({ ...arrangementForm, minBalance: e.target.value })}
                                 placeholder="100.00"
                               />
                             </div>
@@ -925,53 +1078,147 @@ export default function Settings() {
                                 type="number"
                                 step="0.01"
                                 value={arrangementForm.maxBalance}
-                                onChange={(e) => setArrangementForm({...arrangementForm, maxBalance: e.target.value})}
+                                onChange={(e) => setArrangementForm({ ...arrangementForm, maxBalance: e.target.value })}
                                 placeholder="1999.99"
                               />
                             </div>
                           </div>
-                          
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <Label>Min Payment ($) *</Label>
-                              <Input
-                                type="number"
-                                step="0.01"
-                                value={arrangementForm.monthlyPaymentMin}
-                                onChange={(e) => setArrangementForm({...arrangementForm, monthlyPaymentMin: e.target.value})}
-                                placeholder="50.00"
-                              />
-                            </div>
-                            <div>
-                              <Label>Max Payment ($) *</Label>
-                              <Input
-                                type="number"
-                                step="0.01"
-                                value={arrangementForm.monthlyPaymentMax}
-                                onChange={(e) => setArrangementForm({...arrangementForm, monthlyPaymentMax: e.target.value})}
-                                placeholder="100.00"
-                              />
-                            </div>
-                          </div>
-                          
+
                           <div>
-                            <Label>Max Term (Months)</Label>
-                            <Select value={arrangementForm.maxTermMonths} onValueChange={(value) => setArrangementForm({...arrangementForm, maxTermMonths: value})}>
+                            <Label>Plan Type *</Label>
+                            <Select
+                              value={arrangementForm.planType}
+                              onValueChange={(value) =>
+                                setArrangementForm({
+                                  ...arrangementForm,
+                                  planType: value as ArrangementFormState["planType"],
+                                  monthlyPaymentMin: "",
+                                  monthlyPaymentMax: "",
+                                  fixedMonthlyPayment: "",
+                                  payInFullAmount: "",
+                                  payoffText: "",
+                                  customTermsText: "",
+                                  maxTermMonths: value === "fixed_monthly" ? "until_paid" : "12",
+                                })
+                              }
+                            >
                               <SelectTrigger>
-                                <SelectValue />
+                                <SelectValue placeholder="Select plan type" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="6">6 months</SelectItem>
-                                <SelectItem value="12">12 months</SelectItem>
-                                <SelectItem value="18">18 months</SelectItem>
-                                <SelectItem value="24">24 months</SelectItem>
-                                <SelectItem value="36">36 months</SelectItem>
+                                <SelectItem value="range">Monthly range (legacy)</SelectItem>
+                                <SelectItem value="fixed_monthly">Fixed monthly amount</SelectItem>
+                                <SelectItem value="pay_in_full">Pay in full</SelectItem>
+                                <SelectItem value="custom_terms">Custom terms copy</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>
+
+                          {arrangementForm.planType === "range" && (
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <Label>Min Payment ($) *</Label>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  value={arrangementForm.monthlyPaymentMin}
+                                  onChange={(e) => setArrangementForm({ ...arrangementForm, monthlyPaymentMin: e.target.value })}
+                                  placeholder="50.00"
+                                />
+                              </div>
+                              <div>
+                                <Label>Max Payment ($) *</Label>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  value={arrangementForm.monthlyPaymentMax}
+                                  onChange={(e) => setArrangementForm({ ...arrangementForm, monthlyPaymentMax: e.target.value })}
+                                  placeholder="100.00"
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {arrangementForm.planType === "fixed_monthly" && (
+                            <div>
+                              <Label>Monthly Payment ($) *</Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                value={arrangementForm.fixedMonthlyPayment}
+                                onChange={(e) => setArrangementForm({ ...arrangementForm, fixedMonthlyPayment: e.target.value })}
+                                placeholder="150.00"
+                              />
+                            </div>
+                          )}
+
+                          {arrangementForm.planType === "pay_in_full" && (
+                            <div className="space-y-4">
+                              <div>
+                                <Label>Payoff Amount ($)</Label>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  value={arrangementForm.payInFullAmount}
+                                  onChange={(e) => setArrangementForm({ ...arrangementForm, payInFullAmount: e.target.value })}
+                                  placeholder="500.00"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">Optional if you provide custom payoff copy.</p>
+                              </div>
+                              <div>
+                                <Label>Payoff Copy</Label>
+                                <Textarea
+                                  value={arrangementForm.payoffText}
+                                  onChange={(e) => setArrangementForm({ ...arrangementForm, payoffText: e.target.value })}
+                                  placeholder="Describe payoff terms or incentives"
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {arrangementForm.planType === "custom_terms" && (
+                            <div>
+                              <Label>Custom Terms Copy *</Label>
+                              <Textarea
+                                value={arrangementForm.customTermsText}
+                                onChange={(e) => setArrangementForm({ ...arrangementForm, customTermsText: e.target.value })}
+                                placeholder="Enter the custom terms consumers should see"
+                              />
+                            </div>
+                          )}
+
+                          {(arrangementForm.planType === "range" || arrangementForm.planType === "fixed_monthly") && (
+                            <div>
+                              <Label>Max Term (Months)</Label>
+                              <Select
+                                value={arrangementForm.maxTermMonths}
+                                onValueChange={(value) => setArrangementForm({ ...arrangementForm, maxTermMonths: value })}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="6">6 months</SelectItem>
+                                  <SelectItem value="12">12 months</SelectItem>
+                                  <SelectItem value="18">18 months</SelectItem>
+                                  <SelectItem value="24">24 months</SelectItem>
+                                  <SelectItem value="36">36 months</SelectItem>
+                                  {arrangementForm.planType === "fixed_monthly" && (
+                                    <SelectItem value="until_paid">Until paid in full</SelectItem>
+                                  )}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
                           
                           <div className="flex justify-end space-x-2">
-                            <Button variant="outline" onClick={() => setShowArrangementModal(false)}>
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                setShowArrangementModal(false);
+                                setArrangementForm({ ...emptyArrangementForm });
+                              }}
+                            >
                               Cancel
                             </Button>
                             <Button onClick={handleSubmitArrangement}>
@@ -997,13 +1244,19 @@ export default function Settings() {
                           <div>
                             <h3 className="font-medium">{option.name}</h3>
                             <p className="text-sm text-gray-500">{option.description}</p>
-                            <div className="text-sm text-gray-600 mt-1">
-                              Balance: {formatCurrency(option.minBalance)} - {formatCurrency(option.maxBalance)}
-                              <span className="mx-2">•</span>
-                              Payment: {formatCurrency(option.monthlyPaymentMin)} - {formatCurrency(option.monthlyPaymentMax)}/month
-                              <span className="mx-2">•</span>
-                              Max term: {option.maxTermMonths} months
-                            </div>
+                            {(() => {
+                              const summary = getArrangementSummary(option);
+                              return (
+                                <div className="text-sm text-gray-600 mt-2 space-y-1">
+                                  <div className="font-medium text-gray-700">{getPlanTypeLabel(option.planType)}</div>
+                                  <div>{summary.headline}</div>
+                                  {summary.detail && <div className="text-gray-500">{summary.detail}</div>}
+                                  <div className="text-gray-500">
+                                    Balance range: {formatCurrencyFromCents(option.minBalance)} - {formatCurrencyFromCents(option.maxBalance)}
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </div>
                           <Button
                             variant="ghost"
