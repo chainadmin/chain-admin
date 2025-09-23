@@ -137,7 +137,9 @@ export interface IStorage {
   getConsumersByEmail(email: string): Promise<Consumer[]>;
   getConsumerByEmailAndTenant(email: string, tenantId: string): Promise<Consumer | undefined>;
   createConsumer(consumer: InsertConsumer): Promise<Consumer>;
+  updateConsumer(id: string, updates: Partial<Consumer>): Promise<Consumer>;
   findOrCreateConsumer(consumerData: InsertConsumer): Promise<Consumer>;
+  findAccountsByConsumerEmail(email: string): Promise<(Account & { consumer: Consumer })[]>;
   deleteConsumer(id: string, tenantId: string): Promise<void>;
   
   // Folder operations
@@ -476,6 +478,40 @@ export class DatabaseStorage implements IStorage {
     return newConsumer;
   }
 
+  async updateConsumer(id: string, updates: Partial<Consumer>): Promise<Consumer> {
+    const [updatedConsumer] = await db.update(consumers)
+      .set(updates)
+      .where(eq(consumers.id, id))
+      .returning();
+    return updatedConsumer;
+  }
+
+  async findAccountsByConsumerEmail(email: string): Promise<(Account & { consumer: Consumer })[]> {
+    // Find all consumers with this email
+    const consumersWithEmail = await db.select()
+      .from(consumers)
+      .where(eq(consumers.email, email));
+    
+    if (consumersWithEmail.length === 0) {
+      return [];
+    }
+
+    // Get all accounts for these consumers
+    const consumerIds = consumersWithEmail.map(c => c.id);
+    const accountsList = await db.select({
+      account: accounts,
+      consumer: consumers
+    })
+      .from(accounts)
+      .innerJoin(consumers, eq(accounts.consumerId, consumers.id))
+      .where(sql`${accounts.consumerId} IN ${sql`(${sql.join(consumerIds.map(id => sql`${id}`), sql`, `)})`}`);
+
+    return accountsList.map(row => ({
+      ...row.account,
+      consumer: row.consumer
+    }));
+  }
+
   async findOrCreateConsumer(consumerData: InsertConsumer): Promise<Consumer> {
     // Check for existing consumer by email and tenant (unique within tenant)
     if (!consumerData.email || !consumerData.tenantId) {
@@ -483,8 +519,8 @@ export class DatabaseStorage implements IStorage {
       return await this.createConsumer(consumerData);
     }
     
-    // Match by email and tenant only (prevent duplicates within same agency)
-    const [existingConsumer] = await db.select()
+    // First check if consumer already exists with this tenant
+    const [existingConsumerWithTenant] = await db.select()
       .from(consumers)
       .where(
         and(
@@ -492,6 +528,49 @@ export class DatabaseStorage implements IStorage {
           sql`LOWER(${consumers.email}) = LOWER(${consumerData.email})`
         )
       );
+    
+    if (existingConsumerWithTenant) {
+      // Consumer already exists with this tenant - update if needed
+      return existingConsumerWithTenant;
+    }
+
+    // Check if consumer exists but not linked to any tenant (auto-link scenario)
+    const [unlinkedConsumer] = await db.select()
+      .from(consumers)
+      .where(
+        and(
+          sql`${consumers.tenantId} IS NULL`,
+          sql`LOWER(${consumers.email}) = LOWER(${consumerData.email})`
+        )
+      );
+
+    if (unlinkedConsumer) {
+      // Found unlinked consumer with matching email - auto-link to this tenant
+      const [linkedConsumer] = await db.update(consumers)
+        .set({ 
+          tenantId: consumerData.tenantId,
+          firstName: consumerData.firstName || unlinkedConsumer.firstName,
+          lastName: consumerData.lastName || unlinkedConsumer.lastName,
+          phone: consumerData.phone || unlinkedConsumer.phone,
+          dateOfBirth: consumerData.dateOfBirth || unlinkedConsumer.dateOfBirth,
+          ssnLast4: consumerData.ssnLast4 || unlinkedConsumer.ssnLast4,
+          address: consumerData.address || unlinkedConsumer.address,
+          city: consumerData.city || unlinkedConsumer.city,
+          state: consumerData.state || unlinkedConsumer.state,
+          zipCode: consumerData.zipCode || unlinkedConsumer.zipCode,
+          folderId: consumerData.folderId
+        })
+        .where(eq(consumers.id, unlinkedConsumer.id))
+        .returning();
+        
+      console.log(`Auto-linked unlinked consumer ${unlinkedConsumer.id} to tenant ${consumerData.tenantId}`);
+      return linkedConsumer;
+    }
+    
+    // Check for existing consumer with same email in another tenant (prevent duplicates)
+    const [existingConsumer] = await db.select()
+      .from(consumers)
+      .where(sql`LOWER(${consumers.email}) = LOWER(${consumerData.email})`);
     
     if (existingConsumer) {
       // Update existing consumer with any new information provided

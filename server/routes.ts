@@ -292,7 +292,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Consumer login endpoint
+  // Consumer login endpoint with auto-linking
   app.post('/api/consumer/login', async (req, res) => {
     try {
       const { email, dateOfBirth, tenantSlug } = req.body;
@@ -302,7 +302,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Find consumer(s) by email across all tenants
-      const consumersFound = await storage.getConsumersByEmail(email);
+      let consumersFound = await storage.getConsumersByEmail(email);
       
       if (consumersFound.length === 0) {
         return res.status(404).json({ 
@@ -310,12 +310,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      // Check for unlinked consumers and try to auto-link them
+      for (const consumer of consumersFound) {
+        if (!consumer.tenantId) {
+          // Consumer exists but not linked to any agency
+          // Try to find accounts with matching consumer data
+          const matchingAccounts = await storage.findAccountsByConsumerEmail(email);
+          
+          if (matchingAccounts.length > 0) {
+            // Group accounts by tenant
+            const tenantGroups = new Map<string, typeof matchingAccounts>();
+            for (const account of matchingAccounts) {
+              if (!tenantGroups.has(account.tenantId)) {
+                tenantGroups.set(account.tenantId, []);
+              }
+              tenantGroups.get(account.tenantId)?.push(account);
+            }
+            
+            // If only one tenant has accounts for this consumer, auto-link
+            if (tenantGroups.size === 1) {
+              const tenantId = Array.from(tenantGroups.keys())[0];
+              await storage.updateConsumer(consumer.id, { tenantId });
+              consumer.tenantId = tenantId;
+              console.log(`Auto-linked consumer ${consumer.id} to tenant ${tenantId} based on matching accounts`);
+            }
+          }
+        }
+      }
+
+      // Refresh consumers list after potential auto-linking
+      consumersFound = await storage.getConsumersByEmail(email);
+
+      // Filter out unlinked consumers for login purposes
+      const linkedConsumers = consumersFound.filter(c => c.tenantId);
+      
+      if (linkedConsumers.length === 0) {
+        return res.status(404).json({ 
+          message: "No agency accounts found. Please contact your agency for account details."
+        });
+      }
+
       // TODO: Verify dateOfBirth against consumer record when field is added
       
-      if (consumersFound.length === 1) {
+      if (linkedConsumers.length === 1) {
         // Single agency - proceed with login
-        const consumer = consumersFound[0];
-        const tenant = await storage.getTenant(consumer.tenantId);
+        const consumer = linkedConsumers[0];
+        const tenant = consumer.tenantId ? await storage.getTenant(consumer.tenantId) : null;
         
         // Generate consumer JWT token
         const token = jwt.sign(
@@ -348,7 +388,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         // Multiple agencies - let consumer choose
         const agencies = await Promise.all(
-          consumersFound.map(async (consumer: any) => {
+          linkedConsumers.map(async (consumer: any) => {
             const tenant = await storage.getTenant(consumer.tenantId);
             return {
               id: tenant?.id,
