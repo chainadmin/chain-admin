@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { VercelResponse } from '@vercel/node';
 import { getDb } from './_lib/db.js';
 import { withAuth, AuthenticatedRequest } from './_lib/auth.js';
 import { emailTemplates } from './_lib/schema.js';
@@ -15,11 +15,15 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
 
   try {
     const db = getDb();
-    
-    // Get tenant ID from JWT token
-    const token = req.headers.authorization?.replace('Bearer ', '') || 
-                  req.headers.cookie?.split(';').find(c => c.trim().startsWith('authToken='))?.split('=')[1];
-    
+
+    // Get tenant ID from JWT token (Authorization: Bearer or cookie)
+    const token =
+      req.headers.authorization?.replace('Bearer ', '') ||
+      req.headers.cookie
+        ?.split(';')
+        .find((c) => c.trim().startsWith('authToken='))
+        ?.split('=')[1];
+
     if (!token) {
       res.status(401).json({ error: 'No token provided' });
       return;
@@ -44,11 +48,10 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       res.status(200).json(templates);
     } else if (req.method === 'POST') {
       // Create a new email template
-      // Frontend sends 'html' field, backend stores it as 'content'
-      const { name, subject, html, category } = req.body;
+      const { name, subject, html, status } = req.body;
 
       if (!name || !subject || !html) {
-        res.status(400).json({ error: 'Name, subject, and content are required' });
+        res.status(400).json({ error: 'Name, subject, and html are required' });
         return;
       }
 
@@ -58,8 +61,8 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
           tenantId,
           name,
           subject,
-          html,  // Now using 'html' directly to match database
-          category: category || 'general',
+          html,
+          ...(status ? { status } : {}),
         })
         .returning();
 
@@ -77,10 +80,9 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       const [template] = await db
         .select()
         .from(emailTemplates)
-        .where(and(
-          eq(emailTemplates.id, templateId),
-          eq(emailTemplates.tenantId, tenantId)
-        ))
+        .where(
+          and(eq(emailTemplates.id, templateId), eq(emailTemplates.tenantId, tenantId))
+        )
         .limit(1);
 
       if (!template) {
@@ -89,19 +91,19 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       }
 
       // Delete the template
-      await db
-        .delete(emailTemplates)
-        .where(eq(emailTemplates.id, templateId));
+      await db.delete(emailTemplates).where(eq(emailTemplates.id, templateId));
 
-      res.status(200).json({ success: true, message: 'Template deleted successfully' });
+      res
+        .status(200)
+        .json({ success: true, message: 'Template deleted successfully' });
     } else {
       res.status(405).json({ error: 'Method not allowed' });
     }
   } catch (error: any) {
     console.error('Email templates API error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to process email template request',
-      message: error.message 
+      message: error.message,
     });
   }
 }
