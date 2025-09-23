@@ -3,13 +3,11 @@ import { useMutation } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Building2, Mail, Lock, ArrowRight, UserCheck } from "lucide-react";
-import chainLogo from "@/assets/chain-logo.png";
+import { Building2, Mail, Lock, ArrowRight, ShieldCheck, UserCheck } from "lucide-react";
+import PublicHeroLayout from "@/components/public-hero-layout";
 
 interface LoginForm {
   email: string;
@@ -154,155 +152,169 @@ export default function ConsumerLogin() {
     loginMutation.mutate(form);
   };
 
-  // Common agency slugs for quick selection
-  const commonAgencies = [
-    { slug: "agency-pro", name: "Agency Pro" },
-    { slug: "collections-plus", name: "Collections Plus" },
-    { slug: "debt-solutions", name: "Debt Solutions" },
-  ];
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center px-4">
-      <div className="max-w-md w-full space-y-6">
-        {/* Header */}
-        <div className="text-center">
-          {agencyContext ? (
-            <>
-              <div className="mb-4">
-                <img src={chainLogo} alt="Chain Software Group" className="h-12 object-contain mx-auto mb-2" />
-                <h1 className="text-3xl font-bold text-gray-900">Access Your Account</h1>
-                <p className="text-lg text-blue-600 font-medium mt-2">
-                  {agencyContext.name}
-                </p>
-                <p className="text-gray-600 text-sm">
-                  Sign in to view your account information
-                </p>
+    <PublicHeroLayout
+      badgeText="Secure consumer access"
+      title={agencyContext ? `Welcome back to ${agencyContext.name}` : "Access your account"}
+      description={
+        agencyContext
+          ? "Verify your information to review balances, download documents, and stay in touch with your agency."
+          : "Log in to review balances, download documents, and stay ahead of every update in one connected hub."
+      }
+      supportingContent={(
+        <>
+          <div className="text-base text-blue-100/80">
+            Enter the email address on file and your date of birth. We'll securely match you with the right agency and guide you to your information.
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500/20">
+                <Lock className="h-5 w-5 text-blue-200" />
               </div>
-            </>
-          ) : (
-            <>
-              <div className="w-16 h-16 bg-blue-600 rounded-full mx-auto flex items-center justify-center mb-4">
-                <Building2 className="h-8 w-8 text-white" />
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-white">Protected verification</p>
+                <p className="text-sm text-blue-100/70">Bank-level encryption and identity checks keep every login secure.</p>
               </div>
-              <h1 className="text-3xl font-bold text-gray-900">Consumer Portal</h1>
-              <p className="text-gray-600 mt-2">
-                Find and access your accounts from any agency
-              </p>
-            </>
-          )}
-        </div>
-
-        {/* Login Form */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <UserCheck className="h-5 w-5 mr-2 text-blue-600" />
-              Sign In to Your Account
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <Label htmlFor="email">Email Address *</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                  <Input
-                    id="email"
-                    type="email"
-                    value={form.email}
-                    onChange={(e) => handleInputChange("email", e.target.value)}
-                    placeholder="your@email.com"
-                    className="pl-10"
-                    data-testid="input-consumer-email"
-                    required
-                  />
-                </div>
-              </div>
-
-
-              <div>
-                <Label htmlFor="dob">Date of Birth *</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                  <Input
-                    id="dob"
-                    type="date"
-                    value={form.dateOfBirth}
-                    onChange={(e) => handleInputChange("dateOfBirth", e.target.value)}
-                    className="pl-10"
-                    data-testid="input-date-of-birth"
-                    required
-                  />
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Used for identity verification and security
-                </p>
-              </div>
-
-              <Button 
-                type="submit" 
-                className="w-full"
-                disabled={loginMutation.isPending}
-                data-testid="button-consumer-login"
-              >
-                {loginMutation.isPending ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Verifying...
-                  </>
-                ) : (
-                  <>
-                    Sign In to Your Account
-                    <ArrowRight className="h-4 w-4 ml-2" />
-                  </>
-                )}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        {/* Registration Link */}
-        <div className="text-center">
-          <p className="text-gray-600 text-sm">
-            New to the system?{" "}
-            <button
-              onClick={() => setLocation("/consumer-register")}
-              className="text-blue-600 hover:text-blue-800 font-medium"
-              data-testid="link-register"
-            >
-              Create an account
-            </button>
-          </p>
-        </div>
-
-        {/* Help */}
-        <div className="bg-blue-50 rounded-lg p-4">
-          <div className="flex items-start">
-            <div className="flex-shrink-0">
-              <Building2 className="h-5 w-5 text-blue-600" />
             </div>
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-blue-800">How it works</h3>
-              <p className="text-sm text-blue-700 mt-1">
-                Simply enter your email and date of birth. We'll search across all agencies to find your accounts and help you get set up if you're new.
+            <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500/20">
+                <ShieldCheck className="h-5 w-5 text-blue-200" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-white">Stay connected</p>
+                <p className="text-sm text-blue-100/70">Get account alerts, request support, and collaborate with your agency.</p>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+      headerActions={(
+        <>
+          <Button
+            variant="ghost"
+            className="text-blue-100 hover:bg-white/10"
+            onClick={() => (window.location.href = "/")}
+          >
+            Home
+          </Button>
+          <Button
+            className="bg-blue-500 hover:bg-blue-400"
+            onClick={() => setLocation("/consumer-register")}
+          >
+            Create account
+          </Button>
+        </>
+      )}
+      showDefaultHeaderActions={false}
+      contentClassName="p-8 sm:p-10"
+    >
+      <div className="space-y-8 text-left">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-blue-200">Consumer portal</p>
+            <h2 className="mt-2 text-2xl font-semibold text-white">Sign in to continue</h2>
+            <p className="mt-3 text-sm text-blue-100/70">
+              Provide your details below to access your dashboard and manage every account in one place.
+            </p>
+          </div>
+          <div className="hidden h-12 w-12 items-center justify-center rounded-full bg-blue-500/20 sm:flex">
+            <UserCheck className="h-6 w-6 text-blue-200" />
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="space-y-2">
+            <Label htmlFor="email" className="text-sm font-medium text-blue-100">
+              Email address
+            </Label>
+            <div className="relative">
+              <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-200/70" />
+              <Input
+                id="email"
+                type="email"
+                value={form.email}
+                onChange={(e) => handleInputChange("email", e.target.value)}
+                placeholder="you@example.com"
+                className="h-12 rounded-2xl border-white/20 bg-slate-900/60 pl-12 text-base text-white placeholder:text-blue-100/50 focus-visible:ring-blue-400"
+                data-testid="input-consumer-email"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="dob" className="text-sm font-medium text-blue-100">
+              Date of birth
+            </Label>
+            <div className="relative">
+              <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-200/70" />
+              <Input
+                id="dob"
+                type="date"
+                value={form.dateOfBirth}
+                onChange={(e) => handleInputChange("dateOfBirth", e.target.value)}
+                className="h-12 rounded-2xl border-white/20 bg-slate-900/60 pl-12 text-base text-white placeholder:text-blue-100/50 focus-visible:ring-blue-400"
+                data-testid="input-date-of-birth"
+                required
+              />
+            </div>
+            <p className="text-xs text-blue-100/60">We use this information only to confirm your identity.</p>
+          </div>
+
+          <Button
+            type="submit"
+            className="h-12 w-full rounded-full bg-blue-500 text-base font-medium text-white transition hover:bg-blue-400"
+            disabled={loginMutation.isPending}
+            data-testid="button-consumer-login"
+          >
+            {loginMutation.isPending ? (
+              <>
+                <div className="mr-2 h-4 w-4 animate-spin rounded-full border-b-2 border-white"></div>
+                Verifying
+              </>
+            ) : (
+              <>
+                Access your account
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </>
+            )}
+          </Button>
+        </form>
+
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-blue-100/70">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-500/20">
+              <Building2 className="h-5 w-5 text-blue-200" />
+            </div>
+            <div className="space-y-2">
+              <p className="font-semibold text-white">Need to register instead?</p>
+              <p>
+                New to the portal? We’ll guide you through finding your accounts and verifying your information in just a minute.
               </p>
+              <button
+                onClick={() => setLocation("/consumer-register")}
+                className="text-sm font-medium text-blue-200 transition hover:text-white"
+                data-testid="link-register"
+              >
+                Start registration
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Footer Links */}
-        <div className="mt-8 text-center border-t pt-4">
-          <div className="text-sm text-gray-600 space-x-4">
-            <a href="/terms-of-service" className="hover:text-blue-600 hover:underline">
+        <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-blue-100/60">
+          <div className="flex items-center gap-3">
+            <a href="/terms-of-service" className="transition hover:text-white hover:underline">
               Terms of Service
             </a>
             <span>•</span>
-            <a href="/privacy-policy" className="hover:text-blue-600 hover:underline">
+            <a href="/privacy-policy" className="transition hover:text-white hover:underline">
               Privacy Policy
             </a>
           </div>
+          <p>Secure access powered by Chain Software Group</p>
         </div>
       </div>
-    </div>
+    </PublicHeroLayout>
   );
 }
