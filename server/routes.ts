@@ -247,7 +247,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/consumer/accounts/:email', authenticateConsumer, async (req: any, res) => {
     try {
       // Get consumer info from JWT token (already verified by authenticateConsumer)
-      const { email: tokenEmail, tenantId } = req.consumer;
+      const { email: tokenEmail, tenantId, tenantSlug } = req.consumer;
       const requestedEmail = req.params.email;
       
       // Ensure consumer can only access their own data
@@ -256,7 +256,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Get consumer record
-      const consumer = await storage.getConsumerByEmailAndTenant(tokenEmail, tenantId);
+      const tenantIdentifier = tenantId ?? tenantSlug;
+      if (!tenantIdentifier) {
+        return res.status(400).json({ message: "Tenant information is missing" });
+      }
+
+      const consumer = await storage.getConsumerByEmailAndTenant(tokenEmail, tenantIdentifier);
       if (!consumer) {
         return res.status(404).json({ message: "Consumer not found" });
       }
@@ -265,10 +270,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const accountsList = await storage.getAccountsByConsumer(consumer.id);
 
       // Get tenant info for display
-      const tenant = await storage.getTenant(tenantId);
-      
+      const tenant = tenantId
+        ? await storage.getTenant(tenantId)
+        : tenantSlug
+          ? await storage.getTenantBySlug(tenantSlug)
+          : undefined;
+
       // Get tenant settings
-      const tenantSettings = await storage.getTenantSettings(tenantId);
+      const tenantSettings = tenant?.id ? await storage.getTenantSettings(tenant.id) : undefined;
 
       res.json({
         consumer: {

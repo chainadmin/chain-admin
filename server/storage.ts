@@ -135,7 +135,7 @@ export interface IStorage {
   getConsumer(id: string): Promise<Consumer | undefined>;
   getConsumerByEmail(email: string): Promise<Consumer | undefined>;
   getConsumersByEmail(email: string): Promise<Consumer[]>;
-  getConsumerByEmailAndTenant(email: string, tenantId: string): Promise<Consumer | undefined>;
+  getConsumerByEmailAndTenant(email: string, tenantIdentifier: string): Promise<Consumer | undefined>;
   createConsumer(consumer: InsertConsumer): Promise<Consumer>;
   updateConsumer(id: string, updates: Partial<Consumer>): Promise<Consumer>;
   findOrCreateConsumer(consumerData: InsertConsumer): Promise<Consumer>;
@@ -228,7 +228,7 @@ export interface IStorage {
   
   // Consumer registration operations
   registerConsumer(consumerData: InsertConsumer): Promise<Consumer>;
-  getConsumerByEmailAndTenant(email: string, tenantSlug: string): Promise<Consumer | undefined>;
+  getConsumerByEmailAndTenant(email: string, tenantIdentifier: string): Promise<Consumer | undefined>;
   getConsumerByEmail(email: string, tenantId: string): Promise<Consumer | undefined>;
   getTenantBySlug(slug: string): Promise<Tenant | undefined>;
   
@@ -1183,18 +1183,29 @@ export class DatabaseStorage implements IStorage {
     return newConsumer;
   }
 
-  async getConsumerByEmailAndTenant(email: string, tenantSlug: string): Promise<Consumer | undefined> {
-    const tenant = await this.getTenantBySlug(tenantSlug);
-    if (!tenant) return undefined;
+  async getConsumerByEmailAndTenant(email: string, tenantIdentifier: string): Promise<Consumer | undefined> {
+    if (!tenantIdentifier) {
+      return undefined;
+    }
+
+    const tenant = await this.getTenantBySlug(tenantIdentifier);
+    const tenantId = tenant?.id ?? (tenantIdentifier.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+      ? tenantIdentifier
+      : undefined);
+
+    if (!tenantId) {
+      return undefined;
+    }
 
     const [consumer] = await db.select()
       .from(consumers)
       .where(
         and(
-          eq(consumers.tenantId, tenant.id),
+          eq(consumers.tenantId, tenantId),
           sql`LOWER(${consumers.email}) = LOWER(${email})`
         )
       );
+
     return consumer || undefined;
   }
 
