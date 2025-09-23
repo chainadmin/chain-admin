@@ -117,6 +117,27 @@ export default function Emails() {
     },
   });
 
+  const deleteCampaignMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/email-campaigns/${id}`);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Campaign Deleted",
+        description: "Pending email campaign has been removed.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/email-campaigns"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/email-metrics"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Deletion Failed",
+        description: error.message || "Failed to delete campaign.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const deleteTemplateMutation = useMutation({
     mutationFn: async (id: string) => {
       await apiRequest("DELETE", `/api/email-templates/${id}`);
@@ -589,13 +610,10 @@ export default function Emails() {
                     <div className="space-y-4">
                       {(campaigns as any[]).map((campaign: any) => (
                         <div key={campaign.id} className="border rounded-lg p-4" data-testid={`campaign-${campaign.id}`}>
-                          <div className="flex justify-between items-start">
+                          <div className="flex justify-between items-start gap-4">
                             <div className="flex-1">
                               <div className="flex items-center space-x-2 mb-2">
                                 <h3 className="font-medium text-gray-900">{campaign.name}</h3>
-                                <Badge variant={campaign.status === 'completed' ? 'default' : campaign.status === 'sending' ? 'secondary' : 'destructive'}>
-                                  {campaign.status}
-                                </Badge>
                               </div>
                               <p className="text-sm text-gray-600 mb-2">
                                 <strong>Template:</strong> {campaign.templateName}
@@ -609,6 +627,43 @@ export default function Emails() {
                               <div className="text-xs text-gray-500 mt-2">
                                 Sent: {new Date(campaign.createdAt).toLocaleString()}
                               </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Badge variant={campaign.status === 'completed' ? 'default' : campaign.status === 'sending' ? 'secondary' : 'destructive'}>
+                                {campaign.status}
+                              </Badge>
+                              {campaign.status === 'pending' && (
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="text-red-600 hover:text-red-700"
+                                      aria-label="Delete campaign"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Delete Campaign</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        This will remove the pending campaign and it will no longer be sent to consumers. This action cannot be undone.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction
+                                        className="bg-red-600 hover:bg-red-700"
+                                        onClick={() => deleteCampaignMutation.mutate(campaign.id)}
+                                        disabled={deleteCampaignMutation.isPending}
+                                      >
+                                        {deleteCampaignMutation.isPending ? "Deleting..." : "Delete"}
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              )}
                             </div>
                           </div>
                         </div>

@@ -80,9 +80,7 @@ export default function Consumers() {
 
   // Delete consumer mutation
   const deleteConsumerMutation = useMutation({
-    mutationFn: async (id: string) => {
-      return apiRequest("DELETE", "/api/consumers", { id });
-    },
+    mutationFn: async (id: string) => apiRequest("DELETE", `/api/consumers/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/consumers"] });
       setShowDeleteDialog(false);
@@ -502,8 +500,9 @@ export default function Consumers() {
                 }
               }}
               className="bg-red-600 hover:bg-red-700"
+              disabled={deleteConsumerMutation.isPending}
             >
-              Delete
+              {deleteConsumerMutation.isPending ? "Deleting..." : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

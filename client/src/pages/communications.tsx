@@ -272,6 +272,33 @@ export default function Communications() {
     },
   });
 
+  const deleteCampaignMutation = useMutation({
+    mutationFn: ({ id, type }: { id: string; type: "email" | "sms" }) => {
+      const endpoint = type === "email" ? `/api/email-campaigns/${id}` : `/api/sms-campaigns/${id}`;
+      return apiRequest("DELETE", endpoint);
+    },
+    onSuccess: (_, variables) => {
+      if (variables.type === "email") {
+        queryClient.invalidateQueries({ queryKey: ["/api/email-campaigns"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/email-metrics"] });
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["/api/sms-campaigns"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/sms-metrics"] });
+      }
+      toast({
+        title: "Campaign Deleted",
+        description: `${variables.type === 'email' ? 'Email' : 'SMS'} campaign has been removed before sending.`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete campaign",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Automation Mutations
   const createAutomationMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/automations", data),
@@ -1336,11 +1363,45 @@ export default function Communications() {
                   <div className="space-y-4">
                     {(campaigns as any).map((campaign: any) => (
                       <div key={campaign.id} className="border rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-start justify-between gap-4 mb-2">
                           <h3 className="font-medium">{campaign.name}</h3>
-                          <Badge className={getStatusColor(campaign.status)}>
-                            {campaign.status}
-                          </Badge>
+                          <div className="flex items-center gap-2">
+                            <Badge className={getStatusColor(campaign.status)}>
+                              {campaign.status}
+                            </Badge>
+                            {campaign.status === "pending" && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="text-red-600 hover:text-red-700"
+                                    aria-label="Delete campaign"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Delete Campaign</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      This will cancel the pending {communicationType.toUpperCase()} campaign before it is sent to consumers. This action cannot be undone.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      className="bg-red-600 hover:bg-red-700"
+                                      onClick={() => deleteCampaignMutation.mutate({ id: campaign.id, type: communicationType })}
+                                      disabled={deleteCampaignMutation.isPending}
+                                    >
+                                      {deleteCampaignMutation.isPending ? "Deleting..." : "Delete"}
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
+                          </div>
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                           <div>
