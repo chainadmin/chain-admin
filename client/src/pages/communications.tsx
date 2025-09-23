@@ -844,10 +844,33 @@ export default function Communications() {
                             data-testid="textarea-html"
                             value={emailTemplateForm.html}
                             onChange={(e) => setEmailTemplateForm({ ...emailTemplateForm, html: e.target.value })}
-                            placeholder="Enter your email content (HTML supported)"
+                            placeholder="Enter your email content. Use {{firstName}} or {balance}."
                             rows={8}
                             required
                           />
+                        </div>
+                        <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+                          <h4 className="font-medium text-blue-900 text-sm mb-1">Available Variables</h4>
+                          <p className="text-xs text-blue-700 mb-2">
+                            Use <code className="font-mono">{"{{variable}}"}</code> or <code className="font-mono">{"{variable}"}</code> syntax to personalize each message.
+                          </p>
+                          <div className="text-xs text-blue-800 grid grid-cols-2 md:grid-cols-3 gap-1">
+                            <div>• {"{{firstName}}"}</div>
+                            <div>• {"{{lastName}}"}</div>
+                            <div>• {"{{fullName}}"}</div>
+                            <div>• {"{{email}}"}</div>
+                            <div>• {"{{phone}}"}</div>
+                            <div>• {"{{accountNumber}}"}</div>
+                            <div>• {"{{creditor}}"}</div>
+                            <div>• {"{{balance}}"}</div>
+                            <div>• {"{{dueDate}}"}</div>
+                            <div>• {"{{consumerPortalLink}}"}</div>
+                            <div>• {"{{appDownloadLink}}"}</div>
+                            <div>• {"{{agencyName}}"}</div>
+                            <div>• {"{{agencyEmail}}"}</div>
+                            <div>• {"{{agencyPhone}}"}</div>
+                            <div className="col-span-full">• Plus any additional CSV columns</div>
+                          </div>
                         </div>
                       </>
                     ) : (
@@ -858,7 +881,7 @@ export default function Communications() {
                           data-testid="textarea-message"
                           value={smsTemplateForm.message}
                           onChange={(e) => setSmsTemplateForm({ ...smsTemplateForm, message: e.target.value })}
-                          placeholder="Enter your SMS message (160 characters recommended)"
+                          placeholder="Enter your SMS message. Use {{firstName}} or {balance}."
                           rows={6}
                           maxLength={1600}
                           required
@@ -866,6 +889,27 @@ export default function Communications() {
                         <p className="text-sm text-gray-500 mt-1">
                           {smsTemplateForm.message.length}/1600 characters
                         </p>
+                        <div className="mt-3 bg-blue-50 border border-blue-200 rounded-md p-3">
+                          <h4 className="font-medium text-blue-900 text-sm mb-1">Available Variables</h4>
+                          <p className="text-xs text-blue-700 mb-2">
+                            Use <code className="font-mono">{"{{variable}}"}</code> or <code className="font-mono">{"{variable}"}</code> syntax to personalize each message.
+                          </p>
+                          <div className="text-xs text-blue-800 grid grid-cols-2 gap-1">
+                            <div>• {"{{firstName}}"}</div>
+                            <div>• {"{{lastName}}"}</div>
+                            <div>• {"{{fullName}}"}</div>
+                            <div>• {"{{phone}}"}</div>
+                            <div>• {"{{accountNumber}}"}</div>
+                            <div>• {"{{creditor}}"}</div>
+                            <div>• {"{{balance}}"}</div>
+                            <div>• {"{{dueDate}}"}</div>
+                            <div>• {"{{consumerPortalLink}}"}</div>
+                            <div>• {"{{appDownloadLink}}"}</div>
+                            <div>• {"{{agencyName}}"}</div>
+                            <div>• {"{{agencyPhone}}"}</div>
+                            <div className="col-span-full">• Plus any additional CSV columns</div>
+                          </div>
+                        </div>
                       </div>
                     )}
                     

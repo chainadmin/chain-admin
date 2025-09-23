@@ -52,46 +52,106 @@ const upload = multer({
   }
 });
 
-// Helper function to replace email template variables
-function replaceEmailVariables(
-  template: string, 
-  consumer: any, 
-  account: any, 
+// Helper utilities for template variable replacement
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function formatCurrency(cents: number | string | null | undefined): string {
+  if (cents === null || cents === undefined) return '';
+  const numericValue = typeof cents === 'number' ? cents : Number(cents);
+  if (Number.isNaN(numericValue)) return '';
+  return `$${(numericValue / 100).toFixed(2)}`;
+}
+
+function applyTemplateReplacement(template: string, key: string, value: string): string {
+  if (!template) return template;
+  const sanitizedValue = value ?? '';
+  const keyPattern = escapeRegExp(key);
+  const patterns = [
+    new RegExp(`\\{\\{\\s*${keyPattern}\\s*\\}\\}`, 'gi'),
+    new RegExp(`\\{\\s*${keyPattern}\\s*\\}`, 'gi'),
+  ];
+
+  return patterns.reduce((result, pattern) => result.replace(pattern, sanitizedValue), template);
+}
+
+// Helper function to replace template variables for both email and SMS content
+function replaceTemplateVariables(
+  template: string,
+  consumer: any,
+  account: any,
   tenant: any,
   baseUrl: string = process.env.REPLIT_DOMAINS || 'localhost:5000'
 ): string {
+  if (!template) return template;
+
+  const sanitizedBaseUrl = (baseUrl || 'localhost:5000').replace(/^https?:\/\//, '').replace(/\/$/, '');
+  const consumerEmail = consumer?.email || '';
+  const consumerSlug = tenant?.slug;
+
+  let consumerPortalUrl = '';
+  if (sanitizedBaseUrl && consumerSlug) {
+    const emailPath = consumerEmail ? `/${encodeURIComponent(consumerEmail)}` : '';
+    consumerPortalUrl = `https://${sanitizedBaseUrl}/consumer/${consumerSlug}${emailPath}`;
+  }
+
+  const appDownloadUrl = sanitizedBaseUrl ? `https://${sanitizedBaseUrl}/download` : '';
+
+  const firstName = consumer?.firstName || '';
+  const lastName = consumer?.lastName || '';
+  const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
+  const consumerPhone = consumer?.phone || '';
+
+  const balanceCents = account?.balanceCents;
+  const formattedBalance = formatCurrency(balanceCents);
+  const formattedDueDate = account?.dueDate ? new Date(account.dueDate).toLocaleDateString() : '';
+  const dueDateIso = account?.dueDate ? new Date(account.dueDate).toISOString().split('T')[0] : '';
+
+  const replacements: Record<string, string> = {
+    firstName,
+    lastName,
+    fullName,
+    consumerName: fullName,
+    email: consumerEmail,
+    phone: consumerPhone,
+    consumerId: consumer?.id || '',
+    accountId: account?.id || '',
+    accountNumber: account?.accountNumber || '',
+    creditor: account?.creditor || '',
+    balance: formattedBalance,
+    balence: formattedBalance,
+    balanceCents: balanceCents !== undefined && balanceCents !== null ? String(balanceCents) : '',
+    dueDate: formattedDueDate,
+    dueDateIso,
+    consumerPortalLink: consumerPortalUrl,
+    appDownloadLink: appDownloadUrl,
+    agencyName: tenant?.name || '',
+    agencyEmail: tenant?.email || '',
+    agencyPhone: tenant?.phoneNumber || tenant?.twilioPhoneNumber || '',
+  };
+
   let processedTemplate = template;
-  
-  // Consumer variables
-  processedTemplate = processedTemplate.replace(/\{\{firstName\}\}/g, consumer.firstName || '');
-  processedTemplate = processedTemplate.replace(/\{\{lastName\}\}/g, consumer.lastName || '');
-  processedTemplate = processedTemplate.replace(/\{\{email\}\}/g, consumer.email || '');
-  
-  // Account variables (if account exists)
-  if (account) {
-    processedTemplate = processedTemplate.replace(/\{\{accountNumber\}\}/g, account.accountNumber || '');
-    processedTemplate = processedTemplate.replace(/\{\{creditor\}\}/g, account.creditor || '');
-    processedTemplate = processedTemplate.replace(/\{\{balance\}\}/g, 
-      account.balanceCents ? `$${(account.balanceCents / 100).toFixed(2)}` : '$0.00');
-    processedTemplate = processedTemplate.replace(/\{\{dueDate\}\}/g, 
-      account.dueDate ? new Date(account.dueDate).toLocaleDateString() : '');
-  }
-  
-  // Consumer portal and app download links
-  const consumerPortalUrl = `https://${baseUrl}/consumer/${tenant.slug}/${encodeURIComponent(consumer.email)}`;
-  const appDownloadUrl = `https://${baseUrl}/download`; // Generic app download page
-  
-  processedTemplate = processedTemplate.replace(/\{\{consumerPortalLink\}\}/g, consumerPortalUrl);
-  processedTemplate = processedTemplate.replace(/\{\{appDownloadLink\}\}/g, appDownloadUrl);
-  
-  // Process any additional data from consumer.additionalData (CSV columns)
-  if (consumer.additionalData && typeof consumer.additionalData === 'object') {
-    Object.keys(consumer.additionalData).forEach(key => {
-      const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
-      processedTemplate = processedTemplate.replace(regex, consumer.additionalData[key] || '');
-    });
-  }
-  
+
+  Object.entries(replacements).forEach(([key, value]) => {
+    processedTemplate = applyTemplateReplacement(processedTemplate, key, value || '');
+  });
+
+  const additionalSources = [consumer?.additionalData, account?.additionalData];
+  additionalSources.forEach(source => {
+    if (source && typeof source === 'object') {
+      Object.entries(source).forEach(([key, value]) => {
+        const stringValue =
+          value === null || value === undefined
+            ? ''
+            : typeof value === 'object'
+              ? JSON.stringify(value)
+              : String(value);
+        processedTemplate = applyTemplateReplacement(processedTemplate, key, stringValue);
+      });
+    }
+  });
+
   return processedTemplate;
 }
 
@@ -804,8 +864,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const consumerAccount = accountsData.find(acc => acc.consumerId === consumer.id);
         
         // Replace variables in both subject and HTML content
-        const processedSubject = replaceEmailVariables(template.subject, consumer, consumerAccount, tenant);
-        const processedHtml = replaceEmailVariables(template.html, consumer, consumerAccount, tenant);
+        const processedSubject = replaceTemplateVariables(template.subject || '', consumer, consumerAccount, tenant);
+        const processedHtml = replaceTemplateVariables(template.html || '', consumer, consumerAccount, tenant);
         
         return {
           to: consumer.email!,
@@ -831,6 +891,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: 'completed',
         totalSent: emailResults.successful,
         totalErrors: emailResults.failed,
+        totalRecipients: processedEmails.length,
         completedAt: new Date(),
       });
 
@@ -986,7 +1047,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/sms-campaigns', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
-      if (!tenantId) { 
+      if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
       }
 
@@ -996,14 +1057,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
         targetGroup: z.enum(["all", "with-balance", "decline", "recent-upload"]),
       });
 
-      const validatedData = insertSmsCampaignSchema.parse(req.body);
-      
-      const newCampaign = await storage.createSmsCampaign({
-        ...validatedData,
-        tenantId: tenantId,
+      const { templateId, name, targetGroup } = insertSmsCampaignSchema.parse(req.body);
+
+      const consumers = await storage.getConsumersByTenant(tenantId);
+      const accountsData = await storage.getAccountsByTenant(tenantId);
+
+      let targetedConsumers = consumers;
+
+      if (targetGroup === "with-balance") {
+        const consumerIds = accountsData
+          .filter(acc => (acc.balanceCents || 0) > 0)
+          .map(acc => acc.consumerId);
+        targetedConsumers = consumers.filter(c => consumerIds.includes(c.id));
+      } else if (targetGroup === "decline") {
+        targetedConsumers = consumers.filter(c =>
+          (c.additionalData && (c.additionalData as any).status === 'decline') ||
+          (c.additionalData && (c.additionalData as any).folder === 'decline')
+        );
+      } else if (targetGroup === "recent-upload") {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        targetedConsumers = consumers.filter(c =>
+          c.createdAt && new Date(c.createdAt) > yesterday
+        );
+      }
+
+      const campaign = await storage.createSmsCampaign({
+        tenantId,
+        templateId,
+        name,
+        targetGroup,
+        totalRecipients: targetedConsumers.length,
+        status: 'sending',
       });
-      
-      res.status(201).json(newCampaign);
+
+      const templates = await storage.getSmsTemplatesByTenant(tenantId);
+      const template = templates.find(t => t.id === templateId);
+      if (!template) {
+        return res.status(404).json({ message: "SMS template not found" });
+      }
+
+      const tenant = await storage.getTenant(tenantId);
+      if (!tenant) {
+        return res.status(404).json({ message: "Tenant not found" });
+      }
+
+      const processedMessages = targetedConsumers
+        .filter(consumer => consumer.phone)
+        .map(consumer => {
+          const consumerAccount = accountsData.find(acc => acc.consumerId === consumer.id);
+          const processedMessage = replaceTemplateVariables(template.message || '', consumer, consumerAccount, tenant);
+          return {
+            to: consumer.phone!,
+            message: processedMessage,
+            consumerId: consumer.id,
+          };
+        });
+
+      console.log(`📱 Sending ${processedMessages.length} SMS messages via Twilio...`);
+      const smsResults = await smsService.sendBulkSms(processedMessages, tenantId, campaign.id);
+
+      const updatedCampaign = await storage.updateSmsCampaign(campaign.id, {
+        status: smsResults.totalQueued > 0 ? 'sending' : 'completed',
+        totalSent: smsResults.totalSent,
+        totalErrors: smsResults.totalFailed,
+        totalRecipients: processedMessages.length,
+        completedAt: smsResults.totalQueued > 0 ? null : new Date(),
+      });
+
+      console.log(
+        `✅ SMS campaign processed: ${smsResults.totalSent} sent immediately, ${smsResults.totalQueued} queued, ${smsResults.totalFailed} failed`
+      );
+
+      res.json({
+        ...updatedCampaign,
+        smsResults: {
+          sent: smsResults.totalSent,
+          queued: smsResults.totalQueued,
+          failed: smsResults.totalFailed,
+          totalProcessed: processedMessages.length,
+        }
+      });
     } catch (error) {
       console.error("Error creating SMS campaign:", error);
       res.status(500).json({ message: "Failed to create SMS campaign" });

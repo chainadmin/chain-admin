@@ -207,25 +207,35 @@ export default function Emails() {
                         rows={10}
                         value={templateForm.html}
                         onChange={(e) => setTemplateForm({...templateForm, html: e.target.value})}
-                        placeholder="Enter your HTML email content. Use variables like {{firstName}}, {{balance}}, etc."
+                        placeholder="Enter your HTML email content. Use variables like {{firstName}} or {balance}."
                         className="font-mono text-sm"
                         data-testid="input-template-html"
                       />
                     </div>
-                    
+
                     <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
-                      <h4 className="font-medium text-blue-900 text-sm mb-2">Available Variables:</h4>
-                      <div className="text-xs text-blue-800 grid grid-cols-2 gap-1">
+                      <h4 className="font-medium text-blue-900 text-sm mb-1">Available Variables:</h4>
+                      <p className="text-xs text-blue-700 mb-2">
+                        Use either <code className="font-mono">{"{{variable}}"}</code> or <code className="font-mono">{"{variable}"}</code> syntax.
+                      </p>
+                      <div className="text-xs text-blue-800 grid grid-cols-2 md:grid-cols-3 gap-1">
                         <div>• {"{{firstName}}"}</div>
                         <div>• {"{{lastName}}"}</div>
+                        <div>• {"{{fullName}}"}</div>
                         <div>• {"{{email}}"}</div>
+                        <div>• {"{{phone}}"}</div>
                         <div>• {"{{accountNumber}}"}</div>
                         <div>• {"{{creditor}}"}</div>
                         <div>• {"{{balance}}"}</div>
+                        <div>• {"{{balanceCents}}"}</div>
                         <div>• {"{{dueDate}}"}</div>
+                        <div>• {"{{dueDateIso}}"}</div>
                         <div>• {"{{consumerPortalLink}}"}</div>
                         <div>• {"{{appDownloadLink}}"}</div>
-                        <div>• Plus any additional CSV columns</div>
+                        <div>• {"{{agencyName}}"}</div>
+                        <div>• {"{{agencyEmail}}"}</div>
+                        <div>• {"{{agencyPhone}}"}</div>
+                        <div className="col-span-full">• Plus any additional CSV columns</div>
                       </div>
                     </div>
                   </div>
