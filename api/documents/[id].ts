@@ -3,8 +3,7 @@ import jwt from 'jsonwebtoken';
 import { getDb } from '../_lib/db.js';
 import { documents } from '../_lib/schema.js';
 import { eq, and } from 'drizzle-orm';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+import { JWT_SECRET } from '../_lib/auth.js';
 
 interface AuthenticatedRequest extends VercelRequest {
   method: string;
