@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAgencyContext } from "@/hooks/useAgencyContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +19,10 @@ export default function EnhancedConsumerPortal() {
   const { tenantSlug, email } = useParams();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { agencySlug } = useAgencyContext();
+
+  const resolvedTenantSlug = tenantSlug ?? agencySlug;
+  const encodedEmail = email ? encodeURIComponent(email) : "";
 
   const [callbackForm, setCallbackForm] = useState({
     requestType: "callback",
@@ -32,23 +37,26 @@ export default function EnhancedConsumerPortal() {
 
   // Fetch consumer data
   const { data, isLoading, error } = useQuery({
-    queryKey: [`/api/consumer/accounts/${email}?tenantSlug=${tenantSlug}`],
+    queryKey: [`/api/consumer/accounts/${encodedEmail}?tenantSlug=${resolvedTenantSlug ?? ""}`],
+    enabled: !!(resolvedTenantSlug && email),
   });
 
   // Fetch notifications
   const { data: notifications } = useQuery({
-    queryKey: [`/api/consumer-notifications/${email}/${tenantSlug}`],
+    queryKey: [`/api/consumer-notifications/${encodedEmail}/${resolvedTenantSlug ?? ""}`],
+    enabled: !!(resolvedTenantSlug && email),
   });
 
   // Fetch documents
   const { data: documents } = useQuery({
-    queryKey: [`/api/consumer/documents/${email}?tenantSlug=${tenantSlug}`],
+    queryKey: [`/api/consumer/documents/${encodedEmail}?tenantSlug=${resolvedTenantSlug ?? ""}`],
+    enabled: !!(resolvedTenantSlug && email),
   });
 
   // Fetch payment arrangements
   const { data: arrangements } = useQuery({
-    queryKey: [`/api/consumer/arrangements/${email}?tenantSlug=${tenantSlug}&balance=${(data as any)?.accounts?.reduce((sum: number, acc: any) => sum + (acc.balanceCents || 0), 0) || 0}`],
-    enabled: !!(data as any)?.accounts,
+    queryKey: [`/api/consumer/arrangements/${encodedEmail}?tenantSlug=${resolvedTenantSlug ?? ""}&balance=${(data as any)?.accounts?.reduce((sum: number, acc: any) => sum + (acc.balanceCents || 0), 0) || 0}`],
+    enabled: !!(data as any)?.accounts && !!(resolvedTenantSlug && email),
   });
 
   // Submit callback request mutation
@@ -56,7 +64,7 @@ export default function EnhancedConsumerPortal() {
     mutationFn: async (requestData: any) => {
       await apiRequest("POST", "/api/callback-request", {
         ...requestData,
-        tenantSlug,
+        tenantSlug: resolvedTenantSlug,
         consumerEmail: email,
       });
     },
@@ -90,9 +98,28 @@ export default function EnhancedConsumerPortal() {
       await apiRequest("PATCH", `/api/consumer-notifications/${notificationId}/read`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/consumer-notifications/${email}/${tenantSlug}`] });
+      queryClient.invalidateQueries({
+        queryKey: [`/api/consumer-notifications/${encodedEmail}/${resolvedTenantSlug ?? ""}`],
+      });
     },
   });
+
+  if (!resolvedTenantSlug) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Card className="max-w-md mx-4">
+          <CardContent className="pt-6 text-center">
+            <AlertCircle className="h-12 w-12 text-amber-500 mx-auto mb-4" />
+            <h1 className="text-xl font-semibold text-gray-900 mb-2">Agency Not Found</h1>
+            <p className="text-gray-600">
+              We couldn&apos;t determine which agency portal to load. Please check your link or contact your agency for
+              assistance.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const handleCallbackSubmit = (e: React.FormEvent) => {
     e.preventDefault();
