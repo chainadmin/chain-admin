@@ -391,7 +391,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/consumers', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = await getTenantId(req, storage);
-      
+
       if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
       }
@@ -401,6 +401,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching consumers:", error);
       res.status(500).json({ message: "Failed to fetch consumers" });
+    }
+  });
+
+  app.patch('/api/consumers/:id', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = await getTenantId(req, storage);
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { id } = req.params;
+      const consumer = await storage.getConsumer(id);
+
+      if (!consumer || consumer.tenantId !== tenantId) {
+        return res.status(404).json({ message: "Consumer not found" });
+      }
+
+      const updatedConsumer = await storage.updateConsumer(id, req.body);
+      res.json(updatedConsumer);
+    } catch (error) {
+      console.error("Error updating consumer:", error);
+      res.status(500).json({ message: "Failed to update consumer" });
     }
   });
 
@@ -2413,13 +2436,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/company/consumers', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
-      if (!tenantId) { 
+      if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
       }
 
+      const tenant = await storage.getTenant(tenantId);
       const consumers = await storage.getConsumersByTenant(tenantId);
-      
-      // Add account count and total balance for each consumer
+
+      // Add account count, total balance, and tenant slug for each consumer
       const consumersWithStats = await Promise.all(
         consumers.map(async (consumer) => {
           const accounts = await storage.getAccountsByConsumer(consumer.id);
@@ -2427,10 +2451,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ...consumer,
             accountCount: accounts.length,
             totalBalanceCents: accounts.reduce((sum, acc) => sum + (acc.balanceCents || 0), 0),
+            tenantSlug: tenant?.slug,
           };
         })
       );
-      
+
       res.json(consumersWithStats);
     } catch (error) {
       console.error("Error fetching company consumers:", error);
@@ -2456,13 +2481,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch('/api/company/consumers/:id', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
-      if (!tenantId) { 
-        return res.status(403).json({ message: "No tenant access" }); 
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
       }
       const { id } = req.params;
 
-      const consumer = await storage.updateConsumer(id, req.body);
-      res.json(consumer);
+      const consumer = await storage.getConsumer(id);
+      if (!consumer || consumer.tenantId !== tenantId) {
+        return res.status(404).json({ message: "Consumer not found" });
+      }
+
+      const updatedConsumer = await storage.updateConsumer(id, req.body);
+      res.json(updatedConsumer);
     } catch (error) {
       console.error("Error updating consumer:", error);
       res.status(500).json({ message: "Failed to update consumer" });
