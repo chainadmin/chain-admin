@@ -176,6 +176,14 @@ export const emailCampaigns = pgTable("email_campaigns", {
   templateId: uuid("template_id").references(() => emailTemplates.id, { onDelete: "cascade" }).notNull(),
   name: text("name").notNull(),
   targetGroup: text("target_group").notNull(), // "all", "with-balance", "overdue"
+  targetType: text("target_type", { enum: ['all', 'folder', 'custom'] }).default('all').notNull(),
+  targetFolderIds: jsonb("target_folder_ids").$type<string[]>().default(sql`'[]'::jsonb`),
+  customFilters: jsonb("custom_filters").$type<{
+    balanceMin?: string;
+    balanceMax?: string;
+    status?: string;
+    lastContactDays?: string;
+  }>().default(sql`'{}'::jsonb`),
   status: text("status").default("pending"), // "pending", "sending", "completed", "failed"
   totalRecipients: bigint("total_recipients", { mode: "number" }).default(0),
   totalSent: bigint("total_sent", { mode: "number" }).default(0),
@@ -220,6 +228,14 @@ export const smsCampaigns = pgTable("sms_campaigns", {
   templateId: uuid("template_id").references(() => smsTemplates.id, { onDelete: "cascade" }).notNull(),
   name: text("name").notNull(),
   targetGroup: text("target_group").notNull(), // "all", "with-balance", "decline", "recent-upload"
+  targetType: text("target_type", { enum: ['all', 'folder', 'custom'] }).default('all').notNull(),
+  targetFolderIds: jsonb("target_folder_ids").$type<string[]>().default(sql`'[]'::jsonb`),
+  customFilters: jsonb("custom_filters").$type<{
+    balanceMin?: string;
+    balanceMax?: string;
+    status?: string;
+    lastContactDays?: string;
+  }>().default(sql`'{}'::jsonb`),
   status: text("status").default("pending"), // "pending", "sending", "completed", "failed"
   totalRecipients: bigint("total_recipients", { mode: "number" }).default(0),
   totalSent: bigint("total_sent", { mode: "number" }).default(0),

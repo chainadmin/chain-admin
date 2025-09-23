@@ -17,6 +17,7 @@ import { uploadLogo } from "./supabaseStorage";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { subdomainMiddleware } from "./middleware/subdomain";
+import { filterConsumersForCampaign, sanitizeTargetingInput } from "@shared/utils/campaignTargeting";
 
 const csvUploadSchema = z.object({
   consumers: z.array(z.object({
@@ -244,6 +245,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (consumersFound.length === 1) {
         // Single agency - proceed with login
         const consumer = consumersFound[0];
+        if (!consumer.tenantId) {
+          return res.status(400).json({ message: "Consumer record is missing an associated tenant" });
+        }
+
         const tenant = await storage.getTenant(consumer.tenantId);
         
         // Generate consumer JWT token
@@ -740,49 +745,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const { name, templateId, targetGroup } = req.body;
-      
-      if (!name || !templateId || !targetGroup) {
-        return res.status(400).json({ message: "Name, template ID, and target group are required" });
+      const campaignRequestSchema = z.object({
+        name: z.string().min(1),
+        templateId: z.string().uuid(),
+        targetGroup: z.enum(['all', 'with-balance', 'decline', 'recent-upload']).default('all'),
+        targetType: z.enum(['all', 'folder', 'custom']).optional(),
+        targetFolderIds: z.array(z.string().uuid()).optional(),
+        customFilters: z.object({
+          balanceMin: z.string().optional(),
+          balanceMax: z.string().optional(),
+          status: z.string().optional(),
+          lastContactDays: z.string().optional(),
+        }).optional(),
+      });
+
+      const parsedBody = campaignRequestSchema.parse(req.body);
+
+      const targeting = sanitizeTargetingInput({
+        targetGroup: parsedBody.targetGroup,
+        targetType: parsedBody.targetType,
+        targetFolderIds: parsedBody.targetFolderIds,
+        customFilters: parsedBody.customFilters,
+      });
+
+      if (targeting.targetType === 'folder' && targeting.targetFolderIds.length === 0) {
+        return res.status(400).json({ message: "Please select at least one folder" });
       }
 
-      // Get target consumers count
       const consumers = await storage.getConsumersByTenant(tenantId);
-      let targetedConsumers = consumers;
-      
-      if (targetGroup === "with-balance") {
-        const accounts = await storage.getAccountsByTenant(tenantId);
-        const consumerIds = accounts.filter(acc => (acc.balanceCents || 0) > 0).map(acc => acc.consumerId);
-        targetedConsumers = consumers.filter(c => consumerIds.includes(c.id));
-      } else if (targetGroup === "decline") {
-        // For decline status, we'll filter consumers based on a decline status field
-        // This could be stored in consumer additionalData or a separate status field
-        targetedConsumers = consumers.filter(c => 
-          (c.additionalData && (c.additionalData as any).status === 'decline') ||
-          (c.additionalData && (c.additionalData as any).folder === 'decline')
-        );
-      } else if (targetGroup === "recent-upload") {
-        // For most recent upload, we'll need to track upload batches
-        // For now, we'll use consumers created in the last 24 hours as a proxy
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        targetedConsumers = consumers.filter(c => 
-          c.createdAt && new Date(c.createdAt) > yesterday
-        );
-      }
+      const accountsData = await storage.getAccountsByTenant(tenantId);
+      const targetedConsumers = filterConsumersForCampaign(consumers, accountsData, targeting);
 
       const campaign = await storage.createEmailCampaign({
-        tenantId: tenantId,
-        name,
-        templateId,
-        targetGroup,
+        tenantId,
+        name: parsedBody.name,
+        templateId: parsedBody.templateId,
+        targetGroup: targeting.targetGroup,
+        targetType: targeting.targetType,
+        targetFolderIds: targeting.targetFolderIds,
+        customFilters: targeting.customFilters,
         totalRecipients: targetedConsumers.length,
         status: 'sending',
       });
 
       // Get email template for variable replacement
       const templates = await storage.getEmailTemplatesByTenant(tenantId);
-      const template = templates.find(t => t.id === templateId);
+      const template = templates.find(t => t.id === parsedBody.templateId);
       if (!template) {
         return res.status(404).json({ message: "Email template not found" });
       }
@@ -793,16 +801,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Tenant not found" });
       }
 
-      // Process variables for each consumer and prepare email content
-      const accountsData = await storage.getAccountsByTenant(tenantId);
-      
       // Prepare emails with variable replacement (filter out consumers without emails)
       const processedEmails = targetedConsumers
         .filter(consumer => consumer.email) // Only include consumers with valid emails
         .map(consumer => {
         // Find the primary account for this consumer (could be multiple accounts)
         const consumerAccount = accountsData.find(acc => acc.consumerId === consumer.id);
-        
+
         // Replace variables in both subject and HTML content
         const processedSubject = replaceEmailVariables(template.subject, consumer, consumerAccount, tenant);
         const processedHtml = replaceEmailVariables(template.html, consumer, consumerAccount, tenant);
@@ -817,7 +822,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             campaignId: campaign.id,
             tenantId: tenantId || '',
             consumerId: consumer.id,
-            templateId: templateId,
+            templateId: parsedBody.templateId,
           }
         };
       });
@@ -990,19 +995,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const insertSmsCampaignSchema = z.object({
+      const smsCampaignSchema = z.object({
         templateId: z.string().uuid(),
         name: z.string().min(1),
-        targetGroup: z.enum(["all", "with-balance", "decline", "recent-upload"]),
+        targetGroup: z.enum(["all", "with-balance", "decline", "recent-upload"]).default("all"),
+        targetType: z.enum(["all", "folder", "custom"]).optional(),
+        targetFolderIds: z.array(z.string().uuid()).optional(),
+        customFilters: z.object({
+          balanceMin: z.string().optional(),
+          balanceMax: z.string().optional(),
+          status: z.string().optional(),
+          lastContactDays: z.string().optional(),
+        }).optional(),
       });
 
-      const validatedData = insertSmsCampaignSchema.parse(req.body);
-      
-      const newCampaign = await storage.createSmsCampaign({
-        ...validatedData,
-        tenantId: tenantId,
+      const parsedBody = smsCampaignSchema.parse(req.body);
+
+      const targeting = sanitizeTargetingInput({
+        targetGroup: parsedBody.targetGroup,
+        targetType: parsedBody.targetType,
+        targetFolderIds: parsedBody.targetFolderIds,
+        customFilters: parsedBody.customFilters,
       });
-      
+
+      if (targeting.targetType === "folder" && targeting.targetFolderIds.length === 0) {
+        return res.status(400).json({ message: "Please select at least one folder" });
+      }
+
+      const consumers = await storage.getConsumersByTenant(tenantId);
+      const accountsData = await storage.getAccountsByTenant(tenantId);
+      const targetedConsumers = filterConsumersForCampaign(consumers, accountsData, targeting);
+      const recipientsWithPhone = targetedConsumers.filter((consumer) => !!consumer.phone).length;
+
+      const newCampaign = await storage.createSmsCampaign({
+        tenantId,
+        templateId: parsedBody.templateId,
+        name: parsedBody.name,
+        targetGroup: targeting.targetGroup,
+        targetType: targeting.targetType,
+        targetFolderIds: targeting.targetFolderIds,
+        customFilters: targeting.customFilters,
+        totalRecipients: recipientsWithPhone,
+      });
+
       res.status(201).json(newCampaign);
     } catch (error) {
       console.error("Error creating SMS campaign:", error);

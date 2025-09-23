@@ -1,9 +1,118 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getDb } from './_lib/db.js';
+import { getDb, getSqlClient } from './_lib/db.js';
 import { withAuth, AuthenticatedRequest } from './_lib/auth.js';
-import { emailCampaigns, emailTemplates, consumers, emailTracking } from './_lib/schema.js';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { emailCampaigns, emailTemplates, consumers, accounts } from './_lib/schema.js';
+import { eq, and, desc } from 'drizzle-orm';
+import { z } from 'zod';
+import { filterConsumersForCampaign, sanitizeTargetingInput } from '@shared/utils/campaignTargeting.js';
 import jwt from 'jsonwebtoken';
+
+type RawRecord = Record<string, unknown>;
+
+function ensureStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const result: string[] = [];
+  for (const entry of value) {
+    if (typeof entry === 'string') {
+      const trimmed = entry.trim();
+      if (trimmed) {
+        result.push(trimmed);
+      }
+    }
+  }
+
+  return result;
+}
+
+function ensureCustomFilters(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  const record = value as RawRecord;
+  const result: RawRecord = {};
+
+  const keys: Array<keyof typeof record> = ['balanceMin', 'balanceMax', 'status', 'lastContactDays'];
+  for (const key of keys) {
+    const entry = record[key];
+    if (typeof entry === 'string') {
+      const trimmed = entry.trim();
+      if (trimmed) {
+        result[key] = trimmed;
+      }
+    }
+  }
+
+  return result;
+}
+
+function ensureDate(value: unknown): Date | null {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return value;
+  }
+
+  const parsed = new Date(value as string | number);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function mapLegacyCampaignRow(row: RawRecord, templateNameKey: string) {
+  const templateNameValue = row[templateNameKey];
+
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    templateId: row.template_id,
+    name: row.name,
+    targetGroup: (row.target_group as string) ?? 'all',
+    targetType: ((row.target_type as string) ?? 'all') as 'all' | 'folder' | 'custom',
+    targetFolderIds: ensureStringArray(row.target_folder_ids),
+    customFilters: ensureCustomFilters(row.custom_filters),
+    status: (row.status as string) ?? 'pending',
+    totalRecipients: Number((row.total_recipients as string | number | null) ?? 0),
+    totalSent: Number((row.total_sent as string | number | null) ?? 0),
+    totalDelivered: Number((row.total_delivered as string | number | null) ?? 0),
+    totalOpened: Number((row.total_opened as string | number | null) ?? 0),
+    totalClicked: Number((row.total_clicked as string | number | null) ?? 0),
+    totalErrors: Number((row.total_errors as string | number | null) ?? 0),
+    totalOptOuts: Number((row.total_opt_outs as string | number | null) ?? 0),
+    createdAt: ensureDate(row.created_at),
+    completedAt: ensureDate(row.completed_at),
+    templateName: typeof templateNameValue === 'string' ? templateNameValue : null,
+  };
+}
+
+let emailCampaignTargetingSupported: boolean | null = null;
+async function supportsEmailCampaignTargeting(): Promise<boolean> {
+  if (emailCampaignTargetingSupported !== null) {
+    return emailCampaignTargetingSupported;
+  }
+
+  try {
+    const sql = getSqlClient();
+    const result = await sql`
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = ${'email_campaigns'}
+        AND column_name = ${'target_type'}
+      LIMIT 1
+    `;
+
+    emailCampaignTargetingSupported = result.length > 0;
+  } catch (error) {
+    console.error('Failed to inspect email_campaigns columns', error);
+    emailCampaignTargetingSupported = false;
+  }
+
+  return emailCampaignTargetingSupported;
+}
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-jwt-secret-key-change-this-in-production';
 
@@ -34,29 +143,81 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
     }
 
     if (req.method === 'GET') {
-      // Get all email campaigns for the tenant
-      const campaigns = await db
-        .select()
-        .from(emailCampaigns)
-        .where(eq(emailCampaigns.tenantId, tenantId))
-        .orderBy(desc(emailCampaigns.createdAt));
+      if (await supportsEmailCampaignTargeting()) {
+        const [campaigns, templates] = await Promise.all([
+          db
+            .select()
+            .from(emailCampaigns)
+            .where(eq(emailCampaigns.tenantId, tenantId))
+            .orderBy(desc(emailCampaigns.createdAt)),
+          db
+            .select()
+            .from(emailTemplates)
+            .where(eq(emailTemplates.tenantId, tenantId)),
+        ]);
 
-      res.status(200).json(campaigns);
-    } else if (req.method === 'POST') {
-      // Create a new email campaign
-      const { templateId, name, targetGroup } = req.body;
+        const templateNameMap = new Map(templates.map((template) => [template.id, template.name]));
 
-      if (!templateId || !name || !targetGroup) {
-        res.status(400).json({ error: 'Template ID, name, and target group are required' });
+        const normalizedCampaigns = campaigns.map((campaign) => ({
+          ...campaign,
+          targetFolderIds: ensureStringArray(campaign.targetFolderIds),
+          customFilters: ensureCustomFilters(campaign.customFilters),
+          templateName: templateNameMap.get(campaign.templateId) ?? null,
+        }));
+
+        res.status(200).json(normalizedCampaigns);
         return;
       }
 
-      // Verify template exists and belongs to tenant
+      const sql = getSqlClient();
+      const campaigns = await sql`
+        SELECT ec.*, et.name AS template_name
+        FROM email_campaigns ec
+        LEFT JOIN email_templates et ON ec.template_id = et.id
+        WHERE ec.tenant_id = ${tenantId}
+        ORDER BY ec.created_at DESC
+      `;
+
+      const normalizedCampaigns = campaigns.map((campaign) => {
+        const normalized = mapLegacyCampaignRow(campaign as RawRecord, 'template_name');
+        return normalized;
+      });
+
+      res.status(200).json(normalizedCampaigns);
+    } else if (req.method === 'POST') {
+      const campaignSchema = z.object({
+        templateId: z.string().uuid(),
+        name: z.string().min(1),
+        targetGroup: z.enum(['all', 'with-balance', 'decline', 'recent-upload']).default('all'),
+        targetType: z.enum(['all', 'folder', 'custom']).optional(),
+        targetFolderIds: z.array(z.string().uuid()).optional(),
+        customFilters: z.object({
+          balanceMin: z.string().optional(),
+          balanceMax: z.string().optional(),
+          status: z.string().optional(),
+          lastContactDays: z.string().optional(),
+        }).optional(),
+      });
+
+      const parsedBody = campaignSchema.parse(req.body);
+
+      const targeting = sanitizeTargetingInput({
+        targetGroup: parsedBody.targetGroup,
+        targetType: parsedBody.targetType,
+        targetFolderIds: parsedBody.targetFolderIds,
+        customFilters: parsedBody.customFilters,
+      });
+
+      if (targeting.targetType === 'folder' && targeting.targetFolderIds.length === 0) {
+        res.status(400).json({ error: 'Please select at least one folder' });
+        return;
+      }
+
       const [template] = await db
         .select()
         .from(emailTemplates)
         .where(and(
-          eq(emailTemplates.id, templateId),
+          eq(emailTemplates.id, parsedBody.templateId),
           eq(emailTemplates.tenantId, tenantId)
         ))
         .limit(1);
@@ -66,57 +227,78 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         return;
       }
 
-      // Count target recipients based on targetGroup
-      let recipientCount = 0;
-      
-      if (targetGroup === 'all') {
-        const result = await db
-          .select({ count: sql<number>`count(*)` })
-          .from(consumers)
-          .where(eq(consumers.tenantId, tenantId));
-        recipientCount = Number(result[0]?.count || 0);
-      } else if (targetGroup === 'with-balance') {
-        // This would need to join with accounts table and check balance > 0
-        // For now, using a simplified query
-        const result = await db
-          .select({ count: sql<number>`count(*)` })
-          .from(consumers)
-          .where(and(
-            eq(consumers.tenantId, tenantId),
-            sql`EXISTS (SELECT 1 FROM accounts WHERE accounts.consumer_id = consumers.id AND accounts.balance > 0)`
-          ));
-        recipientCount = Number(result[0]?.count || 0);
-      } else if (targetGroup === 'overdue') {
-        // This would check for overdue accounts
-        const result = await db
-          .select({ count: sql<number>`count(*)` })
-          .from(consumers)
-          .where(and(
-            eq(consumers.tenantId, tenantId),
-            sql`EXISTS (SELECT 1 FROM accounts WHERE accounts.consumer_id = consumers.id AND accounts.due_date < NOW())`
-          ));
-        recipientCount = Number(result[0]?.count || 0);
+      const consumersList = await db
+        .select()
+        .from(consumers)
+        .where(eq(consumers.tenantId, tenantId));
+
+      const accountsList = await db
+        .select()
+        .from(accounts)
+        .where(eq(accounts.tenantId, tenantId));
+
+      const targetedConsumers = filterConsumersForCampaign(consumersList, accountsList, targeting);
+      const recipientCount = targetedConsumers.filter((consumer) => !!consumer.email).length;
+
+      if (await supportsEmailCampaignTargeting()) {
+        const [newCampaign] = await db
+          .insert(emailCampaigns)
+          .values({
+            tenantId,
+            templateId: parsedBody.templateId,
+            name: parsedBody.name,
+            targetGroup: targeting.targetGroup,
+            targetType: targeting.targetType,
+            targetFolderIds: targeting.targetFolderIds,
+            customFilters: targeting.customFilters,
+            status: 'pending',
+            totalRecipients: recipientCount,
+            totalSent: 0,
+            totalDelivered: 0,
+            totalOpened: 0,
+            totalClicked: 0,
+            totalErrors: 0,
+            totalOptOuts: 0,
+          })
+          .returning();
+
+        res.status(201).json({
+          ...newCampaign,
+          targetFolderIds: ensureStringArray(newCampaign.targetFolderIds),
+          customFilters: ensureCustomFilters(newCampaign.customFilters),
+          templateName: template.name,
+        });
+        return;
       }
 
-      const [newCampaign] = await db
-        .insert(emailCampaigns)
-        .values({
-          tenantId,
-          templateId,
+      const sql = getSqlClient();
+      const legacyInsert = await sql`
+        INSERT INTO email_campaigns (
+          tenant_id,
+          template_id,
           name,
-          targetGroup,
-          status: 'pending',
-          totalRecipients: recipientCount,
-          totalSent: 0,
-          totalDelivered: 0,
-          totalOpened: 0,
-          totalClicked: 0,
-          totalErrors: 0,
-          totalOptOuts: 0,
-        })
-        .returning();
+          target_group,
+          status,
+          total_recipients
+        )
+        VALUES (${tenantId}, ${parsedBody.templateId}, ${parsedBody.name}, ${targeting.targetGroup}, ${'pending'}, ${recipientCount})
+        RETURNING *
+      `;
 
-      res.status(201).json(newCampaign);
+      const legacyCampaign = legacyInsert[0] as RawRecord | undefined;
+      if (!legacyCampaign) {
+        res.status(500).json({ error: 'Failed to create email campaign' });
+        return;
+      }
+
+      const normalized = mapLegacyCampaignRow(legacyCampaign, 'template_name');
+      res.status(201).json({
+        ...normalized,
+        targetType: 'all',
+        targetFolderIds: [],
+        customFilters: {},
+        templateName: template.name,
+      });
     } else if (req.method === 'PUT') {
       // Update campaign status (start/pause/cancel)
       const { campaignId, status } = req.body;

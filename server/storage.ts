@@ -78,8 +78,201 @@ import {
   type Invoice,
   type InsertInvoice,
 } from "@shared/schema";
-import { db } from "./db";
+import { db, pool } from "./db";
 import { eq, and, desc, sql } from "drizzle-orm";
+
+function ensureDate(value: unknown): Date | null {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return value;
+  }
+
+  const parsed = new Date(value as string | number);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function ensureStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const result: string[] = [];
+  for (const entry of value) {
+    if (typeof entry === "string") {
+      const trimmed = entry.trim();
+      if (trimmed) {
+        result.push(trimmed);
+      }
+    }
+  }
+
+  return result;
+}
+
+function ensureCustomFilters(value: unknown): {
+  balanceMin?: string;
+  balanceMax?: string;
+  status?: string;
+  lastContactDays?: string;
+} {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  const record = value as Record<string, unknown>;
+  const result: {
+    balanceMin?: string;
+    balanceMax?: string;
+    status?: string;
+    lastContactDays?: string;
+  } = {};
+
+  if (typeof record.balanceMin === "string") {
+    const trimmed = record.balanceMin.trim();
+    if (trimmed) {
+      result.balanceMin = trimmed;
+    }
+  }
+
+  if (typeof record.balanceMax === "string") {
+    const trimmed = record.balanceMax.trim();
+    if (trimmed) {
+      result.balanceMax = trimmed;
+    }
+  }
+
+  if (typeof record.status === "string") {
+    const trimmed = record.status.trim();
+    if (trimmed) {
+      result.status = trimmed;
+    }
+  }
+
+  if (typeof record.lastContactDays === "string") {
+    const trimmed = record.lastContactDays.trim();
+    if (trimmed) {
+      result.lastContactDays = trimmed;
+    }
+  }
+
+  return result;
+}
+
+async function columnExists(table: string, column: string): Promise<boolean> {
+  const result = await pool.query(
+    `SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2 LIMIT 1`,
+    [table, column],
+  );
+
+  if ("rowCount" in result) {
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  return Array.isArray((result as unknown as { rows?: unknown[] }).rows)
+    ? (((result as unknown as { rows?: unknown[] }).rows?.length ?? 0) > 0)
+    : false;
+}
+
+let emailCampaignTargetingSupported: boolean | null = null;
+async function supportsEmailCampaignTargeting(): Promise<boolean> {
+  if (emailCampaignTargetingSupported !== null) {
+    return emailCampaignTargetingSupported;
+  }
+
+  try {
+    emailCampaignTargetingSupported = await columnExists("email_campaigns", "target_type");
+  } catch (error) {
+    console.error("Failed to inspect email_campaigns columns", error);
+    emailCampaignTargetingSupported = false;
+  }
+
+  return emailCampaignTargetingSupported;
+}
+
+let smsCampaignTargetingSupported: boolean | null = null;
+async function supportsSmsCampaignTargeting(): Promise<boolean> {
+  if (smsCampaignTargetingSupported !== null) {
+    return smsCampaignTargetingSupported;
+  }
+
+  try {
+    smsCampaignTargetingSupported = await columnExists("sms_campaigns", "target_type");
+  } catch (error) {
+    console.error("Failed to inspect sms_campaigns columns", error);
+    smsCampaignTargetingSupported = false;
+  }
+
+  return smsCampaignTargetingSupported;
+}
+
+function mapEmailCampaignRow(
+  row: Record<string, unknown>,
+  templateNameKey: string,
+): EmailCampaign & { templateName: string } {
+  const totals = {
+    totalRecipients: Number((row.total_recipients as string | number | null) ?? 0),
+    totalSent: Number((row.total_sent as string | number | null) ?? 0),
+    totalDelivered: Number((row.total_delivered as string | number | null) ?? 0),
+    totalOpened: Number((row.total_opened as string | number | null) ?? 0),
+    totalClicked: Number((row.total_clicked as string | number | null) ?? 0),
+    totalErrors: Number((row.total_errors as string | number | null) ?? 0),
+    totalOptOuts: Number((row.total_opt_outs as string | number | null) ?? 0),
+  };
+
+  const customFilters = ensureCustomFilters(row.custom_filters);
+  const targetFolderIds = ensureStringArray(row.target_folder_ids);
+
+  return {
+    id: row.id as string,
+    tenantId: row.tenant_id as string,
+    templateId: row.template_id as string,
+    name: (row.name as string) ?? "",
+    targetGroup: ((row.target_group as string) ?? "all") as EmailCampaign["targetGroup"],
+    targetType: ((row.target_type as string) ?? "all") as EmailCampaign["targetType"],
+    targetFolderIds,
+    customFilters,
+    status: ((row.status as string) ?? "pending") as EmailCampaign["status"],
+    createdAt: ensureDate(row.created_at) ?? new Date(),
+    completedAt: ensureDate(row.completed_at),
+    templateName: ((row as Record<string, unknown>)[templateNameKey] as string) ?? "Unknown Template",
+    ...totals,
+  };
+}
+
+function mapSmsCampaignRow(
+  row: Record<string, unknown>,
+  templateNameKey: string,
+): SmsCampaign & { templateName: string } {
+  const totals = {
+    totalRecipients: Number((row.total_recipients as string | number | null) ?? 0),
+    totalSent: Number((row.total_sent as string | number | null) ?? 0),
+    totalDelivered: Number((row.total_delivered as string | number | null) ?? 0),
+    totalErrors: Number((row.total_errors as string | number | null) ?? 0),
+    totalOptOuts: Number((row.total_opt_outs as string | number | null) ?? 0),
+  };
+
+  const customFilters = ensureCustomFilters(row.custom_filters);
+  const targetFolderIds = ensureStringArray(row.target_folder_ids);
+
+  return {
+    id: row.id as string,
+    tenantId: row.tenant_id as string,
+    templateId: row.template_id as string,
+    name: (row.name as string) ?? "",
+    targetGroup: ((row.target_group as string) ?? "all") as SmsCampaign["targetGroup"],
+    targetType: ((row.target_type as string) ?? "all") as SmsCampaign["targetType"],
+    targetFolderIds,
+    customFilters,
+    status: ((row.status as string) ?? "pending") as SmsCampaign["status"],
+    createdAt: ensureDate(row.created_at) ?? new Date(),
+    completedAt: ensureDate(row.completed_at),
+    templateName: ((row as Record<string, unknown>)[templateNameKey] as string) ?? "Unknown Template",
+    ...totals,
+  };
+}
 
 export interface IStorage {
   // User operations (mandatory for Replit Auth)
@@ -684,22 +877,95 @@ export class DatabaseStorage implements IStorage {
 
   // Email campaign operations
   async getEmailCampaignsByTenant(tenantId: string): Promise<(EmailCampaign & { templateName: string })[]> {
-    const result = await db
-      .select()
-      .from(emailCampaigns)
-      .leftJoin(emailTemplates, eq(emailCampaigns.templateId, emailTemplates.id))
-      .where(eq(emailCampaigns.tenantId, tenantId))
-      .orderBy(desc(emailCampaigns.createdAt));
-    
-    return result.map(row => ({
-      ...row.email_campaigns,
-      templateName: row.email_templates?.name || 'Unknown Template',
-    }));
+    if (await supportsEmailCampaignTargeting()) {
+      const result = await db
+        .select()
+        .from(emailCampaigns)
+        .leftJoin(emailTemplates, eq(emailCampaigns.templateId, emailTemplates.id))
+        .where(eq(emailCampaigns.tenantId, tenantId))
+        .orderBy(desc(emailCampaigns.createdAt));
+
+      return result.map((row) => ({
+        ...row.email_campaigns,
+        targetFolderIds: ensureStringArray(row.email_campaigns?.targetFolderIds),
+        customFilters: ensureCustomFilters(row.email_campaigns?.customFilters),
+        templateName: row.email_templates?.name || "Unknown Template",
+      }));
+    }
+
+    const result = await pool.query(
+      `
+        SELECT ec.*, et.name AS template_name
+        FROM email_campaigns ec
+        LEFT JOIN email_templates et ON ec.template_id = et.id
+        WHERE ec.tenant_id = $1
+        ORDER BY ec.created_at DESC
+      `,
+      [tenantId],
+    );
+
+    const rows = "rows" in result ? result.rows : [];
+    return rows.map((row) => mapEmailCampaignRow(row as Record<string, unknown>, "template_name"));
   }
 
   async createEmailCampaign(campaign: InsertEmailCampaign): Promise<EmailCampaign> {
-    const [newCampaign] = await db.insert(emailCampaigns).values(campaign).returning();
-    return newCampaign;
+    if (await supportsEmailCampaignTargeting()) {
+      const rawFolderIds = Array.isArray((campaign as any).targetFolderIds)
+        ? ((campaign as any).targetFolderIds as unknown[])
+        : [];
+      const folderIds = rawFolderIds.filter((value): value is string => typeof value === "string");
+
+      const rawFilters = (campaign as any).customFilters;
+      const filters = ensureCustomFilters(rawFilters);
+
+      const values: InsertEmailCampaign = {
+        ...campaign,
+        targetType: (campaign as any).targetType ?? "all",
+        targetFolderIds: folderIds,
+        customFilters: filters,
+      };
+
+      const [newCampaign] = await db.insert(emailCampaigns).values(values as any).returning();
+      return newCampaign;
+    }
+
+    const inserted = await pool.query(
+      `
+        INSERT INTO email_campaigns (
+          tenant_id,
+          template_id,
+          name,
+          target_group,
+          status,
+          total_recipients
+        )
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING *
+      `,
+      [
+        campaign.tenantId,
+        campaign.templateId,
+        campaign.name,
+        campaign.targetGroup ?? "all",
+        (campaign as unknown as { status?: string }).status ?? "pending",
+        (campaign as unknown as { totalRecipients?: number }).totalRecipients ?? 0,
+      ],
+    );
+
+    const rows = "rows" in inserted ? inserted.rows : [];
+    const row = rows[0] as Record<string, unknown> | undefined;
+    if (!row) {
+      throw new Error("Failed to insert email campaign");
+    }
+
+    const mapped = mapEmailCampaignRow(row, "template_name");
+    const { templateName: _templateName, ...campaignData } = mapped;
+    return {
+      ...campaignData,
+      targetType: "all",
+      targetFolderIds: [],
+      customFilters: {},
+    };
   }
 
   async updateEmailCampaign(id: string, updates: Partial<EmailCampaign>): Promise<EmailCampaign> {
@@ -761,22 +1027,95 @@ export class DatabaseStorage implements IStorage {
 
   // SMS campaign operations
   async getSmsCampaignsByTenant(tenantId: string): Promise<(SmsCampaign & { templateName: string })[]> {
-    const result = await db
-      .select()
-      .from(smsCampaigns)
-      .leftJoin(smsTemplates, eq(smsCampaigns.templateId, smsTemplates.id))
-      .where(eq(smsCampaigns.tenantId, tenantId))
-      .orderBy(desc(smsCampaigns.createdAt));
-    
-    return result.map(row => ({
-      ...row.sms_campaigns,
-      templateName: row.sms_templates?.name || 'Unknown Template',
-    }));
+    if (await supportsSmsCampaignTargeting()) {
+      const result = await db
+        .select()
+        .from(smsCampaigns)
+        .leftJoin(smsTemplates, eq(smsCampaigns.templateId, smsTemplates.id))
+        .where(eq(smsCampaigns.tenantId, tenantId))
+        .orderBy(desc(smsCampaigns.createdAt));
+
+      return result.map((row) => ({
+        ...row.sms_campaigns,
+        targetFolderIds: ensureStringArray(row.sms_campaigns?.targetFolderIds),
+        customFilters: ensureCustomFilters(row.sms_campaigns?.customFilters),
+        templateName: row.sms_templates?.name || "Unknown Template",
+      }));
+    }
+
+    const result = await pool.query(
+      `
+        SELECT sc.*, st.name AS template_name
+        FROM sms_campaigns sc
+        LEFT JOIN sms_templates st ON sc.template_id = st.id
+        WHERE sc.tenant_id = $1
+        ORDER BY sc.created_at DESC
+      `,
+      [tenantId],
+    );
+
+    const rows = "rows" in result ? result.rows : [];
+    return rows.map((row) => mapSmsCampaignRow(row as Record<string, unknown>, "template_name"));
   }
 
   async createSmsCampaign(campaign: InsertSmsCampaign): Promise<SmsCampaign> {
-    const [newCampaign] = await db.insert(smsCampaigns).values(campaign).returning();
-    return newCampaign;
+    if (await supportsSmsCampaignTargeting()) {
+      const rawSmsFolderIds = Array.isArray((campaign as any).targetFolderIds)
+        ? ((campaign as any).targetFolderIds as unknown[])
+        : [];
+      const smsFolderIds = rawSmsFolderIds.filter((value): value is string => typeof value === "string");
+
+      const rawSmsFilters = (campaign as any).customFilters;
+      const smsFilters = ensureCustomFilters(rawSmsFilters);
+
+      const values: InsertSmsCampaign = {
+        ...campaign,
+        targetType: (campaign as any).targetType ?? "all",
+        targetFolderIds: smsFolderIds,
+        customFilters: smsFilters,
+      };
+
+      const [newCampaign] = await db.insert(smsCampaigns).values(values as any).returning();
+      return newCampaign;
+    }
+
+    const inserted = await pool.query(
+      `
+        INSERT INTO sms_campaigns (
+          tenant_id,
+          template_id,
+          name,
+          target_group,
+          status,
+          total_recipients
+        )
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING *
+      `,
+      [
+        campaign.tenantId,
+        campaign.templateId,
+        campaign.name,
+        campaign.targetGroup ?? "all",
+        (campaign as unknown as { status?: string }).status ?? "pending",
+        (campaign as unknown as { totalRecipients?: number }).totalRecipients ?? 0,
+      ],
+    );
+
+    const rows = "rows" in inserted ? inserted.rows : [];
+    const row = rows[0] as Record<string, unknown> | undefined;
+    if (!row) {
+      throw new Error("Failed to insert sms campaign");
+    }
+
+    const mapped = mapSmsCampaignRow(row, "template_name");
+    const { templateName: _templateName, ...campaignData } = mapped;
+    return {
+      ...campaignData,
+      targetType: "all",
+      targetFolderIds: [],
+      customFilters: {},
+    };
   }
 
   async updateSmsCampaign(id: string, updates: Partial<SmsCampaign>): Promise<SmsCampaign> {
