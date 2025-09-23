@@ -2625,8 +2625,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Arrangement options routes
   app.get('/api/arrangement-options', authenticateUser, async (req: any, res) => {
     try {
-      const tenantId = req.user.tenantId;
-      
+      const tenantId = req.user?.tenantId;
+
       if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
       }
@@ -2641,7 +2641,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/arrangement-options', authenticateUser, async (req: any, res) => {
     try {
-      const tenantId = req.user.tenantId;
+      const tenantId = req.user?.tenantId;
 
       if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
@@ -2665,7 +2665,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put('/api/arrangement-options/:id', authenticateUser, async (req: any, res) => {
     try {
-      const tenantId = req.user.tenantId;
+      const tenantId = req.user?.tenantId;
 
       if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
@@ -2693,7 +2693,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete('/api/arrangement-options/:id', authenticateUser, async (req: any, res) => {
     try {
-      const tenantId = req.user.tenantId;
+      const tenantId = req.user?.tenantId;
 
       if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
