@@ -332,7 +332,7 @@ export default function SMS() {
                         data-testid="textarea-message"
                         value={templateForm.message}
                         onChange={(e) => setTemplateForm({ ...templateForm, message: e.target.value })}
-                        placeholder="Enter your SMS message (160 characters recommended)"
+                        placeholder="Enter your SMS message. Use {{firstName}} or {balance} to personalize."
                         rows={6}
                         maxLength={1600}
                         required
@@ -340,6 +340,27 @@ export default function SMS() {
                       <p className="text-sm text-gray-500 mt-1">
                         {templateForm.message.length}/1600 characters
                       </p>
+                      <div className="mt-3 bg-blue-50 border border-blue-200 rounded-md p-3">
+                        <h4 className="font-medium text-blue-900 text-sm mb-1">Available Variables:</h4>
+                        <p className="text-xs text-blue-700 mb-2">
+                          Use <code className="font-mono">{"{{variable}}"}</code> or <code className="font-mono">{"{variable}"}</code> syntax to insert data.
+                        </p>
+                        <div className="text-xs text-blue-800 grid grid-cols-2 gap-1">
+                          <div>• {"{{firstName}}"}</div>
+                          <div>• {"{{lastName}}"}</div>
+                          <div>• {"{{fullName}}"}</div>
+                          <div>• {"{{phone}}"}</div>
+                          <div>• {"{{accountNumber}}"}</div>
+                          <div>• {"{{creditor}}"}</div>
+                          <div>• {"{{balance}}"}</div>
+                          <div>• {"{{dueDate}}"}</div>
+                          <div>• {"{{consumerPortalLink}}"}</div>
+                          <div>• {"{{appDownloadLink}}"}</div>
+                          <div>• {"{{agencyName}}"}</div>
+                          <div>• {"{{agencyPhone}}"}</div>
+                          <div className="col-span-full">• Plus any additional CSV columns</div>
+                        </div>
+                      </div>
                     </div>
                     <div className="flex justify-end gap-2">
                       <Button
