@@ -7,29 +7,24 @@ interface StatsCardProps {
 }
 
 export default function StatsCard({ title, value, change, changeType, icon }: StatsCardProps) {
+  const changeColor = changeType === "positive" ? "text-emerald-300" : "text-rose-300";
+
   return (
-    <div className="bg-white overflow-hidden shadow rounded-lg">
-      <div className="p-5">
-        <div className="flex items-center">
-          <div className="flex-shrink-0">
-            <i className={`${icon} text-gray-400 text-lg`}></i>
-          </div>
-          <div className="ml-5 w-0 flex-1">
-            <dl>
-              <dt className="text-sm font-medium text-gray-500 truncate">{title}</dt>
-              <dd className="text-lg font-medium text-gray-900">{value}</dd>
-            </dl>
-          </div>
+    <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/10 p-6 shadow-lg shadow-blue-900/20 backdrop-blur">
+      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-sky-400 via-cyan-300 to-indigo-400" />
+      <div className="relative z-10 flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium uppercase tracking-wide text-blue-100/70">{title}</p>
+          <p className="mt-4 text-3xl font-semibold text-white">{value}</p>
+        </div>
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-gradient-to-br from-sky-400/20 to-indigo-500/20 text-white">
+          <i className={`${icon} text-lg`}></i>
         </div>
       </div>
-      <div className="bg-gray-50 px-5 py-3">
-        <div className="text-sm">
-          <span className={`font-medium ${changeType === "positive" ? "text-green-600" : "text-red-600"}`}>
-            {change}
-          </span>
-          <span className="text-gray-500"> from last month</span>
-        </div>
-      </div>
+      <p className="relative z-10 mt-6 text-xs font-medium text-blue-100/70">
+        <span className={`${changeColor} mr-1 font-semibold`}>{change}</span>
+        vs last month
+      </p>
     </div>
   );
 }
