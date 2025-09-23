@@ -1017,10 +1017,15 @@ export class DatabaseStorage implements IStorage {
   async getConsumerByEmailAndTenant(email: string, tenantSlug: string): Promise<Consumer | undefined> {
     const tenant = await this.getTenantBySlug(tenantSlug);
     if (!tenant) return undefined;
-    
+
     const [consumer] = await db.select()
       .from(consumers)
-      .where(and(eq(consumers.email, email), eq(consumers.tenantId, tenant.id)));
+      .where(
+        and(
+          eq(consumers.tenantId, tenant.id),
+          sql`LOWER(${consumers.email}) = LOWER(${email})`
+        )
+      );
     return consumer || undefined;
   }
 
@@ -1028,8 +1033,8 @@ export class DatabaseStorage implements IStorage {
     // Get all consumers with this email
     const allConsumers = await db.select()
       .from(consumers)
-      .where(eq(consumers.email, email));
-    
+      .where(sql`LOWER(${consumers.email}) = LOWER(${email})`);
+
     // Prioritize consumers WITH a tenantId over those without
     // This ensures we return linked consumers first
     const linkedConsumer = allConsumers.find(c => c.tenantId);
