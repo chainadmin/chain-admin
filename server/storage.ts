@@ -147,10 +147,12 @@ export interface IStorage {
   ensureDefaultFolders(tenantId: string): Promise<void>;
   
   // Account operations
+  getAccount(id: string): Promise<(Account & { consumer?: Consumer; folder?: Folder }) | undefined>;
   getAccountsByTenant(tenantId: string): Promise<(Account & { consumer: Consumer; folder?: Folder })[]>;
   getAccountsByFolder(folderId: string): Promise<(Account & { consumer: Consumer })[]>;
   getAccountsByConsumer(consumerId: string): Promise<Account[]>;
   createAccount(account: InsertAccount): Promise<Account>;
+  updateAccount(id: string, updates: Partial<Account>): Promise<Account>;
   bulkCreateAccounts(accounts: InsertAccount[]): Promise<Account[]>;
   
   // Email template operations
@@ -485,20 +487,32 @@ export class DatabaseStorage implements IStorage {
     if (existingConsumer) {
       // Update existing consumer with any new information provided
       const updates: any = {};
-      if (consumerData.firstName && consumerData.firstName !== existingConsumer.firstName) {
+      if (consumerData.firstName !== undefined && consumerData.firstName !== existingConsumer.firstName) {
         updates.firstName = consumerData.firstName;
       }
-      if (consumerData.lastName && consumerData.lastName !== existingConsumer.lastName) {
+      if (consumerData.lastName !== undefined && consumerData.lastName !== existingConsumer.lastName) {
         updates.lastName = consumerData.lastName;
       }
-      if (consumerData.dateOfBirth && consumerData.dateOfBirth !== existingConsumer.dateOfBirth) {
+      if (consumerData.dateOfBirth !== undefined && consumerData.dateOfBirth !== existingConsumer.dateOfBirth) {
         updates.dateOfBirth = consumerData.dateOfBirth;
       }
-      if (consumerData.phone && consumerData.phone !== existingConsumer.phone) {
+      if (consumerData.phone !== undefined && consumerData.phone !== existingConsumer.phone) {
         updates.phone = consumerData.phone;
       }
-      if (consumerData.folderId && consumerData.folderId !== existingConsumer.folderId) {
+      if (consumerData.folderId !== undefined && consumerData.folderId !== existingConsumer.folderId) {
         updates.folderId = consumerData.folderId;
+      }
+      if (consumerData.address !== undefined && consumerData.address !== existingConsumer.address) {
+        updates.address = consumerData.address;
+      }
+      if (consumerData.city !== undefined && consumerData.city !== existingConsumer.city) {
+        updates.city = consumerData.city;
+      }
+      if (consumerData.state !== undefined && consumerData.state !== existingConsumer.state) {
+        updates.state = consumerData.state;
+      }
+      if (consumerData.zipCode !== undefined && consumerData.zipCode !== existingConsumer.zipCode) {
+        updates.zipCode = consumerData.zipCode;
       }
       // Update registration status if provided
       if (consumerData.isRegistered !== undefined && consumerData.isRegistered !== existingConsumer.isRegistered) {
@@ -611,13 +625,42 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(accounts).where(eq(accounts.consumerId, consumerId));
   }
 
+  async getAccount(id: string): Promise<(Account & { consumer?: Consumer; folder?: Folder }) | undefined> {
+    const [result] = await db
+      .select()
+      .from(accounts)
+      .leftJoin(consumers, eq(accounts.consumerId, consumers.id))
+      .leftJoin(folders, eq(accounts.folderId, folders.id))
+      .where(eq(accounts.id, id));
+
+    if (!result) {
+      return undefined;
+    }
+
+    return {
+      ...result.accounts,
+      consumer: result.consumers || undefined,
+      folder: result.folders || undefined,
+    };
+  }
+
   async createAccount(account: InsertAccount): Promise<Account> {
     const [newAccount] = await db.insert(accounts).values(account).returning();
-    
+
     // Check if consumer is registered and send notification
     await this.notifyConsumerAccountAdded(newAccount);
-    
+
     return newAccount;
+  }
+
+  async updateAccount(id: string, updates: Partial<Account>): Promise<Account> {
+    const [updatedAccount] = await db
+      .update(accounts)
+      .set(updates)
+      .where(eq(accounts.id, id))
+      .returning();
+
+    return updatedAccount;
   }
 
   async bulkCreateAccounts(accountsData: InsertAccount[]): Promise<Account[]> {

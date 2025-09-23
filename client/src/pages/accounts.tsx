@@ -84,6 +84,7 @@ export default function Accounts() {
     accountNumber: "",
     creditor: "",
     balance: "",
+    folderId: "",
     dateOfBirth: "",
     address: "",
     city: "",
@@ -143,22 +144,36 @@ export default function Accounts() {
   });
 
   const updateAccountMutation = useMutation({
-    mutationFn: (data: any) => {
-      const consumerId = selectedAccount?.consumer?.id || selectedAccount?.consumerId;
-      if (!consumerId) {
-        return Promise.reject(new Error("No consumer ID found"));
+    mutationFn: async (data: any) => {
+      if (!selectedAccount?.id) {
+        return Promise.reject(new Error("No account selected"));
       }
-      // Update consumer info
-      return apiRequest("PATCH", `/api/consumers/${consumerId}`, {
+
+      const balanceValue = data.balance?.toString().trim();
+      const balanceCents = balanceValue
+        ? Math.round(parseFloat(balanceValue) * 100)
+        : undefined;
+
+      return apiRequest("PATCH", `/api/accounts/${selectedAccount.id}`, {
         firstName: data.firstName,
         lastName: data.lastName,
         email: data.email,
-        phone: data.phone,
+        phone: data.phone || null,
+        accountNumber: data.accountNumber || null,
+        creditor: data.creditor,
+        balanceCents,
+        folderId: data.folderId || null,
+        dateOfBirth: data.dateOfBirth || null,
+        address: data.address || null,
+        city: data.city || null,
+        state: data.state || null,
+        zipCode: data.zipCode || null,
       });
     },
-    onSuccess: () => {
+    onSuccess: (updatedAccount: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/consumers"] });
+      setSelectedAccount(updatedAccount);
       setShowEditModal(false);
       toast({
         title: "Success",
@@ -288,11 +303,12 @@ export default function Accounts() {
       accountNumber: account.accountNumber || "",
       creditor: account.creditor || "",
       balance: account.balanceCents ? (account.balanceCents / 100).toString() : "",
-      dateOfBirth: "",
-      address: "",
-      city: "",
-      state: "",
-      zipCode: "",
+      folderId: account.folderId || account.consumer?.folderId || "",
+      dateOfBirth: account.consumer?.dateOfBirth || "",
+      address: account.consumer?.address || "",
+      city: account.consumer?.city || "",
+      state: account.consumer?.state || "",
+      zipCode: account.consumer?.zipCode || "",
     });
     setShowEditModal(true);
   };
@@ -831,45 +847,175 @@ export default function Accounts() {
             <DialogHeader>
               <DialogTitle>Edit Account</DialogTitle>
             </DialogHeader>
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              updateAccountMutation.mutate(editForm);
-            }} className="space-y-4">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                updateAccountMutation.mutate(editForm);
+              }}
+              className="space-y-4"
+            >
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="edit-firstName">First Name</Label>
+                  <Label htmlFor="edit-firstName">First Name *</Label>
                   <Input
                     id="edit-firstName"
+                    data-testid="input-edit-first-name"
                     value={editForm.firstName}
                     onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
+                    placeholder="Enter first name"
+                    required
                   />
                 </div>
                 <div>
-                  <Label htmlFor="edit-lastName">Last Name</Label>
+                  <Label htmlFor="edit-lastName">Last Name *</Label>
                   <Input
                     id="edit-lastName"
+                    data-testid="input-edit-last-name"
                     value={editForm.lastName}
                     onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
+                    placeholder="Enter last name"
+                    required
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="edit-email">Email</Label>
+                  <Label htmlFor="edit-email">Email *</Label>
                   <Input
                     id="edit-email"
                     type="email"
+                    data-testid="input-edit-email"
                     value={editForm.email}
                     onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                    placeholder="Enter email address"
+                    required
                   />
                 </div>
                 <div>
                   <Label htmlFor="edit-phone">Phone</Label>
                   <Input
                     id="edit-phone"
+                    data-testid="input-edit-phone"
                     value={editForm.phone}
                     onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                    placeholder="Enter phone number"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="edit-accountNumber">Account Number</Label>
+                  <Input
+                    id="edit-accountNumber"
+                    data-testid="input-edit-account-number"
+                    value={editForm.accountNumber}
+                    onChange={(e) => setEditForm({ ...editForm, accountNumber: e.target.value })}
+                    placeholder="Enter account number"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-creditor">Creditor *</Label>
+                  <Input
+                    id="edit-creditor"
+                    data-testid="input-edit-creditor"
+                    value={editForm.creditor}
+                    onChange={(e) => setEditForm({ ...editForm, creditor: e.target.value })}
+                    placeholder="Enter creditor name"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="edit-balance">Balance *</Label>
+                  <Input
+                    id="edit-balance"
+                    type="number"
+                    step="0.01"
+                    data-testid="input-edit-balance"
+                    value={editForm.balance}
+                    onChange={(e) => setEditForm({ ...editForm, balance: e.target.value })}
+                    placeholder="Enter balance"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-folder">Folder</Label>
+                  <Select
+                    value={editForm.folderId}
+                    onValueChange={(value) => setEditForm({ ...editForm, folderId: value })}
+                  >
+                    <SelectTrigger id="edit-folder" data-testid="select-edit-folder">
+                      <SelectValue placeholder="Select folder" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(folders as any[])?.map((folder: any) => (
+                        <SelectItem key={folder.id} value={folder.id}>
+                          {folder.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="edit-dateOfBirth">Date of Birth *</Label>
+                  <Input
+                    id="edit-dateOfBirth"
+                    type="date"
+                    data-testid="input-edit-date-of-birth"
+                    value={editForm.dateOfBirth}
+                    onChange={(e) => setEditForm({ ...editForm, dateOfBirth: e.target.value })}
+                    placeholder="Select date of birth"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-address">Address</Label>
+                  <Input
+                    id="edit-address"
+                    data-testid="input-edit-address"
+                    value={editForm.address}
+                    onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
+                    placeholder="Enter address"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label htmlFor="edit-city">City</Label>
+                  <Input
+                    id="edit-city"
+                    data-testid="input-edit-city"
+                    value={editForm.city}
+                    onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
+                    placeholder="Enter city"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-state">State</Label>
+                  <Input
+                    id="edit-state"
+                    data-testid="input-edit-state"
+                    value={editForm.state}
+                    onChange={(e) => setEditForm({ ...editForm, state: e.target.value })}
+                    placeholder="Enter state"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-zipCode">Zip Code</Label>
+                  <Input
+                    id="edit-zipCode"
+                    data-testid="input-edit-zip-code"
+                    value={editForm.zipCode}
+                    onChange={(e) => setEditForm({ ...editForm, zipCode: e.target.value })}
+                    placeholder="Enter zip code"
                   />
                 </div>
               </div>
@@ -878,7 +1024,7 @@ export default function Accounts() {
                 <Button type="button" variant="outline" onClick={() => setShowEditModal(false)}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={updateAccountMutation.isPending}>
+                <Button type="submit" disabled={updateAccountMutation.isPending} data-testid="button-submit-edit">
                   {updateAccountMutation.isPending ? "Saving..." : "Save Changes"}
                 </Button>
               </div>
