@@ -161,7 +161,7 @@ export interface IStorage {
   deleteEmailTemplate(id: string, tenantId: string): Promise<void>;
   
   // Email campaign operations
-  getEmailCampaignsByTenant(tenantId: string): Promise<(EmailCampaign & { templateName: string })[]>;
+  getEmailCampaignsByTenant(tenantId: string): Promise<(EmailCampaign & { templateName: string; arrangementName?: string | null })[]>;
   createEmailCampaign(campaign: InsertEmailCampaign): Promise<EmailCampaign>;
   updateEmailCampaign(id: string, updates: Partial<EmailCampaign>): Promise<EmailCampaign>;
   
@@ -174,7 +174,7 @@ export interface IStorage {
   deleteSmsTemplate(id: string, tenantId: string): Promise<void>;
   
   // SMS campaign operations
-  getSmsCampaignsByTenant(tenantId: string): Promise<(SmsCampaign & { templateName: string })[]>;
+  getSmsCampaignsByTenant(tenantId: string): Promise<(SmsCampaign & { templateName: string; arrangementName?: string | null })[]>;
   createSmsCampaign(campaign: InsertSmsCampaign): Promise<SmsCampaign>;
   updateSmsCampaign(id: string, updates: Partial<SmsCampaign>): Promise<SmsCampaign>;
   
@@ -246,6 +246,7 @@ export interface IStorage {
   
   // Arrangement options operations
   getArrangementOptionsByTenant(tenantId: string): Promise<ArrangementOption[]>;
+  getArrangementOptionById(id: string, tenantId: string, options?: { requireActive?: boolean }): Promise<ArrangementOption | undefined>;
   createArrangementOption(option: InsertArrangementOption): Promise<ArrangementOption>;
   updateArrangementOption(id: string, option: Partial<InsertArrangementOption>): Promise<ArrangementOption>;
   deleteArrangementOption(id: string): Promise<void>;
@@ -726,17 +727,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Email campaign operations
-  async getEmailCampaignsByTenant(tenantId: string): Promise<(EmailCampaign & { templateName: string })[]> {
+  async getEmailCampaignsByTenant(tenantId: string): Promise<(EmailCampaign & { templateName: string; arrangementName?: string | null })[]> {
     const result = await db
       .select()
       .from(emailCampaigns)
       .leftJoin(emailTemplates, eq(emailCampaigns.templateId, emailTemplates.id))
+      .leftJoin(arrangementOptions, eq(emailCampaigns.arrangementOptionId, arrangementOptions.id))
       .where(eq(emailCampaigns.tenantId, tenantId))
       .orderBy(desc(emailCampaigns.createdAt));
-    
+
     return result.map(row => ({
       ...row.email_campaigns,
       templateName: row.email_templates?.name || 'Unknown Template',
+      arrangementName: row.arrangement_options?.name || null,
     }));
   }
 
@@ -803,17 +806,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   // SMS campaign operations
-  async getSmsCampaignsByTenant(tenantId: string): Promise<(SmsCampaign & { templateName: string })[]> {
+  async getSmsCampaignsByTenant(tenantId: string): Promise<(SmsCampaign & { templateName: string; arrangementName?: string | null })[]> {
     const result = await db
       .select()
       .from(smsCampaigns)
       .leftJoin(smsTemplates, eq(smsCampaigns.templateId, smsTemplates.id))
+      .leftJoin(arrangementOptions, eq(smsCampaigns.arrangementOptionId, arrangementOptions.id))
       .where(eq(smsCampaigns.tenantId, tenantId))
       .orderBy(desc(smsCampaigns.createdAt));
-    
+
     return result.map(row => ({
       ...row.sms_campaigns,
       templateName: row.sms_templates?.name || 'Unknown Template',
+      arrangementName: row.arrangement_options?.name || null,
     }));
   }
 
@@ -1163,6 +1168,28 @@ export class DatabaseStorage implements IStorage {
   // Arrangement options operations
   async getArrangementOptionsByTenant(tenantId: string): Promise<ArrangementOption[]> {
     return await db.select().from(arrangementOptions).where(and(eq(arrangementOptions.tenantId, tenantId), eq(arrangementOptions.isActive, true)));
+  }
+
+  async getArrangementOptionById(
+    id: string,
+    tenantId: string,
+    options: { requireActive?: boolean } = {}
+  ): Promise<ArrangementOption | undefined> {
+    const conditions = [
+      eq(arrangementOptions.id, id),
+      eq(arrangementOptions.tenantId, tenantId),
+    ];
+
+    if (options.requireActive) {
+      conditions.push(eq(arrangementOptions.isActive, true));
+    }
+
+    const [option] = await db
+      .select()
+      .from(arrangementOptions)
+      .where(and(...conditions));
+
+    return option;
   }
 
   async createArrangementOption(option: InsertArrangementOption): Promise<ArrangementOption> {

@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage, type IStorage } from "./storage";
 import { authenticateUser, authenticateConsumer, getCurrentUser } from "./authMiddleware";
 import { postmarkServerService } from "./postmarkServerService";
-import { insertConsumerSchema, insertAccountSchema, agencyTrialRegistrationSchema, platformUsers, tenants, consumers, agencyCredentials } from "@shared/schema";
+import { insertConsumerSchema, insertAccountSchema, agencyTrialRegistrationSchema, platformUsers, tenants, consumers, agencyCredentials, type ArrangementOption } from "@shared/schema";
 import { db } from "./db";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -17,6 +17,12 @@ import { uploadLogo } from "./supabaseStorage";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { subdomainMiddleware } from "./middleware/subdomain";
+import {
+  TemplateReplacementOptions,
+  formatCurrencyRange,
+  enrichArrangement,
+  replaceTemplateVariables,
+} from "./templatePlaceholders";
 
 const csvUploadSchema = z.object({
   consumers: z.array(z.object({
@@ -52,108 +58,6 @@ const upload = multer({
   }
 });
 
-// Helper utilities for template variable replacement
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function formatCurrency(cents: number | string | null | undefined): string {
-  if (cents === null || cents === undefined) return '';
-  const numericValue = typeof cents === 'number' ? cents : Number(cents);
-  if (Number.isNaN(numericValue)) return '';
-  return `$${(numericValue / 100).toFixed(2)}`;
-}
-
-function applyTemplateReplacement(template: string, key: string, value: string): string {
-  if (!template) return template;
-  const sanitizedValue = value ?? '';
-  const keyPattern = escapeRegExp(key);
-  const patterns = [
-    new RegExp(`\\{\\{\\s*${keyPattern}\\s*\\}\\}`, 'gi'),
-    new RegExp(`\\{\\s*${keyPattern}\\s*\\}`, 'gi'),
-  ];
-
-  return patterns.reduce((result, pattern) => result.replace(pattern, sanitizedValue), template);
-}
-
-// Helper function to replace template variables for both email and SMS content
-function replaceTemplateVariables(
-  template: string,
-  consumer: any,
-  account: any,
-  tenant: any,
-  baseUrl: string = process.env.REPLIT_DOMAINS || 'localhost:5000'
-): string {
-  if (!template) return template;
-
-  const sanitizedBaseUrl = (baseUrl || 'localhost:5000').replace(/^https?:\/\//, '').replace(/\/$/, '');
-  const consumerEmail = consumer?.email || '';
-  const consumerSlug = tenant?.slug;
-
-  let consumerPortalUrl = '';
-  if (sanitizedBaseUrl && consumerSlug) {
-    const emailPath = consumerEmail ? `/${encodeURIComponent(consumerEmail)}` : '';
-    consumerPortalUrl = `https://${sanitizedBaseUrl}/consumer/${consumerSlug}${emailPath}`;
-  }
-
-  const appDownloadUrl = sanitizedBaseUrl ? `https://${sanitizedBaseUrl}/download` : '';
-
-  const firstName = consumer?.firstName || '';
-  const lastName = consumer?.lastName || '';
-  const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
-  const consumerPhone = consumer?.phone || '';
-
-  const balanceCents = account?.balanceCents;
-  const formattedBalance = formatCurrency(balanceCents);
-  const formattedDueDate = account?.dueDate ? new Date(account.dueDate).toLocaleDateString() : '';
-  const dueDateIso = account?.dueDate ? new Date(account.dueDate).toISOString().split('T')[0] : '';
-
-  const replacements: Record<string, string> = {
-    firstName,
-    lastName,
-    fullName,
-    consumerName: fullName,
-    email: consumerEmail,
-    phone: consumerPhone,
-    consumerId: consumer?.id || '',
-    accountId: account?.id || '',
-    accountNumber: account?.accountNumber || '',
-    creditor: account?.creditor || '',
-    balance: formattedBalance,
-    balence: formattedBalance,
-    balanceCents: balanceCents !== undefined && balanceCents !== null ? String(balanceCents) : '',
-    dueDate: formattedDueDate,
-    dueDateIso,
-    consumerPortalLink: consumerPortalUrl,
-    appDownloadLink: appDownloadUrl,
-    agencyName: tenant?.name || '',
-    agencyEmail: tenant?.email || '',
-    agencyPhone: tenant?.phoneNumber || tenant?.twilioPhoneNumber || '',
-  };
-
-  let processedTemplate = template;
-
-  Object.entries(replacements).forEach(([key, value]) => {
-    processedTemplate = applyTemplateReplacement(processedTemplate, key, value || '');
-  });
-
-  const additionalSources = [consumer?.additionalData, account?.additionalData];
-  additionalSources.forEach(source => {
-    if (source && typeof source === 'object') {
-      Object.entries(source).forEach(([key, value]) => {
-        const stringValue =
-          value === null || value === undefined
-            ? ''
-            : typeof value === 'object'
-              ? JSON.stringify(value)
-              : String(value);
-        processedTemplate = applyTemplateReplacement(processedTemplate, key, stringValue);
-      });
-    }
-  });
-
-  return processedTemplate;
-}
 
 // Helper function to get tenantId from JWT auth
 async function getTenantId(req: any, storage: IStorage): Promise<string | null> {
@@ -826,14 +730,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/email-templates', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
-      if (!tenantId) { 
+      if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const { name, subject, html } = req.body;
-      
+      const { name, subject, html, arrangementOptionId } = req.body;
+
       if (!name || !subject || !html) {
         return res.status(400).json({ message: "Name, subject, and HTML content are required" });
+      }
+
+      let arrangementOption = null;
+      if (arrangementOptionId) {
+        if (typeof arrangementOptionId !== 'string') {
+          return res.status(400).json({ message: "Invalid payment plan selection" });
+        }
+
+        arrangementOption = await storage.getArrangementOptionById(arrangementOptionId, tenantId, { requireActive: true });
+        if (!arrangementOption) {
+          return res.status(400).json({ message: "Selected payment plan is not available" });
+        }
       }
 
       const template = await storage.createEmailTemplate({
@@ -842,8 +758,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         subject,
         html,
         status: 'draft',
+        defaultArrangementOptionId: arrangementOption?.id ?? null,
       });
-      
+
       res.json(template);
     } catch (error) {
       console.error("Error creating email template:", error);
@@ -887,40 +804,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/email-campaigns', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
-      if (!tenantId) { 
+      if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const { name, templateId, targetGroup } = req.body;
-      
-      if (!name || !templateId || !targetGroup) {
-        return res.status(400).json({ message: "Name, template ID, and target group are required" });
-      }
+      const createEmailCampaignSchema = z.object({
+        name: z.string().min(1),
+        templateId: z.string().uuid(),
+        targetGroup: z.enum(["all", "with-balance", "decline", "recent-upload"]),
+        arrangementOptionId: z.string().uuid().optional().nullable(),
+      });
 
-      // Get target consumers count
+      const { name, templateId, targetGroup, arrangementOptionId } = createEmailCampaignSchema.parse(req.body);
+
       const consumers = await storage.getConsumersByTenant(tenantId);
+      const accountsData = await storage.getAccountsByTenant(tenantId);
+
       let targetedConsumers = consumers;
-      
+
       if (targetGroup === "with-balance") {
-        const accounts = await storage.getAccountsByTenant(tenantId);
-        const consumerIds = accounts.filter(acc => (acc.balanceCents || 0) > 0).map(acc => acc.consumerId);
+        const consumerIds = accountsData
+          .filter(acc => (acc.balanceCents || 0) > 0)
+          .map(acc => acc.consumerId);
         targetedConsumers = consumers.filter(c => consumerIds.includes(c.id));
       } else if (targetGroup === "decline") {
-        // For decline status, we'll filter consumers based on a decline status field
-        // This could be stored in consumer additionalData or a separate status field
-        targetedConsumers = consumers.filter(c => 
+        targetedConsumers = consumers.filter(c =>
           (c.additionalData && (c.additionalData as any).status === 'decline') ||
           (c.additionalData && (c.additionalData as any).folder === 'decline')
         );
       } else if (targetGroup === "recent-upload") {
-        // For most recent upload, we'll need to track upload batches
-        // For now, we'll use consumers created in the last 24 hours as a proxy
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
-        targetedConsumers = consumers.filter(c => 
+        targetedConsumers = consumers.filter(c =>
           c.createdAt && new Date(c.createdAt) > yesterday
         );
       }
+
+      const templates = await storage.getEmailTemplatesByTenant(tenantId);
+      const template = templates.find(t => t.id === templateId);
+      if (!template) {
+        return res.status(404).json({ message: "Email template not found" });
+      }
+
+      let selectedArrangementOption: ArrangementOption | null = null;
+      if (arrangementOptionId) {
+        selectedArrangementOption = await storage.getArrangementOptionById(arrangementOptionId, tenantId, { requireActive: true }) ?? null;
+        if (!selectedArrangementOption) {
+          return res.status(400).json({ message: "Selected payment plan is not available" });
+        }
+      } else if (template.defaultArrangementOptionId) {
+        selectedArrangementOption = await storage.getArrangementOptionById(template.defaultArrangementOptionId, tenantId) ?? null;
+        if (!selectedArrangementOption) {
+          console.warn(`Payment plan ${template.defaultArrangementOptionId} referenced by template ${template.id} was not found for tenant ${tenantId}`);
+        }
+      }
+
+      const arrangementContext = enrichArrangement(selectedArrangementOption ?? undefined);
 
       const campaign = await storage.createEmailCampaign({
         tenantId: tenantId,
@@ -929,55 +868,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
         targetGroup,
         totalRecipients: targetedConsumers.length,
         status: 'sending',
+        arrangementOptionId: arrangementContext?.id ?? null,
       });
 
-      // Get email template for variable replacement
-      const templates = await storage.getEmailTemplatesByTenant(tenantId);
-      const template = templates.find(t => t.id === templateId);
-      if (!template) {
-        return res.status(404).json({ message: "Email template not found" });
-      }
-
-      // Get tenant details for URL generation
       const tenant = await storage.getTenant(tenantId);
       if (!tenant) {
         return res.status(404).json({ message: "Tenant not found" });
       }
 
-      // Process variables for each consumer and prepare email content
-      const accountsData = await storage.getAccountsByTenant(tenantId);
-      
-      // Prepare emails with variable replacement (filter out consumers without emails)
       const processedEmails = targetedConsumers
-        .filter(consumer => consumer.email) // Only include consumers with valid emails
+        .filter(consumer => consumer.email)
         .map(consumer => {
-        // Find the primary account for this consumer (could be multiple accounts)
-        const consumerAccount = accountsData.find(acc => acc.consumerId === consumer.id);
-        
-        // Replace variables in both subject and HTML content
-        const processedSubject = replaceTemplateVariables(template.subject || '', consumer, consumerAccount, tenant);
-        const processedHtml = replaceTemplateVariables(template.html || '', consumer, consumerAccount, tenant);
-        
-        return {
-          to: consumer.email!,
-          from: tenant.email || 'noreply@chainplatform.com', // Use tenant email or default
-          subject: processedSubject,
-          html: processedHtml,
-          tag: `campaign-${campaign.id}`,
-          metadata: {
+          const consumerAccount = accountsData.find(acc => acc.consumerId === consumer.id);
+          const replacementOptions: TemplateReplacementOptions = { arrangement: arrangementContext };
+
+          const processedSubject = replaceTemplateVariables(template.subject || '', consumer, consumerAccount, tenant, replacementOptions);
+          const processedHtml = replaceTemplateVariables(template.html || '', consumer, consumerAccount, tenant, replacementOptions);
+
+          const metadata: Record<string, string> = {
             campaignId: campaign.id,
             tenantId: tenantId || '',
             consumerId: consumer.id,
-            templateId: templateId,
-          }
-        };
-      });
+            templateId,
+          };
 
-      // Send emails via Postmark
+          if (arrangementContext) {
+            metadata.arrangementOptionId = arrangementContext.id;
+            metadata.arrangementName = arrangementContext.name || '';
+          }
+
+          return {
+            to: consumer.email!,
+            from: tenant.email || 'noreply@chainplatform.com',
+            subject: processedSubject,
+            html: processedHtml,
+            tag: `campaign-${campaign.id}`,
+            metadata,
+          };
+        });
+
       console.log(`📧 Sending ${processedEmails.length} emails via Postmark...`);
       const emailResults = await emailService.sendBulkEmails(processedEmails);
-      
-      // Update campaign status
+
       await storage.updateEmailCampaign(campaign.id, {
         status: 'completed',
         totalSent: emailResults.successful,
@@ -987,9 +919,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       console.log(`✅ Email campaign completed: ${emailResults.successful} sent, ${emailResults.failed} failed`);
-      
+
       res.json({
         ...campaign,
+        arrangementName: arrangementContext?.name || null,
         emailResults: {
           successful: emailResults.successful,
           failed: emailResults.failed,
@@ -1088,15 +1021,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         name: z.string().min(1),
         message: z.string().min(1).max(1600), // SMS length limit
         status: z.string().optional().default("draft"),
+        arrangementOptionId: z.string().uuid().optional().nullable(),
       });
 
       const validatedData = insertSmsTemplateSchema.parse(req.body);
-      
+
+      let arrangementOption = null;
+      if (validatedData.arrangementOptionId) {
+        arrangementOption = await storage.getArrangementOptionById(validatedData.arrangementOptionId, tenantId, { requireActive: true });
+        if (!arrangementOption) {
+          return res.status(400).json({ message: "Selected payment plan is not available" });
+        }
+      }
+
+      const { arrangementOptionId, ...templateData } = validatedData;
+
       const newTemplate = await storage.createSmsTemplate({
-        ...validatedData,
+        ...templateData,
         tenantId: tenantId,
+        defaultArrangementOptionId: arrangementOption?.id ?? null,
       });
-      
+
       res.status(201).json(newTemplate);
     } catch (error) {
       console.error("Error creating SMS template:", error);
@@ -1146,9 +1091,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         templateId: z.string().uuid(),
         name: z.string().min(1),
         targetGroup: z.enum(["all", "with-balance", "decline", "recent-upload"]),
+        arrangementOptionId: z.string().uuid().optional().nullable(),
       });
 
-      const { templateId, name, targetGroup } = insertSmsCampaignSchema.parse(req.body);
+      const { templateId, name, targetGroup, arrangementOptionId } = insertSmsCampaignSchema.parse(req.body);
 
       const consumers = await storage.getConsumersByTenant(tenantId);
       const accountsData = await storage.getAccountsByTenant(tenantId);
@@ -1173,6 +1119,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
       }
 
+      const templates = await storage.getSmsTemplatesByTenant(tenantId);
+      const template = templates.find(t => t.id === templateId);
+      if (!template) {
+        return res.status(404).json({ message: "SMS template not found" });
+      }
+
+      let selectedArrangementOption: ArrangementOption | null = null;
+      if (arrangementOptionId) {
+        selectedArrangementOption = await storage.getArrangementOptionById(arrangementOptionId, tenantId, { requireActive: true }) ?? null;
+        if (!selectedArrangementOption) {
+          return res.status(400).json({ message: "Selected payment plan is not available" });
+        }
+      } else if (template.defaultArrangementOptionId) {
+        selectedArrangementOption = await storage.getArrangementOptionById(template.defaultArrangementOptionId, tenantId) ?? null;
+        if (!selectedArrangementOption) {
+          console.warn(`Payment plan ${template.defaultArrangementOptionId} referenced by SMS template ${template.id} was not found for tenant ${tenantId}`);
+        }
+      }
+
+      const arrangementContext = enrichArrangement(selectedArrangementOption ?? undefined);
+
       const campaign = await storage.createSmsCampaign({
         tenantId,
         templateId,
@@ -1180,13 +1147,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         targetGroup,
         totalRecipients: targetedConsumers.length,
         status: 'sending',
+        arrangementOptionId: arrangementContext?.id ?? null,
       });
-
-      const templates = await storage.getSmsTemplatesByTenant(tenantId);
-      const template = templates.find(t => t.id === templateId);
-      if (!template) {
-        return res.status(404).json({ message: "SMS template not found" });
-      }
 
       const tenant = await storage.getTenant(tenantId);
       if (!tenant) {
@@ -1197,7 +1159,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .filter(consumer => consumer.phone)
         .map(consumer => {
           const consumerAccount = accountsData.find(acc => acc.consumerId === consumer.id);
-          const processedMessage = replaceTemplateVariables(template.message || '', consumer, consumerAccount, tenant);
+          const replacementOptions: TemplateReplacementOptions = { arrangement: arrangementContext };
+          const processedMessage = replaceTemplateVariables(template.message || '', consumer, consumerAccount, tenant, replacementOptions);
           return {
             to: consumer.phone!,
             message: processedMessage,
@@ -1222,6 +1185,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({
         ...updatedCampaign,
+        arrangementName: arrangementContext?.name || null,
         smsResults: {
           sent: smsResults.totalSent,
           queued: smsResults.totalQueued,
@@ -2386,11 +2350,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get('/api/communications/arrangement-options', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const options = await storage.getArrangementOptionsByTenant(tenantId);
+      const enrichedOptions = options.map(option => enrichArrangement(option) ?? {
+        ...option,
+        summary: '',
+        details: '',
+        balanceRange: formatCurrencyRange(option.minBalance, option.maxBalance),
+        monthlyRange: formatCurrencyRange(option.monthlyPaymentMin, option.monthlyPaymentMax),
+        maxTermLabel: option.maxTermMonths ? `${option.maxTermMonths} months` : '',
+      });
+
+      res.json(enrichedOptions);
+    } catch (error) {
+      console.error("Error fetching arrangement options for communications:", error);
+      res.status(500).json({ message: "Failed to fetch arrangement options" });
+    }
+  });
+
   // Arrangement options routes
   app.get('/api/arrangement-options', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
-      
+
       if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
       }

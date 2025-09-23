@@ -49,13 +49,15 @@ export default function Communications() {
     name: "",
     subject: "",
     html: "",
+    arrangementOptionId: "",
   });
-  
+
   const [smsTemplateForm, setSmsTemplateForm] = useState({
     name: "",
     message: "",
+    arrangementOptionId: "",
   });
-  
+
   const [campaignForm, setCampaignForm] = useState({
     name: "",
     templateId: "",
@@ -68,6 +70,7 @@ export default function Communications() {
       status: "",
       lastContactDays: "",
     },
+    arrangementOptionId: "",
   });
 
   const [automationForm, setAutomationForm] = useState({
@@ -155,13 +158,25 @@ export default function Communications() {
     queryKey: ["/api/settings"],
   });
 
+  const { data: arrangementOptionsData } = useQuery({
+    queryKey: ["/api/communications/arrangement-options"],
+  });
+
+  const arrangementOptionsList = (arrangementOptionsData as any[]) || [];
+  const getArrangementById = (id?: string | null) =>
+    arrangementOptionsList.find((option: any) => option.id === id);
+
+  const selectedEmailArrangement = getArrangementById(emailTemplateForm.arrangementOptionId);
+  const selectedSmsArrangement = getArrangementById(smsTemplateForm.arrangementOptionId);
+  const selectedCampaignArrangement = getArrangementById(campaignForm.arrangementOptionId);
+
   // Email Mutations
   const createEmailTemplateMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/email-templates", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/email-templates"] });
       setShowTemplateModal(false);
-      setEmailTemplateForm({ name: "", subject: "", html: "" });
+      setEmailTemplateForm({ name: "", subject: "", html: "", arrangementOptionId: "" });
       toast({
         title: "Success",
         description: "Email template created successfully",
@@ -193,7 +208,7 @@ export default function Communications() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sms-templates"] });
       setShowTemplateModal(false);
-      setSmsTemplateForm({ name: "", message: "" });
+      setSmsTemplateForm({ name: "", message: "", arrangementOptionId: "" });
       toast({
         title: "Success",
         description: "SMS template created successfully",
@@ -226,9 +241,9 @@ export default function Communications() {
       queryClient.invalidateQueries({ queryKey: ["/api/email-campaigns"] });
       setShowCampaignModal(false);
       setShowCampaignConfirmation(false);
-      setCampaignForm({ 
-        name: "", 
-        templateId: "", 
+      setCampaignForm({
+        name: "",
+        templateId: "",
         targetGroup: "all",
         targetType: "all",
         targetFolderIds: [],
@@ -238,6 +253,7 @@ export default function Communications() {
           status: "",
           lastContactDays: "",
         },
+        arrangementOptionId: "",
       });
       toast({
         title: "Success",
@@ -252,9 +268,9 @@ export default function Communications() {
       queryClient.invalidateQueries({ queryKey: ["/api/sms-campaigns"] });
       setShowCampaignModal(false);
       setShowCampaignConfirmation(false);
-      setCampaignForm({ 
-        name: "", 
-        templateId: "", 
+      setCampaignForm({
+        name: "",
+        templateId: "",
         targetGroup: "all",
         targetType: "all",
         targetFolderIds: [],
@@ -264,6 +280,7 @@ export default function Communications() {
           status: "",
           lastContactDays: "",
         },
+        arrangementOptionId: "",
       });
       toast({
         title: "Success",
@@ -284,6 +301,7 @@ export default function Communications() {
         type: "email",
         templateId: "",
         templateIds: [],
+        templateSchedule: [],
         triggerType: "schedule",
         scheduleType: "once",
         scheduledDate: "",
@@ -364,7 +382,10 @@ export default function Communications() {
         });
         return;
       }
-      createEmailTemplateMutation.mutate(emailTemplateForm);
+      createEmailTemplateMutation.mutate({
+        ...emailTemplateForm,
+        arrangementOptionId: emailTemplateForm.arrangementOptionId || undefined,
+      });
     } else {
       if (!smsTemplateForm.name.trim() || !smsTemplateForm.message.trim()) {
         toast({
@@ -374,7 +395,10 @@ export default function Communications() {
         });
         return;
       }
-      createSmsTemplateMutation.mutate(smsTemplateForm);
+      createSmsTemplateMutation.mutate({
+        ...smsTemplateForm,
+        arrangementOptionId: smsTemplateForm.arrangementOptionId || undefined,
+      });
     }
   };
 
@@ -394,10 +418,15 @@ export default function Communications() {
   };
 
   const handleCampaignConfirm = () => {
+    const payload = {
+      ...campaignForm,
+      arrangementOptionId: campaignForm.arrangementOptionId || undefined,
+    };
+
     if (communicationType === "email") {
-      createEmailCampaignMutation.mutate(campaignForm);
+      createEmailCampaignMutation.mutate(payload);
     } else {
-      createSmsCampaignMutation.mutate(campaignForm);
+      createSmsCampaignMutation.mutate(payload);
     }
     setShowCampaignConfirmation(false);
   };
@@ -742,8 +771,8 @@ export default function Communications() {
                         <div>
                           <h3 className="font-medium">{campaign.name}</h3>
                           <p className="text-sm text-gray-600">
-                            Target: {getTargetGroupLabel(campaign)} • 
-                            Template: {campaign.templateName}
+                            Target: {getTargetGroupLabel(campaign)} • Template: {campaign.templateName}
+                            {campaign.arrangementName ? ` • Plan: ${campaign.arrangementName}` : ''}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
@@ -849,6 +878,74 @@ export default function Communications() {
                             required
                           />
                         </div>
+                        <div>
+                          <Label htmlFor="email-plan">Highlighted Payment Plan</Label>
+                          <Select
+                            value={emailTemplateForm.arrangementOptionId || 'none'}
+                            onValueChange={(value) =>
+                              setEmailTemplateForm({
+                                ...emailTemplateForm,
+                                arrangementOptionId: value === 'none' ? '' : value,
+                              })
+                            }
+                          >
+                            <SelectTrigger id="email-plan">
+                              <SelectValue placeholder="Optional: insert a payment plan" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">No payment plan</SelectItem>
+                              {arrangementOptionsList.length === 0 ? (
+                                <SelectItem value="__no-email-plan" disabled>
+                                  No payment plans configured
+                                </SelectItem>
+                              ) : (
+                                arrangementOptionsList.map((option: any) => (
+                                  <SelectItem key={option.id} value={option.id}>
+                                    {option.name}
+                                  </SelectItem>
+                                ))
+                              )}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Use placeholders such as <code className="font-mono">{'{{arrangementName}}'}</code>,{' '}
+                            <code className="font-mono">{'{{arrangementSummary}}'}</code>,{' '}
+                            <code className="font-mono">{'{{arrangementDetails}}'}</code>,{' '}
+                            <code className="font-mono">{'{{arrangementMonthlyRange}}'}</code>,{' '}
+                            <code className="font-mono">{'{{arrangementBalanceRange}}'}</code>, or{' '}
+                            <code className="font-mono">{'{{arrangementMaxTermLabel}}'}</code> to inject payment plan copy.
+                          </p>
+                          {selectedEmailArrangement && (
+                            <div className="mt-3 bg-emerald-50 border border-emerald-200 rounded-md p-3 text-sm text-emerald-900 space-y-1">
+                              <p className="font-semibold">Payment plan preview</p>
+                              <p>
+                                <span className="font-medium">{'{{arrangementName}}'}</span> → {selectedEmailArrangement.name}
+                              </p>
+                              {selectedEmailArrangement.summary && (
+                                <p>
+                                  <span className="font-medium">{'{{arrangementSummary}}'}</span> → {selectedEmailArrangement.summary}
+                                </p>
+                              )}
+                              <p>
+                                <span className="font-medium">{'{{arrangementMonthlyRange}}'}</span> → {selectedEmailArrangement.monthlyRange || '—'}
+                              </p>
+                              <p>
+                                <span className="font-medium">{'{{arrangementBalanceRange}}'}</span> → {selectedEmailArrangement.balanceRange || '—'}
+                              </p>
+                              {selectedEmailArrangement.maxTermLabel && (
+                                <p>
+                                  <span className="font-medium">{'{{arrangementMaxTermLabel}}'}</span> → {selectedEmailArrangement.maxTermLabel}
+                                </p>
+                              )}
+                              <div>
+                                <span className="font-medium">{'{{arrangementDetails}}'}</span>
+                                <pre className="whitespace-pre-wrap mt-1 text-emerald-900">
+                                  {selectedEmailArrangement.details || 'No plan details available.'}
+                                </pre>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                         <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
                           <h4 className="font-medium text-blue-900 text-sm mb-1">Available Variables</h4>
                           <p className="text-xs text-blue-700 mb-2">
@@ -869,6 +966,18 @@ export default function Communications() {
                             <div>• {"{{agencyName}}"}</div>
                             <div>• {"{{agencyEmail}}"}</div>
                             <div>• {"{{agencyPhone}}"}</div>
+                            <div className="col-span-full font-semibold mt-2">Payment Plans</div>
+                            <div>• {"{{arrangementName}}"}</div>
+                            <div>• {"{{arrangementSummary}}"}</div>
+                            <div>• {"{{arrangementDescription}}"}</div>
+                            <div>• {"{{arrangementDetails}}"}</div>
+                            <div>• {"{{arrangementMonthlyRange}}"}</div>
+                            <div>• {"{{arrangementBalanceRange}}"}</div>
+                            <div>• {"{{arrangementMonthlyPaymentMin}}"}</div>
+                            <div>• {"{{arrangementMonthlyPaymentMax}}"}</div>
+                            <div>• {"{{arrangementMinBalance}}"}</div>
+                            <div>• {"{{arrangementMaxBalance}}"}</div>
+                            <div>• {"{{arrangementMaxTermLabel}}"}</div>
                             <div className="col-span-full">• Plus any additional CSV columns</div>
                           </div>
                         </div>
@@ -889,6 +998,74 @@ export default function Communications() {
                         <p className="text-sm text-gray-500 mt-1">
                           {smsTemplateForm.message.length}/1600 characters
                         </p>
+                        <div className="mt-3">
+                          <Label htmlFor="sms-plan">Highlighted Payment Plan</Label>
+                          <Select
+                            value={smsTemplateForm.arrangementOptionId || 'none'}
+                            onValueChange={(value) =>
+                              setSmsTemplateForm({
+                                ...smsTemplateForm,
+                                arrangementOptionId: value === 'none' ? '' : value,
+                              })
+                            }
+                          >
+                            <SelectTrigger id="sms-plan">
+                              <SelectValue placeholder="Optional: insert a payment plan" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">No payment plan</SelectItem>
+                              {arrangementOptionsList.length === 0 ? (
+                                <SelectItem value="__no-sms-plan" disabled>
+                                  No payment plans configured
+                                </SelectItem>
+                              ) : (
+                                arrangementOptionsList.map((option: any) => (
+                                  <SelectItem key={option.id} value={option.id}>
+                                    {option.name}
+                                  </SelectItem>
+                                ))
+                              )}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Plan placeholders such as <code className="font-mono">{'{{arrangementName}}'}</code>,{' '}
+                            <code className="font-mono">{'{{arrangementSummary}}'}</code>,{' '}
+                            <code className="font-mono">{'{{arrangementDetails}}'}</code>,{' '}
+                            <code className="font-mono">{'{{arrangementMonthlyRange}}'}</code>,{' '}
+                            <code className="font-mono">{'{{arrangementBalanceRange}}'}</code>, and{' '}
+                            <code className="font-mono">{'{{arrangementMaxTermLabel}}'}</code> work in SMS messages too.
+                          </p>
+                          {selectedSmsArrangement && (
+                            <div className="mt-3 bg-emerald-50 border border-emerald-200 rounded-md p-3 text-sm text-emerald-900 space-y-1">
+                              <p className="font-semibold">Payment plan preview</p>
+                              <p>
+                                <span className="font-medium">{'{{arrangementName}}'}</span> → {selectedSmsArrangement.name}
+                              </p>
+                              {selectedSmsArrangement.summary && (
+                                <p>
+                                  <span className="font-medium">{'{{arrangementSummary}}'}</span> → {selectedSmsArrangement.summary}
+                                </p>
+                              )}
+                              <p>
+                                <span className="font-medium">{'{{arrangementMonthlyRange}}'}</span> → {selectedSmsArrangement.monthlyRange || '—'}
+                              </p>
+                              <p>
+                                <span className="font-medium">{'{{arrangementBalanceRange}}'}</span> → {selectedSmsArrangement.balanceRange || '—'}
+                              </p>
+                              {selectedSmsArrangement.maxTermLabel && (
+                                <p>
+                                  <span className="font-medium">{'{{arrangementMaxTermLabel}}'}</span> → {selectedSmsArrangement.maxTermLabel}
+                                </p>
+                              )}
+                              <div>
+                                <span className="font-medium">{'{{arrangementDetails}}'}</span>
+                                <pre className="whitespace-pre-wrap mt-1 text-emerald-900">
+                                  {selectedSmsArrangement.details || 'No plan details available.'}
+                                </pre>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                         <div className="mt-3 bg-blue-50 border border-blue-200 rounded-md p-3">
                           <h4 className="font-medium text-blue-900 text-sm mb-1">Available Variables</h4>
                           <p className="text-xs text-blue-700 mb-2">
@@ -907,6 +1084,18 @@ export default function Communications() {
                             <div>• {"{{appDownloadLink}}"}</div>
                             <div>• {"{{agencyName}}"}</div>
                             <div>• {"{{agencyPhone}}"}</div>
+                            <div className="col-span-full font-semibold mt-2">Payment Plans</div>
+                            <div>• {"{{arrangementName}}"}</div>
+                            <div>• {"{{arrangementSummary}}"}</div>
+                            <div>• {"{{arrangementDescription}}"}</div>
+                            <div>• {"{{arrangementDetails}}"}</div>
+                            <div>• {"{{arrangementMonthlyRange}}"}</div>
+                            <div>• {"{{arrangementBalanceRange}}"}</div>
+                            <div>• {"{{arrangementMonthlyPaymentMin}}"}</div>
+                            <div>• {"{{arrangementMonthlyPaymentMax}}"}</div>
+                            <div>• {"{{arrangementMinBalance}}"}</div>
+                            <div>• {"{{arrangementMaxBalance}}"}</div>
+                            <div>• {"{{arrangementMaxTermLabel}}"}</div>
                             <div className="col-span-full">• Plus any additional CSV columns</div>
                           </div>
                         </div>
@@ -963,6 +1152,9 @@ export default function Communications() {
                           {template.message}
                         </p>
                       )}
+                      <p className="text-xs text-gray-500 mb-3">
+                        Default plan: {getArrangementById(template.defaultArrangementOptionId)?.name || 'None'}
+                      </p>
                       {/* Agency URL Section */}
                       <div className="mb-3 p-2 bg-gray-50 rounded-md">
                         <div className="flex items-center justify-between">
@@ -1151,7 +1343,14 @@ export default function Communications() {
                       <Label htmlFor="template">{communicationType === "email" ? "Email" : "SMS"} Template</Label>
                       <Select
                         value={campaignForm.templateId}
-                        onValueChange={(value) => setCampaignForm({ ...campaignForm, templateId: value })}
+                        onValueChange={(value) => {
+                          const selectedTemplate = (templates as any)?.find((template: any) => template.id === value);
+                          setCampaignForm(prev => ({
+                            ...prev,
+                            templateId: value,
+                            arrangementOptionId: selectedTemplate?.defaultArrangementOptionId || '',
+                          }));
+                        }}
                       >
                         <SelectTrigger data-testid="select-template">
                           <SelectValue placeholder="Select a template" />
@@ -1164,6 +1363,74 @@ export default function Communications() {
                           ))}
                         </SelectContent>
                       </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="campaign-plan">Highlighted Payment Plan</Label>
+                      <Select
+                        value={campaignForm.arrangementOptionId || 'none'}
+                        onValueChange={(value) =>
+                          setCampaignForm(prev => ({
+                            ...prev,
+                            arrangementOptionId: value === 'none' ? '' : value,
+                          }))
+                        }
+                      >
+                        <SelectTrigger id="campaign-plan" data-testid="select-campaign-plan">
+                          <SelectValue placeholder="Optional: insert a payment plan" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No payment plan</SelectItem>
+                          {arrangementOptionsList.length === 0 ? (
+                            <SelectItem value="__no-campaign-plan" disabled>
+                              No payment plans configured
+                            </SelectItem>
+                          ) : (
+                            arrangementOptionsList.map((option: any) => (
+                              <SelectItem key={option.id} value={option.id}>
+                                {option.name}
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Plan placeholders such as <code className="font-mono">{'{{arrangementName}}'}</code>,{' '}
+                        <code className="font-mono">{'{{arrangementSummary}}'}</code>,{' '}
+                        <code className="font-mono">{'{{arrangementDetails}}'}</code>,{' '}
+                        <code className="font-mono">{'{{arrangementMonthlyRange}}'}</code>,{' '}
+                        <code className="font-mono">{'{{arrangementBalanceRange}}'}</code>, and{' '}
+                        <code className="font-mono">{'{{arrangementMaxTermLabel}}'}</code> will use the selection below.
+                      </p>
+                      {selectedCampaignArrangement && (
+                        <div className="mt-3 bg-emerald-50 border border-emerald-200 rounded-md p-3 text-sm text-emerald-900 space-y-1">
+                          <p className="font-semibold">Payment plan preview</p>
+                          <p>
+                            <span className="font-medium">{'{{arrangementName}}'}</span> → {selectedCampaignArrangement.name}
+                          </p>
+                          {selectedCampaignArrangement.summary && (
+                            <p>
+                              <span className="font-medium">{'{{arrangementSummary}}'}</span> → {selectedCampaignArrangement.summary}
+                            </p>
+                          )}
+                          <p>
+                            <span className="font-medium">{'{{arrangementMonthlyRange}}'}</span> → {selectedCampaignArrangement.monthlyRange || '—'}
+                          </p>
+                          <p>
+                            <span className="font-medium">{'{{arrangementBalanceRange}}'}</span> → {selectedCampaignArrangement.balanceRange || '—'}
+                          </p>
+                          {selectedCampaignArrangement.maxTermLabel && (
+                            <p>
+                              <span className="font-medium">{'{{arrangementMaxTermLabel}}'}</span> → {selectedCampaignArrangement.maxTermLabel}
+                            </p>
+                          )}
+                          <div>
+                            <span className="font-medium">{'{{arrangementDetails}}'}</span>
+                            <pre className="whitespace-pre-wrap mt-1 text-emerald-900">
+                              {selectedCampaignArrangement.details || 'No plan details available.'}
+                            </pre>
+                          </div>
+                        </div>
+                      )}
                     </div>
                     <div>
                       <Label htmlFor="target-type">Target Type</Label>
@@ -1346,6 +1613,9 @@ export default function Communications() {
                           <div>
                             <span className="text-gray-600">Template:</span>
                             <div className="font-medium">{campaign.templateName}</div>
+                            <div className="text-xs text-gray-500">
+                              Plan: {campaign.arrangementName || 'None'}
+                            </div>
                           </div>
                           <div>
                             <span className="text-gray-600">Target:</span>
@@ -1940,18 +2210,65 @@ export default function Communications() {
         </Tabs>
 
         {/* Campaign Confirmation Dialog */}
-        <AlertDialog open={showCampaignConfirmation} onOpenChange={setShowCampaignConfirmation}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Confirm Campaign Creation</AlertDialogTitle>
-              <AlertDialogDescription>
-                Are you sure you want to create this {communicationType} campaign? 
-                This will send messages to: {getTargetGroupLabel(campaignForm)}.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel data-testid="button-cancel-campaign">Cancel</AlertDialogCancel>
-              <AlertDialogAction 
+          <AlertDialog open={showCampaignConfirmation} onOpenChange={setShowCampaignConfirmation}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Confirm Campaign Creation</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to create this {communicationType} campaign? This will send messages to:
+                  {" "}
+                  {getTargetGroupLabel(campaignForm)}.
+                  {selectedCampaignArrangement ? (
+                    <span>
+                      {" "}The selected messages will include payment plan details for
+                      {" "}
+                      <strong>{selectedCampaignArrangement.name}</strong>.
+                    </span>
+                  ) : (
+                    <span>
+                      {" "}No payment plan will be merged into this send.
+                    </span>
+                  )}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              {selectedCampaignArrangement ? (
+                <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 space-y-1">
+                  <p className="font-semibold">Payment plan preview</p>
+                  <p>
+                    <span className="font-medium">Plan:</span> {selectedCampaignArrangement.name}
+                  </p>
+                  {selectedCampaignArrangement.summary && (
+                    <p>{selectedCampaignArrangement.summary}</p>
+                  )}
+                  <p>
+                    <span className="font-medium">Monthly range:</span>{" "}
+                    {selectedCampaignArrangement.monthlyRange || "—"}
+                  </p>
+                  <p>
+                    <span className="font-medium">Eligible balances:</span>{" "}
+                    {selectedCampaignArrangement.balanceRange || "—"}
+                  </p>
+                  {selectedCampaignArrangement.maxTermLabel && (
+                    <p>
+                      <span className="font-medium">Maximum term:</span>{" "}
+                      {selectedCampaignArrangement.maxTermLabel}
+                    </p>
+                  )}
+                  <div>
+                    <span className="font-medium">Merged details:</span>
+                    <pre className="mt-1 whitespace-pre-wrap text-emerald-900">
+                      {selectedCampaignArrangement.details || "No plan details available."}
+                    </pre>
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-muted-foreground">
+                  Payment plan placeholders will remain blank for this campaign.
+                </p>
+              )}
+              <AlertDialogFooter>
+                <AlertDialogCancel data-testid="button-cancel-campaign">Cancel</AlertDialogCancel>
+                <AlertDialogAction
                 onClick={handleCampaignConfirm}
                 data-testid="button-confirm-campaign"
                 className="bg-red-600 hover:bg-red-700"

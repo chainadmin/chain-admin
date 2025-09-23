@@ -166,6 +166,7 @@ export const emailTemplates = pgTable("email_templates", {
   subject: text("subject").notNull(),
   html: text("html").notNull(),
   status: text("status").default("draft"),
+  defaultArrangementOptionId: uuid("default_arrangement_option_id").references(() => arrangementOptions.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -184,6 +185,7 @@ export const emailCampaigns = pgTable("email_campaigns", {
   totalClicked: bigint("total_clicked", { mode: "number" }).default(0),
   totalErrors: bigint("total_errors", { mode: "number" }).default(0),
   totalOptOuts: bigint("total_opt_outs", { mode: "number" }).default(0),
+  arrangementOptionId: uuid("arrangement_option_id").references(() => arrangementOptions.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow(),
   completedAt: timestamp("completed_at"),
 });
@@ -210,6 +212,7 @@ export const smsTemplates = pgTable("sms_templates", {
   name: text("name").notNull(),
   message: text("message").notNull(), // SMS message content (160 char limit recommended)
   status: text("status").default("draft"),
+  defaultArrangementOptionId: uuid("default_arrangement_option_id").references(() => arrangementOptions.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -226,6 +229,7 @@ export const smsCampaigns = pgTable("sms_campaigns", {
   totalDelivered: bigint("total_delivered", { mode: "number" }).default(0),
   totalErrors: bigint("total_errors", { mode: "number" }).default(0),
   totalOptOuts: bigint("total_opt_outs", { mode: "number" }).default(0),
+  arrangementOptionId: uuid("arrangement_option_id").references(() => arrangementOptions.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow(),
   completedAt: timestamp("completed_at"),
 });
