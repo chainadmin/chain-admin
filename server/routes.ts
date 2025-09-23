@@ -498,6 +498,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete('/api/consumers/:id', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = await getTenantId(req, storage);
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { id } = req.params;
+      const consumer = await storage.getConsumer(id);
+
+      if (!consumer || consumer.tenantId !== tenantId) {
+        return res.status(404).json({ message: "Consumer not found" });
+      }
+
+      await storage.deleteConsumer(id, tenantId);
+
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting consumer:", error);
+      res.status(500).json({ message: "Failed to delete consumer" });
+    }
+  });
+
   // Account routes
   app.get('/api/accounts', authenticateUser, async (req: any, res) => {
     try {
@@ -898,7 +922,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/email-campaigns', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
-      if (!tenantId) { 
+      if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
       }
 
@@ -1010,6 +1034,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error creating email campaign:", error);
       res.status(500).json({ message: "Failed to create email campaign" });
+    }
+  });
+
+  app.delete('/api/email-campaigns/:id', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { id } = req.params;
+      const campaign = await storage.getEmailCampaignById(id, tenantId);
+
+      if (!campaign) {
+        return res.status(404).json({ message: "Campaign not found" });
+      }
+
+      if ((campaign.status || '').toLowerCase() !== 'pending') {
+        return res.status(400).json({ message: "Only pending campaigns can be deleted" });
+      }
+
+      await storage.deleteEmailCampaign(id, tenantId);
+
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting email campaign:", error);
+      res.status(500).json({ message: "Failed to delete email campaign" });
     }
   });
 
@@ -1243,6 +1294,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error creating SMS campaign:", error);
       res.status(500).json({ message: "Failed to create SMS campaign" });
+    }
+  });
+
+  app.delete('/api/sms-campaigns/:id', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { id } = req.params;
+      const campaign = await storage.getSmsCampaignById(id, tenantId);
+
+      if (!campaign) {
+        return res.status(404).json({ message: "Campaign not found" });
+      }
+
+      if ((campaign.status || '').toLowerCase() !== 'pending') {
+        return res.status(400).json({ message: "Only pending campaigns can be deleted" });
+      }
+
+      await storage.deleteSmsCampaign(id, tenantId);
+
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting SMS campaign:", error);
+      res.status(500).json({ message: "Failed to delete SMS campaign" });
     }
   });
 

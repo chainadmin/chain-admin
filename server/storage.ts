@@ -138,6 +138,7 @@ export interface IStorage {
   getConsumerByEmailAndTenant(email: string, tenantId: string): Promise<Consumer | undefined>;
   createConsumer(consumer: InsertConsumer): Promise<Consumer>;
   findOrCreateConsumer(consumerData: InsertConsumer): Promise<Consumer>;
+  deleteConsumer(id: string, tenantId: string): Promise<void>;
   
   // Folder operations
   getFoldersByTenant(tenantId: string): Promise<Folder[]>;
@@ -162,8 +163,10 @@ export interface IStorage {
   
   // Email campaign operations
   getEmailCampaignsByTenant(tenantId: string): Promise<(EmailCampaign & { templateName: string })[]>;
+  getEmailCampaignById(id: string, tenantId: string): Promise<EmailCampaign | undefined>;
   createEmailCampaign(campaign: InsertEmailCampaign): Promise<EmailCampaign>;
   updateEmailCampaign(id: string, updates: Partial<EmailCampaign>): Promise<EmailCampaign>;
+  deleteEmailCampaign(id: string, tenantId: string): Promise<void>;
   
   // Email metrics operations
   getEmailMetricsByTenant(tenantId: string): Promise<any>;
@@ -175,8 +178,10 @@ export interface IStorage {
   
   // SMS campaign operations
   getSmsCampaignsByTenant(tenantId: string): Promise<(SmsCampaign & { templateName: string })[]>;
+  getSmsCampaignById(id: string, tenantId: string): Promise<SmsCampaign | undefined>;
   createSmsCampaign(campaign: InsertSmsCampaign): Promise<SmsCampaign>;
   updateSmsCampaign(id: string, updates: Partial<SmsCampaign>): Promise<SmsCampaign>;
+  deleteSmsCampaign(id: string, tenantId: string): Promise<void>;
   
   // SMS metrics operations
   getSmsMetricsByTenant(tenantId: string): Promise<any>;
@@ -534,9 +539,14 @@ export class DatabaseStorage implements IStorage {
       // Return existing consumer if no updates
       return existingConsumer;
     }
-    
+
     // No existing consumer found - create new one
     return await this.createConsumer(consumerData);
+  }
+
+  async deleteConsumer(id: string, tenantId: string): Promise<void> {
+    await db.delete(consumers)
+      .where(and(eq(consumers.id, id), eq(consumers.tenantId, tenantId)));
   }
 
   // Folder operations
@@ -733,11 +743,18 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(emailTemplates, eq(emailCampaigns.templateId, emailTemplates.id))
       .where(eq(emailCampaigns.tenantId, tenantId))
       .orderBy(desc(emailCampaigns.createdAt));
-    
+
     return result.map(row => ({
       ...row.email_campaigns,
       templateName: row.email_templates?.name || 'Unknown Template',
     }));
+  }
+
+  async getEmailCampaignById(id: string, tenantId: string): Promise<EmailCampaign | undefined> {
+    const [campaign] = await db.select()
+      .from(emailCampaigns)
+      .where(and(eq(emailCampaigns.id, id), eq(emailCampaigns.tenantId, tenantId)));
+    return campaign;
   }
 
   async createEmailCampaign(campaign: InsertEmailCampaign): Promise<EmailCampaign> {
@@ -748,6 +765,11 @@ export class DatabaseStorage implements IStorage {
   async updateEmailCampaign(id: string, updates: Partial<EmailCampaign>): Promise<EmailCampaign> {
     const [updatedCampaign] = await db.update(emailCampaigns).set(updates).where(eq(emailCampaigns.id, id)).returning();
     return updatedCampaign;
+  }
+
+  async deleteEmailCampaign(id: string, tenantId: string): Promise<void> {
+    await db.delete(emailCampaigns)
+      .where(and(eq(emailCampaigns.id, id), eq(emailCampaigns.tenantId, tenantId)));
   }
 
   // Email metrics operations
@@ -810,11 +832,18 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(smsTemplates, eq(smsCampaigns.templateId, smsTemplates.id))
       .where(eq(smsCampaigns.tenantId, tenantId))
       .orderBy(desc(smsCampaigns.createdAt));
-    
+
     return result.map(row => ({
       ...row.sms_campaigns,
       templateName: row.sms_templates?.name || 'Unknown Template',
     }));
+  }
+
+  async getSmsCampaignById(id: string, tenantId: string): Promise<SmsCampaign | undefined> {
+    const [campaign] = await db.select()
+      .from(smsCampaigns)
+      .where(and(eq(smsCampaigns.id, id), eq(smsCampaigns.tenantId, tenantId)));
+    return campaign;
   }
 
   async createSmsCampaign(campaign: InsertSmsCampaign): Promise<SmsCampaign> {
@@ -825,6 +854,11 @@ export class DatabaseStorage implements IStorage {
   async updateSmsCampaign(id: string, updates: Partial<SmsCampaign>): Promise<SmsCampaign> {
     const [updatedCampaign] = await db.update(smsCampaigns).set(updates).where(eq(smsCampaigns.id, id)).returning();
     return updatedCampaign;
+  }
+
+  async deleteSmsCampaign(id: string, tenantId: string): Promise<void> {
+    await db.delete(smsCampaigns)
+      .where(and(eq(smsCampaigns.id, id), eq(smsCampaigns.tenantId, tenantId)));
   }
 
   // SMS metrics operations

@@ -130,6 +130,25 @@ export default function SMS() {
     },
   });
 
+  const deleteCampaignMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/sms-campaigns/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sms-campaigns"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sms-metrics"] });
+      toast({
+        title: "Success",
+        description: "Pending SMS campaign deleted successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete SMS campaign",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleTemplateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!templateForm.name.trim() || !templateForm.message.trim()) {
@@ -573,11 +592,45 @@ export default function SMS() {
                   <div className="space-y-4">
                     {(campaigns as any).map((campaign: any) => (
                       <div key={campaign.id} className="border rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-start justify-between gap-4 mb-2">
                           <h3 className="font-medium">{campaign.name}</h3>
-                          <Badge className={getStatusColor(campaign.status)}>
-                            {campaign.status}
-                          </Badge>
+                          <div className="flex items-center gap-2">
+                            <Badge className={getStatusColor(campaign.status)}>
+                              {campaign.status}
+                            </Badge>
+                            {campaign.status === "pending" && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="text-red-600 hover:text-red-700"
+                                    aria-label="Delete campaign"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Delete Campaign</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      This will cancel the pending SMS campaign before any messages are sent. This action cannot be undone.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      className="bg-red-600 hover:bg-red-700"
+                                      onClick={() => deleteCampaignMutation.mutate(campaign.id)}
+                                      disabled={deleteCampaignMutation.isPending}
+                                    >
+                                      {deleteCampaignMutation.isPending ? "Deleting..." : "Delete"}
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
+                          </div>
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                           <div>
