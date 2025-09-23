@@ -530,7 +530,38 @@ export class DatabaseStorage implements IStorage {
       );
     
     if (existingConsumerWithTenant) {
-      // Consumer already exists with this tenant - update if needed
+      // Consumer already exists with this tenant - update missing fields if provided
+      const updates: any = {};
+      
+      // Update fields only if they're missing in the existing record but provided in new data
+      if (!existingConsumerWithTenant.dateOfBirth && consumerData.dateOfBirth) {
+        updates.dateOfBirth = consumerData.dateOfBirth;
+      }
+      if (!existingConsumerWithTenant.address && consumerData.address) {
+        updates.address = consumerData.address;
+      }
+      if (!existingConsumerWithTenant.city && consumerData.city) {
+        updates.city = consumerData.city;
+      }
+      if (!existingConsumerWithTenant.state && consumerData.state) {
+        updates.state = consumerData.state;
+      }
+      if (!existingConsumerWithTenant.zipCode && consumerData.zipCode) {
+        updates.zipCode = consumerData.zipCode;
+      }
+      if (!existingConsumerWithTenant.phone && consumerData.phone) {
+        updates.phone = consumerData.phone;
+      }
+      
+      if (Object.keys(updates).length > 0) {
+        const [updatedConsumer] = await db.update(consumers)
+          .set(updates)
+          .where(eq(consumers.id, existingConsumerWithTenant.id))
+          .returning();
+        console.log(`Updated consumer ${existingConsumerWithTenant.id} with missing fields`);
+        return updatedConsumer;
+      }
+      
       return existingConsumerWithTenant;
     }
 
@@ -567,60 +598,34 @@ export class DatabaseStorage implements IStorage {
       return linkedConsumer;
     }
     
-    // Check for existing consumer with same email in another tenant (prevent duplicates)
+    // Check for existing consumer with matching criteria in another tenant to copy data
     const [existingConsumer] = await db.select()
       .from(consumers)
-      .where(sql`LOWER(${consumers.email}) = LOWER(${consumerData.email})`);
+      .where(
+        and(
+          sql`LOWER(${consumers.email}) = LOWER(${consumerData.email})`,
+          sql`${consumers.tenantId} IS NOT NULL`
+        )
+      );
     
     if (existingConsumer) {
-      // Update existing consumer with any new information provided
-      const updates: any = {};
-      if (consumerData.firstName !== undefined && consumerData.firstName !== existingConsumer.firstName) {
-        updates.firstName = consumerData.firstName;
-      }
-      if (consumerData.lastName !== undefined && consumerData.lastName !== existingConsumer.lastName) {
-        updates.lastName = consumerData.lastName;
-      }
-      if (consumerData.dateOfBirth !== undefined && consumerData.dateOfBirth !== existingConsumer.dateOfBirth) {
-        updates.dateOfBirth = consumerData.dateOfBirth;
-      }
-      if (consumerData.phone !== undefined && consumerData.phone !== existingConsumer.phone) {
-        updates.phone = consumerData.phone;
-      }
-      if (consumerData.folderId !== undefined && consumerData.folderId !== existingConsumer.folderId) {
-        updates.folderId = consumerData.folderId;
-      }
-      if (consumerData.address !== undefined && consumerData.address !== existingConsumer.address) {
-        updates.address = consumerData.address;
-      }
-      if (consumerData.city !== undefined && consumerData.city !== existingConsumer.city) {
-        updates.city = consumerData.city;
-      }
-      if (consumerData.state !== undefined && consumerData.state !== existingConsumer.state) {
-        updates.state = consumerData.state;
-      }
-      if (consumerData.zipCode !== undefined && consumerData.zipCode !== existingConsumer.zipCode) {
-        updates.zipCode = consumerData.zipCode;
-      }
-      // Update registration status if provided
-      if (consumerData.isRegistered !== undefined && consumerData.isRegistered !== existingConsumer.isRegistered) {
-        updates.isRegistered = consumerData.isRegistered;
-      }
-      if (consumerData.registrationDate && !existingConsumer.registrationDate) {
-        updates.registrationDate = consumerData.registrationDate;
-      }
+      // Consumer exists in another tenant - create a new consumer record for this tenant
+      // Copy data from existing consumer but create a new record for multi-tenant support
+      const newConsumerData = {
+        ...consumerData,
+        firstName: consumerData.firstName || existingConsumer.firstName,
+        lastName: consumerData.lastName || existingConsumer.lastName,
+        phone: consumerData.phone || existingConsumer.phone,
+        dateOfBirth: consumerData.dateOfBirth || existingConsumer.dateOfBirth,
+        address: consumerData.address || existingConsumer.address,
+        city: consumerData.city || existingConsumer.city,
+        state: consumerData.state || existingConsumer.state,
+        zipCode: consumerData.zipCode || existingConsumer.zipCode,
+        ssnLast4: consumerData.ssnLast4 || existingConsumer.ssnLast4,
+      };
       
-      // If there are updates, apply them
-      if (Object.keys(updates).length > 0) {
-        const [updatedConsumer] = await db.update(consumers)
-          .set(updates)
-          .where(eq(consumers.id, existingConsumer.id))
-          .returning();
-        return updatedConsumer;
-      }
-      
-      // Return existing consumer if no updates
-      return existingConsumer;
+      console.log(`Creating new consumer record for tenant ${consumerData.tenantId} based on existing consumer from another tenant`);
+      return await this.createConsumer(newConsumerData);
     }
 
     // No existing consumer found - create new one
