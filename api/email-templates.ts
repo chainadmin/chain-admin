@@ -44,8 +44,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       res.status(200).json(templates);
     } else if (req.method === 'POST') {
       // Create a new email template
-      // Frontend sends 'html' field, backend stores it as 'content'
-      const { name, subject, html, category } = req.body;
+      const { name, subject, html, status } = req.body;
 
       if (!name || !subject || !html) {
         res.status(400).json({ error: 'Name, subject, and content are required' });
@@ -58,8 +57,8 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
           tenantId,
           name,
           subject,
-          html,  // Now using 'html' directly to match database
-          category: category || 'general',
+          html,
+          ...(status ? { status } : {}),
         })
         .returning();
 
