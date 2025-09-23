@@ -11,7 +11,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Users, UserCheck, UserX, Shield, Mail, Phone, Calendar, Building2, Plus, Edit, Trash2 } from "lucide-react";
+import {
+  Users,
+  UserCheck,
+  UserX,
+  Shield,
+  Mail,
+  Phone,
+  Calendar,
+  Building2,
+  Plus,
+  Edit,
+  Trash2,
+  Eye,
+  MapPin,
+  ArrowUpRight,
+} from "lucide-react";
 
 export default function CompanyManagement() {
   const { toast } = useToast();
@@ -19,12 +34,26 @@ export default function CompanyManagement() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [showAddAdminModal, setShowAddAdminModal] = useState(false);
+  const [showViewDialog, setShowViewDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [selectedConsumer, setSelectedConsumer] = useState<any | null>(null);
 
   const [newAdminForm, setNewAdminForm] = useState({
     email: "",
     role: "admin",
     firstName: "",
     lastName: "",
+  });
+  const [editForm, setEditForm] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    dateOfBirth: "",
+    address: "",
+    city: "",
+    state: "",
+    zipCode: "",
   });
 
   // Fetch all consumers
@@ -81,9 +110,31 @@ export default function CompanyManagement() {
     },
   });
 
+  const editConsumerMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      await apiRequest("PATCH", `/api/company/consumers/${id}`, data);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Consumer Updated",
+        description: "Consumer details have been saved.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/consumers"] });
+      setShowEditDialog(false);
+      setSelectedConsumer(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Update Failed",
+        description: error.message || "We couldn't save the consumer details.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleAddAdmin = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!newAdminForm.email || !newAdminForm.firstName || !newAdminForm.lastName) {
       toast({
         title: "Missing Information",
@@ -103,12 +154,92 @@ export default function CompanyManagement() {
     }));
   };
 
+  const handleOpenView = (consumer: any) => {
+    setSelectedConsumer(consumer);
+    setShowViewDialog(true);
+  };
+
+  const handleOpenEdit = (consumer: any) => {
+    setSelectedConsumer(consumer);
+    setEditForm({
+      firstName: consumer.firstName || "",
+      lastName: consumer.lastName || "",
+      email: consumer.email || "",
+      phone: consumer.phone || "",
+      dateOfBirth: consumer.dateOfBirth ? consumer.dateOfBirth.split('T')[0] : "",
+      address: consumer.address || "",
+      city: consumer.city || "",
+      state: consumer.state || "",
+      zipCode: consumer.zipCode || "",
+    });
+    setShowEditDialog(true);
+  };
+
+  const handleEditFormChange = (field: string, value: string) => {
+    setEditForm(prev => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const handleEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedConsumer) return;
+
+    editConsumerMutation.mutate({
+      id: selectedConsumer.id,
+      data: editForm,
+    });
+  };
+
+  const handleCloseDialogs = () => {
+    setShowViewDialog(false);
+    setShowEditDialog(false);
+    setSelectedConsumer(null);
+  };
+
+  const handleOpenPortal = (consumer: any) => {
+    if (!consumer?.email) {
+      toast({
+        title: "Portal unavailable",
+        description: "A consumer email is required to open the portal.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!consumer?.tenantSlug) {
+      toast({
+        title: "Portal unavailable",
+        description: "We couldn't find the consumer's portal address.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const url = `/consumer/${consumer.tenantSlug}/${encodeURIComponent(consumer.email)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric'
     });
+  };
+
+  const formatCurrency = (valueCents?: number | bigint | null) => {
+    const cents =
+      typeof valueCents === 'number'
+        ? valueCents
+        : typeof valueCents === 'bigint'
+          ? Number(valueCents)
+          : 0;
+    return `$${(cents / 100).toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
   };
 
   const getStatusColor = (isRegistered: boolean, isActive: boolean = true) => {
@@ -328,7 +459,7 @@ export default function CompanyManagement() {
 
                             <div className="flex items-center space-x-4 text-sm text-gray-500">
                               <span>Accounts: {consumer.accountCount || 0}</span>
-                              <span>Total Balance: ${((consumer.totalBalanceCents || 0) / 100).toFixed(2)}</span>
+                              <span>Total Balance: {formatCurrency(consumer.totalBalanceCents)}</span>
                               {consumer.lastLoginAt && (
                                 <span>Last Login: {formatDate(consumer.lastLoginAt)}</span>
                               )}
@@ -336,8 +467,28 @@ export default function CompanyManagement() {
                           </div>
                           
                           <div className="ml-6 flex flex-col space-y-2">
-                            <Button 
-                              variant="outline" 
+                            <div className="flex space-x-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleOpenView(consumer)}
+                                data-testid={`button-view-consumer-${consumer.id}`}
+                              >
+                                <Eye className="h-4 w-4" />
+                                Details
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleOpenEdit(consumer)}
+                                data-testid={`button-edit-consumer-${consumer.id}`}
+                              >
+                                <Edit className="h-4 w-4" />
+                                Edit
+                              </Button>
+                            </div>
+                            <Button
+                              variant="outline"
                               size="sm"
                               onClick={() => updateConsumerMutation.mutate({
                                 consumerId: consumer.id,
@@ -357,13 +508,16 @@ export default function CompanyManagement() {
                                 </>
                               )}
                             </Button>
-                            
-                            <Button 
+
+                            <Button
                               size="sm"
-                              onClick={() => window.open(`/consumer-dashboard?email=${consumer.email}&tenantSlug=${consumer.tenantSlug}`, '_blank')}
+                              variant="secondary"
+                              className="flex items-center gap-1"
+                              onClick={() => handleOpenPortal(consumer)}
                               data-testid={`button-view-portal-${consumer.id}`}
                             >
                               View Portal
+                              <ArrowUpRight className="h-4 w-4" />
                             </Button>
                           </div>
                         </div>
@@ -524,6 +678,201 @@ export default function CompanyManagement() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <Dialog
+        open={showViewDialog}
+        onOpenChange={(open) => {
+          setShowViewDialog(open);
+          if (!open) {
+            setSelectedConsumer(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Consumer details</DialogTitle>
+          </DialogHeader>
+          {selectedConsumer && (
+            <div className="space-y-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    {selectedConsumer.firstName} {selectedConsumer.lastName}
+                  </h3>
+                  <p className="text-sm text-gray-500">Added {formatDate(selectedConsumer.createdAt)}</p>
+                </div>
+                <Badge className={getStatusColor(selectedConsumer.isRegistered)}>
+                  {getStatusText(selectedConsumer.isRegistered)}
+                </Badge>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {selectedConsumer.email && (
+                  <div className="rounded-lg border border-gray-100 bg-gray-50 p-4">
+                    <Label className="text-xs uppercase text-gray-500">Email</Label>
+                    <p className="mt-1 flex items-center gap-2 text-sm font-medium text-gray-700">
+                      <Mail className="h-4 w-4 text-gray-400" />
+                      {selectedConsumer.email}
+                    </p>
+                  </div>
+                )}
+                {selectedConsumer.phone && (
+                  <div className="rounded-lg border border-gray-100 bg-gray-50 p-4">
+                    <Label className="text-xs uppercase text-gray-500">Phone</Label>
+                    <p className="mt-1 flex items-center gap-2 text-sm font-medium text-gray-700">
+                      <Phone className="h-4 w-4 text-gray-400" />
+                      {selectedConsumer.phone}
+                    </p>
+                  </div>
+                )}
+                {selectedConsumer.dateOfBirth && (
+                  <div className="rounded-lg border border-gray-100 bg-gray-50 p-4">
+                    <Label className="text-xs uppercase text-gray-500">Date of Birth</Label>
+                    <p className="mt-1 flex items-center gap-2 text-sm font-medium text-gray-700">
+                      <Calendar className="h-4 w-4 text-gray-400" />
+                      {selectedConsumer.dateOfBirth}
+                    </p>
+                  </div>
+                )}
+                {(selectedConsumer.address || selectedConsumer.city || selectedConsumer.state || selectedConsumer.zipCode) && (
+                  <div className="rounded-lg border border-gray-100 bg-gray-50 p-4 sm:col-span-2">
+                    <Label className="text-xs uppercase text-gray-500">Address</Label>
+                    <p className="mt-1 flex items-center gap-2 text-sm font-medium text-gray-700">
+                      <MapPin className="h-4 w-4 text-gray-400" />
+                      {[selectedConsumer.address, selectedConsumer.city, selectedConsumer.state, selectedConsumer.zipCode]
+                        .filter(Boolean)
+                        .join(", ")}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="rounded-lg border border-gray-100 bg-white p-4 text-center">
+                  <p className="text-2xl font-semibold text-gray-900">{selectedConsumer.accountCount || 0}</p>
+                  <p className="text-xs text-gray-500">Accounts</p>
+                </div>
+                <div className="rounded-lg border border-gray-100 bg-white p-4 text-center">
+                  <p className="text-2xl font-semibold text-gray-900">
+                    {formatCurrency(selectedConsumer.totalBalanceCents)}
+                  </p>
+                  <p className="text-xs text-gray-500">Total balance</p>
+                </div>
+                <div className="rounded-lg border border-gray-100 bg-white p-4 text-center">
+                  <p className="text-2xl font-semibold text-gray-900">
+                    {selectedConsumer.lastLoginAt ? formatDate(selectedConsumer.lastLoginAt) : "—"}
+                  </p>
+                  <p className="text-xs text-gray-500">Last login</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showEditDialog}
+        onOpenChange={(open) => {
+          setShowEditDialog(open);
+          if (!open) {
+            setSelectedConsumer(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit consumer information</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleEditSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="consumer-first-name">First name</Label>
+                <Input
+                  id="consumer-first-name"
+                  value={editForm.firstName}
+                  onChange={(e) => handleEditFormChange("firstName", e.target.value)}
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="consumer-last-name">Last name</Label>
+                <Input
+                  id="consumer-last-name"
+                  value={editForm.lastName}
+                  onChange={(e) => handleEditFormChange("lastName", e.target.value)}
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="consumer-email">Email</Label>
+                <Input
+                  id="consumer-email"
+                  type="email"
+                  value={editForm.email}
+                  onChange={(e) => handleEditFormChange("email", e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="consumer-phone">Phone</Label>
+                <Input
+                  id="consumer-phone"
+                  value={editForm.phone}
+                  onChange={(e) => handleEditFormChange("phone", e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="consumer-dob">Date of birth</Label>
+                <Input
+                  id="consumer-dob"
+                  type="date"
+                  value={editForm.dateOfBirth}
+                  onChange={(e) => handleEditFormChange("dateOfBirth", e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="consumer-address">Address</Label>
+                <Input
+                  id="consumer-address"
+                  value={editForm.address}
+                  onChange={(e) => handleEditFormChange("address", e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="consumer-city">City</Label>
+                <Input
+                  id="consumer-city"
+                  value={editForm.city}
+                  onChange={(e) => handleEditFormChange("city", e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="consumer-state">State</Label>
+                <Input
+                  id="consumer-state"
+                  value={editForm.state}
+                  onChange={(e) => handleEditFormChange("state", e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="consumer-zip">ZIP Code</Label>
+                <Input
+                  id="consumer-zip"
+                  value={editForm.zipCode}
+                  onChange={(e) => handleEditFormChange("zipCode", e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={handleCloseDialogs}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={editConsumerMutation.isPending}>
+                {editConsumerMutation.isPending ? "Saving..." : "Save changes"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 }
