@@ -1,11 +1,21 @@
 import test, { mock } from "node:test";
 import assert from "node:assert/strict";
+import express from "express";
+import type { Server } from "node:http";
+import { AddressInfo } from "node:net";
+import jwt from "jsonwebtoken";
 
 process.env.DATABASE_URL ??= "postgres://user:pass@localhost:5432/db";
+process.env.POSTMARK_ACCOUNT_TOKEN ??= "test-token";
+process.env.POSTMARK_SERVER_TOKEN ??= "server-token";
+process.env.SUPABASE_URL ??= "https://example.supabase.co";
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= "service-role-key";
+process.env.JWT_SECRET ??= "test-secret";
 
-const [{ DatabaseStorage }, { db }] = await Promise.all([
+const [{ DatabaseStorage, storage }, { db }, { registerRoutes }] = await Promise.all([
   import("../../storage"),
   import("../../db"),
+  import("../../routes"),
 ]);
 
 type ArrangementOptionRecord = {
@@ -131,6 +141,87 @@ function createFakeArrangementDb(initialData: ArrangementOptionRecord[]): {
   return { update, delete: remove, state };
 }
 
+const baseArrangementPayload = {
+  name: "Updated Range Plan",
+  description: "Updated description",
+  minBalance: 10000,
+  maxBalance: 20000,
+  monthlyPaymentMin: 1000,
+  monthlyPaymentMax: 2000,
+  planType: "range",
+} as const;
+
+const arrangementOptionId = "11111111-1111-1111-1111-111111111111";
+const deleteArrangementOptionId = "22222222-2222-2222-2222-222222222222";
+const tenantIdForTests = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+
+function createArrangementRequestBody(overrides: Record<string, unknown> = {}) {
+  return {
+    ...baseArrangementPayload,
+    ...overrides,
+  };
+}
+
+async function startArrangementServer({
+  updateHandler,
+  deleteHandler,
+}: {
+  updateHandler?: (id: string, tenant: string, payload: any) => Promise<any>;
+  deleteHandler?: (id: string, tenant: string) => Promise<boolean>;
+}) {
+  const updateMock = mock.method(storage, "updateArrangementOption", async (id: string, tenant: string, payload: any) => {
+    if (!updateHandler) {
+      throw new Error("updateArrangementOption called unexpectedly");
+    }
+    return updateHandler(id, tenant, payload);
+  });
+
+  const deleteMock = mock.method(storage, "deleteArrangementOption", async (id: string, tenant: string) => {
+    if (!deleteHandler) {
+      throw new Error("deleteArrangementOption called unexpectedly");
+    }
+    return deleteHandler(id, tenant);
+  });
+
+  const app = express();
+  const server = await registerRoutes(app);
+
+  await new Promise<void>((resolve) => server.listen(0, resolve));
+
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("Failed to obtain server address");
+  }
+
+  return { server, port: (address as AddressInfo).port, updateMock, deleteMock };
+}
+
+async function closeServer(server: Server): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+function createAuthHeader(tenantId: string = tenantIdForTests) {
+  const token = jwt.sign(
+    {
+      userId: "user-1",
+      tenantId,
+      tenantSlug: "tenant-slug",
+    },
+    process.env.JWT_SECRET!,
+    { expiresIn: "1h" },
+  );
+
+  return `Bearer ${token}`;
+}
+
 test("updateArrangementOption updates matching tenant and ignores tenantId", async () => {
   const initial = [
     {
@@ -227,6 +318,167 @@ test("deleteArrangementOption returns false when tenant does not match", async (
     assert.strictEqual(state.data.length, 2);
     assert.strictEqual(state.data.find((option) => option.id === "option-1")?.tenantId, "tenant-1");
   } finally {
+    mock.restoreAll();
+  }
+});
+
+test("PUT /api/arrangement-options/:id succeeds for the authenticated tenant", async () => {
+  let server: Server | undefined;
+
+  try {
+    const started = await startArrangementServer({
+      updateHandler: async (_id, tenant, payload) => {
+        return { ...payload, id: arrangementOptionId, tenantId: tenant, updatedAt: new Date(), createdAt: new Date() };
+      },
+      deleteHandler: async () => {
+        throw new Error("deleteArrangementOption should not be called");
+      },
+    });
+
+    server = started.server;
+
+    const response = await fetch(`http://127.0.0.1:${started.port}/api/arrangement-options/${arrangementOptionId}`, {
+      method: "PUT",
+      headers: {
+        "content-type": "application/json",
+        Authorization: createAuthHeader(),
+      },
+      body: JSON.stringify(createArrangementRequestBody({ tenantId: "tenant-evil" })),
+    });
+
+    const responseText = await response.text();
+    assert.strictEqual(response.status, 200);
+    const body = JSON.parse(responseText);
+    assert.strictEqual(body.id, arrangementOptionId);
+    assert.strictEqual(body.tenantId, tenantIdForTests);
+    assert.strictEqual(body.name, baseArrangementPayload.name);
+
+    assert.strictEqual(started.updateMock.mock.callCount(), 1);
+    const callInfo = started.updateMock.mock.calls[0];
+    assert.ok(callInfo);
+    assert.strictEqual(callInfo.arguments[0], arrangementOptionId);
+    assert.strictEqual(callInfo.arguments[1], tenantIdForTests);
+    assert.strictEqual(callInfo.arguments[2]?.tenantId, tenantIdForTests);
+  } finally {
+    if (server) {
+      await closeServer(server);
+    }
+    mock.restoreAll();
+  }
+});
+
+test("PUT /api/arrangement-options/:id returns 404 when storage finds no tenant match", async () => {
+  let server: Server | undefined;
+
+  try {
+    const started = await startArrangementServer({
+      updateHandler: async () => {
+        return undefined;
+      },
+      deleteHandler: async () => {
+        throw new Error("deleteArrangementOption should not be called");
+      },
+    });
+
+    server = started.server;
+
+    const response = await fetch(`http://127.0.0.1:${started.port}/api/arrangement-options/${arrangementOptionId}`, {
+      method: "PUT",
+      headers: {
+        "content-type": "application/json",
+        Authorization: createAuthHeader(),
+      },
+      body: JSON.stringify(createArrangementRequestBody()),
+    });
+
+    assert.strictEqual(response.status, 404);
+    const body = await response.json();
+    assert.strictEqual(body.message, "Arrangement option not found");
+    assert.strictEqual(started.updateMock.mock.callCount(), 1);
+    const callInfo = started.updateMock.mock.calls[0];
+    assert.ok(callInfo);
+    assert.strictEqual(callInfo.arguments[0], arrangementOptionId);
+    assert.strictEqual(callInfo.arguments[1], tenantIdForTests);
+  } finally {
+    if (server) {
+      await closeServer(server);
+    }
+    mock.restoreAll();
+  }
+});
+
+test("DELETE /api/arrangement-options/:id removes data for the authenticated tenant", async () => {
+  let server: Server | undefined;
+
+  try {
+    const started = await startArrangementServer({
+      updateHandler: async () => {
+        throw new Error("updateArrangementOption should not be called");
+      },
+      deleteHandler: async () => {
+        return true;
+      },
+    });
+
+    server = started.server;
+
+    const response = await fetch(`http://127.0.0.1:${started.port}/api/arrangement-options/${deleteArrangementOptionId}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: createAuthHeader(),
+      },
+    });
+
+    assert.strictEqual(response.status, 200);
+    const body = await response.json();
+    assert.strictEqual(body.message, "Arrangement option deleted successfully");
+    assert.strictEqual(started.deleteMock.mock.callCount(), 1);
+    const callInfo = started.deleteMock.mock.calls[0];
+    assert.ok(callInfo);
+    assert.strictEqual(callInfo.arguments[0], deleteArrangementOptionId);
+    assert.strictEqual(callInfo.arguments[1], tenantIdForTests);
+  } finally {
+    if (server) {
+      await closeServer(server);
+    }
+    mock.restoreAll();
+  }
+});
+
+test("DELETE /api/arrangement-options/:id returns 404 when tenant does not match", async () => {
+  let server: Server | undefined;
+
+  try {
+    const started = await startArrangementServer({
+      updateHandler: async () => {
+        throw new Error("updateArrangementOption should not be called");
+      },
+      deleteHandler: async () => {
+        return false;
+      },
+    });
+
+    server = started.server;
+
+    const response = await fetch(`http://127.0.0.1:${started.port}/api/arrangement-options/${deleteArrangementOptionId}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: createAuthHeader(),
+      },
+    });
+
+    assert.strictEqual(response.status, 404);
+    const body = await response.json();
+    assert.strictEqual(body.message, "Arrangement option not found");
+    assert.strictEqual(started.deleteMock.mock.callCount(), 1);
+    const callInfo = started.deleteMock.mock.calls[0];
+    assert.ok(callInfo);
+    assert.strictEqual(callInfo.arguments[0], deleteArrangementOptionId);
+    assert.strictEqual(callInfo.arguments[1], tenantIdForTests);
+  } finally {
+    if (server) {
+      await closeServer(server);
+    }
     mock.restoreAll();
   }
 });
