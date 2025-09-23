@@ -3,7 +3,18 @@ import { createServer, type Server } from "http";
 import { storage, type IStorage } from "./storage";
 import { authenticateUser, authenticateConsumer, getCurrentUser } from "./authMiddleware";
 import { postmarkServerService } from "./postmarkServerService";
-import { insertConsumerSchema, insertAccountSchema, agencyTrialRegistrationSchema, platformUsers, tenants, consumers, agencyCredentials } from "@shared/schema";
+import {
+  insertConsumerSchema,
+  insertAccountSchema,
+  insertArrangementOptionSchema,
+  arrangementPlanTypes,
+  agencyTrialRegistrationSchema,
+  platformUsers,
+  tenants,
+  consumers,
+  agencyCredentials,
+  type InsertArrangementOption,
+} from "@shared/schema";
 import { db } from "./db";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -2403,6 +2414,136 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  const planTypeSet = new Set(arrangementPlanTypes);
+
+  const parseCurrencyInput = (value: unknown): number | null => {
+    if (value === null || value === undefined) {
+      return null;
+    }
+
+    if (typeof value === "number") {
+      if (!Number.isFinite(value)) {
+        return null;
+      }
+      return Math.round(value);
+    }
+
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return null;
+      }
+      const numeric = Number(trimmed);
+      if (Number.isNaN(numeric)) {
+        return null;
+      }
+      if (trimmed.includes('.')) {
+        return Math.round(numeric * 100);
+      }
+      return Math.round(numeric);
+    }
+
+    return null;
+  };
+
+  const parseOptionalInteger = (value: unknown): number | null => {
+    if (value === null || value === undefined || value === "") {
+      return null;
+    }
+
+    if (typeof value === "number") {
+      if (!Number.isFinite(value)) {
+        return null;
+      }
+      return Math.trunc(value);
+    }
+
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return null;
+      }
+      const numeric = Number(trimmed);
+      if (Number.isNaN(numeric)) {
+        return null;
+      }
+      return Math.trunc(numeric);
+    }
+
+    return null;
+  };
+
+  const sanitizeOptionalText = (value: unknown): string | null => {
+    if (typeof value !== "string") {
+      return null;
+    }
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  };
+
+  const buildArrangementOptionPayload = (body: any, tenantId: string): InsertArrangementOption => {
+    const planTypeRaw = typeof body.planType === "string" ? body.planType : "range";
+    const planType = planTypeSet.has(planTypeRaw as any) ? (planTypeRaw as InsertArrangementOption["planType"]) : "range";
+
+    const minBalance = parseCurrencyInput(body.minBalance);
+    const maxBalance = parseCurrencyInput(body.maxBalance);
+
+    if (minBalance === null || maxBalance === null) {
+      const error = new Error("Minimum and maximum balances must be valid numbers");
+      (error as any).statusCode = 400;
+      throw error;
+    }
+
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    if (!name) {
+      const error = new Error("Plan name is required");
+      (error as any).statusCode = 400;
+      throw error;
+    }
+
+    const monthlyPaymentMin = parseCurrencyInput(body.monthlyPaymentMin);
+    const monthlyPaymentMax = parseCurrencyInput(body.monthlyPaymentMax);
+    const fixedMonthlyPayment = parseCurrencyInput(body.fixedMonthlyPayment ?? body.fixedMonthlyAmount);
+    const payInFullAmount = parseCurrencyInput(body.payInFullAmount ?? body.payoffAmount);
+    const payoffText = sanitizeOptionalText(body.payoffText ?? body.payInFullText ?? body.payoffCopy);
+    const customTermsText = sanitizeOptionalText(body.customTermsText ?? body.customCopy);
+    const maxTermMonths = parseOptionalInteger(body.maxTermMonths);
+    const description = sanitizeOptionalText(body.description);
+    const isActive = body.isActive === undefined ? true : Boolean(body.isActive);
+
+    const candidate = {
+      tenantId,
+      name,
+      description,
+      minBalance,
+      maxBalance,
+      planType,
+      monthlyPaymentMin: planType === "range" ? monthlyPaymentMin : null,
+      monthlyPaymentMax: planType === "range" ? monthlyPaymentMax : null,
+      fixedMonthlyPayment: planType === "fixed_monthly" ? fixedMonthlyPayment : null,
+      payInFullAmount: planType === "pay_in_full" ? payInFullAmount : null,
+      payoffText: planType === "pay_in_full" ? payoffText : null,
+      customTermsText: planType === "custom_terms" ? customTermsText : null,
+      maxTermMonths:
+        planType === "pay_in_full" || planType === "custom_terms"
+          ? null
+          : planType === "range"
+            ? maxTermMonths ?? 12
+            : maxTermMonths,
+      isActive,
+    } satisfies Partial<InsertArrangementOption> as InsertArrangementOption;
+
+    const parsed = insertArrangementOptionSchema.safeParse(candidate);
+    if (!parsed.success) {
+      const message = parsed.error.errors[0]?.message ?? "Invalid arrangement option";
+      const error = new Error(message);
+      (error as any).statusCode = 400;
+      throw error;
+    }
+
+    return parsed.data;
+  };
+
   // Arrangement options routes
   app.get('/api/arrangement-options', authenticateUser, async (req: any, res) => {
     try {
@@ -2423,30 +2564,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/arrangement-options', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
-      
+
       if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const option = await storage.createArrangementOption({
-        ...req.body,
-        tenantId: tenantId,
-      });
-      
+      const payload = buildArrangementOptionPayload(req.body, tenantId);
+      const option = await storage.createArrangementOption(payload);
+
       res.json(option);
     } catch (error) {
       console.error("Error creating arrangement option:", error);
-      res.status(500).json({ message: "Failed to create arrangement option" });
+      const statusCode = error instanceof z.ZodError || (error as any)?.statusCode === 400 ? 400 : 500;
+      res.status(statusCode).json({
+        message:
+          statusCode === 400
+            ? (error as any)?.message || "Invalid arrangement option payload"
+            : "Failed to create arrangement option",
+      });
     }
   });
 
   app.put('/api/arrangement-options/:id', authenticateUser, async (req: any, res) => {
     try {
-      const option = await storage.updateArrangementOption(req.params.id, req.body);
+      const tenantId = req.user.tenantId;
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const payload = buildArrangementOptionPayload(req.body, tenantId);
+      const option = await storage.updateArrangementOption(req.params.id, payload);
       res.json(option);
     } catch (error) {
       console.error("Error updating arrangement option:", error);
-      res.status(500).json({ message: "Failed to update arrangement option" });
+      const statusCode = error instanceof z.ZodError || (error as any)?.statusCode === 400 ? 400 : 500;
+      res.status(statusCode).json({
+        message:
+          statusCode === 400
+            ? (error as any)?.message || "Invalid arrangement option payload"
+            : "Failed to update arrangement option",
+      });
     }
   });
 

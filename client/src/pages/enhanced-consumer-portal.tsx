@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Bell, Phone, Mail, MessageSquare, Download, Building2, CreditCard, FileText, AlertCircle } from "lucide-react";
+import { getArrangementSummary, getPlanTypeLabel, formatCurrencyFromCents } from "@/lib/arrangements";
 
 export default function EnhancedConsumerPortal() {
   const { tenantSlug, email } = useParams();
@@ -188,7 +189,7 @@ export default function EnhancedConsumerPortal() {
   };
 
   const formatCurrency = (cents: number) => {
-    return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+    return formatCurrencyFromCents(cents);
   };
 
   const formatDate = (dateString: string) => {
@@ -547,24 +548,24 @@ export default function EnhancedConsumerPortal() {
                         <div className="flex-1">
                           <h3 className="text-lg font-semibold text-gray-900">{arrangement.name}</h3>
                           <p className="text-gray-600 mt-2">{arrangement.description}</p>
-                          <div className="mt-4 space-y-2">
-                            <div className="flex justify-between text-sm">
-                              <span className="text-gray-600">Monthly Payment:</span>
-                              <span className="font-medium">
-                                {formatCurrency(arrangement.monthlyPaymentMin)} - {formatCurrency(arrangement.monthlyPaymentMax)}
-                              </span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                              <span className="text-gray-600">Maximum Term:</span>
-                              <span className="font-medium">{arrangement.maxTermMonths} months</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                              <span className="text-gray-600">Eligible Balance Range:</span>
-                              <span className="font-medium">
-                                {formatCurrency(arrangement.minBalance)} - {formatCurrency(arrangement.maxBalance)}
-                              </span>
-                            </div>
-                          </div>
+                          {(() => {
+                            const summary = getArrangementSummary(arrangement);
+                            return (
+                              <div className="mt-4 space-y-2">
+                                <div className="flex items-center gap-2 text-sm">
+                                  <Badge variant="secondary">{getPlanTypeLabel(arrangement.planType)}</Badge>
+                                  <span className="font-medium text-gray-700">{summary.headline}</span>
+                                </div>
+                                {summary.detail && <p className="text-sm text-gray-500">{summary.detail}</p>}
+                                <div className="flex justify-between text-sm">
+                                  <span className="text-gray-600">Eligible Balance Range:</span>
+                                  <span className="font-medium">
+                                    {formatCurrencyFromCents(arrangement.minBalance)} - {formatCurrencyFromCents(arrangement.maxBalance)}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </div>
                         <div className="ml-6">
                           <Button onClick={() => setShowCallbackModal(true)}>

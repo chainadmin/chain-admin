@@ -215,6 +215,13 @@ export const documents = pgTable("documents", {
 });
 
 // Payment arrangement options
+export const arrangementPlanTypes = [
+  "range",
+  "fixed_monthly",
+  "pay_in_full",
+  "custom_terms",
+] as const;
+
 export const arrangementOptions = pgTable("arrangement_options", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
@@ -222,9 +229,14 @@ export const arrangementOptions = pgTable("arrangement_options", {
   description: text("description"),
   minBalance: bigint("min_balance", { mode: "number" }).notNull(),
   maxBalance: bigint("max_balance", { mode: "number" }).notNull(),
-  monthlyPaymentMin: bigint("monthly_payment_min", { mode: "number" }).notNull(),
-  monthlyPaymentMax: bigint("monthly_payment_max", { mode: "number" }).notNull(),
-  maxTermMonths: integer("max_term_months").notNull().default(12),
+  planType: text("plan_type", { enum: arrangementPlanTypes }).default("range").notNull(),
+  monthlyPaymentMin: bigint("monthly_payment_min", { mode: "number" }),
+  monthlyPaymentMax: bigint("monthly_payment_max", { mode: "number" }),
+  fixedMonthlyPayment: bigint("fixed_monthly_payment", { mode: "number" }),
+  payInFullAmount: bigint("pay_in_full_amount", { mode: "number" }),
+  payoffText: text("payoff_text"),
+  customTermsText: text("custom_terms_text"),
+  maxTermMonths: integer("max_term_months"),
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

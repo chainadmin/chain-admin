@@ -1,7 +1,7 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import jwt from 'jsonwebtoken';
 import { getDb } from './_lib/db.js';
-import { arrangementOptions } from './_lib/schema.js';
+import { arrangementOptions, arrangementPlanTypes } from './_lib/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { JWT_SECRET } from './_lib/auth.js';
 
@@ -17,7 +17,66 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
 
   try {
     const db = getDb();
-    
+
+    const planTypeSet = new Set(arrangementPlanTypes);
+
+    const parseCurrencyInput = (value: any): number | null => {
+      if (value === null || value === undefined) {
+        return null;
+      }
+
+      if (typeof value === 'number') {
+        if (!Number.isFinite(value)) {
+          return null;
+        }
+        return Math.round(value);
+      }
+
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) {
+          return null;
+        }
+        const numeric = Number(trimmed);
+        if (Number.isNaN(numeric)) {
+          return null;
+        }
+        if (trimmed.includes('.')) {
+          return Math.round(numeric * 100);
+        }
+        return Math.round(numeric);
+      }
+
+      return null;
+    };
+
+    const parseOptionalInteger = (value: any): number | null => {
+      if (value === null || value === undefined || value === '') {
+        return null;
+      }
+
+      if (typeof value === 'number') {
+        if (!Number.isFinite(value)) {
+          return null;
+        }
+        return Math.trunc(value);
+      }
+
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) {
+          return null;
+        }
+        const numeric = Number(trimmed);
+        if (Number.isNaN(numeric)) {
+          return null;
+        }
+        return Math.trunc(numeric);
+      }
+
+      return null;
+    };
+
     // Get tenant ID from JWT token
     const token = req.headers.authorization?.replace('Bearer ', '') || 
                   req.headers.cookie?.split(';').find(c => c.trim().startsWith('authToken='))?.split('=')[1];
@@ -45,43 +104,55 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       res.status(200).json(options);
     } else if (req.method === 'POST') {
       // Create a new arrangement option
-      const { 
-        name, 
-        description, 
-        minBalance, 
-        maxBalance, 
-        monthlyPaymentMin, 
-        monthlyPaymentMax, 
-        maxTermMonths 
-      } = req.body;
+      const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+      const planTypeRaw = typeof req.body.planType === 'string' ? req.body.planType : 'range';
+      const planType = planTypeSet.has(planTypeRaw as any) ? planTypeRaw : 'range';
+      const minBalanceCents = parseCurrencyInput(req.body.minBalance);
+      const maxBalanceCents = parseCurrencyInput(req.body.maxBalance);
 
-      if (!name || minBalance === undefined || maxBalance === undefined || 
-          monthlyPaymentMin === undefined || monthlyPaymentMax === undefined) {
+      if (!name || minBalanceCents === null || maxBalanceCents === null) {
         res.status(400).json({ error: 'Missing required fields' });
         return;
       }
 
-      // Convert dollar amounts to cents for storage
-      const minBalanceCents = Math.round(parseFloat(minBalance) * 100);
-      const maxBalanceCents = Math.round(parseFloat(maxBalance) * 100);
-      const monthlyPaymentMinCents = Math.round(parseFloat(monthlyPaymentMin) * 100);
-      const monthlyPaymentMaxCents = Math.round(parseFloat(monthlyPaymentMax) * 100);
-      
-      // Validate that all values are valid numbers
-      if (isNaN(minBalanceCents) || isNaN(maxBalanceCents) || 
-          isNaN(monthlyPaymentMinCents) || isNaN(monthlyPaymentMaxCents)) {
-        res.status(400).json({ error: 'Invalid numeric values provided' });
-        return;
-      }
-      
-      // Validate logical constraints
       if (minBalanceCents > maxBalanceCents) {
         res.status(400).json({ error: 'Minimum balance cannot be greater than maximum balance' });
         return;
       }
-      
-      if (monthlyPaymentMinCents > monthlyPaymentMaxCents) {
-        res.status(400).json({ error: 'Minimum payment cannot be greater than maximum payment' });
+
+      const monthlyPaymentMinCents = parseCurrencyInput(req.body.monthlyPaymentMin);
+      const monthlyPaymentMaxCents = parseCurrencyInput(req.body.monthlyPaymentMax);
+      const fixedMonthlyPaymentCents = parseCurrencyInput(req.body.fixedMonthlyPayment ?? req.body.fixedMonthlyAmount);
+      const payInFullAmountCents = parseCurrencyInput(req.body.payInFullAmount ?? req.body.payoffAmount);
+      const payoffText = typeof req.body.payoffText === 'string' ? req.body.payoffText.trim() : (typeof req.body.payInFullText === 'string' ? req.body.payInFullText.trim() : null);
+      const customTermsText = typeof req.body.customTermsText === 'string' ? req.body.customTermsText.trim() : (typeof req.body.customCopy === 'string' ? req.body.customCopy.trim() : null);
+      const maxTermMonths = parseOptionalInteger(req.body.maxTermMonths);
+      const description = typeof req.body.description === 'string' ? req.body.description.trim() : null;
+
+      if (planType === 'range') {
+        if (monthlyPaymentMinCents === null || monthlyPaymentMaxCents === null) {
+          res.status(400).json({ error: 'Monthly payment range is required for range plans' });
+          return;
+        }
+
+        if (monthlyPaymentMinCents > monthlyPaymentMaxCents) {
+          res.status(400).json({ error: 'Minimum payment cannot be greater than maximum payment' });
+          return;
+        }
+      }
+
+      if (planType === 'fixed_monthly' && fixedMonthlyPaymentCents === null) {
+        res.status(400).json({ error: 'Monthly payment amount is required for fixed monthly plans' });
+        return;
+      }
+
+      if (planType === 'pay_in_full' && payInFullAmountCents === null && !payoffText) {
+        res.status(400).json({ error: 'Provide a payoff amount or custom text for pay in full plans' });
+        return;
+      }
+
+      if (planType === 'custom_terms' && !customTermsText) {
+        res.status(400).json({ error: 'Custom terms copy is required' });
         return;
       }
 
@@ -90,12 +161,22 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         .values({
           tenantId,
           name,
-          description: description || null,
+          description,
           minBalance: minBalanceCents,
           maxBalance: maxBalanceCents,
-          monthlyPaymentMin: monthlyPaymentMinCents,
-          monthlyPaymentMax: monthlyPaymentMaxCents,
-          maxTermMonths: parseInt(maxTermMonths) || 12,
+          planType,
+          monthlyPaymentMin: planType === 'range' ? monthlyPaymentMinCents : null,
+          monthlyPaymentMax: planType === 'range' ? monthlyPaymentMaxCents : null,
+          fixedMonthlyPayment: planType === 'fixed_monthly' ? fixedMonthlyPaymentCents : null,
+          payInFullAmount: planType === 'pay_in_full' ? payInFullAmountCents : null,
+          payoffText: planType === 'pay_in_full' ? payoffText : null,
+          customTermsText: planType === 'custom_terms' ? customTermsText : null,
+          maxTermMonths:
+            planType === 'pay_in_full' || planType === 'custom_terms'
+              ? null
+              : planType === 'range'
+                ? (maxTermMonths ?? 12)
+                : maxTermMonths,
         })
         .returning();
 

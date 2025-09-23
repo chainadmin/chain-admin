@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useParams } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { getArrangementSummary, formatCurrencyFromCents } from "@/lib/arrangements";
 
 export default function ConsumerPortal() {
   const { tenantSlug, email } = useParams();
@@ -64,7 +65,7 @@ export default function ConsumerPortal() {
   };
 
   const formatCurrency = (cents: number) => {
-    return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+    return formatCurrencyFromCents(cents);
   };
 
   const formatDate = (dateString: string) => {
@@ -211,10 +212,18 @@ export default function ConsumerPortal() {
                     <div>
                       <h3 className="font-medium text-gray-900">{arrangement.name}</h3>
                       <p className="text-sm text-gray-500 mt-1">{arrangement.description}</p>
-                      <div className="text-sm text-blue-600 mt-2">
-                        {formatCurrency(arrangement.monthlyPaymentMin)} - {formatCurrency(arrangement.monthlyPaymentMax)} per month
-                        <span className="text-gray-500 ml-2">• Up to {arrangement.maxTermMonths} months</span>
-                      </div>
+                      {(() => {
+                        const summary = getArrangementSummary(arrangement);
+                        return (
+                          <div className="text-sm text-blue-600 mt-2 space-y-1">
+                            <div>{summary.headline}</div>
+                            {summary.detail && <div className="text-gray-500">{summary.detail}</div>}
+                            <div className="text-gray-500">
+                              Eligible balance: {formatCurrencyFromCents(arrangement.minBalance)} - {formatCurrencyFromCents(arrangement.maxBalance)}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                     <Button className="bg-blue-600 hover:bg-blue-700">
                       Select Plan
