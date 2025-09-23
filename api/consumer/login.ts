@@ -42,13 +42,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // TODO: In the future, verify dateOfBirth against consumer record
-    // For now, we're using it as a simple verification step
-    // You could add a dateOfBirth field to consumers table and verify here
+    // Filter consumers by DOB verification
+    const verifiedConsumers = consumersFound.filter(({ consumer }) => {
+      if (!consumer.dateOfBirth || !dateOfBirth) {
+        // If either DOB is missing, allow login for backward compatibility
+        return true;
+      }
+      // Compare DOB strings (format: MM/DD/YYYY or YYYY-MM-DD)
+      const normalizedInputDob = dateOfBirth.replace(/\//g, '-');
+      const normalizedStoredDob = consumer.dateOfBirth.replace(/\//g, '-');
+      
+      // Try to parse and compare dates
+      const inputDate = new Date(normalizedInputDob);
+      const storedDate = new Date(normalizedStoredDob);
+      
+      // If dates are valid, compare them
+      if (!isNaN(inputDate.getTime()) && !isNaN(storedDate.getTime())) {
+        return inputDate.toDateString() === storedDate.toDateString();
+      }
+      
+      // Fallback to string comparison
+      return normalizedInputDob === normalizedStoredDob;
+    });
 
-    if (consumersFound.length === 1) {
+    if (verifiedConsumers.length === 0) {
+      return res.status(401).json({ 
+        error: 'Invalid credentials',
+        message: 'The date of birth provided does not match our records. Please verify and try again.'
+      });
+    }
+
+    if (verifiedConsumers.length === 1) {
       // Single agency - proceed with login
-      const { consumer, tenant } = consumersFound[0];
+      const { consumer, tenant } = verifiedConsumers[0];
       
       // Generate consumer JWT token
       const token = jwt.sign(
@@ -80,7 +106,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     } else {
       // Multiple agencies - let consumer choose
-      const agencies = consumersFound.map(({ tenant }) => ({
+      const agencies = verifiedConsumers.map(({ tenant }) => ({
         id: tenant.id,
         name: tenant.name,
         slug: tenant.slug
