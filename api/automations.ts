@@ -1,7 +1,7 @@
 import type { VercelResponse } from '@vercel/node';
 import { getDb } from './_lib/db.js';
 import { withAuth, AuthenticatedRequest, JWT_SECRET } from './_lib/auth.js';
-import { communicationAutomations, emailTemplates, smsTemplates } from './_lib/schema.js';
+import { communicationAutomations, emailTemplates, smsTemplates } from '../shared/schema.js';
 import { eq, and, desc, inArray } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 
@@ -208,9 +208,9 @@ function formatAutomation(raw: any) {
   const templateIdSet = new Set<string>();
 
   const metadataTemplateIds = Array.isArray(metadata.templateIds)
-    ? metadata.templateIds.filter((id: unknown): id is string => typeof id === 'string' && id)
+    ? metadata.templateIds.filter((id: unknown) => typeof id === 'string' && id)
     : [];
-  metadataTemplateIds.forEach((id) => templateIdSet.add(id));
+  metadataTemplateIds.forEach((id: any) => templateIdSet.add(id));
 
   templateSchedule.forEach((item) => templateIdSet.add(item.templateId));
 
@@ -394,7 +394,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
 
       const normalizedTemplateSchedule = sanitizeTemplateSchedule(templateSchedule);
       const rotationTemplateIds = Array.isArray(templateIds)
-        ? templateIds.filter((id: unknown): id is string => typeof id === 'string' && id)
+        ? templateIds.filter((id: unknown) => typeof id === 'string' && id)
         : [];
 
       let resolvedTemplateId = typeof templateId === 'string' && templateId ? templateId : undefined;
@@ -433,9 +433,9 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       }
 
       const scheduleWeekdaysNormalized = Array.isArray(scheduleWeekdays)
-        ? scheduleWeekdays.filter((day: unknown): day is string => typeof day === 'string' && day)
+        ? scheduleWeekdays.filter((day: unknown) => typeof day === 'string' && day)
         : Array.isArray(body.scheduledDaysOfWeek)
-          ? body.scheduledDaysOfWeek.filter((day: unknown): day is string => typeof day === 'string' && day)
+          ? body.scheduledDaysOfWeek.filter((day: unknown) => typeof day === 'string' && day)
           : [];
 
       const scheduleDayRaw = scheduleDayOfMonth ?? body.scheduleDayOfMonth ?? null;
@@ -535,15 +535,13 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
           name,
           type,
           templateId: resolvedTemplateId || null,
-          trigger: triggerColumnValue,
-          targetGroup: targetGroupColumn,
+          triggerType: resolvedTriggerType as any,
+          scheduleType: normalizedScheduleType as any,
+          scheduledDate: scheduledTimestamp,
+          scheduleTime: scheduleTimeValue,
+          scheduleWeekdays: scheduleWeekdaysNormalized,
+          targetType: resolvedTargetType as any,
           isActive: isActive !== undefined ? Boolean(isActive) : true,
-          scheduleType: normalizedScheduleType,
-          scheduledTime: scheduledTimestamp,
-          scheduledDaysOfWeek: scheduleWeekdaysNormalized,
-          scheduledTimeOfDay: scheduleTimeValue,
-          removeOnPayment: !!removeOnPayment,
-          metadata,
         })
         .returning();
 
