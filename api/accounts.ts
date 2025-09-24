@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb } from './_lib/db.js';
 import { withAuth, AuthenticatedRequest, JWT_SECRET } from './_lib/auth.js';
 import { accounts, consumers, folders } from './_lib/schema.js';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 
 function resolveAccountId(req: AuthenticatedRequest) {
@@ -100,11 +100,13 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
 
       // Check if consumer exists or create new one
       // Match by email, firstName, lastName, and dateOfBirth to ensure it's the same person
+      const normalizedEmail = email.toLowerCase();
+
       let [consumer] = await db
         .select()
         .from(consumers)
         .where(and(
-          eq(consumers.email, email),
+          sql`lower(${consumers.email}) = ${normalizedEmail}`,
           eq(consumers.firstName, firstName),
           eq(consumers.lastName, lastName),
           eq(consumers.tenantId, tenantId)
