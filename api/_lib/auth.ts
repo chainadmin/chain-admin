@@ -32,7 +32,7 @@ export async function verifyAuth(req: AuthenticatedRequest): Promise<boolean> {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET) as any;
-    const db = getDb();
+    const db = await getDb();
     
     // Get the user
     const [user] = await db

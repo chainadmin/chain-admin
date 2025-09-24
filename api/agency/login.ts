@@ -23,7 +23,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const { username, password } = parsed.data;
-    const db = getDb();
+    const db = await getDb();
 
     // Get agency credentials (username can be either username or email)
     const [credentials] = await db

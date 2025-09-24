@@ -29,7 +29,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const data = parsed.data;
-    const db = getDb();
+    const db = await getDb();
     
     // Generate a slug from business name
     const slug = data.businessName.toLowerCase()

@@ -12,7 +12,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   }
 
   try {
-    const db = getDb();
+    const db = await getDb();
     
     // Get tenant ID from JWT token
     const token = req.headers.authorization?.replace('Bearer ', '') || 
