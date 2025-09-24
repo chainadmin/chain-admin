@@ -15,6 +15,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Bell, Phone, Mail, MessageSquare, Download, Building2, CreditCard, FileText, AlertCircle, LogOut, User } from "lucide-react";
 import { getArrangementSummary, getPlanTypeLabel, formatCurrencyFromCents } from "@/lib/arrangements";
 
+type AgencyBranding = {
+  agencyName: string;
+  logoUrl: string | null;
+  contactEmail: string | null;
+};
+
 export default function ConsumerDashboard() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -57,8 +63,9 @@ export default function ConsumerDashboard() {
     }
   }, [setLocation, toast]);
 
+  const tenantSlug = consumerSession?.tenantSlug;
   const encodedEmail = consumerSession?.email ? encodeURIComponent(consumerSession.email) : "";
-  const encodedTenantSlug = consumerSession?.tenantSlug ? encodeURIComponent(consumerSession.tenantSlug) : "";
+  const encodedTenantSlug = tenantSlug ? encodeURIComponent(tenantSlug) : "";
 
   const accountsUrl = encodedEmail && encodedTenantSlug
     ? `/api/consumer/accounts/${encodedEmail}?tenantSlug=${encodedTenantSlug}`
@@ -102,6 +109,13 @@ export default function ConsumerDashboard() {
   const { data: notifications } = useQuery({
     queryKey: notificationsUrl ? [notificationsUrl] : ['consumer-notifications'],
     enabled: !!notificationsUrl,
+  });
+
+  const brandingUrl = tenantSlug ? `/api/public/agency-branding?slug=${encodeURIComponent(tenantSlug)}` : "";
+
+  const { data: branding } = useQuery<AgencyBranding>({
+    queryKey: brandingUrl ? [brandingUrl] : ['consumer-agency-branding'],
+    enabled: !!brandingUrl,
   });
 
   // Fetch documents
@@ -262,6 +276,18 @@ export default function ConsumerDashboard() {
 
   const { consumer, accounts, tenant, tenantSettings } = (data as any) || {};
 
+  const resolvedAgencyName = tenant?.name
+    || branding?.agencyName
+    || (tenantSlug ? tenantSlug.replace(/-/g, ' ') : undefined);
+
+  const resolvedLogoUrl = tenantSettings?.customBranding?.logoUrl
+    || branding?.logoUrl
+    || null;
+
+  const resolvedContactEmail = tenantSettings?.contactEmail
+    || branding?.contactEmail
+    || null;
+
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
       case 'active':
@@ -296,10 +322,10 @@ export default function ConsumerDashboard() {
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <div className="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center overflow-hidden">
-                {tenantSettings?.customBranding?.logoUrl ? (
-                  <img 
-                    src={tenantSettings.customBranding.logoUrl} 
-                    alt="Company Logo" 
+                {resolvedLogoUrl ? (
+                  <img
+                    src={resolvedLogoUrl}
+                    alt="Company Logo"
                     className="w-full h-full object-contain"
                   />
                 ) : (
@@ -307,15 +333,15 @@ export default function ConsumerDashboard() {
                 )}
               </div>
               <div>
-                <h1 className="text-xl font-semibold text-white">{tenant?.name || "Debt Management Portal"}</h1>
+                <h1 className="text-xl font-semibold text-white">{resolvedAgencyName || "Debt Management Portal"}</h1>
                 <p className="text-blue-100 text-sm flex items-center">
                   <User className="h-4 w-4 mr-1" />
                   {consumer?.firstName} {consumer?.lastName} • {consumer?.email}
                 </p>
-                {tenantSettings?.contactEmail && (
+                {resolvedContactEmail && (
                   <p className="text-blue-100 text-xs flex items-center mt-1">
                     <Mail className="h-3 w-3 mr-1" />
-                    {tenantSettings.contactEmail}
+                    {resolvedContactEmail}
                   </p>
                 )}
               </div>
