@@ -261,6 +261,7 @@ export const senderIdentities = pgTable("sender_identities", {
 export const documents = pgTable("documents", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  accountId: uuid("account_id").references(() => accounts.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   description: text("description"),
   fileName: text("file_name").notNull(),
@@ -295,6 +296,8 @@ export const arrangementOptions = pgTable("arrangement_options", {
   fixedMonthlyPayment: bigint("fixed_monthly_payment", { mode: "number" }), // In cents
   payInFullAmount: bigint("pay_in_full_amount", { mode: "number" }), // In cents
   payoffText: text("payoff_text"),
+  payoffPercentageBasisPoints: integer("payoff_percentage_basis_points"),
+  payoffDueDate: date("payoff_due_date"),
   customTermsText: text("custom_terms_text"),
   maxTermMonths: bigint("max_term_months", { mode: "number" }).default(12),
   isActive: boolean("is_active").default(true),
@@ -506,6 +509,10 @@ export const documentsRelations = relations(documents, ({ one }) => ({
   tenant: one(tenants, {
     fields: [documents.tenantId],
     references: [tenants.id],
+  }),
+  account: one(accounts, {
+    fields: [documents.accountId],
+    references: [accounts.id],
   }),
 }));
 
@@ -911,11 +918,25 @@ export const insertArrangementOptionSchema = createInsertSchema(arrangementOptio
         break;
       }
       case "pay_in_full": {
-        if (data.payInFullAmount == null && !data.payoffText) {
+        if (data.payoffPercentageBasisPoints == null) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            path: ["payInFullAmount"],
-            message: "Provide a payoff amount or custom payoff text",
+            path: ["payoffPercentageBasisPoints"],
+            message: "Payoff percentage is required",
+          });
+        } else if (data.payoffPercentageBasisPoints <= 0 || data.payoffPercentageBasisPoints > 10000) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["payoffPercentageBasisPoints"],
+            message: "Payoff percentage must be between 0 and 100",
+          });
+        }
+
+        if (!data.payoffDueDate) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["payoffDueDate"],
+            message: "Payoff due date is required",
           });
         }
         break;

@@ -43,15 +43,29 @@ import { getArrangementSummary, getPlanTypeLabel, formatCurrencyFromCents } from
 export default function Settings() {
   const [showDocumentModal, setShowDocumentModal] = useState(false);
   const [showArrangementModal, setShowArrangementModal] = useState(false);
-  const [documentForm, setDocumentForm] = useState({
+  type DocumentFormState = {
+    title: string;
+    description: string;
+    fileName: string;
+    fileUrl: string;
+    fileSize: number;
+    mimeType: string;
+    isPublic: boolean;
+    accountId: string;
+  };
+
+  const emptyDocumentForm: DocumentFormState = {
     title: "",
     description: "",
     fileName: "",
     fileUrl: "",
     fileSize: 0,
     mimeType: "",
-    isPublic: true,
-  });
+    isPublic: false,
+    accountId: "",
+  };
+
+  const [documentForm, setDocumentForm] = useState<DocumentFormState>({ ...emptyDocumentForm });
   type ArrangementFormState = {
     name: string;
     description: string;
@@ -61,7 +75,8 @@ export default function Settings() {
     monthlyPaymentMin: string;
     monthlyPaymentMax: string;
     fixedMonthlyPayment: string;
-    payInFullAmount: string;
+    payoffPercentage: string;
+    payoffDueDate: string;
     payoffText: string;
     customTermsText: string;
     maxTermMonths: string;
@@ -76,7 +91,8 @@ export default function Settings() {
     monthlyPaymentMin: "",
     monthlyPaymentMax: "",
     fixedMonthlyPayment: "",
-    payInFullAmount: "",
+    payoffPercentage: "",
+    payoffDueDate: "",
     payoffText: "",
     customTermsText: "",
     maxTermMonths: "12",
@@ -96,6 +112,10 @@ export default function Settings() {
 
   const { data: documents, isLoading: documentsLoading } = useQuery({
     queryKey: ["/api/documents"],
+  });
+
+  const { data: accounts, isLoading: accountsLoading } = useQuery({
+    queryKey: ["/api/accounts"],
   });
 
   const { data: arrangementOptions, isLoading: arrangementsLoading } = useQuery({
@@ -184,15 +204,7 @@ export default function Settings() {
       });
       queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
       setShowDocumentModal(false);
-      setDocumentForm({
-        title: "",
-        description: "",
-        fileName: "",
-        fileUrl: "",
-        fileSize: 0,
-        mimeType: "",
-        isPublic: true,
-      });
+      setDocumentForm({ ...emptyDocumentForm });
     },
     onError: (error) => {
       toast({
@@ -213,6 +225,13 @@ export default function Settings() {
         description: "Document has been removed successfully.",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Delete Failed",
+        description: error?.message || "Unable to delete document.",
+        variant: "destructive",
+      });
     },
   });
 
@@ -292,16 +311,30 @@ export default function Settings() {
   };
 
   const handleSubmitDocument = () => {
-    if (!documentForm.title || !documentForm.fileName) {
+    if (!documentForm.title || !documentForm.fileName || !documentForm.fileUrl) {
       toast({
         title: "Missing Information",
-        description: "Please provide a title and select a file.",
+        description: "Please provide a title and select a file to upload.",
         variant: "destructive",
       });
       return;
     }
 
-    createDocumentMutation.mutate(documentForm);
+    if (!documentForm.isPublic && !documentForm.accountId) {
+      toast({
+        title: "Account Required",
+        description: "Select an account to share this document with or enable sharing with all consumers.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const payload = {
+      ...documentForm,
+      accountId: documentForm.isPublic ? null : documentForm.accountId,
+    };
+
+    createDocumentMutation.mutate(payload);
   };
 
   const parseCurrencyInput = (value: string): number | null => {
@@ -330,6 +363,46 @@ export default function Settings() {
     }
 
     return Math.trunc(numeric);
+  };
+
+  const parsePercentageInput = (value: string): number | null => {
+    if (value === undefined || value === null) {
+      return null;
+    }
+
+    const trimmed = value.toString().trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const numeric = Number(trimmed);
+    if (Number.isNaN(numeric)) {
+      return null;
+    }
+
+    return Math.round(numeric * 100);
+  };
+
+  const parseDateInput = (value: string): string | null => {
+    if (typeof value !== "string") {
+      return null;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      return null;
+    }
+
+    const date = new Date(trimmed);
+    if (Number.isNaN(date.getTime())) {
+      return null;
+    }
+
+    return trimmed;
   };
 
   const handleSubmitArrangement = () => {
@@ -424,28 +497,39 @@ export default function Settings() {
       payload.fixedMonthlyPayment = fixedMonthly;
       payload.maxTermMonths = maxTermMonths ?? null;
     } else if (planType === "pay_in_full") {
-      const payInFullAmount = parseCurrencyInput(arrangementForm.payInFullAmount);
+      const payoffPercentage = parsePercentageInput(arrangementForm.payoffPercentage);
+      const payoffDueDate = parseDateInput(arrangementForm.payoffDueDate);
       const payoffText = arrangementForm.payoffText.trim();
 
-      if ((payInFullAmount === null || payInFullAmount <= 0) && !payoffText) {
+      if (payoffPercentage === null || payoffPercentage <= 0) {
         toast({
-          title: "Payoff Details Required",
-          description: "Provide a payoff amount or custom payoff instructions.",
+          title: "Payoff Percentage Required",
+          description: "Enter a valid payoff percentage greater than zero.",
           variant: "destructive",
         });
         return;
       }
 
-      if (payInFullAmount !== null && payInFullAmount <= 0) {
+      if (payoffPercentage > 10000) {
         toast({
-          title: "Invalid Payoff Amount",
-          description: "Payoff amount must be greater than zero.",
+          title: "Invalid Percentage",
+          description: "Payoff percentage cannot exceed 100%.",
           variant: "destructive",
         });
         return;
       }
 
-      payload.payInFullAmount = payInFullAmount ?? undefined;
+      if (!payoffDueDate) {
+        toast({
+          title: "Payoff Due Date Required",
+          description: "Select a valid date for the payoff terms.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      payload.payoffPercentageBasisPoints = payoffPercentage;
+      payload.payoffDueDate = payoffDueDate;
       payload.payoffText = payoffText || undefined;
       payload.maxTermMonths = null;
     } else if (planType === "custom_terms") {
@@ -927,7 +1011,15 @@ export default function Settings() {
                 <CardHeader>
                   <div className="flex justify-between items-center">
                     <CardTitle>Document Management</CardTitle>
-                    <Dialog open={showDocumentModal} onOpenChange={setShowDocumentModal}>
+                    <Dialog
+                      open={showDocumentModal}
+                      onOpenChange={(open) => {
+                        setShowDocumentModal(open);
+                        if (!open) {
+                          setDocumentForm({ ...emptyDocumentForm });
+                        }
+                      }}
+                    >
                       <DialogTrigger asChild>
                         <Button>
                           <i className="fas fa-plus mr-2"></i>
@@ -965,18 +1057,66 @@ export default function Settings() {
                               accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
                             />
                           </div>
-                          
+
+                          {!documentForm.isPublic && (
+                            <div>
+                              <Label>Account *</Label>
+                              <Select
+                                value={documentForm.accountId}
+                                onValueChange={(value) => setDocumentForm({ ...documentForm, accountId: value })}
+                                disabled={accountsLoading || !Array.isArray(accounts) || (accounts as any)?.length === 0}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder={accountsLoading ? "Loading accounts..." : "Select account"} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {Array.isArray(accounts) && (accounts as any).length > 0 ? (
+                                    (accounts as any).map((account: any) => (
+                                      <SelectItem key={account.id} value={account.id}>
+                                        {account.consumer
+                                          ? `${account.consumer.firstName} ${account.consumer.lastName}`.trim()
+                                          : "Unassigned Account"}
+                                        {account.accountNumber ? ` • ${account.accountNumber}` : ""}
+                                      </SelectItem>
+                                    ))
+                                  ) : (
+                                    <SelectItem value="__no_accounts" disabled>
+                                      {accountsLoading ? "Loading accounts..." : "No accounts available"}
+                                    </SelectItem>
+                                  )}
+                                </SelectContent>
+                              </Select>
+                              {!accountsLoading && (!Array.isArray(accounts) || (accounts as any)?.length === 0) && (
+                                <p className="text-xs text-gray-500 mt-1">
+                                  No accounts available. Create or import an account before attaching documents.
+                                </p>
+                              )}
+                            </div>
+                          )}
+
                           <div className="flex items-center space-x-2">
                             <Switch
                               id="public"
                               checked={documentForm.isPublic}
-                              onCheckedChange={(checked) => setDocumentForm({...documentForm, isPublic: checked})}
+                              onCheckedChange={(checked) =>
+                                setDocumentForm((prev) => ({
+                                  ...prev,
+                                  isPublic: checked,
+                                  accountId: checked ? "" : prev.accountId,
+                                }))
+                              }
                             />
-                            <Label htmlFor="public">Visible to consumers</Label>
+                            <Label htmlFor="public">Share with all consumers</Label>
                           </div>
-                          
+
                           <div className="flex justify-end space-x-2">
-                            <Button variant="outline" onClick={() => setShowDocumentModal(false)}>
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                setShowDocumentModal(false);
+                                setDocumentForm({ ...emptyDocumentForm });
+                              }}
+                            >
                               Cancel
                             </Button>
                             <Button onClick={handleSubmitDocument}>
@@ -1006,7 +1146,33 @@ export default function Settings() {
                               <p className="text-sm text-gray-500">{document.description}</p>
                               <div className="text-xs text-gray-400">
                                 {document.fileName} • {(document.fileSize / 1024).toFixed(1)} KB
-                                {document.isPublic && <span className="ml-2 text-green-600">• Public</span>}
+                              </div>
+                              <div className="text-xs text-gray-400 mt-1">
+                                {(() => {
+                                  if (document.isPublic) {
+                                    return <span className="text-green-600">Shared with all consumers</span>;
+                                  }
+
+                                  if (!document.account) {
+                                    return <span className="text-amber-600">Account association missing</span>;
+                                  }
+
+                                  const consumerName = document.account.consumer
+                                    ? [document.account.consumer.firstName, document.account.consumer.lastName]
+                                        .filter(Boolean)
+                                        .join(" ")
+                                        .trim()
+                                    : "";
+
+                                  return (
+                                    <span>
+                                      Shared with {consumerName || "selected account"}
+                                      {document.account.accountNumber
+                                        ? ` • Account ${document.account.accountNumber}`
+                                        : ""}
+                                    </span>
+                                  );
+                                })()}
                               </div>
                             </div>
                           </div>
@@ -1031,7 +1197,15 @@ export default function Settings() {
                 <CardHeader>
                   <div className="flex justify-between items-center">
                     <CardTitle>Payment Arrangement Options</CardTitle>
-                    <Dialog open={showArrangementModal} onOpenChange={setShowArrangementModal}>
+                    <Dialog
+                      open={showArrangementModal}
+                      onOpenChange={(open) => {
+                        setShowArrangementModal(open);
+                        if (!open) {
+                          setArrangementForm({ ...emptyArrangementForm });
+                        }
+                      }}
+                    >
                       <DialogTrigger asChild>
                         <Button>
                           <i className="fas fa-plus mr-2"></i>
@@ -1095,7 +1269,8 @@ export default function Settings() {
                                   monthlyPaymentMin: "",
                                   monthlyPaymentMax: "",
                                   fixedMonthlyPayment: "",
-                                  payInFullAmount: "",
+                                  payoffPercentage: "",
+                                  payoffDueDate: "",
                                   payoffText: "",
                                   customTermsText: "",
                                   maxTermMonths: value === "fixed_monthly" ? "until_paid" : "12",
@@ -1155,22 +1330,34 @@ export default function Settings() {
                           {arrangementForm.planType === "pay_in_full" && (
                             <div className="space-y-4">
                               <div>
-                                <Label>Payoff Amount ($)</Label>
+                                <Label>Payoff Percentage (%) *</Label>
                                 <Input
                                   type="number"
                                   step="0.01"
-                                  value={arrangementForm.payInFullAmount}
-                                  onChange={(e) => setArrangementForm({ ...arrangementForm, payInFullAmount: e.target.value })}
-                                  placeholder="500.00"
+                                  min="0"
+                                  max="100"
+                                  value={arrangementForm.payoffPercentage}
+                                  onChange={(e) => setArrangementForm({ ...arrangementForm, payoffPercentage: e.target.value })}
+                                  placeholder="50"
                                 />
-                                <p className="text-xs text-gray-500 mt-1">Optional if you provide custom payoff copy.</p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Enter the portion of the outstanding balance the consumer must pay.
+                                </p>
                               </div>
                               <div>
-                                <Label>Payoff Copy</Label>
+                                <Label>Payoff Due Date *</Label>
+                                <Input
+                                  type="date"
+                                  value={arrangementForm.payoffDueDate}
+                                  onChange={(e) => setArrangementForm({ ...arrangementForm, payoffDueDate: e.target.value })}
+                                />
+                              </div>
+                              <div>
+                                <Label>Additional Notes</Label>
                                 <Textarea
                                   value={arrangementForm.payoffText}
                                   onChange={(e) => setArrangementForm({ ...arrangementForm, payoffText: e.target.value })}
-                                  placeholder="Describe payoff terms or incentives"
+                                  placeholder="Describe any additional payoff instructions"
                                 />
                               </div>
                             </div>

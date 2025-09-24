@@ -6,6 +6,7 @@ import { sql } from 'drizzle-orm';
 import { relations } from 'drizzle-orm';
 import {
   index,
+  integer,
   jsonb,
   pgTable,
   timestamp,
@@ -254,6 +255,7 @@ export const senderIdentities = pgTable("sender_identities", {
 export const documents = pgTable("documents", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  accountId: uuid("account_id").references(() => accounts.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   description: text("description"),
   fileName: text("file_name").notNull(),
@@ -288,6 +290,8 @@ export const arrangementOptions = pgTable("arrangement_options", {
   fixedMonthlyPayment: bigint("fixed_monthly_payment", { mode: "number" }), // In cents
   payInFullAmount: bigint("pay_in_full_amount", { mode: "number" }), // In cents
   payoffText: text("payoff_text"),
+  payoffPercentageBasisPoints: integer("payoff_percentage_basis_points"),
+  payoffDueDate: date("payoff_due_date"),
   customTermsText: text("custom_terms_text"),
   maxTermMonths: bigint("max_term_months", { mode: "number" }).default(12),
   isActive: boolean("is_active").default(true),

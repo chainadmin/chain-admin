@@ -167,6 +167,7 @@ export const senderIdentities = pgTable("sender_identities", {
 export const documents = pgTable("documents", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  accountId: uuid("account_id").references(() => accounts.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   description: text("description"),
   fileName: text("file_name").notNull(),

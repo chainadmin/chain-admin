@@ -84,6 +84,10 @@ import { messagingPlans, EMAIL_OVERAGE_RATE_PER_EMAIL, SMS_OVERAGE_RATE_PER_SEGM
 import { db } from "./db";
 import { eq, and, desc, sql, inArray, gte, lte } from "drizzle-orm";
 
+type DocumentWithAccount = Document & {
+  account?: (Account & { consumer?: Consumer }) | null;
+};
+
 export interface IStorage {
   // User operations (mandatory for Replit Auth)
   getUser(id: string): Promise<User | undefined>;
@@ -251,9 +255,9 @@ export interface IStorage {
   updateCallbackRequest(id: string, updates: Partial<CallbackRequest>): Promise<CallbackRequest>;
   
   // Document operations
-  getDocumentsByTenant(tenantId: string): Promise<Document[]>;
+  getDocumentsByTenant(tenantId: string): Promise<DocumentWithAccount[]>;
   createDocument(document: InsertDocument): Promise<Document>;
-  deleteDocument(id: string): Promise<void>;
+  deleteDocument(id: string, tenantId: string): Promise<boolean>;
   
   // Arrangement options operations
   getArrangementOptionsByTenant(tenantId: string): Promise<ArrangementOption[]>;
@@ -1415,8 +1419,24 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Document operations
-  async getDocumentsByTenant(tenantId: string): Promise<Document[]> {
-    return await db.select().from(documents).where(eq(documents.tenantId, tenantId));
+  async getDocumentsByTenant(tenantId: string): Promise<DocumentWithAccount[]> {
+    const result = await db
+      .select()
+      .from(documents)
+      .leftJoin(accounts, eq(documents.accountId, accounts.id))
+      .leftJoin(consumers, eq(accounts.consumerId, consumers.id))
+      .where(eq(documents.tenantId, tenantId))
+      .orderBy(desc(documents.createdAt));
+
+    return result.map(row => ({
+      ...row.documents,
+      account: row.accounts
+        ? {
+            ...row.accounts,
+            consumer: row.consumers || undefined,
+          }
+        : undefined,
+    }));
   }
 
   async createDocument(document: InsertDocument): Promise<Document> {
@@ -1424,8 +1444,13 @@ export class DatabaseStorage implements IStorage {
     return newDocument;
   }
 
-  async deleteDocument(id: string): Promise<void> {
-    await db.delete(documents).where(eq(documents.id, id));
+  async deleteDocument(id: string, tenantId: string): Promise<boolean> {
+    const deleted = await db
+      .delete(documents)
+      .where(and(eq(documents.id, id), eq(documents.tenantId, tenantId)))
+      .returning({ id: documents.id });
+
+    return deleted.length > 0;
   }
 
   // Arrangement options operations
