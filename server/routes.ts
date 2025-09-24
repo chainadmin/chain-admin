@@ -257,9 +257,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get consumer info from JWT token (already verified by authenticateConsumer)
       const { email: tokenEmail, tenantId, tenantSlug } = req.consumer;
       const requestedEmail = req.params.email;
-      
-      // Ensure consumer can only access their own data
-      if (tokenEmail !== requestedEmail) {
+
+      const normalizedTokenEmail = (tokenEmail || '').trim().toLowerCase();
+      const normalizedRequestedEmail = (requestedEmail || '').trim().toLowerCase();
+
+      // Ensure consumer can only access their own data (case-insensitive)
+      if (!normalizedTokenEmail || normalizedTokenEmail !== normalizedRequestedEmail) {
         return res.status(403).json({ message: "Access denied" });
       }
 
@@ -635,9 +638,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/consumer/accounts/:email', authenticateConsumer, async (req: any, res) => {
     try {
       const { email } = req.params;
-      
+      const normalizedEmail = (email || '').trim().toLowerCase();
+      const normalizedConsumerEmail = (req.consumer.email || '').trim().toLowerCase();
+
       // Verify the email in the URL matches the authenticated consumer's email
-      if (email !== req.consumer.email) {
+      if (!normalizedEmail || normalizedEmail !== normalizedConsumerEmail) {
         return res.status(403).json({ message: "Access denied to this account" });
       }
       
