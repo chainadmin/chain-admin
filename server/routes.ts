@@ -255,41 +255,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Consumer routes - Protected by consumer JWT authentication
   app.get('/api/consumer/accounts/:email', authenticateConsumer, async (req: any, res) => {
     try {
-      // Get consumer info from JWT token (already verified by authenticateConsumer)
-      const { email: tokenEmail, tenantId, tenantSlug } = req.consumer;
-      const requestedEmail = req.params.email;
+      const { consumer: authConsumer } = req;
+      const requestedEmail = (req.params.email || '').trim().toLowerCase();
+      const normalizedTokenEmail = (authConsumer?.email || '').trim().toLowerCase();
 
-      const normalizedTokenEmail = (tokenEmail || '').trim().toLowerCase();
-      const normalizedRequestedEmail = (requestedEmail || '').trim().toLowerCase();
-
-      // Ensure consumer can only access their own data (case-insensitive)
-      if (!normalizedTokenEmail || normalizedTokenEmail !== normalizedRequestedEmail) {
+      if (!normalizedTokenEmail || normalizedTokenEmail !== requestedEmail) {
         return res.status(403).json({ message: "Access denied" });
       }
 
-      // Get consumer record
-      const tenantIdentifier = tenantId ?? tenantSlug;
-      if (!tenantIdentifier) {
-        return res.status(400).json({ message: "Tenant information is missing" });
+      // Prefer looking up the consumer by the id embedded in the token to avoid
+      // any casing/tenant edge cases that may arise from imported data.
+      let consumer = authConsumer?.id ? await storage.getConsumer(authConsumer.id) : undefined;
+
+      // Fallback to the legacy lookup if the record could not be found by id
+      // (for example, very old tokens that didn't embed the consumer id).
+      if (!consumer) {
+        const tenantIdentifier = authConsumer?.tenantId
+          ?? authConsumer?.tenantSlug
+          ?? (req.query.tenantSlug as string | undefined);
+
+        if (!tenantIdentifier) {
+          return res.status(400).json({ message: "Tenant information is missing" });
+        }
+
+        consumer = await storage.getConsumerByEmailAndTenant(normalizedTokenEmail, tenantIdentifier);
       }
 
-      const consumer = await storage.getConsumerByEmailAndTenant(tokenEmail, tenantIdentifier);
       if (!consumer) {
         return res.status(404).json({ message: "Consumer not found" });
       }
 
-      // Get consumer's accounts
       const accountsList = await storage.getAccountsByConsumer(consumer.id);
 
-      // Get tenant info for display
-      const tenant = tenantId
-        ? await storage.getTenant(tenantId)
-        : tenantSlug
-          ? await storage.getTenantBySlug(tenantSlug)
-          : undefined;
+      // Resolve tenant information from either the consumer record, the token or the query string
+      const tenantId = consumer.tenantId ?? authConsumer?.tenantId;
+      const tenantSlug = authConsumer?.tenantSlug
+        ?? (req.query.tenantSlug as string | undefined);
 
-      // Get tenant settings
-      const tenantSettings = tenant?.id ? await storage.getTenantSettings(tenant.id) : undefined;
+      let tenant = tenantId ? await storage.getTenant(tenantId) : undefined;
+      if (!tenant && tenantSlug) {
+        tenant = await storage.getTenantBySlug(tenantSlug);
+      }
+
+      if (!tenant) {
+        return res.status(404).json({ message: "Tenant not found" });
+      }
+
+      const tenantSettings = tenant.id ? await storage.getTenantSettings(tenant.id) : undefined;
 
       res.json({
         consumer: {
@@ -297,15 +309,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           firstName: consumer.firstName,
           lastName: consumer.lastName,
           email: consumer.email,
-          phone: consumer.phone
+          phone: consumer.phone,
         },
         accounts: accountsList,
         tenant: {
-          id: tenant?.id,
-          name: tenant?.name,
-          slug: tenant?.slug
+          id: tenant.id,
+          name: tenant.name,
+          slug: tenant.slug,
         },
-        tenantSettings: tenantSettings
+        tenantSettings,
       });
     } catch (error) {
       console.error("Error fetching consumer accounts:", error);
