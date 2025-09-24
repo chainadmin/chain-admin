@@ -1,23 +1,44 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getArrangementSummary, formatCurrencyFromCents } from "@/lib/arrangements";
+import { useAgencyContext } from "@/hooks/useAgencyContext";
 
 export default function ConsumerPortal() {
   const { tenantSlug, email } = useParams();
-  
-  const { data, isLoading, error } = useQuery({
-    queryKey: [`/api/consumer/accounts/${email}?tenantSlug=${tenantSlug}`],
+  const { agencySlug } = useAgencyContext();
+
+  const { encodedEmail, tenantQuery, accountsUrl, documentsUrl, arrangementsUrl } = useMemo(() => {
+    const safeEmail = email ? encodeURIComponent(email) : "";
+    const resolvedTenantSlug = tenantSlug && tenantSlug !== "undefined" ? tenantSlug : agencySlug;
+    const safeTenantSlug = resolvedTenantSlug ? encodeURIComponent(resolvedTenantSlug) : "";
+
+    return {
+      encodedEmail: safeEmail,
+      tenantQuery: safeTenantSlug ? `?tenantSlug=${safeTenantSlug}` : "",
+      accountsUrl: safeEmail && safeTenantSlug ? `/api/consumer/accounts/${safeEmail}?tenantSlug=${safeTenantSlug}` : "",
+      documentsUrl: safeEmail && safeTenantSlug ? `/api/consumer/documents/${safeEmail}?tenantSlug=${safeTenantSlug}` : "",
+      arrangementsUrl: safeEmail && safeTenantSlug ? `/api/consumer/arrangements/${safeEmail}?tenantSlug=${safeTenantSlug}` : ""
+    };
+  }, [agencySlug, email, tenantSlug]);
+
+  const { data, isLoading, error } = useQuery<any>({
+    queryKey: accountsUrl ? [accountsUrl] : ['consumer-portal-accounts'],
+    enabled: !!accountsUrl,
   });
 
-  const { data: documents } = useQuery({
-    queryKey: [`/api/consumer/documents/${email}?tenantSlug=${tenantSlug}`],
+  const { data: documents } = useQuery<any>({
+    queryKey: documentsUrl ? [documentsUrl] : ['consumer-portal-documents'],
+    enabled: !!documentsUrl,
   });
 
-  const { data: arrangements } = useQuery({
-    queryKey: [`/api/consumer/arrangements/${email}?tenantSlug=${tenantSlug}&balance=${(data as any)?.accounts?.reduce((sum: number, acc: any) => sum + (acc.balanceCents || 0), 0) || 0}`],
-    enabled: !!(data as any)?.accounts,
+  const { data: arrangements } = useQuery<any>({
+    queryKey: arrangementsUrl && (data as any)?.accounts ? [
+      `${arrangementsUrl}&balance=${(data as any)?.accounts?.reduce((sum: number, acc: any) => sum + (acc.balanceCents || 0), 0) || 0}`
+    ] : ['consumer-portal-arrangements'],
+    enabled: !!((data as any)?.accounts && arrangementsUrl),
   });
 
   if (isLoading) {

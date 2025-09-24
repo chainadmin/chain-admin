@@ -57,15 +57,22 @@ export default function ConsumerDashboard() {
     }
   }, [setLocation, toast]);
 
+  const encodedEmail = consumerSession?.email ? encodeURIComponent(consumerSession.email) : "";
+  const encodedTenantSlug = consumerSession?.tenantSlug ? encodeURIComponent(consumerSession.tenantSlug) : "";
+
+  const accountsUrl = encodedEmail && encodedTenantSlug
+    ? `/api/consumer/accounts/${encodedEmail}?tenantSlug=${encodedTenantSlug}`
+    : "";
+
   // Fetch consumer data
   const { data, isLoading, error } = useQuery({
-    queryKey: [`/api/consumer/accounts/${consumerSession?.email}?tenantSlug=${consumerSession?.tenantSlug}`],
+    queryKey: accountsUrl ? [accountsUrl] : ['consumer-accounts'],
     queryFn: async () => {
       const token = localStorage.getItem('consumerToken');
       if (!token) {
         throw new Error('No consumer token found');
       }
-      const response = await fetch(`/api/consumer/accounts/${consumerSession?.email}?tenantSlug=${consumerSession?.tenantSlug}`, {
+      const response = await fetch(accountsUrl, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -84,34 +91,54 @@ export default function ConsumerDashboard() {
       }
       return response.json();
     },
-    enabled: !!consumerSession?.email && !!consumerSession?.tenantSlug,
+    enabled: !!accountsUrl,
   });
 
   // Fetch notifications
+  const notificationsUrl = encodedEmail && encodedTenantSlug
+    ? `/api/consumer-notifications/${encodedEmail}/${encodedTenantSlug}`
+    : "";
+
   const { data: notifications } = useQuery({
-    queryKey: [`/api/consumer-notifications/${consumerSession?.email}/${consumerSession?.tenantSlug}`],
-    enabled: !!consumerSession?.email && !!consumerSession?.tenantSlug,
+    queryKey: notificationsUrl ? [notificationsUrl] : ['consumer-notifications'],
+    enabled: !!notificationsUrl,
   });
 
   // Fetch documents
+  const documentsUrl = encodedEmail && encodedTenantSlug
+    ? `/api/consumer/documents/${encodedEmail}?tenantSlug=${encodedTenantSlug}`
+    : "";
+
   const { data: documents } = useQuery({
-    queryKey: [`/api/consumer/documents/${consumerSession?.email}`],
+    queryKey: documentsUrl ? [documentsUrl] : ['consumer-documents'],
     queryFn: async () => {
-      const response = await apiRequest("GET", `/api/consumer/documents/${consumerSession?.email}?tenantSlug=${consumerSession?.tenantSlug}`);
+      if (!documentsUrl) {
+        return null;
+      }
+      const response = await apiRequest("GET", documentsUrl);
       return response.json();
     },
-    enabled: !!consumerSession?.email && !!consumerSession?.tenantSlug,
+    enabled: !!documentsUrl,
   });
 
   // Fetch payment arrangements
+  const arrangementsUrl = encodedEmail && encodedTenantSlug
+    ? `/api/consumer/arrangements/${encodedEmail}?tenantSlug=${encodedTenantSlug}`
+    : "";
+
   const { data: arrangements } = useQuery({
-    queryKey: [`/api/consumer/arrangements/${consumerSession?.email}`],
+    queryKey: arrangementsUrl && (data as any)?.accounts ? [
+      `${arrangementsUrl}&balance=${(data as any)?.accounts?.reduce((sum: number, acc: any) => sum + (acc.balanceCents || 0), 0) || 0}`
+    ] : ['consumer-arrangements'],
     queryFn: async () => {
+      if (!arrangementsUrl) {
+        return null;
+      }
       const balance = (data as any)?.accounts?.reduce((sum: number, acc: any) => sum + (acc.balanceCents || 0), 0) || 0;
-      const response = await apiRequest("GET", `/api/consumer/arrangements/${consumerSession?.email}?tenantSlug=${consumerSession?.tenantSlug}&balance=${balance}`);
+      const response = await apiRequest("GET", `${arrangementsUrl}&balance=${balance}`);
       return response.json();
     },
-    enabled: !!(data as any)?.accounts && !!consumerSession?.email,
+    enabled: !!(data as any)?.accounts && !!arrangementsUrl,
   });
 
   // Submit callback request mutation
@@ -153,9 +180,11 @@ export default function ConsumerDashboard() {
       await apiRequest("PATCH", `/api/consumer-notifications/${notificationId}/read`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ 
-        queryKey: [`/api/consumer-notifications/${consumerSession?.email}/${consumerSession?.tenantSlug}`] 
-      });
+      if (notificationsUrl) {
+        queryClient.invalidateQueries({
+          queryKey: [notificationsUrl]
+        });
+      }
     },
   });
 
