@@ -3,8 +3,9 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -17,6 +18,7 @@ const registrationWithCredentialsSchema = agencyTrialRegistrationSchema.extend({
   username: z.string().min(3, "Username must be at least 3 characters").max(50),
   password: z.string().min(8, "Password must be at least 8 characters").max(100),
   confirmPassword: z.string(),
+  smsOptIn: z.boolean().default(false),
 }).refine(data => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
@@ -41,13 +43,14 @@ export default function AgencyRegistration() {
       username: "",
       password: "",
       confirmPassword: "",
+      smsOptIn: false,
     },
   });
 
   const registrationMutation = useMutation({
     mutationFn: async (data: RegistrationWithCredentials) => {
       // Remove confirmPassword before sending to API
-      const { confirmPassword, ...registrationData } = data;
+      const { confirmPassword, smsOptIn, ...registrationData } = data;
       return apiRequest("POST", "/api/agencies/register", registrationData);
     },
     onSuccess: (data: any) => {
@@ -270,9 +273,9 @@ export default function AgencyRegistration() {
                       <FormItem>
                         <FormLabel>Business Name</FormLabel>
                         <FormControl>
-                          <Input 
-                            {...field} 
-                            placeholder="ABC Collections Agency"
+                          <Input
+                            {...field}
+                            placeholder="ABC Service Group"
                             data-testid="input-business-name"
                           />
                         </FormControl>
@@ -404,12 +407,40 @@ export default function AgencyRegistration() {
                         </FormItem>
                       )}
                     />
-                  </div>
                 </div>
+              </div>
 
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <h4 className="font-semibold text-blue-900 mb-2">What happens next?</h4>
-                  <ul className="text-sm text-blue-800 space-y-1">
+              <FormField
+                control={form.control}
+                name="smsOptIn"
+                render={({ field }) => (
+                  <FormItem className="flex items-start gap-3 rounded-lg border border-gray-200/60 bg-white p-4 shadow-sm">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={(checked) => field.onChange(checked === true)}
+                        className="mt-1"
+                      />
+                    </FormControl>
+                    <div className="space-y-1 text-left">
+                      <FormLabel className="text-sm font-semibold text-gray-900">
+                        Opt in to receive text message updates
+                      </FormLabel>
+                      <FormDescription className="text-xs text-gray-600">
+                        By selecting this box, you consent to receive autodialed and manual SMS updates about your account at
+                        the phone number provided. Message frequency varies. Message and data rates may apply. Reply STOP to
+                        cancel, HELP for help. Your consent is not a condition of service, and you can update your preference
+                        at any time by contacting support.
+                      </FormDescription>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h4 className="font-semibold text-blue-900 mb-2">What happens next?</h4>
+                <ul className="text-sm text-blue-800 space-y-1">
                     <li>• You'll get instant access to explore the platform</li>
                     <li>• Our team will contact you within 24 hours</li>
                     <li>• We'll discuss your needs and recommend the best plan</li>
@@ -431,8 +462,8 @@ export default function AgencyRegistration() {
             <div className="text-center mt-6 pt-6 border-t">
               <p className="text-sm text-gray-600">
                 Already have an account?{" "}
-                <Button 
-                  variant="link" 
+                <Button
+                  variant="link"
                   onClick={() => window.location.href = '/agency-login'}
                   className="p-0 h-auto"
                   data-testid="link-login"
@@ -440,6 +471,20 @@ export default function AgencyRegistration() {
                   Sign in here
                 </Button>
               </p>
+            </div>
+
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3 text-xs text-gray-500">
+              <a href="/terms-of-service" className="transition hover:text-gray-700 hover:underline">
+                Terms of Service
+              </a>
+              <span>•</span>
+              <a href="/privacy-policy" className="transition hover:text-gray-700 hover:underline">
+                Privacy Policy
+              </a>
+              <span>•</span>
+              <a href="/sms-opt-in-disclosure" className="transition hover:text-gray-700 hover:underline">
+                SMS Opt-In Disclosure
+              </a>
             </div>
           </CardContent>
         </Card>
