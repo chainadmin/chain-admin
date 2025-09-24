@@ -2259,12 +2259,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Consumer notifications route
-  app.get('/api/consumer-notifications/:email/:tenantSlug', async (req, res) => {
+  const resolveQueryValue = (value: unknown): string | undefined => {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed ? trimmed : undefined;
+    }
+
+    if (Array.isArray(value) && value.length > 0) {
+      return resolveQueryValue(value[0]);
+    }
+
+    return undefined;
+  };
+
+  // Consumer notifications routes
+  app.get('/api/consumer-notifications/by-consumer', async (req, res) => {
     try {
-      const { email, tenantSlug } = req.params;
-      
-      const consumer = await storage.getConsumerByEmailAndTenant(email, tenantSlug);
+      const email = resolveQueryValue(req.query.email);
+      const tenantSlug = resolveQueryValue(req.query.tenantSlug);
+
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+
+      const consumer = tenantSlug
+        ? await storage.getConsumerByEmailAndTenant(email, tenantSlug)
+        : await storage.getConsumerByEmail(email);
+
       if (!consumer) {
         return res.status(404).json({ message: "Consumer not found" });
       }
@@ -2277,11 +2298,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Mark notification as read
-  app.patch('/api/consumer-notifications/:id/read', async (req, res) => {
+  app.patch('/api/consumer-notifications/mark-read', async (req, res) => {
     try {
-      const { id } = req.params;
-      await storage.markNotificationRead(id);
+      const bodyNotificationId = typeof req.body?.notificationId === 'string'
+        ? req.body.notificationId.trim()
+        : undefined;
+      const notificationId = bodyNotificationId || resolveQueryValue(req.query.notificationId) || resolveQueryValue(req.query.id);
+
+      if (!notificationId) {
+        return res.status(400).json({ message: "Notification ID is required" });
+      }
+
+      await storage.markNotificationRead(notificationId);
       res.json({ message: "Notification marked as read" });
     } catch (error) {
       console.error("Error marking notification as read:", error);

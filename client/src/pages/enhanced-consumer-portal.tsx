@@ -24,6 +24,12 @@ export default function EnhancedConsumerPortal() {
 
   const resolvedTenantSlug = tenantSlug ?? agencySlug;
   const encodedEmail = email ? encodeURIComponent(email) : "";
+  const encodedTenantSlug = resolvedTenantSlug ? encodeURIComponent(resolvedTenantSlug) : "";
+  const notificationsQueryUrl = encodedEmail
+    ? resolvedTenantSlug
+      ? `/api/consumer-notifications/by-consumer?email=${encodedEmail}&tenantSlug=${encodedTenantSlug}`
+      : `/api/consumer-notifications/by-consumer?email=${encodedEmail}`
+    : "";
 
   const [callbackForm, setCallbackForm] = useState({
     requestType: "callback",
@@ -44,7 +50,7 @@ export default function EnhancedConsumerPortal() {
 
   // Fetch notifications
   const { data: notifications } = useQuery({
-    queryKey: [`/api/consumer-notifications/${encodedEmail}/${resolvedTenantSlug ?? ""}`],
+    queryKey: [notificationsQueryUrl],
     enabled: !!(resolvedTenantSlug && email),
   });
 
@@ -96,11 +102,11 @@ export default function EnhancedConsumerPortal() {
   // Mark notification as read
   const markNotificationReadMutation = useMutation({
     mutationFn: async (notificationId: string) => {
-      await apiRequest("PATCH", `/api/consumer-notifications/${notificationId}/read`);
+      await apiRequest("PATCH", "/api/consumer-notifications/mark-read", { notificationId });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: [`/api/consumer-notifications/${encodedEmail}/${resolvedTenantSlug ?? ""}`],
+        queryKey: [notificationsQueryUrl],
       });
     },
   });

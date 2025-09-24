@@ -31,6 +31,13 @@ export default function ConsumerDashboard() {
 
   const [showCallbackModal, setShowCallbackModal] = useState(false);
   const [consumerSession, setConsumerSession] = useState<any>(null);
+  const encodedEmail = consumerSession?.email ? encodeURIComponent(consumerSession.email) : "";
+  const encodedTenantSlug = consumerSession?.tenantSlug ? encodeURIComponent(consumerSession.tenantSlug) : "";
+  const notificationsQueryUrl = encodedEmail
+    ? consumerSession?.tenantSlug
+      ? `/api/consumer-notifications/by-consumer?email=${encodedEmail}&tenantSlug=${encodedTenantSlug}`
+      : `/api/consumer-notifications/by-consumer?email=${encodedEmail}`
+    : "";
 
   // Get consumer session data
   useEffect(() => {
@@ -89,7 +96,7 @@ export default function ConsumerDashboard() {
 
   // Fetch notifications
   const { data: notifications } = useQuery({
-    queryKey: [`/api/consumer-notifications/${consumerSession?.email}/${consumerSession?.tenantSlug}`],
+    queryKey: [notificationsQueryUrl],
     enabled: !!consumerSession?.email && !!consumerSession?.tenantSlug,
   });
 
@@ -150,11 +157,11 @@ export default function ConsumerDashboard() {
   // Mark notification as read
   const markNotificationReadMutation = useMutation({
     mutationFn: async (notificationId: string) => {
-      await apiRequest("PATCH", `/api/consumer-notifications/${notificationId}/read`);
+      await apiRequest("PATCH", "/api/consumer-notifications/mark-read", { notificationId });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ 
-        queryKey: [`/api/consumer-notifications/${consumerSession?.email}/${consumerSession?.tenantSlug}`] 
+      queryClient.invalidateQueries({
+        queryKey: [notificationsQueryUrl]
       });
     },
   });
