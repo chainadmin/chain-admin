@@ -473,10 +473,10 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       const normalizedDescription = typeof body.description === 'string' ? body.description : undefined;
 
       const normalizedTargetFolderIds = Array.isArray(targetFolderIds)
-        ? targetFolderIds.filter((id: unknown): id is string => typeof id === 'string' && id)
+        ? targetFolderIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
         : [];
       const normalizedTargetCustomerIds = Array.isArray(targetCustomerIds)
-        ? targetCustomerIds.filter((id: unknown): id is string => typeof id === 'string' && id)
+        ? targetCustomerIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
         : [];
       const normalizedCustomFilters = customFilters && typeof customFilters === 'object'
         ? customFilters
