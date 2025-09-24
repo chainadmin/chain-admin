@@ -5,6 +5,12 @@ import { accounts, consumers, folders } from './_lib/schema.js';
 import { eq, and } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 
+let testDbOverride: ReturnType<typeof getDb> | null = null;
+
+function resolveDb() {
+  return testDbOverride ?? getDb();
+}
+
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -12,7 +18,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   }
 
   try {
-    const db = getDb();
+    const db = resolveDb();
     
     // Get tenant ID from JWT token
     const token = req.headers.authorization?.replace('Bearer ', '') || 
@@ -130,8 +136,44 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
             isRegistered: false,
           })
           .returning();
-        
+
         consumer = newConsumer;
+      } else {
+        const updateData: Partial<typeof consumers.$inferInsert> = {};
+
+        if (dateOfBirth !== undefined) {
+          updateData.dateOfBirth = dateOfBirth;
+        }
+        if (address !== undefined) {
+          updateData.address = address;
+        }
+        if (city !== undefined) {
+          updateData.city = city;
+        }
+        if (state !== undefined) {
+          updateData.state = state;
+        }
+        if (zipCode !== undefined) {
+          updateData.zipCode = zipCode;
+        }
+        if (phone !== undefined) {
+          updateData.phone = phone;
+        }
+
+        if (Object.keys(updateData).length > 0) {
+          const [updatedConsumer] = await db
+            .update(consumers)
+            .set(updateData)
+            .where(and(
+              eq(consumers.id, consumer.id),
+              eq(consumers.tenantId, tenantId)
+            ))
+            .returning();
+
+          if (updatedConsumer) {
+            consumer = updatedConsumer;
+          }
+        }
       }
 
       // Create the account
@@ -192,4 +234,9 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   }
 }
 
+export function __setTestDb(db: ReturnType<typeof getDb> | null | undefined) {
+  testDbOverride = db ?? null;
+}
+
+export { handler };
 export default withAuth(handler);
