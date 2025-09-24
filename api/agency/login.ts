@@ -60,21 +60,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Get platform user
-    const [platformUser] = await db
+    let [platformUser] = await db
       .select()
       .from(platformUsers)
       .where(eq(platformUsers.authId, user.id))
       .limit(1);
 
     if (!platformUser) {
+      const [newPlatformUser] = await db
+        .insert(platformUsers)
+        .values({
+          authId: user.id,
+          tenantId: credentials.tenantId,
+          role: credentials.role || 'owner',
+          isActive: credentials.isActive ?? true
+        })
+        .returning();
+
+      platformUser = newPlatformUser;
+    } else if (!platformUser.tenantId) {
+      const [updatedPlatformUser] = await db
+        .update(platformUsers)
+        .set({ tenantId: credentials.tenantId })
+        .where(eq(platformUsers.id, platformUser.id))
+        .returning();
+
+      platformUser = updatedPlatformUser;
+    }
+
+    if (!platformUser?.tenantId) {
       return res.status(401).json({ error: 'User not associated with any agency' });
     }
 
-    // Get tenant info
-    if (!platformUser.tenantId) {
-      return res.status(401).json({ error: 'User not associated with any agency' });
-    }
-    
     const [tenant] = await db
       .select()
       .from(tenants)
@@ -130,5 +147,3 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 }
 
-// Import helper
-import { nanoid } from 'nanoid';
