@@ -185,14 +185,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    const providedDOB = new Date(dateOfBirth);
-    const storedDOB = consumer.dateOfBirth ? new Date(consumer.dateOfBirth) : null;
-
-    if (!storedDOB || Number.isNaN(storedDOB.getTime())) {
+    // Compare date strings directly instead of Date objects to avoid timezone issues
+    if (!consumer.dateOfBirth) {
       return res.status(401).json({ message: 'Date of birth verification required. Please contact your agency.' });
     }
 
-    if (Number.isNaN(providedDOB.getTime()) || providedDOB.getTime() !== storedDOB.getTime()) {
+    // Normalize date format (both should be YYYY-MM-DD)
+    const normalizeDate = (dateStr: string) => {
+      try {
+        // Create date object to validate, then extract components to avoid timezone issues
+        const date = new Date(dateStr);
+        if (Number.isNaN(date.getTime())) {
+          return null;
+        }
+        // Return in YYYY-MM-DD format
+        return date.toISOString().split('T')[0];
+      } catch {
+        return null;
+      }
+    };
+
+    const normalizedProvided = normalizeDate(dateOfBirth);
+    const normalizedStored = normalizeDate(consumer.dateOfBirth);
+
+    if (!normalizedProvided || !normalizedStored) {
+      return res.status(401).json({ message: 'Invalid date format provided.' });
+    }
+
+    if (normalizedProvided !== normalizedStored) {
       return res.status(401).json({ message: 'Date of birth verification failed. Please check your information.' });
     }
 
