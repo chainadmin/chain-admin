@@ -110,10 +110,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       // Update the consumer
       const [updatedConsumer] = await db
         .update(consumers)
-        .set({
-          ...updates,
-          updatedAt: new Date(),
-        })
+        .set(updates)
         .where(and(
           eq(consumers.id, consumerId),
           eq(consumers.tenantId, tenantId)

@@ -44,26 +44,20 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       // Create a new automation
       const {
         name,
-        description,
         type, // 'email' or 'sms'
         templateId,
-        templateIds,
-        templateSchedule,
-        triggerType, // 'schedule', 'event', 'manual'
-        scheduleType, // 'once', 'daily', 'weekly', 'monthly', 'sequence'
-        scheduledDate,
-        scheduleTime,
-        scheduleWeekdays,
-        scheduleDayOfMonth,
-        eventType,
-        eventDelay,
-        targetType, // 'all', 'folder', 'custom'
-        targetFolderIds,
-        targetCustomerIds,
+        trigger, // 'scheduled', 'account_added', 'payment_received', etc.
+        targetGroup, // 'all', 'with-balance', 'overdue', etc.
+        scheduleType, // 'one-time', 'recurring'
+        scheduledTime, // For one-time scheduled automations
+        scheduledDaysOfWeek, // For recurring: ["monday", "wednesday", "friday"]
+        scheduledTimeOfDay, // For recurring: "09:00"
+        removeOnPayment,
+        isActive,
       } = req.body;
 
-      if (!name || !type || !triggerType || !targetType) {
-        res.status(400).json({ error: 'Name, type, trigger type, and target type are required' });
+      if (!name || !type || !trigger) {
+        res.status(400).json({ error: 'Name, type, and trigger are required' });
         return;
       }
 
@@ -85,68 +79,22 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         }
       }
 
-      // Validate multiple templates if provided
-      if (templateIds && templateIds.length > 0) {
-        const tableToCheck = type === 'email' ? emailTemplates : smsTemplates;
-        const templates = await db
-          .select()
-          .from(tableToCheck)
-          .where(and(
-            sql`${tableToCheck.id} = ANY(${templateIds})`,
-            eq(tableToCheck.tenantId, tenantId)
-          ));
-
-        if (templates.length !== templateIds.length) {
-          res.status(404).json({ error: `Some ${type} templates not found` });
-          return;
-        }
-      }
-
-      // Calculate next execution time if it's a scheduled automation
-      let nextExecution = null;
-      if (triggerType === 'schedule') {
-        if (scheduleType === 'once' && scheduledDate) {
-          nextExecution = new Date(scheduledDate);
-        } else if (scheduleType === 'daily' && scheduleTime) {
-          // Set next execution to today at the scheduled time
-          const now = new Date();
-          const [hours, minutes] = scheduleTime.split(':').map(Number);
-          nextExecution = new Date();
-          nextExecution.setHours(hours, minutes, 0, 0);
-          
-          // If time has already passed today, set for tomorrow
-          if (nextExecution <= now) {
-            nextExecution.setDate(nextExecution.getDate() + 1);
-          }
-        }
-        // Add similar logic for weekly and monthly schedules as needed
-      }
-
       const [newAutomation] = await db
         .insert(communicationAutomations)
         .values({
           tenantId,
           name,
-          description,
           type,
           templateId,
-          templateIds,
-          templateSchedule,
-          isActive: true,
-          triggerType,
+          trigger,
+          targetGroup,
+          isActive: isActive !== undefined ? isActive : true,
           scheduleType,
-          scheduledDate,
-          scheduleTime,
-          scheduleWeekdays,
-          scheduleDayOfMonth,
-          eventType,
-          eventDelay,
-          targetType,
-          targetFolderIds,
-          targetCustomerIds,
-          nextExecution,
-          totalSent: 0,
-          currentTemplateIndex: 0,
+          scheduledTime: scheduledTime ? new Date(scheduledTime) : null,
+          scheduledDaysOfWeek: scheduledDaysOfWeek || [],
+          scheduledTimeOfDay: scheduledTimeOfDay || null,
+          removeOnPayment: removeOnPayment || false,
+          metadata: {},
         })
         .returning();
 
