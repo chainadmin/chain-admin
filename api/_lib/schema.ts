@@ -2,7 +2,7 @@
 // This schema exactly matches the database structure
 
 import { sql } from 'drizzle-orm';
-import { pgTable, uuid, text, timestamp, boolean, jsonb, bigint, decimal, serial, integer, varchar, date } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, timestamp, boolean, jsonb, bigint, decimal, serial, integer, varchar, date, uniqueIndex, index } from 'drizzle-orm/pg-core';
 
 // Tenants (agencies/organizations)
 export const tenants = pgTable("tenants", {
@@ -350,6 +350,25 @@ export const automationExecutions = pgTable("automation_executions", {
   executionData: jsonb("execution_data").$type<any>(), // Any additional data about the execution
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+export const messagingUsageEvents = pgTable(
+  "messaging_usage_events",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+    provider: text("provider").notNull(),
+    messageType: text("message_type").notNull(),
+    quantity: integer("quantity").notNull().default(1),
+    externalMessageId: text("external_message_id").notNull(),
+    occurredAt: timestamp("occurred_at").defaultNow(),
+    metadata: jsonb("metadata").default(sql`'{}'::jsonb`),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => ({
+    uniqueExternalMessage: uniqueIndex("messaging_usage_events_external_idx").on(table.externalMessageId),
+    tenantPeriodIdx: index("messaging_usage_events_tenant_period_idx").on(table.tenantId, table.occurredAt),
+  })
+);
 
 // Sessions
 export const sessions = pgTable("sessions", {

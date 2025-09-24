@@ -14,6 +14,7 @@ import {
   consumers,
   agencyCredentials,
   type InsertArrangementOption,
+  type SmsTracking,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, sql } from "drizzle-orm";
@@ -28,6 +29,13 @@ import { uploadLogo } from "./supabaseStorage";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { subdomainMiddleware } from "./middleware/subdomain";
+import {
+  messagingPlanList,
+  messagingPlans,
+  EMAIL_OVERAGE_RATE_PER_THOUSAND,
+  SMS_OVERAGE_RATE_PER_SEGMENT,
+  type MessagingPlanId,
+} from "@shared/billing-plans";
 
 const csvUploadSchema = z.object({
   consumers: z.array(z.object({
@@ -3228,10 +3236,98 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const subscription = await storage.getSubscriptionByTenant(tenantId);
-      res.json(subscription);
+      if (!subscription) {
+        return res.json(null);
+      }
+
+      const planId = subscription.plan as MessagingPlanId;
+      const plan = messagingPlans[planId];
+
+      res.json({
+        ...subscription,
+        planId: plan?.id ?? subscription.plan,
+        planName: plan?.name ?? subscription.plan,
+        planPrice: plan?.price ?? subscription.monthlyBaseCents / 100,
+        includedEmails: plan?.includedEmails ?? 0,
+        includedSmsSegments: plan?.includedSmsSegments ?? 0,
+      });
     } catch (error) {
       console.error("Error fetching subscription:", error);
       res.status(500).json({ message: "Failed to fetch subscription" });
+    }
+  });
+
+  app.get('/api/billing/plans', authenticateUser, async (_req: any, res) => {
+    res.json({
+      plans: messagingPlanList,
+      emailOverageRatePerThousand: EMAIL_OVERAGE_RATE_PER_THOUSAND,
+      smsOverageRatePerSegment: SMS_OVERAGE_RATE_PER_SEGMENT,
+    });
+  });
+
+  app.post('/api/billing/select-plan', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const bodySchema = z.object({
+        planId: z.string(),
+        billingEmail: z.string().email().optional(),
+      });
+
+      const parseResult = bodySchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({
+          message: "Invalid plan selection",
+          errors: parseResult.error.flatten(),
+        });
+      }
+
+      const { planId, billingEmail } = parseResult.data;
+      const plan = messagingPlans[planId as MessagingPlanId];
+
+      if (!plan) {
+        return res.status(400).json({ message: "Unknown plan selection" });
+      }
+
+      const now = new Date();
+      const periodStart = now;
+      const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+      const existingSubscription = await storage.getSubscriptionByTenant(tenantId);
+      const subscriptionPayload = {
+        plan: plan.id,
+        monthlyBaseCents: plan.price * 100,
+        pricePerConsumerCents: 0,
+        currentPeriodStart: periodStart,
+        currentPeriodEnd: periodEnd,
+        status: 'active' as const,
+        billingEmail: billingEmail ?? existingSubscription?.billingEmail ?? null,
+      };
+
+      const updatedSubscription = existingSubscription
+        ? await storage.updateSubscription(existingSubscription.id, {
+            ...subscriptionPayload,
+            updatedAt: new Date(),
+          })
+        : await storage.createSubscription({
+            tenantId,
+            ...subscriptionPayload,
+          });
+
+      res.json({
+        ...updatedSubscription,
+        planId: plan.id,
+        planName: plan.name,
+        planPrice: plan.price,
+        includedEmails: plan.includedEmails,
+        includedSmsSegments: plan.includedSmsSegments,
+      });
+    } catch (error) {
+      console.error("Error updating billing plan:", error);
+      res.status(500).json({ message: "Failed to update billing plan" });
     }
   });
 
@@ -3462,6 +3558,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Twilio webhook endpoint for SMS delivery tracking and usage
+  app.post('/api/webhooks/twilio', async (req, res) => {
+    try {
+      const messageSid = req.body.MessageSid || req.body.SmsSid;
+      const status = (req.body.MessageStatus || req.body.SmsStatus || '').toLowerCase();
+
+      if (!messageSid) {
+        return res.status(400).json({ message: 'Missing MessageSid' });
+      }
+
+      const relevantStatuses = new Set(['sent', 'delivered', 'undelivered', 'failed']);
+      if (!relevantStatuses.has(status)) {
+        return res.status(200).json({ message: 'Status ignored' });
+      }
+
+      const segmentsRaw = req.body.NumSegments || req.body.SmsSegments || '1';
+      const segmentsParsed = Number.parseInt(Array.isArray(segmentsRaw) ? segmentsRaw[0] : segmentsRaw, 10);
+      const quantity = Number.isFinite(segmentsParsed) && segmentsParsed > 0 ? segmentsParsed : 1;
+
+      let tenantId = (req.body.TenantId || req.body.tenantId) as string | undefined;
+      const trackingInfo = await storage.findSmsTrackingByExternalId(messageSid);
+
+      if (!tenantId) {
+        tenantId = trackingInfo?.tenantId ?? undefined;
+      }
+
+      if (trackingInfo?.tracking) {
+        const normalizedStatus = status === 'undelivered' ? 'failed' : status;
+        const updates: Partial<SmsTracking> = {
+          status: normalizedStatus as SmsTracking['status'],
+        };
+
+        if (status === 'delivered') {
+          updates.deliveredAt = new Date();
+        }
+
+        if (status === 'failed' || status === 'undelivered') {
+          const errorMessage = req.body.ErrorMessage || req.body.ErrorCode;
+          if (errorMessage) {
+            updates.errorMessage = errorMessage;
+          }
+        }
+
+        await storage.updateSmsTracking(trackingInfo.tracking.id, updates);
+      }
+
+      if (!tenantId) {
+        console.warn('Twilio webhook missing tenant context', { messageSid, status });
+        return res.status(200).json({ message: 'No tenant resolved' });
+      }
+
+      await storage.recordMessagingUsageEvent({
+        tenantId,
+        provider: 'twilio',
+        messageType: 'sms',
+        quantity,
+        externalMessageId: messageSid,
+        occurredAt: new Date(),
+        metadata: req.body,
+      });
+
+      res.status(200).json({ message: 'Webhook processed' });
+    } catch (error) {
+      console.error('Twilio webhook error:', error);
+      res.status(500).json({ message: 'Webhook processing failed' });
+    }
+  });
+
   // Postmark webhook endpoints for email tracking
   app.post('/api/webhooks/postmark', async (req, res) => {
     try {
@@ -3484,11 +3648,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Process individual Postmark webhook events
   async function processPostmarkWebhook(event: any) {
     const { RecordType, MessageID, Recipient, Tag, Metadata } = event;
-    
+
     // Only process events that have our tracking metadata
     if (!Metadata?.campaignId && !Tag) return;
-    
+
     const campaignId = Metadata?.campaignId;
+    const tenantId = Metadata?.tenantId as string | undefined;
     const trackingData = {
       messageId: MessageID,
       recipient: Recipient,
@@ -3500,7 +3665,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     // Store tracking event in database (using the correct method name)
     console.log('Email tracking event:', trackingData);
-    
+
+    const normalizedRecordType = (RecordType || '').toLowerCase();
+    const isDeliverabilityEvent = ['delivery', 'bounce'].includes(normalizedRecordType);
+
+    if (tenantId && isDeliverabilityEvent) {
+      const occurredAtRaw = event.DeliveredAt || event.ReceivedAt || event.BouncedAt || event.SubmittedAt;
+      const occurredAt = occurredAtRaw ? new Date(occurredAtRaw) : new Date();
+
+      await storage.recordMessagingUsageEvent({
+        tenantId,
+        provider: 'postmark',
+        messageType: 'email',
+        quantity: 1,
+        externalMessageId: MessageID,
+        occurredAt,
+        metadata: event,
+      });
+    }
+
     // Update campaign metrics
     if (campaignId) {
       await updateCampaignMetrics(campaignId, RecordType);
