@@ -13,11 +13,12 @@ import {
   tenants,
   consumers,
   agencyCredentials,
+  users,
   type InsertArrangementOption,
   type SmsTracking,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
@@ -3196,18 +3197,145 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  const mapPlatformRoleToDisplay = (role: string): string => {
+    switch (role) {
+      case 'platform_admin':
+      case 'owner':
+        return 'admin';
+      case 'manager':
+      case 'agent':
+      case 'viewer':
+      case 'uploader':
+        return role;
+      default:
+        return role;
+    }
+  };
+
+  const displayRoleToPlatformRole: Record<'admin' | 'manager' | 'agent', 'owner' | 'manager' | 'agent'> = {
+    admin: 'owner',
+    manager: 'manager',
+    agent: 'agent',
+  };
+
   app.get('/api/company/admins', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
-      if (!tenantId) { 
+      if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
       }
 
       const admins = await storage.getPlatformUsersByTenant(tenantId);
-      res.json(admins);
+      const formattedAdmins = admins.map(admin => ({
+        id: admin.id,
+        authId: admin.authId,
+        tenantId: admin.tenantId,
+        isActive: admin.isActive,
+        permissions: admin.permissions,
+        createdAt: admin.createdAt,
+        updatedAt: admin.updatedAt,
+        role: mapPlatformRoleToDisplay(admin.role),
+        platformRole: admin.role,
+        email: admin.userDetails?.email ?? null,
+        firstName: admin.userDetails?.firstName ?? null,
+        lastName: admin.userDetails?.lastName ?? null,
+        profileImageUrl: admin.userDetails?.profileImageUrl ?? null,
+      }));
+
+      res.json(formattedAdmins);
     } catch (error) {
       console.error("Error fetching company admins:", error);
       res.status(500).json({ message: "Failed to fetch admins" });
+    }
+  });
+
+  app.post('/api/company/admins', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const adminSchema = z.object({
+        email: z.string().email(),
+        firstName: z.string().min(1),
+        lastName: z.string().min(1),
+        role: z.enum(['admin', 'manager', 'agent']).default('admin'),
+      });
+
+      const { email, firstName, lastName, role } = adminSchema.parse(req.body);
+
+      const [existingUser] = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, email))
+        .limit(1);
+
+      const userRecord = existingUser
+        ? await storage.upsertUser({
+            id: existingUser.id,
+            email,
+            firstName,
+            lastName,
+          })
+        : await storage.upsertUser({
+            email,
+            firstName,
+            lastName,
+          });
+
+      const [existingPlatformUser] = await db
+        .select()
+        .from(platformUsers)
+        .where(
+          and(
+            eq(platformUsers.authId, userRecord.id),
+            eq(platformUsers.tenantId, tenantId)
+          )
+        )
+        .limit(1);
+
+      const platformRole = displayRoleToPlatformRole[role];
+
+      let platformUserRecord;
+      if (existingPlatformUser) {
+        const [updatedPlatformUser] = await db
+          .update(platformUsers)
+          .set({
+            role: platformRole,
+            updatedAt: new Date(),
+          })
+          .where(eq(platformUsers.id, existingPlatformUser.id))
+          .returning();
+        platformUserRecord = updatedPlatformUser;
+      } else {
+        platformUserRecord = await storage.createPlatformUser({
+          authId: userRecord.id,
+          tenantId,
+          role: platformRole,
+        });
+      }
+
+      const responsePayload = {
+        id: platformUserRecord.id,
+        authId: platformUserRecord.authId,
+        tenantId: platformUserRecord.tenantId,
+        isActive: platformUserRecord.isActive,
+        permissions: platformUserRecord.permissions,
+        createdAt: platformUserRecord.createdAt,
+        updatedAt: platformUserRecord.updatedAt,
+        role,
+        platformRole: platformUserRecord.role,
+        email: userRecord.email,
+        firstName: userRecord.firstName ?? null,
+        lastName: userRecord.lastName ?? null,
+        profileImageUrl: userRecord.profileImageUrl ?? null,
+      };
+
+      res.status(existingPlatformUser ? 200 : 201).json(responsePayload);
+    } catch (error) {
+      console.error("Error creating company admin:", error);
+      res.status(500).json({ message: "Failed to create admin" });
     }
   });
 
