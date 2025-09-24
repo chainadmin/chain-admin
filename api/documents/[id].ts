@@ -81,7 +81,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       // Delete the document
       await db
         .delete(documents)
-        .where(eq(documents.id, id));
+        .where(and(eq(documents.id, id), eq(documents.tenantId, tenantId)));
 
       res.status(200).json({ success: true });
     } else {
