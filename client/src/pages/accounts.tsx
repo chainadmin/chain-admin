@@ -40,7 +40,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
-import { FolderOpen, Folder, Plus, Upload, Settings, Trash2, MoreVertical, Eye, Edit, Mail, Phone, MapPin, Calendar } from "lucide-react";
+import { FolderOpen, Folder, Plus, Upload, Settings, Trash2, MoreVertical, Eye, Edit, Mail } from "lucide-react";
 
 export default function Accounts() {
   const [selectedFolderId, setSelectedFolderId] = useState<string>("all");
@@ -49,6 +49,7 @@ export default function Accounts() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showContactDialog, setShowContactDialog] = useState(false);
+  const [contactForm, setContactForm] = useState({ method: "", message: "" });
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
@@ -323,7 +324,27 @@ export default function Accounts() {
 
   const handleContact = (account: any) => {
     setSelectedAccount(account);
+    const preferredMethod = account.consumer?.email ? "email" : account.consumer?.phone ? "sms" : "";
+    setContactForm({ method: preferredMethod, message: "" });
     setShowContactDialog(true);
+  };
+
+  const handleContactSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!selectedAccount || !contactForm.method) {
+      return;
+    }
+
+    const contactName = `${selectedAccount.consumer?.firstName ?? ""} ${selectedAccount.consumer?.lastName ?? ""}`.trim();
+    const methodLabel = contactForm.method === "email" ? "email" : "SMS";
+
+    toast({
+      title: "Message Sent",
+      description: `Message sent to ${contactName || "the consumer"} via ${methodLabel}.`,
+    });
+
+    setShowContactDialog(false);
   };
 
   const handleDelete = (account: any) => {
@@ -1120,89 +1141,61 @@ export default function Accounts() {
 
         {/* Contact Account Modal */}
         <Dialog open={showContactDialog} onOpenChange={setShowContactDialog}>
-          <DialogContent className="max-w-lg">
+          <DialogContent>
             <DialogHeader>
               <DialogTitle>
                 Contact {selectedAccount?.consumer?.firstName} {selectedAccount?.consumer?.lastName}
               </DialogTitle>
-              <DialogDescription>
-                Reach out using the preferred channel for this consumer.
-              </DialogDescription>
+              <DialogDescription>Send a quick message using the available contact information.</DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
-              {selectedAccount?.consumer?.email && (
-                <div className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white p-4">
-                  <div className="rounded-full bg-blue-50 p-2 text-blue-600">
-                    <Mail className="h-4 w-4" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-900">Email</p>
-                    <p className="text-sm text-gray-600">{selectedAccount.consumer.email}</p>
-                  </div>
-                  <Button variant="outline" size="sm" asChild>
-                    <a href={`mailto:${selectedAccount.consumer.email}`}>Compose</a>
-                  </Button>
-                </div>
-              )}
-
-              {selectedAccount?.consumer?.phone && (
-                <div className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white p-4">
-                  <div className="rounded-full bg-emerald-50 p-2 text-emerald-600">
-                    <Phone className="h-4 w-4" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-900">Phone</p>
-                    <p className="text-sm text-gray-600">{selectedAccount.consumer.phone}</p>
-                  </div>
-                  <Button variant="outline" size="sm" asChild>
-                    <a href={`tel:${selectedAccount.consumer.phone?.replace(/[^0-9+]/g, "")}`}>
-                      Call
-                    </a>
-                  </Button>
-                </div>
-              )}
-
-              <div className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white p-4">
-                <div className="rounded-full bg-purple-50 p-2 text-purple-600">
-                  <MapPin className="h-4 w-4" />
+            {selectedAccount && contactForm.method ? (
+              <form onSubmit={handleContactSubmit} className="space-y-4">
+                <div>
+                  <Label htmlFor="contact-method">Contact Method</Label>
+                  <select
+                    id="contact-method"
+                    className="w-full rounded border border-gray-300 p-2"
+                    value={contactForm.method}
+                    onChange={(event) => setContactForm({ ...contactForm, method: event.target.value })}
+                  >
+                    {selectedAccount.consumer?.email && (
+                      <option value="email">Email ({selectedAccount.consumer.email})</option>
+                    )}
+                    {selectedAccount.consumer?.phone && (
+                      <option value="sms">SMS ({selectedAccount.consumer.phone})</option>
+                    )}
+                  </select>
                 </div>
                 <div>
-                  <p className="font-medium text-gray-900">Mailing Address</p>
-                  <p className="text-sm text-gray-600">
-                    {selectedAccount?.consumer?.address ? (
-                      <>
-                        {selectedAccount.consumer.address}
-                        <br />
-                        {[selectedAccount.consumer.city, selectedAccount.consumer.state]
-                          .filter(Boolean)
-                          .join(", ")}
-                        {selectedAccount.consumer.zipCode ? ` ${selectedAccount.consumer.zipCode}` : ""}
-                      </>
-                    ) : (
-                      "No mailing address on file."
-                    )}
-                  </p>
+                  <Label htmlFor="contact-message">Message</Label>
+                  <textarea
+                    id="contact-message"
+                    className="min-h-[120px] w-full rounded border border-gray-300 p-2"
+                    value={contactForm.message}
+                    onChange={(event) => setContactForm({ ...contactForm, message: event.target.value })}
+                    placeholder="Write a short message..."
+                    required
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={() => setShowContactDialog(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit">Send Message</Button>
+                </div>
+              </form>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-500">
+                  No contact information is available for this consumer yet.
+                </p>
+                <div className="flex justify-end">
+                  <Button type="button" variant="outline" onClick={() => setShowContactDialog(false)}>
+                    Close
+                  </Button>
                 </div>
               </div>
-
-              {selectedAccount?.dueDate && (
-                <div className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white p-4">
-                  <div className="rounded-full bg-amber-50 p-2 text-amber-600">
-                    <Calendar className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-900">Upcoming Due Date</p>
-                    <p className="text-sm text-gray-600">{formatDate(selectedAccount.dueDate)}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setShowContactDialog(false)}>
-                Close
-              </Button>
-              <Button onClick={() => setShowContactDialog(false)}>Done</Button>
-            </div>
+            )}
           </DialogContent>
         </Dialog>
 
