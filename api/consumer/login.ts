@@ -118,17 +118,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           });
         }
 
-        return res.status(200).json({
-          message: 'Your account needs to be linked to an agency. Please complete registration.',
-          needsAgencyLink: true,
-          consumer: {
-            id: firstConsumer.id,
-            firstName: firstConsumer.firstName,
-            lastName: firstConsumer.lastName,
-            email: firstConsumer.email
-          },
-          suggestedAction: 'register'
-        });
+        // If consumer has a tenant_id, let the flow continue to fetch the tenant by ID
+        // Only return needsAgencyLink if truly no tenant_id exists
+        if (firstConsumer.tenantId) {
+          consumer = firstConsumer;
+          // Flow will continue and fetch tenant by ID below
+        } else {
+          return res.status(200).json({
+            message: 'Your account needs to be linked to an agency. Please complete registration.',
+            needsAgencyLink: true,
+            consumer: {
+              id: firstConsumer.id,
+              firstName: firstConsumer.firstName,
+              lastName: firstConsumer.lastName,
+              email: firstConsumer.email
+            },
+            suggestedAction: 'register'
+          });
+        }
       }
     }
 
