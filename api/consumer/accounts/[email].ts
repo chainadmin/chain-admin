@@ -1,7 +1,7 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb } from '../../_lib/db.js';
 import { consumers, accounts, tenants } from '../../../shared/schema.js';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
@@ -9,15 +9,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const email = req.query.email as string;
+    const email = (req.query.email as string | undefined) ?? '';
     const tenantSlug = req.query.tenantSlug as string;
 
-    if (!email) {
+    const sanitizedEmail = email.trim();
+
+    if (!sanitizedEmail) {
       return res.status(400).json({ error: 'Email is required' });
     }
 
     const db = getDb();
-    let tenantId = null;
+    let tenantId: string | null = null;
 
     // Get tenant if slug provided
     if (tenantSlug) {
@@ -34,9 +36,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Get consumer
+    const normalizedEmailMatch = sql`LOWER(${consumers.email}) = LOWER(${sanitizedEmail})`;
+
     const consumerQuery = tenantId
-      ? and(eq(consumers.email, email), eq(consumers.tenantId, tenantId))
-      : eq(consumers.email, email);
+      ? and(eq(consumers.tenantId, tenantId), normalizedEmailMatch)
+      : normalizedEmailMatch;
 
     const [consumer] = await db
       .select()
