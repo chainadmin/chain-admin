@@ -238,7 +238,37 @@ async function getTenantId(req: any, storage: IStorage): Promise<string | null> 
   if (req.user?.tenantId) {
     return req.user.tenantId;
   }
-  
+
+  // Replit / session-based auth - look up the platform user to determine tenant
+  const potentialAuthIds = new Set<string>();
+
+  const maybeAuthId = req.user?.id ?? req.user?.authId ?? req.user?.userId;
+  if (maybeAuthId) {
+    potentialAuthIds.add(String(maybeAuthId));
+  }
+
+  const sessionAuthId = req.session?.user?.id ?? req.session?.authId;
+  if (sessionAuthId) {
+    potentialAuthIds.add(String(sessionAuthId));
+  }
+
+  for (const authId of potentialAuthIds) {
+    const platformUser = await storage.getPlatformUserWithTenant(authId);
+    if (platformUser?.tenantId) {
+      req.user = {
+        ...(req.user ?? {}),
+        tenantId: platformUser.tenantId,
+        tenantSlug: req.user?.tenantSlug ?? platformUser.tenant?.slug,
+      };
+      return platformUser.tenantId;
+    }
+  }
+
+  const sessionTenantId = req.session?.tenantId;
+  if (sessionTenantId) {
+    return sessionTenantId;
+  }
+
   return null;
 }
 
@@ -2583,8 +2613,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Document routes
   app.get('/api/documents', authenticateUser, async (req: any, res) => {
     try {
-      const tenantId = req.user.tenantId;
-      
+      const tenantId = await getTenantId(req, storage);
+
       if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
       }
@@ -2599,7 +2629,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/documents', authenticateUser, async (req: any, res) => {
     try {
-      const tenantId = req.user.tenantId;
+      const tenantId = await getTenantId(req, storage);
 
       if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
@@ -2660,7 +2690,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete('/api/documents/:id', authenticateUser, async (req: any, res) => {
     try {
-      const tenantId = req.user?.tenantId;
+      const tenantId = await getTenantId(req, storage);
 
       if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
