@@ -38,7 +38,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
-import { FolderOpen, Folder, Plus, Upload, Settings, Trash2, MoreVertical, Eye, Edit, Mail, Phone, MapPin, Calendar } from "lucide-react";
+import { FolderOpen, Folder, Plus, Upload, Trash2, MoreVertical, Eye, Edit, Mail, Phone, MapPin, Calendar } from "lucide-react";
 
 export default function Accounts() {
   const [selectedFolderId, setSelectedFolderId] = useState<string>("all");
@@ -1039,53 +1039,97 @@ export default function Accounts() {
               <DialogTitle>Account Details</DialogTitle>
             </DialogHeader>
             {selectedAccount && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-500">Name</p>
-                    <p className="font-medium">
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="rounded-lg border border-gray-200 p-4">
+                    <p className="text-xs font-semibold uppercase text-gray-500">Consumer</p>
+                    <p className="mt-1 text-lg font-semibold text-gray-900">
                       {selectedAccount.consumer?.firstName} {selectedAccount.consumer?.lastName}
                     </p>
+                    <div className="mt-3 space-y-2 text-sm text-gray-600">
+                      <div className="flex items-center gap-2">
+                        <Mail className="h-4 w-4 text-gray-400" />
+                        <span>{selectedAccount.consumer?.email || '—'}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Phone className="h-4 w-4 text-gray-400" />
+                        <span>{selectedAccount.consumer?.phone || '—'}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Email</p>
-                    <p className="font-medium">{selectedAccount.consumer?.email}</p>
+                  <div className="rounded-lg border border-gray-200 p-4">
+                    <p className="text-xs font-semibold uppercase text-gray-500">Account</p>
+                    <div className="mt-3 space-y-3 text-sm text-gray-600">
+                      <div>
+                        <p className="text-xs text-gray-500">Account Number</p>
+                        <p className="font-medium text-gray-900">{selectedAccount.accountNumber || '—'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Creditor</p>
+                        <p className="font-medium text-gray-900">{selectedAccount.creditor}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Balance</p>
+                        <p className="font-medium text-gray-900">{formatCurrency(selectedAccount.balanceCents || 0)}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500">Status</span>
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(selectedAccount.status)}`}>
+                          {selectedAccount.status || 'Pending'}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-500">Phone</p>
-                    <p className="font-medium">{selectedAccount.consumer?.phone || '-'}</p>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="rounded-lg border border-gray-200 p-4">
+                    <p className="text-xs font-semibold uppercase text-gray-500">Address</p>
+                    <div className="mt-3 space-y-2 text-sm text-gray-600">
+                      <div className="flex items-start gap-2">
+                        <MapPin className="mt-0.5 h-4 w-4 text-gray-400" />
+                        <div>
+                          <p className="font-medium text-gray-900">{selectedAccount.consumer?.address || '—'}</p>
+                          {(selectedAccount.consumer?.city || selectedAccount.consumer?.state || selectedAccount.consumer?.zipCode) ? (
+                            <p>
+                              {[selectedAccount.consumer?.city, selectedAccount.consumer?.state].filter(Boolean).join(', ')}
+                              {selectedAccount.consumer?.zipCode ? ` ${selectedAccount.consumer?.zipCode}` : ''}
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Account Number</p>
-                    <p className="font-medium">{selectedAccount.accountNumber || '-'}</p>
+                  <div className="rounded-lg border border-gray-200 p-4">
+                    <p className="text-xs font-semibold uppercase text-gray-500">Key Dates</p>
+                    <div className="mt-3 space-y-3 text-sm text-gray-600">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-gray-400" />
+                        <span>
+                          {selectedAccount.consumer?.dateOfBirth
+                            ? formatDate(selectedAccount.consumer.dateOfBirth)
+                            : 'Date of birth not available'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-gray-400" />
+                        <span>
+                          {selectedAccount.dueDate ? `Due ${formatDate(selectedAccount.dueDate)}` : 'No due date set'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-gray-400" />
+                        <span>Created {formatDate(selectedAccount.createdAt)}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-500">Creditor</p>
-                    <p className="font-medium">{selectedAccount.creditor}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Balance</p>
-                    <p className="font-medium">{formatCurrency(selectedAccount.balanceCents || 0)}</p>
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-500">Status</p>
-                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(selectedAccount.status)}`}>
-                      {selectedAccount.status || 'Pending'}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Created</p>
-                    <p className="font-medium">{formatDate(selectedAccount.createdAt)}</p>
-                  </div>
+
+                <div className="rounded-lg border border-gray-200 p-4">
+                  <p className="text-xs font-semibold uppercase text-gray-500">Folder</p>
+                  <p className="mt-2 text-sm font-medium text-gray-900">
+                    {selectedAccount.folder?.name || 'No folder assigned'}
+                  </p>
                 </div>
               </div>
             )}
