@@ -23,9 +23,18 @@ interface AccountsTableProps {
   isLoading: boolean;
   showFolderColumn?: boolean;
   showDeleteButton?: boolean;
+  onView?: (account: any) => void;
+  onContact?: (account: any) => void;
 }
 
-export default function AccountsTable({ accounts, isLoading, showFolderColumn = false, showDeleteButton = false }: AccountsTableProps) {
+export default function AccountsTable({
+  accounts,
+  isLoading,
+  showFolderColumn = false,
+  showDeleteButton = false,
+  onView,
+  onContact,
+}: AccountsTableProps) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
@@ -281,6 +290,7 @@ export default function AccountsTable({ accounts, isLoading, showFolderColumn = 
                           size="sm"
                           className="rounded-lg border border-white/10 bg-white/10 px-3 text-xs font-semibold text-blue-100 hover:bg-white/20"
                           data-testid={`button-view-account-${account.id}`}
+                          onClick={() => onView?.(account)}
                         >
                           View
                         </Button>
@@ -289,6 +299,7 @@ export default function AccountsTable({ accounts, isLoading, showFolderColumn = 
                           size="sm"
                           className="rounded-lg border border-white/10 bg-white/10 px-3 text-xs font-semibold text-blue-100 hover:bg-white/20"
                           data-testid={`button-contact-account-${account.id}`}
+                          onClick={() => onContact?.(account)}
                         >
                           Contact
                         </Button>
