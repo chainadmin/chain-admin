@@ -70,6 +70,11 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
             email: consumers.email,
             phone: consumers.phone,
             folderId: consumers.folderId,
+            dateOfBirth: consumers.dateOfBirth,
+            address: consumers.address,
+            city: consumers.city,
+            state: consumers.state,
+            zipCode: consumers.zipCode,
           },
           folder: {
             id: folders.id,
