@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Building2, Mail, Lock, ArrowRight, ShieldCheck, UserCheck } from "lucide-react";
+import { getAgencySlugFromRequest } from "@shared/utils/subdomain";
 import PublicHeroLayout from "@/components/public-hero-layout";
 
 interface LoginForm {
@@ -39,15 +40,17 @@ export default function ConsumerLogin() {
   const loginMutation = useMutation({
     mutationFn: async (loginData: LoginForm) => {
       // Get tenant slug from URL path (e.g., /waypoint-solutions/consumer)
-      const pathname = window.location.pathname;
-      const pathSegments = pathname.split('/').filter(Boolean);
-      const tenantSlug = pathSegments[0]; // First segment is the tenant slug
-      
+      const slugFromUrl = getAgencySlugFromRequest(
+        window.location.hostname,
+        window.location.pathname
+      );
+      const tenantSlug = slugFromUrl || agencyContext?.slug;
+
       // Send email and dateOfBirth for consumer verification
       const response = await apiRequest("POST", "/api/consumer/login", {
         email: loginData.email,
         dateOfBirth: loginData.dateOfBirth,
-        tenantSlug: tenantSlug || agencyContext?.slug
+        tenantSlug
       });
       return response.json();
     },
