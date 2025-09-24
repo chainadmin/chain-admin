@@ -5,11 +5,42 @@ import { consumers, accounts, folders } from './_lib/schema.js';
 import { eq, and, sql, inArray } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 
-function safeJsonParse(body: string) {
+function safeJsonParse<T>(body: string): T | undefined {
   try {
-    return JSON.parse(body);
+    return JSON.parse(body) as T;
   } catch {
     return undefined;
+  }
+}
+
+function collectIdValues(value: unknown, collector: Set<string>) {
+  if (value === null || value === undefined) {
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach(item => collectIdValues(item, collector));
+    return;
+  }
+
+  if (typeof value === 'string') {
+    value
+      .split(',')
+      .map(segment => segment.trim())
+      .filter(Boolean)
+      .forEach(segment => {
+        if (segment && segment !== 'consumers') {
+          collector.add(segment);
+        }
+      });
+    return;
+  }
+
+  if (typeof value === 'number' || typeof value === 'bigint') {
+    const asString = String(value);
+    if (asString) {
+      collector.add(asString);
+    }
   }
 }
 
@@ -132,45 +163,43 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
     } else if (req.method === 'DELETE') {
       // Handle consumer deletion
       // Accept IDs from the body, query string, or URL path segment
-      const bodyData = typeof req.body === 'string' ? safeJsonParse(req.body) : req.body;
-      const { id, ids } = bodyData || {};
+      const bodyData = typeof req.body === 'string'
+        ? safeJsonParse<Record<string, unknown>>(req.body)
+        : req.body;
 
-      const collectedIds: string[] = [];
-      const addIds = (value: unknown) => {
-        if (!value) {
-          return;
-        }
+      const idCollector = new Set<string>();
 
-        if (Array.isArray(value)) {
-          value.forEach(addIds);
-          return;
-        }
-
-        if (typeof value === 'string') {
-          value
-            .split(',')
-            .map(segment => segment.trim())
-            .filter(Boolean)
-            .forEach(segment => {
-              if (segment && segment !== 'consumers' && !collectedIds.includes(segment)) {
-                collectedIds.push(segment);
-              }
-            });
-        }
-      };
-
-      addIds(req.query?.id as string | string[] | undefined);
-      addIds(req.query?.ids as string | string[] | undefined);
+      if (req.query) {
+        Object.entries(req.query).forEach(([key, value]) => {
+          if (
+            key === 'id' ||
+            key === 'ids' ||
+            key === 'ids[]' ||
+            key === 'consumerId' ||
+            key === 'consumerIds' ||
+            /(?:^|\b)ids?\[/.test(key)
+          ) {
+            collectIdValues(value, idCollector);
+          }
+        });
+      }
 
       const pathId = req.url?.split('?')[0]?.split('/')?.filter(Boolean).pop();
       if (pathId && pathId !== 'consumers') {
-        addIds(pathId);
+        collectIdValues(pathId, idCollector);
       }
 
-      addIds(id);
-      addIds(ids);
+      collectIdValues(bodyData, idCollector);
 
-      const consumerIds = collectedIds;
+      if (bodyData && typeof bodyData === 'object') {
+        const candidates = bodyData as Record<string, unknown>;
+        collectIdValues(candidates.id, idCollector);
+        collectIdValues(candidates.ids, idCollector);
+        collectIdValues(candidates.consumerId, idCollector);
+        collectIdValues(candidates.consumerIds, idCollector);
+      }
+
+      const consumerIds = Array.from(idCollector);
 
       if (consumerIds.length === 0) {
         res.status(400).json({ error: 'No valid consumer IDs provided' });
