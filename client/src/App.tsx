@@ -257,6 +257,7 @@ function Router() {
       <Route key="main-consumer-login" path="/consumer-login" component={ConsumerLogin} />,
       <Route key="main-agency-login" path="/agency-login" component={AgencyLogin} />,
       <Route key="main-agency-register" path="/agency-register" component={AgencyRegistration} />,
+      <Route key="main-consumer-register" path="/consumer-register/:tenantSlug?" component={ConsumerRegistration} />,
       <Route key="main-agency" path="/agency/:agencySlug" component={AgencyLanding} />,
       <Route key="main-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
       <Route key="main-terms" path="/terms-of-service" component={TermsOfService} />,
