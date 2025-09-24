@@ -5,6 +5,14 @@ import { consumers, accounts, folders } from './_lib/schema.js';
 import { eq, and, sql, inArray } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 
+function safeJsonParse(body: string) {
+  try {
+    return JSON.parse(body);
+  } catch {
+    return undefined;
+  }
+}
+
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -123,19 +131,47 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       res.status(200).json(updatedConsumer);
     } else if (req.method === 'DELETE') {
       // Handle consumer deletion
-      // Can accept either a single ID or an array of IDs
-      const { id, ids } = req.body || {};
-      
-      let consumerIds: string[] = [];
-      
-      if (id && typeof id === 'string') {
-        // Single deletion
-        consumerIds = [id];
-      } else if (ids && Array.isArray(ids) && ids.length > 0) {
-        // Bulk deletion
-        consumerIds = ids.filter(id => typeof id === 'string');
+      // Accept IDs from the body, query string, or URL path segment
+      const bodyData = typeof req.body === 'string' ? safeJsonParse(req.body) : req.body;
+      const { id, ids } = bodyData || {};
+
+      const collectedIds: string[] = [];
+      const addIds = (value: unknown) => {
+        if (!value) {
+          return;
+        }
+
+        if (Array.isArray(value)) {
+          value.forEach(addIds);
+          return;
+        }
+
+        if (typeof value === 'string') {
+          value
+            .split(',')
+            .map(segment => segment.trim())
+            .filter(Boolean)
+            .forEach(segment => {
+              if (segment && segment !== 'consumers' && !collectedIds.includes(segment)) {
+                collectedIds.push(segment);
+              }
+            });
+        }
+      };
+
+      addIds(req.query?.id as string | string[] | undefined);
+      addIds(req.query?.ids as string | string[] | undefined);
+
+      const pathId = req.url?.split('?')[0]?.split('/')?.filter(Boolean).pop();
+      if (pathId && pathId !== 'consumers') {
+        addIds(pathId);
       }
-      
+
+      addIds(id);
+      addIds(ids);
+
+      const consumerIds = collectedIds;
+
       if (consumerIds.length === 0) {
         res.status(400).json({ error: 'No valid consumer IDs provided' });
         return;
