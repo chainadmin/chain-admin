@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import AdminLayout from "@/components/admin-layout";
+import AccountsTable from "@/components/accounts-table";
 import ImportModal from "@/components/import-modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -46,6 +48,7 @@ export default function Accounts() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
+  const [showContactDialog, setShowContactDialog] = useState(false);
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
@@ -318,6 +321,11 @@ export default function Accounts() {
     setShowViewModal(true);
   };
 
+  const handleContact = (account: any) => {
+    setSelectedAccount(account);
+    setShowContactDialog(true);
+  };
+
   const handleDelete = (account: any) => {
     setSelectedAccount(account);
     setShowDeleteDialog(true);
@@ -477,6 +485,17 @@ export default function Accounts() {
           </div>
         </div>
 
+        {selectedFolderId === "all" && statusFilter === "all" && (
+          <div className="mb-6">
+            <AccountsTable
+              accounts={(accounts as any[]) || []}
+              isLoading={accountsLoading}
+              onView={handleView}
+              onContact={handleContact}
+            />
+          </div>
+        )}
+
         {/* Accounts Table */}
         <Card>
           <CardHeader>
@@ -626,6 +645,10 @@ export default function Accounts() {
                               <DropdownMenuItem onClick={() => handleView(account)}>
                                 <Eye className="h-4 w-4 mr-2" />
                                 View Details
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleContact(account)}>
+                                <Mail className="h-4 w-4 mr-2" />
+                                Contact
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleEdit(account)}>
                                 <Edit className="h-4 w-4 mr-2" />
@@ -1091,6 +1114,94 @@ export default function Accounts() {
             )}
             <div className="flex justify-end mt-4">
               <Button onClick={() => setShowViewModal(false)}>Close</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Contact Account Modal */}
+        <Dialog open={showContactDialog} onOpenChange={setShowContactDialog}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>
+                Contact {selectedAccount?.consumer?.firstName} {selectedAccount?.consumer?.lastName}
+              </DialogTitle>
+              <DialogDescription>
+                Reach out using the preferred channel for this consumer.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              {selectedAccount?.consumer?.email && (
+                <div className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white p-4">
+                  <div className="rounded-full bg-blue-50 p-2 text-blue-600">
+                    <Mail className="h-4 w-4" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium text-gray-900">Email</p>
+                    <p className="text-sm text-gray-600">{selectedAccount.consumer.email}</p>
+                  </div>
+                  <Button variant="outline" size="sm" asChild>
+                    <a href={`mailto:${selectedAccount.consumer.email}`}>Compose</a>
+                  </Button>
+                </div>
+              )}
+
+              {selectedAccount?.consumer?.phone && (
+                <div className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white p-4">
+                  <div className="rounded-full bg-emerald-50 p-2 text-emerald-600">
+                    <Phone className="h-4 w-4" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium text-gray-900">Phone</p>
+                    <p className="text-sm text-gray-600">{selectedAccount.consumer.phone}</p>
+                  </div>
+                  <Button variant="outline" size="sm" asChild>
+                    <a href={`tel:${selectedAccount.consumer.phone?.replace(/[^0-9+]/g, "")}`}>
+                      Call
+                    </a>
+                  </Button>
+                </div>
+              )}
+
+              <div className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white p-4">
+                <div className="rounded-full bg-purple-50 p-2 text-purple-600">
+                  <MapPin className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="font-medium text-gray-900">Mailing Address</p>
+                  <p className="text-sm text-gray-600">
+                    {selectedAccount?.consumer?.address ? (
+                      <>
+                        {selectedAccount.consumer.address}
+                        <br />
+                        {[selectedAccount.consumer.city, selectedAccount.consumer.state]
+                          .filter(Boolean)
+                          .join(", ")}
+                        {selectedAccount.consumer.zipCode ? ` ${selectedAccount.consumer.zipCode}` : ""}
+                      </>
+                    ) : (
+                      "No mailing address on file."
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              {selectedAccount?.dueDate && (
+                <div className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white p-4">
+                  <div className="rounded-full bg-amber-50 p-2 text-amber-600">
+                    <Calendar className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900">Upcoming Due Date</p>
+                    <p className="text-sm text-gray-600">{formatDate(selectedAccount.dueDate)}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowContactDialog(false)}>
+                Close
+              </Button>
+              <Button onClick={() => setShowContactDialog(false)}>Done</Button>
             </div>
           </DialogContent>
         </Dialog>
