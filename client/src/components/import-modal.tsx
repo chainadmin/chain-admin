@@ -91,17 +91,26 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
 
         // Define standard column mappings
         const standardConsumerFields = [
-          'consumer_first_name', 'first_name', 
-          'consumer_last_name', 'last_name', 
-          'consumer_email', 'email', 
+          'consumer_first_name', 'first_name',
+          'consumer_last_name', 'last_name',
+          'consumer_email', 'email',
           'consumer_phone', 'phone',
           'date_of_birth', 'dob', 'dateofbirth', 'consumer_dob', 'consumer_date_of_birth',
           'address', 'consumer_address',
           'city', 'consumer_city',
           'state', 'consumer_state',
-          'zip_code', 'zipcode', 'zip', 'consumer_zip', 'consumer_zip_code'
+          'zip_code', 'zipcode', 'zip', 'consumer_zip', 'consumer_zip_code',
+          'ssn_last4', 'ssn', 'consumer_ssn', 'consumer_ssn_last4'
         ];
         const standardAccountFields = ['account_number', 'account', 'creditor', 'balance', 'due_date'];
+
+        const normalizeLast4 = (value: string) => {
+          if (!value) {
+            return '';
+          }
+          const digits = value.replace(/[^0-9]/g, '').slice(-4);
+          return digits.length === 4 ? digits : '';
+        };
         
         for (let i = 1; i < lines.length; i++) {
           const values = lines[i].split(',').map(v => v.trim());
@@ -135,6 +144,10 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
               }
             });
 
+            const ssnLast4 = normalizeLast4(
+              row.ssn_last4 || row.consumer_ssn_last4 || row.consumer_ssn || row.ssn || ''
+            );
+
             consumers.set(consumerKey, {
               firstName: row.consumer_first_name || row.first_name || '',
               lastName: row.consumer_last_name || row.last_name || '',
@@ -145,6 +158,7 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
               city: cityValue,
               state: stateValue,
               zipCode: zipValue,
+              ssnLast4: ssnLast4 || undefined,
               additionalData: additionalConsumerData,
             });
           }

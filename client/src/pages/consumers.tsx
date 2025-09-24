@@ -43,6 +43,7 @@ export default function Consumers() {
     city: "",
     state: "",
     zipCode: "",
+    ssnLast4: "",
   });
   const [contactForm, setContactForm] = useState({
     method: "email",
@@ -51,6 +52,8 @@ export default function Consumers() {
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const normalizeLast4 = (value: string) => value.replace(/[^0-9]/g, "").slice(-4);
 
   const { data: consumers, isLoading } = useQuery({
     queryKey: ["/api/consumers"],
@@ -111,6 +114,7 @@ export default function Consumers() {
       city: consumer.city || "",
       state: consumer.state || "",
       zipCode: consumer.zipCode || "",
+      ssnLast4: consumer.ssnLast4 || "",
     });
     setShowEditDialog(true);
   };
@@ -137,9 +141,26 @@ export default function Consumers() {
   const handleUpdateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedConsumer) {
+      const trimmed = editForm.ssnLast4.trim();
+      const normalizedLast4 = normalizeLast4(trimmed);
+
+      if (trimmed && normalizedLast4.length !== 4) {
+        toast({
+          title: "Invalid SSN",
+          description: "SSN last four must contain exactly four digits.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const payload: any = {
+        ...editForm,
+        ssnLast4: trimmed ? normalizedLast4 : null,
+      };
+
       updateConsumerMutation.mutate({
         id: selectedConsumer.id,
-        data: editForm,
+        data: payload,
       });
     }
   };
@@ -289,6 +310,12 @@ export default function Consumers() {
                     </p>
                   </div>
                 )}
+                {selectedConsumer.ssnLast4 && (
+                  <div>
+                    <Label className="text-sm text-gray-500">SSN (last 4)</Label>
+                    <p className="font-medium">{`•••• ${selectedConsumer.ssnLast4}`}</p>
+                  </div>
+                )}
                 {(selectedConsumer.address || selectedConsumer.city || selectedConsumer.state || selectedConsumer.zipCode) && (
                   <div className="col-span-2">
                     <Label className="text-sm text-gray-500">Address</Label>
@@ -382,6 +409,19 @@ export default function Consumers() {
                   value={editForm.dateOfBirth}
                   onChange={(e) => setEditForm({ ...editForm, dateOfBirth: e.target.value })}
                 />
+              </div>
+              <div>
+                <Label htmlFor="ssnLast4">SSN Last 4</Label>
+                <Input
+                  id="ssnLast4"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={4}
+                  value={editForm.ssnLast4}
+                  onChange={(e) => setEditForm({ ...editForm, ssnLast4: e.target.value })}
+                  placeholder="1234"
+                />
+                <p className="mt-1 text-xs text-gray-500">Digits only. Stored securely.</p>
               </div>
               <div>
                 <Label htmlFor="address">Address</Label>

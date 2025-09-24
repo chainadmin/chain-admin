@@ -42,7 +42,7 @@ export default function ImportData() {
                 You can include any additional columns with custom data fields. Examples:
               </p>
               <ul>
-                <li><strong>ssn</strong> - Social Security Number</li>
+                <li><strong>ssn_last4</strong> - Last four digits of the Social Security Number</li>
                 <li><strong>date_of_birth</strong> - Date of birth</li>
                 <li><strong>employer</strong> - Current employer</li>
                 <li><strong>original_creditor</strong> - Original creditor name</li>

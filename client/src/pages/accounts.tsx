@@ -81,6 +81,7 @@ export default function Accounts() {
     city: "",
     state: "",
     zipCode: "",
+    ssnLast4: "",
   });
   const [composeEmailForm, setComposeEmailForm] = useState({
     templateId: "",
@@ -101,10 +102,15 @@ export default function Accounts() {
     city: "",
     state: "",
     zipCode: "",
+    ssnLast4: "",
   });
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const normalizeLast4 = (value: string) => {
+    return value.replace(/[^0-9]/g, '').slice(-4);
+  };
   
   const { data: accounts, isLoading: accountsLoading } = useQuery({
     queryKey: ["/api/accounts"],
@@ -144,6 +150,7 @@ export default function Accounts() {
         city: "",
         state: "",
         zipCode: "",
+        ssnLast4: "",
       });
       toast({
         title: "Success",
@@ -170,6 +177,20 @@ export default function Accounts() {
         ? Math.round(parseFloat(balanceValue) * 100)
         : undefined;
 
+      let ssnLast4: string | null | undefined = undefined;
+      if (typeof data.ssnLast4 === "string") {
+        const trimmed = data.ssnLast4.trim();
+        if (trimmed.length === 0) {
+          ssnLast4 = null;
+        } else {
+          const normalized = normalizeLast4(trimmed);
+          if (normalized.length !== 4) {
+            return Promise.reject(new Error("SSN last four must contain exactly four digits."));
+          }
+          ssnLast4 = normalized;
+        }
+      }
+
       return apiRequest("PATCH", `/api/accounts/${selectedAccount.id}`, {
         firstName: data.firstName,
         lastName: data.lastName,
@@ -184,6 +205,7 @@ export default function Accounts() {
         city: data.city || null,
         state: data.state || null,
         zipCode: data.zipCode || null,
+        ssnLast4,
       });
     },
     onSuccess: (updatedAccount: any) => {
@@ -321,7 +343,17 @@ export default function Accounts() {
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const balanceCents = Math.round(parseFloat(createForm.balance || "0") * 100);
-    
+
+    const normalizedLast4 = normalizeLast4(createForm.ssnLast4 || "");
+    if (createForm.ssnLast4.trim() && normalizedLast4.length !== 4) {
+      toast({
+        title: "Invalid SSN",
+        description: "SSN last four must contain exactly four digits.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     createAccountMutation.mutate({
       firstName: createForm.firstName,
       lastName: createForm.lastName,
@@ -336,6 +368,7 @@ export default function Accounts() {
       city: createForm.city || null,
       state: createForm.state || null,
       zipCode: createForm.zipCode || null,
+      ssnLast4: normalizedLast4 || null,
     });
   };
 
@@ -355,6 +388,7 @@ export default function Accounts() {
       city: account.consumer?.city || "",
       state: account.consumer?.state || "",
       zipCode: account.consumer?.zipCode || "",
+      ssnLast4: account.consumer?.ssnLast4 || "",
     });
     setShowEditModal(true);
   };
@@ -922,6 +956,23 @@ export default function Accounts() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="ssnLast4">SSN Last 4</Label>
+                  <Input
+                    id="ssnLast4"
+                    maxLength={4}
+                    pattern="[0-9]*"
+                    inputMode="numeric"
+                    data-testid="input-ssn-last4"
+                    value={createForm.ssnLast4}
+                    onChange={(e) => setCreateForm({ ...createForm, ssnLast4: e.target.value })}
+                    placeholder="1234"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">Digits only. Stored securely.</p>
+                </div>
+              </div>
+
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <Label htmlFor="city">City</Label>
@@ -1113,6 +1164,23 @@ export default function Accounts() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="edit-ssnLast4">SSN Last 4</Label>
+                  <Input
+                    id="edit-ssnLast4"
+                    maxLength={4}
+                    pattern="[0-9]*"
+                    inputMode="numeric"
+                    data-testid="input-edit-ssn-last4"
+                    value={editForm.ssnLast4}
+                    onChange={(e) => setEditForm({ ...editForm, ssnLast4: e.target.value })}
+                    placeholder="1234"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">Digits only. Stored securely.</p>
+                </div>
+              </div>
+
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <Label htmlFor="edit-city">City</Label>
@@ -1189,7 +1257,18 @@ export default function Accounts() {
                     <p className="font-medium">{selectedAccount.accountNumber || '-'}</p>
                   </div>
                 </div>
-                
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-500">SSN (last 4)</p>
+                    <p className="font-medium">
+                      {selectedAccount.consumer?.ssnLast4
+                        ? `•••• ${selectedAccount.consumer.ssnLast4}`
+                        : '-'}
+                    </p>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-gray-500">Creditor</p>

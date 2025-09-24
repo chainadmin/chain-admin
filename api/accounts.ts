@@ -70,6 +70,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
             email: consumers.email,
             phone: consumers.phone,
             folderId: consumers.folderId,
+            ssnLast4: consumers.ssnLast4,
           },
           folder: {
             id: folders.id,
@@ -90,8 +91,16 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         firstName, lastName, email, phone,
         accountNumber, creditor, balanceCents, folderId,
         dateOfBirth, address, city, state, zipCode,
-        additionalData, dueDate
+        additionalData, dueDate, ssnLast4,
       } = req.body;
+
+      const normalizedSsnLast4 = typeof ssnLast4 === 'string'
+        ? ssnLast4.replace(/\D/g, '').slice(-4)
+        : null;
+      if (ssnLast4 && (!normalizedSsnLast4 || normalizedSsnLast4.length !== 4)) {
+        res.status(400).json({ error: 'SSN last 4 must contain exactly four digits' });
+        return;
+      }
 
       if (!firstName || !lastName || !email || !creditor || balanceCents === undefined || !dateOfBirth) {
         res.status(400).json({ error: 'Missing required fields' });
@@ -141,6 +150,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
             lastName,
             email,
             phone: phone || null,
+            ssnLast4: normalizedSsnLast4 || null,
             dateOfBirth: dateOfBirth,
             address: address || null,
             city: city || null,
@@ -172,6 +182,11 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         }
         if (typeof phone === 'string' && phone.trim() !== '') {
           updateData.phone = phone;
+        }
+        if (ssnLast4 !== undefined) {
+          updateData.ssnLast4 = normalizedSsnLast4 && normalizedSsnLast4.length === 4
+            ? normalizedSsnLast4
+            : null;
         }
 
         if (Object.keys(updateData).length > 0) {
@@ -261,7 +276,16 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         status,
         additionalData,
         consumerAdditionalData,
+        ssnLast4,
       } = req.body || {};
+
+      const normalizedSsnLast4 = typeof ssnLast4 === 'string'
+        ? ssnLast4.replace(/\D/g, '').slice(-4)
+        : null;
+      if (ssnLast4 && (!normalizedSsnLast4 || normalizedSsnLast4.length !== 4)) {
+        res.status(400).json({ error: 'SSN last 4 must contain exactly four digits' });
+        return;
+      }
 
       const accountUpdates: Record<string, any> = {};
       if (accountNumber !== undefined) accountUpdates.accountNumber = accountNumber ?? '';
@@ -284,6 +308,11 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       if (state !== undefined) consumerUpdates.state = state;
       if (zipCode !== undefined) consumerUpdates.zipCode = zipCode;
       if (consumerAdditionalData !== undefined) consumerUpdates.additionalData = consumerAdditionalData;
+      if (ssnLast4 !== undefined) {
+        consumerUpdates.ssnLast4 = normalizedSsnLast4 && normalizedSsnLast4.length === 4
+          ? normalizedSsnLast4
+          : null;
+      }
 
       // Validate that provided folder belongs to tenant
       if (folderId) {
@@ -346,6 +375,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
             city: consumers.city,
             state: consumers.state,
             zipCode: consumers.zipCode,
+            ssnLast4: consumers.ssnLast4,
             additionalData: consumers.additionalData,
           },
           folder: {

@@ -41,6 +41,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
           email: consumers.email,
           phone: consumers.phone,
           dateOfBirth: consumers.dateOfBirth,
+          ssnLast4: consumers.ssnLast4,
           address: consumers.address,
           city: consumers.city,
           state: consumers.state,
@@ -90,8 +91,27 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         return;
       }
       
-      const updates = req.body;
-      
+      const updates = req.body ?? {};
+      const updateData: any = { ...updates };
+
+      if (Object.prototype.hasOwnProperty.call(updates, 'ssnLast4')) {
+        const rawValue = updates.ssnLast4;
+
+        if (rawValue === null || (typeof rawValue === 'string' && rawValue.trim() === '')) {
+          updateData.ssnLast4 = null;
+        } else if (typeof rawValue === 'string') {
+          const normalized = rawValue.replace(/\D/g, '').slice(-4);
+          if (normalized.length !== 4) {
+            res.status(400).json({ error: 'SSN last 4 must contain exactly four digits' });
+            return;
+          }
+          updateData.ssnLast4 = normalized;
+        } else {
+          res.status(400).json({ error: 'SSN last 4 must be provided as a string or null' });
+          return;
+        }
+      }
+
       // Verify consumer belongs to tenant
       const [existingConsumer] = await db
         .select()
@@ -110,7 +130,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       // Update the consumer
       const [updatedConsumer] = await db
         .update(consumers)
-        .set(updates)
+        .set(updateData)
         .where(and(
           eq(consumers.id, consumerId),
           eq(consumers.tenantId, tenantId)

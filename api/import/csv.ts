@@ -38,6 +38,14 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
 
     const { consumers: csvConsumers, accounts: csvAccounts, folderId } = req.body;
 
+    const normalizeLast4 = (value: unknown) => {
+      if (typeof value !== 'string') {
+        return null;
+      }
+      const digits = value.replace(/\D/g, '').slice(-4);
+      return digits.length === 4 ? digits : null;
+    };
+
     if (!csvConsumers || !csvAccounts) {
       res.status(400).json({ error: 'Missing consumer or account data' });
       return;
@@ -95,6 +103,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
             lastName: csvConsumer.lastName,
             email: csvConsumer.email,
             phone: csvConsumer.phone || null,
+            ssnLast4: normalizeLast4(csvConsumer.ssnLast4),
             dateOfBirth: csvConsumer.dateOfBirth,
             address: csvConsumer.address || null,
             city: csvConsumer.city || null,
@@ -104,9 +113,17 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
             isRegistered: false,
           })
           .returning();
-        
+
         existingConsumer = newConsumer;
         importedConsumers.push(newConsumer);
+      } else if (csvConsumer.ssnLast4 !== undefined) {
+        await db
+          .update(consumers)
+          .set({ ssnLast4: normalizeLast4(csvConsumer.ssnLast4) })
+          .where(and(
+            eq(consumers.id, existingConsumer.id),
+            eq(consumers.tenantId, tenantId)
+          ));
       }
 
       // Find accounts for this consumer
