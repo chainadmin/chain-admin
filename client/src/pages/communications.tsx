@@ -349,8 +349,8 @@ export default function Communications() {
   });
 
   const toggleAutomationMutation = useMutation({
-    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) => 
-      apiRequest(`/api/automations/${id}`, "PUT", { isActive }),
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      apiRequest("PUT", `/api/automations/${id}`, { isActive }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/automations"] });
       toast({

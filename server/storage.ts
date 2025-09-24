@@ -79,7 +79,7 @@ import {
   type InsertInvoice,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, inArray } from "drizzle-orm";
 
 export interface IStorage {
   // User operations (mandatory for Replit Auth)
@@ -235,6 +235,7 @@ export interface IStorage {
   // Account management operations
   createAccount(account: InsertAccount): Promise<Account>;
   deleteAccount(id: string, tenantId: string): Promise<void>;
+  bulkDeleteAccounts(ids: string[], tenantId: string): Promise<number>;
   
   // Notification operations
   createNotification(notification: InsertConsumerNotification): Promise<ConsumerNotification>;
@@ -1234,6 +1235,27 @@ export class DatabaseStorage implements IStorage {
   async deleteAccount(id: string, tenantId: string): Promise<void> {
     await db.delete(accounts)
       .where(and(eq(accounts.id, id), eq(accounts.tenantId, tenantId)));
+  }
+
+  async bulkDeleteAccounts(ids: string[], tenantId: string): Promise<number> {
+    if (ids.length === 0) {
+      return 0;
+    }
+
+    const accountsToDelete = await db
+      .select({ id: accounts.id })
+      .from(accounts)
+      .where(and(inArray(accounts.id, ids), eq(accounts.tenantId, tenantId)));
+
+    if (accountsToDelete.length === 0) {
+      return 0;
+    }
+
+    await db
+      .delete(accounts)
+      .where(and(inArray(accounts.id, ids), eq(accounts.tenantId, tenantId)));
+
+    return accountsToDelete.length;
   }
 
 
