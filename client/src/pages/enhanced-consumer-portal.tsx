@@ -24,6 +24,11 @@ export default function EnhancedConsumerPortal() {
 
   const resolvedTenantSlug = tenantSlug ?? agencySlug;
   const encodedEmail = email ? encodeURIComponent(email) : "";
+  const encodedTenantSlug = resolvedTenantSlug ? encodeURIComponent(resolvedTenantSlug) : "";
+  const tenantQuery = encodedTenantSlug ? `?tenantSlug=${encodedTenantSlug}` : "";
+  const accountsUrl = encodedEmail && encodedTenantSlug ? `/api/consumer/accounts/${encodedEmail}${tenantQuery}` : "";
+  const notificationsUrl = encodedEmail && encodedTenantSlug ? `/api/consumer-notifications/${encodedEmail}/${encodedTenantSlug}` : "";
+  const documentsUrl = encodedEmail && encodedTenantSlug ? `/api/consumer/documents/${encodedEmail}${tenantQuery}` : "";
 
   const [callbackForm, setCallbackForm] = useState({
     requestType: "callback",
@@ -37,27 +42,32 @@ export default function EnhancedConsumerPortal() {
   const [showCallbackModal, setShowCallbackModal] = useState(false);
 
   // Fetch consumer data
-  const { data, isLoading, error } = useQuery({
-    queryKey: [`/api/consumer/accounts/${encodedEmail}?tenantSlug=${resolvedTenantSlug ?? ""}`],
-    enabled: !!(resolvedTenantSlug && email),
+  const { data, isLoading, error } = useQuery<any>({
+    queryKey: accountsUrl ? [accountsUrl] : ['enhanced-consumer-accounts'],
+    enabled: !!accountsUrl,
   });
 
   // Fetch notifications
-  const { data: notifications } = useQuery({
-    queryKey: [`/api/consumer-notifications/${encodedEmail}/${resolvedTenantSlug ?? ""}`],
-    enabled: !!(resolvedTenantSlug && email),
+  const { data: notifications } = useQuery<any>({
+    queryKey: notificationsUrl ? [notificationsUrl] : ['enhanced-consumer-notifications'],
+    enabled: !!notificationsUrl,
   });
 
   // Fetch documents
-  const { data: documents } = useQuery({
-    queryKey: [`/api/consumer/documents/${encodedEmail}?tenantSlug=${resolvedTenantSlug ?? ""}`],
-    enabled: !!(resolvedTenantSlug && email),
+  const { data: documents } = useQuery<any>({
+    queryKey: documentsUrl ? [documentsUrl] : ['enhanced-consumer-documents'],
+    enabled: !!documentsUrl,
   });
 
   // Fetch payment arrangements
-  const { data: arrangements } = useQuery({
-    queryKey: [`/api/consumer/arrangements/${encodedEmail}?tenantSlug=${resolvedTenantSlug ?? ""}&balance=${(data as any)?.accounts?.reduce((sum: number, acc: any) => sum + (acc.balanceCents || 0), 0) || 0}`],
-    enabled: !!(data as any)?.accounts && !!(resolvedTenantSlug && email),
+  const totalBalanceForQuery = (data as any)?.accounts?.reduce((sum: number, acc: any) => sum + (acc.balanceCents || 0), 0) || 0;
+  const arrangementsBaseUrl = encodedEmail && encodedTenantSlug ? `/api/consumer/arrangements/${encodedEmail}${tenantQuery}` : "";
+
+  const { data: arrangements } = useQuery<any>({
+    queryKey: arrangementsBaseUrl && (data as any)?.accounts ? [
+      `${arrangementsBaseUrl}&balance=${totalBalanceForQuery}`
+    ] : ['enhanced-consumer-arrangements'],
+    enabled: !!((data as any)?.accounts && arrangementsBaseUrl),
   });
 
   // Submit callback request mutation
