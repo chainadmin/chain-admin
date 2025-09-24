@@ -61,19 +61,15 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
           isPublic: documents.isPublic,
           createdAt: documents.createdAt,
           updatedAt: documents.updatedAt,
-          account: {
-            id: accounts.id,
-            accountNumber: accounts.accountNumber,
-            creditor: accounts.creditor,
-            consumerId: accounts.consumerId,
-            consumer: {
-              id: consumers.id,
-              firstName: consumers.firstName,
-              lastName: consumers.lastName,
-              email: consumers.email,
-              phone: consumers.phone,
-            },
-          },
+          linkedAccountId: accounts.id,
+          linkedAccountNumber: accounts.accountNumber,
+          linkedAccountCreditor: accounts.creditor,
+          linkedAccountConsumerId: accounts.consumerId,
+          linkedConsumerId: consumers.id,
+          linkedConsumerFirstName: consumers.firstName,
+          linkedConsumerLastName: consumers.lastName,
+          linkedConsumerEmail: consumers.email,
+          linkedConsumerPhone: consumers.phone,
         })
         .from(documents)
         .leftJoin(accounts, eq(documents.accountId, accounts.id))
@@ -90,21 +86,43 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       }
 
       const formattedDocument = (() => {
-        const { account, ...rest } = document;
+        const {
+          linkedAccountId,
+          linkedAccountNumber,
+          linkedAccountCreditor,
+          linkedAccountConsumerId,
+          linkedConsumerId,
+          linkedConsumerFirstName,
+          linkedConsumerLastName,
+          linkedConsumerEmail,
+          linkedConsumerPhone,
+          ...rest
+        } = document;
 
-        if (!account?.id) {
+        if (!linkedAccountId) {
           return {
             ...rest,
             account: null,
           };
         }
 
-        const consumer = account.consumer?.id ? account.consumer : null;
+        const consumer = linkedConsumerId
+          ? {
+              id: linkedConsumerId,
+              firstName: linkedConsumerFirstName,
+              lastName: linkedConsumerLastName,
+              email: linkedConsumerEmail,
+              phone: linkedConsumerPhone,
+            }
+          : null;
 
         return {
           ...rest,
           account: {
-            ...account,
+            id: linkedAccountId,
+            accountNumber: linkedAccountNumber,
+            creditor: linkedAccountCreditor,
+            consumerId: linkedAccountConsumerId,
             consumer,
           },
         };
