@@ -4,6 +4,7 @@ import { withAuth, AuthenticatedRequest, JWT_SECRET } from './_lib/auth.js';
 import { emailTemplates } from './_lib/schema.js';
 import { eq, and, desc } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
+import { resolveResourceId } from './_lib/request-helpers.js';
 
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') {
@@ -62,8 +63,8 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
 
       res.status(201).json(newTemplate);
     } else if (req.method === 'DELETE') {
-      // Delete an email template - expects /api/email-templates?id=<templateId>
-      const templateId = req.query.id as string;
+      // Delete an email template - accepts /api/email-templates?id=<templateId> or /api/email-templates/<templateId>
+      const templateId = resolveResourceId(req);
 
       if (!templateId) {
         res.status(400).json({ error: 'Template ID is required' });

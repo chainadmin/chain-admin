@@ -4,6 +4,7 @@ import { withAuth, AuthenticatedRequest, JWT_SECRET } from './_lib/auth.js';
 import { folders, accounts } from './_lib/schema.js';
 import { eq, and } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
+import { resolveResourceId } from './_lib/request-helpers.js';
 
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') {
@@ -61,8 +62,8 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
 
       res.status(201).json(newFolder);
     } else if (req.method === 'DELETE') {
-      // Delete a folder - expects /api/folders?id=<folderId>
-      const folderId = req.query.id as string;
+      // Delete a folder - accepts /api/folders?id=<folderId> or /api/folders/<folderId>
+      const folderId = resolveResourceId(req);
 
       if (!folderId) {
         res.status(400).json({ error: 'Folder ID is required' });

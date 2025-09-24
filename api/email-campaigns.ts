@@ -4,6 +4,7 @@ import { withAuth, AuthenticatedRequest, JWT_SECRET } from './_lib/auth.js';
 import { emailCampaigns, emailTemplates, consumers, emailTracking } from './_lib/schema.js';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
+import { resolveResourceId } from './_lib/request-helpers.js';
 
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') {
@@ -155,7 +156,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       res.status(200).json(updatedCampaign);
     } else if (req.method === 'DELETE') {
       // Delete a campaign
-      const campaignId = req.query.id as string;
+      const campaignId = resolveResourceId(req);
 
       if (!campaignId) {
         res.status(400).json({ error: 'Campaign ID is required' });

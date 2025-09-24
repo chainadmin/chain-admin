@@ -4,6 +4,7 @@ import { withAuth, AuthenticatedRequest, JWT_SECRET } from './_lib/auth.js';
 import { callbackRequests, consumers } from './_lib/schema.js';
 import { eq, and, desc } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
+import { resolveResourceId } from './_lib/request-helpers.js';
 
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') {
@@ -64,8 +65,8 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
 
       res.status(200).json(requests);
     } else if (req.method === 'PATCH') {
-      // Update callback request - expects /api/callback-requests?id=<requestId>
-      const requestId = req.query.id as string;
+      // Update callback request - accepts /api/callback-requests?id=<requestId> or /api/callback-requests/<requestId>
+      const requestId = resolveResourceId(req);
       const updates = req.body;
 
       if (!requestId) {

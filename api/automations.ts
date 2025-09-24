@@ -4,6 +4,7 @@ import { withAuth, AuthenticatedRequest, JWT_SECRET } from './_lib/auth.js';
 import { communicationAutomations, automationExecutions, emailTemplates, smsTemplates } from './_lib/schema.js';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
+import { resolveResourceId } from './_lib/request-helpers.js';
 
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') {
@@ -153,7 +154,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       res.status(201).json(newAutomation);
     } else if (req.method === 'PUT') {
       // Update automation (activate/deactivate or modify settings)
-      const automationId = req.query.id as string;
+      const automationId = resolveResourceId(req);
       const updates = req.body;
 
       if (!automationId) {
@@ -189,7 +190,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       res.status(200).json(updatedAutomation);
     } else if (req.method === 'DELETE') {
       // Delete an automation
-      const automationId = req.query.id as string;
+      const automationId = resolveResourceId(req);
 
       if (!automationId) {
         res.status(400).json({ error: 'Automation ID is required' });

@@ -4,6 +4,7 @@ import { withAuth, AuthenticatedRequest, JWT_SECRET } from './_lib/auth.js';
 import { accounts, consumers, folders } from './_lib/schema.js';
 import { eq, and } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
+import { resolveResourceId } from './_lib/request-helpers.js';
 
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') {
@@ -151,8 +152,8 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
 
       res.status(201).json(newAccount);
     } else if (req.method === 'DELETE') {
-      // Delete an account - expects /api/accounts?id=<accountId>
-      const accountId = req.query.id as string;
+      // Delete an account - accepts /api/accounts?id=<accountId> or /api/accounts/<accountId>
+      const accountId = resolveResourceId(req);
 
       if (!accountId) {
         res.status(400).json({ error: 'Account ID is required' });
