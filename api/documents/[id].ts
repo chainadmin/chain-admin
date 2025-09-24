@@ -1,7 +1,7 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import jwt from 'jsonwebtoken';
 import { getDb } from '../_lib/db.js';
-import { documents } from '../_lib/schema.js';
+import { accounts, consumers, documents } from '../_lib/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { JWT_SECRET } from '../_lib/auth.js';
 
@@ -46,10 +46,38 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
     }
 
     if (req.method === 'GET') {
-      // Get a specific document
+      // Get a specific document including related account & consumer info if available
       const [document] = await db
-        .select()
+        .select({
+          id: documents.id,
+          tenantId: documents.tenantId,
+          accountId: documents.accountId,
+          title: documents.title,
+          description: documents.description,
+          fileName: documents.fileName,
+          fileUrl: documents.fileUrl,
+          fileSize: documents.fileSize,
+          mimeType: documents.mimeType,
+          isPublic: documents.isPublic,
+          createdAt: documents.createdAt,
+          updatedAt: documents.updatedAt,
+          account: {
+            id: accounts.id,
+            accountNumber: accounts.accountNumber,
+            creditor: accounts.creditor,
+            consumerId: accounts.consumerId,
+            consumer: {
+              id: consumers.id,
+              firstName: consumers.firstName,
+              lastName: consumers.lastName,
+              email: consumers.email,
+              phone: consumers.phone,
+            },
+          },
+        })
         .from(documents)
+        .leftJoin(accounts, eq(documents.accountId, accounts.id))
+        .leftJoin(consumers, eq(accounts.consumerId, consumers.id))
         .where(and(
           eq(documents.id, id),
           eq(documents.tenantId, tenantId)
@@ -61,7 +89,28 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         return;
       }
 
-      res.status(200).json(document);
+      const formattedDocument = (() => {
+        const { account, ...rest } = document;
+
+        if (!account?.id) {
+          return {
+            ...rest,
+            account: null,
+          };
+        }
+
+        const consumer = account.consumer?.id ? account.consumer : null;
+
+        return {
+          ...rest,
+          account: {
+            ...account,
+            consumer,
+          },
+        };
+      })();
+
+      res.status(200).json(formattedDocument);
     } else if (req.method === 'DELETE') {
       // Check if document belongs to tenant
       const [document] = await db
@@ -81,7 +130,10 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       // Delete the document
       await db
         .delete(documents)
-        .where(eq(documents.id, id));
+        .where(and(
+          eq(documents.id, id),
+          eq(documents.tenantId, tenantId)
+        ));
 
       res.status(200).json({ success: true });
     } else {
