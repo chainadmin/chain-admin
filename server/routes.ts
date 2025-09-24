@@ -2260,10 +2260,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Consumer notifications route
-  app.get('/api/consumer-notifications/:email/:tenantSlug', async (req, res) => {
+  app.get('/api/consumer-notifications/by-consumer/:tenantSlug/:email', async (req, res) => {
     try {
       const { email, tenantSlug } = req.params;
-      
+
       const consumer = await storage.getConsumerByEmailAndTenant(email, tenantSlug);
       if (!consumer) {
         return res.status(404).json({ message: "Consumer not found" });
@@ -2278,7 +2278,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Mark notification as read
-  app.patch('/api/consumer-notifications/:id/read', async (req, res) => {
+  app.patch('/api/consumer-notifications/read/:id', async (req, res) => {
     try {
       const { id } = req.params;
       await storage.markNotificationRead(id);

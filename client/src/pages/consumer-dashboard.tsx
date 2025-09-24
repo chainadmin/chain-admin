@@ -32,6 +32,12 @@ export default function ConsumerDashboard() {
   const [showCallbackModal, setShowCallbackModal] = useState(false);
   const [consumerSession, setConsumerSession] = useState<any>(null);
 
+  const encodedEmail = consumerSession?.email ? encodeURIComponent(consumerSession.email) : '';
+  const tenantSlug = consumerSession?.tenantSlug ?? '';
+  const notificationsPath = tenantSlug && encodedEmail
+    ? `/api/consumer-notifications/by-consumer/${tenantSlug}/${encodedEmail}`
+    : '';
+
   // Get consumer session data
   useEffect(() => {
     const sessionData = localStorage.getItem("consumerSession");
@@ -89,8 +95,8 @@ export default function ConsumerDashboard() {
 
   // Fetch notifications
   const { data: notifications } = useQuery({
-    queryKey: [`/api/consumer-notifications/${consumerSession?.email}/${consumerSession?.tenantSlug}`],
-    enabled: !!consumerSession?.email && !!consumerSession?.tenantSlug,
+    queryKey: [notificationsPath],
+    enabled: !!notificationsPath,
   });
 
   // Fetch documents
@@ -150,12 +156,14 @@ export default function ConsumerDashboard() {
   // Mark notification as read
   const markNotificationReadMutation = useMutation({
     mutationFn: async (notificationId: string) => {
-      await apiRequest("PATCH", `/api/consumer-notifications/${notificationId}/read`);
+      await apiRequest("PATCH", `/api/consumer-notifications/read/${notificationId}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ 
-        queryKey: [`/api/consumer-notifications/${consumerSession?.email}/${consumerSession?.tenantSlug}`] 
-      });
+      if (notificationsPath) {
+        queryClient.invalidateQueries({
+          queryKey: [notificationsPath]
+        });
+      }
     },
   });
 
