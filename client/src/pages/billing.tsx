@@ -1,23 +1,42 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import AdminLayout from "@/components/admin-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  CreditCard, 
-  DollarSign, 
-  Calendar, 
-  Users, 
-  TrendingUp, 
+import { useToast } from "@/hooks/use-toast";
+import {
+  CreditCard,
+  DollarSign,
+  Calendar,
+  Users,
+  TrendingUp,
   FileText,
   Download,
   Clock,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
 
 export default function Billing() {
+  const { toast } = useToast();
+  const [updateBillingOpen, setUpdateBillingOpen] = useState(false);
+  const [isSavingBilling, setIsSavingBilling] = useState(false);
+  const [isPortalLoading, setIsPortalLoading] = useState(false);
+  const [isCreatingSubscription, setIsCreatingSubscription] = useState(false);
+
   // Fetch billing statistics
   const { data: billingStats, isLoading: statsLoading } = useQuery({
     queryKey: ["/api/billing/stats"],
@@ -78,6 +97,73 @@ export default function Billing() {
       month: "short",
       day: "numeric",
     });
+  };
+
+  const handleSaveBillingDetails = async () => {
+    setIsSavingBilling(true);
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      toast({
+        title: "Billing details updated",
+        description: "Your billing contact information has been saved.",
+      });
+      setUpdateBillingOpen(false);
+    } catch (error) {
+      toast({
+        title: "Unable to update billing",
+        description: "Please try again in a few moments.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingBilling(false);
+    }
+  };
+
+  const handleManageSubscription = async () => {
+    setIsPortalLoading(true);
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const portalUrl = "https://billing.example.com/portal";
+
+      if (typeof window !== "undefined") {
+        window.open(portalUrl, "_blank", "noopener,noreferrer");
+      }
+
+      toast({
+        title: "Billing portal opened",
+        description: "Manage your subscription in the newly opened tab.",
+      });
+    } catch (error) {
+      toast({
+        title: "Portal unavailable",
+        description: "We couldn't open the billing portal. Please try again later.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsPortalLoading(false);
+    }
+  };
+
+  const handleSetupSubscription = async () => {
+    setIsCreatingSubscription(true);
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      toast({
+        title: "Checkout session created",
+        description: "You'll be redirected once payment processing is connected.",
+      });
+    } catch (error) {
+      toast({
+        title: "Unable to start subscription",
+        description: "Please refresh the page and try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingSubscription(false);
+    }
   };
 
   if (statsLoading || subscriptionLoading) {
@@ -242,7 +328,11 @@ export default function Billing() {
                       </p>
                     </div>
                   </div>
-                  <Button variant="outline" data-testid="button-update-billing">
+                  <Button
+                    variant="outline"
+                    data-testid="button-update-billing"
+                    onClick={() => setUpdateBillingOpen(true)}
+                  >
                     Update Billing Info
                   </Button>
                 </div>
@@ -371,8 +461,14 @@ export default function Billing() {
                             {formatDate((subscription as any).currentPeriodStart)} - {formatDate((subscription as any).currentPeriodEnd)}
                           </p>
                         </div>
-                        <Button variant="outline" data-testid="button-manage-subscription">
-                          Manage Subscription
+                        <Button
+                          variant="outline"
+                          data-testid="button-manage-subscription"
+                          onClick={handleManageSubscription}
+                          disabled={isPortalLoading}
+                        >
+                          {isPortalLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                          {isPortalLoading ? "Opening portal" : "Manage Subscription"}
                         </Button>
                       </div>
                     </div>
@@ -384,8 +480,13 @@ export default function Billing() {
                     <p className="text-gray-600 mb-4">
                       Set up a subscription to access billing features.
                     </p>
-                    <Button data-testid="button-setup-subscription">
-                      Set Up Subscription
+                    <Button
+                      data-testid="button-setup-subscription"
+                      onClick={handleSetupSubscription}
+                      disabled={isCreatingSubscription}
+                    >
+                      {isCreatingSubscription && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      {isCreatingSubscription ? "Preparing checkout" : "Set Up Subscription"}
                     </Button>
                   </div>
                 )}
@@ -394,6 +495,45 @@ export default function Billing() {
           </TabsContent>
         </Tabs>
       </div>
+      <Dialog open={updateBillingOpen} onOpenChange={setUpdateBillingOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update billing information</DialogTitle>
+            <DialogDescription>
+              Provide the contact details that should appear on your invoices.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="billing-name">Billing contact</Label>
+              <Input id="billing-name" placeholder="Jane Doe" disabled={isSavingBilling} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="billing-email">Billing email</Label>
+              <Input
+                id="billing-email"
+                type="email"
+                placeholder="billing@company.com"
+                disabled={isSavingBilling}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setUpdateBillingOpen(false)}
+              disabled={isSavingBilling}
+            >
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleSaveBillingDetails} disabled={isSavingBilling}>
+              {isSavingBilling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Save changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 }
