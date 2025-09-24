@@ -148,8 +148,41 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
             isRegistered: false,
           })
           .returning();
-        
+
         consumer = newConsumer;
+      } else {
+        const updateData: Partial<typeof consumers.$inferInsert> = {};
+
+        if (dateOfBirth) {
+          updateData.dateOfBirth = dateOfBirth;
+        }
+        if (typeof address === 'string' && address.trim() !== '') {
+          updateData.address = address;
+        }
+        if (typeof city === 'string' && city.trim() !== '') {
+          updateData.city = city;
+        }
+        if (typeof state === 'string' && state.trim() !== '') {
+          updateData.state = state;
+        }
+        if (typeof zipCode === 'string' && zipCode.trim() !== '') {
+          updateData.zipCode = zipCode;
+        }
+        if (typeof phone === 'string' && phone.trim() !== '') {
+          updateData.phone = phone;
+        }
+
+        if (Object.keys(updateData).length > 0) {
+          const [updatedConsumer] = await db
+            .update(consumers)
+            .set(updateData)
+            .where(eq(consumers.id, consumer.id))
+            .returning();
+
+          if (updatedConsumer) {
+            consumer = updatedConsumer;
+          }
+        }
       }
 
       // Create the account
