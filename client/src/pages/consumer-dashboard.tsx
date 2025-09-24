@@ -59,13 +59,13 @@ export default function ConsumerDashboard() {
 
   // Fetch consumer data
   const { data, isLoading, error } = useQuery({
-    queryKey: [`/api/consumer/accounts/${consumerSession?.email}`],
+    queryKey: [`/api/consumer/accounts/${consumerSession?.email}?tenantSlug=${consumerSession?.tenantSlug}`],
     queryFn: async () => {
       const token = localStorage.getItem('consumerToken');
       if (!token) {
         throw new Error('No consumer token found');
       }
-      const response = await fetch(`/api/consumer/accounts/${consumerSession?.email}`, {
+      const response = await fetch(`/api/consumer/accounts/${consumerSession?.email}?tenantSlug=${consumerSession?.tenantSlug}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -84,7 +84,7 @@ export default function ConsumerDashboard() {
       }
       return response.json();
     },
-    enabled: !!consumerSession?.email,
+    enabled: !!consumerSession?.email && !!consumerSession?.tenantSlug,
   });
 
   // Fetch notifications
