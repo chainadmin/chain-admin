@@ -12,6 +12,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -39,7 +41,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
-import { FolderOpen, Folder, Plus, Upload, Settings, Trash2, MoreVertical, Eye, Edit, Mail, Phone, MapPin, Calendar } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { FolderOpen, Folder, Plus, Upload, Settings, Trash2, MoreVertical, Eye, Edit, Mail, Phone, MapPin, Calendar, Loader2 } from "lucide-react";
 
 export default function Accounts() {
   const [selectedFolderId, setSelectedFolderId] = useState<string>("all");
@@ -48,6 +51,7 @@ export default function Accounts() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showContactDialog, setShowContactDialog] = useState(false);
+  const [showComposeEmailDialog, setShowComposeEmailDialog] = useState(false);
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
@@ -78,6 +82,11 @@ export default function Accounts() {
     state: "",
     zipCode: "",
   });
+  const [composeEmailForm, setComposeEmailForm] = useState({
+    templateId: "",
+    subject: "",
+    body: "",
+  });
   const [editForm, setEditForm] = useState({
     firstName: "",
     lastName: "",
@@ -107,6 +116,11 @@ export default function Accounts() {
 
   const { data: consumers } = useQuery({
     queryKey: ["/api/consumers"],
+  });
+
+  const { data: emailTemplates, isLoading: emailTemplatesLoading } = useQuery({
+    queryKey: ["/api/email-templates"],
+    enabled: showComposeEmailDialog,
   });
 
   // Mutations
@@ -193,11 +207,19 @@ export default function Accounts() {
 
   const deleteAccountMutation = useMutation({
     mutationFn: (accountId: string) => apiRequest("DELETE", `/api/accounts/${accountId}`),
-    onSuccess: () => {
+    onSuccess: (_data, accountId) => {
       queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/consumers"] });
       setShowDeleteDialog(false);
       setSelectedAccount(null);
+      setSelectedAccounts((prev) => {
+        if (!accountId) {
+          return prev;
+        }
+        const updated = new Set(prev);
+        updated.delete(accountId);
+        return updated;
+      });
       toast({
         title: "Success",
         description: "Account deleted successfully",
@@ -273,6 +295,28 @@ export default function Accounts() {
     },
   });
 
+  const sendEmailMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      const response = await apiRequest("POST", "/api/communications/send-email", payload);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Email sent",
+        description: "Message delivered through the communications system.",
+      });
+      setShowComposeEmailDialog(false);
+      setComposeEmailForm({ templateId: "", subject: "", body: "" });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to send email",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Handlers
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -323,6 +367,39 @@ export default function Accounts() {
   const handleContact = (account: any) => {
     setSelectedAccount(account);
     setShowContactDialog(true);
+  };
+
+  const handleComposeEmail = (account: any) => {
+    if (!account?.consumer?.email) {
+      return;
+    }
+
+    const consumerName = [account.consumer?.firstName, account.consumer?.lastName]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+
+    const defaultSubject = account.creditor
+      ? `${account.creditor} account update`
+      : 'Account update';
+
+    const defaultBody = [
+      consumerName ? `Hello ${consumerName},` : 'Hello,',
+      '',
+      'We are reaching out regarding your account and would be happy to assist with any questions you may have.',
+      '',
+      'Thank you,',
+      'Your agency team',
+    ].join('\n');
+
+    setComposeEmailForm({
+      templateId: '',
+      subject: defaultSubject,
+      body: defaultBody,
+    });
+    setSelectedAccount(account);
+    setShowContactDialog(false);
+    setShowComposeEmailDialog(true);
   };
 
   const handleDelete = (account: any) => {
@@ -394,6 +471,29 @@ export default function Accounts() {
       month: 'short',
       day: 'numeric'
     });
+  };
+
+  const escapeComposeHtml = (value: string) =>
+    value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+  const buildComposePreviewHtml = (content: string) => {
+    if (!content) {
+      return '';
+    }
+
+    if (/<[a-z][\s\S]*>/i.test(content.trim())) {
+      return content;
+    }
+
+    return content
+      .split(/\r?\n\r?\n/)
+      .map(paragraph => `<p>${escapeComposeHtml(paragraph).replace(/\r?\n/g, '<br />')}</p>`)
+      .join('');
   };
 
   const isLoading = accountsLoading || foldersLoading;
@@ -1140,15 +1240,14 @@ export default function Accounts() {
                         {selectedAccount.consumer?.email || "Not provided"}
                       </p>
                     </div>
-                    {selectedAccount.consumer?.email ? (
-                      <Button variant="outline" size="sm" asChild>
-                        <a href={`mailto:${selectedAccount.consumer.email}`}>Send Email</a>
-                      </Button>
-                    ) : (
-                      <Button variant="outline" size="sm" disabled>
-                        Send Email
-                      </Button>
-                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => selectedAccount && handleComposeEmail(selectedAccount)}
+                      disabled={!selectedAccount.consumer?.email}
+                    >
+                      Send Email
+                    </Button>
                   </div>
                   <div className="flex items-center gap-3 rounded-lg border border-gray-200 p-3">
                     <Phone className="h-5 w-5 text-emerald-600" />
@@ -1196,12 +1295,160 @@ export default function Accounts() {
               <Button variant="outline" onClick={() => setShowContactDialog(false)}>
                 Close
               </Button>
-              {selectedAccount?.consumer?.email && (
-                <Button asChild>
-                  <a href={`mailto:${selectedAccount.consumer.email}`}>Compose Email</a>
-                </Button>
-              )}
+              <Button
+                onClick={() => selectedAccount && handleComposeEmail(selectedAccount)}
+                disabled={!selectedAccount?.consumer?.email}
+              >
+                Compose Email
+              </Button>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Compose Email Modal */}
+        <Dialog
+          open={showComposeEmailDialog}
+          onOpenChange={(open) => {
+            setShowComposeEmailDialog(open);
+            if (!open) {
+              setComposeEmailForm({ templateId: "", subject: "", body: "" });
+            }
+          }}
+        >
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Compose Email</DialogTitle>
+              <DialogDescription>
+                Send a message to the consumer using the integrated communications system.
+              </DialogDescription>
+            </DialogHeader>
+
+            {selectedAccount && (
+              <div className="space-y-5">
+                <div className="rounded-md border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+                  <p className="font-semibold">To: {selectedAccount.consumer?.email}</p>
+                  {selectedAccount.consumer && (
+                    <p className="text-blue-900/80">
+                      {[selectedAccount.consumer.firstName, selectedAccount.consumer.lastName].filter(Boolean).join(" ")}
+                    </p>
+                  )}
+                  {selectedAccount.accountNumber && (
+                    <p className="mt-1 text-xs text-blue-900/70">
+                      Account #: {selectedAccount.accountNumber}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="compose-template">Template</Label>
+                  <Select
+                    value={composeEmailForm.templateId}
+                    onValueChange={(value) => {
+                      if (!value) {
+                        setComposeEmailForm((prev) => ({ ...prev, templateId: "" }));
+                        return;
+                      }
+
+                      const template = (emailTemplates as any[])?.find((item: any) => item.id === value);
+                      setComposeEmailForm((prev) => ({
+                        templateId: value,
+                        subject: template?.subject || prev.subject,
+                        body: template?.html || prev.body,
+                      }));
+                    }}
+                    disabled={emailTemplatesLoading}
+                  >
+                    <SelectTrigger id="compose-template">
+                      <SelectValue placeholder={emailTemplatesLoading ? "Loading templates..." : "Choose a template (optional)"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">No template (start from scratch)</SelectItem>
+                      {(emailTemplates as any[])?.map((template: any) => (
+                        <SelectItem key={template.id} value={template.id}>
+                          {template.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="compose-subject">Subject</Label>
+                  <Input
+                    id="compose-subject"
+                    value={composeEmailForm.subject}
+                    onChange={(event) =>
+                      setComposeEmailForm((prev) => ({ ...prev, subject: event.target.value }))
+                    }
+                    placeholder="Email subject"
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="compose-body">Message</Label>
+                    <Textarea
+                      id="compose-body"
+                      value={composeEmailForm.body}
+                      onChange={(event) =>
+                        setComposeEmailForm((prev) => ({ ...prev, body: event.target.value }))
+                      }
+                      rows={8}
+                      placeholder="Write your message or choose a communication template"
+                    />
+                  </div>
+
+                  {composeEmailForm.body && (
+                    <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                      <p className="mb-2 text-xs font-semibold uppercase text-gray-500">Preview</p>
+                      <div
+                        className="prose prose-sm max-w-none text-gray-800"
+                        dangerouslySetInnerHTML={{ __html: buildComposePreviewHtml(composeEmailForm.body) }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <DialogFooter className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowComposeEmailDialog(false);
+                  setComposeEmailForm({ templateId: "", subject: "", body: "" });
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() =>
+                  selectedAccount &&
+                  sendEmailMutation.mutate({
+                    consumerId: selectedAccount.consumer?.id || selectedAccount.consumerId,
+                    accountId: selectedAccount.id,
+                    templateId: composeEmailForm.templateId || undefined,
+                    subject: composeEmailForm.subject,
+                    body: composeEmailForm.body,
+                  })
+                }
+                disabled={
+                  sendEmailMutation.isPending ||
+                  !selectedAccount?.consumer?.email ||
+                  !composeEmailForm.subject.trim() ||
+                  !composeEmailForm.body.trim()
+                }
+              >
+                {sendEmailMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  "Send Email"
+                )}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 

@@ -43,9 +43,16 @@ export default function AccountsTable({
 
   const deleteAccountMutation = useMutation({
     mutationFn: (accountId: string) => apiRequest("DELETE", `/api/accounts/${accountId}`),
-    onSuccess: () => {
+    onSuccess: (_data, accountId) => {
       queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/consumers"] });
+      if (accountId) {
+        setSelectedAccounts((prev) => {
+          const updated = new Set(prev);
+          updated.delete(accountId);
+          return updated;
+        });
+      }
       toast({
         title: "Success",
         description: "Account deleted successfully",
@@ -62,14 +69,14 @@ export default function AccountsTable({
 
   const bulkDeleteMutation = useMutation({
     mutationFn: (accountIds: string[]) => apiRequest("DELETE", "/api/accounts/bulk-delete", { ids: accountIds }),
-    onSuccess: () => {
+    onSuccess: (_data, accountIds) => {
       queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/consumers"] });
       setSelectedAccounts(new Set());
       setShowBulkDeleteDialog(false);
       toast({
         title: "Success",
-        description: `${selectedAccounts.size} accounts deleted successfully`,
+        description: `${Array.isArray(accountIds) ? accountIds.length : 0} accounts deleted successfully`,
       });
     },
     onError: (error: any) => {
