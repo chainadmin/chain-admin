@@ -5,6 +5,24 @@ import { communicationAutomations, automationExecutions, emailTemplates, smsTemp
 import { eq, and, desc, sql } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 
+function resolveAutomationId(req: AuthenticatedRequest) {
+  const queryId = req.query?.id;
+  if (typeof queryId === 'string' && queryId) {
+    return queryId;
+  }
+  if (Array.isArray(queryId) && queryId.length > 0 && queryId[0]) {
+    return queryId[0];
+  }
+  if (req.url) {
+    const url = new URL(req.url, 'http://localhost');
+    const segments = url.pathname.split('/').filter(Boolean);
+    if (segments.length > 2) {
+      return segments[segments.length - 1];
+    }
+  }
+  return undefined;
+}
+
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -101,7 +119,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       res.status(201).json(newAutomation);
     } else if (req.method === 'PUT') {
       // Update automation (activate/deactivate or modify settings)
-      const automationId = req.query.id as string;
+      const automationId = resolveAutomationId(req);
       const updates = req.body;
 
       if (!automationId) {
@@ -137,7 +155,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       res.status(200).json(updatedAutomation);
     } else if (req.method === 'DELETE') {
       // Delete an automation
-      const automationId = req.query.id as string;
+      const automationId = resolveAutomationId(req);
 
       if (!automationId) {
         res.status(400).json({ error: 'Automation ID is required' });

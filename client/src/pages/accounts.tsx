@@ -4,6 +4,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import AdminLayout from "@/components/admin-layout";
 import ImportModal from "@/components/import-modal";
+import AccountsTable from "@/components/accounts-table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,6 +47,7 @@ export default function Accounts() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
+  const [showContactDialog, setShowContactDialog] = useState(false);
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
@@ -318,6 +320,11 @@ export default function Accounts() {
     setShowViewModal(true);
   };
 
+  const handleContact = (account: any) => {
+    setSelectedAccount(account);
+    setShowContactDialog(true);
+  };
+
   const handleDelete = (account: any) => {
     setSelectedAccount(account);
     setShowDeleteDialog(true);
@@ -354,6 +361,16 @@ export default function Accounts() {
     return matchesFolder && matchesStatus;
   }) || [];
 
+  const selectedAccountLocation = selectedAccount
+    ? [
+        selectedAccount.consumer?.city,
+        selectedAccount.consumer?.state,
+        selectedAccount.consumer?.zipCode,
+      ]
+        .filter(Boolean)
+        .join(", ")
+    : "";
+
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
       case 'active':
@@ -387,6 +404,15 @@ export default function Accounts() {
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Accounts Management</h1>
           <p className="text-sm text-gray-600 mt-1">Manage all consumer accounts in one place</p>
+        </div>
+
+        <div className="mb-6">
+          <AccountsTable
+            accounts={Array.isArray(accounts) ? (accounts as any[]) : []}
+            isLoading={accountsLoading}
+            onView={handleView}
+            onContact={handleContact}
+          />
         </div>
 
         {/* Folder Navigation */}
@@ -1091,6 +1117,90 @@ export default function Accounts() {
             )}
             <div className="flex justify-end mt-4">
               <Button onClick={() => setShowViewModal(false)}>Close</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Contact Account Modal */}
+        <Dialog open={showContactDialog} onOpenChange={setShowContactDialog}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>
+                Contact {selectedAccount?.consumer?.firstName} {selectedAccount?.consumer?.lastName}
+              </DialogTitle>
+            </DialogHeader>
+            {selectedAccount && (
+              <div className="space-y-4">
+                <div className="grid gap-3">
+                  <div className="flex items-center gap-3 rounded-lg border border-gray-200 p-3">
+                    <Mail className="h-5 w-5 text-sky-600" />
+                    <div className="flex-1">
+                      <p className="text-xs uppercase tracking-wide text-gray-500">Email</p>
+                      <p className="font-medium text-gray-900">
+                        {selectedAccount.consumer?.email || "Not provided"}
+                      </p>
+                    </div>
+                    {selectedAccount.consumer?.email ? (
+                      <Button variant="outline" size="sm" asChild>
+                        <a href={`mailto:${selectedAccount.consumer.email}`}>Send Email</a>
+                      </Button>
+                    ) : (
+                      <Button variant="outline" size="sm" disabled>
+                        Send Email
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 rounded-lg border border-gray-200 p-3">
+                    <Phone className="h-5 w-5 text-emerald-600" />
+                    <div className="flex-1">
+                      <p className="text-xs uppercase tracking-wide text-gray-500">Phone</p>
+                      <p className="font-medium text-gray-900">
+                        {selectedAccount.consumer?.phone || "Not provided"}
+                      </p>
+                    </div>
+                    {selectedAccount.consumer?.phone ? (
+                      <Button variant="outline" size="sm" asChild>
+                        <a href={`tel:${selectedAccount.consumer.phone}`}>Call</a>
+                      </Button>
+                    ) : (
+                      <Button variant="outline" size="sm" disabled>
+                        Call
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 rounded-lg border border-gray-200 p-3">
+                  <MapPin className="mt-1 h-5 w-5 text-indigo-600" />
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-gray-500">Address</p>
+                    <p className="font-medium text-gray-900">
+                      {selectedAccount.consumer?.address || "Not provided"}
+                    </p>
+                    {selectedAccountLocation && (
+                      <p className="text-sm text-gray-600">{selectedAccountLocation}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 rounded-lg border border-gray-200 p-3">
+                  <Calendar className="h-5 w-5 text-amber-600" />
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-gray-500">Next Due Date</p>
+                    <p className="font-medium text-gray-900">
+                      {selectedAccount.dueDate ? formatDate(selectedAccount.dueDate) : "Not scheduled"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div className="mt-6 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowContactDialog(false)}>
+                Close
+              </Button>
+              {selectedAccount?.consumer?.email && (
+                <Button asChild>
+                  <a href={`mailto:${selectedAccount.consumer.email}`}>Compose Email</a>
+                </Button>
+              )}
             </div>
           </DialogContent>
         </Dialog>

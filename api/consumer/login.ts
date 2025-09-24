@@ -1,14 +1,16 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { getDb } from '../_lib/db.js';
-import { consumers, tenants } from '../../shared/schema.js';
-import { eq, and } from 'drizzle-orm';
-import { z } from 'zod';
+import { and, eq, sql } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
+import { z } from 'zod';
+
+import { getDb } from '../_lib/db.js';
 import { JWT_SECRET } from '../_lib/auth.js';
+import { consumers, tenants } from '../../shared/schema.js';
 
 const loginSchema = z.object({
   email: z.string().email(),
-  dateOfBirth: z.string()  // Consumer verifies with DOB
+  dateOfBirth: z.string().min(1),
+  tenantSlug: z.string().optional()
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -17,110 +19,227 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const parsed = loginSchema.safeParse(req.body);
+    const parsed = loginSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Invalid login data' });
+      return res.status(400).json({ message: 'Email and date of birth are required' });
     }
 
-    const { email, dateOfBirth } = parsed.data;
+    const { email, dateOfBirth, tenantSlug: bodyTenantSlug } = parsed.data;
+    const tenantSlug = bodyTenantSlug || (req as any)?.agencySlug;
+
     const db = getDb();
 
-    // Search for consumer across all tenants
-    const consumersFound = await db
-      .select({
-        consumer: consumers,
-        tenant: tenants
-      })
-      .from(consumers)
-      .innerJoin(tenants, eq(consumers.tenantId, tenants.id))
-      .where(eq(consumers.email, email));
+    let tenant: typeof tenants.$inferSelect | null = null;
+    let consumer: typeof consumers.$inferSelect | null = null;
 
-    if (consumersFound.length === 0) {
-      return res.status(404).json({ 
-        error: 'No account found',
-        message: 'No account found with this email. Please contact your agency for account details.'
-      });
-    }
+    if (tenantSlug) {
+      const [tenantMatch] = await db
+        .select()
+        .from(tenants)
+        .where(eq(tenants.slug, tenantSlug))
+        .limit(1);
 
-    // Filter consumers by DOB verification
-    const verifiedConsumers = consumersFound.filter(({ consumer }) => {
-      if (!consumer.dateOfBirth || !dateOfBirth) {
-        // If either DOB is missing, allow login for backward compatibility
-        return true;
+      if (!tenantMatch) {
+        return res.status(404).json({ message: 'Agency not found' });
       }
-      // Compare DOB strings (format: MM/DD/YYYY or YYYY-MM-DD)
-      const normalizedInputDob = dateOfBirth.replace(/\//g, '-');
-      const normalizedStoredDob = consumer.dateOfBirth.replace(/\//g, '-');
-      
-      // Try to parse and compare dates
-      const inputDate = new Date(normalizedInputDob);
-      const storedDate = new Date(normalizedStoredDob);
-      
-      // If dates are valid, compare them
-      if (!isNaN(inputDate.getTime()) && !isNaN(storedDate.getTime())) {
-        return inputDate.toDateString() === storedDate.toDateString();
+
+      tenant = tenantMatch;
+
+      const consumerMatches = await db
+        .select({ consumer: consumers })
+        .from(consumers)
+        .where(
+          and(
+            eq(consumers.tenantId, tenant.id),
+            sql`LOWER(${consumers.email}) = LOWER(${email})`
+          )
+        )
+        .limit(1);
+
+      if (consumerMatches.length === 0) {
+        return res.status(404).json({
+          message: 'No account found with this email for this agency. Would you like to create a new account?',
+          canRegister: true,
+          suggestedAction: 'register'
+        });
       }
-      
-      // Fallback to string comparison
-      return normalizedInputDob === normalizedStoredDob;
-    });
 
-    if (verifiedConsumers.length === 0) {
-      return res.status(401).json({ 
-        error: 'Invalid credentials',
-        message: 'The date of birth provided does not match our records. Please verify and try again.'
-      });
-    }
+      consumer = consumerMatches[0].consumer;
+    } else {
+      const consumerRows = await db
+        .select({
+          consumer: consumers,
+          tenant: tenants
+        })
+        .from(consumers)
+        .leftJoin(tenants, eq(consumers.tenantId, tenants.id))
+        .where(sql`LOWER(${consumers.email}) = LOWER(${email})`);
 
-    if (verifiedConsumers.length === 1) {
-      // Single agency - proceed with login
-      const { consumer, tenant } = verifiedConsumers[0];
-      
-      // Generate consumer JWT token
-      const token = jwt.sign(
-        { 
-          consumerId: consumer.id,
-          email: consumer.email,
-          tenantId: tenant.id,
-          tenantSlug: tenant.slug,
-          type: 'consumer'
-        },
-        JWT_SECRET,
-        { expiresIn: '30d' }
+      if (consumerRows.length === 0) {
+        return res.status(404).json({
+          message: 'No account found with this email. Would you like to create a new account?',
+          canRegister: true,
+          suggestedAction: 'register'
+        });
+      }
+
+      const linkedConsumers = consumerRows.filter(row => row.consumer.tenantId && row.tenant);
+      const uniqueLinkedConsumers = Array.from(
+        new Map(
+          linkedConsumers.map(row => [row.tenant!.id, row])
+        ).values()
       );
 
-      res.status(200).json({
-        success: true,
-        token,
+      if (uniqueLinkedConsumers.length > 1) {
+        const agencies = uniqueLinkedConsumers.map(row => ({
+          id: row.tenant!.id,
+          name: row.tenant!.name,
+          slug: row.tenant!.slug
+        }));
+
+        return res.status(200).json({
+          multipleAgencies: true,
+          message: 'Your account is registered with multiple agencies. Please select one:',
+          agencies,
+          email
+        });
+      }
+
+      if (uniqueLinkedConsumers.length === 1) {
+        consumer = uniqueLinkedConsumers[0].consumer;
+        tenant = uniqueLinkedConsumers[0].tenant!;
+      } else {
+        const firstConsumer = consumerRows[0]?.consumer;
+        if (!firstConsumer) {
+          return res.status(404).json({
+            message: 'No account found with this email. Would you like to create a new account?',
+            canRegister: true,
+            suggestedAction: 'register'
+          });
+        }
+
+        return res.status(200).json({
+          message: 'Your account needs to be linked to an agency. Please complete registration.',
+          needsAgencyLink: true,
+          consumer: {
+            id: firstConsumer.id,
+            firstName: firstConsumer.firstName,
+            lastName: firstConsumer.lastName,
+            email: firstConsumer.email
+          },
+          suggestedAction: 'register'
+        });
+      }
+    }
+
+    if (!consumer) {
+      return res.status(404).json({
+        message: tenantSlug
+          ? 'No account found with this email for this agency. Would you like to create a new account?'
+          : 'No account found with this email. Would you like to create a new account?',
+        canRegister: true,
+        suggestedAction: 'register'
+      });
+    }
+
+    if (!tenant && consumer.tenantId) {
+      const [tenantById] = await db
+        .select()
+        .from(tenants)
+        .where(eq(tenants.id, consumer.tenantId))
+        .limit(1);
+      if (tenantById) {
+        tenant = tenantById;
+      }
+    }
+
+    if (!tenant) {
+      return res.status(200).json({
+        message: 'Your account needs to be linked to an agency. Please complete registration.',
+        needsAgencyLink: true,
         consumer: {
           id: consumer.id,
-          email: consumer.email,
           firstName: consumer.firstName,
-          lastName: consumer.lastName
+          lastName: consumer.lastName,
+          email: consumer.email
+        },
+        suggestedAction: 'register'
+      });
+    }
+
+    if (!consumer.isRegistered) {
+      return res.status(200).json({
+        message: 'Account found but not yet activated. Complete your registration.',
+        needsRegistration: true,
+        consumer: {
+          id: consumer.id,
+          firstName: consumer.firstName,
+          lastName: consumer.lastName,
+          email: consumer.email,
+          tenantId: consumer.tenantId
         },
         tenant: {
-          id: tenant.id,
           name: tenant.name,
           slug: tenant.slug
         }
       });
-    } else {
-      // Multiple agencies - let consumer choose
-      const agencies = verifiedConsumers.map(({ tenant }) => ({
+    }
+
+    const providedDOB = new Date(dateOfBirth);
+    const storedDOB = consumer.dateOfBirth ? new Date(consumer.dateOfBirth) : null;
+
+    if (!storedDOB || Number.isNaN(storedDOB.getTime())) {
+      return res.status(401).json({ message: 'Date of birth verification required. Please contact your agency.' });
+    }
+
+    if (Number.isNaN(providedDOB.getTime()) || providedDOB.getTime() !== storedDOB.getTime()) {
+      return res.status(401).json({ message: 'Date of birth verification failed. Please check your information.' });
+    }
+
+    if (!consumer.tenantId) {
+      return res.status(200).json({
+        message: 'Your account needs to be linked to an agency. Please complete registration.',
+        needsAgencyLink: true,
+        consumer: {
+          id: consumer.id,
+          firstName: consumer.firstName,
+          lastName: consumer.lastName,
+          email: consumer.email
+        },
+        suggestedAction: 'register'
+      });
+    }
+
+    const token = jwt.sign(
+      {
+        consumerId: consumer.id,
+        email: consumer.email,
+        tenantId: consumer.tenantId,
+        tenantSlug: tenant.slug,
+        type: 'consumer'
+      },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    return res.status(200).json({
+      token,
+      consumer: {
+        id: consumer.id,
+        firstName: consumer.firstName,
+        lastName: consumer.lastName,
+        email: consumer.email,
+        phone: consumer.phone,
+        tenantId: consumer.tenantId
+      },
+      tenant: {
         id: tenant.id,
         name: tenant.name,
         slug: tenant.slug
-      }));
-
-      res.status(200).json({
-        multipleAgencies: true,
-        message: 'Your account is registered with multiple agencies. Please select one:',
-        agencies,
-        email
-      });
-    }
+      }
+    });
   } catch (error) {
     console.error('Consumer login error:', error);
-    res.status(500).json({ error: 'Failed to login' });
+    return res.status(500).json({ message: 'Login failed' });
   }
 }

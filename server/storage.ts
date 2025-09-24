@@ -12,6 +12,7 @@ import {
   smsTemplates,
   smsCampaigns,
   smsTracking,
+  messagingUsageEvents,
   communicationAutomations,
   automationExecutions,
   emailSequences,
@@ -51,6 +52,7 @@ import {
   type InsertSmsCampaign,
   type SmsTracking,
   type InsertSmsTracking,
+  type InsertMessagingUsageEvent,
   type CommunicationAutomation,
   type InsertCommunicationAutomation,
   type AutomationExecution,
@@ -78,8 +80,9 @@ import {
   type Invoice,
   type InsertInvoice,
 } from "@shared/schema";
+import { messagingPlans, EMAIL_OVERAGE_RATE_PER_EMAIL, SMS_OVERAGE_RATE_PER_SEGMENT, type MessagingPlanId } from "@shared/billing-plans";
 import { db } from "./db";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, inArray, gte, lte } from "drizzle-orm";
 
 export interface IStorage {
   // User operations (mandatory for Replit Auth)
@@ -235,6 +238,7 @@ export interface IStorage {
   // Account management operations
   createAccount(account: InsertAccount): Promise<Account>;
   deleteAccount(id: string, tenantId: string): Promise<void>;
+  bulkDeleteAccounts(ids: string[], tenantId: string): Promise<number>;
   
   // Notification operations
   createNotification(notification: InsertConsumerNotification): Promise<ConsumerNotification>;
@@ -292,7 +296,32 @@ export interface IStorage {
     usageCharges: number;
     totalBill: number;
     nextBillDate: string;
+    planId: MessagingPlanId | null;
+    planName: string | null;
+    emailUsage: {
+      used: number;
+      included: number;
+      overage: number;
+      overageCharge: number;
+    };
+    smsUsage: {
+      used: number;
+      included: number;
+      overage: number;
+      overageCharge: number;
+    };
+    billingPeriod: { start: string; end: string } | null;
   }>;
+  recordMessagingUsageEvent(event: InsertMessagingUsageEvent): Promise<void>;
+  getMessagingUsageTotals(
+    tenantId: string,
+    periodStart: Date,
+    periodEnd: Date
+  ): Promise<{ emailCount: number; smsSegments: number }>;
+  findSmsTrackingByExternalId(
+    externalId: string
+  ): Promise<{ tracking: SmsTracking; tenantId: string | null; campaignId: string | null } | undefined>;
+  updateSmsTracking(id: string, updates: Partial<SmsTracking>): Promise<SmsTracking | undefined>;
   
   // Company management operations
   getPlatformUsersByTenant(tenantId: string): Promise<(PlatformUser & { userDetails?: User })[]>;
@@ -985,6 +1014,86 @@ export class DatabaseStorage implements IStorage {
     return newTracking;
   }
 
+  async recordMessagingUsageEvent(event: InsertMessagingUsageEvent): Promise<void> {
+    await db
+      .insert(messagingUsageEvents)
+      .values(event)
+      .onConflictDoNothing({ target: messagingUsageEvents.externalMessageId });
+  }
+
+  async getMessagingUsageTotals(
+    tenantId: string,
+    periodStart: Date,
+    periodEnd: Date
+  ): Promise<{ emailCount: number; smsSegments: number }> {
+    const results = await db
+      .select({
+        messageType: messagingUsageEvents.messageType,
+        total: sql<number>`COALESCE(SUM(${messagingUsageEvents.quantity}), 0)`,
+      })
+      .from(messagingUsageEvents)
+      .where(
+        and(
+          eq(messagingUsageEvents.tenantId, tenantId),
+          gte(messagingUsageEvents.occurredAt, periodStart),
+          lte(messagingUsageEvents.occurredAt, periodEnd)
+        )
+      )
+      .groupBy(messagingUsageEvents.messageType);
+
+    let emailCount = 0;
+    let smsSegments = 0;
+
+    for (const row of results) {
+      if (row.messageType === 'email') {
+        emailCount = row.total;
+      }
+      if (row.messageType === 'sms') {
+        smsSegments = row.total;
+      }
+    }
+
+    return { emailCount, smsSegments };
+  }
+
+  async findSmsTrackingByExternalId(
+    externalId: string
+  ): Promise<{ tracking: SmsTracking; tenantId: string | null; campaignId: string | null } | undefined> {
+    const [result] = await db
+      .select({
+        tracking: smsTracking,
+        campaign: smsCampaigns,
+      })
+      .from(smsTracking)
+      .leftJoin(smsCampaigns, eq(smsTracking.campaignId, smsCampaigns.id))
+      .where(sql`(${smsTracking.trackingData} ->> 'twilioSid') = ${externalId}`)
+      .limit(1);
+
+    if (!result?.tracking) {
+      return undefined;
+    }
+
+    return {
+      tracking: result.tracking,
+      tenantId: result.campaign?.tenantId ?? null,
+      campaignId: result.tracking.campaignId ?? null,
+    };
+  }
+
+  async updateSmsTracking(id: string, updates: Partial<SmsTracking>): Promise<SmsTracking | undefined> {
+    const sanitizedUpdates = Object.fromEntries(
+      Object.entries(updates).filter(([, value]) => value !== undefined)
+    ) as Partial<SmsTracking>;
+
+    if (Object.keys(sanitizedUpdates).length === 0) {
+      const [existing] = await db.select().from(smsTracking).where(eq(smsTracking.id, id));
+      return existing;
+    }
+
+    const [updated] = await db.update(smsTracking).set(sanitizedUpdates).where(eq(smsTracking.id, id)).returning();
+    return updated;
+  }
+
   // Automation operations
   async getAutomationsByTenant(tenantId: string): Promise<CommunicationAutomation[]> {
     return await db.select()
@@ -1236,6 +1345,27 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(accounts.id, id), eq(accounts.tenantId, tenantId)));
   }
 
+  async bulkDeleteAccounts(ids: string[], tenantId: string): Promise<number> {
+    if (ids.length === 0) {
+      return 0;
+    }
+
+    const accountsToDelete = await db
+      .select({ id: accounts.id })
+      .from(accounts)
+      .where(and(inArray(accounts.id, ids), eq(accounts.tenantId, tenantId)));
+
+    if (accountsToDelete.length === 0) {
+      return 0;
+    }
+
+    await db
+      .delete(accounts)
+      .where(and(inArray(accounts.id, ids), eq(accounts.tenantId, tenantId)));
+
+    return accountsToDelete.length;
+  }
+
 
   // Notification operations
   async createNotification(notification: InsertConsumerNotification): Promise<ConsumerNotification> {
@@ -1475,21 +1605,72 @@ export class DatabaseStorage implements IStorage {
     usageCharges: number;
     totalBill: number;
     nextBillDate: string;
+    planId: MessagingPlanId | null;
+    planName: string | null;
+    emailUsage: {
+      used: number;
+      included: number;
+      overage: number;
+      overageCharge: number;
+    };
+    smsUsage: {
+      used: number;
+      included: number;
+      overage: number;
+      overageCharge: number;
+    };
+    billingPeriod: { start: string; end: string } | null;
   }> {
-    // Get active consumers count
     const activeConsumersResult = await db.select().from(consumers).where(eq(consumers.tenantId, tenantId));
     const activeConsumers = activeConsumersResult.length;
 
-    // Get subscription details
     const subscription = await this.getSubscriptionByTenant(tenantId);
-    const monthlyBase = subscription ? subscription.monthlyBaseCents / 100 : 0;
-    const usageCharges = subscription ? (activeConsumers * subscription.pricePerConsumerCents) / 100 : 0;
-    const totalBill = monthlyBase + usageCharges;
+    const planId = subscription?.plan as MessagingPlanId | undefined;
+    const plan = planId ? messagingPlans[planId] : undefined;
 
-    // Calculate next bill date (end of current billing period)
-    const nextBillDate = subscription 
-      ? new Date(subscription.currentPeriodEnd).toLocaleDateString()
-      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString(); // Default to 30 days from now
+    const monthlyBase = plan?.price ?? (subscription ? subscription.monthlyBaseCents / 100 : 0);
+
+    let emailUsage = { used: 0, included: plan?.includedEmails ?? 0, overage: 0, overageCharge: 0 };
+    let smsUsage = { used: 0, included: plan?.includedSmsSegments ?? 0, overage: 0, overageCharge: 0 };
+    let usageCharges = 0;
+    let totalBill = monthlyBase;
+    let nextBillDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString();
+    let billingPeriod: { start: string; end: string } | null = null;
+
+    if (subscription) {
+      const periodStart = new Date(subscription.currentPeriodStart);
+      const periodEnd = new Date(subscription.currentPeriodEnd);
+      billingPeriod = { start: periodStart.toISOString(), end: periodEnd.toISOString() };
+      nextBillDate = periodEnd.toLocaleDateString();
+
+      const usageTotals = await this.getMessagingUsageTotals(tenantId, periodStart, periodEnd);
+
+      const includedEmails = plan?.includedEmails ?? 0;
+      const includedSms = plan?.includedSmsSegments ?? 0;
+
+      const emailOverage = Math.max(0, usageTotals.emailCount - includedEmails);
+      const smsOverage = Math.max(0, usageTotals.smsSegments - includedSms);
+
+      const emailOverageCharge = Number((emailOverage * EMAIL_OVERAGE_RATE_PER_EMAIL).toFixed(2));
+      const smsOverageCharge = Number((smsOverage * SMS_OVERAGE_RATE_PER_SEGMENT).toFixed(2));
+
+      emailUsage = {
+        used: usageTotals.emailCount,
+        included: includedEmails,
+        overage: emailOverage,
+        overageCharge: emailOverageCharge,
+      };
+
+      smsUsage = {
+        used: usageTotals.smsSegments,
+        included: includedSms,
+        overage: smsOverage,
+        overageCharge: smsOverageCharge,
+      };
+
+      usageCharges = Number((emailOverageCharge + smsOverageCharge).toFixed(2));
+      totalBill = Number((monthlyBase + usageCharges).toFixed(2));
+    }
 
     return {
       activeConsumers,
@@ -1497,6 +1678,11 @@ export class DatabaseStorage implements IStorage {
       usageCharges,
       totalBill,
       nextBillDate,
+      planId: plan?.id ?? planId ?? null,
+      planName: plan?.name ?? planId ?? null,
+      emailUsage,
+      smsUsage,
+      billingPeriod,
     };
   }
 

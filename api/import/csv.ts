@@ -70,13 +70,14 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         console.error(`Skipping consumer: missing required fields`, csvConsumer);
         continue;
       }
+      const normalizedEmail = csvConsumer.email.toLowerCase();
       // Check if consumer already exists
       // Match by email, firstName, lastName to ensure it's the same person
       let [existingConsumer] = await db
         .select()
         .from(consumers)
         .where(and(
-          eq(consumers.email, csvConsumer.email),
+          sql`lower(${consumers.email}) = ${normalizedEmail}`,
           eq(consumers.firstName, csvConsumer.firstName),
           eq(consumers.lastName, csvConsumer.lastName),
           eq(consumers.tenantId, tenantId)
@@ -110,7 +111,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
 
       // Find accounts for this consumer
       const consumerAccounts = csvAccounts.filter(
-        (acc: any) => acc.consumerEmail === csvConsumer.email
+        (acc: any) => typeof acc.consumerEmail === 'string' && acc.consumerEmail.toLowerCase() === normalizedEmail
       );
 
       // Process each account

@@ -2,6 +2,7 @@
 // This schema exactly matches the database structure
 
 import { sql } from 'drizzle-orm';
+
 import { relations } from 'drizzle-orm';
 import {
   index,
@@ -19,15 +20,6 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // Session storage table.
-export const sessions = pgTable(
-  "sessions",
-  {
-    sid: varchar("sid").primaryKey(),
-    sess: jsonb("sess").notNull(),
-    expire: timestamp("expire").notNull(),
-  },
-  (table) => [index("IDX_session_expire").on(table.expire)],
-);
 
 // User storage table.
 export const users = pgTable("users", {
@@ -341,6 +333,7 @@ export const consumerNotifications = pgTable("consumer_notifications", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+
 // Consumer callback requests 
 export const callbackRequests = pgTable("callback_requests", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -430,38 +423,3 @@ export const communicationAutomations = pgTable("communication_automations", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// Automation execution history
-export const automationExecutions = pgTable("automation_executions", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  automationId: uuid("automation_id").references(() => communicationAutomations.id, { onDelete: "cascade" }).notNull(),
-  campaignId: uuid("campaign_id"), // References either emailCampaigns or smsCampaigns
-  status: text("status").notNull(), // "success", "failed", "partial"
-  recipientsCount: bigint("recipients_count", { mode: "number" }).default(0),
-  successCount: bigint("success_count", { mode: "number" }).default(0),
-  errorCount: bigint("error_count", { mode: "number" }).default(0),
-  errorMessage: text("error_message"),
-  metadata: jsonb("metadata").default(sql`'{}'::jsonb`),
-  executedAt: timestamp("executed_at").defaultNow(),
-});
-
-// Communication blocklist (opted out numbers/emails)
-export const communicationBlocklist = pgTable("communication_blocklist", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
-  consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "cascade" }),
-  type: text("type").notNull(), // "email" or "sms"
-  value: text("value").notNull(), // The email address or phone number
-  reason: text("reason"), // "consumer_opt_out", "bounce", "complaint", "manual"
-  metadata: jsonb("metadata").default(sql`'{}'::jsonb`),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-// Export types for TypeScript usage
-export type Consumer = typeof consumers.$inferSelect;
-export type NewConsumer = typeof consumers.$inferInsert;
-export type Account = typeof accounts.$inferSelect;
-export type NewAccount = typeof accounts.$inferInsert;
-export type EmailTemplate = typeof emailTemplates.$inferSelect;
-export type NewEmailTemplate = typeof emailTemplates.$inferInsert;
-export type ArrangementOption = typeof arrangementOptions.$inferSelect;
-export type NewArrangementOption = typeof arrangementOptions.$inferInsert;

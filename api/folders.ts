@@ -5,6 +5,24 @@ import { folders, accounts } from './_lib/schema.js';
 import { eq, and } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 
+function resolveFolderId(req: AuthenticatedRequest) {
+  const queryId = req.query?.id;
+  if (typeof queryId === 'string' && queryId) {
+    return queryId;
+  }
+  if (Array.isArray(queryId) && queryId.length > 0 && queryId[0]) {
+    return queryId[0];
+  }
+  if (req.url) {
+    const url = new URL(req.url, 'http://localhost');
+    const segments = url.pathname.split('/').filter(Boolean);
+    if (segments.length > 2) {
+      return segments[segments.length - 1];
+    }
+  }
+  return undefined;
+}
+
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -61,8 +79,8 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
 
       res.status(201).json(newFolder);
     } else if (req.method === 'DELETE') {
-      // Delete a folder - expects /api/folders?id=<folderId>
-      const folderId = req.query.id as string;
+      // Delete a folder - supports /api/folders?id=<folderId> and /api/folders/<folderId>
+      const folderId = resolveFolderId(req);
 
       if (!folderId) {
         res.status(400).json({ error: 'Folder ID is required' });
