@@ -1,6 +1,5 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mock } from 'node:test';
 import jwt from 'jsonwebtoken';
 
 const TEST_SECRET = 'test-secret';
@@ -18,6 +17,7 @@ interface TestResponse {
 }
 
 test('updates existing consumer details before linking account', async () => {
+  const originalSecret = process.env.JWT_SECRET;
   process.env.JWT_SECRET = TEST_SECRET;
 
   const existingConsumer = {
@@ -69,8 +69,8 @@ test('updates existing consumer details before linking account', async () => {
     }),
   };
 
-  const { handler, __setTestDb } = await import('../accounts.ts');
-  __setTestDb(fakeDb as any);
+  const { createAccountsHandler } = await import('../accounts.ts');
+  const handler = createAccountsHandler(() => fakeDb as any);
 
   const token = jwt.sign({ tenantId: 'tenant-1' }, TEST_SECRET);
 
@@ -132,6 +132,9 @@ test('updates existing consumer details before linking account', async () => {
   assert.equal(insertCalls.length, 1);
   assert.equal(insertCalls[0].consumerId, existingConsumer.id);
 
-  __setTestDb(null);
-  mock.restoreAll();
+  if (originalSecret === undefined) {
+    delete process.env.JWT_SECRET;
+  } else {
+    process.env.JWT_SECRET = originalSecret;
+  }
 });
