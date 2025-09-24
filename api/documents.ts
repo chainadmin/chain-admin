@@ -1,7 +1,7 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import jwt from 'jsonwebtoken';
 import { getDb } from './_lib/db.js';
-import { documents } from './_lib/schema.js';
+import { accounts, consumers, documents } from './_lib/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { JWT_SECRET } from './_lib/auth.js';
 
@@ -36,33 +36,117 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
     }
 
     if (req.method === 'GET') {
-      // Get all documents for the tenant
+      // Get all documents for the tenant, including related account + consumer info when available
       const tenantDocuments = await db
-        .select()
+        .select({
+          id: documents.id,
+          tenantId: documents.tenantId,
+          accountId: documents.accountId,
+          title: documents.title,
+          description: documents.description,
+          fileName: documents.fileName,
+          fileUrl: documents.fileUrl,
+          fileSize: documents.fileSize,
+          mimeType: documents.mimeType,
+          isPublic: documents.isPublic,
+          createdAt: documents.createdAt,
+          updatedAt: documents.updatedAt,
+          account: {
+            id: accounts.id,
+            accountNumber: accounts.accountNumber,
+            creditor: accounts.creditor,
+            consumerId: accounts.consumerId,
+            consumer: {
+              id: consumers.id,
+              firstName: consumers.firstName,
+              lastName: consumers.lastName,
+              email: consumers.email,
+              phone: consumers.phone,
+            },
+          },
+        })
         .from(documents)
+        .leftJoin(accounts, eq(documents.accountId, accounts.id))
+        .leftJoin(consumers, eq(accounts.consumerId, consumers.id))
         .where(eq(documents.tenantId, tenantId));
 
-      res.status(200).json(tenantDocuments);
+      const formattedDocuments = tenantDocuments.map((document) => {
+        const { account, ...rest } = document;
+
+        if (!account?.id) {
+          return {
+            ...rest,
+            account: null,
+          };
+        }
+
+        const consumer = account.consumer?.id
+          ? account.consumer
+          : null;
+
+        return {
+          ...rest,
+          account: {
+            ...account,
+            consumer,
+          },
+        };
+      });
+
+      res.status(200).json(formattedDocuments);
     } else if (req.method === 'POST') {
       // Create a new document
-      const { title, description, fileName, fileUrl, fileSize, mimeType, isPublic } = req.body;
+      const {
+        title,
+        description,
+        fileName,
+        fileUrl,
+        fileSize,
+        mimeType,
+        isPublic,
+        accountId,
+      } = req.body;
 
       if (!title || !fileName || !fileUrl) {
         res.status(400).json({ error: 'Missing required fields' });
         return;
       }
 
+      const isPublicDocument = isPublic ?? true;
+
+      if (!isPublicDocument && !accountId) {
+        res.status(400).json({ error: 'Account is required when document is not public' });
+        return;
+      }
+
+      let validatedAccountId: string | null = null;
+      if (accountId) {
+        const [account] = await db
+          .select({ id: accounts.id })
+          .from(accounts)
+          .where(and(eq(accounts.id, accountId), eq(accounts.tenantId, tenantId)))
+          .limit(1);
+
+        if (!account) {
+          res.status(404).json({ error: 'Account not found for this tenant' });
+          return;
+        }
+
+        validatedAccountId = account.id;
+      }
+
       const [newDocument] = await db
         .insert(documents)
         .values({
           tenantId,
+          accountId: validatedAccountId,
           title,
           description: description || null,
           fileName,
           fileUrl,
           fileSize: fileSize || 0,
           mimeType: mimeType || 'application/octet-stream',
-          isPublic: isPublic ?? true,
+          isPublic: isPublicDocument,
         })
         .returning();
 
