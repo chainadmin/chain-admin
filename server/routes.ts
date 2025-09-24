@@ -2551,16 +2551,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/documents', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
-      
+
       if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
       }
 
+      const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
+      const fileName = typeof req.body?.fileName === "string" ? req.body.fileName.trim() : "";
+      const fileUrl = typeof req.body?.fileUrl === "string" ? req.body.fileUrl.trim() : "";
+      const mimeType = typeof req.body?.mimeType === "string" ? req.body.mimeType.trim() : "";
+      const description = typeof req.body?.description === "string" ? req.body.description.trim() : undefined;
+      const isPublic = Boolean(req.body?.isPublic);
+      const rawFileSize = req.body?.fileSize;
+
+      if (!title || !fileName || !fileUrl || !mimeType) {
+        return res.status(400).json({ message: "Title, file name, file URL, and mime type are required" });
+      }
+
+      const fileSize = typeof rawFileSize === "number" ? rawFileSize : Number(rawFileSize);
+      if (!Number.isFinite(fileSize) || fileSize <= 0) {
+        return res.status(400).json({ message: "File size must be a positive number" });
+      }
+
+      let accountId: string | null = null;
+
+      if (!isPublic) {
+        const submittedAccountId = typeof req.body?.accountId === "string" ? req.body.accountId.trim() : "";
+
+        if (!submittedAccountId) {
+          return res.status(400).json({ message: "Account is required when document is not shared with all consumers" });
+        }
+
+        const account = await storage.getAccount(submittedAccountId);
+        if (!account || account.tenantId !== tenantId) {
+          return res.status(400).json({ message: "Selected account could not be found" });
+        }
+
+        accountId = account.id;
+      }
+
       const document = await storage.createDocument({
-        ...req.body,
-        tenantId: tenantId,
+        tenantId,
+        accountId,
+        title,
+        description,
+        fileName,
+        fileUrl,
+        fileSize,
+        mimeType,
+        isPublic,
       });
-      
+
       res.json(document);
     } catch (error) {
       console.error("Error creating document:", error);
@@ -2570,7 +2611,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete('/api/documents/:id', authenticateUser, async (req: any, res) => {
     try {
-      await storage.deleteDocument(req.params.id);
+      const tenantId = req.user?.tenantId;
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const deleted = await storage.deleteDocument(req.params.id, tenantId);
+
+      if (!deleted) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+
       res.json({ message: "Document deleted successfully" });
     } catch (error) {
       console.error("Error deleting document:", error);
@@ -2645,6 +2697,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return trimmed ? trimmed : null;
   };
 
+  const parsePercentageInput = (value: unknown): number | null => {
+    if (value === null || value === undefined || value === "") {
+      return null;
+    }
+
+    if (typeof value === "number") {
+      if (!Number.isFinite(value)) {
+        return null;
+      }
+      if (value > 100 && value <= 10000 && Number.isInteger(value)) {
+        return Math.trunc(value);
+      }
+      return Math.round(value * 100);
+    }
+
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return null;
+      }
+      const numeric = Number(trimmed.replace(/%$/, ""));
+      if (Number.isNaN(numeric)) {
+        return null;
+      }
+      return Math.round(numeric * 100);
+    }
+
+    return null;
+  };
+
+  const parseDateInput = (value: unknown): string | null => {
+    if (typeof value !== "string") {
+      return null;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      return null;
+    }
+
+    const parsed = new Date(trimmed);
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
+
+    return trimmed;
+  };
+
   const buildArrangementOptionPayload = (body: any, tenantId: string): InsertArrangementOption => {
     const planTypeRaw = typeof body.planType === "string" ? body.planType : "range";
     const planType = planTypeSet.has(planTypeRaw as any) ? (planTypeRaw as InsertArrangementOption["planType"]) : "range";
@@ -2669,6 +2773,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const monthlyPaymentMax = parseCurrencyInput(body.monthlyPaymentMax);
     const fixedMonthlyPayment = parseCurrencyInput(body.fixedMonthlyPayment ?? body.fixedMonthlyAmount);
     const payInFullAmount = parseCurrencyInput(body.payInFullAmount ?? body.payoffAmount);
+    const payoffPercentage = parsePercentageInput(
+      body.payoffPercentageBasisPoints ?? body.payoffPercentage ?? body.payoffPercent ?? body.payoffPercentageBps
+    );
+    const payoffDueDate = parseDateInput(body.payoffDueDate);
     const payoffText = sanitizeOptionalText(body.payoffText ?? body.payInFullText ?? body.payoffCopy);
     const customTermsText = sanitizeOptionalText(body.customTermsText ?? body.customCopy);
     const maxTermMonths = parseOptionalInteger(body.maxTermMonths);
@@ -2687,6 +2795,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       fixedMonthlyPayment: planType === "fixed_monthly" ? fixedMonthlyPayment : null,
       payInFullAmount: planType === "pay_in_full" ? payInFullAmount : null,
       payoffText: planType === "pay_in_full" ? payoffText : null,
+      payoffPercentageBasisPoints: planType === "pay_in_full" ? payoffPercentage : null,
+      payoffDueDate: planType === "pay_in_full" ? payoffDueDate : null,
       customTermsText: planType === "custom_terms" ? customTermsText : null,
       maxTermMonths:
         planType === "pay_in_full" || planType === "custom_terms"
@@ -2974,10 +3084,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json([]);
       }
 
+      const consumer = await storage.getConsumerByEmailAndTenant(email, tenantSlug as string);
+
+      if (!consumer) {
+        return res.json([]);
+      }
+
+      const consumerAccounts = await storage.getAccountsByConsumer(consumer.id);
+      const consumerAccountIds = new Set(consumerAccounts.map(account => account.id));
+
+      const requestedAccountId = typeof req.query.accountId === "string" ? req.query.accountId : null;
+      if (requestedAccountId && !consumerAccountIds.has(requestedAccountId)) {
+        return res.json([]);
+      }
+
       const documents = await storage.getDocumentsByTenant(tenant.id);
-      const publicDocuments = documents.filter(doc => doc.isPublic);
-      
-      res.json(publicDocuments);
+      const visibleDocuments = documents.filter(doc => {
+        if (doc.isPublic) {
+          return true;
+        }
+
+        if (!doc.accountId) {
+          return false;
+        }
+
+        if (!consumerAccountIds.has(doc.accountId)) {
+          return false;
+        }
+
+        if (requestedAccountId) {
+          return doc.accountId === requestedAccountId;
+        }
+
+        return true;
+      });
+
+      res.json(visibleDocuments);
     } catch (error) {
       console.error("Error fetching consumer documents:", error);
       res.status(500).json({ message: "Failed to fetch documents" });

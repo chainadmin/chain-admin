@@ -77,6 +77,58 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       return null;
     };
 
+    const parsePercentageInput = (value: any): number | null => {
+      if (value === null || value === undefined || value === '') {
+        return null;
+      }
+
+      if (typeof value === 'number') {
+        if (!Number.isFinite(value)) {
+          return null;
+        }
+        if (value > 100 && value <= 10000 && Number.isInteger(value)) {
+          return Math.trunc(value);
+        }
+        return Math.round(value * 100);
+      }
+
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) {
+          return null;
+        }
+        const numeric = Number(trimmed.replace(/%$/, ''));
+        if (Number.isNaN(numeric)) {
+          return null;
+        }
+        return Math.round(numeric * 100);
+      }
+
+      return null;
+    };
+
+    const parseDateInput = (value: any): string | null => {
+      if (typeof value !== 'string') {
+        return null;
+      }
+
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return null;
+      }
+
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+        return null;
+      }
+
+      const parsed = new Date(trimmed);
+      if (Number.isNaN(parsed.getTime())) {
+        return null;
+      }
+
+      return trimmed;
+    };
+
     // Get tenant ID from JWT token
     const token = req.headers.authorization?.replace('Bearer ', '') || 
                   req.headers.cookie?.split(';').find(c => c.trim().startsWith('authToken='))?.split('=')[1];
@@ -124,6 +176,10 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       const monthlyPaymentMaxCents = parseCurrencyInput(req.body.monthlyPaymentMax);
       const fixedMonthlyPaymentCents = parseCurrencyInput(req.body.fixedMonthlyPayment ?? req.body.fixedMonthlyAmount);
       const payInFullAmountCents = parseCurrencyInput(req.body.payInFullAmount ?? req.body.payoffAmount);
+      const payoffPercentageBasisPoints = parsePercentageInput(
+        req.body.payoffPercentageBasisPoints ?? req.body.payoffPercentage ?? req.body.payoffPercent
+      );
+      const payoffDueDate = parseDateInput(req.body.payoffDueDate);
       const payoffText = typeof req.body.payoffText === 'string' ? req.body.payoffText.trim() : (typeof req.body.payInFullText === 'string' ? req.body.payInFullText.trim() : null);
       const customTermsText = typeof req.body.customTermsText === 'string' ? req.body.customTermsText.trim() : (typeof req.body.customCopy === 'string' ? req.body.customCopy.trim() : null);
       const maxTermMonths = parseOptionalInteger(req.body.maxTermMonths);
@@ -146,9 +202,21 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         return;
       }
 
-      if (planType === 'pay_in_full' && payInFullAmountCents === null && !payoffText) {
-        res.status(400).json({ error: 'Provide a payoff amount or custom text for pay in full plans' });
-        return;
+      if (planType === 'pay_in_full') {
+        if (payoffPercentageBasisPoints === null) {
+          res.status(400).json({ error: 'Payoff percentage is required for pay in full plans' });
+          return;
+        }
+
+        if (payoffPercentageBasisPoints <= 0 || payoffPercentageBasisPoints > 10000) {
+          res.status(400).json({ error: 'Payoff percentage must be between 0 and 100' });
+          return;
+        }
+
+        if (!payoffDueDate) {
+          res.status(400).json({ error: 'Payoff due date is required for pay in full plans' });
+          return;
+        }
       }
 
       if (planType === 'custom_terms' && !customTermsText) {
@@ -170,6 +238,8 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
           fixedMonthlyPayment: planType === 'fixed_monthly' ? fixedMonthlyPaymentCents : null,
           payInFullAmount: planType === 'pay_in_full' ? payInFullAmountCents : null,
           payoffText: planType === 'pay_in_full' ? payoffText : null,
+          payoffPercentageBasisPoints: planType === 'pay_in_full' ? payoffPercentageBasisPoints : null,
+          payoffDueDate: planType === 'pay_in_full' ? payoffDueDate : null,
           customTermsText: planType === 'custom_terms' ? customTermsText : null,
           maxTermMonths:
             planType === 'pay_in_full' || planType === 'custom_terms'

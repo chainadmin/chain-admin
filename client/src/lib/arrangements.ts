@@ -7,6 +7,8 @@ export interface ArrangementLike {
   payoffText?: string | null;
   customTermsText?: string | null;
   maxTermMonths?: number | null;
+  payoffPercentageBasisPoints?: number | null;
+  payoffDueDate?: string | null;
 }
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
@@ -14,6 +16,8 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
   currency: 'USD',
   minimumFractionDigits: 2,
 });
+
+const dateFormatter = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium' });
 
 export const formatCurrencyFromCents = (value?: number | null): string => {
   if (value === null || value === undefined) {
@@ -75,11 +79,42 @@ export const getArrangementSummary = (arrangement: ArrangementLike) => {
     case 'pay_in_full': {
       const amount = typeof arrangement.payInFullAmount === 'number' ? arrangement.payInFullAmount : null;
       const payoffText = arrangement.payoffText?.trim();
-      const headline = amount !== null
-        ? `Pay ${formatCurrencyFromCents(amount)} today`
-        : payoffText || 'Pay in full';
-      const detail = amount !== null && payoffText ? payoffText : undefined;
-      return { planType, headline, detail };
+      const percentageBasisPoints = typeof arrangement.payoffPercentageBasisPoints === 'number'
+        ? arrangement.payoffPercentageBasisPoints
+        : null;
+      const dueDate = arrangement.payoffDueDate;
+
+      const formattedPercentage = percentageBasisPoints !== null
+        ? (percentageBasisPoints / 100).toLocaleString('en-US', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 2,
+          }) + '%'
+        : null;
+
+      const formattedDueDate = dueDate
+        ? (() => {
+            const parsedDate = new Date(dueDate);
+            return Number.isNaN(parsedDate.getTime()) ? null : dateFormatter.format(parsedDate);
+          })()
+        : null;
+
+      const headline = formattedPercentage
+        ? `Pay ${formattedPercentage} of balance`
+        : amount !== null
+          ? `Pay ${formatCurrencyFromCents(amount)} today`
+          : payoffText || 'Pay in full';
+
+      const detailParts: string[] = [];
+      if (formattedDueDate) {
+        detailParts.push(`Due by ${formattedDueDate}`);
+      }
+
+      const supplementalText = payoffText && payoffText !== headline ? payoffText : null;
+      if (supplementalText) {
+        detailParts.push(supplementalText);
+      }
+
+      return { planType, headline, detail: detailParts.length ? detailParts.join(' • ') : undefined };
     }
     case 'custom_terms': {
       const customText = arrangement.customTermsText?.trim();
