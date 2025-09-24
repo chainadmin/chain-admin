@@ -55,6 +55,10 @@ export default function ConsumerLogin() {
       return response.json();
     },
     onSuccess: (data: any) => {
+      // Clear any old cached data first
+      localStorage.removeItem("consumerToken");
+      localStorage.removeItem("consumerSession");
+      
       if (data.multipleAgencies) {
         // Consumer has accounts with multiple agencies
         toast({
@@ -92,20 +96,29 @@ export default function ConsumerLogin() {
           description: "Welcome to your account portal!",
         });
         
+        // Ensure we have required data
+        if (!data.token || !data.tenant?.slug) {
+          console.error("Missing token or tenant data:", data);
+          toast({
+            title: "Login Error",
+            description: "Invalid response from server. Please try again.",
+            variant: "destructive",
+          });
+          return;
+        }
+        
         // Store consumer session data and token
         localStorage.setItem("consumerSession", JSON.stringify({
           email: form.email,
-          tenantSlug: data.tenant?.slug,
+          tenantSlug: data.tenant.slug,
           consumerData: data.consumer,
         }));
         
         // Store the token for authenticated requests
-        if (data.token) {
-          localStorage.setItem("consumerToken", data.token);
-        }
+        localStorage.setItem("consumerToken", data.token);
         
-        // Redirect to consumer portal
-        setLocation(`/consumer-dashboard`);
+        // Force a hard redirect to clear any cached state
+        window.location.href = '/consumer-dashboard';
       }
     },
     onError: (error: any) => {
