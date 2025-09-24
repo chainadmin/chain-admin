@@ -44,7 +44,7 @@ export default function EnhancedConsumerPortal() {
 
   // Fetch notifications
   const { data: notifications } = useQuery({
-    queryKey: [`/api/consumer-notifications/${encodedEmail}/${resolvedTenantSlug ?? ""}`],
+    queryKey: [`/api/consumer-notifications/by-consumer/${encodedEmail}/${resolvedTenantSlug ?? ""}`],
     enabled: !!(resolvedTenantSlug && email),
   });
 
@@ -100,7 +100,7 @@ export default function EnhancedConsumerPortal() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: [`/api/consumer-notifications/${encodedEmail}/${resolvedTenantSlug ?? ""}`],
+        queryKey: [`/api/consumer-notifications/by-consumer/${encodedEmail}/${resolvedTenantSlug ?? ""}`],
       });
     },
   });

@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage, type IStorage } from "./storage";
 import { authenticateUser, authenticateConsumer, getCurrentUser } from "./authMiddleware";
@@ -2259,11 +2259,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Consumer notifications route
-  app.get('/api/consumer-notifications/:email/:tenantSlug', async (req, res) => {
+  const consumerNotificationsHandler = async (req: Request, res: Response) => {
     try {
       const { email, tenantSlug } = req.params;
-      
+
+      if (!email || !tenantSlug) {
+        return res.status(400).json({ message: "Email and tenant slug are required" });
+      }
+
       const consumer = await storage.getConsumerByEmailAndTenant(email, tenantSlug);
       if (!consumer) {
         return res.status(404).json({ message: "Consumer not found" });
@@ -2275,7 +2278,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error fetching consumer notifications:", error);
       res.status(500).json({ message: "Failed to fetch notifications" });
     }
-  });
+  };
+
+  // Consumer notifications routes
+  app.get('/api/consumer-notifications/by-consumer/:email/:tenantSlug', consumerNotificationsHandler);
+  app.get('/api/consumer-notifications/:email/:tenantSlug', consumerNotificationsHandler);
 
   // Mark notification as read
   app.patch('/api/consumer-notifications/:id/read', async (req, res) => {

@@ -89,7 +89,7 @@ export default function ConsumerDashboard() {
 
   // Fetch notifications
   const { data: notifications } = useQuery({
-    queryKey: [`/api/consumer-notifications/${consumerSession?.email}/${consumerSession?.tenantSlug}`],
+    queryKey: [`/api/consumer-notifications/by-consumer/${consumerSession?.email}/${consumerSession?.tenantSlug}`],
     enabled: !!consumerSession?.email && !!consumerSession?.tenantSlug,
   });
 
@@ -153,8 +153,8 @@ export default function ConsumerDashboard() {
       await apiRequest("PATCH", `/api/consumer-notifications/${notificationId}/read`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ 
-        queryKey: [`/api/consumer-notifications/${consumerSession?.email}/${consumerSession?.tenantSlug}`] 
+      queryClient.invalidateQueries({
+        queryKey: [`/api/consumer-notifications/by-consumer/${consumerSession?.email}/${consumerSession?.tenantSlug}`]
       });
     },
   });
