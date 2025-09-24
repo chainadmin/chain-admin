@@ -61,7 +61,7 @@ export default function Settings() {
     fileUrl: "",
     fileSize: 0,
     mimeType: "",
-    isPublic: false,
+    isPublic: true,
     accountId: "",
   };
 
@@ -1176,14 +1176,38 @@ export default function Settings() {
                               </div>
                             </div>
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => deleteDocumentMutation.mutate(document.id)}
-                            className="text-red-500 hover:text-red-700"
-                          >
-                            <i className="fas fa-trash"></i>
-                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-red-500 hover:text-red-700"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete document?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This action cannot be undone. The document "{document.title}" will no longer be available to
+                                  consumers.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction asChild>
+                                  <Button
+                                    variant="destructive"
+                                    onClick={() => deleteDocumentMutation.mutate(document.id)}
+                                    disabled={deleteDocumentMutation.isPending}
+                                  >
+                                    Delete
+                                  </Button>
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </div>
                       ))}
                     </div>
