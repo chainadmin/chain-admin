@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import AdminLayout from "@/components/admin-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
 import {
   CreditCard,
   DollarSign,
@@ -28,11 +27,6 @@ import {
   AlertCircle,
   Loader2,
 } from "lucide-react";
-
-type BillingRedirectResponse = {
-  url?: string;
-  message?: string;
-};
 
 export default function Billing() {
   // Fetch billing statistics
@@ -56,79 +50,68 @@ export default function Billing() {
   });
 
   const { toast } = useToast();
-  const [showUpdateBillingModal, setShowUpdateBillingModal] = useState(false);
+  type BillingDialog = "update-billing" | "manage-subscription" | "setup-subscription";
+  const [activeDialog, setActiveDialog] = useState<BillingDialog | null>(null);
+  const [isPreparingPortal, setIsPreparingPortal] = useState(false);
+  const [isPreparingCheckout, setIsPreparingCheckout] = useState(false);
   const [savingBillingInfo, setSavingBillingInfo] = useState(false);
 
-  const manageSubscriptionMutation = useMutation({
-    mutationFn: async (): Promise<BillingRedirectResponse> => {
-      const response = await apiRequest("POST", "/api/billing/customer-portal");
-      return (await response.json().catch(() => ({}))) as BillingRedirectResponse;
-    },
-    onSuccess: (data) => {
-      toast({
-        title: "Portal ready",
-        description:
-          data?.message ?? "Opening the subscription management portal in a new tab.",
-      });
+  const simulateDelay = (duration = 800) => new Promise((resolve) => setTimeout(resolve, duration));
 
-      if (data?.url && typeof window !== "undefined") {
-        window.open(data.url, "_blank", "noopener");
-      }
-    },
-    onError: (error: unknown) => {
-      toast({
-        title: "Unable to open portal",
-        description:
-          error instanceof Error
-            ? error.message
-            : "We couldn't open the subscription portal. Please try again later.",
-        variant: "destructive",
-      });
-    },
-  });
+  const handleManageSubscription = async () => {
+    setIsPreparingPortal(true);
+    toast({
+      title: "Preparing subscription portal",
+      description: "Hang tight while we ready the management tools.",
+    });
 
-  const setupSubscriptionMutation = useMutation({
-    mutationFn: async (): Promise<BillingRedirectResponse> => {
-      const response = await apiRequest("POST", "/api/billing/checkout-session");
-      return (await response.json().catch(() => ({}))) as BillingRedirectResponse;
-    },
-    onSuccess: (data) => {
+    try {
+      await simulateDelay();
       toast({
-        title: "Checkout ready",
-        description:
-          data?.message ?? "Opening the subscription checkout experience in a new tab.",
+        title: "Preview ready",
+        description: "Review the steps below while the live portal integration is finalized.",
       });
+      setActiveDialog("manage-subscription");
+    } finally {
+      setIsPreparingPortal(false);
+    }
+  };
 
-      if (data?.url && typeof window !== "undefined") {
-        window.open(data.url, "_blank", "noopener");
-      }
-    },
-    onError: (error: unknown) => {
+  const handleSetupSubscription = async () => {
+    setIsPreparingCheckout(true);
+    toast({
+      title: "Preparing checkout",
+      description: "We're almost ready to launch the hosted subscription checkout.",
+    });
+
+    try {
+      await simulateDelay();
       toast({
-        title: "Unable to start checkout",
-        description:
-          error instanceof Error
-            ? error.message
-            : "We couldn't start the subscription checkout. Please try again later.",
-        variant: "destructive",
+        title: "Next steps",
+        description: "Follow the guided setup in the dialog to finish onboarding.",
       });
-    },
-  });
+      setActiveDialog("setup-subscription");
+    } finally {
+      setIsPreparingCheckout(false);
+    }
+  };
 
   const handleBillingInfoSave = async () => {
     setSavingBillingInfo(true);
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      await simulateDelay();
       toast({
         title: "Billing details updated",
         description: "Your billing preferences have been saved.",
       });
-      setShowUpdateBillingModal(false);
+      setActiveDialog(null);
     } finally {
       setSavingBillingInfo(false);
     }
   };
+
+  const closeDialog = () => setActiveDialog(null);
 
   const formatCurrency = (amount: number) => {
     return `$${amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
@@ -337,7 +320,7 @@ export default function Billing() {
                   <Button
                     variant="outline"
                     data-testid="button-update-billing"
-                    onClick={() => setShowUpdateBillingModal(true)}
+                    onClick={() => setActiveDialog("update-billing")}
                   >
                     Update Billing Info
                   </Button>
@@ -470,13 +453,13 @@ export default function Billing() {
                         <Button
                           variant="outline"
                           data-testid="button-manage-subscription"
-                          onClick={() => manageSubscriptionMutation.mutate()}
-                          disabled={manageSubscriptionMutation.isPending}
+                          onClick={handleManageSubscription}
+                          disabled={isPreparingPortal}
                         >
-                          {manageSubscriptionMutation.isPending ? (
+                          {isPreparingPortal ? (
                             <>
                               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Opening portal...
+                              Preparing portal...
                             </>
                           ) : (
                             "Manage Subscription"
@@ -494,13 +477,13 @@ export default function Billing() {
                     </p>
                     <Button
                       data-testid="button-setup-subscription"
-                      onClick={() => setupSubscriptionMutation.mutate()}
-                      disabled={setupSubscriptionMutation.isPending}
+                      onClick={handleSetupSubscription}
+                      disabled={isPreparingCheckout}
                     >
-                      {setupSubscriptionMutation.isPending ? (
+                      {isPreparingCheckout ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Starting checkout...
+                          Preparing checkout...
                         </>
                       ) : (
                         "Set Up Subscription"
@@ -514,46 +497,117 @@ export default function Billing() {
         </Tabs>
       </div>
 
-      <Dialog open={showUpdateBillingModal} onOpenChange={setShowUpdateBillingModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Update billing information</DialogTitle>
-            <DialogDescription>
-              Add or replace the payment method that will be used for your upcoming invoices.
-              We&apos;ll connect this modal to the live billing integration soon.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 text-sm text-muted-foreground">
-            <p>
-              For now, you can confirm the intent to update your billing details. When the
-              integration is complete, this workflow will securely collect your payment
-              method.
-            </p>
-            <p>
-              Need immediate help? Contact support and we&apos;ll assist you with any billing
-              changes.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowUpdateBillingModal(false)}
-              disabled={savingBillingInfo}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleBillingInfoSave} disabled={savingBillingInfo}>
-              {savingBillingInfo ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                "Save changes"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+      <Dialog open={activeDialog !== null} onOpenChange={(open) => { if (!open) setActiveDialog(null); }}>
+        {activeDialog === "update-billing" && (
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Update billing information</DialogTitle>
+              <DialogDescription>
+                Add or replace the payment method that will be used for your upcoming invoices.
+                We&apos;ll connect this modal to the live billing integration soon.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 text-sm text-muted-foreground">
+              <p>
+                For now, you can confirm the intent to update your billing details. When the
+                integration is complete, this workflow will securely collect your payment
+                method.
+              </p>
+              <p>
+                Need immediate help? Contact support and we&apos;ll assist you with any billing
+                changes.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={closeDialog} disabled={savingBillingInfo}>
+                Cancel
+              </Button>
+              <Button onClick={handleBillingInfoSave} disabled={savingBillingInfo}>
+                {savingBillingInfo ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save changes"
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        )}
+
+        {activeDialog === "manage-subscription" && (
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Manage subscription</DialogTitle>
+              <DialogDescription>
+                The live management portal is on the way. Until then, follow these steps to review
+                or adjust your plan.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 text-sm text-muted-foreground">
+              <p>
+                Confirm the subscription changes you&apos;d like to make and share them with our team.
+                We&apos;ll update your billing details and send a confirmation.
+              </p>
+              <p>
+                Need help immediately? Contact support and we&apos;ll guide you through the update.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={closeDialog}>
+                Close
+              </Button>
+              <Button asChild>
+                <a
+                  href="mailto:billing@chain.software"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={closeDialog}
+                >
+                  Email support
+                </a>
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        )}
+
+        {activeDialog === "setup-subscription" && (
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Set up your subscription</DialogTitle>
+              <DialogDescription>
+                We&apos;ll walk you through a guided checkout experience soon. For now, let us know
+                how you&apos;d like to get started.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 text-sm text-muted-foreground">
+              <p>
+                Share the plan you&apos;re interested in and any preferred billing cadence. Our team will
+                provision the subscription and send the hosted checkout link to finalize payment.
+              </p>
+              <p>
+                You can also book a quick onboarding call if you&apos;d like us to walk through options
+                live.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={closeDialog}>
+                Close
+              </Button>
+              <Button asChild>
+                <a
+                  href="https://chainsoftwaregroup.com/contact"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={closeDialog}
+                >
+                  Book a call
+                </a>
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        )}
       </Dialog>
     </AdminLayout>
   );
