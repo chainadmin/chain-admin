@@ -68,9 +68,9 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       res.status(200).json(tenantAccounts);
     } else if (req.method === 'POST') {
       // Create a new account
-      const { 
-        firstName, lastName, email, phone, 
-        accountNumber, creditor, balanceCents, folderId, 
+      const {
+        firstName, lastName, email, phone,
+        accountNumber, creditor, balanceCents, folderId,
         dateOfBirth, address, city, state, zipCode,
         additionalData, dueDate
       } = req.body;
@@ -150,6 +150,152 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         .returning();
 
       res.status(201).json(newAccount);
+    } else if (req.method === 'PATCH') {
+      // Update an account and optionally associated consumer details
+      const queryId = req.query?.id;
+      let accountId = Array.isArray(queryId) ? queryId[0] : queryId;
+
+      if (!accountId) {
+        const urlPath = req.url?.split('?')[0] ?? '';
+        const parts = urlPath.split('/').filter(Boolean);
+        const possibleId = parts[parts.length - 1];
+        if (possibleId && possibleId !== 'accounts') {
+          accountId = possibleId;
+        }
+      }
+
+      if (!accountId) {
+        res.status(400).json({ error: 'Account ID is required' });
+        return;
+      }
+
+      const [existing] = await db
+        .select({
+          account: accounts,
+          consumer: consumers
+        })
+        .from(accounts)
+        .leftJoin(consumers, eq(accounts.consumerId, consumers.id))
+        .where(and(
+          eq(accounts.id, accountId),
+          eq(accounts.tenantId, tenantId)
+        ))
+        .limit(1);
+
+      if (!existing?.account) {
+        res.status(404).json({ error: 'Account not found' });
+        return;
+      }
+
+      const {
+        accountNumber,
+        creditor,
+        balanceCents,
+        dueDate,
+        status,
+        additionalData,
+        folderId,
+        firstName,
+        lastName,
+        email,
+        phone,
+        dateOfBirth,
+        address,
+        city,
+        state,
+        zipCode,
+      } = req.body ?? {};
+
+      const accountUpdates: Record<string, any> = {};
+      if (accountNumber !== undefined) accountUpdates.accountNumber = accountNumber;
+      if (creditor !== undefined) accountUpdates.creditor = creditor;
+      if (balanceCents !== undefined) accountUpdates.balanceCents = balanceCents;
+      if (dueDate !== undefined) accountUpdates.dueDate = dueDate;
+      if (status !== undefined) accountUpdates.status = status;
+      if (additionalData !== undefined) accountUpdates.additionalData = additionalData;
+      if (folderId !== undefined) accountUpdates.folderId = folderId;
+
+      let updatedAccount = existing.account;
+      if (Object.keys(accountUpdates).length > 0) {
+        const [accountResult] = await db
+          .update(accounts)
+          .set(accountUpdates)
+          .where(and(
+            eq(accounts.id, accountId),
+            eq(accounts.tenantId, tenantId)
+          ))
+          .returning();
+
+        if (accountResult) {
+          updatedAccount = accountResult;
+        }
+      }
+
+      const consumerUpdates: Record<string, any> = {};
+      if (firstName !== undefined) consumerUpdates.firstName = firstName;
+      if (lastName !== undefined) consumerUpdates.lastName = lastName;
+      if (email !== undefined) consumerUpdates.email = email;
+      if (phone !== undefined) consumerUpdates.phone = phone;
+      if (dateOfBirth !== undefined) consumerUpdates.dateOfBirth = dateOfBirth;
+      if (address !== undefined) consumerUpdates.address = address;
+      if (city !== undefined) consumerUpdates.city = city;
+      if (state !== undefined) consumerUpdates.state = state;
+      if (zipCode !== undefined) consumerUpdates.zipCode = zipCode;
+      if (folderId !== undefined) consumerUpdates.folderId = folderId;
+
+      if (existing.consumer && Object.keys(consumerUpdates).length > 0) {
+        await db
+          .update(consumers)
+          .set(consumerUpdates)
+          .where(and(
+            eq(consumers.id, existing.consumer.id),
+            eq(consumers.tenantId, tenantId)
+          ));
+      }
+
+      const [updatedAccountWithRelations] = await db
+        .select({
+          id: accounts.id,
+          accountNumber: accounts.accountNumber,
+          creditor: accounts.creditor,
+          balanceCents: accounts.balanceCents,
+          dueDate: accounts.dueDate,
+          status: accounts.status,
+          additionalData: accounts.additionalData,
+          consumerId: accounts.consumerId,
+          tenantId: accounts.tenantId,
+          createdAt: accounts.createdAt,
+          folderId: accounts.folderId,
+          consumer: {
+            id: consumers.id,
+            firstName: consumers.firstName,
+            lastName: consumers.lastName,
+            email: consumers.email,
+            phone: consumers.phone,
+            folderId: consumers.folderId,
+            dateOfBirth: consumers.dateOfBirth,
+            address: consumers.address,
+            city: consumers.city,
+            state: consumers.state,
+            zipCode: consumers.zipCode,
+          },
+          folder: {
+            id: folders.id,
+            name: folders.name,
+            color: folders.color,
+            isDefault: folders.isDefault,
+          },
+        })
+        .from(accounts)
+        .leftJoin(consumers, eq(accounts.consumerId, consumers.id))
+        .leftJoin(folders, eq(consumers.folderId, folders.id))
+        .where(and(
+          eq(accounts.id, accountId),
+          eq(accounts.tenantId, tenantId)
+        ))
+        .limit(1);
+
+      res.status(200).json(updatedAccountWithRelations ?? updatedAccount);
     } else if (req.method === 'DELETE') {
       // Delete an account - expects /api/accounts?id=<accountId>
       const accountId = req.query.id as string;
