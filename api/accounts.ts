@@ -76,7 +76,7 @@ function createAccountsHandler(resolveDb: typeof getDb = getDb) {
           additionalData, dueDate
         } = req.body;
 
-        if (!firstName || !lastName || !email || !creditor || balanceCents === undefined || !dateOfBirth) {
+        if (!firstName || !lastName || !email || !creditor || balanceCents === undefined) {
           res.status(400).json({ error: 'Missing required fields' });
           return;
         }
@@ -95,6 +95,11 @@ function createAccountsHandler(resolveDb: typeof getDb = getDb) {
           .limit(1);
 
         if (!consumer) {
+          if (!dateOfBirth) {
+            res.status(400).json({ error: 'Date of birth is required for new consumers' });
+            return;
+          }
+
           // Get default folder if no folder specified
           let targetFolderId = folderId;
           if (!targetFolderId) {
@@ -137,8 +142,13 @@ function createAccountsHandler(resolveDb: typeof getDb = getDb) {
           type ConsumerUpdate = Partial<typeof consumers.$inferInsert>;
           const updateData: ConsumerUpdate = {};
 
-          const normalizeNullable = (value?: string | null) =>
-            value === undefined ? undefined : (value || null);
+          const normalizeNullable = (value?: string | null) => {
+            if (value === undefined) {
+              return undefined;
+            }
+
+            return value === '' ? null : value ?? null;
+          };
 
           const assignIfProvided = <K extends keyof ConsumerUpdate>(
             key: K,
@@ -149,7 +159,7 @@ function createAccountsHandler(resolveDb: typeof getDb = getDb) {
             }
           };
 
-          assignIfProvided('dateOfBirth', dateOfBirth);
+          assignIfProvided('dateOfBirth', normalizeNullable(dateOfBirth));
           assignIfProvided('address', normalizeNullable(address));
           assignIfProvided('city', normalizeNullable(city));
           assignIfProvided('state', normalizeNullable(state));
