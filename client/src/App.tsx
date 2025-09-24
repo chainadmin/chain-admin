@@ -32,6 +32,7 @@ import AgencyLogin from "@/pages/agency-login";
 import AgencyLanding from "@/pages/agency-landing";
 import PrivacyPolicy from "@/pages/privacy-policy";
 import TermsOfService from "@/pages/terms-of-service";
+import SmsOptInDisclosure from "@/pages/sms-opt-in";
 import TenantSetup from "@/components/tenant-setup";
 import GlobalAdmin from "@/pages/global-admin";
 import EmailTest from "@/pages/email-test";
@@ -42,14 +43,30 @@ function Router() {
   const { agencySlug, agency, isLoading: agencyLoading } = useAgencyContext();
   const { toast } = useToast();
   const isMobileApp = mobileConfig.isNativePlatform;
+  const pathname = window.location.pathname;
+  const smsOptInPaths = ["/sms-opt-in", "/sms-opt-in-disclosure"] as const;
+  const isSmsOptInRoute = smsOptInPaths.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`)
+  );
+  const getSmsOptInRoutes = (prefix: string): JSX.Element[] =>
+    smsOptInPaths.map((path) => {
+      const normalizedKey = path.replace(/\//g, "-").replace(/^-/, "");
+      return (
+        <Route
+          key={`${prefix}-${normalizedKey}`}
+          path={path}
+          component={SmsOptInDisclosure}
+        />
+      );
+    });
   
   // Check if we're on a public route that doesn't need auth
-  const pathname = window.location.pathname;
-  const isPublicRoute = pathname.startsWith('/agency/') || 
-                       pathname === '/consumer-login' || 
+  const isPublicRoute = pathname.startsWith('/agency/') ||
+                       pathname === '/consumer-login' ||
                        pathname.startsWith('/consumer-register') ||
                        pathname === '/privacy-policy' ||
-                       pathname === '/terms-of-service';
+                       pathname === '/terms-of-service' ||
+                       isSmsOptInRoute;
   
   // Don't block public routes with auth loading
   const shouldShowLoader = isLoading && !isPublicRoute;
@@ -124,7 +141,8 @@ function Router() {
         />,
         <Route key="mobile-agency" path="/agency/:agencySlug" component={AgencyLanding} />,
         <Route key="mobile-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
-        <Route key="mobile-terms" path="/terms-of-service" component={TermsOfService} />
+        <Route key="mobile-terms" path="/terms-of-service" component={TermsOfService} />,
+        ...getSmsOptInRoutes("mobile-sms")
       );
 
       mobileRoutes.push(
@@ -161,6 +179,7 @@ function Router() {
       />,
       <Route key="agency-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
       <Route key="agency-terms" path="/terms-of-service" component={TermsOfService} />,
+      ...getSmsOptInRoutes("agency-sms"),
       <Route key="agency-landing" path="/agency/:agencySlug" component={AgencyLanding} />,
       <Route key="agency-login" path="/agency-login" component={AgencyLogin} />,
       <Route
@@ -210,6 +229,7 @@ function Router() {
       />,
       <Route key="landing-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
       <Route key="landing-terms" path="/terms-of-service" component={TermsOfService} />,
+      ...getSmsOptInRoutes("landing-sms"),
       <Route key="landing-fallback" path="/:rest*" component={NotFound} />
     ];
 
@@ -240,6 +260,7 @@ function Router() {
       <Route key="main-agency" path="/agency/:agencySlug" component={AgencyLanding} />,
       <Route key="main-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
       <Route key="main-terms" path="/terms-of-service" component={TermsOfService} />,
+      ...getSmsOptInRoutes("main-sms"),
       <Route key="main-fallback" path="/:rest*" component={NotFound} />
     ];
 
@@ -271,6 +292,7 @@ function Router() {
       <Route key="public-agency" path="/agency/:agencySlug" component={AgencyLanding} />,
       <Route key="public-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
       <Route key="public-terms" path="/terms-of-service" component={TermsOfService} />,
+      ...getSmsOptInRoutes("public-sms"),
       <Route key="public-fix-db" path="/fix-db" component={FixDatabase} />,
       <Route key="public-admin" path="/admin" component={GlobalAdmin} />,
       <Route key="public-admin-cap" path="/Admin" component={GlobalAdmin} />,
@@ -305,6 +327,7 @@ function Router() {
     <Route key="auth-agency" path="/agency/:agencySlug" component={AgencyLanding} />,
     <Route key="auth-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
     <Route key="auth-terms" path="/terms-of-service" component={TermsOfService} />,
+    ...getSmsOptInRoutes("auth-sms"),
     <Route key="auth-fallback" path="/:rest*" component={NotFound} />
   ];
 
