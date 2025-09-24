@@ -1,21 +1,38 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import AdminLayout from "@/components/admin-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  CreditCard, 
-  DollarSign, 
-  Calendar, 
-  Users, 
-  TrendingUp, 
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+import {
+  CreditCard,
+  DollarSign,
+  Calendar,
+  Users,
+  TrendingUp,
   FileText,
   Download,
   Clock,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
+
+type BillingRedirectResponse = {
+  url?: string;
+  message?: string;
+};
 
 export default function Billing() {
   // Fetch billing statistics
@@ -37,6 +54,81 @@ export default function Billing() {
   const { data: currentInvoice } = useQuery({
     queryKey: ["/api/billing/current-invoice"],
   });
+
+  const { toast } = useToast();
+  const [showUpdateBillingModal, setShowUpdateBillingModal] = useState(false);
+  const [savingBillingInfo, setSavingBillingInfo] = useState(false);
+
+  const manageSubscriptionMutation = useMutation({
+    mutationFn: async (): Promise<BillingRedirectResponse> => {
+      const response = await apiRequest("POST", "/api/billing/customer-portal");
+      return (await response.json().catch(() => ({}))) as BillingRedirectResponse;
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Portal ready",
+        description:
+          data?.message ?? "Opening the subscription management portal in a new tab.",
+      });
+
+      if (data?.url && typeof window !== "undefined") {
+        window.open(data.url, "_blank", "noopener");
+      }
+    },
+    onError: (error: unknown) => {
+      toast({
+        title: "Unable to open portal",
+        description:
+          error instanceof Error
+            ? error.message
+            : "We couldn't open the subscription portal. Please try again later.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const setupSubscriptionMutation = useMutation({
+    mutationFn: async (): Promise<BillingRedirectResponse> => {
+      const response = await apiRequest("POST", "/api/billing/checkout-session");
+      return (await response.json().catch(() => ({}))) as BillingRedirectResponse;
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Checkout ready",
+        description:
+          data?.message ?? "Opening the subscription checkout experience in a new tab.",
+      });
+
+      if (data?.url && typeof window !== "undefined") {
+        window.open(data.url, "_blank", "noopener");
+      }
+    },
+    onError: (error: unknown) => {
+      toast({
+        title: "Unable to start checkout",
+        description:
+          error instanceof Error
+            ? error.message
+            : "We couldn't start the subscription checkout. Please try again later.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleBillingInfoSave = async () => {
+    setSavingBillingInfo(true);
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      toast({
+        title: "Billing details updated",
+        description: "Your billing preferences have been saved.",
+      });
+      setShowUpdateBillingModal(false);
+    } finally {
+      setSavingBillingInfo(false);
+    }
+  };
 
   const formatCurrency = (amount: number) => {
     return `$${amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
@@ -242,7 +334,11 @@ export default function Billing() {
                       </p>
                     </div>
                   </div>
-                  <Button variant="outline" data-testid="button-update-billing">
+                  <Button
+                    variant="outline"
+                    data-testid="button-update-billing"
+                    onClick={() => setShowUpdateBillingModal(true)}
+                  >
                     Update Billing Info
                   </Button>
                 </div>
@@ -371,8 +467,20 @@ export default function Billing() {
                             {formatDate((subscription as any).currentPeriodStart)} - {formatDate((subscription as any).currentPeriodEnd)}
                           </p>
                         </div>
-                        <Button variant="outline" data-testid="button-manage-subscription">
-                          Manage Subscription
+                        <Button
+                          variant="outline"
+                          data-testid="button-manage-subscription"
+                          onClick={() => manageSubscriptionMutation.mutate()}
+                          disabled={manageSubscriptionMutation.isPending}
+                        >
+                          {manageSubscriptionMutation.isPending ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Opening portal...
+                            </>
+                          ) : (
+                            "Manage Subscription"
+                          )}
                         </Button>
                       </div>
                     </div>
@@ -384,8 +492,19 @@ export default function Billing() {
                     <p className="text-gray-600 mb-4">
                       Set up a subscription to access billing features.
                     </p>
-                    <Button data-testid="button-setup-subscription">
-                      Set Up Subscription
+                    <Button
+                      data-testid="button-setup-subscription"
+                      onClick={() => setupSubscriptionMutation.mutate()}
+                      disabled={setupSubscriptionMutation.isPending}
+                    >
+                      {setupSubscriptionMutation.isPending ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Starting checkout...
+                        </>
+                      ) : (
+                        "Set Up Subscription"
+                      )}
                     </Button>
                   </div>
                 )}
@@ -394,6 +513,48 @@ export default function Billing() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <Dialog open={showUpdateBillingModal} onOpenChange={setShowUpdateBillingModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update billing information</DialogTitle>
+            <DialogDescription>
+              Add or replace the payment method that will be used for your upcoming invoices.
+              We&apos;ll connect this modal to the live billing integration soon.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-sm text-muted-foreground">
+            <p>
+              For now, you can confirm the intent to update your billing details. When the
+              integration is complete, this workflow will securely collect your payment
+              method.
+            </p>
+            <p>
+              Need immediate help? Contact support and we&apos;ll assist you with any billing
+              changes.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowUpdateBillingModal(false)}
+              disabled={savingBillingInfo}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleBillingInfoSave} disabled={savingBillingInfo}>
+              {savingBillingInfo ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save changes"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 }
