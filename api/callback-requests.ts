@@ -5,6 +5,24 @@ import { callbackRequests, consumers } from './_lib/schema.js';
 import { eq, and, desc } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 
+function resolveRequestId(req: AuthenticatedRequest) {
+  const queryId = req.query?.id;
+  if (typeof queryId === 'string' && queryId) {
+    return queryId;
+  }
+  if (Array.isArray(queryId) && queryId.length > 0 && queryId[0]) {
+    return queryId[0];
+  }
+  if (req.url) {
+    const url = new URL(req.url, 'http://localhost');
+    const segments = url.pathname.split('/').filter(Boolean);
+    if (segments.length > 2) {
+      return segments[segments.length - 1];
+    }
+  }
+  return undefined;
+}
+
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -64,8 +82,8 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
 
       res.status(200).json(requests);
     } else if (req.method === 'PATCH') {
-      // Update callback request - expects /api/callback-requests?id=<requestId>
-      const requestId = req.query.id as string;
+      // Update callback request - supports /api/callback-requests?id=<requestId> and /api/callback-requests/<requestId>
+      const requestId = resolveRequestId(req);
       const updates = req.body;
 
       if (!requestId) {

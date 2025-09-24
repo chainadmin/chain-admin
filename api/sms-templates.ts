@@ -5,6 +5,24 @@ import { smsTemplates } from './_lib/schema.js';
 import { eq, and, desc } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 
+function resolveTemplateId(req: AuthenticatedRequest) {
+  const queryId = req.query?.id;
+  if (typeof queryId === 'string' && queryId) {
+    return queryId;
+  }
+  if (Array.isArray(queryId) && queryId.length > 0 && queryId[0]) {
+    return queryId[0];
+  }
+  if (req.url) {
+    const url = new URL(req.url, 'http://localhost');
+    const segments = url.pathname.split('/').filter(Boolean);
+    if (segments.length > 2) {
+      return segments[segments.length - 1];
+    }
+  }
+  return undefined;
+}
+
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -60,8 +78,8 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
 
       res.status(201).json(newTemplate);
     } else if (req.method === 'DELETE') {
-      // Delete an SMS template - expects /api/sms-templates?id=<templateId>
-      const templateId = req.query.id as string;
+      // Delete an SMS template - supports /api/sms-templates?id=<templateId> and /api/sms-templates/<templateId>
+      const templateId = resolveTemplateId(req);
 
       if (!templateId) {
         res.status(400).json({ error: 'Template ID is required' });

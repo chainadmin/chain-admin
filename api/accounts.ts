@@ -5,6 +5,24 @@ import { accounts, consumers, folders } from './_lib/schema.js';
 import { eq, and } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 
+function resolveAccountId(req: AuthenticatedRequest) {
+  const queryId = req.query?.id;
+  if (typeof queryId === 'string' && queryId) {
+    return queryId;
+  }
+  if (Array.isArray(queryId) && queryId.length > 0 && queryId[0]) {
+    return queryId[0];
+  }
+  if (req.url) {
+    const url = new URL(req.url, 'http://localhost');
+    const segments = url.pathname.split('/').filter(Boolean);
+    if (segments.length > 2) {
+      return segments[segments.length - 1];
+    }
+  }
+  return undefined;
+}
+
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -313,8 +331,8 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
 
       res.status(200).json(updatedAccount);
     } else if (req.method === 'DELETE') {
-      // Delete an account - expects /api/accounts?id=<accountId>
-      const accountId = req.query.id as string;
+      // Delete an account - supports /api/accounts?id=<accountId> and /api/accounts/<accountId>
+      const accountId = resolveAccountId(req);
 
       if (!accountId) {
         res.status(400).json({ error: 'Account ID is required' });
