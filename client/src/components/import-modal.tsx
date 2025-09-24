@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { parseSsnLast4 } from "@shared/utils/ssn";
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -104,14 +105,6 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
         ];
         const standardAccountFields = ['account_number', 'account', 'creditor', 'balance', 'due_date'];
 
-        const normalizeLast4 = (value: string) => {
-          if (!value) {
-            return '';
-          }
-          const digits = value.replace(/[^0-9]/g, '').slice(-4);
-          return digits.length === 4 ? digits : '';
-        };
-        
         for (let i = 1; i < lines.length; i++) {
           const values = lines[i].split(',').map(v => v.trim());
           const row: any = {};
@@ -144,7 +137,7 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
               }
             });
 
-            const ssnLast4 = normalizeLast4(
+            const parsedSsn = parseSsnLast4(
               row.ssn_last4 || row.consumer_ssn_last4 || row.consumer_ssn || row.ssn || ''
             );
 
@@ -158,7 +151,7 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
               city: cityValue,
               state: stateValue,
               zipCode: zipValue,
-              ssnLast4: ssnLast4 || undefined,
+              ssnLast4: parsedSsn.hasValue && parsedSsn.isValid ? parsedSsn.normalized : undefined,
               additionalData: additionalConsumerData,
             });
           }

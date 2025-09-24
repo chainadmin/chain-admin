@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { maskSsnLast4, parseSsnLast4 } from "@shared/utils/ssn";
 import {
   Dialog,
   DialogContent,
@@ -108,10 +109,6 @@ export default function Accounts() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const normalizeLast4 = (value: string) => {
-    return value.replace(/[^0-9]/g, '').slice(-4);
-  };
-  
   const { data: accounts, isLoading: accountsLoading } = useQuery({
     queryKey: ["/api/accounts"],
   });
@@ -177,19 +174,11 @@ export default function Accounts() {
         ? Math.round(parseFloat(balanceValue) * 100)
         : undefined;
 
-      let ssnLast4: string | null | undefined = undefined;
-      if (typeof data.ssnLast4 === "string") {
-        const trimmed = data.ssnLast4.trim();
-        if (trimmed.length === 0) {
-          ssnLast4 = null;
-        } else {
-          const normalized = normalizeLast4(trimmed);
-          if (normalized.length !== 4) {
-            return Promise.reject(new Error("SSN last four must contain exactly four digits."));
-          }
-          ssnLast4 = normalized;
-        }
+      const parsedSsn = parseSsnLast4(data.ssnLast4);
+      if (!parsedSsn.isValid) {
+        return Promise.reject(new Error("SSN last four must contain exactly four digits."));
       }
+      const ssnLast4 = parsedSsn.hasValue ? parsedSsn.normalized : null;
 
       return apiRequest("PATCH", `/api/accounts/${selectedAccount.id}`, {
         firstName: data.firstName,
@@ -344,8 +333,8 @@ export default function Accounts() {
     e.preventDefault();
     const balanceCents = Math.round(parseFloat(createForm.balance || "0") * 100);
 
-    const normalizedLast4 = normalizeLast4(createForm.ssnLast4 || "");
-    if (createForm.ssnLast4.trim() && normalizedLast4.length !== 4) {
+    const parsedSsn = parseSsnLast4(createForm.ssnLast4);
+    if (parsedSsn.hasValue && !parsedSsn.isValid) {
       toast({
         title: "Invalid SSN",
         description: "SSN last four must contain exactly four digits.",
@@ -368,7 +357,7 @@ export default function Accounts() {
       city: createForm.city || null,
       state: createForm.state || null,
       zipCode: createForm.zipCode || null,
-      ssnLast4: normalizedLast4 || null,
+      ssnLast4: parsedSsn.hasValue ? parsedSsn.normalized : null,
     });
   };
 
@@ -1262,9 +1251,7 @@ export default function Accounts() {
                   <div>
                     <p className="text-sm text-gray-500">SSN (last 4)</p>
                     <p className="font-medium">
-                      {selectedAccount.consumer?.ssnLast4
-                        ? `•••• ${selectedAccount.consumer.ssnLast4}`
-                        : '-'}
+                      {maskSsnLast4(selectedAccount.consumer?.ssnLast4) || '-'}
                     </p>
                   </div>
                 </div>

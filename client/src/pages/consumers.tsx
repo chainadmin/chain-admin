@@ -25,6 +25,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Eye, Phone, Edit, Trash2, Mail, MapPin, Calendar } from "lucide-react";
+import { maskSsnLast4, parseSsnLast4 } from "@shared/utils/ssn";
 
 export default function Consumers() {
   const [selectedConsumer, setSelectedConsumer] = useState<any>(null);
@@ -52,8 +53,6 @@ export default function Consumers() {
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
-
-  const normalizeLast4 = (value: string) => value.replace(/[^0-9]/g, "").slice(-4);
 
   const { data: consumers, isLoading } = useQuery({
     queryKey: ["/api/consumers"],
@@ -141,10 +140,9 @@ export default function Consumers() {
   const handleUpdateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedConsumer) {
-      const trimmed = editForm.ssnLast4.trim();
-      const normalizedLast4 = normalizeLast4(trimmed);
+      const parsedSsn = parseSsnLast4(editForm.ssnLast4);
 
-      if (trimmed && normalizedLast4.length !== 4) {
+      if (!parsedSsn.isValid) {
         toast({
           title: "Invalid SSN",
           description: "SSN last four must contain exactly four digits.",
@@ -155,7 +153,7 @@ export default function Consumers() {
 
       const payload: any = {
         ...editForm,
-        ssnLast4: trimmed ? normalizedLast4 : null,
+        ssnLast4: parsedSsn.hasValue ? parsedSsn.normalized : null,
       };
 
       updateConsumerMutation.mutate({
@@ -313,7 +311,7 @@ export default function Consumers() {
                 {selectedConsumer.ssnLast4 && (
                   <div>
                     <Label className="text-sm text-gray-500">SSN (last 4)</Label>
-                    <p className="font-medium">{`•••• ${selectedConsumer.ssnLast4}`}</p>
+                    <p className="font-medium">{maskSsnLast4(selectedConsumer.ssnLast4)}</p>
                   </div>
                 )}
                 {(selectedConsumer.address || selectedConsumer.city || selectedConsumer.state || selectedConsumer.zipCode) && (

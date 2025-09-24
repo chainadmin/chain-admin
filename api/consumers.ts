@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb } from './_lib/db.js';
 import { withAuth, AuthenticatedRequest, JWT_SECRET } from './_lib/auth.js';
 import { consumers, accounts, folders } from './_lib/schema.js';
+import { parseSsnLast4 } from '../shared/utils/ssn.js';
 import { eq, and, sql, inArray } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 
@@ -95,21 +96,12 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       const updateData: any = { ...updates };
 
       if (Object.prototype.hasOwnProperty.call(updates, 'ssnLast4')) {
-        const rawValue = updates.ssnLast4;
-
-        if (rawValue === null || (typeof rawValue === 'string' && rawValue.trim() === '')) {
-          updateData.ssnLast4 = null;
-        } else if (typeof rawValue === 'string') {
-          const normalized = rawValue.replace(/\D/g, '').slice(-4);
-          if (normalized.length !== 4) {
-            res.status(400).json({ error: 'SSN last 4 must contain exactly four digits' });
-            return;
-          }
-          updateData.ssnLast4 = normalized;
-        } else {
-          res.status(400).json({ error: 'SSN last 4 must be provided as a string or null' });
+        const parsedSsn = parseSsnLast4(updates.ssnLast4);
+        if (!parsedSsn.isValid) {
+          res.status(400).json({ error: 'SSN last 4 must contain exactly four digits' });
           return;
         }
+        updateData.ssnLast4 = parsedSsn.hasValue ? parsedSsn.normalized : null;
       }
 
       // Verify consumer belongs to tenant

@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb } from './_lib/db.js';
 import { withAuth, AuthenticatedRequest, JWT_SECRET } from './_lib/auth.js';
 import { accounts, consumers, folders } from './_lib/schema.js';
+import { parseSsnLast4 } from '../shared/utils/ssn.js';
 import { eq, and, sql } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 
@@ -94,10 +95,8 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         additionalData, dueDate, ssnLast4,
       } = req.body;
 
-      const normalizedSsnLast4 = typeof ssnLast4 === 'string'
-        ? ssnLast4.replace(/\D/g, '').slice(-4)
-        : null;
-      if (ssnLast4 && (!normalizedSsnLast4 || normalizedSsnLast4.length !== 4)) {
+      const parsedSsn = parseSsnLast4(ssnLast4);
+      if (parsedSsn.hasValue && !parsedSsn.isValid) {
         res.status(400).json({ error: 'SSN last 4 must contain exactly four digits' });
         return;
       }
@@ -150,7 +149,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
             lastName,
             email,
             phone: phone || null,
-            ssnLast4: normalizedSsnLast4 || null,
+            ssnLast4: parsedSsn.hasValue ? parsedSsn.normalized : null,
             dateOfBirth: dateOfBirth,
             address: address || null,
             city: city || null,
@@ -184,9 +183,12 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
           updateData.phone = phone;
         }
         if (ssnLast4 !== undefined) {
-          updateData.ssnLast4 = normalizedSsnLast4 && normalizedSsnLast4.length === 4
-            ? normalizedSsnLast4
-            : null;
+          const parsed = parseSsnLast4(ssnLast4);
+          if (!parsed.isValid) {
+            res.status(400).json({ error: 'SSN last 4 must contain exactly four digits' });
+            return;
+          }
+          updateData.ssnLast4 = parsed.hasValue ? parsed.normalized : null;
         }
 
         if (Object.keys(updateData).length > 0) {
@@ -279,10 +281,8 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         ssnLast4,
       } = req.body || {};
 
-      const normalizedSsnLast4 = typeof ssnLast4 === 'string'
-        ? ssnLast4.replace(/\D/g, '').slice(-4)
-        : null;
-      if (ssnLast4 && (!normalizedSsnLast4 || normalizedSsnLast4.length !== 4)) {
+      const parsedSsn = parseSsnLast4(ssnLast4);
+      if (ssnLast4 !== undefined && !parsedSsn.isValid) {
         res.status(400).json({ error: 'SSN last 4 must contain exactly four digits' });
         return;
       }
@@ -309,9 +309,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       if (zipCode !== undefined) consumerUpdates.zipCode = zipCode;
       if (consumerAdditionalData !== undefined) consumerUpdates.additionalData = consumerAdditionalData;
       if (ssnLast4 !== undefined) {
-        consumerUpdates.ssnLast4 = normalizedSsnLast4 && normalizedSsnLast4.length === 4
-          ? normalizedSsnLast4
-          : null;
+        consumerUpdates.ssnLast4 = parsedSsn.hasValue ? parsedSsn.normalized : null;
       }
 
       // Validate that provided folder belongs to tenant

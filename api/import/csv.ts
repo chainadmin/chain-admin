@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb } from '../_lib/db.js';
 import { withAuth, AuthenticatedRequest, JWT_SECRET } from '../_lib/auth.js';
 import { consumers, accounts, folders } from '../../shared/schema.js';
+import { parseSsnLast4 } from '../../shared/utils/ssn.js';
 import { eq, and, sql } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 
@@ -37,14 +38,6 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
     }
 
     const { consumers: csvConsumers, accounts: csvAccounts, folderId } = req.body;
-
-    const normalizeLast4 = (value: unknown) => {
-      if (typeof value !== 'string') {
-        return null;
-      }
-      const digits = value.replace(/\D/g, '').slice(-4);
-      return digits.length === 4 ? digits : null;
-    };
 
     if (!csvConsumers || !csvAccounts) {
       res.status(400).json({ error: 'Missing consumer or account data' });
@@ -92,6 +85,11 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         ))
         .limit(1);
 
+      const parsedSsn = parseSsnLast4(csvConsumer.ssnLast4);
+      if (parsedSsn.hasValue && !parsedSsn.isValid) {
+        console.warn(`Invalid SSN last 4 for consumer ${csvConsumer.email ?? '<unknown email>'}`);
+      }
+
       if (!existingConsumer) {
         // Create new consumer with all available fields
         const [newConsumer] = await db
@@ -103,7 +101,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
             lastName: csvConsumer.lastName,
             email: csvConsumer.email,
             phone: csvConsumer.phone || null,
-            ssnLast4: normalizeLast4(csvConsumer.ssnLast4),
+            ssnLast4: parsedSsn.isValid && parsedSsn.hasValue ? parsedSsn.normalized : null,
             dateOfBirth: csvConsumer.dateOfBirth,
             address: csvConsumer.address || null,
             city: csvConsumer.city || null,
@@ -117,9 +115,13 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         existingConsumer = newConsumer;
         importedConsumers.push(newConsumer);
       } else if (csvConsumer.ssnLast4 !== undefined) {
+        const updatedSsn = parseSsnLast4(csvConsumer.ssnLast4);
+        if (updatedSsn.hasValue && !updatedSsn.isValid) {
+          console.warn(`Invalid SSN last 4 for existing consumer ${csvConsumer.email ?? existingConsumer.id}`);
+        }
         await db
           .update(consumers)
-          .set({ ssnLast4: normalizeLast4(csvConsumer.ssnLast4) })
+          .set({ ssnLast4: updatedSsn.isValid && updatedSsn.hasValue ? updatedSsn.normalized : null })
           .where(and(
             eq(consumers.id, existingConsumer.id),
             eq(consumers.tenantId, tenantId)

@@ -81,12 +81,31 @@ import {
   type InsertInvoice,
 } from "@shared/schema";
 import { messagingPlans, EMAIL_OVERAGE_RATE_PER_EMAIL, SMS_OVERAGE_RATE_PER_SEGMENT, type MessagingPlanId } from "@shared/billing-plans";
+import { parseSsnLast4 } from "@shared/utils/ssn";
 import { db } from "./db";
 import { eq, and, desc, sql, inArray, gte, lte } from "drizzle-orm";
 
 type DocumentWithAccount = Document & {
   account?: (Account & { consumer?: Consumer }) | null;
 };
+
+const SSN_LAST4_ERROR_MESSAGE = "SSN last 4 must contain exactly four digits";
+
+function sanitizeSsnLast4Field<T extends Record<string, unknown>>(record: T): T {
+  if (!Object.prototype.hasOwnProperty.call(record, "ssnLast4")) {
+    return record;
+  }
+
+  const parsed = parseSsnLast4((record as Record<string, unknown>).ssnLast4);
+  if (!parsed.isValid) {
+    throw new Error(SSN_LAST4_ERROR_MESSAGE);
+  }
+
+  return {
+    ...record,
+    ssnLast4: parsed.hasValue ? parsed.normalized : null,
+  } as T;
+}
 
 export interface IStorage {
   // User operations (mandatory for Replit Auth)
@@ -507,13 +526,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createConsumer(consumer: InsertConsumer): Promise<Consumer> {
-    const [newConsumer] = await db.insert(consumers).values(consumer).returning();
+    const sanitizedConsumer = sanitizeSsnLast4Field(consumer);
+    const [newConsumer] = await db.insert(consumers).values(sanitizedConsumer).returning();
     return newConsumer;
   }
 
   async updateConsumer(id: string, updates: Partial<Consumer>): Promise<Consumer> {
+    const sanitizedUpdates = sanitizeSsnLast4Field(updates);
     const [updatedConsumer] = await db.update(consumers)
-      .set(updates)
+      .set(sanitizedUpdates)
       .where(eq(consumers.id, id))
       .returning();
     return updatedConsumer;
@@ -546,44 +567,49 @@ export class DatabaseStorage implements IStorage {
   }
 
   async findOrCreateConsumer(consumerData: InsertConsumer): Promise<Consumer> {
+    const sanitizedConsumerData = sanitizeSsnLast4Field(consumerData);
+
     // Check for existing consumer by email and tenant (unique within tenant)
-    if (!consumerData.email || !consumerData.tenantId) {
+    if (!sanitizedConsumerData.email || !sanitizedConsumerData.tenantId) {
       // If email or tenant is missing, create a new consumer
-      return await this.createConsumer(consumerData);
+      return await this.createConsumer(sanitizedConsumerData);
     }
-    
+
     // First check if consumer already exists with this tenant
     const [existingConsumerWithTenant] = await db.select()
       .from(consumers)
       .where(
         and(
-          eq(consumers.tenantId, consumerData.tenantId),
-          sql`LOWER(${consumers.email}) = LOWER(${consumerData.email})`
+          eq(consumers.tenantId, sanitizedConsumerData.tenantId),
+          sql`LOWER(${consumers.email}) = LOWER(${sanitizedConsumerData.email})`
         )
       );
-    
+
     if (existingConsumerWithTenant) {
       // Consumer already exists with this tenant - update missing fields if provided
       const updates: any = {};
-      
+
       // Update fields only if they're missing in the existing record but provided in new data
-      if (!existingConsumerWithTenant.dateOfBirth && consumerData.dateOfBirth) {
-        updates.dateOfBirth = consumerData.dateOfBirth;
+      if (!existingConsumerWithTenant.dateOfBirth && sanitizedConsumerData.dateOfBirth) {
+        updates.dateOfBirth = sanitizedConsumerData.dateOfBirth;
       }
-      if (!existingConsumerWithTenant.address && consumerData.address) {
-        updates.address = consumerData.address;
+      if (!existingConsumerWithTenant.address && sanitizedConsumerData.address) {
+        updates.address = sanitizedConsumerData.address;
       }
-      if (!existingConsumerWithTenant.city && consumerData.city) {
-        updates.city = consumerData.city;
+      if (!existingConsumerWithTenant.city && sanitizedConsumerData.city) {
+        updates.city = sanitizedConsumerData.city;
       }
-      if (!existingConsumerWithTenant.state && consumerData.state) {
-        updates.state = consumerData.state;
+      if (!existingConsumerWithTenant.state && sanitizedConsumerData.state) {
+        updates.state = sanitizedConsumerData.state;
       }
-      if (!existingConsumerWithTenant.zipCode && consumerData.zipCode) {
-        updates.zipCode = consumerData.zipCode;
+      if (!existingConsumerWithTenant.zipCode && sanitizedConsumerData.zipCode) {
+        updates.zipCode = sanitizedConsumerData.zipCode;
       }
-      if (!existingConsumerWithTenant.phone && consumerData.phone) {
-        updates.phone = consumerData.phone;
+      if (!existingConsumerWithTenant.phone && sanitizedConsumerData.phone) {
+        updates.phone = sanitizedConsumerData.phone;
+      }
+      if (!existingConsumerWithTenant.ssnLast4 && sanitizedConsumerData.ssnLast4) {
+        updates.ssnLast4 = sanitizedConsumerData.ssnLast4;
       }
       
       if (Object.keys(updates).length > 0) {
@@ -604,65 +630,65 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           sql`${consumers.tenantId} IS NULL`,
-          sql`LOWER(${consumers.email}) = LOWER(${consumerData.email})`
+          sql`LOWER(${consumers.email}) = LOWER(${sanitizedConsumerData.email})`
         )
       );
 
     if (unlinkedConsumer) {
       // Found unlinked consumer with matching email - auto-link to this tenant
       const [linkedConsumer] = await db.update(consumers)
-        .set({ 
-          tenantId: consumerData.tenantId,
-          firstName: consumerData.firstName || unlinkedConsumer.firstName,
-          lastName: consumerData.lastName || unlinkedConsumer.lastName,
-          phone: consumerData.phone || unlinkedConsumer.phone,
-          dateOfBirth: consumerData.dateOfBirth || unlinkedConsumer.dateOfBirth,
-          ssnLast4: consumerData.ssnLast4 || unlinkedConsumer.ssnLast4,
-          address: consumerData.address || unlinkedConsumer.address,
-          city: consumerData.city || unlinkedConsumer.city,
-          state: consumerData.state || unlinkedConsumer.state,
-          zipCode: consumerData.zipCode || unlinkedConsumer.zipCode,
-          folderId: consumerData.folderId
+        .set({
+          tenantId: sanitizedConsumerData.tenantId,
+          firstName: sanitizedConsumerData.firstName || unlinkedConsumer.firstName,
+          lastName: sanitizedConsumerData.lastName || unlinkedConsumer.lastName,
+          phone: sanitizedConsumerData.phone || unlinkedConsumer.phone,
+          dateOfBirth: sanitizedConsumerData.dateOfBirth || unlinkedConsumer.dateOfBirth,
+          ssnLast4: sanitizedConsumerData.ssnLast4 || unlinkedConsumer.ssnLast4,
+          address: sanitizedConsumerData.address || unlinkedConsumer.address,
+          city: sanitizedConsumerData.city || unlinkedConsumer.city,
+          state: sanitizedConsumerData.state || unlinkedConsumer.state,
+          zipCode: sanitizedConsumerData.zipCode || unlinkedConsumer.zipCode,
+          folderId: sanitizedConsumerData.folderId
         })
         .where(eq(consumers.id, unlinkedConsumer.id))
         .returning();
-        
-      console.log(`Auto-linked unlinked consumer ${unlinkedConsumer.id} to tenant ${consumerData.tenantId}`);
+
+      console.log(`Auto-linked unlinked consumer ${unlinkedConsumer.id} to tenant ${sanitizedConsumerData.tenantId}`);
       return linkedConsumer;
     }
-    
+
     // Check for existing consumer with matching criteria in another tenant to copy data
     const [existingConsumer] = await db.select()
       .from(consumers)
       .where(
         and(
-          sql`LOWER(${consumers.email}) = LOWER(${consumerData.email})`,
+          sql`LOWER(${consumers.email}) = LOWER(${sanitizedConsumerData.email})`,
           sql`${consumers.tenantId} IS NOT NULL`
         )
       );
-    
+
     if (existingConsumer) {
       // Consumer exists in another tenant - create a new consumer record for this tenant
       // Copy data from existing consumer but create a new record for multi-tenant support
       const newConsumerData = {
-        ...consumerData,
-        firstName: consumerData.firstName || existingConsumer.firstName,
-        lastName: consumerData.lastName || existingConsumer.lastName,
-        phone: consumerData.phone || existingConsumer.phone,
-        dateOfBirth: consumerData.dateOfBirth || existingConsumer.dateOfBirth,
-        address: consumerData.address || existingConsumer.address,
-        city: consumerData.city || existingConsumer.city,
-        state: consumerData.state || existingConsumer.state,
-        zipCode: consumerData.zipCode || existingConsumer.zipCode,
-        ssnLast4: consumerData.ssnLast4 || existingConsumer.ssnLast4,
+        ...sanitizedConsumerData,
+        firstName: sanitizedConsumerData.firstName || existingConsumer.firstName,
+        lastName: sanitizedConsumerData.lastName || existingConsumer.lastName,
+        phone: sanitizedConsumerData.phone || existingConsumer.phone,
+        dateOfBirth: sanitizedConsumerData.dateOfBirth || existingConsumer.dateOfBirth,
+        address: sanitizedConsumerData.address || existingConsumer.address,
+        city: sanitizedConsumerData.city || existingConsumer.city,
+        state: sanitizedConsumerData.state || existingConsumer.state,
+        zipCode: sanitizedConsumerData.zipCode || existingConsumer.zipCode,
+        ssnLast4: sanitizedConsumerData.ssnLast4 || existingConsumer.ssnLast4,
       };
-      
-      console.log(`Creating new consumer record for tenant ${consumerData.tenantId} based on existing consumer from another tenant`);
+
+      console.log(`Creating new consumer record for tenant ${sanitizedConsumerData.tenantId} based on existing consumer from another tenant`);
       return await this.createConsumer(newConsumerData);
     }
 
     // No existing consumer found - create new one
-    return await this.createConsumer(consumerData);
+    return await this.createConsumer(sanitizedConsumerData);
   }
 
   async deleteConsumer(id: string, tenantId: string): Promise<void> {
@@ -1293,11 +1319,13 @@ export class DatabaseStorage implements IStorage {
 
   // Consumer registration operations
   async registerConsumer(consumerData: InsertConsumer): Promise<Consumer> {
-    const [newConsumer] = await db.insert(consumers).values({
+    const registrationRecord = sanitizeSsnLast4Field({
       ...consumerData,
       isRegistered: true,
       registrationDate: new Date(),
-    }).returning();
+    });
+
+    const [newConsumer] = await db.insert(consumers).values(registrationRecord).returning();
     return newConsumer;
   }
 
@@ -1724,14 +1752,6 @@ export class DatabaseStorage implements IStorage {
       ...row.platform_users,
       userDetails: row.users || undefined,
     }));
-  }
-
-  async updateConsumer(id: string, updates: Partial<Consumer>): Promise<Consumer> {
-    const [updatedConsumer] = await db.update(consumers)
-      .set(updates)
-      .where(eq(consumers.id, id))
-      .returning();
-    return updatedConsumer;
   }
 
   // Stats operations
