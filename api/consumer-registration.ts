@@ -17,7 +17,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const data = parsed.data;
-    const db = getDb();
+    const db = await getDb();
 
     // Get tenant by slug
     let tenant: typeof tenants.$inferSelect | null = null;

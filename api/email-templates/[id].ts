@@ -17,7 +17,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   }
 
   try {
-    const db = getDb();
+    const db = await getDb();
     const templateIdParam = req.query.id;
     const templateId = Array.isArray(templateIdParam) ? templateIdParam[0] : templateIdParam;
 

@@ -21,7 +21,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Email is required' });
     }
 
-    const db = getDb();
+    const db = await getDb();
     let tenantId: string | null = null;
 
     // Get tenant if slug provided

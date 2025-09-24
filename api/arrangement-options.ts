@@ -16,7 +16,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   }
 
   try {
-    const db = getDb();
+    const db = await getDb();
 
     const planTypeSet = new Set(arrangementPlanTypes);
 

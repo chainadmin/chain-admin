@@ -27,7 +27,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { email, dateOfBirth, tenantSlug: bodyTenantSlug } = parsed.data;
     const tenantSlug = bodyTenantSlug || (req as any)?.agencySlug;
 
-    const db = getDb();
+    const db = await getDb();
 
     let tenant: typeof tenants.$inferSelect | null = null;
     let consumer: typeof consumers.$inferSelect | null = null;

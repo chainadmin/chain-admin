@@ -17,7 +17,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   }
 
   try {
-    const db = getDb();
+    const db = await getDb();
 
     const token = req.headers.authorization?.replace('Bearer ', '') ||
       req.headers.cookie?.split(';').find((c) => c.trim().startsWith('authToken='))?.split('=')[1];

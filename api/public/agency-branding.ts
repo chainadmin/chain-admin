@@ -15,7 +15,7 @@ async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const db = getDb();
+    const db = await getDb();
     
     // Get agency slug from query parameter
     const { slug } = req.query;
