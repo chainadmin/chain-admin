@@ -74,6 +74,12 @@ export default function ConsumerDashboard() {
       });
       if (!response.ok) {
         const error = await response.text();
+        // If unauthorized, clear old token and force re-login
+        if (response.status === 401 || response.status === 403 || response.status === 400) {
+          localStorage.removeItem('consumerToken');
+          localStorage.removeItem('consumerSession');
+          window.location.href = '/consumer-login';
+        }
         throw new Error(`Failed to fetch accounts: ${error}`);
       }
       return response.json();
