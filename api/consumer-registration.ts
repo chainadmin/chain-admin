@@ -52,8 +52,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .limit(1);
 
     let consumerId: string;
-    let finalConsumer: any;
-    let effectiveTenantId: string | null = null;
 
     if (existingConsumer.length > 0) {
       const existing = existingConsumer[0];
@@ -63,41 +61,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: 'Consumer already registered' });
       }
       
-      // Determine effective tenantId - preserve company-set tenantId if it exists
-      effectiveTenantId = existing.tenantId || tenant?.id || null;
-      
       // Update pre-created consumer with self-provided information
+      // Consumer-provided data overwrites company-provided data
       const [updatedConsumer] = await db
         .update(consumers)
         .set({
-          // Update with consumer-provided data (consumer data overwrites company data)
-          firstName: data.firstName || existing.firstName,
-          lastName: data.lastName || existing.lastName,
-          phone: data.phone || existing.phone,
-          dateOfBirth: data.dateOfBirth || existing.dateOfBirth,
-          ssnLast4: data.ssnLast4 || existing.ssnLast4,
-          address: data.address || existing.address,
-          city: data.city || existing.city,
-          state: data.state || existing.state,
-          zipCode: data.zipCode || existing.zipCode,
-          // Mark as registered
+          firstName: data.firstName,
+          lastName: data.lastName,
+          phone: data.phone,
+          dateOfBirth: data.dateOfBirth,
+          ssnLast4: data.ssnLast4,
+          address: data.address,
+          city: data.city,
+          state: data.state,
+          zipCode: data.zipCode,
           isRegistered: true,
           registrationDate: new Date(),
-          // Preserve company-set tenantId
-          tenantId: effectiveTenantId
+          // Keep the existing tenantId if it exists (preserve company linkage)
+          tenantId: existing.tenantId || tenant?.id
         })
         .where(eq(consumers.id, existing.id))
         .returning();
       
       consumerId = updatedConsumer.id;
-      finalConsumer = updatedConsumer;
       
-      // If consumer has a tenantId but tenant isn't loaded, get it
-      if (effectiveTenantId && !tenant) {
+      // If consumer has a tenantId but tenant isn't loaded, get it for response
+      if (updatedConsumer.tenantId && !tenant) {
         const [foundTenant] = await db
           .select()
           .from(tenants)
-          .where(eq(tenants.id, effectiveTenantId))
+          .where(eq(tenants.id, updatedConsumer.tenantId))
           .limit(1);
         tenant = foundTenant || null;
       }
@@ -120,7 +113,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }).returning();
       
       consumerId = newConsumer.id;
-      finalConsumer = newConsumer;
     }
 
     // If tenant is provided, get associated accounts
@@ -149,9 +141,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       success: true,
       consumer: {
         id: consumerId,
-        firstName: finalConsumer.firstName,
-        lastName: finalConsumer.lastName,
-        email: finalConsumer.email
+        firstName: data.firstName,
+        lastName: data.lastName,
+        email: data.email
       },
       tenant: tenant ? {
         id: tenant.id,
