@@ -57,32 +57,38 @@ export default function ConsumerDashboard() {
     }
   }, [setLocation, toast]);
 
+  const encodedEmail = consumerSession?.email ? encodeURIComponent(consumerSession.email) : "";
+
   // Fetch consumer data
   const { data, isLoading, error } = useQuery({
-    queryKey: [`/api/consumer/accounts/${consumerSession?.email}?tenantSlug=${consumerSession?.tenantSlug}`],
+    queryKey: [`/api/consumer/accounts/${encodedEmail}?tenantSlug=${consumerSession?.tenantSlug}`],
     queryFn: async () => {
-      const token = localStorage.getItem('consumerToken');
-      if (!token) {
-        throw new Error('No consumer token found');
+      if (!consumerSession?.email || !consumerSession?.tenantSlug) {
+        throw new Error('Missing consumer session');
       }
-      const response = await fetch(`/api/consumer/accounts/${consumerSession?.email}?tenantSlug=${consumerSession?.tenantSlug}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include'
-      });
-      if (!response.ok) {
-        const error = await response.text();
-        // If unauthorized, clear old token and force re-login
-        if (response.status === 401 || response.status === 403 || response.status === 400) {
-          localStorage.removeItem('consumerToken');
-          localStorage.removeItem('consumerSession');
-          window.location.href = '/consumer-login';
+
+      try {
+        const response = await apiRequest(
+          "GET",
+          `/api/consumer/accounts/${encodeURIComponent(consumerSession.email)}?tenantSlug=${consumerSession.tenantSlug}`
+        );
+
+        return response.json();
+      } catch (error: any) {
+        const message = error?.message || "";
+
+        if (typeof message === "string") {
+          const statusCode = parseInt(message.split(":")[0], 10);
+
+          if (statusCode === 401 || statusCode === 403 || statusCode === 400) {
+            localStorage.removeItem('consumerToken');
+            localStorage.removeItem('consumerSession');
+            window.location.href = '/consumer-login';
+          }
         }
-        throw new Error(`Failed to fetch accounts: ${error}`);
+
+        throw error;
       }
-      return response.json();
     },
     enabled: !!consumerSession?.email && !!consumerSession?.tenantSlug,
   });
