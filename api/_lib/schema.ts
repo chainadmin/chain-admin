@@ -423,3 +423,16 @@ export const communicationAutomations = pgTable("communication_automations", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+export const automationExecutions = pgTable("automation_executions", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  automationId: uuid("automation_id")
+    .references(() => communicationAutomations.id, { onDelete: "cascade" })
+    .notNull(),
+  executedAt: timestamp("executed_at").defaultNow(),
+  status: text("status").notNull(),
+  totalSent: bigint("total_sent", { mode: "number" }).default(0),
+  totalFailed: bigint("total_failed", { mode: "number" }).default(0),
+  errorMessage: text("error_message"),
+  executionDetails: jsonb("execution_details"),
+});
+
