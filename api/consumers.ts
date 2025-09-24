@@ -123,19 +123,65 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       res.status(200).json(updatedConsumer);
     } else if (req.method === 'DELETE') {
       // Handle consumer deletion
-      // Can accept either a single ID or an array of IDs
-      const { id, ids } = req.body || {};
-      
-      let consumerIds: string[] = [];
-      
-      if (id && typeof id === 'string') {
-        // Single deletion
-        consumerIds = [id];
-      } else if (ids && Array.isArray(ids) && ids.length > 0) {
-        // Bulk deletion
-        consumerIds = ids.filter(id => typeof id === 'string');
-      }
-      
+      const normalizeIds = (value: unknown): string[] => {
+        if (!value && value !== 0) {
+          return [];
+        }
+
+        if (Array.isArray(value)) {
+          return value.reduce<string[]>((acc, item) => acc.concat(normalizeIds(item)), []);
+        }
+
+        if (typeof value === 'number') {
+          return [String(value)];
+        }
+
+        if (typeof value === 'string') {
+          const trimmedValue = value.trim();
+
+          if (!trimmedValue) {
+            return [];
+          }
+
+          if (
+            (trimmedValue.startsWith('[') && trimmedValue.endsWith(']')) ||
+            (trimmedValue.startsWith('{') && trimmedValue.endsWith('}'))
+          ) {
+            try {
+              const parsed = JSON.parse(trimmedValue);
+              return normalizeIds(parsed);
+            } catch {
+              // Fall through to standard parsing if JSON.parse fails
+            }
+          }
+
+          return trimmedValue
+            .split(',')
+            .map(idValue => idValue.trim().replace(/^['"]+|['"]+$/g, ''))
+            .filter(Boolean);
+        }
+
+        return [];
+      };
+
+      const bodyPayload = (req.body ?? {}) as { id?: unknown; ids?: unknown };
+      const queryPayload = (req.query ?? {}) as { [key: string]: unknown };
+
+      const urlPath = req.url ? req.url.split('?')[0] : '';
+      const pathSegments = urlPath ? urlPath.split('/').filter(Boolean) : [];
+      const pathId = pathSegments[pathSegments.length - 1];
+      const idsFromPath = pathId && pathId !== 'consumers' ? normalizeIds(pathId) : [];
+
+      const consumerIds = Array.from(
+        new Set([
+          ...normalizeIds(bodyPayload.id),
+          ...normalizeIds(bodyPayload.ids),
+          ...normalizeIds(queryPayload.id),
+          ...normalizeIds(queryPayload.ids),
+          ...idsFromPath,
+        ])
+      );
+
       if (consumerIds.length === 0) {
         res.status(400).json({ error: 'No valid consumer IDs provided' });
         return;
