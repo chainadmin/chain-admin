@@ -61,8 +61,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: 'Consumer already registered' });
       }
       
-      // Update pre-created consumer with self-provided information
-      // Consumer-provided data overwrites company-provided data
+      // Update pre-created consumer with registration data
       const [updatedConsumer] = await db
         .update(consumers)
         .set({
@@ -76,9 +75,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           state: data.state,
           zipCode: data.zipCode,
           isRegistered: true,
-          registrationDate: new Date(),
-          // Keep the existing tenantId if it exists (preserve company linkage)
-          tenantId: existing.tenantId || tenant?.id
+          registrationDate: new Date()
         })
         .where(eq(consumers.id, existing.id))
         .returning();
@@ -95,7 +92,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         tenant = foundTenant || null;
       }
     } else {
-      // Create new consumer if doesn't exist
+      // Create consumer - let PostgreSQL generate the UUID
       const [newConsumer] = await db.insert(consumers).values({
         tenantId: tenant?.id,
         firstName: data.firstName,
