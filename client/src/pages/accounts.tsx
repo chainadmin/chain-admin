@@ -8,7 +8,6 @@ import AccountsTable from "@/components/accounts-table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -34,15 +33,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
-import { FolderOpen, Folder, Plus, Upload, Settings, Trash2, MoreVertical, Eye, Edit, Mail, Phone, MapPin, Calendar, Loader2 } from "lucide-react";
+import { FolderOpen, Plus, Upload, Trash2, Mail, Phone, MapPin, Calendar } from "lucide-react";
 
 export default function Accounts() {
   const [selectedFolderId, setSelectedFolderId] = useState<string>("all");
@@ -53,11 +45,7 @@ export default function Accounts() {
   const [showContactDialog, setShowContactDialog] = useState(false);
   const [showComposeEmailDialog, setShowComposeEmailDialog] = useState(false);
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
-  const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
   const [selectedAccount, setSelectedAccount] = useState<any>(null);
-  const [statusFilter, setStatusFilter] = useState("all");
   const [deleteFolderDialog, setDeleteFolderDialog] = useState<{ open: boolean; folder: any }>({
     open: false,
     folder: null,
@@ -205,56 +193,6 @@ export default function Accounts() {
     },
   });
 
-  const deleteAccountMutation = useMutation({
-    mutationFn: (accountId: string) => apiRequest("DELETE", `/api/accounts/${accountId}`),
-    onSuccess: (_data, accountId) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/consumers"] });
-      setShowDeleteDialog(false);
-      setSelectedAccount(null);
-      setSelectedAccounts((prev) => {
-        if (!accountId) {
-          return prev;
-        }
-        const updated = new Set(prev);
-        updated.delete(accountId);
-        return updated;
-      });
-      toast({
-        title: "Success",
-        description: "Account deleted successfully",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to delete account",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const bulkDeleteMutation = useMutation({
-    mutationFn: (accountIds: string[]) => apiRequest("DELETE", "/api/accounts/bulk-delete", { ids: accountIds }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/consumers"] });
-      setSelectedAccounts(new Set());
-      setShowBulkDeleteDialog(false);
-      toast({
-        title: "Success",
-        description: `${selectedAccounts.size} accounts deleted successfully`,
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to delete accounts",
-        variant: "destructive",
-      });
-    },
-  });
-
   const createFolderMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/folders", data),
     onSuccess: () => {
@@ -369,6 +307,20 @@ export default function Accounts() {
     setShowContactDialog(true);
   };
 
+  const handleViewModalChange = (open: boolean) => {
+    setShowViewModal(open);
+    if (!open && !showContactDialog) {
+      setSelectedAccount(null);
+    }
+  };
+
+  const handleContactModalChange = (open: boolean) => {
+    setShowContactDialog(open);
+    if (!open && !showViewModal) {
+      setSelectedAccount(null);
+    }
+  };
+
   const handleComposeEmail = (account: any) => {
     if (!account?.consumer?.email) {
       return;
@@ -401,42 +353,6 @@ export default function Accounts() {
     setShowContactDialog(false);
     setShowComposeEmailDialog(true);
   };
-
-  const handleDelete = (account: any) => {
-    setSelectedAccount(account);
-    setShowDeleteDialog(true);
-  };
-
-  const handleBulkDelete = () => {
-    if (selectedAccounts.size > 0) {
-      bulkDeleteMutation.mutate(Array.from(selectedAccounts));
-    }
-  };
-
-  const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedAccounts(new Set(filteredAccounts.map((a: any) => a.id)));
-    } else {
-      setSelectedAccounts(new Set());
-    }
-  };
-
-  const handleSelectAccount = (accountId: string, checked: boolean) => {
-    const newSelected = new Set(selectedAccounts);
-    if (checked) {
-      newSelected.add(accountId);
-    } else {
-      newSelected.delete(accountId);
-    }
-    setSelectedAccounts(newSelected);
-  };
-
-  // Filtering
-  const filteredAccounts = (accounts as any[])?.filter(account => {
-    const matchesFolder = selectedFolderId === "all" || account.consumer?.folderId === selectedFolderId;
-    const matchesStatus = statusFilter === "all" || account.status?.toLowerCase() === statusFilter.toLowerCase();
-    return matchesFolder && matchesStatus;
-  }) || [];
 
   const selectedAccountLocation = selectedAccount
     ? [
@@ -496,1081 +412,1019 @@ export default function Accounts() {
       .join('');
   };
 
-  const isLoading = accountsLoading || foldersLoading;
+  const accountsList = Array.isArray(accounts) ? (accounts as any[]) : [];
+  const folderList = Array.isArray(folders) ? (folders as any[]) : [];
+  const folderFilteredAccounts =
+    selectedFolderId === "all"
+      ? accountsList
+      : accountsList.filter((account: any) => account.consumer?.folderId === selectedFolderId);
+  const selectedFolder =
+    selectedFolderId === "all"
+      ? null
+      : folderList.find((folder: any) => folder.id === selectedFolderId) || null;
 
   return (
     <AdminLayout>
-      <div className="p-6">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Accounts Management</h1>
-          <p className="text-sm text-gray-600 mt-1">Manage all consumer accounts in one place</p>
-        </div>
-
-        <div className="mb-6">
-          <AccountsTable
-            accounts={Array.isArray(accounts) ? (accounts as any[]) : []}
-            isLoading={accountsLoading}
-            onView={handleView}
-            onContact={handleContact}
-          />
-        </div>
-
-        {/* Folder Navigation */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-gray-700">FOLDERS</h2>
-            <div className="flex gap-2">
+      <div className="mx-auto flex max-w-7xl flex-col gap-10 px-4 py-10 text-blue-50 sm:px-6 lg:px-8">
+        <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-white/10 via-white/5 to-white/10 p-8 shadow-2xl shadow-blue-900/30">
+          <div className="pointer-events-none absolute -right-12 top-12 h-56 w-56 rounded-full bg-sky-500/20 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-16 left-8 h-48 w-48 rounded-full bg-indigo-500/20 blur-3xl" />
+          <div className="relative z-10 flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
+            <div className="max-w-2xl space-y-5">
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-blue-100/80">
+                Account operations
+              </span>
+              <h1 className="text-3xl font-semibold text-white sm:text-4xl">
+                Account management command center
+              </h1>
+              <p className="text-sm text-blue-100/70 sm:text-base">
+                Manage every consumer relationship, organize folders, and launch outreach without leaving this workspace.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-white/10 bg-white/10 p-4 text-sm text-blue-100/80">
+                  <p className="font-semibold text-white">Folder intelligence</p>
+                  <p className="mt-1 text-xs text-blue-100/70">
+                    Segment accounts by workflow or priority and toggle segments instantly.
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/10 p-4 text-sm text-blue-100/80">
+                  <p className="font-semibold text-white">Actionable workflows</p>
+                  <p className="mt-1 text-xs text-blue-100/70">
+                    Create, edit, and contact consumers with modern hero experiences.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
               <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setShowCreateFolderModal(true)}
-                data-testid="button-create-folder"
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                New Folder
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
+                variant="ghost"
+                className="rounded-xl border border-white/15 bg-white/10 px-6 py-2 text-sm font-semibold text-blue-100 transition hover:bg-white/20"
                 onClick={() => setShowImportModal(true)}
                 data-testid="button-import"
               >
-                <Upload className="h-4 w-4 mr-1" />
-                Import CSV
+                <Upload className="mr-2 h-4 w-4" />
+                Import accounts
               </Button>
               <Button
-                size="sm"
+                className="rounded-xl bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-6 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 transition hover:from-sky-400/80 hover:to-indigo-400/80"
                 onClick={() => setShowCreateModal(true)}
                 data-testid="button-create-account"
               >
-                <Plus className="h-4 w-4 mr-1" />
-                Create Account
+                <Plus className="mr-2 h-4 w-4" />
+                Create account
               </Button>
             </div>
           </div>
+        </section>
 
-          {/* Folder tabs */}
-          <div className="flex gap-2 overflow-x-auto pb-2">
-            <Button
-              variant={selectedFolderId === "all" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setSelectedFolderId("all")}
-              className="flex items-center gap-1"
-              data-testid="folder-all"
-            >
-              <FolderOpen className="h-4 w-4" />
-              All Accounts
-              <span className="ml-1 text-xs bg-white/20 px-1.5 py-0.5 rounded">
-                {(accounts as any[])?.length || 0}
-              </span>
-            </Button>
-            
-            {(folders as any[])?.map((folder: any) => (
-              <div key={folder.id} className="relative group">
-                <Button
-                  variant={selectedFolderId === folder.id ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setSelectedFolderId(folder.id)}
-                  className="flex items-center gap-1"
-                  style={{
-                    borderColor: selectedFolderId === folder.id ? folder.color : undefined,
-                    backgroundColor: selectedFolderId === folder.id ? folder.color : undefined,
-                  }}
-                  data-testid={`folder-${folder.id}`}
-                >
-                  <Folder className="h-4 w-4" />
-                  {folder.name}
-                  <span className="ml-1 text-xs bg-white/20 px-1.5 py-0.5 rounded">
-                    {(accounts as any[])?.filter((a: any) => a.consumer?.folderId === folder.id).length || 0}
-                  </span>
-                </Button>
-                {!folder.isDefault && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="absolute -top-1 -right-1 h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeleteFolderDialog({ open: true, folder });
-                    }}
-                    data-testid={`delete-folder-${folder.id}`}
-                  >
-                    <Trash2 className="h-3 w-3 text-red-500" />
-                  </Button>
-                )}
+        <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-blue-900/20 backdrop-blur">
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Collections folders</h2>
+                <p className="text-sm text-blue-100/70">
+                  Organize accounts into focused segments and switch views with a click.
+                </p>
               </div>
-            ))}
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="ghost"
+                  className="rounded-xl border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-blue-100 transition hover:bg-white/20"
+                  onClick={() => setShowCreateFolderModal(true)}
+                  data-testid="button-create-folder"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  New folder
+                </Button>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {foldersLoading ? (
+                [...Array(4)].map((_, index) => (
+                  <div
+                    key={index}
+                    className="h-11 w-28 rounded-full border border-white/10 bg-white/10 opacity-70"
+                  />
+                ))
+              ) : folderList.length === 0 ? (
+                <p className="text-sm text-blue-100/70">
+                  No custom folders yet. Create one to start organizing accounts.
+                </p>
+              ) : (
+                <>
+                  <Button
+                    variant="ghost"
+                    className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
+                      selectedFolderId === "all"
+                        ? "border-sky-400/60 bg-sky-500/20 text-white shadow-lg shadow-sky-900/30"
+                        : "border-white/10 bg-white/5 text-blue-100 hover:bg-white/10"
+                    }`}
+                    onClick={() => setSelectedFolderId("all")}
+                    data-testid="folder-all"
+                  >
+                    <FolderOpen className="h-4 w-4" />
+                    All accounts
+                    <span className="rounded-full bg-white/10 px-2 text-xs text-blue-100/80">
+                      {accountsList.length}
+                    </span>
+                  </Button>
+                  {folderList.map((folder: any) => (
+                    <div key={folder.id} className="group relative">
+                      <Button
+                        variant="ghost"
+                        className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
+                          selectedFolderId === folder.id
+                            ? "border-sky-400/60 bg-sky-500/20 text-white shadow-lg shadow-sky-900/30"
+                            : "border-white/10 bg-white/5 text-blue-100 hover:bg-white/10"
+                        }`}
+                        onClick={() => setSelectedFolderId(folder.id)}
+                        data-testid={`folder-${folder.id}`}
+                      >
+                        <span
+                          className="h-2.5 w-2.5 rounded-full"
+                          style={{ backgroundColor: folder.color || undefined }}
+                        />
+                        {folder.name}
+                        <span className="rounded-full bg-white/10 px-2 text-xs text-blue-100/80">
+                          {accountsList.filter(
+                            (account: any) => account.consumer?.folderId === folder.id
+                          ).length}
+                        </span>
+                      </Button>
+                      {!folder.isDefault && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="absolute -right-2 -top-2 h-6 w-6 rounded-full border border-white/10 bg-white/10 p-0 text-blue-100 opacity-0 transition-opacity hover:bg-white/20 group-hover:opacity-100"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setDeleteFolderDialog({ open: true, folder });
+                          }}
+                          data-testid={`delete-folder-${folder.id}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+            {selectedFolder?.description && (
+              <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-blue-100/80">
+                {selectedFolder.description}
+              </div>
+            )}
           </div>
-        </div>
+        </section>
 
-        {/* Accounts Table */}
-        <Card>
-          <CardHeader>
-            <div className="flex justify-between items-center">
-              <CardTitle>Accounts</CardTitle>
-              <div className="flex gap-2">
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-[150px]" data-testid="select-status-filter">
-                    <SelectValue placeholder="Filter by status" />
+        <section>
+          <AccountsTable
+            accounts={folderFilteredAccounts}
+            isLoading={accountsLoading}
+            onView={handleView}
+            onContact={handleContact}
+            onEdit={handleEdit}
+            showFolderColumn
+            showDeleteButton
+          />
+        </section>
+      </div>
+
+      <ImportModal isOpen={showImportModal} onClose={() => setShowImportModal(false)} />
+
+      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Create New Account</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreateSubmit} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="firstName">First Name *</Label>
+                <Input
+                  id="firstName"
+                  data-testid="input-first-name"
+                  value={createForm.firstName}
+                  onChange={(e) => setCreateForm({ ...createForm, firstName: e.target.value })}
+                  placeholder="Enter first name"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="lastName">Last Name *</Label>
+                <Input
+                  id="lastName"
+                  data-testid="input-last-name"
+                  value={createForm.lastName}
+                  onChange={(e) => setCreateForm({ ...createForm, lastName: e.target.value })}
+                  placeholder="Enter last name"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="email">Email *</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  data-testid="input-email"
+                  value={createForm.email}
+                  onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+                  placeholder="Enter email address"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="phone">Phone</Label>
+                <Input
+                  id="phone"
+                  data-testid="input-phone"
+                  value={createForm.phone}
+                  onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
+                  placeholder="Enter phone number"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="accountNumber">Account Number</Label>
+                <Input
+                  id="accountNumber"
+                  data-testid="input-account-number"
+                  value={createForm.accountNumber}
+                  onChange={(e) => setCreateForm({ ...createForm, accountNumber: e.target.value })}
+                  placeholder="Enter account number"
+                />
+              </div>
+              <div>
+                <Label htmlFor="creditor">Creditor *</Label>
+                <Input
+                  id="creditor"
+                  data-testid="input-creditor"
+                  value={createForm.creditor}
+                  onChange={(e) => setCreateForm({ ...createForm, creditor: e.target.value })}
+                  placeholder="Enter creditor name"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="balance">Balance *</Label>
+                <Input
+                  id="balance"
+                  type="number"
+                  step="0.01"
+                  data-testid="input-balance"
+                  value={createForm.balance}
+                  onChange={(e) => setCreateForm({ ...createForm, balance: e.target.value })}
+                  placeholder="Enter balance"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="folder">Folder</Label>
+                <Select
+                  value={createForm.folderId}
+                  onValueChange={(value) => setCreateForm({ ...createForm, folderId: value })}
+                >
+                  <SelectTrigger data-testid="select-folder">
+                    <SelectValue placeholder="Select folder" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="overdue">Overdue</SelectItem>
-                    <SelectItem value="settled">Settled</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
+                    {(folders as any[])?.map((folder: any) => (
+                      <SelectItem key={folder.id} value={folder.id}>
+                        {folder.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
-                {selectedAccounts.size > 0 && (
-                  <Button
-                    variant="destructive"
-                    onClick={() => setShowBulkDeleteDialog(true)}
-                    data-testid="button-delete-selected"
-                  >
-                    <Trash2 className="h-4 w-4 mr-1" />
-                    Delete ({selectedAccounts.size})
-                  </Button>
-                )}
               </div>
             </div>
-            {selectedAccounts.size > 0 && (
-              <p className="text-sm text-gray-500 mt-2">
-                {selectedAccounts.size} account{selectedAccounts.size > 1 ? 's' : ''} selected
-              </p>
-            )}
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <div className="animate-pulse">
-                <div className="h-4 bg-gray-200 rounded w-1/4 mb-4"></div>
-                {[...Array(5)].map((_, i) => (
-                  <div key={i} className="flex space-x-4 mb-4">
-                    <div className="h-10 w-10 bg-gray-200 rounded-full"></div>
-                    <div className="flex-1 space-y-2">
-                      <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                      <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                    </div>
-                  </div>
-                ))}
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="dateOfBirth">Date of Birth *</Label>
+                <Input
+                  id="dateOfBirth"
+                  type="date"
+                  data-testid="input-date-of-birth"
+                  value={createForm.dateOfBirth}
+                  onChange={(e) => setCreateForm({ ...createForm, dateOfBirth: e.target.value })}
+                  placeholder="Select date of birth"
+                  required
+                />
               </div>
-            ) : filteredAccounts.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                No accounts found. Import data or create an account to get started.
+              <div>
+                <Label htmlFor="address">Address</Label>
+                <Input
+                  id="address"
+                  data-testid="input-address"
+                  value={createForm.address}
+                  onChange={(e) => setCreateForm({ ...createForm, address: e.target.value })}
+                  placeholder="Enter address"
+                />
               </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        <Checkbox
-                          checked={selectedAccounts.size === filteredAccounts.length && filteredAccounts.length > 0}
-                          onCheckedChange={handleSelectAll}
-                          data-testid="checkbox-select-all"
-                        />
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Consumer
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Account #
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Creditor
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Balance
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredAccounts.map((account: any) => (
-                      <tr key={account.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <Checkbox
-                            checked={selectedAccounts.has(account.id)}
-                            onCheckedChange={(checked) => handleSelectAccount(account.id, checked as boolean)}
-                            data-testid={`checkbox-${account.id}`}
-                          />
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="flex-shrink-0 h-10 w-10">
-                              <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
-                                <span className="text-sm font-medium text-gray-700">
-                                  {account.consumer?.firstName?.[0]}{account.consumer?.lastName?.[0]}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="ml-4">
-                              <div className="text-sm font-medium text-gray-900">
-                                {account.consumer?.firstName} {account.consumer?.lastName}
-                              </div>
-                              <div className="text-sm text-gray-500">
-                                {account.consumer?.email}
-                              </div>
-                              {account.consumer?.phone && (
-                                <div className="text-xs text-gray-400">
-                                  {account.consumer?.phone}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {account.accountNumber || '-'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {account.creditor}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {formatCurrency(account.balanceCents || 0)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(account.status)}`}>
-                            {account.status || 'Pending'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                data-testid={`button-actions-${account.id}`}
-                              >
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleView(account)}>
-                                <Eye className="h-4 w-4 mr-2" />
-                                View Details
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleEdit(account)}>
-                                <Edit className="h-4 w-4 mr-2" />
-                                Edit
-                              </DropdownMenuItem>
-                              <DropdownMenuItem 
-                                onClick={() => handleDelete(account)}
-                                className="text-red-600"
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </td>
-                      </tr>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <Label htmlFor="city">City</Label>
+                <Input
+                  id="city"
+                  data-testid="input-city"
+                  value={createForm.city}
+                  onChange={(e) => setCreateForm({ ...createForm, city: e.target.value })}
+                  placeholder="Enter city"
+                />
+              </div>
+              <div>
+                <Label htmlFor="state">State</Label>
+                <Input
+                  id="state"
+                  data-testid="input-state"
+                  value={createForm.state}
+                  onChange={(e) => setCreateForm({ ...createForm, state: e.target.value })}
+                  placeholder="Enter state"
+                />
+              </div>
+              <div>
+                <Label htmlFor="zipCode">Zip Code</Label>
+                <Input
+                  id="zipCode"
+                  data-testid="input-zip-code"
+                  value={createForm.zipCode}
+                  onChange={(e) => setCreateForm({ ...createForm, zipCode: e.target.value })}
+                  placeholder="Enter zip code"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setShowCreateModal(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={createAccountMutation.isPending} data-testid="button-submit-create">
+                {createAccountMutation.isPending ? "Creating..." : "Create Account"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Account</DialogTitle>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              updateAccountMutation.mutate(editForm);
+            }}
+            className="space-y-4"
+          >
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-firstName">First Name *</Label>
+                <Input
+                  id="edit-firstName"
+                  data-testid="input-edit-first-name"
+                  value={editForm.firstName}
+                  onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
+                  placeholder="Enter first name"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-lastName">Last Name *</Label>
+                <Input
+                  id="edit-lastName"
+                  data-testid="input-edit-last-name"
+                  value={editForm.lastName}
+                  onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
+                  placeholder="Enter last name"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-email">Email *</Label>
+                <Input
+                  id="edit-email"
+                  type="email"
+                  data-testid="input-edit-email"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                  placeholder="Enter email address"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-phone">Phone</Label>
+                <Input
+                  id="edit-phone"
+                  data-testid="input-edit-phone"
+                  value={editForm.phone}
+                  onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                  placeholder="Enter phone number"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-accountNumber">Account Number</Label>
+                <Input
+                  id="edit-accountNumber"
+                  data-testid="input-edit-account-number"
+                  value={editForm.accountNumber}
+                  onChange={(e) => setEditForm({ ...editForm, accountNumber: e.target.value })}
+                  placeholder="Enter account number"
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-creditor">Creditor *</Label>
+                <Input
+                  id="edit-creditor"
+                  data-testid="input-edit-creditor"
+                  value={editForm.creditor}
+                  onChange={(e) => setEditForm({ ...editForm, creditor: e.target.value })}
+                  placeholder="Enter creditor name"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-balance">Balance *</Label>
+                <Input
+                  id="edit-balance"
+                  type="number"
+                  step="0.01"
+                  data-testid="input-edit-balance"
+                  value={editForm.balance}
+                  onChange={(e) => setEditForm({ ...editForm, balance: e.target.value })}
+                  placeholder="Enter balance"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-folder">Folder</Label>
+                <Select
+                  value={editForm.folderId}
+                  onValueChange={(value) => setEditForm({ ...editForm, folderId: value })}
+                >
+                  <SelectTrigger id="edit-folder" data-testid="select-edit-folder">
+                    <SelectValue placeholder="Select folder" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(folders as any[])?.map((folder: any) => (
+                      <SelectItem key={folder.id} value={folder.id}>
+                        {folder.name}
+                      </SelectItem>
                     ))}
-                  </tbody>
-                </table>
+                  </SelectContent>
+                </Select>
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </div>
 
-        {/* Import Modal */}
-        <ImportModal
-          isOpen={showImportModal}
-          onClose={() => setShowImportModal(false)}
-        />
-
-        {/* Create Account Modal */}
-        <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Create New Account</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleCreateSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="firstName">First Name *</Label>
-                  <Input
-                    id="firstName"
-                    data-testid="input-first-name"
-                    value={createForm.firstName}
-                    onChange={(e) => setCreateForm({ ...createForm, firstName: e.target.value })}
-                    placeholder="Enter first name"
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="lastName">Last Name *</Label>
-                  <Input
-                    id="lastName"
-                    data-testid="input-last-name"
-                    value={createForm.lastName}
-                    onChange={(e) => setCreateForm({ ...createForm, lastName: e.target.value })}
-                    placeholder="Enter last name"
-                    required
-                  />
-                </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-dateOfBirth">Date of Birth *</Label>
+                <Input
+                  id="edit-dateOfBirth"
+                  type="date"
+                  data-testid="input-edit-date-of-birth"
+                  value={editForm.dateOfBirth}
+                  onChange={(e) => setEditForm({ ...editForm, dateOfBirth: e.target.value })}
+                  placeholder="Select date of birth"
+                  required
+                />
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="email">Email *</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    data-testid="input-email"
-                    value={createForm.email}
-                    onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
-                    placeholder="Enter email address"
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="phone">Phone</Label>
-                  <Input
-                    id="phone"
-                    data-testid="input-phone"
-                    value={createForm.phone}
-                    onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
-                    placeholder="Enter phone number"
-                  />
-                </div>
+              <div>
+                <Label htmlFor="edit-address">Address</Label>
+                <Input
+                  id="edit-address"
+                  data-testid="input-edit-address"
+                  value={editForm.address}
+                  onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
+                  placeholder="Enter address"
+                />
               </div>
+            </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="accountNumber">Account Number</Label>
-                  <Input
-                    id="accountNumber"
-                    data-testid="input-account-number"
-                    value={createForm.accountNumber}
-                    onChange={(e) => setCreateForm({ ...createForm, accountNumber: e.target.value })}
-                    placeholder="Enter account number"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="creditor">Creditor *</Label>
-                  <Input
-                    id="creditor"
-                    data-testid="input-creditor"
-                    value={createForm.creditor}
-                    onChange={(e) => setCreateForm({ ...createForm, creditor: e.target.value })}
-                    placeholder="Enter creditor name"
-                    required
-                  />
-                </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <Label htmlFor="edit-city">City</Label>
+                <Input
+                  id="edit-city"
+                  data-testid="input-edit-city"
+                  value={editForm.city}
+                  onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
+                  placeholder="Enter city"
+                />
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="balance">Balance *</Label>
-                  <Input
-                    id="balance"
-                    type="number"
-                    step="0.01"
-                    data-testid="input-balance"
-                    value={createForm.balance}
-                    onChange={(e) => setCreateForm({ ...createForm, balance: e.target.value })}
-                    placeholder="Enter balance"
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="folder">Folder</Label>
-                  <Select
-                    value={createForm.folderId}
-                    onValueChange={(value) => setCreateForm({ ...createForm, folderId: value })}
-                  >
-                    <SelectTrigger data-testid="select-folder">
-                      <SelectValue placeholder="Select folder" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(folders as any[])?.map((folder: any) => (
-                        <SelectItem key={folder.id} value={folder.id}>
-                          {folder.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div>
+                <Label htmlFor="edit-state">State</Label>
+                <Input
+                  id="edit-state"
+                  data-testid="input-edit-state"
+                  value={editForm.state}
+                  onChange={(e) => setEditForm({ ...editForm, state: e.target.value })}
+                  placeholder="Enter state"
+                />
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="dateOfBirth">Date of Birth *</Label>
-                  <Input
-                    id="dateOfBirth"
-                    type="date"
-                    data-testid="input-date-of-birth"
-                    value={createForm.dateOfBirth}
-                    onChange={(e) => setCreateForm({ ...createForm, dateOfBirth: e.target.value })}
-                    placeholder="Select date of birth"
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="address">Address</Label>
-                  <Input
-                    id="address"
-                    data-testid="input-address"
-                    value={createForm.address}
-                    onChange={(e) => setCreateForm({ ...createForm, address: e.target.value })}
-                    placeholder="Enter address"
-                  />
-                </div>
+              <div>
+                <Label htmlFor="edit-zipCode">Zip Code</Label>
+                <Input
+                  id="edit-zipCode"
+                  data-testid="input-edit-zip-code"
+                  value={editForm.zipCode}
+                  onChange={(e) => setEditForm({ ...editForm, zipCode: e.target.value })}
+                  placeholder="Enter zip code"
+                />
               </div>
+            </div>
 
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <Label htmlFor="city">City</Label>
-                  <Input
-                    id="city"
-                    data-testid="input-city"
-                    value={createForm.city}
-                    onChange={(e) => setCreateForm({ ...createForm, city: e.target.value })}
-                    placeholder="Enter city"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="state">State</Label>
-                  <Input
-                    id="state"
-                    data-testid="input-state"
-                    value={createForm.state}
-                    onChange={(e) => setCreateForm({ ...createForm, state: e.target.value })}
-                    placeholder="Enter state"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="zipCode">Zip Code</Label>
-                  <Input
-                    id="zipCode"
-                    data-testid="input-zip-code"
-                    value={createForm.zipCode}
-                    onChange={(e) => setCreateForm({ ...createForm, zipCode: e.target.value })}
-                    placeholder="Enter zip code"
-                  />
-                </div>
-              </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setShowEditModal(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={updateAccountMutation.isPending} data-testid="button-submit-edit">
+                {updateAccountMutation.isPending ? "Saving..." : "Save Changes"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
-              <div className="flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={() => setShowCreateModal(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={createAccountMutation.isPending} data-testid="button-submit-create">
-                  {createAccountMutation.isPending ? "Creating..." : "Create Account"}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+      <Dialog open={showViewModal} onOpenChange={handleViewModalChange}>
+        <DialogContent className="max-w-3xl border border-white/10 bg-[#0f1a3c] text-blue-100">
+          {selectedAccount && (
+            <>
+              <DialogHeader className="space-y-2 text-left">
+                <DialogTitle className="text-2xl font-semibold text-white">Account overview</DialogTitle>
+                <DialogDescription className="text-sm text-blue-100/70">
+                  Snapshot for {selectedAccount.consumer?.firstName} {selectedAccount.consumer?.lastName}
+                </DialogDescription>
+              </DialogHeader>
 
-        {/* Edit Account Modal */}
-        <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Edit Account</DialogTitle>
-            </DialogHeader>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                updateAccountMutation.mutate(editForm);
-              }}
-              className="space-y-4"
-            >
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="edit-firstName">First Name *</Label>
-                  <Input
-                    id="edit-firstName"
-                    data-testid="input-edit-first-name"
-                    value={editForm.firstName}
-                    onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
-                    placeholder="Enter first name"
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="edit-lastName">Last Name *</Label>
-                  <Input
-                    id="edit-lastName"
-                    data-testid="input-edit-last-name"
-                    value={editForm.lastName}
-                    onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
-                    placeholder="Enter last name"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="edit-email">Email *</Label>
-                  <Input
-                    id="edit-email"
-                    type="email"
-                    data-testid="input-edit-email"
-                    value={editForm.email}
-                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                    placeholder="Enter email address"
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="edit-phone">Phone</Label>
-                  <Input
-                    id="edit-phone"
-                    data-testid="input-edit-phone"
-                    value={editForm.phone}
-                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                    placeholder="Enter phone number"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="edit-accountNumber">Account Number</Label>
-                  <Input
-                    id="edit-accountNumber"
-                    data-testid="input-edit-account-number"
-                    value={editForm.accountNumber}
-                    onChange={(e) => setEditForm({ ...editForm, accountNumber: e.target.value })}
-                    placeholder="Enter account number"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="edit-creditor">Creditor *</Label>
-                  <Input
-                    id="edit-creditor"
-                    data-testid="input-edit-creditor"
-                    value={editForm.creditor}
-                    onChange={(e) => setEditForm({ ...editForm, creditor: e.target.value })}
-                    placeholder="Enter creditor name"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="edit-balance">Balance *</Label>
-                  <Input
-                    id="edit-balance"
-                    type="number"
-                    step="0.01"
-                    data-testid="input-edit-balance"
-                    value={editForm.balance}
-                    onChange={(e) => setEditForm({ ...editForm, balance: e.target.value })}
-                    placeholder="Enter balance"
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="edit-folder">Folder</Label>
-                  <Select
-                    value={editForm.folderId}
-                    onValueChange={(value) => setEditForm({ ...editForm, folderId: value })}
-                  >
-                    <SelectTrigger id="edit-folder" data-testid="select-edit-folder">
-                      <SelectValue placeholder="Select folder" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(folders as any[])?.map((folder: any) => (
-                        <SelectItem key={folder.id} value={folder.id}>
-                          {folder.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="edit-dateOfBirth">Date of Birth *</Label>
-                  <Input
-                    id="edit-dateOfBirth"
-                    type="date"
-                    data-testid="input-edit-date-of-birth"
-                    value={editForm.dateOfBirth}
-                    onChange={(e) => setEditForm({ ...editForm, dateOfBirth: e.target.value })}
-                    placeholder="Select date of birth"
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="edit-address">Address</Label>
-                  <Input
-                    id="edit-address"
-                    data-testid="input-edit-address"
-                    value={editForm.address}
-                    onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
-                    placeholder="Enter address"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <Label htmlFor="edit-city">City</Label>
-                  <Input
-                    id="edit-city"
-                    data-testid="input-edit-city"
-                    value={editForm.city}
-                    onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
-                    placeholder="Enter city"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="edit-state">State</Label>
-                  <Input
-                    id="edit-state"
-                    data-testid="input-edit-state"
-                    value={editForm.state}
-                    onChange={(e) => setEditForm({ ...editForm, state: e.target.value })}
-                    placeholder="Enter state"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="edit-zipCode">Zip Code</Label>
-                  <Input
-                    id="edit-zipCode"
-                    data-testid="input-edit-zip-code"
-                    value={editForm.zipCode}
-                    onChange={(e) => setEditForm({ ...editForm, zipCode: e.target.value })}
-                    placeholder="Enter zip code"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={() => setShowEditModal(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={updateAccountMutation.isPending} data-testid="button-submit-edit">
-                  {updateAccountMutation.isPending ? "Saving..." : "Save Changes"}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
-
-        {/* View Account Modal */}
-        <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Account Details</DialogTitle>
-            </DialogHeader>
-            {selectedAccount && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-6">
+                <div className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/5 p-5 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <p className="text-sm text-gray-500">Name</p>
-                    <p className="font-medium">
+                    <p className="text-xs uppercase tracking-wide text-blue-100/60">Consumer</p>
+                    <p className="mt-2 text-2xl font-semibold text-white">
                       {selectedAccount.consumer?.firstName} {selectedAccount.consumer?.lastName}
                     </p>
+                    <p className="text-sm text-blue-100/70">
+                      {selectedAccount.consumer?.email || "No email on file"}
+                    </p>
+                    {selectedAccount.consumer?.phone && (
+                      <p className="text-sm text-blue-100/60">{selectedAccount.consumer.phone}</p>
+                    )}
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Email</p>
-                    <p className="font-medium">{selectedAccount.consumer?.email}</p>
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-500">Phone</p>
-                    <p className="font-medium">{selectedAccount.consumer?.phone || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Account Number</p>
-                    <p className="font-medium">{selectedAccount.accountNumber || '-'}</p>
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-500">Creditor</p>
-                    <p className="font-medium">{selectedAccount.creditor}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Balance</p>
-                    <p className="font-medium">{formatCurrency(selectedAccount.balanceCents || 0)}</p>
+                  <div className="rounded-2xl border border-white/10 bg-[#0c1630] px-5 py-4 text-right text-sm text-blue-100/80">
+                    <p className="text-xs uppercase tracking-wide text-blue-100/60">Account #</p>
+                    <p className="mt-2 text-lg font-semibold text-white">
+                      {selectedAccount.accountNumber || "N/A"}
+                    </p>
+                    <p className="text-xs text-blue-100/60">
+                      Created {selectedAccount.createdAt ? formatDate(selectedAccount.createdAt) : "Unknown"}
+                    </p>
                   </div>
                 </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-500">Status</p>
-                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(selectedAccount.status)}`}>
-                      {selectedAccount.status || 'Pending'}
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-xs uppercase tracking-wide text-blue-100/60">Creditor</p>
+                    <p className="mt-2 text-base font-semibold text-white">
+                      {selectedAccount.creditor || "Unknown creditor"}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-xs uppercase tracking-wide text-blue-100/60">Balance</p>
+                    <p className="mt-2 text-base font-semibold text-white">
+                      {formatCurrency(
+                        typeof selectedAccount.balanceCents === "number"
+                          ? selectedAccount.balanceCents
+                          : Number(selectedAccount.balanceCents ?? 0)
+                      )}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-xs uppercase tracking-wide text-blue-100/60">Status</p>
+                    <span
+                      className={`mt-2 inline-flex w-fit items-center rounded-full px-3 py-1 text-xs font-semibold ${getStatusColor(
+                        selectedAccount.status
+                      )}`}
+                    >
+                      {selectedAccount.status || "Unknown"}
                     </span>
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Created</p>
-                    <p className="font-medium">{formatDate(selectedAccount.createdAt)}</p>
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-xs uppercase tracking-wide text-blue-100/60">Due date</p>
+                    <p className="mt-2 text-base font-semibold text-white">
+                      {selectedAccount.dueDate ? formatDate(selectedAccount.dueDate) : "Not scheduled"}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-xs uppercase tracking-wide text-blue-100/60">Folder</p>
+                    <p className="mt-2 text-base font-semibold text-white">
+                      {selectedAccount.folder?.name || "Not assigned"}
+                    </p>
                   </div>
                 </div>
-              </div>
-            )}
-            <div className="flex justify-end mt-4">
-              <Button onClick={() => setShowViewModal(false)}>Close</Button>
-            </div>
-          </DialogContent>
-        </Dialog>
 
-        {/* Contact Account Modal */}
-        <Dialog open={showContactDialog} onOpenChange={setShowContactDialog}>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>
-                Contact {selectedAccount?.consumer?.firstName} {selectedAccount?.consumer?.lastName}
-              </DialogTitle>
-            </DialogHeader>
-            {selectedAccount && (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-xs uppercase tracking-wide text-blue-100/60">Address</p>
+                  <p className="mt-2 text-base font-semibold text-white">
+                    {selectedAccount.consumer?.address || "Not provided"}
+                  </p>
+                  {selectedAccountLocation && (
+                    <p className="mt-1 text-sm text-blue-100/70">{selectedAccountLocation}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <Button
+                  variant="ghost"
+                  className="rounded-lg border border-white/10 bg-white/5 px-4 text-blue-100 hover:bg-white/10"
+                  onClick={() => {
+                    setShowViewModal(false);
+                    handleEdit(selectedAccount);
+                  }}
+                >
+                  Edit account
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="rounded-lg border border-white/10 bg-white/5 px-4 text-blue-100 hover:bg-white/10"
+                  onClick={() => {
+                    setShowViewModal(false);
+                    handleContact(selectedAccount);
+                  }}
+                >
+                  Contact consumer
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="rounded-lg border border-white/10 bg-white/5 px-4 text-blue-100 hover:bg-white/10"
+                  onClick={() => setShowViewModal(false)}
+                >
+                  Close
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showContactDialog} onOpenChange={handleContactModalChange}>
+        <DialogContent className="max-w-xl border border-white/10 bg-[#0f1a3c] text-blue-100">
+          {selectedAccount && (
+            <>
+              <DialogHeader className="space-y-2 text-left">
+                <DialogTitle className="text-xl font-semibold text-white">
+                  Contact {selectedAccount.consumer?.firstName} {selectedAccount.consumer?.lastName}
+                </DialogTitle>
+                <DialogDescription className="text-sm text-blue-100/70">
+                  Reach out using the consumer's preferred channel.
+                </DialogDescription>
+              </DialogHeader>
+
               <div className="space-y-4">
-                <div className="grid gap-3">
-                  <div className="flex items-center gap-3 rounded-lg border border-gray-200 p-3">
-                    <Mail className="h-5 w-5 text-sky-600" />
-                    <div className="flex-1">
-                      <p className="text-xs uppercase tracking-wide text-gray-500">Email</p>
-                      <p className="font-medium text-gray-900">
-                        {selectedAccount.consumer?.email || "Not provided"}
-                      </p>
-                    </div>
+                <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 sm:flex-row sm:items-center">
+                  <span className="rounded-xl bg-sky-500/20 p-2 text-sky-300">
+                    <Mail className="h-5 w-5" />
+                  </span>
+                  <div className="flex-1">
+                    <p className="text-xs uppercase tracking-wide text-blue-100/60">Email</p>
+                    <p className="text-sm font-semibold text-white">
+                      {selectedAccount.consumer?.email || "Not provided"}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
                     <Button
-                      variant="outline"
+                      variant="ghost"
                       size="sm"
+                      className="rounded-lg border border-white/10 bg-white/5 px-3 text-blue-100 hover:bg-white/10"
                       onClick={() => selectedAccount && handleComposeEmail(selectedAccount)}
                       disabled={!selectedAccount.consumer?.email}
                     >
-                      Send Email
+                      Compose
                     </Button>
-                  </div>
-                  <div className="flex items-center gap-3 rounded-lg border border-gray-200 p-3">
-                    <Phone className="h-5 w-5 text-emerald-600" />
-                    <div className="flex-1">
-                      <p className="text-xs uppercase tracking-wide text-gray-500">Phone</p>
-                      <p className="font-medium text-gray-900">
-                        {selectedAccount.consumer?.phone || "Not provided"}
-                      </p>
-                    </div>
-                    {selectedAccount.consumer?.phone ? (
-                      <Button variant="outline" size="sm" asChild>
-                        <a href={`tel:${selectedAccount.consumer.phone}`}>Call</a>
+                    {selectedAccount.consumer?.email ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        asChild
+                        className="rounded-lg border border-white/10 bg-white/5 px-3 text-blue-100 hover:bg-white/10"
+                      >
+                        <a href={`mailto:${selectedAccount.consumer.email}`}>Email</a>
                       </Button>
                     ) : (
-                      <Button variant="outline" size="sm" disabled>
-                        Call
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled
+                        className="rounded-lg border border-white/10 bg-white/5 px-3 text-blue-100/50"
+                      >
+                        Email
                       </Button>
                     )}
                   </div>
                 </div>
-                <div className="flex items-start gap-3 rounded-lg border border-gray-200 p-3">
-                  <MapPin className="mt-1 h-5 w-5 text-indigo-600" />
+
+                <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <span className="rounded-xl bg-emerald-500/20 p-2 text-emerald-300">
+                    <Phone className="h-5 w-5" />
+                  </span>
+                  <div className="flex-1">
+                    <p className="text-xs uppercase tracking-wide text-blue-100/60">Phone</p>
+                    <p className="text-sm font-semibold text-white">
+                      {selectedAccount.consumer?.phone || "Not provided"}
+                    </p>
+                  </div>
+                  {selectedAccount.consumer?.phone ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      asChild
+                      className="rounded-lg border border-white/10 bg-white/5 px-3 text-blue-100 hover:bg-white/10"
+                    >
+                      <a href={`tel:${selectedAccount.consumer.phone}`}>Call</a>
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled
+                      className="rounded-lg border border-white/10 bg-white/5 px-3 text-blue-100/50"
+                    >
+                      Call
+                    </Button>
+                  )}
+                </div>
+
+                <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <span className="rounded-xl bg-indigo-500/20 p-2 text-indigo-300">
+                    <MapPin className="h-5 w-5" />
+                  </span>
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-gray-500">Address</p>
-                    <p className="font-medium text-gray-900">
+                    <p className="text-xs uppercase tracking-wide text-blue-100/60">Address</p>
+                    <p className="text-sm font-semibold text-white">
                       {selectedAccount.consumer?.address || "Not provided"}
                     </p>
                     {selectedAccountLocation && (
-                      <p className="text-sm text-gray-600">{selectedAccountLocation}</p>
+                      <p className="text-xs text-blue-100/70">{selectedAccountLocation}</p>
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-3 rounded-lg border border-gray-200 p-3">
-                  <Calendar className="h-5 w-5 text-amber-600" />
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-gray-500">Next Due Date</p>
-                    <p className="font-medium text-gray-900">
+
+                <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <span className="rounded-xl bg-amber-500/20 p-2 text-amber-300">
+                    <Calendar className="h-5 w-5" />
+                  </span>
+                  <div className="flex-1">
+                    <p className="text-xs uppercase tracking-wide text-blue-100/60">Next due date</p>
+                    <p className="text-sm font-semibold text-white">
                       {selectedAccount.dueDate ? formatDate(selectedAccount.dueDate) : "Not scheduled"}
                     </p>
                   </div>
                 </div>
-              </div>
-            )}
-            <div className="mt-6 flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setShowContactDialog(false)}>
-                Close
-              </Button>
-              <Button
-                onClick={() => selectedAccount && handleComposeEmail(selectedAccount)}
-                disabled={!selectedAccount?.consumer?.email}
-              >
-                Compose Email
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
 
-        {/* Compose Email Modal */}
-        <Dialog
-          open={showComposeEmailDialog}
-          onOpenChange={(open) => {
-            setShowComposeEmailDialog(open);
-            if (!open) {
-              setComposeEmailForm({ templateId: "", subject: "", body: "" });
-            }
-          }}
-        >
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Compose Email</DialogTitle>
-              <DialogDescription>
-                Send a message to the consumer using the integrated communications system.
-              </DialogDescription>
-            </DialogHeader>
-
-            {selectedAccount && (
-              <div className="space-y-5">
-                <div className="rounded-md border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-                  <p className="font-semibold">To: {selectedAccount.consumer?.email}</p>
-                  {selectedAccount.consumer && (
-                    <p className="text-blue-900/80">
-                      {[selectedAccount.consumer.firstName, selectedAccount.consumer.lastName].filter(Boolean).join(" ")}
-                    </p>
-                  )}
-                  {selectedAccount.accountNumber && (
-                    <p className="mt-1 text-xs text-blue-900/70">
-                      Account #: {selectedAccount.accountNumber}
-                    </p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="compose-template">Template</Label>
-                  <Select
-                    value={composeEmailForm.templateId}
-                    onValueChange={(value) => {
-                      if (!value) {
-                        setComposeEmailForm((prev) => ({ ...prev, templateId: "" }));
-                        return;
-                      }
-
-                      const template = (emailTemplates as any[])?.find((item: any) => item.id === value);
-                      setComposeEmailForm((prev) => ({
-                        templateId: value,
-                        subject: template?.subject || prev.subject,
-                        body: template?.html || prev.body,
-                      }));
-                    }}
-                    disabled={emailTemplatesLoading}
+                <div className="flex justify-end">
+                  <Button
+                    variant="ghost"
+                    className="rounded-lg border border-white/10 bg-white/5 px-4 text-blue-100 hover:bg-white/10"
+                    onClick={() => setShowContactDialog(false)}
                   >
-                    <SelectTrigger id="compose-template">
-                      <SelectValue placeholder={emailTemplatesLoading ? "Loading templates..." : "Choose a template (optional)"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">No template (start from scratch)</SelectItem>
-                      {(emailTemplates as any[])?.map((template: any) => (
-                        <SelectItem key={template.id} value={template.id}>
-                          {template.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    Close
+                  </Button>
                 </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
-                <div className="space-y-2">
-                  <Label htmlFor="compose-subject">Subject</Label>
-                  <Input
-                    id="compose-subject"
-                    value={composeEmailForm.subject}
-                    onChange={(event) =>
-                      setComposeEmailForm((prev) => ({ ...prev, subject: event.target.value }))
+      <Dialog
+        open={showComposeEmailDialog}
+        onOpenChange={(open) => {
+          setShowComposeEmailDialog(open);
+          if (!open) {
+            setComposeEmailForm({ templateId: "", subject: "", body: "" });
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Compose Email</DialogTitle>
+            <DialogDescription>
+              Send a message to the consumer using the integrated communications system.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedAccount && (
+            <div className="space-y-5">
+              <div className="rounded-md border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+                <p className="font-semibold">To: {selectedAccount.consumer?.email}</p>
+                {selectedAccount.consumer && (
+                  <p className="text-blue-900/80">
+                    {[selectedAccount.consumer.firstName, selectedAccount.consumer.lastName].filter(Boolean).join(" ")}
+                  </p>
+                )}
+                {selectedAccount.accountNumber && (
+                  <p className="mt-1 text-xs text-blue-900/70">
+                    Account #: {selectedAccount.accountNumber}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="compose-template">Template</Label>
+                <Select
+                  value={composeEmailForm.templateId}
+                  onValueChange={(value) => {
+                    if (!value) {
+                      setComposeEmailForm((prev) => ({ ...prev, templateId: "" }));
+                      return;
                     }
-                    placeholder="Email subject"
+
+                    const template = (emailTemplates as any[])?.find((item: any) => item.id === value);
+                    setComposeEmailForm((prev) => ({
+                      templateId: value,
+                      subject: template?.subject || prev.subject,
+                      body: template?.html || prev.body,
+                    }));
+                  }}
+                  disabled={emailTemplatesLoading}
+                >
+                  <SelectTrigger id="compose-template">
+                    <SelectValue placeholder={emailTemplatesLoading ? "Loading templates..." : "Choose a template (optional)"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">No template (start from scratch)</SelectItem>
+                    {(emailTemplates as any[])?.map((template: any) => (
+                      <SelectItem key={template.id} value={template.id}>
+                        {template.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="compose-subject">Subject</Label>
+                <Input
+                  id="compose-subject"
+                  value={composeEmailForm.subject}
+                  onChange={(event) =>
+                    setComposeEmailForm((prev) => ({ ...prev, subject: event.target.value }))
+                  }
+                  placeholder="Email subject"
+                />
+              </div>
+
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="compose-body">Message</Label>
+                  <Textarea
+                    id="compose-body"
+                    value={composeEmailForm.body}
+                    onChange={(event) =>
+                      setComposeEmailForm((prev) => ({ ...prev, body: event.target.value }))
+                    }
+                    rows={8}
+                    placeholder="Write your message or choose a communication template"
                   />
                 </div>
 
-                <div className="space-y-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="compose-body">Message</Label>
-                    <Textarea
-                      id="compose-body"
-                      value={composeEmailForm.body}
-                      onChange={(event) =>
-                        setComposeEmailForm((prev) => ({ ...prev, body: event.target.value }))
-                      }
-                      rows={8}
-                      placeholder="Write your message or choose a communication template"
+                {composeEmailForm.body && (
+                  <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                    <p className="mb-2 text-xs font-semibold uppercase text-gray-500">Preview</p>
+                    <div
+                      className="prose prose-sm max-w-none text-gray-800"
+                      dangerouslySetInnerHTML={{ __html: buildComposePreviewHtml(composeEmailForm.body) }}
                     />
                   </div>
-
-                  {composeEmailForm.body && (
-                    <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                      <p className="mb-2 text-xs font-semibold uppercase text-gray-500">Preview</p>
-                      <div
-                        className="prose prose-sm max-w-none text-gray-800"
-                        dangerouslySetInnerHTML={{ __html: buildComposePreviewHtml(composeEmailForm.body) }}
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            <DialogFooter className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowComposeEmailDialog(false);
-                  setComposeEmailForm({ templateId: "", subject: "", body: "" });
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={() =>
-                  selectedAccount &&
-                  sendEmailMutation.mutate({
-                    consumerId: selectedAccount.consumer?.id || selectedAccount.consumerId,
-                    accountId: selectedAccount.id,
-                    templateId: composeEmailForm.templateId || undefined,
-                    subject: composeEmailForm.subject,
-                    body: composeEmailForm.body,
-                  })
-                }
-                disabled={
-                  sendEmailMutation.isPending ||
-                  !selectedAccount?.consumer?.email ||
-                  !composeEmailForm.subject.trim() ||
-                  !composeEmailForm.body.trim()
-                }
-              >
-                {sendEmailMutation.isPending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Sending...
-                  </>
-                ) : (
-                  "Send Email"
                 )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              </div>
+            </div>
+          )}
 
-        {/* Delete Account Confirmation */}
-        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete Account</AlertDialogTitle>
-              <AlertDialogDescription>
-                Are you sure you want to delete this account for {selectedAccount?.consumer?.firstName} {selectedAccount?.consumer?.lastName}? 
-                This action cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => selectedAccount && deleteAccountMutation.mutate(selectedAccount.id)}
-                className="bg-red-600 hover:bg-red-700"
-              >
-                Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+          <DialogFooter className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowComposeEmailDialog(false);
+                setComposeEmailForm({ templateId: "", subject: "", body: "" });
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() =>
+                sendEmailMutation.mutate({
+                  to: selectedAccount?.consumer?.email,
+                  subject: composeEmailForm.subject,
+                  body: composeEmailForm.body,
+                  templateId: composeEmailForm.templateId || undefined,
+                })
+              }
+              disabled={sendEmailMutation.isPending || !composeEmailForm.subject || !composeEmailForm.body}
+            >
+              {sendEmailMutation.isPending ? "Sending..." : "Send Email"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-        {/* Bulk Delete Confirmation */}
-        <AlertDialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete Multiple Accounts</AlertDialogTitle>
-              <AlertDialogDescription>
-                Are you sure you want to delete {selectedAccounts.size} selected accounts? 
-                This action cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={handleBulkDelete}
-                className="bg-red-600 hover:bg-red-700"
-              >
-                Delete {selectedAccounts.size} Accounts
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+      <AlertDialog open={deleteFolderDialog.open} onOpenChange={(open) => setDeleteFolderDialog({ open, folder: null })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Folder</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete the folder "{deleteFolderDialog.folder?.name}"?
+              Accounts in this folder will be moved to the default folder.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteFolderDialog.folder && deleteFolderMutation.mutate(deleteFolderDialog.folder.id)}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Delete Folder
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
-        {/* Delete Folder Confirmation */}
-        <AlertDialog open={deleteFolderDialog.open} onOpenChange={(open) => setDeleteFolderDialog({ open, folder: null })}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete Folder</AlertDialogTitle>
-              <AlertDialogDescription>
-                Are you sure you want to delete the folder "{deleteFolderDialog.folder?.name}"? 
-                Accounts in this folder will be moved to the default folder.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => deleteFolderDialog.folder && deleteFolderMutation.mutate(deleteFolderDialog.folder.id)}
-                className="bg-red-600 hover:bg-red-700"
-              >
-                Delete Folder
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        {/* Create Folder Modal */}
-        <Dialog open={showCreateFolderModal} onOpenChange={setShowCreateFolderModal}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create New Folder</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={(e) => {
+      <Dialog open={showCreateFolderModal} onOpenChange={setShowCreateFolderModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create New Folder</DialogTitle>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
               e.preventDefault();
               createFolderMutation.mutate(folderForm);
-            }} className="space-y-4">
-              <div>
-                <Label htmlFor="folder-name">Folder Name *</Label>
-                <Input
-                  id="folder-name"
-                  value={folderForm.name}
-                  onChange={(e) => setFolderForm({ ...folderForm, name: e.target.value })}
-                  placeholder="Enter folder name"
-                  required
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="folder-color">Color</Label>
-                <Input
-                  id="folder-color"
-                  type="color"
-                  value={folderForm.color}
-                  onChange={(e) => setFolderForm({ ...folderForm, color: e.target.value })}
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="folder-description">Description</Label>
-                <Input
-                  id="folder-description"
-                  value={folderForm.description}
-                  onChange={(e) => setFolderForm({ ...folderForm, description: e.target.value })}
-                  placeholder="Enter folder description"
-                />
-              </div>
+            }}
+            className="space-y-4"
+          >
+            <div>
+              <Label htmlFor="folder-name">Folder Name *</Label>
+              <Input
+                id="folder-name"
+                value={folderForm.name}
+                onChange={(e) => setFolderForm({ ...folderForm, name: e.target.value })}
+                placeholder="Enter folder name"
+                required
+              />
+            </div>
 
-              <div className="flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={() => setShowCreateFolderModal(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={createFolderMutation.isPending}>
-                  {createFolderMutation.isPending ? "Creating..." : "Create Folder"}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
+            <div>
+              <Label htmlFor="folder-color">Color</Label>
+              <Input
+                id="folder-color"
+                type="color"
+                value={folderForm.color}
+                onChange={(e) => setFolderForm({ ...folderForm, color: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="folder-description">Description</Label>
+              <Input
+                id="folder-description"
+                value={folderForm.description}
+                onChange={(e) => setFolderForm({ ...folderForm, description: e.target.value })}
+                placeholder="Enter folder description"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setShowCreateFolderModal(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={createFolderMutation.isPending}>
+                {createFolderMutation.isPending ? "Creating..." : "Create Folder"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 }
