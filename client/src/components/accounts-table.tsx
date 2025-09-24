@@ -25,6 +25,7 @@ interface AccountsTableProps {
   showDeleteButton?: boolean;
   onView?: (account: any) => void;
   onContact?: (account: any) => void;
+  onEdit?: (account: any) => void;
 }
 
 export default function AccountsTable({
@@ -34,6 +35,7 @@ export default function AccountsTable({
   showDeleteButton = false,
   onView,
   onContact,
+  onEdit,
 }: AccountsTableProps) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
@@ -301,6 +303,17 @@ export default function AccountsTable({
                         >
                           View
                         </Button>
+                        {onEdit && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="rounded-lg border border-sky-400/40 bg-sky-500/20 px-3 text-xs font-semibold text-white hover:bg-sky-500/30"
+                            data-testid={`button-edit-account-${account.id}`}
+                            onClick={() => onEdit(account)}
+                          >
+                            Edit
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
