@@ -51,28 +51,77 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       )
       .limit(1);
 
-    if (existingConsumer.length > 0) {
-      return res.status(400).json({ error: 'Consumer already registered' });
-    }
+    let consumerId: string;
+    let finalConsumer: any;
+    let effectiveTenantId: string | null = null;
 
-    // Create consumer - let PostgreSQL generate the UUID
-    const [newConsumer] = await db.insert(consumers).values({
-      tenantId: tenant?.id,
-      firstName: data.firstName,
-      lastName: data.lastName,
-      email: data.email,
-      phone: data.phone,
-      dateOfBirth: data.dateOfBirth,
-      ssnLast4: data.ssnLast4,
-      address: data.address,
-      city: data.city,
-      state: data.state,
-      zipCode: data.zipCode,
-      isRegistered: true,
-      registrationDate: new Date()
-    }).returning();
-    
-    const consumerId = newConsumer.id;
+    if (existingConsumer.length > 0) {
+      const existing = existingConsumer[0];
+      
+      // If already registered, reject
+      if (existing.isRegistered) {
+        return res.status(400).json({ error: 'Consumer already registered' });
+      }
+      
+      // Determine effective tenantId - preserve company-set tenantId if it exists
+      effectiveTenantId = existing.tenantId || tenant?.id || null;
+      
+      // Update pre-created consumer with self-provided information
+      const [updatedConsumer] = await db
+        .update(consumers)
+        .set({
+          // Update with consumer-provided data (consumer data overwrites company data)
+          firstName: data.firstName || existing.firstName,
+          lastName: data.lastName || existing.lastName,
+          phone: data.phone || existing.phone,
+          dateOfBirth: data.dateOfBirth || existing.dateOfBirth,
+          ssnLast4: data.ssnLast4 || existing.ssnLast4,
+          address: data.address || existing.address,
+          city: data.city || existing.city,
+          state: data.state || existing.state,
+          zipCode: data.zipCode || existing.zipCode,
+          // Mark as registered
+          isRegistered: true,
+          registrationDate: new Date(),
+          // Preserve company-set tenantId
+          tenantId: effectiveTenantId
+        })
+        .where(eq(consumers.id, existing.id))
+        .returning();
+      
+      consumerId = updatedConsumer.id;
+      finalConsumer = updatedConsumer;
+      
+      // If consumer has a tenantId but tenant isn't loaded, get it
+      if (effectiveTenantId && !tenant) {
+        const [foundTenant] = await db
+          .select()
+          .from(tenants)
+          .where(eq(tenants.id, effectiveTenantId))
+          .limit(1);
+        tenant = foundTenant || null;
+      }
+    } else {
+      // Create new consumer if doesn't exist
+      const [newConsumer] = await db.insert(consumers).values({
+        tenantId: tenant?.id,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        email: data.email,
+        phone: data.phone,
+        dateOfBirth: data.dateOfBirth,
+        ssnLast4: data.ssnLast4,
+        address: data.address,
+        city: data.city,
+        state: data.state,
+        zipCode: data.zipCode,
+        isRegistered: true,
+        registrationDate: new Date()
+      }).returning();
+      
+      consumerId = newConsumer.id;
+      finalConsumer = newConsumer;
+    }
 
     // If tenant is provided, get associated accounts
     let consumerAccounts: typeof accounts.$inferSelect[] = [];
@@ -100,9 +149,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       success: true,
       consumer: {
         id: consumerId,
-        firstName: data.firstName,
-        lastName: data.lastName,
-        email: data.email
+        firstName: finalConsumer.firstName,
+        lastName: finalConsumer.lastName,
+        email: finalConsumer.email
       },
       tenant: tenant ? {
         id: tenant.id,
