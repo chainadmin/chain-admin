@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import { relations } from 'drizzle-orm';
 import {
   index,
+  integer,
   jsonb,
   pgTable,
   timestamp,
@@ -11,6 +12,7 @@ import {
   date,
   boolean,
   uuid,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -405,6 +407,26 @@ export const invoices = pgTable("invoices", {
   paidAt: timestamp("paid_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+// Messaging usage events (for billing usage tracking)
+export const messagingUsageEvents = pgTable(
+  "messaging_usage_events",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+    provider: text("provider").notNull(),
+    messageType: text("message_type").notNull(),
+    quantity: integer("quantity").notNull().default(1),
+    externalMessageId: text("external_message_id").notNull(),
+    occurredAt: timestamp("occurred_at").defaultNow(),
+    metadata: jsonb("metadata").default(sql`'{}'::jsonb`),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => ({
+    uniqueExternalMessage: uniqueIndex("messaging_usage_events_external_idx").on(table.externalMessageId),
+    tenantPeriodIdx: index("messaging_usage_events_tenant_period_idx").on(table.tenantId, table.occurredAt),
+  })
+);
 
 // Relations
 export const tenantsRelations = relations(tenants, ({ one, many }) => ({
@@ -933,6 +955,7 @@ export const insertCallbackRequestSchema = createInsertSchema(callbackRequests).
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true });
 export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true, createdAt: true });
+export const insertMessagingUsageEventSchema = createInsertSchema(messagingUsageEvents).omit({ id: true, createdAt: true });
 export const insertFolderSchema = createInsertSchema(folders).omit({ id: true, createdAt: true });
 export const insertSmsTemplateSchema = createInsertSchema(smsTemplates).omit({ id: true, createdAt: true });
 export const insertSmsCampaignSchema = createInsertSchema(smsCampaigns).omit({ id: true, createdAt: true, completedAt: true });
@@ -979,6 +1002,8 @@ export type Subscription = typeof subscriptions.$inferSelect;
 export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
 export type Invoice = typeof invoices.$inferSelect;
 export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
+export type MessagingUsageEvent = typeof messagingUsageEvents.$inferSelect;
+export type InsertMessagingUsageEvent = z.infer<typeof insertMessagingUsageEventSchema>;
 export type Folder = typeof folders.$inferSelect;
 export type InsertFolder = z.infer<typeof insertFolderSchema>;
 export type SmsTemplate = typeof smsTemplates.$inferSelect;
