@@ -34,6 +34,39 @@ Chain is a multi-tenant platform designed for agencies to manage consumer accoun
   - Tabbed interface with color-coded folder display
   - Improved account organization and workflow management
 
+# Known Issues To Address
+
+## Consumer Login Issues
+- **Login Success but No Access**: Consumer dashboard API call fails due to URL parameter mismatch (expects query param, gets path param)
+- **Registration Duplicate Error**: Registration API rejects existing unregistered consumers instead of updating them
+
+## Dashboard Issues
+- **View/Contact Not Working**: View and contact buttons on dashboard don't work (work on accounts page)
+- **API Endpoint Mismatch**: Dashboard uses `/api/consumer/accounts/${email}` but API expects query parameters
+
+## Account Management Issues  
+- **Account Deletion 405**: DELETE endpoint exists but getting method not allowed errors
+- **Folder Deletion 405**: DELETE endpoint exists but getting method not allowed errors
+- **Compose Email Integration**: Should open communications system, not basic modal
+- **Deleted Accounts Cleanup**: Deleted accounts should be removed entirely from system
+
+## Communication Issues
+- **Can't Delete Templates**: DELETE endpoints exist but not working
+- **Can't Delete SMS Campaigns**: DELETE endpoints exist but not working
+- **No Campaign Selected Error**: Automation dropdown not populating campaigns
+- **SMS Throttle Not Visible**: Frontend not displaying SMS throttle limit from tenant settings
+
+## Settings/Documents Issues
+- **Document Visibility**: Documents show globally instead of per-account
+- **Can't Delete Documents**: DELETE endpoint incomplete/not working
+- **Payment Arrangement 500**: Field validation errors on creation
+- **Payoff Amount Format**: Needs percentage, currently expects cents
+- **Payoff Terms Format**: Needs date field, currently uses months number
+
+## Payment Processing
+- **USAePay Integration Missing**: Need to integrate USAePay for payment processing
+- **Payment API Response Handling**: Need proper webhook and response handling
+
 # User Preferences
 
 Preferred communication style: Simple, everyday language.
