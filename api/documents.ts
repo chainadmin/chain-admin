@@ -39,9 +39,9 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       // Get all documents for the tenant, including related account + consumer info when available
       const tenantDocuments = await db
         .select({
-          id: documents.id,
-          tenantId: documents.tenantId,
-          accountId: documents.accountId,
+          documentId: documents.id,
+          documentTenantId: documents.tenantId,
+          documentAccountId: documents.accountId,
           title: documents.title,
           description: documents.description,
           fileName: documents.fileName,
@@ -51,19 +51,15 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
           isPublic: documents.isPublic,
           createdAt: documents.createdAt,
           updatedAt: documents.updatedAt,
-          account: {
-            id: accounts.id,
-            accountNumber: accounts.accountNumber,
-            creditor: accounts.creditor,
-            consumerId: accounts.consumerId,
-            consumer: {
-              id: consumers.id,
-              firstName: consumers.firstName,
-              lastName: consumers.lastName,
-              email: consumers.email,
-              phone: consumers.phone,
-            },
-          },
+          joinedAccountId: accounts.id,
+          accountNumber: accounts.accountNumber,
+          accountCreditor: accounts.creditor,
+          accountConsumerId: accounts.consumerId,
+          consumerId: consumers.id,
+          consumerFirstName: consumers.firstName,
+          consumerLastName: consumers.lastName,
+          consumerEmail: consumers.email,
+          consumerPhone: consumers.phone,
         })
         .from(documents)
         .leftJoin(accounts, eq(documents.accountId, accounts.id))
@@ -71,25 +67,38 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         .where(eq(documents.tenantId, tenantId));
 
       const formattedDocuments = tenantDocuments.map((document) => {
-        const { account, ...rest } = document;
-
-        if (!account?.id) {
-          return {
-            ...rest,
-            account: null,
-          };
-        }
-
-        const consumer = account.consumer?.id
-          ? account.consumer
+        const account = document.joinedAccountId
+          ? {
+              id: document.joinedAccountId,
+              accountNumber: document.accountNumber,
+              creditor: document.accountCreditor,
+              consumerId: document.accountConsumerId,
+              consumer: document.consumerId
+                ? {
+                    id: document.consumerId,
+                    firstName: document.consumerFirstName,
+                    lastName: document.consumerLastName,
+                    email: document.consumerEmail,
+                    phone: document.consumerPhone,
+                  }
+                : null,
+            }
           : null;
 
         return {
-          ...rest,
-          account: {
-            ...account,
-            consumer,
-          },
+          id: document.documentId,
+          tenantId: document.documentTenantId,
+          accountId: document.documentAccountId,
+          title: document.title,
+          description: document.description,
+          fileName: document.fileName,
+          fileUrl: document.fileUrl,
+          fileSize: document.fileSize,
+          mimeType: document.mimeType,
+          isPublic: document.isPublic,
+          createdAt: document.createdAt,
+          updatedAt: document.updatedAt,
+          account,
         };
       });
 
