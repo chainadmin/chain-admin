@@ -64,8 +64,64 @@ export async function verifyAuth(req: AuthenticatedRequest): Promise<boolean> {
   }
 }
 
+function appendVaryHeader(res: VercelResponse, value: string) {
+  const existing = res.getHeader('Vary');
+
+  if (!existing) {
+    res.setHeader('Vary', value);
+    return;
+  }
+
+  const values = Array.isArray(existing) ? existing.join(', ') : String(existing);
+
+  if (!values.split(/,\s*/).includes(value)) {
+    res.setHeader('Vary', `${values}, ${value}`);
+  }
+}
+
+function applyCorsHeaders(req: AuthenticatedRequest, res: VercelResponse) {
+  const allowedOrigins = [
+    'https://chainsoftwaregroup.com',
+    'https://www.chainsoftwaregroup.com',
+    'http://localhost:5173',
+    'http://localhost:5000',
+    'http://localhost:3000',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:5000',
+    'http://127.0.0.1:3000'
+  ];
+
+  const origin = req.headers.origin as string | undefined;
+
+  let isAllowed = true;
+
+  if (origin) {
+    isAllowed =
+      allowedOrigins.includes(origin) ||
+      origin.includes('vercel.app') ||
+      origin.includes('vercel.sh') ||
+      origin.includes('replit.dev') ||
+      origin.includes('replit.app') ||
+      origin.includes('repl.co') ||
+      origin.endsWith('.chainsoftwaregroup.com');
+  }
+
+  appendVaryHeader(res, 'Origin');
+
+  if (isAllowed) {
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+  }
+
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Max-Age', '86400');
+}
+
 export function withAuth(handler: (req: AuthenticatedRequest, res: VercelResponse) => Promise<void>) {
   return async (req: AuthenticatedRequest, res: VercelResponse) => {
+    applyCorsHeaders(req, res);
+
     // Allow CORS preflight requests to proceed without authentication
     if (req.method?.toUpperCase() === 'OPTIONS') {
       res.status(200).end();
