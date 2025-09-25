@@ -318,6 +318,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
+  // Disable HTTP caching for consumer APIs so browsers always get a 200 body
+  app.use('/api/consumer', (_req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Surrogate-Control', 'no-store');
+    next();
+  });
+
   // Subdomain detection middleware
   app.use(subdomainMiddleware);
 

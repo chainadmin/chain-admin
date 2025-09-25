@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
+app.disable("etag");
 
 async function createServer() {
   const server = await registerRoutes(app);

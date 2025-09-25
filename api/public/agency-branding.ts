@@ -13,6 +13,12 @@ async function handler(req: VercelRequest, res: VercelResponse) {
       ? requestHeaders.join(', ')
       : requestHeaders || 'Content-Type, Authorization'
   );
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+  res.setHeader('CDN-Cache-Control', 'no-store');
+  res.setHeader('Vercel-CDN-Cache-Control', 'no-store');
 
   if (req.method === 'OPTIONS') {
     res.status(204).end();
