@@ -9,7 +9,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Building2, Lock, Sparkles, UserCheck } from "lucide-react";
 import { z } from "zod";
 import { isSubdomainSupported } from "@shared/utils/subdomain";
-import { setCookie } from "@/lib/cookies";
+import { persistTenantMetadata, setCookie } from "@/lib/cookies";
 import AgencyAuthLayout from "@/components/agency-auth-layout";
 
 const loginSchema = z.object({
@@ -42,13 +42,10 @@ export default function AgencyLogin() {
       }
 
       // Persist tenant details for cross-subdomain navigation
-      if (result.tenant?.slug) {
-        setCookie('tenantSlug', result.tenant.slug);
-      }
-
-      if (result.tenant?.name) {
-        setCookie('tenantName', encodeURIComponent(result.tenant.name));
-      }
+      persistTenantMetadata({
+        slug: result.tenant?.slug,
+        name: result.tenant?.name,
+      });
 
       return result;
     },

@@ -1,15 +1,46 @@
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getAgencySlugFromRequest, isSubdomainSupported } from "@shared/utils/subdomain";
 import { useLocation } from "wouter";
+import { getStoredTenantSlug, persistTenantMetadata } from "@/lib/cookies";
 
 export function useAgencyContext() {
   const [location] = useLocation();
-  
-  // Extract agency slug from current URL
-  const agencySlug = getAgencySlugFromRequest(
-    window.location.hostname,
-    window.location.pathname
-  );
+  const subdomainSupported = useMemo(() => isSubdomainSupported(), []);
+
+  const [agencySlug, setAgencySlug] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+
+    const slugFromUrl = getAgencySlugFromRequest(
+      window.location.hostname,
+      window.location.pathname
+    );
+
+    if (slugFromUrl) {
+      persistTenantMetadata({ slug: slugFromUrl });
+      return slugFromUrl;
+    }
+
+    return getStoredTenantSlug();
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const slugFromUrl = getAgencySlugFromRequest(
+      window.location.hostname,
+      window.location.pathname
+    );
+
+    if (slugFromUrl) {
+      persistTenantMetadata({ slug: slugFromUrl });
+      setAgencySlug((current) => (current === slugFromUrl ? current : slugFromUrl));
+      return;
+    }
+
+    const storedSlug = getStoredTenantSlug();
+    setAgencySlug((current) => (current === storedSlug ? current : storedSlug));
+  }, [location]);
 
   // Fetch agency details if we have a slug
   const { data: agency, isLoading, error } = useQuery({
@@ -33,8 +64,8 @@ export function useAgencyContext() {
   // Helper to build agency-specific URLs
   const buildAgencyUrl = (path: string): string => {
     if (!agencySlug) return path;
-    
-    if (isSubdomainSupported()) {
+
+    if (subdomainSupported) {
       // In production with custom domain, we're already on the subdomain
       return path;
     } else {
@@ -56,6 +87,6 @@ export function useAgencyContext() {
     error,
     buildAgencyUrl,
     navigateInAgency,
-    isSubdomainSupported: isSubdomainSupported(),
+    isSubdomainSupported: subdomainSupported,
   };
 }

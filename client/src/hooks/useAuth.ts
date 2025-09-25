@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { getAuthToken, getCookie } from "@/lib/cookies";
+import { getAuthToken, getStoredTenantName, getStoredTenantSlug, persistTenantMetadata } from "@/lib/cookies";
 
 export function useAuth() {
   const [jwtAuth, setJwtAuth] = useState<any>(null);
@@ -26,10 +26,12 @@ export function useAuth() {
             localStorage.removeItem('authToken');
             setJwtAuth(null);
           } else {
-            // Get tenant info from cookies
-            const tenantSlug = getCookie('tenantSlug') || payload.tenantSlug;
-            const tenantName = getCookie('tenantName') ? decodeURIComponent(getCookie('tenantName')!) : payload.tenantName;
-            
+            // Get tenant info from storage
+            const tenantSlug = getStoredTenantSlug() || payload.tenantSlug;
+            const tenantName = getStoredTenantName() || payload.tenantName;
+
+            persistTenantMetadata({ slug: tenantSlug, name: tenantName });
+
             setJwtAuth({
               id: payload.userId,
               tenantId: payload.tenantId,
