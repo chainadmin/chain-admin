@@ -214,7 +214,16 @@ export default function Accounts() {
   });
 
   const deleteFolderMutation = useMutation({
-    mutationFn: (folderId: string) => apiRequest("DELETE", `/api/folders/${folderId}`),
+    mutationFn: async (folderId: string) => {
+      try {
+        return await apiRequest("DELETE", `/api/folders/${folderId}`);
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith("405")) {
+          return await apiRequest("POST", `/api/folders/${folderId}/delete`);
+        }
+        throw error;
+      }
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });

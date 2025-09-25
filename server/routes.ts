@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage, type IStorage } from "./storage";
 import { authenticateUser, authenticateConsumer, getCurrentUser } from "./authMiddleware";
@@ -469,23 +469,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/folders/:id', authenticateUser, async (req: any, res) => {
+  const deleteFolderHandler = async (req: any, res: Response) => {
     try {
       const tenantId = await getTenantId(req, storage);
-      
+
       if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
       }
 
       const folderId = req.params.id;
       await storage.deleteFolder(folderId, tenantId);
-      
+
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting folder:", error);
       res.status(500).json({ message: "Failed to delete folder" });
     }
-  });
+  };
+
+  app.delete('/api/folders/:id', authenticateUser, deleteFolderHandler);
+  app.post('/api/folders/:id/delete', authenticateUser, deleteFolderHandler);
 
   // Consumer routes
   app.get('/api/consumers', authenticateUser, async (req: any, res) => {
