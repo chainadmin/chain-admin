@@ -13,12 +13,19 @@ const loginSchema = z.object({
   tenantSlug: z.string().optional()
 });
 
+function preventCaching(res: VercelResponse) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
+    preventCaching(res);
     const parsed = loginSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
       return res.status(400).json({ message: 'Email and date of birth are required' });
@@ -97,7 +104,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           slug: row.tenant!.slug
         }));
 
-        return res.status(200).json({
+        return res.status(409).json({
           multipleAgencies: true,
           message: 'Your account is registered with multiple agencies. Please select one:',
           agencies,
@@ -124,7 +131,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           consumer = firstConsumer;
           // Flow will continue and fetch tenant by ID below
         } else {
-          return res.status(200).json({
+          return res.status(409).json({
             message: 'Your account needs to be linked to an agency. Please complete registration.',
             needsAgencyLink: true,
             consumer: {
@@ -161,7 +168,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (!tenant) {
-      return res.status(200).json({
+      return res.status(409).json({
         message: 'Your account needs to be linked to an agency. Please complete registration.',
         needsAgencyLink: true,
         consumer: {
@@ -175,7 +182,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (!consumer.isRegistered) {
-      return res.status(200).json({
+      return res.status(409).json({
         message: 'Account found but not yet activated. Complete your registration.',
         needsRegistration: true,
         consumer: {
@@ -224,7 +231,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (!consumer.tenantId) {
-      return res.status(200).json({
+      return res.status(409).json({
         message: 'Your account needs to be linked to an agency. Please complete registration.',
         needsAgencyLink: true,
         consumer: {
@@ -249,20 +256,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       { expiresIn: '7d' }
     );
 
+    const consumerPayload = {
+      id: consumer.id,
+      firstName: consumer.firstName,
+      lastName: consumer.lastName,
+      email: consumer.email,
+      phone: consumer.phone,
+      tenantId: consumer.tenantId
+    };
+
+    const tenantPayload = {
+      id: tenant.id,
+      name: tenant.name,
+      slug: tenant.slug
+    };
+
     return res.status(200).json({
       token,
-      consumer: {
-        id: consumer.id,
-        firstName: consumer.firstName,
-        lastName: consumer.lastName,
+      consumer: consumerPayload,
+      tenant: tenantPayload,
+      tenantSlug: tenant.slug,
+      session: {
+        token,
+        tenantSlug: tenant.slug,
         email: consumer.email,
-        phone: consumer.phone,
-        tenantId: consumer.tenantId
-      },
-      tenant: {
-        id: tenant.id,
-        name: tenant.name,
-        slug: tenant.slug
+        consumerId: consumer.id,
+        tenant: tenantPayload,
+        consumer: consumerPayload
       }
     });
   } catch (error) {

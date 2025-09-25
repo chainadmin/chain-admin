@@ -2122,6 +2122,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Consumer login route
   app.post('/api/consumer/login', async (req, res) => {
     try {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+
       const { email, dateOfBirth, tenantSlug: bodyTenantSlug } = req.body ?? {};
       const rawTenantSlug = bodyTenantSlug || (req as any).agencySlug;
       const tenantSlug = rawTenantSlug ? String(rawTenantSlug).trim().toLowerCase() : undefined;
@@ -2183,7 +2187,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (consumersForTenant.length === 0) {
           if (stillUnlinkedConsumers.length > 0) {
             const consumerCandidate = stillUnlinkedConsumers[0];
-            return res.status(200).json({
+            return res.status(409).json({
               message: "Your account needs to be linked to an agency. Please complete registration.",
               needsAgencyLink: true,
               consumer: {
@@ -2206,7 +2210,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (linkedConsumers.length === 0) {
           if (stillUnlinkedConsumers.length > 0) {
             const consumerCandidate = stillUnlinkedConsumers[0];
-            return res.status(200).json({
+            return res.status(409).json({
               message: "Your account needs to be linked to an agency. Please complete registration.",
               needsAgencyLink: true,
               consumer: {
@@ -2245,7 +2249,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         if (dedupedAgencies.size > 1) {
-          return res.json({
+          return res.status(409).json({
             multipleAgencies: true,
             message: 'Your account is registered with multiple agencies. Please select one:',
             agencies: Array.from(dedupedAgencies.values()).map(({ tenantRecord }) => ({
@@ -2277,7 +2281,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (!tenant) {
-        return res.status(200).json({
+        return res.status(409).json({
           message: "Your account needs to be linked to an agency. Please complete registration.",
           needsAgencyLink: true,
           consumer: {
@@ -2291,7 +2295,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (!consumer.isRegistered) {
-        return res.status(200).json({
+        return res.status(409).json({
           message: "Account found but not yet activated. Complete your registration.",
           needsRegistration: true,
           consumer: {
@@ -2328,19 +2332,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         { expiresIn: '7d' }
       );
 
-      res.json({
+      const consumerPayload = {
+        id: consumer.id,
+        firstName: consumer.firstName,
+        lastName: consumer.lastName,
+        email: consumer.email,
+        phone: consumer.phone,
+        tenantId: consumer.tenantId,
+      };
+
+      const tenantPayload = {
+        id: tenant.id,
+        name: tenant.name,
+        slug: tenant.slug,
+      };
+
+      res.status(200).json({
         token,
-        consumer: {
-          id: consumer.id,
-          firstName: consumer.firstName,
-          lastName: consumer.lastName,
+        consumer: consumerPayload,
+        tenant: tenantPayload,
+        tenantSlug: tenant.slug,
+        session: {
+          token,
+          tenantSlug: tenant.slug,
           email: consumer.email,
-          phone: consumer.phone,
-          tenantId: consumer.tenantId,
-        },
-        tenant: {
-          name: tenant.name,
-          slug: tenant.slug,
+          consumerId: consumer.id,
+          tenant: tenantPayload,
+          consumer: consumerPayload,
         },
       });
     } catch (error) {
