@@ -84,8 +84,12 @@ export default function ConsumerDashboard() {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        credentials: 'include'
+        credentials: 'include',
+        cache: 'no-store'
       });
+      if (response.status === 304) {
+        throw new Error('Failed to fetch accounts: received 304 Not Modified');
+      }
       if (!response.ok) {
         const error = await response.text();
         // If unauthorized, clear old token and force re-login
