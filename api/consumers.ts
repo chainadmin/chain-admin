@@ -6,7 +6,9 @@ import { eq, and, sql, inArray } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
-  if (req.method === 'OPTIONS') {
+  const method = (req.method ?? '').toUpperCase();
+
+  if (method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
@@ -31,7 +33,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       return;
     }
 
-    if (req.method === 'GET') {
+    if (method === 'GET') {
       // Get all consumers for the tenant with their folders
       const tenantConsumers = await db
         .select({
@@ -81,7 +83,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       }));
 
       res.status(200).json(consumersWithCounts);
-    } else if (req.method === 'PATCH') {
+    } else if (method === 'PATCH') {
       // Update consumer information
       const consumerId = req.url?.split('/').pop();
       
@@ -118,7 +120,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         .returning();
       
       res.status(200).json(updatedConsumer);
-    } else if (req.method === 'DELETE') {
+    } else if (method === 'DELETE') {
       // Handle consumer deletion
       const normalizeIds = (value: unknown): string[] => {
         if (!value && value !== 0) {

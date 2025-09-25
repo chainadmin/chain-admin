@@ -13,7 +13,9 @@ interface AuthenticatedRequest extends VercelRequest {
 }
 
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
-  if (req.method === 'OPTIONS') {
+  const method = (req.method ?? '').toUpperCase();
+
+  if (method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
@@ -45,7 +47,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       return;
     }
 
-    if (req.method === 'GET') {
+    if (method === 'GET') {
       // Get a specific document including related account & consumer info if available
       const [document] = await db
         .select({
@@ -122,7 +124,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       })();
 
       res.status(200).json(formattedDocument);
-    } else if (req.method === 'DELETE') {
+    } else if (method === 'DELETE') {
       // Check if document belongs to tenant
       const [document] = await db
         .select()

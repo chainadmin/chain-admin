@@ -24,7 +24,9 @@ function resolveAccountId(req: AuthenticatedRequest) {
 }
 
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
-  if (req.method === 'OPTIONS') {
+  const method = (req.method ?? '').toUpperCase();
+
+  if (method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
@@ -49,7 +51,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       return;
     }
 
-    if (req.method === 'GET') {
+    if (method === 'GET') {
       // Get all accounts for the tenant
       const tenantAccounts = await db
         .select({
@@ -89,7 +91,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         .where(eq(accounts.tenantId, tenantId));
 
       res.status(200).json(tenantAccounts);
-    } else if (req.method === 'POST') {
+    } else if (method === 'POST') {
       // Create a new account
       const {
         firstName, lastName, email, phone,
@@ -208,7 +210,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         .returning();
 
       res.status(201).json(newAccount);
-    } else if (req.method === 'PATCH') {
+    } else if (method === 'PATCH') {
       const queryId = req.query.id;
       let accountId: string | undefined;
 
@@ -370,7 +372,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         .limit(1);
 
       res.status(200).json(updatedAccount);
-    } else if (req.method === 'DELETE') {
+    } else if (method === 'DELETE') {
       // Delete an account - supports /api/accounts?id=<accountId> and /api/accounts/<accountId>
       const accountId = resolveAccountId(req);
 

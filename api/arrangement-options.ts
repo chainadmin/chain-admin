@@ -10,7 +10,9 @@ interface AuthenticatedRequest extends VercelRequest {
 }
 
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
-  if (req.method === 'OPTIONS') {
+  const method = (req.method ?? '').toUpperCase();
+
+  if (method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
@@ -146,7 +148,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       return;
     }
 
-    if (req.method === 'GET') {
+    if (method === 'GET') {
       // Get all arrangement options for the tenant
       const options = await db
         .select()
@@ -154,7 +156,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         .where(eq(arrangementOptions.tenantId, tenantId));
 
       res.status(200).json(options);
-    } else if (req.method === 'POST') {
+    } else if (method === 'POST') {
       // Create a new arrangement option
       const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
       const planTypeRaw = typeof req.body.planType === 'string' ? req.body.planType : 'range';

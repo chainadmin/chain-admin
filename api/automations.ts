@@ -305,7 +305,9 @@ function resolveAutomationId(req: AuthenticatedRequest) {
 }
 
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
-  if (req.method === 'OPTIONS') {
+  const method = (req.method ?? '').toUpperCase();
+
+  if (method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
@@ -330,7 +332,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       return;
     }
 
-    if (req.method === 'GET') {
+    if (method === 'GET') {
       // Get all automations for the tenant
       const automations = await db
         .select()
@@ -339,7 +341,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         .orderBy(desc(communicationAutomations.createdAt));
 
       res.status(200).json(automations.map(formatAutomation));
-    } else if (req.method === 'POST') {
+    } else if (method === 'POST') {
       // Create a new automation aligned with the updated communications UI
       const body = req.body || {};
 
@@ -546,7 +548,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         .returning();
 
       res.status(201).json(formatAutomation(newAutomation));
-    } else if (req.method === 'PUT') {
+    } else if (method === 'PUT') {
       // Update automation (activate/deactivate or modify settings)
       const automationId = resolveAutomationId(req);
       const updates = req.body;
@@ -582,7 +584,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         .returning();
 
       res.status(200).json(updatedAutomation);
-    } else if (req.method === 'DELETE') {
+    } else if (method === 'DELETE') {
       // Delete an automation
       const automationId = resolveAutomationId(req);
 
