@@ -3745,12 +3745,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Global Admin Routes (Platform Owner Only)
   const isPlatformAdmin = async (req: any, res: any, next: any) => {
-    const userId = req.user?.userId;
-    
+    const userId = req.user?.id ?? req.user?.userId;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
     // Check if user has platform_admin role (they might have multiple roles)
     const userRoles = await db.select().from(platformUsers).where(eq(platformUsers.authId, userId));
     const hasPlatformAdminRole = userRoles.some((user: any) => user.role === 'platform_admin');
-    
+
     if (!hasPlatformAdminRole) {
       return res.status(403).json({ message: "Platform admin access required" });
     }
