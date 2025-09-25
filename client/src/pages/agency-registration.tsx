@@ -7,8 +7,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
-import { agencyTrialRegistrationSchema, type AgencyTrialRegistration } from "@shared/schema";
+import { apiRequest, ApiError } from "@/lib/queryClient";
+import { agencyTrialRegistrationSchema } from "@shared/schema";
 import { CheckCircle, Building, User, Phone, Mail, Calendar, CreditCard, Lock, UserCheck } from "lucide-react";
 import { z } from "zod";
 
@@ -24,9 +24,25 @@ const registrationWithCredentialsSchema = agencyTrialRegistrationSchema.extend({
 
 type RegistrationWithCredentials = z.infer<typeof registrationWithCredentialsSchema>;
 
+type RegistrationSuccessResponse = {
+  message: string;
+  tenantId: string;
+  slug: string;
+  redirectUrl?: string;
+};
+
+type RegistrationMutationResult = {
+  registration: RegistrationSuccessResponse;
+  credentials: {
+    username: string;
+    password: string;
+  };
+};
+
 export default function AgencyRegistration() {
   const { toast } = useToast();
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [successInfo, setSuccessInfo] = useState<RegistrationSuccessResponse | null>(null);
 
   const form = useForm<RegistrationWithCredentials>({
     resolver: zodResolver(registrationWithCredentialsSchema),
@@ -44,56 +60,104 @@ export default function AgencyRegistration() {
     },
   });
 
-  const registrationMutation = useMutation({
+  const registrationMutation = useMutation<
+    RegistrationMutationResult,
+    ApiError | Error,
+    RegistrationWithCredentials
+  >({
     mutationFn: async (data: RegistrationWithCredentials) => {
-      // Remove confirmPassword before sending to API
       const { confirmPassword, ...registrationData } = data;
-      return apiRequest("POST", "/api/agencies/register", registrationData);
+      const response = await apiRequest("POST", "/api/agencies/register", registrationData);
+      const registration = (await response.json()) as RegistrationSuccessResponse;
+
+      return {
+        registration,
+        credentials: {
+          username: registrationData.username,
+          password: registrationData.password,
+        },
+      } satisfies RegistrationMutationResult;
     },
-    onSuccess: (data: any) => {
+    onSuccess: async ({ registration, credentials }) => {
       setIsSubmitted(true);
-      
-      // Store the JWT token if provided
-      if (data.token) {
-        localStorage.setItem('authToken', data.token);
-      }
-      
-      toast({
-        title: "Registration Successful",
-        description: "Your trial account has been created. Redirecting to your dashboard...",
-      });
-      
-      // Redirect to admin dashboard after successful registration
-      setTimeout(() => {
-        window.location.href = "/admin-dashboard";
-      }, 1500);
-    },
-    onError: async (error: any) => {
-      // Try to parse error response
-      let errorMessage = "Please try again later.";
-      let errorDetails = null;
-      
-      if (error instanceof Response) {
-        try {
-          const errorData = await error.json();
-          if (errorData.errorDetails) {
-            errorDetails = errorData.errorDetails;
-            errorMessage = `${errorData.errorDetails.message}\n\nHint: ${errorData.errorDetails.hint}`;
-          } else {
-            errorMessage = errorData.message || errorMessage;
-          }
-        } catch (e) {
-          // Could not parse error
+      setSuccessInfo(registration);
+
+      try {
+        const loginResponse = await apiRequest("POST", "/api/agency/login", credentials);
+        const loginData = await loginResponse.json();
+
+        if (loginData?.token) {
+          localStorage.setItem("authToken", loginData.token);
         }
+
+        toast({
+          title: "Registration Successful",
+          description: "Your trial account has been created. Redirecting to your dashboard...",
+        });
+
+        setTimeout(() => {
+          window.location.href = "/admin-dashboard";
+        }, 1500);
+      } catch (error: unknown) {
+        let description =
+          registration?.message ||
+          "Your trial account has been created. Please log in with your new username and password.";
+
+        if (error instanceof ApiError) {
+          console.error("Automatic agency login failed", error);
+
+          if (
+            typeof error.data === "object" &&
+            error.data !== null &&
+            "message" in (error.data as Record<string, unknown>)
+          ) {
+            description = `${registration?.message ?? "Registration successful."} ${String(
+              (error.data as Record<string, unknown>).message
+            )}`;
+          }
+        } else if (error instanceof Error) {
+          console.error("Automatic agency login failed", error);
+        }
+
+        toast({
+          title: "Registration Successful",
+          description: description,
+        });
       }
-      
+    },
+    onError: (error: ApiError | Error) => {
+      let errorMessage = "Please try again later.";
+      let errorDetails: unknown = null;
+
+      if (error instanceof ApiError) {
+        if (typeof error.data === "object" && error.data !== null) {
+          const data = error.data as Record<string, unknown>;
+
+          if (data.errorDetails) {
+            errorDetails = data.errorDetails;
+            const details = data.errorDetails as { message?: string; hint?: string };
+            const hint = details?.hint ? `\n\nHint: ${details.hint}` : "";
+            errorMessage = `${details?.message ?? error.message}${hint}`;
+          } else if (data.message) {
+            errorMessage = String(data.message);
+          } else {
+            errorMessage = error.message;
+          }
+        } else if (typeof error.data === "string") {
+          errorMessage = error.data;
+        } else {
+          errorMessage = error.message;
+        }
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
       toast({
-        title: "Registration Failed", 
+        title: "Registration Failed",
         description: errorMessage,
         variant: "destructive",
       });
-      
-      // Log error details to console for debugging
+
       if (errorDetails) {
         console.error("Agency registration error details:", errorDetails);
       }
@@ -101,21 +165,24 @@ export default function AgencyRegistration() {
   });
 
   const onSubmit = (data: RegistrationWithCredentials) => {
-    // Format the data before sending
     const formattedData = {
       ...data,
-      // Ensure date is in YYYY-MM-DD format
       ownerDateOfBirth: data.ownerDateOfBirth,
-      // Remove any non-digit characters from SSN
       ownerSSN: data.ownerSSN.replace(/\D/g, ''),
-      // Remove any non-digit characters from phone number
       phoneNumber: data.phoneNumber.replace(/\D/g, ''),
     };
-    
+
+    setSuccessInfo(null);
+    setIsSubmitted(false);
     registrationMutation.mutate(formattedData);
   };
 
   if (isSubmitted) {
+    const redirectTarget = successInfo?.redirectUrl ?? "/agency-login";
+    const successMessage =
+      successInfo?.message ??
+      "Your trial account has been successfully created. Our team has been notified and will contact you within 24 hours to discuss your needs and set up the perfect plan for your agency.";
+
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
         <Card className="max-w-md w-full">
@@ -126,14 +193,17 @@ export default function AgencyRegistration() {
             <CardTitle className="text-2xl text-green-600">Registration Complete!</CardTitle>
           </CardHeader>
           <CardContent className="text-center space-y-4">
-            <p className="text-gray-600">
-              Your trial account has been successfully created. Our team has been notified and will contact you within 24 hours to discuss your needs and set up the perfect plan for your agency.
-            </p>
+            <p className="text-gray-600">{successMessage}</p>
             <p className="text-sm text-gray-500">
               You can now log in to explore the platform with limited access.
             </p>
-            <Button 
-              onClick={() => window.location.href = '/agency-login'}
+            {successInfo?.slug ? (
+              <p className="text-sm text-gray-500">
+                Your agency dashboard URL: <span className="font-semibold">{successInfo.slug}.chainsoftwaregroup.com</span>
+              </p>
+            ) : null}
+            <Button
+              onClick={() => (window.location.href = redirectTarget)}
               className="w-full"
               data-testid="button-login"
             >

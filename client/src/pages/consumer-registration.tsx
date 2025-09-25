@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, ApiError } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -89,41 +89,45 @@ export default function ConsumerRegistration() {
         });
       }
     },
-    onError: async (error: any) => {
-      // Try to parse error response
+    onError: (error: unknown) => {
       let errorMessage = "Unable to complete registration. Please try again.";
-      let errorDetails = null;
-      
+      let errorDetails: unknown = null;
+
       console.error("Registration error:", error);
-      
-      if (error instanceof Error) {
+
+      if (error instanceof ApiError) {
+        if (typeof error.data === "object" && error.data !== null) {
+          const data = error.data as Record<string, unknown>;
+
+          if (data.errorDetails) {
+            errorDetails = data.errorDetails;
+            const details = data.errorDetails as { message?: string; hint?: string };
+            const hint = details?.hint ? `\n\nHint: ${details.hint}` : "";
+            errorMessage = `${details?.message ?? error.message}${hint}`;
+          } else if (data.message) {
+            errorMessage = String(data.message);
+          } else {
+            errorMessage = error.message;
+          }
+        } else if (typeof error.data === "string") {
+          errorMessage = error.data;
+        } else {
+          errorMessage = error.message;
+        }
+      } else if (error instanceof Error) {
         errorMessage = error.message;
-        // Check if it's a network error
+
         if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
           errorMessage = "Unable to connect to the server. Please check your internet connection and try again.";
         }
-      } else if (error instanceof Response) {
-        try {
-          const errorData = await error.json();
-          if (errorData.errorDetails) {
-            errorDetails = errorData.errorDetails;
-            errorMessage = `${errorData.errorDetails.message}\n\nHint: ${errorData.errorDetails.hint}`;
-          } else {
-            errorMessage = errorData.message || errorMessage;
-          }
-        } catch (e) {
-          // Could not parse error
-          errorMessage = `Server error: ${error.status} ${error.statusText}`;
-        }
       }
-      
+
       toast({
         title: "Registration Failed",
         description: errorMessage,
         variant: "destructive",
       });
-      
-      // Log error details to console for debugging
+
       if (errorDetails) {
         console.error("Registration error details:", errorDetails);
       }

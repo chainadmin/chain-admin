@@ -62,6 +62,8 @@ function Router() {
   
   // Check if we're on a public route that doesn't need auth
   const isPublicRoute = pathname.startsWith('/agency/') ||
+                       pathname === '/agency-registration' ||
+                       pathname === '/agency-register' ||
                        pathname === '/consumer-login' ||
                        pathname.startsWith('/consumer-register') ||
                        pathname === '/privacy-policy' ||
@@ -191,6 +193,16 @@ function Router() {
         key="agency-admin-dashboard"
         path="/admin-dashboard"
         component={isJwtAuth ? AdminDashboard : AgencyLogin}
+      />,
+      <Route
+        key="agency-register"
+        path="/agency-register"
+        component={AgencyRegistration}
+      />,
+      <Route
+        key="agency-registration"
+        path="/agency-registration"
+        component={AgencyRegistration}
       />
     ];
 
@@ -257,6 +269,7 @@ function Router() {
       <Route key="main-consumer-login" path="/consumer-login" component={ConsumerLogin} />,
       <Route key="main-agency-login" path="/agency-login" component={AgencyLogin} />,
       <Route key="main-agency-register" path="/agency-register" component={AgencyRegistration} />,
+      <Route key="main-agency-registration" path="/agency-registration" component={AgencyRegistration} />,
       <Route key="main-consumer-register" path="/consumer-register/:tenantSlug?" component={ConsumerRegistration} />,
       <Route key="main-agency" path="/agency/:agencySlug" component={AgencyLanding} />,
       <Route key="main-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
@@ -289,6 +302,7 @@ function Router() {
         component={ConsumerRegistration}
       />,
       <Route key="public-agency-register" path="/agency-register" component={AgencyRegistration} />,
+      <Route key="public-agency-registration" path="/agency-registration" component={AgencyRegistration} />,
       <Route key="public-agency-login" path="/agency-login" component={AgencyLogin} />,
       <Route key="public-agency" path="/agency/:agencySlug" component={AgencyLanding} />,
       <Route key="public-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
@@ -324,6 +338,8 @@ function Router() {
     <Route key="auth-settings" path="/settings" component={Settings} />,
     <Route key="auth-admin" path="/admin" component={GlobalAdmin} />,
     <Route key="auth-admin-cap" path="/Admin" component={GlobalAdmin} />,
+    <Route key="auth-agency-register" path="/agency-register" component={AgencyRegistration} />,
+    <Route key="auth-agency-registration" path="/agency-registration" component={AgencyRegistration} />,
     <Route key="auth-email-test" path="/email-test" component={EmailTest} />,
     <Route key="auth-agency" path="/agency/:agencySlug" component={AgencyLanding} />,
     <Route key="auth-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
