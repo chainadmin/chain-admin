@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
@@ -9,6 +9,12 @@ import { Label } from "@/components/ui/label";
 import { Building2, Mail, Lock, ArrowRight, ShieldCheck, UserCheck } from "lucide-react";
 import { getAgencySlugFromRequest } from "@shared/utils/subdomain";
 import PublicHeroLayout from "@/components/public-hero-layout";
+
+type AgencyContext = {
+  slug: string;
+  name: string;
+  logoUrl: string | null;
+};
 
 interface LoginForm {
   email: string;
@@ -22,28 +28,76 @@ export default function ConsumerLogin() {
     email: "",
     dateOfBirth: "",
   });
-  const [agencyContext, setAgencyContext] = useState<any>(null);
+  const [agencyContext, setAgencyContext] = useState<AgencyContext | null>(null);
 
-  useEffect(() => {
-    // Check if coming from an agency-specific page
-    const storedContext = sessionStorage.getItem('agencyContext');
-    if (storedContext) {
-      try {
-        const context = JSON.parse(storedContext);
-        setAgencyContext(context);
-      } catch (e) {
-        console.error('Error parsing agency context:', e);
-      }
+  const currentSlug = useMemo(() => {
+    if (typeof window === "undefined") {
+      return null;
+    }
+    return getAgencySlugFromRequest(window.location.hostname, window.location.pathname);
+  }, []);
+
+  const persistAgencyContext = useCallback((context: AgencyContext) => {
+    setAgencyContext(context);
+    try {
+      sessionStorage.setItem("agencyContext", JSON.stringify(context));
+    } catch (error) {
+      console.error("Failed to persist agency context", error);
     }
   }, []);
+
+  const fetchAgencyContext = useCallback(async (slug: string) => {
+    try {
+      const response = await apiRequest(
+        "GET",
+        `/api/public/agency-branding?slug=${encodeURIComponent(slug)}`
+      );
+      const data = await response.json();
+      persistAgencyContext({
+        slug: data.agencySlug ?? slug,
+        name: data.agencyName ?? slug,
+        logoUrl: data.logoUrl ?? null,
+      });
+    } catch (error) {
+      console.error("Failed to load agency branding", error);
+      // Store a minimal context so the login page still reflects the agency
+      persistAgencyContext({
+        slug,
+        name: slug,
+        logoUrl: null,
+      });
+    }
+  }, [persistAgencyContext]);
+
+  useEffect(() => {
+    // Attempt to hydrate from session storage first
+    const storedContext = sessionStorage.getItem("agencyContext");
+    let parsedContext: AgencyContext | null = null;
+
+    if (storedContext) {
+      try {
+        parsedContext = JSON.parse(storedContext) as AgencyContext;
+      } catch (error) {
+        console.error("Error parsing stored agency context", error);
+      }
+    }
+
+    if (parsedContext) {
+      persistAgencyContext(parsedContext);
+    }
+
+    if (currentSlug) {
+      const shouldFetch = !parsedContext || parsedContext.slug !== currentSlug;
+      if (shouldFetch) {
+        fetchAgencyContext(currentSlug);
+      }
+    }
+  }, [currentSlug, fetchAgencyContext, persistAgencyContext]);
 
   const loginMutation = useMutation({
     mutationFn: async (loginData: LoginForm) => {
       // Get tenant slug from URL path (e.g., /waypoint-solutions/consumer)
-      const slugFromUrl = getAgencySlugFromRequest(
-        window.location.hostname,
-        window.location.pathname
-      );
+      const slugFromUrl = currentSlug;
       const tenantSlug = slugFromUrl || agencyContext?.slug;
 
       // Send email and dateOfBirth for consumer verification
