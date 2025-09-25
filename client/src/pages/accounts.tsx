@@ -1350,7 +1350,15 @@ export default function Accounts() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={deleteFolderDialog.open} onOpenChange={(open) => setDeleteFolderDialog({ open, folder: null })}>
+      <AlertDialog
+        open={deleteFolderDialog.open}
+        onOpenChange={(open) =>
+          setDeleteFolderDialog(prev => ({
+            open,
+            folder: open ? prev.folder : null,
+          }))
+        }
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Folder</AlertDialogTitle>
