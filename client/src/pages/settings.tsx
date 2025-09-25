@@ -683,35 +683,20 @@ export default function Settings() {
 
         <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-blue-900/20 backdrop-blur">
           <Tabs defaultValue="general" className="space-y-8">
-            <TabsList className="grid w-full grid-cols-1 gap-2 rounded-2xl border border-white/10 bg-white/10 p-2 text-blue-100 sm:grid-cols-5">
-              <TabsTrigger
-                value="general"
-                className="rounded-xl px-4 py-2 text-sm font-semibold transition data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/80 data-[state=active]:to-indigo-500/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/40"
-              >
+            <TabsList className="grid w-full grid-cols-1 gap-2 p-2 text-blue-100 sm:grid-cols-5">
+              <TabsTrigger value="general" className="px-4 py-2">
                 General
               </TabsTrigger>
-              <TabsTrigger
-                value="merchant"
-                className="rounded-xl px-4 py-2 text-sm font-semibold transition data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/80 data-[state=active]:to-indigo-500/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/40"
-              >
+              <TabsTrigger value="merchant" className="px-4 py-2">
                 Payment Processing
               </TabsTrigger>
-              <TabsTrigger
-                value="documents"
-                className="rounded-xl px-4 py-2 text-sm font-semibold transition data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/80 data-[state=active]:to-indigo-500/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/40"
-              >
+              <TabsTrigger value="documents" className="px-4 py-2">
                 Documents
               </TabsTrigger>
-              <TabsTrigger
-                value="arrangements"
-                className="rounded-xl px-4 py-2 text-sm font-semibold transition data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/80 data-[state=active]:to-indigo-500/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/40"
-              >
+              <TabsTrigger value="arrangements" className="px-4 py-2">
                 Payment Plans
               </TabsTrigger>
-              <TabsTrigger
-                value="privacy"
-                className="rounded-xl px-4 py-2 text-sm font-semibold transition data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/80 data-[state=active]:to-indigo-500/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/40"
-              >
+              <TabsTrigger value="privacy" className="px-4 py-2">
                 Privacy & Legal
               </TabsTrigger>
             </TabsList>
