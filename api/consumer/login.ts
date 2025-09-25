@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { getDb } from '../_lib/db.js';
 import { JWT_SECRET } from '../_lib/auth.js';
 import { consumers, tenants } from '../../shared/schema.js';
+import { applyNoStore } from '../_lib/cacheHeaders.js';
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -14,13 +15,7 @@ const loginSchema = z.object({
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
-  res.setHeader('Surrogate-Control', 'no-store');
-  res.setHeader('CDN-Cache-Control', 'no-store');
-  res.setHeader('Vercel-CDN-Cache-Control', 'no-store');
-  res.removeHeader('Last-Modified');
+  applyNoStore(res, { vary: ['Origin'] });
 
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
