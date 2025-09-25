@@ -16,6 +16,7 @@ export const authenticateUser: RequestHandler = async (req: any, res, next) => {
       // Attach user info from JWT
       req.user = {
         id: decoded.userId,
+        userId: decoded.userId,
         tenantId: decoded.tenantId,
         tenantSlug: decoded.tenantSlug,
         isJwtAuth: true,
