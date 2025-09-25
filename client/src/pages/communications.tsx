@@ -517,15 +517,15 @@ export default function Communications() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "completed":
-        return "bg-green-100 text-green-800";
+        return "border-emerald-200/70 bg-emerald-100/80 text-emerald-700";
       case "sending":
-        return "bg-blue-100 text-blue-800";
+        return "border-sky-200/70 bg-sky-100/80 text-sky-700";
       case "pending":
-        return "bg-yellow-100 text-yellow-800";
+        return "border-amber-200/70 bg-amber-100/80 text-amber-700";
       case "failed":
-        return "bg-red-100 text-red-800";
+        return "border-rose-200/70 bg-rose-100/80 text-rose-700";
       default:
-        return "bg-gray-100 text-gray-800";
+        return "border-slate-200/70 bg-slate-100/80 text-slate-700";
     }
   };
 
@@ -899,7 +899,14 @@ export default function Communications() {
                           </p>
                         </div>
                         <div className="flex items-center gap-3">
-                          <Badge className={getStatusColor(campaign.status)}>{campaign.status}</Badge>
+                          <Badge
+                            className={cn(
+                              "rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-wide",
+                              getStatusColor(campaign.status)
+                            )}
+                          >
+                            {campaign.status}
+                          </Badge>
                           <span className="text-sm font-medium text-slate-600">{campaign.totalSent || 0} sent</span>
                         </div>
                       </div>
@@ -1487,21 +1494,31 @@ export default function Communications() {
               </Dialog>
             </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>All {communicationType === "email" ? "Email" : "SMS"} Campaigns</CardTitle>
+            <Card className={glassPanelClass}>
+              <CardHeader className="border-b border-white/20 pb-4">
+                <CardTitle className="text-lg font-semibold text-slate-800">
+                  All {communicationType === "email" ? "Email" : "SMS"} Campaigns
+                </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-6">
                 {campaignsLoading ? (
-                  <div className="text-center py-4">Loading campaigns...</div>
+                  <div className="py-8 text-center text-slate-500">Loading campaigns...</div>
                 ) : (campaigns as any)?.length > 0 ? (
                   <div className="space-y-4">
                     {(campaigns as any).map((campaign: any) => (
-                      <div key={campaign.id} className="border rounded-lg p-4">
-                        <div className="flex items-start justify-between gap-4 mb-2">
-                          <h3 className="font-medium">{campaign.name}</h3>
+                      <div
+                        key={campaign.id}
+                        className="rounded-2xl border border-slate-200/70 bg-white/70 p-5 shadow-sm shadow-slate-900/5"
+                      >
+                        <div className="mb-3 flex items-start justify-between gap-4">
+                          <h3 className="text-base font-semibold text-slate-800">{campaign.name}</h3>
                           <div className="flex items-center gap-2">
-                            <Badge className={getStatusColor(campaign.status)}>
+                            <Badge
+                              className={cn(
+                                "rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-wide",
+                                getStatusColor(campaign.status)
+                              )}
+                            >
                               {campaign.status}
                             </Badge>
                             {campaign.status === "pending" && (
@@ -1538,54 +1555,54 @@ export default function Communications() {
                             )}
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div className="grid grid-cols-2 gap-4 text-sm text-slate-600 md:grid-cols-4">
                           <div>
-                            <span className="text-gray-600">Template:</span>
-                            <div className="font-medium">{campaign.templateName}</div>
+                            <span className="text-xs uppercase tracking-wide text-slate-500">Template</span>
+                            <div className="mt-1 font-semibold text-slate-800">{campaign.templateName}</div>
                           </div>
                           <div>
-                            <span className="text-gray-600">Target:</span>
-                            <div className="font-medium">{getTargetGroupLabel(campaign)}</div>
+                            <span className="text-xs uppercase tracking-wide text-slate-500">Target</span>
+                            <div className="mt-1 font-semibold text-slate-800">{getTargetGroupLabel(campaign)}</div>
                           </div>
                           <div>
-                            <span className="text-gray-600">Recipients:</span>
-                            <div className="font-medium">{campaign.totalRecipients || 0}</div>
+                            <span className="text-xs uppercase tracking-wide text-slate-500">Recipients</span>
+                            <div className="mt-1 font-semibold text-slate-800">{campaign.totalRecipients || 0}</div>
                           </div>
                           <div>
-                            <span className="text-gray-600">Sent:</span>
-                            <div className="font-medium">{campaign.totalSent || 0}</div>
+                            <span className="text-xs uppercase tracking-wide text-slate-500">Sent</span>
+                            <div className="mt-1 font-semibold text-slate-800">{campaign.totalSent || 0}</div>
                           </div>
                         </div>
                         {/* Agency URL for reference */}
-                        <div className="mt-2 pt-2 border-t">
-                          <span className="text-xs text-gray-600">Agency URL: </span>
-                          <span className="text-xs font-mono text-gray-800">
+                        <div className="mt-4 border-t border-slate-200/70 pt-4">
+                          <span className="text-[11px] uppercase tracking-wide text-slate-500">Agency URL</span>
+                          <span className="mt-1 block font-mono text-xs text-slate-800">
                             {window.location.origin}/agency/{(userData as any)?.platformUser?.tenant?.slug || 'your-agency'}
                           </span>
                         </div>
                         {campaign.status === "completed" && (
-                          <div className="mt-3 pt-3 border-t grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                          <div className="mt-4 grid grid-cols-2 gap-4 rounded-2xl border border-slate-200/70 bg-slate-50/80 p-4 text-sm text-slate-600 md:grid-cols-4">
                             <div>
-                              <span className="text-gray-600">Delivered:</span>
-                              <div className="font-medium text-green-600">{campaign.totalDelivered || 0}</div>
+                              <span className="text-xs uppercase tracking-wide text-slate-500">Delivered</span>
+                              <div className="mt-1 font-semibold text-emerald-600">{campaign.totalDelivered || 0}</div>
                             </div>
                             {communicationType === "email" && (
                               <>
                                 <div>
-                                  <span className="text-gray-600">Opened:</span>
-                                  <div className="font-medium text-blue-600">{campaign.totalOpened || 0}</div>
+                                  <span className="text-xs uppercase tracking-wide text-slate-500">Opened</span>
+                                  <div className="mt-1 font-semibold text-sky-600">{campaign.totalOpened || 0}</div>
                                 </div>
                                 <div>
-                                  <span className="text-gray-600">Clicked:</span>
-                                  <div className="font-medium text-purple-600">{campaign.totalClicked || 0}</div>
+                                  <span className="text-xs uppercase tracking-wide text-slate-500">Clicked</span>
+                                  <div className="mt-1 font-semibold text-indigo-600">{campaign.totalClicked || 0}</div>
                                 </div>
                               </>
                             )}
                             <div>
-                              <span className="text-gray-600">
-                                {communicationType === "email" ? "Errors:" : "Failed:"}
+                              <span className="text-xs uppercase tracking-wide text-slate-500">
+                                {communicationType === "email" ? "Errors" : "Failed"}
                               </span>
-                              <div className="font-medium text-red-600">{campaign.totalErrors || 0}</div>
+                              <div className="mt-1 font-semibold text-rose-600">{campaign.totalErrors || 0}</div>
                             </div>
                           </div>
                         )}
@@ -1593,7 +1610,7 @@ export default function Communications() {
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-8 text-gray-500">
+                  <div className="rounded-2xl border border-dashed border-slate-200/70 bg-white/60 py-10 text-center text-slate-500">
                     No campaigns yet. Create your first {communicationType} campaign to get started.
                   </div>
                 )}
@@ -1603,54 +1620,66 @@ export default function Communications() {
 
           <TabsContent value="requests" className="space-y-10 text-slate-900">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Callback Requests</h2>
+              <h2 className="text-xl font-semibold text-blue-50">Callback Requests</h2>
             </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Phone className="h-5 w-5" />
+            <Card className={glassPanelClass}>
+              <CardHeader className="border-b border-white/20 pb-4">
+                <CardTitle className="flex items-center gap-2 text-lg font-semibold text-slate-800">
+                  <Phone className="h-5 w-5 text-sky-600" />
                   Consumer Callback Requests
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-6">
                 {(callbackRequests as any)?.length > 0 ? (
                   <div className="space-y-4">
                     {(callbackRequests as any).map((request: any) => (
-                      <div key={request.id} className="border rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <h3 className="font-medium">
+                      <div
+                        key={request.id}
+                        className="rounded-2xl border border-slate-200/70 bg-white/70 p-5 shadow-sm shadow-slate-900/5"
+                      >
+                        <div className="mb-3 flex items-center justify-between">
+                          <h3 className="text-base font-semibold text-slate-800">
                             {request.consumer?.firstName} {request.consumer?.lastName}
                           </h3>
-                          <Badge variant={request.status === "pending" ? "secondary" : "default"}>
+                          <Badge
+                            className={cn(
+                              "rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-wide",
+                              request.status === "pending"
+                                ? "border-amber-200/70 bg-amber-100/80 text-amber-700"
+                                : "border-emerald-200/70 bg-emerald-100/80 text-emerald-700"
+                            )}
+                          >
                             {request.status}
                           </Badge>
                         </div>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                        <div className="grid grid-cols-1 gap-4 text-sm text-slate-600 md:grid-cols-3">
                           <div>
-                            <span className="text-gray-600">Phone:</span>
-                            <div className="font-medium">{request.phoneNumber}</div>
+                            <span className="text-xs uppercase tracking-wide text-slate-500">Phone</span>
+                            <div className="mt-1 font-semibold text-slate-800">{request.phoneNumber}</div>
                           </div>
                           <div>
-                            <span className="text-gray-600">Preferred Time:</span>
-                            <div className="font-medium">{request.preferredTime || "Any time"}</div>
+                            <span className="text-xs uppercase tracking-wide text-slate-500">Preferred Time</span>
+                            <div className="mt-1 font-semibold text-slate-800">{request.preferredTime || "Any time"}</div>
                           </div>
                           <div>
-                            <span className="text-gray-600">Requested:</span>
-                            <div className="font-medium">{new Date(request.createdAt).toLocaleDateString()}</div>
+                            <span className="text-xs uppercase tracking-wide text-slate-500">Requested</span>
+                            <div className="mt-1 font-semibold text-slate-800">
+                              {new Date(request.createdAt).toLocaleDateString()}
+                            </div>
                           </div>
                         </div>
                         {request.message && (
-                          <div className="mt-3 pt-3 border-t">
-                            <span className="text-gray-600 text-sm">Message:</span>
-                            <p className="text-sm mt-1">{request.message}</p>
+                          <div className="mt-4 rounded-2xl border border-slate-200/70 bg-slate-50/80 p-4 text-sm text-slate-600">
+                            <span className="text-xs uppercase tracking-wide text-slate-500">Message</span>
+                            <p className="mt-1 text-slate-700">{request.message}</p>
                           </div>
                         )}
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-8 text-gray-500">
+                  <div className="rounded-2xl border border-dashed border-slate-200/70 bg-white/60 py-10 text-center text-slate-500">
                     No callback requests yet.
                   </div>
                 )}
@@ -2017,45 +2046,68 @@ export default function Communications() {
               </Dialog>
             </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Clock className="h-5 w-5" />
+            <Card className={glassPanelClass}>
+              <CardHeader className="border-b border-white/20 pb-4">
+                <CardTitle className="flex items-center gap-2 text-lg font-semibold text-slate-800">
+                  <Clock className="h-5 w-5 text-sky-600" />
                   Active Automations
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-6">
                 {automationsLoading ? (
-                  <div className="text-center py-8">Loading automations...</div>
+                  <div className="py-8 text-center text-slate-500">Loading automations...</div>
                 ) : (automations as any[])?.length > 0 ? (
                   <div className="space-y-4">
                     {(automations as any[]).map((automation: any) => (
-                      <div key={automation.id} className="border rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-3">
-                            <h3 className="font-medium">{automation.name}</h3>
-                            <Badge variant={automation.isActive ? "default" : "secondary"}>
-                              {automation.isActive ? "Active" : "Inactive"}
-                            </Badge>
-                            <Badge variant="outline">
-                              {automation.type.toUpperCase()}
-                            </Badge>
+                      <div
+                        key={automation.id}
+                        className="rounded-2xl border border-slate-200/70 bg-white/70 p-5 shadow-sm shadow-slate-900/5"
+                      >
+                        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="flex flex-col gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="text-base font-semibold text-slate-800">{automation.name}</h3>
+                              <Badge
+                                className={cn(
+                                  "rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-wide",
+                                  automation.isActive
+                                    ? "border-emerald-200/70 bg-emerald-100/80 text-emerald-700"
+                                    : "border-slate-200/70 bg-slate-100/80 text-slate-600"
+                                )}
+                              >
+                                {automation.isActive ? "Active" : "Inactive"}
+                              </Badge>
+                              <Badge className="rounded-full border border-sky-200/70 bg-sky-100/70 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-sky-700">
+                                {automation.type.toUpperCase()}
+                              </Badge>
+                            </div>
+                            {automation.description && (
+                              <p className="text-sm text-slate-600">{automation.description}</p>
+                            )}
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <Button
-                              variant="outline"
+                              variant="ghost"
                               size="sm"
-                              onClick={() => toggleAutomationMutation.mutate({ 
-                                id: automation.id, 
-                                isActive: !automation.isActive 
-                              })}
+                              className="rounded-full border border-slate-200/70 bg-white/70 px-4 py-1 text-xs font-semibold text-slate-700 shadow-sm hover:bg-white"
+                              onClick={() =>
+                                toggleAutomationMutation.mutate({
+                                  id: automation.id,
+                                  isActive: !automation.isActive,
+                                })
+                              }
                               data-testid={`button-toggle-automation-${automation.id}`}
                             >
                               {automation.isActive ? "Pause" : "Resume"}
                             </Button>
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
-                                <Button variant="outline" size="sm" data-testid={`button-delete-automation-${automation.id}`}>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="rounded-full border border-rose-200/60 bg-rose-50/60 px-4 py-1 text-xs font-semibold text-rose-600 shadow-sm hover:bg-rose-50"
+                                  data-testid={`button-delete-automation-${automation.id}`}
+                                >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </AlertDialogTrigger>
@@ -2070,6 +2122,7 @@ export default function Communications() {
                                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                                   <AlertDialogAction
                                     onClick={() => deleteAutomationMutation.mutate(automation.id)}
+                                    className="bg-red-600 hover:bg-red-700"
                                   >
                                     Delete
                                   </AlertDialogAction>
@@ -2079,55 +2132,56 @@ export default function Communications() {
                           </div>
                         </div>
                         
-                        {automation.description && (
-                          <p className="text-sm text-gray-600 mb-3">{automation.description}</p>
-                        )}
-                        
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div className="grid grid-cols-1 gap-4 text-sm text-slate-600 md:grid-cols-2 xl:grid-cols-4">
                           <div>
-                            <span className="text-gray-600">Trigger:</span>
-                            <div className="font-medium capitalize">{automation.triggerType}</div>
+                            <span className="text-xs uppercase tracking-wide text-slate-500">Trigger</span>
+                            <div className="mt-1 font-semibold capitalize text-slate-800">{automation.triggerType}</div>
                           </div>
                           <div>
-                            <span className="text-gray-600">Template{automation.templateIds?.length > 1 ? 's' : ''}:</span>
-                            <div className="font-medium">
+                            <span className="text-xs uppercase tracking-wide text-slate-500">
+                              Template{automation.templateIds?.length > 1 ? "s" : ""}
+                            </span>
+                            <div className="mt-1 font-semibold text-slate-800">
                               {automation.templateIds && automation.templateIds.length > 0 ? (
                                 automation.templateIds.length === 1 ? (
-                                  automation.type === "email" 
+                                  automation.type === "email"
                                     ? (emailTemplates as any[])?.find((t: any) => t.id === automation.templateIds[0])?.name || "Unknown"
                                     : (smsTemplates as any[])?.find((t: any) => t.id === automation.templateIds[0])?.name || "Unknown"
                                 ) : (
                                   `${automation.templateIds.length} templates (rotating)`
                                 )
                               ) : (
-                                automation.type === "email" 
+                                automation.type === "email"
                                   ? (emailTemplates as any[])?.find((t: any) => t.id === automation.templateId)?.name || "Unknown"
                                   : (smsTemplates as any[])?.find((t: any) => t.id === automation.templateId)?.name || "Unknown"
                               )}
                             </div>
                           </div>
                           <div>
-                            <span className="text-gray-600">Target:</span>
-                            <div className="font-medium capitalize">{automation.targetType}</div>
+                            <span className="text-xs uppercase tracking-wide text-slate-500">Target</span>
+                            <div className="mt-1 font-semibold capitalize text-slate-800">{automation.targetType}</div>
                           </div>
                           <div>
-                            <span className="text-gray-600">Next Run:</span>
-                            <div className="font-medium">
-                              {automation.nextExecution 
+                            <span className="text-xs uppercase tracking-wide text-slate-500">Next Run</span>
+                            <div className="mt-1 font-semibold text-slate-800">
+                              {automation.nextExecution
                                 ? new Date(automation.nextExecution).toLocaleDateString()
-                                : "Not scheduled"
-                              }
+                                : "Not scheduled"}
                             </div>
                           </div>
+                        </div>
+                        <div className="mt-4 grid grid-cols-1 gap-3 border-t border-slate-200/70 pt-4 text-sm text-slate-600 sm:grid-cols-2">
+                          <div>Created: {new Date(automation.createdAt).toLocaleString()}</div>
+                          {automation.lastRunAt && <div>Last Run: {new Date(automation.lastRunAt).toLocaleString()}</div>}
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-8 text-gray-500">
-                    <Calendar className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                    <p>No automations created yet.</p>
-                    <p className="text-sm">Create your first automation to start scheduling communications.</p>
+                  <div className="rounded-2xl border border-dashed border-slate-200/70 bg-white/60 py-10 text-center text-slate-500">
+                    <Calendar className="mx-auto mb-4 h-12 w-12 text-slate-300" />
+                    <p className="text-base font-semibold">No automations created yet.</p>
+                    <p className="text-sm text-slate-500">Create your first automation to start scheduling communications.</p>
                   </div>
                 )}
               </CardContent>
