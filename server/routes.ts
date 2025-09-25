@@ -1698,13 +1698,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("Checking for existing consumer with email:", email);
       const existingConsumer = await storage.getConsumerByEmail(email);
       console.log("Existing consumer found:", !!existingConsumer);
-      
+
       if (existingConsumer) {
-        // Verify date of birth matches
-        const providedDOB = new Date(dateOfBirth);
-        const storedDOB = existingConsumer.dateOfBirth ? new Date(existingConsumer.dateOfBirth) : null;
-        
-        if (storedDOB && providedDOB.getTime() === storedDOB.getTime()) {
+        // Normalize DOB values for comparison. Missing stored DOB should not block registration.
+        const normalizedProvidedDOB = normalizeDateString(dateOfBirth);
+        const normalizedStoredDOB = normalizeDateString(existingConsumer.dateOfBirth);
+        const hasStoredDOB = Boolean(normalizedStoredDOB);
+        const dobMatches = normalizedProvidedDOB && normalizedStoredDOB
+          ? normalizedProvidedDOB === normalizedStoredDOB
+          : !hasStoredDOB;
+
+        if (!normalizedProvidedDOB) {
+          return res.status(400).json({
+            message: "Invalid date of birth format. Please use MM/DD/YYYY or YYYY-MM-DD.",
+          });
+        }
+
+        if (dobMatches) {
           // If a tenantSlug is provided and the consumer doesn't have a tenant yet, associate them
           let shouldUpdateTenant = false;
           if (tenantSlug && !existingConsumer.tenantId) {
@@ -1714,7 +1724,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               existingConsumer.tenantId = tenant.id;
             }
           }
-          
+
           // Update existing consumer with complete registration info
           const updateData: any = {
             firstName,
@@ -1726,7 +1736,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             isRegistered: true,
             ...(shouldUpdateTenant && { tenantId: existingConsumer.tenantId })
           };
-          
+
+          if (!hasStoredDOB && normalizedProvidedDOB) {
+            updateData.dateOfBirth = normalizedProvidedDOB;
+          }
+
           // Only add registrationDate if the field is supported
           try {
             updateData.registrationDate = new Date();
@@ -1734,7 +1748,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Field might not exist in production yet
             console.log("Note: registrationDate field not available for update");
           }
-          
+
           const updatedConsumer = await storage.updateConsumer(existingConsumer.id, updateData);
 
           // Only get tenant info if consumer has a tenantId
@@ -1749,10 +1763,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           }
 
-          return res.json({ 
-            message: tenantInfo 
+          return res.json({
+            message: tenantInfo
               ? "Registration completed successfully! Your agency has been automatically identified."
-              : "Registration successful! You'll be notified when your agency adds your account information.", 
+              : "Registration successful! You'll be notified when your agency adds your account information.",
             consumerId: updatedConsumer.id,
             consumer: {
               id: updatedConsumer.id,
@@ -1764,8 +1778,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             needsAgencyLink: !tenantInfo
           });
         } else {
-          return res.status(400).json({ 
-            message: "An account with this email exists, but the date of birth doesn't match. Please verify your information." 
+          return res.status(400).json({
+            message: "An account with this email exists, but the date of birth doesn't match. Please verify your information."
           });
         }
       }
