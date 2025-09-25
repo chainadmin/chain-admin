@@ -46,6 +46,7 @@ export async function apiRequest(
     // FormData should be sent as-is, JSON data should be stringified
     body: data instanceof FormData ? data : (data ? JSON.stringify(data) : undefined),
     credentials: "include", // Important for cookies to be sent
+    cache: "no-store",
   });
 
   await throwIfResNotOk(res);
@@ -73,6 +74,7 @@ export const getQueryFn: <T>(options: {
     const res = await fetch(url, {
       headers,
       credentials: "include", // Important for cookies to be sent
+      cache: "no-store",
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
