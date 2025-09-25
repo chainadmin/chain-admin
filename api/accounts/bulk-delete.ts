@@ -6,12 +6,14 @@ import { eq, and, inArray } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
-  if (req.method === 'OPTIONS') {
+  const method = (req.method ?? '').toUpperCase();
+
+  if (method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
 
-  if (req.method !== 'DELETE') {
+  if (method !== 'DELETE') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
   }

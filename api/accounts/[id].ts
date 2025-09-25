@@ -6,7 +6,9 @@ import { eq, and } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
-  if (req.method === 'OPTIONS') {
+  const method = (req.method ?? '').toUpperCase();
+
+  if (method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
@@ -37,7 +39,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       return;
     }
 
-    if (req.method === 'GET') {
+    if (method === 'GET') {
       // Get single account
       const [account] = await db
         .select()
@@ -54,7 +56,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       }
 
       res.status(200).json(account);
-    } else if (req.method === 'DELETE') {
+    } else if (method === 'DELETE') {
       // Check if account exists and belongs to tenant
       const [account] = await db
         .select()
@@ -79,7 +81,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         ));
 
       res.status(200).json({ success: true, message: 'Account deleted successfully' });
-    } else if (req.method === 'PATCH') {
+    } else if (method === 'PATCH') {
       // Update account
       const { accountNumber, creditor, balanceCents, dueDate, status } = req.body;
 

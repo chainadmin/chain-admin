@@ -24,7 +24,9 @@ function resolveCampaignId(req: AuthenticatedRequest) {
 }
 
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
-  if (req.method === 'OPTIONS') {
+  const method = (req.method ?? '').toUpperCase();
+
+  if (method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
@@ -49,7 +51,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       return;
     }
 
-    if (req.method === 'GET') {
+    if (method === 'GET') {
       // Get all email campaigns for the tenant
       const campaigns = await db
         .select()
@@ -58,7 +60,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         .orderBy(desc(emailCampaigns.createdAt));
 
       res.status(200).json(campaigns);
-    } else if (req.method === 'POST') {
+    } else if (method === 'POST') {
       // Create a new email campaign
       const { templateId, name, targetGroup } = req.body;
 
@@ -133,7 +135,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         .returning();
 
       res.status(201).json(newCampaign);
-    } else if (req.method === 'PUT') {
+    } else if (method === 'PUT') {
       // Update campaign status (start/pause/cancel)
       const { campaignId, status } = req.body;
 
@@ -171,7 +173,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         .returning();
 
       res.status(200).json(updatedCampaign);
-    } else if (req.method === 'DELETE') {
+    } else if (method === 'DELETE') {
       // Delete a campaign
       const campaignId = resolveCampaignId(req);
 
