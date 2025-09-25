@@ -2,10 +2,6 @@ import type { VercelResponse } from '@vercel/node';
 
 const NO_STORE_HEADER_VALUE = 'no-store, no-cache, must-revalidate, max-age=0';
 
-function generateOpaqueEtag(): string {
-  return `"no-store-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}"`;
-}
-
 function mergeVaryHeader(res: VercelResponse, varyValues: string[]) {
   if (varyValues.length === 0) {
     return;
@@ -45,7 +41,7 @@ export function applyNoStore(res: VercelResponse, options?: { vary?: string[] })
   res.setHeader('Surrogate-Control', 'no-store');
   res.setHeader('CDN-Cache-Control', 'no-store');
   res.setHeader('Vercel-CDN-Cache-Control', 'no-store');
-  res.setHeader('ETag', generateOpaqueEtag());
+  res.removeHeader('ETag');
   res.removeHeader('Last-Modified');
 
   if (options?.vary?.length) {
