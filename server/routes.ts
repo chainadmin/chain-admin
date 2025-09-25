@@ -252,7 +252,7 @@ async function getTenantId(req: any, storage: IStorage): Promise<string | null> 
     potentialAuthIds.add(String(sessionAuthId));
   }
 
-  for (const authId of potentialAuthIds) {
+  for (const authId of Array.from(potentialAuthIds)) {
     const platformUser = await storage.getPlatformUserWithTenant(authId);
     if (platformUser?.tenantId) {
       req.user = {
