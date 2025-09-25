@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -35,7 +36,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Mail, MessageSquare, Plus, Send, FileText, Trash2, Eye, TrendingUp, Users, AlertCircle, MousePointer, UserMinus, Phone, Clock, Calendar, Settings, Copy } from "lucide-react";
+import { Mail, MessageSquare, Plus, Send, FileText, Trash2, Eye, TrendingUp, Users, AlertCircle, MousePointer, UserMinus, Phone, Clock, Calendar, Settings, Copy, Sparkles, Megaphone, Zap, BarChart3 } from "lucide-react";
 
 export default function Communications() {
   const [activeTab, setActiveTab] = useState("overview");
@@ -534,101 +535,243 @@ export default function Communications() {
   const templatesLoading = communicationType === "email" ? emailTemplatesLoading : smsTemplatesLoading;
   const campaignsLoading = communicationType === "email" ? emailCampaignsLoading : smsCampaignsLoading;
 
+  const lastSevenDays = Number((metrics as any)?.last7Days || 0);
+  const deliveryRate = Number((metrics as any)?.deliveryRate || 0);
+  const totalDelivered = Number((metrics as any)?.totalDelivered || 0);
+  const activeCampaignsCount = Array.isArray(campaigns)
+    ? (campaigns as any).filter((campaign: any) => campaign.status === "active").length
+    : 0;
+  const engagementRate = communicationType === "email"
+    ? Number((metrics as any)?.openRate || 0)
+    : typeof (metrics as any)?.responseRate === "number"
+      ? Number((metrics as any)?.responseRate || 0)
+      : Math.max(0, 100 - Number((metrics as any)?.optOutRate || 0));
+  const engagementLabel = communicationType === "email" ? "Open rate" : "Estimated response rate";
+  const formatPercent = (value: number) =>
+    value.toLocaleString(undefined, {
+      maximumFractionDigits: 1,
+      minimumFractionDigits: value % 1 === 0 ? 0 : 1,
+    });
+  const glassPanelClass =
+    "rounded-3xl border border-white/20 bg-white/95 text-slate-900 shadow-xl shadow-blue-900/10 backdrop-blur";
+
   return (
     <AdminLayout>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold text-gray-900">Communications</h1>
-        </div>
+      <div className="mx-auto flex max-w-7xl flex-col gap-10 px-4 py-10 text-blue-50 sm:px-6 lg:px-8">
+        <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-sky-600/20 via-indigo-600/20 to-blue-900/10 p-8 shadow-2xl shadow-blue-900/30 backdrop-blur">
+          <div className="pointer-events-none absolute -right-10 top-16 h-64 w-64 rounded-full bg-sky-500/30 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-20 left-10 h-56 w-56 rounded-full bg-indigo-500/30 blur-3xl" />
+          <div className="relative z-10 flex flex-col gap-10 lg:flex-row lg:items-center lg:justify-between">
+            <div className="max-w-2xl space-y-6">
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-blue-100/80">
+                <Sparkles className="h-3.5 w-3.5" />
+                Engagement workspace
+              </span>
+              <div className="space-y-3">
+                <h1 className="text-3xl font-semibold text-white sm:text-4xl">
+                  Communication control center
+                </h1>
+                <p className="text-sm text-blue-100/70 sm:text-base">
+                  Track deliverability, orchestrate outreach, and keep every consumer touchpoint aligned across email and SMS. Switch channels instantly and launch the right workflow without leaving this view.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  variant="ghost"
+                  onClick={() => setCommunicationType("email")}
+                  className={cn(
+                    "rounded-xl border border-white/15 px-5 py-2 text-sm font-semibold transition",
+                    communicationType === "email"
+                      ? "bg-white/30 text-white shadow-lg shadow-blue-900/20 hover:bg-white/40"
+                      : "bg-white/10 text-blue-100 hover:bg-white/20 hover:text-white"
+                  )}
+                >
+                  <Mail className="mr-2 h-4 w-4" /> Email channel
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => setCommunicationType("sms")}
+                  className={cn(
+                    "rounded-xl border border-white/15 px-5 py-2 text-sm font-semibold transition",
+                    communicationType === "sms"
+                      ? "bg-white/30 text-white shadow-lg shadow-blue-900/20 hover:bg-white/40"
+                      : "bg-white/10 text-blue-100 hover:bg-white/20 hover:text-white"
+                  )}
+                >
+                  <MessageSquare className="mr-2 h-4 w-4" /> SMS channel
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => setActiveTab("templates")}
+                  className="rounded-xl border border-white/15 bg-white/5 px-5 py-2 text-sm font-semibold text-blue-100 transition hover:bg-white/15 hover:text-white"
+                >
+                  <FileText className="mr-2 h-4 w-4" /> Manage templates
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => setActiveTab("campaigns")}
+                  className="rounded-xl border border-white/15 bg-white/5 px-5 py-2 text-sm font-semibold text-blue-100 transition hover:bg-white/15 hover:text-white"
+                >
+                  <Megaphone className="mr-2 h-4 w-4" /> Plan campaigns
+                </Button>
+              </div>
+            </div>
+            <div className="w-full max-w-xl space-y-4 rounded-3xl border border-white/10 bg-white/10 p-6 shadow-xl shadow-blue-900/30 backdrop-blur">
+              <div className="flex items-center justify-between">
+                <p className="text-xs uppercase tracking-widest text-blue-100/70">Channel snapshot</p>
+                <Zap className="h-5 w-5 text-blue-100/80" />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
+                  <p className="text-xs uppercase text-blue-100/70">Last 7 days</p>
+                  <p className="mt-2 text-3xl font-semibold text-white">{lastSevenDays.toLocaleString()}</p>
+                  <p className="text-xs text-blue-100/60">{communicationType === "email" ? "emails" : "messages"} sent</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
+                  <p className="text-xs uppercase text-blue-100/70">Deliverability</p>
+                  <p className="mt-2 text-3xl font-semibold text-white">{formatPercent(deliveryRate)}%</p>
+                  <p className="text-xs text-blue-100/60">{totalDelivered.toLocaleString()} delivered</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
+                  <p className="text-xs uppercase text-blue-100/70">Active campaigns</p>
+                  <p className="mt-2 text-3xl font-semibold text-white">{activeCampaignsCount.toLocaleString()}</p>
+                  <p className="text-xs text-blue-100/60">Live workflows running</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
+                  <p className="text-xs uppercase text-blue-100/70">Engagement</p>
+                  <p className="mt-2 text-3xl font-semibold text-white">{formatPercent(engagementRate)}%</p>
+                  <p className="text-xs text-blue-100/60">{engagementLabel}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="relative z-10 flex flex-wrap items-center gap-3 border-t border-white/10 pt-6 text-xs text-blue-100/70">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1">
+              <Users className="h-3.5 w-3.5" /> Unified audience syncing enabled
+            </div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1">
+              <BarChart3 className="h-3.5 w-3.5" /> Real-time metrics refresh every 5 minutes
+            </div>
+          </div>
+        </section>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="templates">Templates</TabsTrigger>
-            <TabsTrigger value="campaigns">Campaigns</TabsTrigger>
-            <TabsTrigger value="automation">Automation</TabsTrigger>
-            <TabsTrigger value="requests">Callback Requests</TabsTrigger>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-10">
+          <TabsList className="grid w-full grid-cols-5 gap-2 rounded-2xl border border-white/10 bg-white/5 p-2 text-sm font-semibold text-blue-100">
+            <TabsTrigger
+              value="overview"
+              className="rounded-xl px-4 py-2.5 transition data-[state=active]:bg-white/90 data-[state=active]:text-slate-900 data-[state=active]:shadow-lg"
+            >
+              Overview
+            </TabsTrigger>
+            <TabsTrigger
+              value="templates"
+              className="rounded-xl px-4 py-2.5 transition data-[state=active]:bg-white/90 data-[state=active]:text-slate-900 data-[state=active]:shadow-lg"
+            >
+              Templates
+            </TabsTrigger>
+            <TabsTrigger
+              value="campaigns"
+              className="rounded-xl px-4 py-2.5 transition data-[state=active]:bg-white/90 data-[state=active]:text-slate-900 data-[state=active]:shadow-lg"
+            >
+              Campaigns
+            </TabsTrigger>
+            <TabsTrigger
+              value="automation"
+              className="rounded-xl px-4 py-2.5 transition data-[state=active]:bg-white/90 data-[state=active]:text-slate-900 data-[state=active]:shadow-lg"
+            >
+              Automation
+            </TabsTrigger>
+            <TabsTrigger
+              value="requests"
+              className="rounded-xl px-4 py-2.5 transition data-[state=active]:bg-white/90 data-[state=active]:text-slate-900 data-[state=active]:shadow-lg"
+            >
+              Callback Requests
+            </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="overview" className="space-y-6">
+          <TabsContent value="overview" className="space-y-10 text-slate-900">
             {/* Communication Type Selector */}
-            <div className="flex items-center gap-4">
-              <Button
-                variant={communicationType === "email" ? "default" : "outline"}
-                onClick={() => setCommunicationType("email")}
-                className="flex items-center gap-2"
-              >
-                <Mail className="h-4 w-4" />
-                Email
-              </Button>
-              <Button
-                variant={communicationType === "sms" ? "default" : "outline"}
-                onClick={() => setCommunicationType("sms")}
-                className="flex items-center gap-2"
-              >
-                <MessageSquare className="h-4 w-4" />
-                SMS
-              </Button>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-sm font-semibold text-slate-600">Channel focus</span>
+              <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-white/70 p-1 shadow-sm shadow-blue-900/5">
+                <Button
+                  variant="ghost"
+                  onClick={() => setCommunicationType("email")}
+                  className={cn(
+                    "rounded-full px-4 py-1.5 text-xs font-semibold transition",
+                    communicationType === "email"
+                      ? "bg-slate-900 text-white shadow"
+                      : "text-slate-600 hover:bg-white"
+                  )}
+                >
+                  <Mail className="mr-2 h-3.5 w-3.5" /> Email
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => setCommunicationType("sms")}
+                  className={cn(
+                    "rounded-full px-4 py-1.5 text-xs font-semibold transition",
+                    communicationType === "sms"
+                      ? "bg-slate-900 text-white shadow"
+                      : "text-slate-600 hover:bg-white"
+                  )}
+                >
+                  <MessageSquare className="mr-2 h-3.5 w-3.5" /> SMS
+                </Button>
+              </div>
             </div>
 
             {/* Metrics Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <Card>
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+              <Card className={glassPanelClass}>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
-                    {communicationType === "email" ? "Emails" : "Messages"} Sent
+                  <CardTitle className="text-sm font-semibold text-slate-700">
+                    {communicationType === "email" ? "Emails" : "Messages"} sent
                   </CardTitle>
-                  {communicationType === "email" ? 
-                    <Mail className="h-4 w-4 text-muted-foreground" /> : 
-                    <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                  }
+                  {communicationType === "email" ? (
+                    <Mail className="h-4 w-4 text-slate-400" />
+                  ) : (
+                    <MessageSquare className="h-4 w-4 text-slate-400" />
+                  )}
                 </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{(metrics as any)?.totalSent || 0}</div>
-                  <p className="text-xs text-muted-foreground">
-                    {(metrics as any)?.last7Days || 0} in last 7 days
-                  </p>
+                <CardContent className="space-y-1">
+                  <div className="text-2xl font-semibold text-slate-900">{((metrics as any)?.totalSent || 0).toLocaleString()}</div>
+                  <p className="text-xs text-slate-500">{lastSevenDays.toLocaleString()} in the last 7 days</p>
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className={glassPanelClass}>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Delivery Rate</CardTitle>
-                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle className="text-sm font-semibold text-slate-700">Deliverability</CardTitle>
+                  <TrendingUp className="h-4 w-4 text-slate-400" />
                 </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{(metrics as any)?.deliveryRate || 0}%</div>
-                  <p className="text-xs text-muted-foreground">
-                    {(metrics as any)?.totalDelivered || 0} delivered
-                  </p>
+                <CardContent className="space-y-1">
+                  <div className="text-2xl font-semibold text-slate-900">{`${formatPercent(Number((metrics as any)?.deliveryRate || 0))}%`}</div>
+                  <p className="text-xs text-slate-500">{((metrics as any)?.totalDelivered || 0).toLocaleString()} delivered</p>
                 </CardContent>
               </Card>
 
               {communicationType === "email" && (
                 <>
-                  <Card>
+                  <Card className={glassPanelClass}>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">Open Rate</CardTitle>
-                      <Eye className="h-4 w-4 text-muted-foreground" />
+                      <CardTitle className="text-sm font-semibold text-slate-700">Open rate</CardTitle>
+                      <Eye className="h-4 w-4 text-slate-400" />
                     </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">{(metrics as any)?.openRate || 0}%</div>
-                      <p className="text-xs text-muted-foreground">
-                        {(metrics as any)?.totalOpened || 0} opened
-                      </p>
+                    <CardContent className="space-y-1">
+                      <div className="text-2xl font-semibold text-slate-900">{`${formatPercent(Number((metrics as any)?.openRate || 0))}%`}</div>
+                      <p className="text-xs text-slate-500">{((metrics as any)?.totalOpened || 0).toLocaleString()} opened</p>
                     </CardContent>
                   </Card>
 
-                  <Card>
+                  <Card className={glassPanelClass}>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">Click Rate</CardTitle>
-                      <MousePointer className="h-4 w-4 text-muted-foreground" />
+                      <CardTitle className="text-sm font-semibold text-slate-700">Click rate</CardTitle>
+                      <MousePointer className="h-4 w-4 text-slate-400" />
                     </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">{(metrics as any)?.clickRate || 0}%</div>
-                      <p className="text-xs text-muted-foreground">
-                        {(metrics as any)?.totalClicked || 0} clicked
-                      </p>
+                    <CardContent className="space-y-1">
+                      <div className="text-2xl font-semibold text-slate-900">{`${formatPercent(Number((metrics as any)?.clickRate || 0))}%`}</div>
+                      <p className="text-xs text-slate-500">{((metrics as any)?.totalClicked || 0).toLocaleString()} clicked</p>
                     </CardContent>
                   </Card>
                 </>
@@ -636,29 +779,25 @@ export default function Communications() {
 
               {communicationType === "sms" && (
                 <>
-                  <Card>
+                  <Card className={glassPanelClass}>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">Error Rate</CardTitle>
-                      <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                      <CardTitle className="text-sm font-semibold text-slate-700">Failed deliveries</CardTitle>
+                      <AlertCircle className="h-4 w-4 text-slate-400" />
                     </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">{(metrics as any)?.totalErrors || 0}</div>
-                      <p className="text-xs text-muted-foreground">
-                        Failed deliveries
-                      </p>
+                    <CardContent className="space-y-1">
+                      <div className="text-2xl font-semibold text-slate-900">{((metrics as any)?.totalErrors || 0).toLocaleString()}</div>
+                      <p className="text-xs text-slate-500">Monitor queue health and sender reputation</p>
                     </CardContent>
                   </Card>
 
-                  <Card>
+                  <Card className={glassPanelClass}>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">Opt-outs</CardTitle>
-                      <UserMinus className="h-4 w-4 text-muted-foreground" />
+                      <CardTitle className="text-sm font-semibold text-slate-700">Opt-outs</CardTitle>
+                      <UserMinus className="h-4 w-4 text-slate-400" />
                     </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">{(metrics as any)?.totalOptOuts || 0}</div>
-                      <p className="text-xs text-muted-foreground">
-                        {(metrics as any)?.optOutRate || 0}% opt-out rate
-                      </p>
+                    <CardContent className="space-y-1">
+                      <div className="text-2xl font-semibold text-slate-900">{((metrics as any)?.totalOptOuts || 0).toLocaleString()}</div>
+                      <p className="text-xs text-slate-500">{`${formatPercent(Number((metrics as any)?.optOutRate || 0))}%`} opt-out rate</p>
                     </CardContent>
                   </Card>
                 </>
@@ -667,60 +806,60 @@ export default function Communications() {
 
             {/* SMS Throttle Status - Only show for SMS mode */}
             {communicationType === "sms" && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Card>
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <Card className={glassPanelClass}>
                   <CardHeader>
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-sm font-medium">SMS Rate Limit Status</CardTitle>
-                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <CardTitle className="text-sm font-semibold text-slate-700">SMS rate limit status</CardTitle>
+                      <Clock className="h-4 w-4 text-slate-400" />
                     </div>
                   </CardHeader>
                   <CardContent>
                     {smsRateLimitStatus ? (
                       <div className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-600">Used this minute:</span>
-                          <span className="font-medium">{(smsRateLimitStatus as any).used}/{(smsRateLimitStatus as any).limit}</span>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-slate-600">Used this minute:</span>
+                          <span className="font-semibold text-slate-900">{(smsRateLimitStatus as any).used}/{(smsRateLimitStatus as any).limit}</span>
                         </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div 
-                            className={`h-2 rounded-full ${(smsRateLimitStatus as any).used >= (smsRateLimitStatus as any).limit * 0.8 ? 'bg-red-500' : 'bg-blue-500'}`}
+                        <div className="h-2 w-full rounded-full bg-slate-200">
+                          <div
+                            className={`h-2 rounded-full ${(smsRateLimitStatus as any).used >= (smsRateLimitStatus as any).limit * 0.8 ? 'bg-rose-500' : 'bg-sky-500'}`}
                             style={{ width: `${Math.min(((smsRateLimitStatus as any).used / (smsRateLimitStatus as any).limit) * 100, 100)}%` }}
                           ></div>
                         </div>
-                        <div className="flex justify-between items-center text-xs text-gray-500">
+                        <div className="flex items-center justify-between text-xs text-slate-500">
                           <span>Next reset: {new Date((smsRateLimitStatus as any).resetTime).toLocaleTimeString()}</span>
-                          <Badge variant={(smsRateLimitStatus as any).canSend ? "default" : "destructive"}>
+                          <Badge variant={(smsRateLimitStatus as any).canSend ? "default" : "destructive"} className="rounded-full px-3 py-1 text-[10px]">
                             {(smsRateLimitStatus as any).canSend ? "Can Send" : "Rate Limited"}
                           </Badge>
                         </div>
                       </div>
                     ) : (
-                      <div className="text-center py-4 text-gray-500">Loading status...</div>
+                      <div className="py-4 text-center text-slate-500">Loading status...</div>
                     )}
                   </CardContent>
                 </Card>
 
-                <Card>
+                <Card className={glassPanelClass}>
                   <CardHeader>
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-sm font-medium">SMS Queue Status</CardTitle>
-                      <Settings className="h-4 w-4 text-muted-foreground" />
+                      <CardTitle className="text-sm font-semibold text-slate-700">SMS queue status</CardTitle>
+                      <Settings className="h-4 w-4 text-slate-400" />
                     </div>
                   </CardHeader>
                   <CardContent>
                     {smsQueueStatus ? (
                       <div className="space-y-3">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-600">Messages in queue:</span>
-                          <span className="font-medium">{(smsQueueStatus as any).queueLength}</span>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-slate-600">Messages in queue:</span>
+                          <span className="font-semibold text-slate-900">{(smsQueueStatus as any).queueLength}</span>
                         </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-600">Est. wait time:</span>
-                          <span className="font-medium">{Math.ceil((smsQueueStatus as any).estimatedWaitTime / 60)} min</span>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-slate-600">Est. wait time:</span>
+                          <span className="font-semibold text-slate-900">{Math.ceil((smsQueueStatus as any).estimatedWaitTime / 60)} min</span>
                         </div>
                         <div className="mt-3">
-                          <Label htmlFor="throttle-limit" className="text-sm font-medium">
+                          <Label htmlFor="throttle-limit" className="text-sm font-semibold text-slate-700">
                             SMS Per Minute Limit
                           </Label>
                           <div className="flex gap-2 mt-1">
@@ -738,16 +877,16 @@ export default function Communications() {
                                   });
                                 }
                               }}
-                              className="w-20"
+                              className="w-20 border-slate-200"
                             />
-                            <span className="text-sm text-gray-500 flex items-center">
+                            <span className="flex items-center text-sm text-slate-500">
                               texts/min
                             </span>
                           </div>
                         </div>
                       </div>
                     ) : (
-                      <div className="text-center py-4 text-gray-500">Loading status...</div>
+                      <div className="py-4 text-center text-slate-500">Loading status...</div>
                     )}
                   </CardContent>
                 </Card>
@@ -755,37 +894,34 @@ export default function Communications() {
             )}
 
             {/* Recent Campaigns */}
-            <Card>
+            <Card className={glassPanelClass}>
               <CardHeader>
-                <CardTitle>Recent {communicationType === "email" ? "Email" : "SMS"} Campaigns</CardTitle>
+                <CardTitle className="text-lg font-semibold text-slate-800">
+                  Recent {communicationType === "email" ? "email" : "SMS"} campaigns
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 {campaignsLoading ? (
-                  <div className="text-center py-4">Loading campaigns...</div>
+                  <div className="py-4 text-center text-slate-500">Loading campaigns...</div>
                 ) : (campaigns as any)?.length > 0 ? (
                   <div className="space-y-4">
                     {(campaigns as any).slice(0, 5).map((campaign: any) => (
-                      <div key={campaign.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div key={campaign.id} className="flex items-center justify-between rounded-2xl border border-slate-200/60 bg-white/70 p-4 shadow-sm">
                         <div>
-                          <h3 className="font-medium">{campaign.name}</h3>
-                          <p className="text-sm text-gray-600">
-                            Target: {getTargetGroupLabel(campaign)} • 
-                            Template: {campaign.templateName}
+                          <h3 className="font-semibold text-slate-800">{campaign.name}</h3>
+                          <p className="text-sm text-slate-500">
+                            Target: {getTargetGroupLabel(campaign)} • Template: {campaign.templateName}
                           </p>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Badge className={getStatusColor(campaign.status)}>
-                            {campaign.status}
-                          </Badge>
-                          <span className="text-sm text-gray-600">
-                            {campaign.totalSent || 0} sent
-                          </span>
+                        <div className="flex items-center gap-3">
+                          <Badge className={getStatusColor(campaign.status)}>{campaign.status}</Badge>
+                          <span className="text-sm font-medium text-slate-600">{campaign.totalSent || 0} sent</span>
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-8 text-gray-500">
+                  <div className="py-8 text-center text-slate-500">
                     No campaigns yet. Create your first {communicationType} campaign to get started.
                   </div>
                 )}
@@ -793,36 +929,49 @@ export default function Communications() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="templates" className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <h2 className="text-xl font-semibold">
-                  {communicationType === "email" ? "Email" : "SMS"} Templates
+          <TabsContent value="templates" className="space-y-10 text-slate-900">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex flex-wrap items-center gap-4">
+                <h2 className="text-xl font-semibold text-slate-800">
+                  {communicationType === "email" ? "Email" : "SMS"} templates
                 </h2>
-                <div className="flex gap-2">
+                <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-white/80 p-1 shadow-sm">
                   <Button
-                    variant={communicationType === "email" ? "default" : "outline"}
+                    variant="ghost"
                     size="sm"
                     onClick={() => setCommunicationType("email")}
+                    className={cn(
+                      "rounded-full px-4 py-1.5 text-xs font-semibold",
+                      communicationType === "email"
+                        ? "bg-slate-900 text-white"
+                        : "text-slate-600 hover:bg-white"
+                    )}
                   >
-                    <Mail className="h-4 w-4 mr-2" />
-                    Email
+                    <Mail className="mr-2 h-3.5 w-3.5" /> Email
                   </Button>
                   <Button
-                    variant={communicationType === "sms" ? "default" : "outline"}
+                    variant="ghost"
                     size="sm"
                     onClick={() => setCommunicationType("sms")}
+                    className={cn(
+                      "rounded-full px-4 py-1.5 text-xs font-semibold",
+                      communicationType === "sms"
+                        ? "bg-slate-900 text-white"
+                        : "text-slate-600 hover:bg-white"
+                    )}
                   >
-                    <MessageSquare className="h-4 w-4 mr-2" />
-                    SMS
+                    <MessageSquare className="mr-2 h-3.5 w-3.5" /> SMS
                   </Button>
                 </div>
               </div>
               <Dialog open={showTemplateModal} onOpenChange={setShowTemplateModal}>
                 <DialogTrigger asChild>
-                  <Button data-testid="button-create-template">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create {communicationType === "email" ? "Email" : "SMS"} Template
+                  <Button
+                    data-testid="button-create-template"
+                    className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-md shadow-slate-400/40 transition hover:bg-slate-800"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Create {communicationType === "email" ? "email" : "SMS"} template
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="max-w-2xl">
@@ -913,7 +1062,7 @@ export default function Communications() {
                           maxLength={1600}
                           required
                         />
-                        <p className="text-sm text-gray-500 mt-1">
+                        <p className="mt-1 text-sm text-slate-500">
                           {smsTemplateForm.message.length}/1600 characters
                         </p>
                         <div className="mt-3 bg-blue-50 border border-blue-200 rounded-md p-3">
@@ -962,36 +1111,36 @@ export default function Communications() {
               </Dialog>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
               {templatesLoading ? (
                 <div className="col-span-full text-center py-8">Loading templates...</div>
               ) : (templates as any)?.length > 0 ? (
                 (templates as any).map((template: any) => (
-                  <Card key={template.id}>
-                    <CardHeader>
+                  <Card key={template.id} className={glassPanelClass}>
+                    <CardHeader className="pb-4">
                       <div className="flex items-center justify-between">
-                        <CardTitle className="text-lg">{template.name}</CardTitle>
+                        <CardTitle className="text-lg font-semibold text-slate-800">{template.name}</CardTitle>
                         <Badge variant={template.status === "active" ? "default" : "secondary"}>
                           {template.status}
                         </Badge>
                       </div>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="space-y-4">
                       {communicationType === "email" ? (
                         <>
-                          <p className="text-sm font-medium text-gray-600 mb-1">Subject:</p>
-                          <p className="text-sm text-gray-800 mb-2">{template.subject}</p>
-                          <p className="text-sm text-gray-600 mb-4 line-clamp-3">
+                          <p className="text-sm font-semibold text-slate-600">Subject</p>
+                          <p className="text-sm text-slate-700">{template.subject}</p>
+                          <p className="text-sm text-slate-500 line-clamp-3">
                             {template.html.replace(/<[^>]*>/g, '')}
                           </p>
                         </>
                       ) : (
-                        <p className="text-sm text-gray-600 mb-4 line-clamp-3">
+                        <p className="text-sm text-slate-500 line-clamp-3">
                           {template.message}
                         </p>
                       )}
                       {/* Agency URL Section */}
-                      <div className="mb-3 p-2 bg-gray-50 rounded-md">
+                      <div className="rounded-xl border border-slate-200/70 bg-white/70 p-3">
                         <div className="flex items-center justify-between">
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-medium text-gray-600 mb-1">Agency URL:</p>
@@ -1002,7 +1151,7 @@ export default function Communications() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-6 w-6 p-0 ml-2"
+                            className="ml-2 h-7 w-7 rounded-full bg-slate-900/5 p-0 text-slate-600 hover:bg-slate-900/10"
                             onClick={() => {
                               const url = `${window.location.origin}/agency/${(userData as any)?.platformUser?.tenant?.slug || 'your-agency'}`;
                               navigator.clipboard.writeText(url);
@@ -1017,24 +1166,25 @@ export default function Communications() {
                           </Button>
                         </div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
                         <Button
                           variant="outline"
                           size="sm"
+                          className="flex items-center gap-2 border-slate-200 text-slate-700"
                           onClick={() => handlePreview(template)}
                           data-testid={`button-preview-${template.id}`}
                         >
-                          <Eye className="h-4 w-4 mr-1" />
-                          Preview
+                          <Eye className="h-4 w-4" /> Preview
                         </Button>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button
                               variant="outline"
                               size="sm"
+                              className="flex items-center gap-2 border-rose-200 text-rose-500"
                               data-testid={`button-delete-${template.id}`}
                             >
-                              <Trash2 className="h-4 w-4 mr-1" />
+                              <Trash2 className="h-4 w-4" />
                               Delete
                             </Button>
                           </AlertDialogTrigger>
@@ -1123,7 +1273,7 @@ export default function Communications() {
             </Dialog>
           </TabsContent>
 
-          <TabsContent value="campaigns" className="space-y-6">
+          <TabsContent value="campaigns" className="space-y-10 text-slate-900">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <h2 className="text-xl font-semibold">
@@ -1466,7 +1616,7 @@ export default function Communications() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="requests" className="space-y-6">
+          <TabsContent value="requests" className="space-y-10 text-slate-900">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-semibold">Callback Requests</h2>
             </div>
@@ -1523,7 +1673,7 @@ export default function Communications() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="automation" className="space-y-6">
+          <TabsContent value="automation" className="space-y-10 text-slate-900">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-semibold">Communication Automation</h2>
               <Dialog open={showAutomationModal} onOpenChange={setShowAutomationModal}>
