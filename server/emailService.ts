@@ -31,7 +31,6 @@ export class EmailService {
         Tag: options.tag,
         Metadata: options.metadata,
         TrackOpens: true, // Enable open tracking
-        TrackLinks: 'HtmlOnly', // Enable click tracking
       });
 
       return {

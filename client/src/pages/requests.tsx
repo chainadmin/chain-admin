@@ -109,16 +109,18 @@ export default function Requests() {
     });
   };
 
-  const filteredRequests = requests?.filter((request: any) => {
+  const requestList = Array.isArray(requests) ? (requests as any[]) : [];
+
+  const filteredRequests = requestList.filter((request: any) => {
     if (filterStatus === "all") return true;
     return request.status === filterStatus;
-  }) || [];
+  });
 
   const statusCounts = {
-    all: requests?.length || 0,
-    pending: requests?.filter((r: any) => r.status === "pending")?.length || 0,
-    in_progress: requests?.filter((r: any) => r.status === "in_progress")?.length || 0,
-    completed: requests?.filter((r: any) => r.status === "completed")?.length || 0,
+    all: requestList.length,
+    pending: requestList.filter((r: any) => r.status === "pending").length,
+    in_progress: requestList.filter((r: any) => r.status === "in_progress").length,
+    completed: requestList.filter((r: any) => r.status === "completed").length,
   };
 
   if (isLoading) {

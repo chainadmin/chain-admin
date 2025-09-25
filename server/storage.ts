@@ -1112,7 +1112,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAutomation(automation: InsertCommunicationAutomation): Promise<CommunicationAutomation> {
-    const [newAutomation] = await db.insert(communicationAutomations).values(automation).returning();
+    const payload = {
+      ...automation,
+      templateIds: automation.templateIds ?? [],
+      templateSchedule: (automation.templateSchedule ?? []) as { templateId: string; dayOffset: number }[],
+    };
+
+    const [newAutomation] = await db
+      .insert(communicationAutomations)
+      .values(payload as any)
+      .returning();
     return newAutomation;
   }
 
@@ -1747,14 +1756,6 @@ export class DatabaseStorage implements IStorage {
       ...row.platform_users,
       userDetails: row.users || undefined,
     }));
-  }
-
-  async updateConsumer(id: string, updates: Partial<Consumer>): Promise<Consumer> {
-    const [updatedConsumer] = await db.update(consumers)
-      .set(updates)
-      .where(eq(consumers.id, id))
-      .returning();
-    return updatedConsumer;
   }
 
   // Stats operations
