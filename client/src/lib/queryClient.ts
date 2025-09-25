@@ -11,6 +11,15 @@ async function throwIfResNotOk(res: Response) {
 // Get the API base URL from environment or use relative URLs
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
+function shouldBypassCache(path: string): boolean {
+  return path.includes('/api/consumer/');
+}
+
+function withCacheBust(url: string): string {
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}_=${Date.now()}`;
+}
+
 function getApiUrl(path: string): string {
   if (path.startsWith('http')) {
     return path; // Already a full URL
@@ -24,6 +33,10 @@ export async function apiRequest(
   data?: unknown | undefined,
 ): Promise<Response> {
   const fullUrl = getApiUrl(url);
+  const requestUrl =
+    method.toUpperCase() === 'GET' && shouldBypassCache(url)
+      ? withCacheBust(fullUrl)
+      : fullUrl;
   const token = getAuthToken(); // Now checks cookies first, then localStorage
   const consumerToken = localStorage.getItem('consumerToken'); // Check for consumer token
   const headers: HeadersInit = {};
@@ -40,7 +53,7 @@ export async function apiRequest(
     headers["Authorization"] = `Bearer ${token}`;
   }
   
-  const res = await fetch(fullUrl, {
+  const res = await fetch(requestUrl, {
     method,
     headers,
     // FormData should be sent as-is, JSON data should be stringified
@@ -59,11 +72,13 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const url = getApiUrl(queryKey.join("/") as string);
+    const rawPath = queryKey.join("/") as string;
+    const url = getApiUrl(rawPath);
+    const requestUrl = shouldBypassCache(rawPath) ? withCacheBust(url) : url;
     const token = getAuthToken(); // Now checks cookies first, then localStorage
     const consumerToken = localStorage.getItem('consumerToken'); // Check for consumer token
     const headers: HeadersInit = {};
-    
+
     // Use consumer token for consumer endpoints, otherwise use admin token
     if (url.includes('/consumer/') && consumerToken) {
       headers["Authorization"] = `Bearer ${consumerToken}`;
@@ -71,7 +86,7 @@ export const getQueryFn: <T>(options: {
       headers["Authorization"] = `Bearer ${token}`;
     }
     
-    const res = await fetch(url, {
+    const res = await fetch(requestUrl, {
       headers,
       credentials: "include", // Important for cookies to be sent
       cache: "no-store",

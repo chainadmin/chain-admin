@@ -21,6 +21,11 @@ type AgencyBranding = {
   contactEmail: string | null;
 };
 
+function withCacheBust(url: string): string {
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}_=${Date.now()}`;
+}
+
 export default function ConsumerDashboard() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -79,7 +84,7 @@ export default function ConsumerDashboard() {
       if (!token) {
         throw new Error('No consumer token found');
       }
-      const response = await fetch(accountsUrl, {
+      const response = await fetch(withCacheBust(accountsUrl), {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
