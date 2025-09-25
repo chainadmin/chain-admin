@@ -1,21 +1,72 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { getAuthToken } from "./cookies";
 
+export class ApiError extends Error {
+  status: number;
+  data: unknown;
+
+  constructor(status: number, message: string, data: unknown) {
+    super(message);
+    this.status = status;
+    this.data = data;
+  }
+}
+
+async function parseErrorResponse(res: Response): Promise<unknown> {
+  const contentType = res.headers.get("content-type") ?? "";
+
+  if (contentType.includes("application/json")) {
+    try {
+      return await res.json();
+    } catch (error) {
+      console.error("Failed to parse JSON error response", error);
+      return null;
+    }
+  }
+
+  try {
+    const text = await res.text();
+    return text || null;
+  } catch (error) {
+    console.error("Failed to read error response body", error);
+    return null;
+  }
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    const errorData = await parseErrorResponse(res);
+    const message =
+      (typeof errorData === "object" && errorData !== null && "message" in errorData)
+        ? String((errorData as Record<string, unknown>).message ?? res.statusText)
+        : (typeof errorData === "string" && errorData.trim().length > 0)
+          ? errorData
+          : res.statusText || `Request failed with status ${res.status}`;
+
+    throw new ApiError(res.status, message, errorData);
   }
 }
 
 // Get the API base URL from environment or use relative URLs
-const API_BASE = import.meta.env.VITE_API_URL || '';
+const API_BASE = import.meta.env.VITE_API_URL || "";
 
 function getApiUrl(path: string): string {
-  if (path.startsWith('http')) {
+  if (path.startsWith("http")) {
     return path; // Already a full URL
   }
-  return API_BASE + path;
+
+  if (!API_BASE) {
+    return path;
+  }
+
+  try {
+    return new URL(path, API_BASE).toString();
+  } catch (error) {
+    console.error("Failed to construct API URL", { path, API_BASE, error });
+    const normalizedBase = API_BASE.replace(/\/$/, "");
+    const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+    return `${normalizedBase}${normalizedPath}`;
+  }
 }
 
 export async function apiRequest(
