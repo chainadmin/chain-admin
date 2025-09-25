@@ -2,7 +2,7 @@ import type { VercelResponse } from '@vercel/node';
 import { getDb } from './_lib/db.js';
 import { withAuth, AuthenticatedRequest, JWT_SECRET } from './_lib/auth.js';
 import { tenantSettings, smsTracking, smsCampaigns } from '../shared/schema.js';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, gte } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
@@ -51,7 +51,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       .innerJoin(smsCampaigns, eq(smsTracking.campaignId, smsCampaigns.id))
       .where(and(
         eq(smsCampaigns.tenantId, tenantId),
-        sql`${smsTracking.sentAt} >= ${oneMinuteAgo}`,
+        gte(smsTracking.sentAt, oneMinuteAgo),
       ));
 
     const used = Number(usageResult[0]?.count ?? 0);

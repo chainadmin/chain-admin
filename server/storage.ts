@@ -83,6 +83,11 @@ import {
 import { messagingPlans, EMAIL_OVERAGE_RATE_PER_EMAIL, SMS_OVERAGE_RATE_PER_SEGMENT, type MessagingPlanId } from "@shared/billing-plans";
 import { db } from "./db";
 import { eq, and, desc, sql, inArray, gte, lte } from "drizzle-orm";
+import {
+  ensureArrangementOptionsSchema,
+  ensureDocumentsSchema,
+  ensureTenantSettingsSchema,
+} from "@shared/schemaFixes";
 
 type DocumentWithAccount = Document & {
   account?: (Account & { consumer?: Consumer }) | null;
@@ -1420,6 +1425,8 @@ export class DatabaseStorage implements IStorage {
 
   // Document operations
   async getDocumentsByTenant(tenantId: string): Promise<DocumentWithAccount[]> {
+    await ensureDocumentsSchema(db);
+
     const result = await db
       .select()
       .from(documents)
@@ -1440,11 +1447,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createDocument(document: InsertDocument): Promise<Document> {
+    await ensureDocumentsSchema(db);
+
     const [newDocument] = await db.insert(documents).values(document).returning();
     return newDocument;
   }
 
   async deleteDocument(id: string, tenantId: string): Promise<boolean> {
+    await ensureDocumentsSchema(db);
+
     const deleted = await db
       .delete(documents)
       .where(and(eq(documents.id, id), eq(documents.tenantId, tenantId)))
@@ -1455,10 +1466,14 @@ export class DatabaseStorage implements IStorage {
 
   // Arrangement options operations
   async getArrangementOptionsByTenant(tenantId: string): Promise<ArrangementOption[]> {
+    await ensureArrangementOptionsSchema(db);
+
     return await db.select().from(arrangementOptions).where(and(eq(arrangementOptions.tenantId, tenantId), eq(arrangementOptions.isActive, true)));
   }
 
   async createArrangementOption(option: InsertArrangementOption): Promise<ArrangementOption> {
+    await ensureArrangementOptionsSchema(db);
+
     const [newOption] = await db.insert(arrangementOptions).values(option).returning();
     return newOption;
   }
@@ -1468,6 +1483,8 @@ export class DatabaseStorage implements IStorage {
     tenantId: string,
     option: Partial<InsertArrangementOption>,
   ): Promise<ArrangementOption | undefined> {
+    await ensureArrangementOptionsSchema(db);
+
     const { tenantId: _ignoredTenantId, ...updates } = option;
 
     const [updatedOption] = await db
@@ -1483,6 +1500,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteArrangementOption(id: string, tenantId: string): Promise<boolean> {
+    await ensureArrangementOptionsSchema(db);
+
     const deletedOptions = await db
       .delete(arrangementOptions)
       .where(and(eq(arrangementOptions.id, id), eq(arrangementOptions.tenantId, tenantId)))
@@ -1493,11 +1512,15 @@ export class DatabaseStorage implements IStorage {
 
   // Tenant settings operations
   async getTenantSettings(tenantId: string): Promise<TenantSettings | undefined> {
+    await ensureTenantSettingsSchema(db);
+
     const [settings] = await db.select().from(tenantSettings).where(eq(tenantSettings.tenantId, tenantId));
     return settings;
   }
 
   async upsertTenantSettings(settings: InsertTenantSettings): Promise<TenantSettings> {
+    await ensureTenantSettingsSchema(db);
+
     const { tenantId, ...settingsData } = settings;
     const [upsertedSettings] = await db
       .insert(tenantSettings)

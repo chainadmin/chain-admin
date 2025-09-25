@@ -121,11 +121,13 @@ export function buildAgencyUrl(
 
 export function isSubdomainSupported(): boolean {
   // Check if we're in an environment that supports subdomains
-  if (typeof window === 'undefined') {
+  const globalWindow = (globalThis as { window?: { location: { hostname: string } } }).window;
+
+  if (!globalWindow) {
     return false;
   }
 
-  const hostname = window.location.hostname;
+  const hostname = globalWindow.location.hostname;
   
   // Subdomain support is ONLY available on the actual production domain
   // Not on localhost, Replit, Vercel, or any other hosting platform
