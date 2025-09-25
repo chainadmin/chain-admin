@@ -4,8 +4,18 @@ import { tenants, tenantSettings } from '../_lib/schema.js';
 import { eq } from 'drizzle-orm';
 
 async function handler(req: VercelRequest, res: VercelResponse) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
+  const requestHeaders = req.headers['access-control-request-headers'];
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    Array.isArray(requestHeaders)
+      ? requestHeaders.join(', ')
+      : requestHeaders || 'Content-Type, Authorization'
+  );
+
   if (req.method === 'OPTIONS') {
-    res.status(200).end();
+    res.status(204).end();
     return;
   }
 
