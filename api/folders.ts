@@ -24,7 +24,9 @@ function resolveFolderId(req: AuthenticatedRequest) {
 }
 
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
-  if (req.method === 'OPTIONS') {
+  const method = req.method?.toUpperCase();
+
+  if (method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
@@ -49,7 +51,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       return;
     }
 
-    if (req.method === 'GET') {
+    if (method === 'GET') {
       // Get all folders for the tenant
       const tenantFolders = await db
         .select()
@@ -58,7 +60,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         .orderBy(folders.isDefault, folders.name);
 
       res.status(200).json(tenantFolders);
-    } else if (req.method === 'POST') {
+    } else if (method === 'POST') {
       // Create a new folder
       const { name, color } = req.body;
 
@@ -78,7 +80,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         .returning();
 
       res.status(201).json(newFolder);
-    } else if (req.method === 'DELETE') {
+    } else if (method === 'DELETE') {
       // Delete a folder - supports /api/folders?id=<folderId> and /api/folders/<folderId>
       const folderId = resolveFolderId(req);
 
