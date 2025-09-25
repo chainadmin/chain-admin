@@ -656,35 +656,20 @@ export default function Communications() {
         </section>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-10">
-          <TabsList className="grid w-full grid-cols-5 gap-2 rounded-2xl border border-white/10 bg-white/5 p-2 text-sm font-semibold text-blue-100">
-            <TabsTrigger
-              value="overview"
-              className="rounded-xl px-4 py-2.5 transition data-[state=active]:bg-white/90 data-[state=active]:text-slate-900 data-[state=active]:shadow-lg"
-            >
+          <TabsList className="grid w-full grid-cols-5 gap-2 p-2">
+            <TabsTrigger value="overview" className="px-4 py-2.5">
               Overview
             </TabsTrigger>
-            <TabsTrigger
-              value="templates"
-              className="rounded-xl px-4 py-2.5 transition data-[state=active]:bg-white/90 data-[state=active]:text-slate-900 data-[state=active]:shadow-lg"
-            >
+            <TabsTrigger value="templates" className="px-4 py-2.5">
               Templates
             </TabsTrigger>
-            <TabsTrigger
-              value="campaigns"
-              className="rounded-xl px-4 py-2.5 transition data-[state=active]:bg-white/90 data-[state=active]:text-slate-900 data-[state=active]:shadow-lg"
-            >
+            <TabsTrigger value="campaigns" className="px-4 py-2.5">
               Campaigns
             </TabsTrigger>
-            <TabsTrigger
-              value="automation"
-              className="rounded-xl px-4 py-2.5 transition data-[state=active]:bg-white/90 data-[state=active]:text-slate-900 data-[state=active]:shadow-lg"
-            >
+            <TabsTrigger value="automation" className="px-4 py-2.5">
               Automation
             </TabsTrigger>
-            <TabsTrigger
-              value="requests"
-              className="rounded-xl px-4 py-2.5 transition data-[state=active]:bg-white/90 data-[state=active]:text-slate-900 data-[state=active]:shadow-lg"
-            >
+            <TabsTrigger value="requests" className="px-4 py-2.5">
               Callback Requests
             </TabsTrigger>
           </TabsList>

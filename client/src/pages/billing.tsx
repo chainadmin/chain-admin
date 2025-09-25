@@ -332,26 +332,14 @@ export default function Billing() {
         </section>
 
         <Tabs defaultValue="overview" className="space-y-8">
-          <TabsList className="flex w-full flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-white/10 p-1 text-sm text-blue-100/80 sm:w-auto">
-            <TabsTrigger
-              value="overview"
-              data-testid="tab-overview"
-              className="rounded-xl px-4 py-2 font-semibold transition data-[state=active]:bg-white/25 data-[state=active]:text-white"
-            >
+          <TabsList className="flex w-full flex-wrap items-center gap-2 p-1 sm:w-auto">
+            <TabsTrigger value="overview" data-testid="tab-overview" className="px-4 py-2">
               Overview
             </TabsTrigger>
-            <TabsTrigger
-              value="invoices"
-              data-testid="tab-invoices"
-              className="rounded-xl px-4 py-2 font-semibold transition data-[state=active]:bg-white/25 data-[state=active]:text-white"
-            >
+            <TabsTrigger value="invoices" data-testid="tab-invoices" className="px-4 py-2">
               Invoices
             </TabsTrigger>
-            <TabsTrigger
-              value="subscription"
-              data-testid="tab-subscription"
-              className="rounded-xl px-4 py-2 font-semibold transition data-[state=active]:bg-white/25 data-[state=active]:text-white"
-            >
+            <TabsTrigger value="subscription" data-testid="tab-subscription" className="px-4 py-2">
               Subscription
             </TabsTrigger>
           </TabsList>
