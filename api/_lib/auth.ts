@@ -66,8 +66,14 @@ export async function verifyAuth(req: AuthenticatedRequest): Promise<boolean> {
 
 export function withAuth(handler: (req: AuthenticatedRequest, res: VercelResponse) => Promise<void>) {
   return async (req: AuthenticatedRequest, res: VercelResponse) => {
+    // Allow CORS preflight requests to proceed without authentication
+    if (req.method?.toUpperCase() === 'OPTIONS') {
+      res.status(200).end();
+      return;
+    }
+
     const isAuthenticated = await verifyAuth(req);
-    
+
     if (!isAuthenticated) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
