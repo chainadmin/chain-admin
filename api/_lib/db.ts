@@ -2,9 +2,11 @@ import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { ensureCoreSchema } from '../../shared/schemaFixes.js';
 
 let db: PostgresJsDatabase | null = null;
 let client: ReturnType<typeof postgres> | null = null;
+let schemaEnsuredPromise: Promise<void> | null = null;
 
 export async function getDb(): Promise<PostgresJsDatabase> {
   // Check for DATABASE_URL
@@ -33,6 +35,13 @@ export async function getDb(): Promise<PostgresJsDatabase> {
       // Test the connection
       await db.execute(sql`SELECT 1`);
       console.log('[DB] Database connection established successfully');
+
+      if (!schemaEnsuredPromise) {
+        schemaEnsuredPromise = ensureCoreSchema(db).catch((error: unknown) => {
+          schemaEnsuredPromise = null;
+          throw error;
+        });
+      }
     } catch (error) {
       console.error('[DB] Failed to connect to database:', error);
       // Reset on error
@@ -40,6 +49,10 @@ export async function getDb(): Promise<PostgresJsDatabase> {
       client = null;
       throw new Error(`Database connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  }
+
+  if (schemaEnsuredPromise) {
+    await schemaEnsuredPromise;
   }
 
   return db;
