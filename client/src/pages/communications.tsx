@@ -312,6 +312,7 @@ export default function Communications() {
         type: "email",
         templateId: "",
         templateIds: [],
+        templateSchedule: [],
         triggerType: "schedule",
         scheduleType: "once",
         scheduledDate: "",
@@ -534,6 +535,8 @@ export default function Communications() {
   const metrics = communicationType === "email" ? emailMetrics : smsMetrics;
   const templatesLoading = communicationType === "email" ? emailTemplatesLoading : smsTemplatesLoading;
   const campaignsLoading = communicationType === "email" ? emailCampaignsLoading : smsCampaignsLoading;
+  const automationTemplates =
+    (automationForm.type === "email" ? (emailTemplates as any[]) : (smsTemplates as any[])) || [];
 
   const lastSevenDays = Number((metrics as any)?.last7Days || 0);
   const deliveryRate = Number((metrics as any)?.deliveryRate || 0);
@@ -959,14 +962,14 @@ export default function Communications() {
                     Create {communicationType === "email" ? "email" : "SMS"} template
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-2xl">
+                <DialogContent className="max-w-3xl rounded-3xl border border-slate-200/70 bg-white/95 p-8 shadow-xl shadow-blue-900/10 backdrop-blur-xl">
                   <DialogHeader>
                     <DialogTitle>Create {communicationType === "email" ? "Email" : "SMS"} Template</DialogTitle>
                     <p className="text-sm text-muted-foreground">
                       Create a new {communicationType === "email" ? "email" : "SMS"} template for your campaigns.
                     </p>
                   </DialogHeader>
-                  <form onSubmit={handleTemplateSubmit} className="space-y-4">
+                  <form onSubmit={handleTemplateSubmit} className="space-y-6">
                     <div>
                       <Label htmlFor="template-name">Template Name</Label>
                       <Input
@@ -1010,12 +1013,12 @@ export default function Communications() {
                             required
                           />
                         </div>
-                        <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
-                          <h4 className="font-medium text-blue-900 text-sm mb-1">Available Variables</h4>
-                          <p className="text-xs text-blue-700 mb-2">
-                            Use <code className="font-mono">{"{{variable}}"}</code> or <code className="font-mono">{"{variable}"}</code> syntax to personalize each message.
+                        <div className="rounded-2xl border border-slate-200/70 bg-gradient-to-br from-sky-50/80 via-white/90 to-indigo-50/80 p-4 text-sm text-slate-600 shadow-inner">
+                          <h4 className="text-sm font-semibold text-slate-700">Available variables</h4>
+                          <p className="mt-1 text-xs text-slate-500">
+                            Use <code className="font-mono text-slate-600">{"{{variable}}"}</code> or <code className="font-mono text-slate-600">{"{variable}"}</code> to personalize each message.
                           </p>
-                          <div className="text-xs text-blue-800 grid grid-cols-2 md:grid-cols-3 gap-1">
+                          <div className="mt-3 grid grid-cols-2 gap-1 text-xs text-slate-600 md:grid-cols-3">
                             <div>• {"{{firstName}}"}</div>
                             <div>• {"{{lastName}}"}</div>
                             <div>• {"{{fullName}}"}</div>
@@ -1050,12 +1053,12 @@ export default function Communications() {
                         <p className="mt-1 text-sm text-slate-500">
                           {smsTemplateForm.message.length}/1600 characters
                         </p>
-                        <div className="mt-3 bg-blue-50 border border-blue-200 rounded-md p-3">
-                          <h4 className="font-medium text-blue-900 text-sm mb-1">Available Variables</h4>
-                          <p className="text-xs text-blue-700 mb-2">
-                            Use <code className="font-mono">{"{{variable}}"}</code> or <code className="font-mono">{"{variable}"}</code> syntax to personalize each message.
+                        <div className="mt-3 rounded-2xl border border-slate-200/70 bg-gradient-to-br from-sky-50/80 via-white/90 to-indigo-50/80 p-4 text-sm text-slate-600 shadow-inner">
+                          <h4 className="text-sm font-semibold text-slate-700">Available variables</h4>
+                          <p className="mt-1 text-xs text-slate-500">
+                            Use <code className="font-mono text-slate-600">{"{{variable}}"}</code> or <code className="font-mono text-slate-600">{"{variable}"}</code> to personalize each message.
                           </p>
-                          <div className="text-xs text-blue-800 grid grid-cols-2 gap-1">
+                          <div className="mt-3 grid grid-cols-2 gap-1 text-xs text-slate-600">
                             <div>• {"{{firstName}}"}</div>
                             <div>• {"{{lastName}}"}</div>
                             <div>• {"{{fullName}}"}</div>
@@ -1166,14 +1169,14 @@ export default function Communications() {
                             <Button
                               variant="outline"
                               size="sm"
-                              className="flex items-center gap-2 border-rose-200 text-rose-500"
+                              className="flex items-center gap-2 rounded-full border-rose-200 bg-rose-50/70 px-3 py-1 text-xs font-semibold text-rose-500 shadow-sm hover:bg-rose-100"
                               data-testid={`button-delete-${template.id}`}
                             >
                               <Trash2 className="h-4 w-4" />
                               Delete
                             </Button>
                           </AlertDialogTrigger>
-                          <AlertDialogContent>
+                          <AlertDialogContent className="max-w-sm rounded-3xl border border-slate-200/70 bg-white/95 p-6 shadow-xl shadow-blue-900/10 backdrop-blur-xl">
                             <AlertDialogHeader>
                               <AlertDialogTitle>Delete Template</AlertDialogTitle>
                               <AlertDialogDescription>
@@ -1210,7 +1213,7 @@ export default function Communications() {
 
             {/* Template Preview Modal */}
             <Dialog open={!!previewTemplate} onOpenChange={() => setPreviewTemplate(null)}>
-              <DialogContent className="max-w-2xl">
+              <DialogContent className="max-w-2xl rounded-3xl border border-slate-200/70 bg-white/95 p-8 shadow-xl shadow-blue-900/10 backdrop-blur-xl">
                 <DialogHeader>
                   <DialogTitle>
                     {communicationType === "email" ? "Email" : "SMS"} Template Preview: {previewTemplate?.name}
@@ -1223,25 +1226,25 @@ export default function Communications() {
                   {communicationType === "email" ? (
                     <>
                       <div>
-                        <div className="text-sm font-medium text-gray-600 mb-2">Subject:</div>
-                        <div className="text-sm font-medium">{previewTemplate?.subject}</div>
+                        <div className="mb-1 text-sm font-semibold text-slate-600">Subject</div>
+                        <div className="text-sm font-medium text-slate-800">{previewTemplate?.subject}</div>
                       </div>
-                      <div className="border rounded-lg p-4 bg-gray-50">
-                        <div className="text-sm font-medium text-gray-600 mb-2">Email Content:</div>
-                        <div className="whitespace-pre-wrap text-sm" dangerouslySetInnerHTML={{ __html: previewTemplate?.html }} />
+                      <div className="rounded-2xl border border-slate-200/70 bg-slate-50/80 p-4">
+                        <div className="mb-2 text-sm font-semibold text-slate-600">Email content</div>
+                        <div className="prose prose-sm max-w-none whitespace-pre-wrap text-slate-700" dangerouslySetInnerHTML={{ __html: previewTemplate?.html }} />
                       </div>
                     </>
                   ) : (
-                    <div className="border rounded-lg p-4 bg-gray-50">
-                      <div className="text-sm font-medium text-gray-600 mb-2">SMS Message:</div>
-                      <div className="whitespace-pre-wrap text-sm">
+                    <div className="rounded-2xl border border-slate-200/70 bg-slate-50/80 p-4">
+                      <div className="mb-2 text-sm font-semibold text-slate-600">SMS message</div>
+                      <div className="whitespace-pre-wrap text-sm text-slate-700">
                         {previewTemplate?.message}
                       </div>
                     </div>
                   )}
-                  <div className="flex items-center justify-between text-sm text-gray-500">
+                  <div className="flex items-center justify-between text-sm text-slate-500">
                     <span>
-                      {communicationType === "email" ? 
+                      {communicationType === "email" ?
                         `Content Length: ${previewTemplate?.html?.length || 0} characters` :
                         `Message Length: ${previewTemplate?.message?.length || 0} characters`
                       }
@@ -1250,7 +1253,7 @@ export default function Communications() {
                   </div>
                 </div>
                 <div className="flex justify-end">
-                  <Button onClick={() => setPreviewTemplate(null)}>
+                  <Button onClick={() => setPreviewTemplate(null)} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-slate-400/30 hover:bg-slate-800">
                     Close
                   </Button>
                 </div>
@@ -1259,45 +1262,58 @@ export default function Communications() {
           </TabsContent>
 
           <TabsContent value="campaigns" className="space-y-10 text-slate-900">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <h2 className="text-xl font-semibold">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex flex-wrap items-center gap-4">
+                <h2 className="text-xl font-semibold text-slate-800">
                   {communicationType === "email" ? "Email" : "SMS"} Campaigns
                 </h2>
-                <div className="flex gap-2">
+                <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white/80 p-1 shadow-sm shadow-blue-900/5">
                   <Button
-                    variant={communicationType === "email" ? "default" : "outline"}
+                    variant="ghost"
                     size="sm"
                     onClick={() => setCommunicationType("email")}
+                    className={cn(
+                      "rounded-full px-4 py-1.5 text-xs font-semibold",
+                      communicationType === "email"
+                        ? "bg-slate-900 text-white"
+                        : "text-slate-600 hover:bg-white"
+                    )}
                   >
-                    <Mail className="h-4 w-4 mr-2" />
-                    Email
+                    <Mail className="mr-2 h-3.5 w-3.5" /> Email
                   </Button>
                   <Button
-                    variant={communicationType === "sms" ? "default" : "outline"}
+                    variant="ghost"
                     size="sm"
                     onClick={() => setCommunicationType("sms")}
+                    className={cn(
+                      "rounded-full px-4 py-1.5 text-xs font-semibold",
+                      communicationType === "sms"
+                        ? "bg-slate-900 text-white"
+                        : "text-slate-600 hover:bg-white"
+                    )}
                   >
-                    <MessageSquare className="h-4 w-4 mr-2" />
-                    SMS
+                    <MessageSquare className="mr-2 h-3.5 w-3.5" /> SMS
                   </Button>
                 </div>
               </div>
               <Dialog open={showCampaignModal} onOpenChange={setShowCampaignModal}>
                 <DialogTrigger asChild>
-                  <Button data-testid="button-create-campaign">
+                  <Button
+                    data-testid="button-create-campaign"
+                    className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-md shadow-slate-400/40 transition hover:bg-slate-800"
+                  >
                     <Plus className="h-4 w-4 mr-2" />
                     Create {communicationType === "email" ? "Email" : "SMS"} Campaign
                   </Button>
                 </DialogTrigger>
-                <DialogContent>
+                <DialogContent className="max-w-3xl rounded-3xl border border-slate-200/70 bg-white/95 p-8 shadow-xl shadow-blue-900/10 backdrop-blur-xl">
                   <DialogHeader>
                     <DialogTitle>Create {communicationType === "email" ? "Email" : "SMS"} Campaign</DialogTitle>
                     <p className="text-sm text-muted-foreground">
                       Create a new campaign to send messages to your target audience.
                     </p>
                   </DialogHeader>
-                  <form onSubmit={handleCampaignSubmit} className="space-y-4">
+                  <form onSubmit={handleCampaignSubmit} className="space-y-6">
                     <div>
                       <Label htmlFor="campaign-name">Campaign Name</Label>
                       <Input
@@ -1372,9 +1388,9 @@ export default function Communications() {
                     )}
 
                     {campaignForm.targetType === "folder" && (
-                      <div>
-                        <Label>Select Folders</Label>
-                        <div className="space-y-2 max-h-40 overflow-y-auto border rounded-md p-3">
+                      <div className="space-y-3">
+                        <Label>Select folders</Label>
+                        <div className="max-h-48 space-y-2 overflow-y-auto rounded-2xl border border-slate-200/70 bg-slate-50/70 p-4">
                           {(folders as any)?.map((folder: any) => (
                             <div key={folder.id} className="flex items-center space-x-2">
                               <input
@@ -1389,7 +1405,7 @@ export default function Communications() {
                                 }}
                                 className="rounded"
                               />
-                              <label htmlFor={`folder-${folder.id}`} className="text-sm font-medium">
+                              <label htmlFor={`folder-${folder.id}`} className="text-sm font-medium text-slate-700">
                                 {folder.name}
                               </label>
                             </div>
@@ -1400,10 +1416,10 @@ export default function Communications() {
 
                     {campaignForm.targetType === "custom" && (
                       <div className="space-y-4">
-                        <Label>Custom Filters</Label>
-                        <div className="grid grid-cols-2 gap-4">
+                        <Label>Custom filters</Label>
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                           <div>
-                            <Label htmlFor="balance-min">Min Balance</Label>
+                            <Label htmlFor="balance-min">Min balance</Label>
                             <Input
                               id="balance-min"
                               type="number"
@@ -1416,7 +1432,7 @@ export default function Communications() {
                             />
                           </div>
                           <div>
-                            <Label htmlFor="balance-max">Max Balance</Label>
+                            <Label htmlFor="balance-max">Max balance</Label>
                             <Input
                               id="balance-max"
                               type="number"
@@ -1429,7 +1445,7 @@ export default function Communications() {
                             />
                           </div>
                           <div>
-                            <Label htmlFor="status-filter">Account Status</Label>
+                            <Label htmlFor="status-filter">Account status</Label>
                             <Select
                               value={campaignForm.customFilters.status}
                               onValueChange={(value) => setCampaignForm({
@@ -1450,7 +1466,7 @@ export default function Communications() {
                             </Select>
                           </div>
                           <div>
-                            <Label htmlFor="last-contact">Days Since Last Contact</Label>
+                            <Label htmlFor="last-contact">Days since last contact</Label>
                             <Input
                               id="last-contact"
                               type="number"
@@ -1487,19 +1503,24 @@ export default function Communications() {
               </Dialog>
             </div>
 
-            <Card>
+            <Card className={glassPanelClass}>
               <CardHeader>
-                <CardTitle>All {communicationType === "email" ? "Email" : "SMS"} Campaigns</CardTitle>
+                <CardTitle className="text-lg font-semibold text-slate-800">
+                  All {communicationType === "email" ? "email" : "SMS"} campaigns
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 {campaignsLoading ? (
-                  <div className="text-center py-4">Loading campaigns...</div>
+                  <div className="py-6 text-center text-slate-500">Loading campaigns...</div>
                 ) : (campaigns as any)?.length > 0 ? (
                   <div className="space-y-4">
                     {(campaigns as any).map((campaign: any) => (
-                      <div key={campaign.id} className="border rounded-lg p-4">
-                        <div className="flex items-start justify-between gap-4 mb-2">
-                          <h3 className="font-medium">{campaign.name}</h3>
+                      <div
+                        key={campaign.id}
+                        className="rounded-2xl border border-slate-200/70 bg-white/75 p-5 shadow-sm shadow-blue-900/10 transition hover:-translate-y-0.5 hover:shadow-md"
+                      >
+                        <div className="mb-3 flex flex-wrap items-start justify-between gap-4">
+                          <h3 className="text-lg font-semibold text-slate-800">{campaign.name}</h3>
                           <div className="flex items-center gap-2">
                             <Badge className={getStatusColor(campaign.status)}>
                               {campaign.status}
@@ -1510,13 +1531,13 @@ export default function Communications() {
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="text-red-600 hover:text-red-700"
+                                    className="rounded-full border border-rose-200 bg-rose-50/60 text-rose-500 transition hover:bg-rose-100"
                                     aria-label="Delete campaign"
                                   >
                                     <Trash2 className="h-4 w-4" />
                                   </Button>
                                 </AlertDialogTrigger>
-                                <AlertDialogContent>
+                                <AlertDialogContent className="max-w-sm rounded-3xl border border-slate-200/70 bg-white/95 p-6 shadow-xl shadow-blue-900/10 backdrop-blur-xl">
                                   <AlertDialogHeader>
                                     <AlertDialogTitle>Delete Campaign</AlertDialogTitle>
                                     <AlertDialogDescription>
@@ -1538,54 +1559,54 @@ export default function Communications() {
                             )}
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div className="grid grid-cols-2 gap-4 text-sm text-slate-600 md:grid-cols-4">
                           <div>
-                            <span className="text-gray-600">Template:</span>
-                            <div className="font-medium">{campaign.templateName}</div>
+                            <span className="text-slate-500">Template</span>
+                            <div className="font-medium text-slate-800">{campaign.templateName}</div>
                           </div>
                           <div>
-                            <span className="text-gray-600">Target:</span>
-                            <div className="font-medium">{getTargetGroupLabel(campaign)}</div>
+                            <span className="text-slate-500">Target</span>
+                            <div className="font-medium text-slate-800">{getTargetGroupLabel(campaign)}</div>
                           </div>
                           <div>
-                            <span className="text-gray-600">Recipients:</span>
-                            <div className="font-medium">{campaign.totalRecipients || 0}</div>
+                            <span className="text-slate-500">Recipients</span>
+                            <div className="font-medium text-slate-800">{campaign.totalRecipients || 0}</div>
                           </div>
                           <div>
-                            <span className="text-gray-600">Sent:</span>
-                            <div className="font-medium">{campaign.totalSent || 0}</div>
+                            <span className="text-slate-500">Sent</span>
+                            <div className="font-medium text-slate-800">{campaign.totalSent || 0}</div>
                           </div>
                         </div>
                         {/* Agency URL for reference */}
-                        <div className="mt-2 pt-2 border-t">
-                          <span className="text-xs text-gray-600">Agency URL: </span>
-                          <span className="text-xs font-mono text-gray-800">
+                        <div className="mt-3 border-t border-slate-200/70 pt-3 text-xs text-slate-500">
+                          <span>Agency URL: </span>
+                          <span className="font-mono text-slate-700">
                             {window.location.origin}/agency/{(userData as any)?.platformUser?.tenant?.slug || 'your-agency'}
                           </span>
                         </div>
                         {campaign.status === "completed" && (
-                          <div className="mt-3 pt-3 border-t grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                          <div className="mt-4 grid grid-cols-2 gap-4 border-t border-slate-200/70 pt-4 text-sm text-slate-600 md:grid-cols-4">
                             <div>
-                              <span className="text-gray-600">Delivered:</span>
-                              <div className="font-medium text-green-600">{campaign.totalDelivered || 0}</div>
+                              <span className="text-slate-500">Delivered</span>
+                              <div className="font-semibold text-emerald-600">{campaign.totalDelivered || 0}</div>
                             </div>
                             {communicationType === "email" && (
                               <>
                                 <div>
-                                  <span className="text-gray-600">Opened:</span>
-                                  <div className="font-medium text-blue-600">{campaign.totalOpened || 0}</div>
+                                  <span className="text-slate-500">Opened</span>
+                                  <div className="font-semibold text-sky-600">{campaign.totalOpened || 0}</div>
                                 </div>
                                 <div>
-                                  <span className="text-gray-600">Clicked:</span>
-                                  <div className="font-medium text-purple-600">{campaign.totalClicked || 0}</div>
+                                  <span className="text-slate-500">Clicked</span>
+                                  <div className="font-semibold text-indigo-600">{campaign.totalClicked || 0}</div>
                                 </div>
                               </>
                             )}
                             <div>
-                              <span className="text-gray-600">
+                              <span className="text-slate-500">
                                 {communicationType === "email" ? "Errors:" : "Failed:"}
                               </span>
-                              <div className="font-medium text-red-600">{campaign.totalErrors || 0}</div>
+                              <div className="font-semibold text-rose-600">{campaign.totalErrors || 0}</div>
                             </div>
                           </div>
                         )}
@@ -1593,7 +1614,7 @@ export default function Communications() {
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-8 text-gray-500">
+                  <div className="py-10 text-center text-slate-500">
                     No campaigns yet. Create your first {communicationType} campaign to get started.
                   </div>
                 )}
@@ -1603,54 +1624,57 @@ export default function Communications() {
 
           <TabsContent value="requests" className="space-y-10 text-slate-900">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Callback Requests</h2>
+              <h2 className="text-xl font-semibold text-slate-800">Callback requests</h2>
             </div>
 
-            <Card>
+            <Card className={glassPanelClass}>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Phone className="h-5 w-5" />
-                  Consumer Callback Requests
+                <CardTitle className="flex items-center gap-2 text-lg font-semibold text-slate-800">
+                  <Phone className="h-5 w-5 text-slate-500" />
+                  Consumer callback requests
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 {(callbackRequests as any)?.length > 0 ? (
                   <div className="space-y-4">
                     {(callbackRequests as any).map((request: any) => (
-                      <div key={request.id} className="border rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <h3 className="font-medium">
+                      <div
+                        key={request.id}
+                        className="rounded-2xl border border-slate-200/70 bg-white/75 p-5 shadow-sm shadow-blue-900/10"
+                      >
+                        <div className="mb-3 flex items-center justify-between">
+                          <h3 className="text-lg font-semibold text-slate-800">
                             {request.consumer?.firstName} {request.consumer?.lastName}
                           </h3>
                           <Badge variant={request.status === "pending" ? "secondary" : "default"}>
                             {request.status}
                           </Badge>
                         </div>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                        <div className="grid grid-cols-1 gap-4 text-sm text-slate-600 md:grid-cols-3">
                           <div>
-                            <span className="text-gray-600">Phone:</span>
-                            <div className="font-medium">{request.phoneNumber}</div>
+                            <span className="text-slate-500">Phone</span>
+                            <div className="font-medium text-slate-800">{request.phoneNumber}</div>
                           </div>
                           <div>
-                            <span className="text-gray-600">Preferred Time:</span>
-                            <div className="font-medium">{request.preferredTime || "Any time"}</div>
+                            <span className="text-slate-500">Preferred time</span>
+                            <div className="font-medium text-slate-800">{request.preferredTime || "Any time"}</div>
                           </div>
                           <div>
-                            <span className="text-gray-600">Requested:</span>
-                            <div className="font-medium">{new Date(request.createdAt).toLocaleDateString()}</div>
+                            <span className="text-slate-500">Requested</span>
+                            <div className="font-medium text-slate-800">{new Date(request.createdAt).toLocaleDateString()}</div>
                           </div>
                         </div>
                         {request.message && (
-                          <div className="mt-3 pt-3 border-t">
-                            <span className="text-gray-600 text-sm">Message:</span>
-                            <p className="text-sm mt-1">{request.message}</p>
+                          <div className="mt-3 border-t border-slate-200/70 pt-3">
+                            <span className="text-sm font-medium text-slate-600">Message</span>
+                            <p className="mt-2 text-sm text-slate-700">{request.message}</p>
                           </div>
                         )}
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-8 text-gray-500">
+                  <div className="py-10 text-center text-slate-500">
                     No callback requests yet.
                   </div>
                 )}
@@ -1659,16 +1683,19 @@ export default function Communications() {
           </TabsContent>
 
           <TabsContent value="automation" className="space-y-10 text-slate-900">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Communication Automation</h2>
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <h2 className="text-xl font-semibold text-slate-800">Communication automation</h2>
               <Dialog open={showAutomationModal} onOpenChange={setShowAutomationModal}>
                 <DialogTrigger asChild>
-                  <Button data-testid="button-create-automation">
+                  <Button
+                    data-testid="button-create-automation"
+                    className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-md shadow-slate-400/40 transition hover:bg-slate-800"
+                  >
                     <Plus className="h-4 w-4 mr-2" />
                     Create Automation
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto rounded-3xl border border-slate-200/70 bg-white/95 p-8 shadow-xl shadow-blue-900/10 backdrop-blur-xl">
                   <DialogHeader>
                     <DialogTitle>Create Communication Automation</DialogTitle>
                     <p className="text-sm text-muted-foreground">
@@ -1676,9 +1703,9 @@ export default function Communications() {
                     </p>
                   </DialogHeader>
                   <form onSubmit={handleAutomationSubmit} className="space-y-6">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                       <div>
-                        <Label htmlFor="automation-name">Automation Name *</Label>
+                        <Label htmlFor="automation-name">Automation name *</Label>
                         <Input
                           id="automation-name"
                           value={automationForm.name}
@@ -1688,9 +1715,9 @@ export default function Communications() {
                         />
                       </div>
                       <div>
-                        <Label htmlFor="automation-type">Communication Type *</Label>
-                        <Select 
-                          value={automationForm.type} 
+                        <Label htmlFor="automation-type">Communication type *</Label>
+                        <Select
+                          value={automationForm.type}
                           onValueChange={(value: "email" | "sms") => setAutomationForm(prev => ({ ...prev, type: value }))}
                         >
                           <SelectTrigger data-testid="select-automation-type">
@@ -1715,10 +1742,10 @@ export default function Communications() {
                       />
                     </div>
 
-                    <div>
+                    <div className="space-y-3">
                       <Label htmlFor="automation-template">
-                        {automationForm.scheduleType === "once" ? "Template *" : 
-                         automationForm.scheduleType === "sequence" ? "Template Sequence *" : 
+                        {automationForm.scheduleType === "once" ? "Template *" :
+                         automationForm.scheduleType === "sequence" ? "Template Sequence *" :
                          "Templates * (Select multiple for rotation)"}
                       </Label>
                       {automationForm.scheduleType === "once" ? (
@@ -1730,24 +1757,17 @@ export default function Communications() {
                             <SelectValue placeholder="Choose a template" />
                           </SelectTrigger>
                           <SelectContent>
-                            {automationForm.type === "email" 
-                              ? (emailTemplates as any[])?.map((template: any) => (
-                                  <SelectItem key={template.id} value={template.id}>
-                                    {template.name}
-                                  </SelectItem>
-                                )) || []
-                              : (smsTemplates as any[])?.map((template: any) => (
-                                  <SelectItem key={template.id} value={template.id}>
-                                    {template.name}
-                                  </SelectItem>
-                                )) || []
-                            }
+                            {automationTemplates.map((template: any) => (
+                              <SelectItem key={template.id} value={template.id}>
+                                {template.name}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       ) : (
-                        <div className="space-y-2">
-                          <div className="text-sm text-gray-600">
-                            {automationForm.scheduleType === "sequence" 
+                        <div className="space-y-3">
+                          <div className="rounded-2xl border border-slate-200/70 bg-slate-50/70 p-4 text-sm text-slate-600">
+                            {automationForm.scheduleType === "sequence"
                               ? "Create a sequence of emails to send on different days. Day 0 is the trigger day."
                               : "Select multiple templates to rotate between on each execution"
                             }
@@ -1755,9 +1775,9 @@ export default function Communications() {
                           {automationForm.scheduleType === "sequence" ? (
                             <div className="space-y-3">
                               {automationForm.templateSchedule.map((item, index) => (
-                                <div key={index} className="flex items-center space-x-3 p-3 border rounded-lg">
+                                <div key={index} className="flex items-center gap-3 rounded-2xl border border-slate-200/70 bg-white/75 p-4">
                                   <div className="flex-1">
-                                    <Label className="text-xs text-gray-500">Day {item.dayOffset}</Label>
+                                    <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Day {item.dayOffset}</Label>
                                     <Select
                                       value={item.templateId}
                                       onValueChange={(templateId) => {
@@ -1770,18 +1790,11 @@ export default function Communications() {
                                         <SelectValue placeholder="Choose template" />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        {automationForm.type === "email" 
-                                          ? (emailTemplates as any[])?.map((template: any) => (
-                                              <SelectItem key={template.id} value={template.id}>
-                                                {template.name}
-                                              </SelectItem>
-                                            )) || []
-                                          : (smsTemplates as any[])?.map((template: any) => (
-                                              <SelectItem key={template.id} value={template.id}>
-                                                {template.name}
-                                              </SelectItem>
-                                            )) || []
-                                        }
+                                        {automationTemplates.map((template: any) => (
+                                          <SelectItem key={template.id} value={template.id}>
+                                            {template.name}
+                                          </SelectItem>
+                                        ))}
                                       </SelectContent>
                                     </Select>
                                   </div>
@@ -1789,6 +1802,7 @@ export default function Communications() {
                                     type="button"
                                     variant="outline"
                                     size="sm"
+                                    className="rounded-full border-rose-200 bg-rose-50/70 text-rose-500 shadow-sm transition hover:bg-rose-100"
                                     onClick={() => {
                                       const newSchedule = automationForm.templateSchedule.filter((_, i) => i !== index);
                                       setAutomationForm(prev => ({ ...prev, templateSchedule: newSchedule }));
@@ -1802,9 +1816,10 @@ export default function Communications() {
                               <Button
                                 type="button"
                                 variant="outline"
+                                className="rounded-full border-slate-200 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-white"
                                 onClick={() => {
-                                  const maxDay = automationForm.templateSchedule.length > 0 
-                                    ? Math.max(...automationForm.templateSchedule.map(s => s.dayOffset)) + 1 
+                                  const maxDay = automationForm.templateSchedule.length > 0
+                                    ? Math.max(...automationForm.templateSchedule.map(s => s.dayOffset)) + 1
                                     : 0;
                                   setAutomationForm(prev => ({
                                     ...prev,
@@ -1813,77 +1828,53 @@ export default function Communications() {
                                 }}
                                 data-testid="button-add-template-to-sequence"
                               >
-                                + Add Template to Sequence
+                                + Add template to sequence
                               </Button>
                             </div>
                           ) : (
-                            <>
-                              {automationForm.type === "email" 
-                                ? (emailTemplates as any[])?.map((template: any) => (
-                                    <div key={template.id} className="flex items-center space-x-2">
-                                      <input
-                                        type="checkbox"
-                                        id={`template-${template.id}`}
-                                        checked={automationForm.templateIds.includes(template.id)}
-                                        onChange={(e) => {
-                                          if (e.target.checked) {
-                                            setAutomationForm(prev => ({
-                                              ...prev,
-                                              templateIds: [...prev.templateIds, template.id]
-                                            }));
-                                          } else {
-                                            setAutomationForm(prev => ({
-                                              ...prev,
-                                              templateIds: prev.templateIds.filter(id => id !== template.id)
-                                            }));
-                                          }
-                                        }}
-                                        data-testid={`checkbox-template-${template.id}`}
-                                        className="rounded border-gray-300"
-                                      />
-                                      <Label htmlFor={`template-${template.id}`} className="text-sm">
-                                        {template.name}
-                                      </Label>
-                                    </div>
-                                  )) || []
-                                : (smsTemplates as any[])?.map((template: any) => (
-                                    <div key={template.id} className="flex items-center space-x-2">
-                                      <input
-                                        type="checkbox"
-                                        id={`template-${template.id}`}
-                                        checked={automationForm.templateIds.includes(template.id)}
-                                        onChange={(e) => {
-                                          if (e.target.checked) {
-                                            setAutomationForm(prev => ({
-                                              ...prev,
-                                              templateIds: [...prev.templateIds, template.id]
-                                            }));
-                                          } else {
-                                            setAutomationForm(prev => ({
-                                              ...prev,
-                                              templateIds: prev.templateIds.filter(id => id !== template.id)
-                                            }));
-                                          }
-                                        }}
-                                        data-testid={`checkbox-template-${template.id}`}
-                                        className="rounded border-gray-300"
-                                      />
-                                      <Label htmlFor={`template-${template.id}`} className="text-sm">
-                                        {template.name}
-                                      </Label>
-                                    </div>
-                                  )) || []
-                              }
-                            </>
+                            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                              {automationTemplates.map((template: any) => (
+                                <label
+                                  key={template.id}
+                                  className="flex items-center justify-between gap-3 rounded-xl border border-slate-200/70 bg-white/70 p-3"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="checkbox"
+                                      id={`template-${template.id}`}
+                                      checked={automationForm.templateIds.includes(template.id)}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setAutomationForm(prev => ({
+                                            ...prev,
+                                            templateIds: [...prev.templateIds, template.id]
+                                          }));
+                                        } else {
+                                          setAutomationForm(prev => ({
+                                            ...prev,
+                                            templateIds: prev.templateIds.filter(id => id !== template.id)
+                                          }));
+                                        }
+                                      }}
+                                      data-testid={`checkbox-template-${template.id}`}
+                                      className="h-4 w-4 rounded border-slate-300"
+                                    />
+                                    <Label htmlFor={`template-${template.id}`} className="text-sm font-medium text-slate-700">
+                                      {template.name}
+                                    </Label>
+                                  </div>
+                                </label>
+                              ))}
+                            </div>
                           )}
                         </div>
                       )}
                     </div>
 
                     <div>
-                      <Label>Trigger Type *</Label>
-                      <Select 
-                        value={automationForm.triggerType} 
+                      <Label>Trigger type *</Label>
+                      <Select
+                        value={automationForm.triggerType}
                         onValueChange={(value: "schedule" | "event" | "manual") => setAutomationForm(prev => ({ ...prev, triggerType: value }))}
                       >
                         <SelectTrigger data-testid="select-trigger-type">
@@ -1898,11 +1889,11 @@ export default function Communications() {
                     </div>
 
                     {automationForm.triggerType === "schedule" && (
-                      <div className="grid grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                         <div>
-                          <Label>Schedule Type</Label>
-                          <Select 
-                            value={automationForm.scheduleType} 
+                          <Label>Schedule type</Label>
+                          <Select
+                            value={automationForm.scheduleType}
                             onValueChange={(value: "once" | "daily" | "weekly" | "monthly") => setAutomationForm(prev => ({ ...prev, scheduleType: value }))}
                           >
                             <SelectTrigger data-testid="select-schedule-type">
@@ -1939,11 +1930,11 @@ export default function Communications() {
                     )}
 
                     {automationForm.triggerType === "event" && (
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                         <div>
-                          <Label>Event Type</Label>
-                          <Select 
-                            value={automationForm.eventType} 
+                          <Label>Event type</Label>
+                          <Select
+                            value={automationForm.eventType}
                             onValueChange={(value: "account_created" | "payment_overdue" | "custom") => setAutomationForm(prev => ({ ...prev, eventType: value }))}
                           >
                             <SelectTrigger data-testid="select-event-type">
@@ -1958,8 +1949,8 @@ export default function Communications() {
                         </div>
                         <div>
                           <Label>Delay</Label>
-                          <Select 
-                            value={automationForm.eventDelay} 
+                          <Select
+                            value={automationForm.eventDelay}
                             onValueChange={(value) => setAutomationForm(prev => ({ ...prev, eventDelay: value }))}
                           >
                             <SelectTrigger data-testid="select-event-delay">
@@ -1979,9 +1970,9 @@ export default function Communications() {
                     )}
 
                     <div>
-                      <Label>Target Audience</Label>
-                      <Select 
-                        value={automationForm.targetType} 
+                      <Label>Target audience</Label>
+                      <Select
+                        value={automationForm.targetType}
                         onValueChange={(value: "all" | "folder" | "custom") => setAutomationForm(prev => ({ ...prev, targetType: value }))}
                       >
                         <SelectTrigger data-testid="select-target-type">
@@ -1999,14 +1990,16 @@ export default function Communications() {
                       <Button
                         type="button"
                         variant="outline"
+                        className="rounded-xl border-slate-200 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-white"
                         onClick={() => setShowAutomationModal(false)}
                         data-testid="button-cancel-automation"
                       >
                         Cancel
                       </Button>
-                      <Button 
-                        type="submit" 
+                      <Button
+                        type="submit"
                         disabled={createAutomationMutation.isPending}
+                        className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-md shadow-slate-400/40 transition hover:bg-slate-800"
                         data-testid="button-submit-automation"
                       >
                         {createAutomationMutation.isPending ? "Creating..." : "Create Automation"}
@@ -2017,23 +2010,26 @@ export default function Communications() {
               </Dialog>
             </div>
 
-            <Card>
+            <Card className={glassPanelClass}>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Clock className="h-5 w-5" />
-                  Active Automations
+                <CardTitle className="flex items-center gap-2 text-lg font-semibold text-slate-800">
+                  <Clock className="h-5 w-5 text-slate-500" />
+                  Active automations
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 {automationsLoading ? (
-                  <div className="text-center py-8">Loading automations...</div>
+                  <div className="py-8 text-center text-slate-500">Loading automations...</div>
                 ) : (automations as any[])?.length > 0 ? (
                   <div className="space-y-4">
                     {(automations as any[]).map((automation: any) => (
-                      <div key={automation.id} className="border rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-3">
-                            <h3 className="font-medium">{automation.name}</h3>
+                      <div
+                        key={automation.id}
+                        className="rounded-2xl border border-slate-200/70 bg-white/75 p-5 shadow-sm shadow-blue-900/10"
+                      >
+                        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex flex-wrap items-center gap-3">
+                            <h3 className="text-lg font-semibold text-slate-800">{automation.name}</h3>
                             <Badge variant={automation.isActive ? "default" : "secondary"}>
                               {automation.isActive ? "Active" : "Inactive"}
                             </Badge>
@@ -2045,9 +2041,10 @@ export default function Communications() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => toggleAutomationMutation.mutate({ 
-                                id: automation.id, 
-                                isActive: !automation.isActive 
+                              className="rounded-full border-slate-200 bg-white/80 px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm hover:bg-white"
+                              onClick={() => toggleAutomationMutation.mutate({
+                                id: automation.id,
+                                isActive: !automation.isActive
                               })}
                               data-testid={`button-toggle-automation-${automation.id}`}
                             >
@@ -2055,11 +2052,16 @@ export default function Communications() {
                             </Button>
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
-                                <Button variant="outline" size="sm" data-testid={`button-delete-automation-${automation.id}`}>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="rounded-full border-rose-200 bg-rose-50/70 px-3 py-1 text-xs font-semibold text-rose-500 shadow-sm hover:bg-rose-100"
+                                  data-testid={`button-delete-automation-${automation.id}`}
+                                >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </AlertDialogTrigger>
-                              <AlertDialogContent>
+                              <AlertDialogContent className="max-w-sm rounded-3xl border border-slate-200/70 bg-white/95 p-6 shadow-xl shadow-blue-900/10 backdrop-blur-xl">
                                 <AlertDialogHeader>
                                   <AlertDialogTitle>Delete Automation</AlertDialogTitle>
                                   <AlertDialogDescription>
@@ -2080,20 +2082,20 @@ export default function Communications() {
                         </div>
                         
                         {automation.description && (
-                          <p className="text-sm text-gray-600 mb-3">{automation.description}</p>
+                          <p className="mb-3 text-sm text-slate-600">{automation.description}</p>
                         )}
-                        
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+
+                        <div className="grid grid-cols-2 gap-4 text-sm text-slate-600 md:grid-cols-4">
                           <div>
-                            <span className="text-gray-600">Trigger:</span>
-                            <div className="font-medium capitalize">{automation.triggerType}</div>
+                            <span className="text-slate-500">Trigger</span>
+                            <div className="font-medium capitalize text-slate-800">{automation.triggerType}</div>
                           </div>
                           <div>
-                            <span className="text-gray-600">Template{automation.templateIds?.length > 1 ? 's' : ''}:</span>
-                            <div className="font-medium">
+                            <span className="text-slate-500">Template{automation.templateIds?.length > 1 ? 's' : ''}</span>
+                            <div className="font-medium text-slate-800">
                               {automation.templateIds && automation.templateIds.length > 0 ? (
                                 automation.templateIds.length === 1 ? (
-                                  automation.type === "email" 
+                                  automation.type === "email"
                                     ? (emailTemplates as any[])?.find((t: any) => t.id === automation.templateIds[0])?.name || "Unknown"
                                     : (smsTemplates as any[])?.find((t: any) => t.id === automation.templateIds[0])?.name || "Unknown"
                                 ) : (
@@ -2107,13 +2109,13 @@ export default function Communications() {
                             </div>
                           </div>
                           <div>
-                            <span className="text-gray-600">Target:</span>
-                            <div className="font-medium capitalize">{automation.targetType}</div>
+                            <span className="text-slate-500">Target</span>
+                            <div className="font-medium capitalize text-slate-800">{automation.targetType}</div>
                           </div>
                           <div>
-                            <span className="text-gray-600">Next Run:</span>
-                            <div className="font-medium">
-                              {automation.nextExecution 
+                            <span className="text-slate-500">Next run</span>
+                            <div className="font-medium text-slate-800">
+                              {automation.nextExecution
                                 ? new Date(automation.nextExecution).toLocaleDateString()
                                 : "Not scheduled"
                               }
@@ -2124,10 +2126,10 @@ export default function Communications() {
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-8 text-gray-500">
-                    <Calendar className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                    <p>No automations created yet.</p>
-                    <p className="text-sm">Create your first automation to start scheduling communications.</p>
+                  <div className="py-12 text-center text-slate-500">
+                    <Calendar className="mx-auto mb-4 h-12 w-12 text-slate-300" />
+                    <p className="text-lg font-semibold text-slate-700">No automations created yet.</p>
+                    <p className="mt-1 text-sm">Create your first automation to start scheduling communications.</p>
                   </div>
                 )}
               </CardContent>
@@ -2137,11 +2139,11 @@ export default function Communications() {
 
         {/* Campaign Confirmation Dialog */}
         <AlertDialog open={showCampaignConfirmation} onOpenChange={setShowCampaignConfirmation}>
-          <AlertDialogContent>
+          <AlertDialogContent className="max-w-sm rounded-3xl border border-slate-200/70 bg-white/95 p-6 shadow-xl shadow-blue-900/10 backdrop-blur-xl">
             <AlertDialogHeader>
               <AlertDialogTitle>Confirm Campaign Creation</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to create this {communicationType} campaign? 
+                Are you sure you want to create this {communicationType} campaign?
                 This will send messages to: {getTargetGroupLabel(campaignForm)}.
               </AlertDialogDescription>
             </AlertDialogHeader>
