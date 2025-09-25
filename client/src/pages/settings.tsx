@@ -39,6 +39,7 @@ import {
 import { Trash2, Upload, Plus, Save, CreditCard, Shield, Settings as SettingsIcon, ImageIcon, Copy, ExternalLink } from "lucide-react";
 import { isSubdomainSupported } from "@shared/utils/subdomain";
 import { getArrangementSummary, getPlanTypeLabel, formatCurrencyFromCents } from "@/lib/arrangements";
+import { cn } from "@/lib/utils";
 
 export default function Settings() {
   const [showDocumentModal, setShowDocumentModal] = useState(false);
@@ -102,6 +103,15 @@ export default function Settings() {
   const [localSettings, setLocalSettings] = useState<any>({});
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
+  const cardBaseClasses =
+    "border border-white/10 bg-white/5 text-blue-50 shadow-lg shadow-blue-900/20 backdrop-blur";
+  const inputClasses =
+    "border-white/20 bg-white/10 text-white placeholder:text-blue-100/60 focus:border-sky-400/60 focus-visible:ring-sky-400/40";
+  const selectTriggerClasses =
+    "border-white/20 bg-white/10 text-white placeholder:text-blue-100/60 focus:border-sky-400/60 focus:ring-0 focus-visible:ring-0";
+  const textareaClasses =
+    "border-white/20 bg-white/10 text-white placeholder:text-blue-100/60 focus:border-sky-400/60 focus-visible:ring-sky-400/40";
+
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user: authUser, isLoading: authLoading } = useAuth();
@@ -121,6 +131,41 @@ export default function Settings() {
   const { data: arrangementOptions, isLoading: arrangementsLoading } = useQuery({
     queryKey: ["/api/arrangement-options"],
   });
+
+  const quickStatusItems = [
+    {
+      label: "Portal branding",
+      icon: ImageIcon,
+      active: Boolean((settings as any)?.customBranding?.logoUrl),
+      description: (settings as any)?.customBranding?.logoUrl
+        ? "Custom logo in use"
+        : "Using default Chain theme",
+    },
+    {
+      label: "Payment plans",
+      icon: CreditCard,
+      active: localSettings?.showPaymentPlans ?? true,
+      description: (localSettings?.showPaymentPlans ?? true)
+        ? "Consumers can explore plans"
+        : "Hidden from consumers",
+    },
+    {
+      label: "Documents",
+      icon: Shield,
+      active: localSettings?.showDocuments ?? true,
+      description: (localSettings?.showDocuments ?? true)
+        ? "Shared with portal users"
+        : "Internal only",
+    },
+    {
+      label: "Online payments",
+      icon: SettingsIcon,
+      active: localSettings?.enableOnlinePayments ?? false,
+      description: (localSettings?.enableOnlinePayments ?? false)
+        ? "Processing enabled"
+        : "Collect offline or by phone",
+    },
+  ];
 
   // Fetch full user data with tenant info if needed
   const { data: userData, isLoading: userLoading, error: userError } = useQuery({
@@ -552,35 +597,139 @@ export default function Settings() {
 
   return (
     <AdminLayout>
-      <div className="py-6">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
-          <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Configure your agency settings, privacy options, and consumer portal features
-          </p>
-        </div>
+      <div className="mx-auto flex max-w-7xl flex-col gap-10 px-4 py-10 text-blue-50 sm:px-6 lg:px-8">
+        <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-white/10 via-white/5 to-white/10 p-8 shadow-2xl shadow-blue-900/30">
+          <div className="pointer-events-none absolute -right-16 top-10 h-64 w-64 rounded-full bg-sky-500/20 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-20 left-0 h-64 w-64 rounded-full bg-indigo-500/20 blur-3xl" />
+          <div className="pointer-events-none absolute left-1/2 top-1/2 h-48 w-48 -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyan-400/10 blur-3xl" />
+          <div className="relative z-10 flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
+            <div className="max-w-2xl space-y-6">
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-blue-100/80">
+                Agency control center
+              </span>
+              <h1 className="text-3xl font-semibold text-white sm:text-4xl">Settings command center</h1>
+              <p className="text-sm text-blue-100/70 sm:text-base">
+                Configure your portal, payments, and compliance policies from one elevated workspace. Every update saves instantly across the consumer experience.
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-2xl border border-white/10 bg-white/10 p-4 text-sm text-blue-100/80">
+                  <p className="font-semibold text-white">Unified preferences</p>
+                  <p className="mt-1 text-xs text-blue-100/70">
+                    Manage branding, portal modules, and operational defaults without leaving the admin.
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/10 p-4 text-sm text-blue-100/80">
+                  <p className="font-semibold text-white">Compliance ready</p>
+                  <p className="mt-1 text-xs text-blue-100/70">
+                    Keep consumer disclosures, documents, and legal notices aligned with your policies.
+                  </p>
+                </div>
+              </div>
+            </div>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 mt-8">
-          <Tabs defaultValue="general" className="space-y-4">
-            <TabsList>
-              <TabsTrigger value="general">General</TabsTrigger>
-              <TabsTrigger value="merchant">Payment Processing</TabsTrigger>
-              <TabsTrigger value="documents">Documents</TabsTrigger>
-              <TabsTrigger value="arrangements">Payment Plans</TabsTrigger>
-              <TabsTrigger value="privacy">Privacy & Legal</TabsTrigger>
+            <div className="w-full max-w-sm space-y-4 rounded-2xl border border-white/10 bg-white/10 p-6">
+              <p className="text-xs font-semibold uppercase tracking-widest text-blue-100/70">Quick status</p>
+              <div className="space-y-3">
+                {quickStatusItems.map((item) => (
+                  <div
+                    key={item.label}
+                    className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={cn(
+                          "flex h-10 w-10 items-center justify-center rounded-xl border text-sm transition",
+                          item.active
+                            ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-100"
+                            : "border-white/10 bg-white/5 text-blue-100/60",
+                        )}
+                      >
+                        <item.icon className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-white">{item.label}</p>
+                        <p className="text-xs text-blue-100/70">{item.description}</p>
+                      </div>
+                    </div>
+                    <span
+                      className={cn(
+                        "rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-widest",
+                        item.active ? "bg-emerald-500/20 text-emerald-100" : "bg-white/5 text-blue-100/60",
+                      )}
+                    >
+                      {item.active ? "On" : "Off"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <Button
+                onClick={handleSaveSettings}
+                disabled={!hasUnsavedChanges || updateSettingsMutation.isPending}
+                className={cn(
+                  "w-full rounded-xl bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-6 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 transition hover:from-sky-400/80 hover:to-indigo-400/80",
+                  (!hasUnsavedChanges || updateSettingsMutation.isPending) &&
+                    "opacity-60 hover:from-sky-500/80 hover:to-indigo-500/80",
+                )}
+              >
+                {updateSettingsMutation.isPending
+                  ? "Saving..."
+                  : hasUnsavedChanges
+                  ? "Save changes"
+                  : "All changes saved"}
+              </Button>
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-blue-900/20 backdrop-blur">
+          <Tabs defaultValue="general" className="space-y-8">
+            <TabsList className="grid w-full grid-cols-1 gap-2 rounded-2xl border border-white/10 bg-white/10 p-2 text-blue-100 sm:grid-cols-5">
+              <TabsTrigger
+                value="general"
+                className="rounded-xl px-4 py-2 text-sm font-semibold transition data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/80 data-[state=active]:to-indigo-500/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/40"
+              >
+                General
+              </TabsTrigger>
+              <TabsTrigger
+                value="merchant"
+                className="rounded-xl px-4 py-2 text-sm font-semibold transition data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/80 data-[state=active]:to-indigo-500/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/40"
+              >
+                Payment Processing
+              </TabsTrigger>
+              <TabsTrigger
+                value="documents"
+                className="rounded-xl px-4 py-2 text-sm font-semibold transition data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/80 data-[state=active]:to-indigo-500/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/40"
+              >
+                Documents
+              </TabsTrigger>
+              <TabsTrigger
+                value="arrangements"
+                className="rounded-xl px-4 py-2 text-sm font-semibold transition data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/80 data-[state=active]:to-indigo-500/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/40"
+              >
+                Payment Plans
+              </TabsTrigger>
+              <TabsTrigger
+                value="privacy"
+                className="rounded-xl px-4 py-2 text-sm font-semibold transition data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/80 data-[state=active]:to-indigo-500/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/40"
+              >
+                Privacy & Legal
+              </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="general">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Consumer Portal Settings</CardTitle>
+            <TabsContent value="general" className="space-y-6">
+              <Card className={cardBaseClasses}>
+                <CardHeader className="space-y-1 text-white">
+                  <CardTitle className="text-xl font-semibold text-white">Consumer Portal Settings</CardTitle>
+                  <p className="text-sm text-blue-100/70">
+                    Configure branding, portal modules, and consumer-facing functionality.
+                  </p>
                 </CardHeader>
-                <CardContent className="space-y-6">
+                <CardContent className="space-y-6 text-sm text-blue-100/80">
                   {/* Custom Agency URL Section */}
                   <div className="space-y-4 border-b pb-6">
                     <div>
-                      <Label className="text-base font-medium">Your Custom Consumer URL</Label>
-                      <p className="text-sm text-gray-500">
+                      <Label className="text-base font-medium text-white">Your Custom Consumer URL</Label>
+                      <p className="text-sm text-blue-100/70">
                         Share this link with consumers to give them direct access to your agency's portal
                       </p>
                     </div>
@@ -590,7 +739,7 @@ export default function Settings() {
                         // Check if user data is still loading
                         if (authLoading || userLoading) {
                           return (
-                            <div className="text-sm text-gray-500">
+                            <div className="text-sm text-blue-100/70">
                               Loading agency information...
                             </div>
                           );
@@ -629,11 +778,12 @@ export default function Settings() {
                                 <Input
                                   readOnly
                                   value={agencyUrl}
-                                  className="flex-1 font-mono text-sm"
+                                  className={`${inputClasses} flex-1 font-mono text-sm`}
                                 />
                                 <Button
                                   variant="outline"
                                   size="sm"
+                                  className="border-white/20 bg-white/5 text-blue-50 hover:bg-white/10"
                                   onClick={() => {
                                     navigator.clipboard.writeText(agencyUrl);
                                     toast({
@@ -648,6 +798,7 @@ export default function Settings() {
                                 <Button
                                   variant="outline"
                                   size="sm"
+                                  className="border-white/20 bg-white/5 text-blue-50 hover:bg-white/10"
                                   onClick={() => {
                                     window.open(agencyUrl, '_blank');
                                   }}
@@ -660,7 +811,7 @@ export default function Settings() {
                           }
                           
                           return (
-                            <div className="text-sm text-gray-500">
+                            <div className="text-sm text-blue-100/70">
                               Unable to load agency information. Please try refreshing the page.
                             </div>
                           );
@@ -716,7 +867,7 @@ export default function Settings() {
                           
                           if (!agencySlug) {
                             return (
-                              <div className="text-sm text-gray-500">
+                              <div className="text-sm text-blue-100/70">
                                 Agency information not available. Please ensure you're logged in to an agency account.
                               </div>
                             );
@@ -728,14 +879,15 @@ export default function Settings() {
                             <Input
                               readOnly
                               value={agencyUrl}
-                              className="flex-1 font-mono text-sm"
+                              className={`${inputClasses} flex-1 font-mono text-sm`}
                             />
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                navigator.clipboard.writeText(agencyUrl);
-                                toast({
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="border-white/20 bg-white/5 text-blue-50 hover:bg-white/10"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(agencyUrl);
+                                  toast({
                                   title: "URL Copied",
                                   description: "The custom URL has been copied to your clipboard.",
                                 });
@@ -744,12 +896,13 @@ export default function Settings() {
                             >
                               <Copy className="h-4 w-4" />
                             </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                window.open(agencyUrl, '_blank');
-                              }}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="border-white/20 bg-white/5 text-blue-50 hover:bg-white/10"
+                                onClick={() => {
+                                  window.open(agencyUrl, '_blank');
+                                }}
                               data-testid="button-preview-url"
                             >
                               <ExternalLink className="h-4 w-4" />
@@ -758,7 +911,7 @@ export default function Settings() {
                         );
                       })()}
                     </div>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-blue-100/70">
                       This link takes consumers directly to a branded page for your agency where they can sign in or create an account.
                     </p>
                   </div>
@@ -766,8 +919,8 @@ export default function Settings() {
                   {/* Logo Upload Section */}
                   <div className="space-y-4 border-b pb-6">
                     <div>
-                      <Label className="text-base font-medium">Company Logo</Label>
-                      <p className="text-sm text-gray-500">
+                      <Label className="text-base font-medium text-white">Company Logo</Label>
+                      <p className="text-sm text-blue-100/70">
                         Upload your company logo to display on the consumer portal
                       </p>
                     </div>
@@ -779,7 +932,7 @@ export default function Settings() {
                           <img 
                             src={(settings as any).customBranding.logoUrl} 
                             alt="Company Logo" 
-                            className="h-16 w-16 object-contain border rounded-md bg-white"
+                            className="h-16 w-16 rounded-md border border-white/10 bg-white/10 object-contain"
                           />
                         </div>
                       )}
@@ -789,7 +942,7 @@ export default function Settings() {
                         <Input
                           type="file"
                           accept="image/*"
-                          className="mb-2"
+                          className={`${inputClasses} mb-2 file:text-white`}
                           onChange={(e) => {
                             const file = e.target.files?.[0];
                             if (file) {
@@ -798,15 +951,15 @@ export default function Settings() {
                           }}
                           disabled={uploadLogoMutation.isPending}
                         />
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs text-blue-100/70">
                           Supported formats: PNG, JPG, GIF. Maximum size: 5MB. Recommended: 200x200px
                         </p>
                       </div>
                     </div>
                     
                     {uploadLogoMutation.isPending && (
-                      <div className="text-sm text-blue-600 flex items-center">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                      <div className="flex items-center text-sm text-sky-200">
+                        <div className="mr-2 h-4 w-4 animate-spin rounded-full border-b-2 border-sky-200"></div>
                         Uploading logo...
                       </div>
                     )}
@@ -815,7 +968,7 @@ export default function Settings() {
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
                       <Label>Show Payment Plans</Label>
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-blue-100/70">
                         Allow consumers to view available payment arrangements
                       </p>
                     </div>
@@ -828,7 +981,7 @@ export default function Settings() {
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
                       <Label>Show Documents</Label>
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-blue-100/70">
                         Allow consumers to access uploaded documents
                       </p>
                     </div>
@@ -841,7 +994,7 @@ export default function Settings() {
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
                       <Label>Allow Settlement Requests</Label>
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-blue-100/70">
                         Let consumers request settlement options
                       </p>
                     </div>
@@ -865,27 +1018,27 @@ export default function Settings() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="merchant">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Payment Processing Settings</CardTitle>
-                  <p className="text-sm text-gray-500">
-                    Configure your merchant account to accept payments from consumers
+            <TabsContent value="merchant" className="space-y-6">
+              <Card className={cardBaseClasses}>
+                <CardHeader className="space-y-1 text-white">
+                  <CardTitle className="text-xl font-semibold text-white">Payment Processing Settings</CardTitle>
+                  <p className="text-sm text-blue-100/70">
+                    Configure your merchant account to accept payments from consumers.
                   </p>
                 </CardHeader>
-                <CardContent className="space-y-6">
+                <CardContent className="space-y-6 text-sm text-blue-100/80">
                   {/* Merchant Account Status */}
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="rounded-xl border border-white/10 bg-white/10 p-4">
                     <div className="flex items-start space-x-3">
                       <div className="flex-shrink-0">
-                        <i className="fas fa-credit-card text-blue-600 text-lg"></i>
+                        <i className="fas fa-credit-card text-sky-300 text-lg"></i>
                       </div>
                       <div className="flex-1">
-                        <h3 className="text-sm font-medium text-blue-900 mb-1">
+                        <h3 className="mb-1 text-sm font-semibold text-white">
                           Payment Processing Status
                         </h3>
-                        <p className="text-sm text-blue-700">
-                          {(settings as any)?.merchantAccountId ? 
+                        <p className="text-sm text-blue-100/70">
+                          {(settings as any)?.merchantAccountId ?
                             "Your merchant account is configured and ready to process payments." :
                             "No merchant account configured. Set up payment processing to accept consumer payments."
                           }
@@ -898,53 +1051,57 @@ export default function Settings() {
                   {(settings as any)?.merchantAccountId ? (
                     <div className="space-y-4">
                       <div>
-                        <Label>Merchant Provider</Label>
+                        <Label className="text-white">Merchant Provider</Label>
                         <Input
                           value={localSettings?.merchantProvider || ""}
                           onChange={(e) => handleSettingsUpdate('merchantProvider', e.target.value)}
                           placeholder="e.g., Stripe, Square, PayPal"
                           data-testid="input-merchant-provider"
+                          className={inputClasses}
                         />
                       </div>
-                      
+
                       <div>
-                        <Label>Merchant Account ID</Label>
+                        <Label className="text-white">Merchant Account ID</Label>
                         <Input
                           value={localSettings?.merchantAccountId || ""}
                           onChange={(e) => handleSettingsUpdate('merchantAccountId', e.target.value)}
                           placeholder="Your merchant account identifier"
                           data-testid="input-merchant-id"
+                          className={inputClasses}
                         />
                       </div>
-                      
+
                       <div>
-                        <Label>API Key</Label>
+                        <Label className="text-white">API Key</Label>
                         <Input
                           type="password"
                           value={localSettings?.merchantApiKey || ""}
                           onChange={(e) => handleSettingsUpdate('merchantApiKey', e.target.value)}
                           placeholder="Your merchant API key"
                           data-testid="input-merchant-key"
+                          className={inputClasses}
                         />
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="mt-1 text-xs text-blue-100/70">
                           This key is encrypted and stored securely
                         </p>
                       </div>
-                      
+
                       <div>
-                        <Label>Merchant Name</Label>
+                        <Label className="text-white">Merchant Name</Label>
                         <Input
                           value={localSettings?.merchantName || ""}
                           onChange={(e) => handleSettingsUpdate('merchantName', e.target.value)}
                           placeholder="Name displayed on payment receipts"
                           data-testid="input-merchant-name"
+                          className={inputClasses}
                         />
                       </div>
 
-                      <div className="flex items-center justify-between pt-4 border-t">
+                      <div className="flex items-center justify-between border-t border-white/10 pt-4">
                         <div className="space-y-0.5">
-                          <Label>Enable Online Payments</Label>
-                          <p className="text-sm text-gray-500">
+                          <Label className="text-white">Enable Online Payments</Label>
+                          <p className="text-sm text-blue-100/70">
                             Allow consumers to make payments through their portal
                           </p>
                         </div>
@@ -956,26 +1113,26 @@ export default function Settings() {
                       </div>
                     </div>
                   ) : (
-                    <div className="text-center py-8">
-                      <div className="mx-auto w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center mb-4">
-                        <i className="fas fa-credit-card text-gray-400 text-xl"></i>
+                    <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-white/20 bg-white/5 px-6 py-10 text-center">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/15 bg-white/10">
+                        <i className="fas fa-credit-card text-sky-300 text-xl"></i>
                       </div>
-                      <h3 className="text-lg font-medium text-gray-900 mb-2">
-                        Set Up Payment Processing
-                      </h3>
-                      <p className="text-gray-600 mb-6 max-w-md mx-auto">
-                        Configure your merchant account to start accepting online payments from consumers.
-                        If you don't have a merchant account, we can help you get one.
-                      </p>
-                      <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                        <Button 
+                      <div className="space-y-2">
+                        <h3 className="text-lg font-semibold text-white">Set Up Payment Processing</h3>
+                        <p className="text-sm text-blue-100/70">
+                          Configure your merchant account to start accepting online payments from consumers. If you don't have a merchant account, we can help you get one.
+                        </p>
+                      </div>
+                      <div className="flex flex-col justify-center gap-3 sm:flex-row">
+                        <Button
                           onClick={() => handleSettingsUpdate('merchantAccountId', 'setup')}
                           data-testid="button-setup-merchant"
+                          className="rounded-xl bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-6 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 transition hover:from-sky-400/80 hover:to-indigo-400/80"
                         >
                           <i className="fas fa-cog mr-2"></i>
                           Configure Existing Account
                         </Button>
-                        <Button 
+                        <Button
                           variant="outline"
                           onClick={() => {
                             toast({
@@ -984,6 +1141,7 @@ export default function Settings() {
                             });
                           }}
                           data-testid="button-request-merchant"
+                          className="rounded-xl border-white/20 bg-white/5 px-6 py-2 text-sm font-semibold text-blue-50 transition hover:bg-white/10"
                         >
                           <i className="fas fa-handshake mr-2"></i>
                           Request Merchant Account
@@ -993,24 +1151,32 @@ export default function Settings() {
                   )}
                 </CardContent>
                 {hasUnsavedChanges && (
-                  <CardFooter>
-                    <Button 
-                      onClick={handleSaveSettings} 
+                  <CardFooter className="border-t border-white/10 pt-6">
+                    <Button
+                      onClick={handleSaveSettings}
                       disabled={updateSettingsMutation.isPending}
-                      className="ml-auto"
+                      className={cn(
+                        "ml-auto rounded-xl bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-6 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 transition hover:from-sky-400/80 hover:to-indigo-400/80",
+                        updateSettingsMutation.isPending && "opacity-60",
+                      )}
                     >
-                      {updateSettingsMutation.isPending ? "Saving..." : "Save Changes"}
+                      {updateSettingsMutation.isPending ? "Saving..." : "Save changes"}
                     </Button>
                   </CardFooter>
                 )}
               </Card>
             </TabsContent>
 
-            <TabsContent value="documents">
-              <Card>
-                <CardHeader>
-                  <div className="flex justify-between items-center">
-                    <CardTitle>Document Management</CardTitle>
+            <TabsContent value="documents" className="space-y-6">
+              <Card className={cardBaseClasses}>
+                <CardHeader className="text-white">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <CardTitle className="text-xl font-semibold text-white">Document Management</CardTitle>
+                      <p className="text-sm text-blue-100/70">
+                        Control access to statements, disclosures, and supporting documents.
+                      </p>
+                    </div>
                     <Dialog
                       open={showDocumentModal}
                       onOpenChange={(open) => {
@@ -1021,52 +1187,55 @@ export default function Settings() {
                       }}
                     >
                       <DialogTrigger asChild>
-                        <Button>
+                        <Button className="rounded-xl bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 transition hover:from-sky-400/80 hover:to-indigo-400/80">
                           <i className="fas fa-plus mr-2"></i>
                           Add Document
                         </Button>
                       </DialogTrigger>
-                      <DialogContent>
+                      <DialogContent className="border-white/10 bg-[#0f172a] text-blue-50 sm:max-w-lg">
                         <DialogHeader>
-                          <DialogTitle>Upload Document</DialogTitle>
+                          <DialogTitle className="text-lg font-semibold text-white">Upload Document</DialogTitle>
                         </DialogHeader>
                         <div className="space-y-4">
                           <div>
-                            <Label>Title *</Label>
+                            <Label className="text-white">Title *</Label>
                             <Input
                               value={documentForm.title}
                               onChange={(e) => setDocumentForm({...documentForm, title: e.target.value})}
                               placeholder="Document title"
+                              className={inputClasses}
                             />
                           </div>
-                          
+
                           <div>
-                            <Label>Description</Label>
+                            <Label className="text-white">Description</Label>
                             <Textarea
                               value={documentForm.description}
                               onChange={(e) => setDocumentForm({...documentForm, description: e.target.value})}
                               placeholder="Optional description"
+                              className={textareaClasses}
                             />
                           </div>
-                          
+
                           <div>
-                            <Label>File *</Label>
+                            <Label className="text-white">File *</Label>
                             <Input
                               type="file"
                               onChange={handleDocumentUpload}
                               accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                              className={`${inputClasses} file:text-white`}
                             />
                           </div>
 
                           {!documentForm.isPublic && (
                             <div>
-                              <Label>Account *</Label>
+                              <Label className="text-white">Account *</Label>
                               <Select
                                 value={documentForm.accountId}
                                 onValueChange={(value) => setDocumentForm({ ...documentForm, accountId: value })}
                                 disabled={accountsLoading || !Array.isArray(accounts) || (accounts as any)?.length === 0}
                               >
-                                <SelectTrigger>
+                                <SelectTrigger className={selectTriggerClasses}>
                                   <SelectValue placeholder={accountsLoading ? "Loading accounts..." : "Select account"} />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1087,7 +1256,7 @@ export default function Settings() {
                                 </SelectContent>
                               </Select>
                               {!accountsLoading && (!Array.isArray(accounts) || (accounts as any)?.length === 0) && (
-                                <p className="text-xs text-gray-500 mt-1">
+                                <p className="mt-1 text-xs text-blue-100/70">
                                   No accounts available. Create or import an account before attaching documents.
                                 </p>
                               )}
@@ -1106,7 +1275,7 @@ export default function Settings() {
                                 }))
                               }
                             />
-                            <Label htmlFor="public">Share with all consumers</Label>
+                            <Label htmlFor="public" className="text-blue-100/80">Share with all consumers</Label>
                           </div>
 
                           <div className="flex justify-end space-x-2">
@@ -1116,10 +1285,14 @@ export default function Settings() {
                                 setShowDocumentModal(false);
                                 setDocumentForm({ ...emptyDocumentForm });
                               }}
+                              className="border-white/20 bg-white/5 text-blue-50 transition hover:bg-white/10"
                             >
                               Cancel
                             </Button>
-                            <Button onClick={handleSubmitDocument}>
+                            <Button
+                              onClick={handleSubmitDocument}
+                              className="rounded-xl bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 transition hover:from-sky-400/80 hover:to-indigo-400/80"
+                            >
                               Upload Document
                             </Button>
                           </div>
@@ -1128,33 +1301,40 @@ export default function Settings() {
                     </Dialog>
                   </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-4 text-sm text-blue-100/80">
                   {documentsLoading ? (
-                    <div className="text-center py-8">Loading documents...</div>
+                    <div className="rounded-2xl border border-white/10 bg-white/5 py-8 text-center text-blue-100/70">
+                      Loading documents...
+                    </div>
                   ) : (documents as any)?.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">
+                    <div className="rounded-2xl border border-dashed border-white/20 bg-white/5 py-10 text-center text-blue-100/70">
                       No documents uploaded yet. Add documents for consumers to access.
                     </div>
                   ) : (
                     <div className="space-y-4">
                       {(documents as any)?.map((document: any) => (
-                        <div key={document.id} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div
+                          key={document.id}
+                          className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-4"
+                        >
                           <div className="flex items-center space-x-3">
-                            <i className="fas fa-file-alt text-blue-500 text-lg"></i>
-                            <div>
-                              <h3 className="font-medium">{document.title}</h3>
-                              <p className="text-sm text-gray-500">{document.description}</p>
-                              <div className="text-xs text-gray-400">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/15 bg-white/10">
+                              <i className="fas fa-file-alt text-sky-300 text-lg"></i>
+                            </div>
+                            <div className="space-y-1">
+                              <h3 className="text-base font-semibold text-white">{document.title}</h3>
+                              <p className="text-xs text-blue-100/70">{document.description}</p>
+                              <div className="text-xs text-blue-100/60">
                                 {document.fileName} • {(document.fileSize / 1024).toFixed(1)} KB
                               </div>
-                              <div className="text-xs text-gray-400 mt-1">
+                              <div className="text-xs text-blue-100/60">
                                 {(() => {
                                   if (document.isPublic) {
-                                    return <span className="text-green-600">Shared with all consumers</span>;
+                                    return <span className="text-emerald-200">Shared with all consumers</span>;
                                   }
 
                                   if (!document.account) {
-                                    return <span className="text-amber-600">Account association missing</span>;
+                                    return <span className="text-amber-200">Account association missing</span>;
                                   }
 
                                   const consumerName = document.account.consumer
@@ -1165,7 +1345,7 @@ export default function Settings() {
                                     : "";
 
                                   return (
-                                    <span>
+                                    <span className="text-blue-100/70">
                                       Shared with {consumerName || "selected account"}
                                       {document.account.accountNumber
                                         ? ` • Account ${document.account.accountNumber}`
@@ -1181,26 +1361,29 @@ export default function Settings() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="text-red-500 hover:text-red-700"
+                                className="rounded-xl border border-transparent px-3 py-1 text-red-300 transition hover:border-red-300/40 hover:bg-red-500/10 hover:text-red-200"
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </AlertDialogTrigger>
-                            <AlertDialogContent>
+                            <AlertDialogContent className="border-white/10 bg-[#0f172a] text-blue-50">
                               <AlertDialogHeader>
-                                <AlertDialogTitle>Delete document?</AlertDialogTitle>
-                                <AlertDialogDescription>
+                                <AlertDialogTitle className="text-lg font-semibold text-white">Delete document?</AlertDialogTitle>
+                                <AlertDialogDescription className="text-sm text-blue-100/70">
                                   This action cannot be undone. The document "{document.title}" will no longer be available to
                                   consumers.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogCancel className="rounded-xl border-white/20 bg-white/5 px-4 py-2 text-blue-50 transition hover:bg-white/10">
+                                  Cancel
+                                </AlertDialogCancel>
                                 <AlertDialogAction asChild>
                                   <Button
                                     variant="destructive"
                                     onClick={() => deleteDocumentMutation.mutate(document.id)}
                                     disabled={deleteDocumentMutation.isPending}
+                                    className="rounded-xl bg-red-600/80 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-red-900/30 transition hover:bg-red-500/80"
                                   >
                                     Delete
                                   </Button>
@@ -1216,11 +1399,16 @@ export default function Settings() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="arrangements">
-              <Card>
-                <CardHeader>
-                  <div className="flex justify-between items-center">
-                    <CardTitle>Payment Arrangement Options</CardTitle>
+            <TabsContent value="arrangements" className="space-y-6">
+              <Card className={cardBaseClasses}>
+                <CardHeader className="text-white">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <CardTitle className="text-xl font-semibold text-white">Payment Arrangement Options</CardTitle>
+                      <p className="text-sm text-blue-100/70">
+                        Define structured plans that consumers can enroll in from their portal.
+                      </p>
+                    </div>
                     <Dialog
                       open={showArrangementModal}
                       onOpenChange={(open) => {
@@ -1231,59 +1419,63 @@ export default function Settings() {
                       }}
                     >
                       <DialogTrigger asChild>
-                        <Button>
+                        <Button className="rounded-xl bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 transition hover:from-sky-400/80 hover:to-indigo-400/80">
                           <i className="fas fa-plus mr-2"></i>
                           Add Arrangement
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="max-w-lg">
+                      <DialogContent className="max-w-lg border-white/10 bg-[#0f172a] text-blue-50">
                         <DialogHeader>
-                          <DialogTitle>Create Payment Arrangement</DialogTitle>
+                          <DialogTitle className="text-lg font-semibold text-white">Create Payment Arrangement</DialogTitle>
                         </DialogHeader>
                         <div className="space-y-4">
                           <div>
-                            <Label>Plan Name *</Label>
+                            <Label className="text-white">Plan Name *</Label>
                             <Input
                               value={arrangementForm.name}
                               onChange={(e) => setArrangementForm({...arrangementForm, name: e.target.value})}
                               placeholder="e.g., Standard Payment Plan"
+                              className={inputClasses}
                             />
                           </div>
-                          
+
                           <div>
-                            <Label>Description</Label>
+                            <Label className="text-white">Description</Label>
                             <Textarea
                               value={arrangementForm.description}
                               onChange={(e) => setArrangementForm({...arrangementForm, description: e.target.value})}
                               placeholder="Optional description"
+                              className={textareaClasses}
                             />
                           </div>
-                          
+
                           <div className="grid grid-cols-2 gap-4">
                             <div>
-                              <Label>Min Balance ($) *</Label>
+                              <Label className="text-white">Min Balance ($) *</Label>
                               <Input
                                 type="number"
                                 step="0.01"
                                 value={arrangementForm.minBalance}
                                 onChange={(e) => setArrangementForm({ ...arrangementForm, minBalance: e.target.value })}
                                 placeholder="100.00"
+                                className={inputClasses}
                               />
                             </div>
                             <div>
-                              <Label>Max Balance ($) *</Label>
+                              <Label className="text-white">Max Balance ($) *</Label>
                               <Input
                                 type="number"
                                 step="0.01"
                                 value={arrangementForm.maxBalance}
                                 onChange={(e) => setArrangementForm({ ...arrangementForm, maxBalance: e.target.value })}
                                 placeholder="1999.99"
+                                className={inputClasses}
                               />
                             </div>
                           </div>
 
                           <div>
-                            <Label>Plan Type *</Label>
+                            <Label className="text-white">Plan Type *</Label>
                             <Select
                               value={arrangementForm.planType}
                               onValueChange={(value) =>
@@ -1301,7 +1493,7 @@ export default function Settings() {
                                 })
                               }
                             >
-                              <SelectTrigger>
+                              <SelectTrigger className={selectTriggerClasses}>
                                 <SelectValue placeholder="Select plan type" />
                               </SelectTrigger>
                               <SelectContent>
@@ -1316,23 +1508,25 @@ export default function Settings() {
                           {arrangementForm.planType === "range" && (
                             <div className="grid grid-cols-2 gap-4">
                               <div>
-                                <Label>Min Payment ($) *</Label>
+                                <Label className="text-white">Min Payment ($) *</Label>
                                 <Input
                                   type="number"
                                   step="0.01"
                                   value={arrangementForm.monthlyPaymentMin}
                                   onChange={(e) => setArrangementForm({ ...arrangementForm, monthlyPaymentMin: e.target.value })}
                                   placeholder="50.00"
+                                  className={inputClasses}
                                 />
                               </div>
                               <div>
-                                <Label>Max Payment ($) *</Label>
+                                <Label className="text-white">Max Payment ($) *</Label>
                                 <Input
                                   type="number"
                                   step="0.01"
                                   value={arrangementForm.monthlyPaymentMax}
                                   onChange={(e) => setArrangementForm({ ...arrangementForm, monthlyPaymentMax: e.target.value })}
                                   placeholder="100.00"
+                                  className={inputClasses}
                                 />
                               </div>
                             </div>
@@ -1340,13 +1534,14 @@ export default function Settings() {
 
                           {arrangementForm.planType === "fixed_monthly" && (
                             <div>
-                              <Label>Monthly Payment ($) *</Label>
+                              <Label className="text-white">Monthly Payment ($) *</Label>
                               <Input
                                 type="number"
                                 step="0.01"
                                 value={arrangementForm.fixedMonthlyPayment}
                                 onChange={(e) => setArrangementForm({ ...arrangementForm, fixedMonthlyPayment: e.target.value })}
                                 placeholder="150.00"
+                                className={inputClasses}
                               />
                             </div>
                           )}
@@ -1354,7 +1549,7 @@ export default function Settings() {
                           {arrangementForm.planType === "pay_in_full" && (
                             <div className="space-y-4">
                               <div>
-                                <Label>Payoff Percentage (%) *</Label>
+                                <Label className="text-white">Payoff Percentage (%) *</Label>
                                 <Input
                                   type="number"
                                   step="0.01"
@@ -1363,25 +1558,28 @@ export default function Settings() {
                                   value={arrangementForm.payoffPercentage}
                                   onChange={(e) => setArrangementForm({ ...arrangementForm, payoffPercentage: e.target.value })}
                                   placeholder="50"
+                                  className={inputClasses}
                                 />
-                                <p className="text-xs text-gray-500 mt-1">
+                                <p className="mt-1 text-xs text-blue-100/70">
                                   Enter the portion of the outstanding balance the consumer must pay.
                                 </p>
                               </div>
                               <div>
-                                <Label>Payoff Due Date *</Label>
+                                <Label className="text-white">Payoff Due Date *</Label>
                                 <Input
                                   type="date"
                                   value={arrangementForm.payoffDueDate}
                                   onChange={(e) => setArrangementForm({ ...arrangementForm, payoffDueDate: e.target.value })}
+                                  className={inputClasses}
                                 />
                               </div>
                               <div>
-                                <Label>Additional Notes</Label>
+                                <Label className="text-white">Additional Notes</Label>
                                 <Textarea
                                   value={arrangementForm.payoffText}
                                   onChange={(e) => setArrangementForm({ ...arrangementForm, payoffText: e.target.value })}
                                   placeholder="Describe any additional payoff instructions"
+                                  className={textareaClasses}
                                 />
                               </div>
                             </div>
@@ -1389,23 +1587,24 @@ export default function Settings() {
 
                           {arrangementForm.planType === "custom_terms" && (
                             <div>
-                              <Label>Custom Terms Copy *</Label>
+                              <Label className="text-white">Custom Terms Copy *</Label>
                               <Textarea
                                 value={arrangementForm.customTermsText}
                                 onChange={(e) => setArrangementForm({ ...arrangementForm, customTermsText: e.target.value })}
                                 placeholder="Enter the custom terms consumers should see"
+                                className={textareaClasses}
                               />
                             </div>
                           )}
 
                           {(arrangementForm.planType === "range" || arrangementForm.planType === "fixed_monthly") && (
                             <div>
-                              <Label>Max Term (Months)</Label>
+                              <Label className="text-white">Max Term (Months)</Label>
                               <Select
                                 value={arrangementForm.maxTermMonths}
                                 onValueChange={(value) => setArrangementForm({ ...arrangementForm, maxTermMonths: value })}
                               >
-                                <SelectTrigger>
+                                <SelectTrigger className={selectTriggerClasses}>
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1429,10 +1628,14 @@ export default function Settings() {
                                 setShowArrangementModal(false);
                                 setArrangementForm({ ...emptyArrangementForm });
                               }}
+                              className="border-white/20 bg-white/5 text-blue-50 transition hover:bg-white/10"
                             >
                               Cancel
                             </Button>
-                            <Button onClick={handleSubmitArrangement}>
+                            <Button
+                              onClick={handleSubmitArrangement}
+                              className="rounded-xl bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 transition hover:from-sky-400/80 hover:to-indigo-400/80"
+                            >
                               Create Arrangement
                             </Button>
                           </div>
@@ -1441,28 +1644,33 @@ export default function Settings() {
                     </Dialog>
                   </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-4 text-sm text-blue-100/80">
                   {arrangementsLoading ? (
-                    <div className="text-center py-8">Loading arrangements...</div>
+                    <div className="rounded-2xl border border-white/10 bg-white/5 py-8 text-center text-blue-100/70">
+                      Loading arrangements...
+                    </div>
                   ) : (arrangementOptions as any)?.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">
+                    <div className="rounded-2xl border border-dashed border-white/20 bg-white/5 py-10 text-center text-blue-100/70">
                       No payment arrangements configured yet. Add arrangements for different balance ranges.
                     </div>
                   ) : (
                     <div className="space-y-4">
                       {(arrangementOptions as any)?.map((option: any) => (
-                        <div key={option.id} className="flex items-center justify-between p-4 border rounded-lg">
-                          <div>
-                            <h3 className="font-medium">{option.name}</h3>
-                            <p className="text-sm text-gray-500">{option.description}</p>
+                        <div
+                          key={option.id}
+                          className="flex items-start justify-between gap-6 rounded-2xl border border-white/10 bg-white/5 p-4"
+                        >
+                          <div className="space-y-2">
+                            <h3 className="text-base font-semibold text-white">{option.name}</h3>
+                            <p className="text-xs text-blue-100/70">{option.description}</p>
                             {(() => {
                               const summary = getArrangementSummary(option);
                               return (
-                                <div className="text-sm text-gray-600 mt-2 space-y-1">
-                                  <div className="font-medium text-gray-700">{getPlanTypeLabel(option.planType)}</div>
+                                <div className="space-y-1 text-xs text-blue-100/70">
+                                  <div className="text-sm font-semibold text-white">{getPlanTypeLabel(option.planType)}</div>
                                   <div>{summary.headline}</div>
-                                  {summary.detail && <div className="text-gray-500">{summary.detail}</div>}
-                                  <div className="text-gray-500">
+                                  {summary.detail && <div className="text-blue-100/70">{summary.detail}</div>}
+                                  <div className="text-blue-100/60">
                                     Balance range: {formatCurrencyFromCents(option.minBalance)} - {formatCurrencyFromCents(option.maxBalance)}
                                   </div>
                                 </div>
@@ -1473,7 +1681,7 @@ export default function Settings() {
                             variant="ghost"
                             size="sm"
                             onClick={() => deleteArrangementMutation.mutate(option.id)}
-                            className="text-red-500 hover:text-red-700"
+                            className="rounded-xl border border-transparent px-3 py-1 text-red-300 transition hover:border-red-300/40 hover:bg-red-500/10 hover:text-red-200"
                           >
                             <i className="fas fa-trash"></i>
                           </Button>
@@ -1485,58 +1693,74 @@ export default function Settings() {
               </Card>
             </TabsContent>
 
-<TabsContent value="privacy">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Privacy & Legal Information</CardTitle>
+            <TabsContent value="privacy" className="space-y-6">
+              <Card className={cardBaseClasses}>
+                <CardHeader className="space-y-1 text-white">
+                  <CardTitle className="text-xl font-semibold text-white">Privacy & Legal Information</CardTitle>
+                  <p className="text-sm text-blue-100/70">
+                    Share contact details and the policies that govern your consumer experience.
+                  </p>
                 </CardHeader>
-                <CardContent className="space-y-6">
+                <CardContent className="space-y-6 text-sm text-blue-100/80">
                   <div>
-                    <Label>Contact Email</Label>
+                    <Label className="text-white">Contact Email</Label>
                     <Input
                       value={localSettings?.contactEmail || ""}
                       onChange={(e) => handleSettingsUpdate('contactEmail', e.target.value)}
                       placeholder="support@youragency.com"
+                      className={inputClasses}
                     />
                   </div>
-                  
+
                   <div>
-                    <Label>Contact Phone</Label>
+                    <Label className="text-white">Contact Phone</Label>
                     <Input
                       value={localSettings?.contactPhone || ""}
                       onChange={(e) => handleSettingsUpdate('contactPhone', e.target.value)}
                       placeholder="(555) 123-4567"
+                      className={inputClasses}
                     />
                   </div>
-                  
-                  <div>
-                    <Label>Privacy Policy</Label>
+
+                  <div className="space-y-2">
+                    <Label className="text-white">Privacy Policy</Label>
                     <Textarea
                       rows={6}
                       value={localSettings?.privacyPolicy || ""}
                       onChange={(e) => handleSettingsUpdate('privacyPolicy', e.target.value)}
                       placeholder="Enter your privacy policy text that consumers will see..."
+                      className={textareaClasses}
                     />
+                    <p className="text-xs text-blue-100/70">
+                      We recommend including consent language, data usage, and dispute processes.
+                    </p>
                   </div>
-                  
-                  <div>
-                    <Label>Terms of Service</Label>
+
+                  <div className="space-y-2">
+                    <Label className="text-white">Terms of Service</Label>
                     <Textarea
                       rows={6}
                       value={localSettings?.termsOfService || ""}
                       onChange={(e) => handleSettingsUpdate('termsOfService', e.target.value)}
                       placeholder="Enter your terms of service text that consumers will see..."
+                      className={textareaClasses}
                     />
+                    <p className="text-xs text-blue-100/70">
+                      Use this section to outline payment expectations, dispute handling, and compliance notes.
+                    </p>
                   </div>
                 </CardContent>
                 {hasUnsavedChanges && (
-                  <CardFooter>
-                    <Button 
-                      onClick={handleSaveSettings} 
+                  <CardFooter className="border-t border-white/10 pt-6">
+                    <Button
+                      onClick={handleSaveSettings}
                       disabled={updateSettingsMutation.isPending}
-                      className="ml-auto"
+                      className={cn(
+                        "ml-auto rounded-xl bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-6 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 transition hover:from-sky-400/80 hover:to-indigo-400/80",
+                        updateSettingsMutation.isPending && "opacity-60",
+                      )}
                     >
-                      {updateSettingsMutation.isPending ? "Saving..." : "Save Changes"}
+                      {updateSettingsMutation.isPending ? "Saving..." : "Save changes"}
                     </Button>
                   </CardFooter>
                 )}
@@ -1544,7 +1768,7 @@ export default function Settings() {
             </TabsContent>
 
           </Tabs>
-        </div>
+        </section>
       </div>
     </AdminLayout>
   );
