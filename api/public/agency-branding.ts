@@ -20,17 +20,23 @@ async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const db = await getDb();
+    console.log('[agency-branding] Starting request for slug:', req.query.slug);
     
     // Get agency slug from query parameter
     const { slug } = req.query;
     
     if (!slug || typeof slug !== 'string') {
+      console.log('[agency-branding] Invalid or missing slug');
       res.status(400).json({ error: 'Agency slug is required' });
       return;
     }
+    
+    console.log('[agency-branding] Getting database connection...');
+    const db = await getDb();
+    console.log('[agency-branding] Database connection obtained');
 
     // Get tenant information
+    console.log('[agency-branding] Querying tenant with slug:', slug);
     const [tenant] = await db
       .select({
         id: tenants.id,
@@ -42,6 +48,7 @@ async function handler(req: VercelRequest, res: VercelResponse) {
       .from(tenants)
       .where(eq(tenants.slug, slug))
       .limit(1);
+    console.log('[agency-branding] Tenant query completed:', tenant ? 'found' : 'not found');
 
     if (!tenant) {
       res.status(404).json({ error: 'Agency not found' });
@@ -54,6 +61,7 @@ async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Get tenant settings for additional branding
+    console.log('[agency-branding] Querying tenant settings for tenant ID:', tenant.id);
     const [settings] = await db
       .select({
         customBranding: tenantSettings.customBranding,
@@ -65,6 +73,7 @@ async function handler(req: VercelRequest, res: VercelResponse) {
       .from(tenantSettings)
       .where(eq(tenantSettings.tenantId, tenant.id))
       .limit(1);
+    console.log('[agency-branding] Tenant settings query completed');
 
     // Combine branding information
     const customBranding = settings?.customBranding as any;
@@ -82,10 +91,15 @@ async function handler(req: VercelRequest, res: VercelResponse) {
       termsOfService: settings?.termsOfService || null,
     };
 
+    console.log('[agency-branding] Sending successful response');
     res.status(200).json(branding);
   } catch (error: any) {
-    console.error('Agency branding API error:', error);
-    res.status(500).json({ error: 'Failed to fetch agency branding' });
+    console.error('[agency-branding] API error:', error);
+    console.error('[agency-branding] Error stack:', error.stack);
+    res.status(500).json({ 
+      error: 'Failed to fetch agency branding',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined 
+    });
   }
 }
 
