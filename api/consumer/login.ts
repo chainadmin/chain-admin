@@ -97,7 +97,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           slug: row.tenant!.slug
         }));
 
-        return res.status(200).json({
+        return res.status(409).json({
           multipleAgencies: true,
           message: 'Your account is registered with multiple agencies. Please select one:',
           agencies,
@@ -124,7 +124,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           consumer = firstConsumer;
           // Flow will continue and fetch tenant by ID below
         } else {
-          return res.status(200).json({
+          return res.status(409).json({
             message: 'Your account needs to be linked to an agency. Please complete registration.',
             needsAgencyLink: true,
             consumer: {
@@ -161,7 +161,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (!tenant) {
-      return res.status(200).json({
+      return res.status(409).json({
         message: 'Your account needs to be linked to an agency. Please complete registration.',
         needsAgencyLink: true,
         consumer: {
@@ -175,7 +175,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (!consumer.isRegistered) {
-      return res.status(200).json({
+      return res.status(409).json({
         message: 'Account found but not yet activated. Complete your registration.',
         needsRegistration: true,
         consumer: {
@@ -224,7 +224,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (!consumer.tenantId) {
-      return res.status(200).json({
+      return res.status(409).json({
         message: 'Your account needs to be linked to an agency. Please complete registration.',
         needsAgencyLink: true,
         consumer: {
@@ -263,7 +263,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         id: tenant.id,
         name: tenant.name,
         slug: tenant.slug
-      }
+      },
+      tenantSlug: tenant.slug
     });
   } catch (error) {
     console.error('Consumer login error:', error);
