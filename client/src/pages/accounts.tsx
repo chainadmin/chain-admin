@@ -230,17 +230,17 @@ export default function Accounts() {
         if (!shouldAttemptFallback(error)) {
           throw error;
         }
-      }
 
-      try {
-        return await apiRequest("POST", `/api/folders/${folderId}/delete`);
-      } catch (error) {
-        if (!shouldAttemptFallback(error)) {
-          throw error;
+        try {
+          return await apiRequest("POST", `/api/folders/${folderId}/delete`);
+        } catch (fallbackError) {
+          if (!shouldAttemptFallback(fallbackError)) {
+            throw fallbackError;
+          }
+
+          return await apiRequest("POST", "/api/folders/delete", { folderId });
         }
       }
-
-      return await apiRequest("POST", "/api/folders/delete", { folderId });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
