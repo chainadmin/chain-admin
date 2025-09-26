@@ -24,6 +24,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
+import fs from "fs";
 import { nanoid } from "nanoid";
 import express from "express";
 import { emailService } from "./emailService";
@@ -320,6 +321,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Subdomain detection middleware
   app.use(subdomainMiddleware);
+
+  // Explicit SPA fallback for the platform admin entry point to avoid 404s
+  app.get(["/admin", "/admin/*", "/Admin", "/Admin/*"], (req, res, next) => {
+    // Let Vite handle this route in development so HMR continues to work
+    if (process.env.NODE_ENV !== "production") {
+      return next();
+    }
+
+    const candidateIndexFiles = [
+      path.resolve(process.cwd(), "dist/public/index.html"),
+      path.resolve(process.cwd(), "client/index.html"),
+    ];
+
+    const spaIndex = candidateIndexFiles.find(filePath => fs.existsSync(filePath));
+
+    if (!spaIndex) {
+      return next();
+    }
+
+    res.sendFile(spaIndex, sendError => {
+      if (sendError) {
+        next(sendError);
+      }
+    });
+  });
 
   // Health check endpoint (no auth required)
   app.get('/api/health', (req, res) => {
@@ -2141,6 +2167,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Consumer login route
   app.post('/api/consumer/login', async (req, res) => {
     try {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+
       const { email, dateOfBirth, tenantSlug: bodyTenantSlug } = req.body ?? {};
       const rawTenantSlug = bodyTenantSlug || (req as any).agencySlug;
       const tenantSlug = rawTenantSlug ? String(rawTenantSlug).trim().toLowerCase() : undefined;
@@ -2341,10 +2371,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           email: consumer.email,
           tenantId: consumer.tenantId,
           tenantSlug: tenant.slug,
-          type: 'consumer',
+          type: "consumer",
         },
-        process.env.JWT_SECRET || 'your-secret-key',
-        { expiresIn: '7d' }
+        process.env.JWT_SECRET || "your-secret-key",
+        { expiresIn: "7d" }
       );
 
       res.status(200).json({

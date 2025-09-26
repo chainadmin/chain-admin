@@ -227,11 +227,13 @@ export default function Accounts() {
       try {
         return await apiRequest("DELETE", `/api/folders/${folderId}`);
       } catch (error) {
+codex/fix-405-method-not-allowed-error-on-delete-p4teey
         if (!shouldAttemptFallback(error)) {
           throw error;
         }
 
         try {
+        if (error instanceof ApiError && error.status === 405) { main
           return await apiRequest("POST", `/api/folders/${folderId}/delete`);
         } catch (fallbackError) {
           if (!shouldAttemptFallback(fallbackError)) {
