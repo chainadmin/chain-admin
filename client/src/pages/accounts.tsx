@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { ApiError, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import AdminLayout from "@/components/admin-layout";
 import ImportModal from "@/components/import-modal";
@@ -215,14 +215,36 @@ export default function Accounts() {
 
   const deleteFolderMutation = useMutation({
     mutationFn: async (folderId: string) => {
-      try {
-        return await apiRequest("DELETE", `/api/folders/${folderId}`);
-      } catch (error) {
-        if (error instanceof Error && error.message.startsWith("405")) {
-          return await apiRequest("POST", `/api/folders/${folderId}/delete`);
+      const fallbackStatuses = new Set([404, 405, 501]);
+      const shouldAttemptFallback = (error: unknown) => {
+        if (error instanceof ApiError) {
+          return fallbackStatuses.has(error.status);
         }
-        throw error;
+
+        return error instanceof TypeError;
+      };
+
+      const attempts: Array<() => Promise<Response>> = [
+        () => apiRequest("DELETE", `/api/folders/${folderId}`),
+        () => apiRequest("POST", `/api/folders/${folderId}/delete`),
+        () => apiRequest("POST", "/api/folders/delete", { folderId }),
+      ];
+
+      let lastError: unknown = new Error("Failed to delete folder");
+
+      for (const attempt of attempts) {
+        try {
+          return await attempt();
+        } catch (error) {
+          lastError = error;
+
+          if (!shouldAttemptFallback(error)) {
+            break;
+          }
+        }
       }
+
+      throw lastError;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
