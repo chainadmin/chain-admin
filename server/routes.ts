@@ -24,6 +24,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
+import fs from "fs";
 import { nanoid } from "nanoid";
 import express from "express";
 import { emailService } from "./emailService";
@@ -320,6 +321,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Subdomain detection middleware
   app.use(subdomainMiddleware);
+
+  // Explicit SPA fallback for the platform admin entry point to avoid 404s
+  app.get(["/admin", "/admin/*", "/Admin", "/Admin/*"], (req, res, next) => {
+    // Let Vite handle this route in development so HMR continues to work
+    if (process.env.NODE_ENV !== "production") {
+      return next();
+    }
+
+    const candidateIndexFiles = [
+      path.resolve(process.cwd(), "dist/public/index.html"),
+      path.resolve(process.cwd(), "client/index.html"),
+    ];
+
+    const spaIndex = candidateIndexFiles.find(filePath => fs.existsSync(filePath));
+
+    if (!spaIndex) {
+      return next();
+    }
+
+    res.sendFile(spaIndex, sendError => {
+      if (sendError) {
+        next(sendError);
+      }
+    });
+  });
 
   // Health check endpoint (no auth required)
   app.get('/api/health', (req, res) => {
