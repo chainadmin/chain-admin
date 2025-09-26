@@ -19,6 +19,7 @@ import {
   type InsertArrangementOption,
   type SmsTracking,
 } from "@shared/schema";
+import { buildConsumerSessionResponse } from "@shared/consumer-session";
 import { db } from "./db";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -2320,47 +2321,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Date of birth verification failed. Please check your information." });
       }
 
-      const token = jwt.sign(
-        {
-          consumerId: consumer.id,
-          email: consumer.email,
-          tenantId: consumer.tenantId,
-          tenantSlug: tenant.slug,
-          type: 'consumer',
-        },
-        process.env.JWT_SECRET || 'your-secret-key',
-        { expiresIn: '7d' }
-      );
-
-      const consumerPayload = {
-        id: consumer.id,
-        firstName: consumer.firstName,
-        lastName: consumer.lastName,
-        email: consumer.email,
-        phone: consumer.phone,
-        tenantId: consumer.tenantId,
-      };
-
-      const tenantPayload = {
-        id: tenant.id,
-        name: tenant.name,
-        slug: tenant.slug,
-      };
-
-      res.status(200).json({
-        token,
-        consumer: consumerPayload,
-        tenant: tenantPayload,
-        tenantSlug: tenant.slug,
-        session: {
-          token,
-          tenantSlug: tenant.slug,
-          email: consumer.email,
-          consumerId: consumer.id,
-          tenant: tenantPayload,
-          consumer: consumerPayload,
-        },
-      });
+        const token = jwt.sign(
+          {
+            consumerId: consumer.id,
+            email: consumer.email,
+            tenantId: consumer.tenantId,
+            tenantSlug: tenant.slug,
+            type: 'consumer',
+          },
+          process.env.JWT_SECRET || 'your-secret-key',
+          { expiresIn: '7d' }
+        );
+        res.status(200).json(buildConsumerSessionResponse(consumer, tenant, token));
     } catch (error) {
       console.error("Error during consumer login:", error);
       res.status(500).json({ message: "Login failed" });
