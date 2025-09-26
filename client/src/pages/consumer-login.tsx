@@ -1,25 +1,28 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { useRoute, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Building2, Mail, Lock, ArrowRight, ShieldCheck, UserCheck } from "lucide-react";
 import { getAgencySlugFromRequest } from "@shared/utils/subdomain";
 import PublicHeroLayout from "@/components/public-hero-layout";
-
-type AgencyContext = {
-  slug: string;
-  name: string;
-  logoUrl: string | null;
-};
-
-interface LoginForm {
-  email: string;
-  dateOfBirth: string;
-}
+import {
+  AgencyContext,
+  LoginForm,
+  LoginMutationPayload,
+  retryLoginWithAgencySelection,
+  storeAgencyContext,
+} from "./consumer-login-helpers";
 
 export default function ConsumerLogin() {
   const [, setLocation] = useLocation();
@@ -29,6 +32,9 @@ export default function ConsumerLogin() {
     dateOfBirth: "",
   });
   const [agencyContext, setAgencyContext] = useState<AgencyContext | null>(null);
+  const [pendingAgencies, setPendingAgencies] = useState<AgencyContext[]>([]);
+  const [agencyDialogOpen, setAgencyDialogOpen] = useState(false);
+  const [selectedAgencySlug, setSelectedAgencySlug] = useState<string | null>(null);
 
   const currentSlug = useMemo(() => {
     if (typeof window === "undefined") {
@@ -39,11 +45,14 @@ export default function ConsumerLogin() {
 
   const persistAgencyContext = useCallback((context: AgencyContext) => {
     setAgencyContext(context);
-    try {
-      sessionStorage.setItem("agencyContext", JSON.stringify(context));
-    } catch (error) {
-      console.error("Failed to persist agency context", error);
+    if (typeof window === "undefined") {
+      return;
     }
+
+    storeAgencyContext(context, {
+      session: window.sessionStorage,
+      local: window.localStorage,
+    });
   }, []);
 
   const fetchAgencyContext = useCallback(async (slug: string) => {
@@ -70,8 +79,14 @@ export default function ConsumerLogin() {
   }, [persistAgencyContext]);
 
   useEffect(() => {
-    // Attempt to hydrate from session storage first
-    const storedContext = sessionStorage.getItem("agencyContext");
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    // Attempt to hydrate from storage first
+    const storedContext =
+      window.sessionStorage.getItem("agencyContext") ||
+      window.localStorage.getItem("agencyContext");
     let parsedContext: AgencyContext | null = null;
 
     if (storedContext) {
@@ -116,10 +131,10 @@ export default function ConsumerLogin() {
   }, [agencyContext?.slug, fetchAgencyContext]);
 
   const loginMutation = useMutation({
-    mutationFn: async (loginData: LoginForm) => {
+    mutationFn: async (loginData: LoginMutationPayload) => {
       // Get tenant slug from URL path (e.g., /waypoint-solutions/consumer)
       const slugFromUrl = currentSlug;
-      const tenantSlug = slugFromUrl || agencyContext?.slug;
+      const tenantSlug = loginData.tenantSlug || slugFromUrl || agencyContext?.slug;
 
       // Send email and dateOfBirth for consumer verification
       const response = await apiRequest("POST", "/api/consumer/login", {
@@ -137,18 +152,12 @@ export default function ConsumerLogin() {
       if (data.multipleAgencies) {
         // Consumer has accounts with multiple agencies
         toast({
-          title: "Multiple Agencies Found",
-          description: data.message,
+          title: "Choose your agency",
+          description: data.message ?? "Select which agency dashboard to open.",
         });
-        // TODO: Show agency selection UI
-        // For now, auto-select the first agency
-        const firstAgency = data.agencies[0];
-        toast({
-          title: "Selecting Agency",
-          description: `Logging into ${firstAgency.name}`,
-        });
-        // Re-submit with specific agency
-        // This would need a separate endpoint or modification
+        setPendingAgencies(data.agencies ?? []);
+        setAgencyDialogOpen(true);
+        return;
       } else if (data.needsRegistration) {
         // User found but needs to complete registration
         toast({
@@ -167,9 +176,13 @@ export default function ConsumerLogin() {
       } else {
         // Successful login
         toast({
-          title: "Login Successful", 
+          title: "Login Successful",
           description: "Welcome to your account portal!",
         });
+
+        setPendingAgencies([]);
+        setAgencyDialogOpen(false);
+        setSelectedAgencySlug(null);
         
         // Ensure we have required data
         if (!data.token || !data.tenant?.slug) {
@@ -191,7 +204,13 @@ export default function ConsumerLogin() {
         
         // Store the token for authenticated requests
         localStorage.setItem("consumerToken", data.token);
-        
+
+        persistAgencyContext({
+          slug: data.tenant.slug,
+          name: data.tenant.name ?? data.tenant.slug,
+          logoUrl: data.tenant.logoUrl ?? null,
+        });
+
         // Force a hard redirect to clear any cached state
         window.location.href = '/consumer-dashboard';
       }
@@ -230,7 +249,7 @@ export default function ConsumerLogin() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!form.email || !form.dateOfBirth) {
       toast({
         title: "Missing Information",
@@ -242,6 +261,23 @@ export default function ConsumerLogin() {
 
     loginMutation.mutate(form);
   };
+
+  const handleAgencySelection = useCallback(
+    async (agency: AgencyContext) => {
+      setSelectedAgencySlug(agency.slug);
+      try {
+        await retryLoginWithAgencySelection(
+          agency,
+          form,
+          payload => loginMutation.mutateAsync(payload),
+          persistAgencyContext
+        );
+      } finally {
+        setSelectedAgencySlug(null);
+      }
+    },
+    [form, loginMutation, persistAgencyContext]
+  );
 
   return (
     <PublicHeroLayout
@@ -371,6 +407,38 @@ export default function ConsumerLogin() {
             )}
           </Button>
         </form>
+
+        <Dialog open={agencyDialogOpen} onOpenChange={setAgencyDialogOpen}>
+          <DialogContent className="bg-slate-900 text-white">
+            <DialogHeader>
+              <DialogTitle>Select an agency</DialogTitle>
+              <DialogDescription className="text-blue-100/80">
+                We found multiple agencies associated with {form.email}. Pick the one you want to open.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="mt-4 grid gap-3" data-testid="agency-selection-list">
+              {pendingAgencies.map(agency => (
+                <button
+                  key={agency.slug}
+                  className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-4 text-left transition hover:bg-white/10"
+                  onClick={() => handleAgencySelection(agency)}
+                  disabled={loginMutation.isPending && selectedAgencySlug === agency.slug}
+                  data-testid={`agency-option-${agency.slug}`}
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-white">{agency.name}</p>
+                    <p className="text-xs text-blue-100/60">{agency.slug}</p>
+                  </div>
+                  <span className="text-xs font-medium text-blue-200">
+                    {selectedAgencySlug === agency.slug && loginMutation.isPending
+                      ? "Connecting..."
+                      : "Choose"}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </DialogContent>
+        </Dialog>
 
         <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-blue-100/70">
           <div className="flex items-start gap-3">
