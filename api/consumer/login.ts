@@ -13,12 +13,19 @@ const loginSchema = z.object({
   tenantSlug: z.string().optional()
 });
 
+function preventCaching(res: VercelResponse) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
+    preventCaching(res);
     const parsed = loginSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
       return res.status(400).json({ message: 'Email and date of birth are required' });

@@ -2122,6 +2122,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Consumer login route
   app.post('/api/consumer/login', async (req, res) => {
     try {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+
       const { email, dateOfBirth, tenantSlug: bodyTenantSlug } = req.body ?? {};
       const rawTenantSlug = bodyTenantSlug || (req as any).agencySlug;
       const tenantSlug = rawTenantSlug ? String(rawTenantSlug).trim().toLowerCase() : undefined;
@@ -2322,10 +2326,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           email: consumer.email,
           tenantId: consumer.tenantId,
           tenantSlug: tenant.slug,
-          type: 'consumer',
+          type: "consumer",
         },
-        process.env.JWT_SECRET || 'your-secret-key',
-        { expiresIn: '7d' }
+        process.env.JWT_SECRET || "your-secret-key",
+        { expiresIn: "7d" }
       );
 
       res.status(200).json({
