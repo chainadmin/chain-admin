@@ -2321,18 +2321,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Date of birth verification failed. Please check your information." });
       }
 
-        const token = jwt.sign(
-          {
-            consumerId: consumer.id,
-            email: consumer.email,
-            tenantId: consumer.tenantId,
-            tenantSlug: tenant.slug,
-            type: 'consumer',
-          },
-          process.env.JWT_SECRET || 'your-secret-key',
-          { expiresIn: '7d' }
-        );
-        res.status(200).json(buildConsumerSessionResponse(consumer, tenant, token));
+      const token = jwt.sign(
+        {
+          consumerId: consumer.id,
+          email: consumer.email,
+          tenantId: consumer.tenantId,
+          tenantSlug: tenant.slug,
+          type: "consumer",
+        },
+        process.env.JWT_SECRET || "your-secret-key",
+        { expiresIn: "7d" }
+      );
+
+      res.status(200).json(buildConsumerSessionResponse(consumer, tenant, token));
     } catch (error) {
       console.error("Error during consumer login:", error);
       res.status(500).json({ message: "Login failed" });
