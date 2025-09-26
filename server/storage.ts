@@ -103,6 +103,16 @@ function normalizeEmailValue(value?: string | null): string | null {
   return trimmed.toLowerCase();
 }
 
+function normalizeUsernameValue(value?: string | null): string | null {
+  if (value === undefined || value === null) return null;
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  return trimmed.toLowerCase();
+}
+
 function applyNormalizedEmail<T extends { email?: string | null }>(record: T): T {
   if (!("email" in record) || record.email === undefined) {
     return record;
@@ -495,7 +505,15 @@ export class DatabaseStorage implements IStorage {
   
   // Agency credentials operations
   async getAgencyCredentialsByUsername(username: string): Promise<SelectAgencyCredentials | undefined> {
-    const [credentials] = await db.select().from(agencyCredentials).where(eq(agencyCredentials.username, username));
+    const normalizedUsername = normalizeUsernameValue(username);
+    if (!normalizedUsername) {
+      return undefined;
+    }
+
+    const [credentials] = await db
+      .select()
+      .from(agencyCredentials)
+      .where(sql`LOWER(TRIM(${agencyCredentials.username})) = ${normalizedUsername}`);
     return credentials;
   }
 
@@ -505,7 +523,25 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAgencyCredentials(credentials: InsertAgencyCredentials): Promise<SelectAgencyCredentials> {
-    const [newCredentials] = await db.insert(agencyCredentials).values(credentials).returning();
+    const normalizedUsername = normalizeUsernameValue(credentials.username);
+    const normalizedEmail = normalizeEmailValue(credentials.email);
+
+    if (!normalizedUsername) {
+      throw new Error("Username is required for agency credentials");
+    }
+
+    if (!normalizedEmail) {
+      throw new Error("Email is required for agency credentials");
+    }
+
+    const [newCredentials] = await db
+      .insert(agencyCredentials)
+      .values({
+        ...credentials,
+        username: normalizedUsername,
+        email: normalizedEmail,
+      })
+      .returning();
     return newCredentials;
   }
 
