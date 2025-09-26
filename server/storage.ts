@@ -271,12 +271,8 @@ export interface IStorage {
   
   // Consumer registration operations
   registerConsumer(consumerData: InsertConsumer): Promise<Consumer>;
-  getConsumerByEmailAndTenant(email: string, tenantIdentifier: string): Promise<Consumer | undefined>;
-  getConsumerByEmail(email: string, tenantId: string): Promise<Consumer | undefined>;
-  getTenantBySlug(slug: string): Promise<Tenant | undefined>;
-  
+
   // Account management operations
-  createAccount(account: InsertAccount): Promise<Account>;
   deleteAccount(id: string, tenantId: string): Promise<void>;
   bulkDeleteAccounts(ids: string[], tenantId: string): Promise<number>;
   
@@ -365,7 +361,6 @@ export interface IStorage {
   
   // Company management operations
   getPlatformUsersByTenant(tenantId: string): Promise<(PlatformUser & { userDetails?: User })[]>;
-  updateConsumer(id: string, updates: Partial<Consumer>): Promise<Consumer>;
   
   // Stats operations
   getTenantStats(tenantId: string): Promise<{
