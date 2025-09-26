@@ -6,7 +6,6 @@ import { z } from 'zod';
 import { getDb } from '../_lib/db.js';
 import { JWT_SECRET } from '../_lib/auth.js';
 import { consumers, tenants } from '../../shared/schema.js';
-import { buildConsumerSessionResponse } from '../../shared/consumer-session.js';
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -257,7 +256,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       { expiresIn: '7d' }
     );
 
-    return res.status(200).json(buildConsumerSessionResponse(consumer, tenant, token));
+    return res.status(200).json({
+      token,
+      consumer: {
+        id: consumer.id,
+        firstName: consumer.firstName,
+        lastName: consumer.lastName,
+        email: consumer.email,
+        phone: consumer.phone,
+        tenantId: consumer.tenantId
+      },
+      tenant: {
+        id: tenant.id,
+        name: tenant.name,
+        slug: tenant.slug
+      },
+      tenantSlug: tenant.slug
+    });
   } catch (error) {
     console.error('Consumer login error:', error);
     return res.status(500).json({ message: 'Login failed' });

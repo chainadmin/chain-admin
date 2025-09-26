@@ -19,7 +19,6 @@ import {
   type InsertArrangementOption,
   type SmsTracking,
 } from "@shared/schema";
-import { buildConsumerSessionResponse } from "@shared/consumer-session";
 import { db } from "./db";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -2333,7 +2332,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         { expiresIn: "7d" }
       );
 
-      res.status(200).json(buildConsumerSessionResponse(consumer, tenant, token));
+      res.status(200).json({
+        token,
+        consumer: {
+          id: consumer.id,
+          firstName: consumer.firstName,
+          lastName: consumer.lastName,
+          email: consumer.email,
+          phone: consumer.phone,
+          tenantId: consumer.tenantId,
+        },
+        tenant: {
+          id: tenant.id,
+          name: tenant.name,
+          slug: tenant.slug,
+        },
+        tenantSlug: tenant.slug,
+      });
     } catch (error) {
       console.error("Error during consumer login:", error);
       res.status(500).json({ message: "Login failed" });
