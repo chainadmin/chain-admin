@@ -75,7 +75,7 @@ export default function ConsumerDashboard() {
   const encodedTenantSlug = tenantSlug ? encodeURIComponent(tenantSlug) : "";
 
   const accountsUrl = encodedEmail && encodedTenantSlug
-    ? `/api/consumer/accounts/${encodedEmail}?email=${encodedEmail}&tenantSlug=${encodedTenantSlug}`
+    ? `/api/consumer/accounts?email=${encodedEmail}&tenantSlug=${encodedTenantSlug}`
     : "";
 
   // Fetch consumer data

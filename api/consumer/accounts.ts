@@ -1,0 +1,146 @@
+import { VercelRequest, VercelResponse } from '@vercel/node';
+import { getDb } from './_lib/db.js';
+import { consumers, accounts, tenants, tenantSettings } from '../shared/schema.js';
+import { eq, and, sql } from 'drizzle-orm';
+import jwt from 'jsonwebtoken';
+import { JWT_SECRET } from './_lib/auth.js';
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    // Check for consumer token
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ message: 'No consumer token provided' });
+    }
+    
+    const token = authHeader.slice(7);
+    let decodedToken: any;
+    
+    try {
+      decodedToken = jwt.verify(token, JWT_SECRET) as any;
+      
+      // Verify this is a consumer token
+      if (decodedToken.type !== 'consumer') {
+        return res.status(401).json({ message: 'Invalid token type' });
+      }
+    } catch (error) {
+      return res.status(401).json({ message: 'Invalid consumer token' });
+    }
+
+    // Now proceed with the original logic
+    const email = (req.query.email as string | undefined) ?? '';
+    const rawTenantSlug = req.query.tenantSlug;
+    const tenantSlug = typeof rawTenantSlug === 'string' && rawTenantSlug !== 'undefined' && rawTenantSlug.trim() !== ''
+      ? rawTenantSlug.trim()
+      : undefined;
+
+    const sanitizedEmail = email.trim();
+
+    if (!sanitizedEmail) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    // Verify the consumer is requesting their own data
+    if (decodedToken.email && decodedToken.email.toLowerCase() !== sanitizedEmail.toLowerCase()) {
+      return res.status(403).json({ message: 'You can only access your own account information' });
+    }
+
+    // Verify tenant slug matches if provided in token
+    if (decodedToken.tenantSlug && tenantSlug && decodedToken.tenantSlug !== tenantSlug) {
+      return res.status(403).json({ message: 'Tenant mismatch' });
+    }
+
+    const db = await getDb();
+    let tenantId: string | null = null;
+
+    // Get tenant if slug provided
+    let tenantRecord: typeof tenants.$inferSelect | null = null;
+
+    if (tenantSlug) {
+      const [tenant] = await db
+        .select()
+        .from(tenants)
+        .where(eq(tenants.slug, tenantSlug))
+        .limit(1);
+      if (!tenant) {
+        return res.status(404).json({ error: 'Agency not found' });
+      }
+      tenantRecord = tenant;
+      tenantId = tenant.id;
+    }
+
+    if (!tenantRecord && tenantId) {
+      const [tenant] = await db
+        .select()
+        .from(tenants)
+        .where(eq(tenants.id, tenantId))
+        .limit(1);
+      tenantRecord = tenant ?? null;
+    }
+
+    // Get consumer
+    const normalizedEmailMatch = sql`LOWER(${consumers.email}) = LOWER(${sanitizedEmail})`;
+
+    const consumerQuery = tenantId
+      ? and(eq(consumers.tenantId, tenantId), normalizedEmailMatch)
+      : normalizedEmailMatch;
+
+    const [consumer] = await db
+      .select()
+      .from(consumers)
+      .where(consumerQuery)
+      .limit(1);
+
+    if (!consumer) {
+      return res.status(404).json({ error: 'Consumer not found' });
+    }
+
+    if (!tenantRecord && consumer.tenantId) {
+      const [tenant] = await db
+        .select()
+        .from(tenants)
+        .where(eq(tenants.id, consumer.tenantId))
+        .limit(1);
+      tenantRecord = tenant ?? null;
+    }
+
+    // Get accounts
+    const accountsData = await db
+      .select()
+      .from(accounts)
+      .where(and(
+        eq(accounts.consumerId, consumer.id),
+        eq(accounts.tenantId, consumer.tenantId)
+      ));
+
+    // Get tenant settings
+    let settings = null;
+    if (consumer.tenantId) {
+      const [settingsData] = await db
+        .select()
+        .from(tenantSettings)
+        .where(eq(tenantSettings.tenantId, consumer.tenantId))
+        .limit(1);
+      settings = settingsData;
+    }
+
+    return res.status(200).json({
+      consumer,
+      accounts: accountsData,
+      tenant: tenantRecord,
+      settings
+    });
+  } catch (error) {
+    console.error('Consumer accounts API error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return res.status(500).json({ 
+      error: 'Failed to fetch consumer accounts',
+      message: errorMessage 
+    });
+  }
+}

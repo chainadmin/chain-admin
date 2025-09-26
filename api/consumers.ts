@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb } from './_lib/db.js';
 import { withAuth, AuthenticatedRequest, JWT_SECRET } from './_lib/auth.js';
-import { listConsumers, updateConsumer, deleteConsumers, ConsumerNotFoundError } from '@shared/server/consumers';
+import { listConsumers, updateConsumer, deleteConsumers, ConsumerNotFoundError } from '../shared/server/consumers.js';
 import jwt from 'jsonwebtoken';
 
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
@@ -135,11 +135,12 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
     } else {
       res.status(405).json({ error: 'Method not allowed' });
     }
-  } catch (error: any) {
+  } catch (error) {
     console.error('Consumers API error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     res.status(500).json({ 
       error: 'Failed to process consumer request',
-      message: error.message 
+      message: errorMessage 
     });
   }
 }
