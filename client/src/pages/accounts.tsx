@@ -219,7 +219,7 @@ export default function Accounts() {
         return await apiRequest("DELETE", `/api/folders/${folderId}`);
       } catch (error) {
         if (error instanceof ApiError && error.status === 405) {
-          return await apiRequest("POST", "/api/folders/delete", { folderId });
+          return await apiRequest("POST", `/api/folders/${folderId}/delete`);
         }
         throw error;
       }
