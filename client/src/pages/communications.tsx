@@ -518,15 +518,15 @@ export default function Communications() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "completed":
-        return "border-emerald-200/70 bg-emerald-100/80 text-emerald-700";
+        return "border-emerald-400/40 bg-emerald-500/10 text-emerald-100";
       case "sending":
-        return "border-sky-200/70 bg-sky-100/80 text-sky-700";
+        return "border-sky-400/40 bg-sky-500/10 text-sky-100";
       case "pending":
-        return "border-amber-200/70 bg-amber-100/80 text-amber-700";
+        return "border-amber-300/40 bg-amber-500/10 text-amber-100";
       case "failed":
-        return "border-rose-200/70 bg-rose-100/80 text-rose-700";
+        return "border-rose-400/40 bg-rose-500/10 text-rose-100";
       default:
-        return "border-slate-200/70 bg-slate-100/80 text-slate-700";
+        return "border-indigo-400/40 bg-indigo-500/10 text-indigo-100";
     }
   };
 
@@ -554,7 +554,7 @@ export default function Communications() {
       minimumFractionDigits: value % 1 === 0 ? 0 : 1,
     });
   const glassPanelClass =
-    "rounded-3xl border border-white/20 bg-white/95 text-slate-900 shadow-xl shadow-blue-900/10 backdrop-blur";
+    "rounded-3xl border border-white/20 bg-[#0b1733]/80 text-blue-50 shadow-xl shadow-blue-900/20 backdrop-blur";
 
   return (
     <AdminLayout>
@@ -657,37 +657,52 @@ export default function Communications() {
         </section>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-10">
-          <TabsList className="grid w-full grid-cols-5 gap-2 p-2">
-            <TabsTrigger value="overview" className="px-4 py-2.5">
+          <TabsList className="grid w-full grid-cols-5 gap-2 rounded-2xl border border-white/15 bg-white/10 p-2 text-blue-100 backdrop-blur">
+            <TabsTrigger
+              value="overview"
+              className="rounded-xl px-4 py-2.5 text-sm font-semibold text-blue-100 transition data-[state=active]:bg-[#0b1733]/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/20"
+            >
               Overview
             </TabsTrigger>
-            <TabsTrigger value="templates" className="px-4 py-2.5">
+            <TabsTrigger
+              value="templates"
+              className="rounded-xl px-4 py-2.5 text-sm font-semibold text-blue-100 transition data-[state=active]:bg-[#0b1733]/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/20"
+            >
               Templates
             </TabsTrigger>
-            <TabsTrigger value="campaigns" className="px-4 py-2.5">
+            <TabsTrigger
+              value="campaigns"
+              className="rounded-xl px-4 py-2.5 text-sm font-semibold text-blue-100 transition data-[state=active]:bg-[#0b1733]/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/20"
+            >
               Campaigns
             </TabsTrigger>
-            <TabsTrigger value="automation" className="px-4 py-2.5">
+            <TabsTrigger
+              value="automation"
+              className="rounded-xl px-4 py-2.5 text-sm font-semibold text-blue-100 transition data-[state=active]:bg-[#0b1733]/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/20"
+            >
               Automation
             </TabsTrigger>
-            <TabsTrigger value="requests" className="px-4 py-2.5">
+            <TabsTrigger
+              value="requests"
+              className="rounded-xl px-4 py-2.5 text-sm font-semibold text-blue-100 transition data-[state=active]:bg-[#0b1733]/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/20"
+            >
               Callback Requests
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="overview" className="space-y-10 text-slate-900">
+          <TabsContent value="overview" className="space-y-10 text-white">
             {/* Communication Type Selector */}
             <div className="flex flex-wrap items-center gap-3">
-              <span className="text-sm font-semibold text-slate-600">Channel focus</span>
-              <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-white/70 p-1 shadow-sm shadow-blue-900/5">
+              <span className="text-sm font-semibold text-blue-100/70">Channel focus</span>
+              <div className="flex items-center gap-1 rounded-full border border-white/20 bg-white/10 p-1 shadow-sm shadow-blue-900/10">
                 <Button
                   variant="ghost"
                   onClick={() => setCommunicationType("email")}
                   className={cn(
                     "rounded-full px-4 py-1.5 text-xs font-semibold transition",
                     communicationType === "email"
-                      ? "bg-slate-900 text-white shadow"
-                      : "text-slate-600 hover:bg-white"
+                      ? "bg-white/20 text-white shadow-lg shadow-blue-900/20"
+                      : "text-blue-100/80 hover:bg-white/10"
                   )}
                 >
                   <Mail className="mr-2 h-3.5 w-3.5" /> Email
@@ -698,8 +713,8 @@ export default function Communications() {
                   className={cn(
                     "rounded-full px-4 py-1.5 text-xs font-semibold transition",
                     communicationType === "sms"
-                      ? "bg-slate-900 text-white shadow"
-                      : "text-slate-600 hover:bg-white"
+                      ? "bg-white/20 text-white shadow-lg shadow-blue-900/20"
+                      : "text-blue-100/80 hover:bg-white/10"
                   )}
                 >
                   <MessageSquare className="mr-2 h-3.5 w-3.5" /> SMS
@@ -711,29 +726,29 @@ export default function Communications() {
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
               <Card className={glassPanelClass}>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-semibold text-slate-700">
+                  <CardTitle className="text-sm font-semibold text-blue-100/80">
                     {communicationType === "email" ? "Emails" : "Messages"} sent
                   </CardTitle>
                   {communicationType === "email" ? (
-                    <Mail className="h-4 w-4 text-slate-400" />
+                    <Mail className="h-4 w-4 text-blue-200/70" />
                   ) : (
-                    <MessageSquare className="h-4 w-4 text-slate-400" />
+                    <MessageSquare className="h-4 w-4 text-blue-200/70" />
                   )}
                 </CardHeader>
                 <CardContent className="space-y-1">
-                  <div className="text-2xl font-semibold text-slate-900">{((metrics as any)?.totalSent || 0).toLocaleString()}</div>
-                  <p className="text-xs text-slate-500">{lastSevenDays.toLocaleString()} in the last 7 days</p>
+                  <div className="text-2xl font-semibold text-white">{((metrics as any)?.totalSent || 0).toLocaleString()}</div>
+                  <p className="text-xs text-blue-100/70">{lastSevenDays.toLocaleString()} in the last 7 days</p>
                 </CardContent>
               </Card>
 
               <Card className={glassPanelClass}>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-semibold text-slate-700">Deliverability</CardTitle>
-                  <TrendingUp className="h-4 w-4 text-slate-400" />
+                  <CardTitle className="text-sm font-semibold text-blue-100/80">Deliverability</CardTitle>
+                  <TrendingUp className="h-4 w-4 text-blue-200/70" />
                 </CardHeader>
                 <CardContent className="space-y-1">
-                  <div className="text-2xl font-semibold text-slate-900">{`${formatPercent(Number((metrics as any)?.deliveryRate || 0))}%`}</div>
-                  <p className="text-xs text-slate-500">{((metrics as any)?.totalDelivered || 0).toLocaleString()} delivered</p>
+                  <div className="text-2xl font-semibold text-white">{`${formatPercent(Number((metrics as any)?.deliveryRate || 0))}%`}</div>
+                  <p className="text-xs text-blue-100/70">{((metrics as any)?.totalDelivered || 0).toLocaleString()} delivered</p>
                 </CardContent>
               </Card>
 
@@ -741,23 +756,23 @@ export default function Communications() {
                 <>
                   <Card className={glassPanelClass}>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-semibold text-slate-700">Open rate</CardTitle>
-                      <Eye className="h-4 w-4 text-slate-400" />
+                      <CardTitle className="text-sm font-semibold text-blue-100/80">Open rate</CardTitle>
+                      <Eye className="h-4 w-4 text-blue-200/70" />
                     </CardHeader>
                     <CardContent className="space-y-1">
-                      <div className="text-2xl font-semibold text-slate-900">{`${formatPercent(Number((metrics as any)?.openRate || 0))}%`}</div>
-                      <p className="text-xs text-slate-500">{((metrics as any)?.totalOpened || 0).toLocaleString()} opened</p>
+                      <div className="text-2xl font-semibold text-white">{`${formatPercent(Number((metrics as any)?.openRate || 0))}%`}</div>
+                      <p className="text-xs text-blue-100/70">{((metrics as any)?.totalOpened || 0).toLocaleString()} opened</p>
                     </CardContent>
                   </Card>
 
                   <Card className={glassPanelClass}>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-semibold text-slate-700">Click rate</CardTitle>
-                      <MousePointer className="h-4 w-4 text-slate-400" />
+                      <CardTitle className="text-sm font-semibold text-blue-100/80">Click rate</CardTitle>
+                      <MousePointer className="h-4 w-4 text-blue-200/70" />
                     </CardHeader>
                     <CardContent className="space-y-1">
-                      <div className="text-2xl font-semibold text-slate-900">{`${formatPercent(Number((metrics as any)?.clickRate || 0))}%`}</div>
-                      <p className="text-xs text-slate-500">{((metrics as any)?.totalClicked || 0).toLocaleString()} clicked</p>
+                      <div className="text-2xl font-semibold text-white">{`${formatPercent(Number((metrics as any)?.clickRate || 0))}%`}</div>
+                      <p className="text-xs text-blue-100/70">{((metrics as any)?.totalClicked || 0).toLocaleString()} clicked</p>
                     </CardContent>
                   </Card>
                 </>
@@ -767,23 +782,23 @@ export default function Communications() {
                 <>
                   <Card className={glassPanelClass}>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-semibold text-slate-700">Failed deliveries</CardTitle>
-                      <AlertCircle className="h-4 w-4 text-slate-400" />
+                      <CardTitle className="text-sm font-semibold text-blue-100/80">Failed deliveries</CardTitle>
+                      <AlertCircle className="h-4 w-4 text-blue-200/70" />
                     </CardHeader>
                     <CardContent className="space-y-1">
-                      <div className="text-2xl font-semibold text-slate-900">{((metrics as any)?.totalErrors || 0).toLocaleString()}</div>
-                      <p className="text-xs text-slate-500">Monitor queue health and sender reputation</p>
+                      <div className="text-2xl font-semibold text-white">{((metrics as any)?.totalErrors || 0).toLocaleString()}</div>
+                      <p className="text-xs text-blue-100/70">Monitor queue health and sender reputation</p>
                     </CardContent>
                   </Card>
 
                   <Card className={glassPanelClass}>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-semibold text-slate-700">Opt-outs</CardTitle>
-                      <UserMinus className="h-4 w-4 text-slate-400" />
+                      <CardTitle className="text-sm font-semibold text-blue-100/80">Opt-outs</CardTitle>
+                      <UserMinus className="h-4 w-4 text-blue-200/70" />
                     </CardHeader>
                     <CardContent className="space-y-1">
-                      <div className="text-2xl font-semibold text-slate-900">{((metrics as any)?.totalOptOuts || 0).toLocaleString()}</div>
-                      <p className="text-xs text-slate-500">{`${formatPercent(Number((metrics as any)?.optOutRate || 0))}%`} opt-out rate</p>
+                      <div className="text-2xl font-semibold text-white">{((metrics as any)?.totalOptOuts || 0).toLocaleString()}</div>
+                      <p className="text-xs text-blue-100/70">{`${formatPercent(Number((metrics as any)?.optOutRate || 0))}%`} opt-out rate</p>
                     </CardContent>
                   </Card>
                 </>
@@ -796,16 +811,16 @@ export default function Communications() {
                 <Card className={glassPanelClass}>
                   <CardHeader>
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-sm font-semibold text-slate-700">SMS rate limit status</CardTitle>
-                      <Clock className="h-4 w-4 text-slate-400" />
+                      <CardTitle className="text-sm font-semibold text-blue-100/80">SMS rate limit status</CardTitle>
+                      <Clock className="h-4 w-4 text-blue-200/70" />
                     </div>
                   </CardHeader>
                   <CardContent>
                     {smsRateLimitStatus ? (
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                          <span className="text-sm text-slate-600">Used this minute:</span>
-                          <span className="font-semibold text-slate-900">{(smsRateLimitStatus as any).used}/{(smsRateLimitStatus as any).limit}</span>
+                          <span className="text-sm text-blue-100/70">Used this minute:</span>
+                          <span className="font-semibold text-white">{(smsRateLimitStatus as any).used}/{(smsRateLimitStatus as any).limit}</span>
                         </div>
                         <div className="h-2 w-full rounded-full bg-slate-200">
                           <div
@@ -813,7 +828,7 @@ export default function Communications() {
                             style={{ width: `${Math.min(((smsRateLimitStatus as any).used / (smsRateLimitStatus as any).limit) * 100, 100)}%` }}
                           ></div>
                         </div>
-                        <div className="flex items-center justify-between text-xs text-slate-500">
+                        <div className="flex items-center justify-between text-xs text-blue-100/70">
                           <span>Next reset: {new Date((smsRateLimitStatus as any).resetTime).toLocaleTimeString()}</span>
                           <Badge variant={(smsRateLimitStatus as any).canSend ? "default" : "destructive"} className="rounded-full px-3 py-1 text-[10px]">
                             {(smsRateLimitStatus as any).canSend ? "Can Send" : "Rate Limited"}
@@ -821,7 +836,7 @@ export default function Communications() {
                         </div>
                       </div>
                     ) : (
-                      <div className="py-4 text-center text-slate-500">Loading status...</div>
+                      <div className="py-4 text-center text-blue-100/70">Loading status...</div>
                     )}
                   </CardContent>
                 </Card>
@@ -829,23 +844,23 @@ export default function Communications() {
                 <Card className={glassPanelClass}>
                   <CardHeader>
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-sm font-semibold text-slate-700">SMS queue status</CardTitle>
-                      <Settings className="h-4 w-4 text-slate-400" />
+                      <CardTitle className="text-sm font-semibold text-blue-100/80">SMS queue status</CardTitle>
+                      <Settings className="h-4 w-4 text-blue-200/70" />
                     </div>
                   </CardHeader>
                   <CardContent>
                     {smsQueueStatus ? (
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
-                          <span className="text-sm text-slate-600">Messages in queue:</span>
-                          <span className="font-semibold text-slate-900">{(smsQueueStatus as any).queueLength}</span>
+                          <span className="text-sm text-blue-100/70">Messages in queue:</span>
+                          <span className="font-semibold text-white">{(smsQueueStatus as any).queueLength}</span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-sm text-slate-600">Est. wait time:</span>
-                          <span className="font-semibold text-slate-900">{Math.ceil((smsQueueStatus as any).estimatedWaitTime / 60)} min</span>
+                          <span className="text-sm text-blue-100/70">Est. wait time:</span>
+                          <span className="font-semibold text-white">{Math.ceil((smsQueueStatus as any).estimatedWaitTime / 60)} min</span>
                         </div>
                         <div className="mt-3">
-                          <Label htmlFor="throttle-limit" className="text-sm font-semibold text-slate-700">
+                          <Label htmlFor="throttle-limit" className="text-sm font-semibold text-blue-100/80">
                             SMS Per Minute Limit
                           </Label>
                           <div className="flex gap-2 mt-1">
@@ -863,16 +878,16 @@ export default function Communications() {
                                   });
                                 }
                               }}
-                              className="w-20 border-slate-200"
+                              className="w-20 rounded-xl border border-white/20 bg-white/10 text-blue-50 placeholder:text-blue-100/60"
                             />
-                            <span className="flex items-center text-sm text-slate-500">
+                            <span className="flex items-center text-sm text-blue-100/70">
                               texts/min
                             </span>
                           </div>
                         </div>
                       </div>
                     ) : (
-                      <div className="py-4 text-center text-slate-500">Loading status...</div>
+                      <div className="py-4 text-center text-blue-100/70">Loading status...</div>
                     )}
                   </CardContent>
                 </Card>
@@ -882,20 +897,23 @@ export default function Communications() {
             {/* Recent Campaigns */}
             <Card className={glassPanelClass}>
               <CardHeader>
-                <CardTitle className="text-lg font-semibold text-slate-800">
+                <CardTitle className="text-lg font-semibold text-blue-50">
                   Recent {communicationType === "email" ? "email" : "SMS"} campaigns
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 {campaignsLoading ? (
-                  <div className="py-4 text-center text-slate-500">Loading campaigns...</div>
+                  <div className="py-4 text-center text-blue-100/70">Loading campaigns...</div>
                 ) : (campaigns as any)?.length > 0 ? (
                   <div className="space-y-4">
                     {(campaigns as any).slice(0, 5).map((campaign: any) => (
-                      <div key={campaign.id} className="flex items-center justify-between rounded-2xl border border-slate-200/60 bg-white/70 p-4 shadow-sm">
+                      <div
+                        key={campaign.id}
+                        className="flex items-center justify-between rounded-2xl border border-white/20 bg-white/10 p-4 text-blue-50 shadow-sm shadow-blue-900/10"
+                      >
                         <div>
-                          <h3 className="font-semibold text-slate-800">{campaign.name}</h3>
-                          <p className="text-sm text-slate-500">
+                          <h3 className="font-semibold text-blue-50">{campaign.name}</h3>
+                          <p className="text-sm text-blue-100/70">
                             Target: {getTargetGroupLabel(campaign)} • Template: {campaign.templateName}
                           </p>
                         </div>
@@ -908,13 +926,13 @@ export default function Communications() {
                           >
                             {campaign.status}
                           </Badge>
-                          <span className="text-sm font-medium text-slate-600">{campaign.totalSent || 0} sent</span>
+                          <span className="text-sm font-medium text-blue-100/70">{campaign.totalSent || 0} sent</span>
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="py-8 text-center text-slate-500">
+                  <div className="py-8 text-center text-blue-100/70">
                     No campaigns yet. Create your first {communicationType} campaign to get started.
                   </div>
                 )}
@@ -922,13 +940,13 @@ export default function Communications() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="templates" className="space-y-10 text-slate-900">
+          <TabsContent value="templates" className="space-y-10 text-white">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex flex-wrap items-center gap-4">
-                <h2 className="text-xl font-semibold text-slate-800">
+                <h2 className="text-xl font-semibold text-blue-50">
                   {communicationType === "email" ? "Email" : "SMS"} templates
                 </h2>
-                <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-white/80 p-1 shadow-sm">
+                <div className="flex items-center gap-1 rounded-full border border-white/20 bg-white/10 p-1 shadow-sm shadow-blue-900/10">
                   <Button
                     variant="ghost"
                     size="sm"
@@ -936,8 +954,8 @@ export default function Communications() {
                     className={cn(
                       "rounded-full px-4 py-1.5 text-xs font-semibold",
                       communicationType === "email"
-                        ? "bg-slate-900 text-white"
-                        : "text-slate-600 hover:bg-white"
+                        ? "bg-white/20 text-white shadow-lg shadow-blue-900/20"
+                        : "text-blue-100/80 hover:bg-white/10"
                     )}
                   >
                     <Mail className="mr-2 h-3.5 w-3.5" /> Email
@@ -949,8 +967,8 @@ export default function Communications() {
                     className={cn(
                       "rounded-full px-4 py-1.5 text-xs font-semibold",
                       communicationType === "sms"
-                        ? "bg-slate-900 text-white"
-                        : "text-slate-600 hover:bg-white"
+                        ? "bg-white/20 text-white shadow-lg shadow-blue-900/20"
+                        : "text-blue-100/80 hover:bg-white/10"
                     )}
                   >
                     <MessageSquare className="mr-2 h-3.5 w-3.5" /> SMS
@@ -1055,7 +1073,7 @@ export default function Communications() {
                           maxLength={1600}
                           required
                         />
-                        <p className="mt-1 text-sm text-slate-500">
+                        <p className="mt-1 text-sm text-blue-100/70">
                           {smsTemplateForm.message.length}/1600 characters
                         </p>
                         <div className="mt-3 bg-blue-50 border border-blue-200 rounded-md p-3">
@@ -1112,7 +1130,7 @@ export default function Communications() {
                   <Card key={template.id} className={glassPanelClass}>
                     <CardHeader className="pb-4">
                       <div className="flex items-center justify-between">
-                        <CardTitle className="text-lg font-semibold text-slate-800">{template.name}</CardTitle>
+                        <CardTitle className="text-lg font-semibold text-blue-50">{template.name}</CardTitle>
                         <Badge variant={template.status === "active" ? "default" : "secondary"}>
                           {template.status}
                         </Badge>
@@ -1121,19 +1139,19 @@ export default function Communications() {
                     <CardContent className="space-y-4">
                       {communicationType === "email" ? (
                         <>
-                          <p className="text-sm font-semibold text-slate-600">Subject</p>
-                          <p className="text-sm text-slate-700">{template.subject}</p>
-                          <p className="text-sm text-slate-500 line-clamp-3">
+                          <p className="text-sm font-semibold text-blue-100/70">Subject</p>
+                          <p className="text-sm text-blue-100/80">{template.subject}</p>
+                          <p className="text-sm text-blue-100/70 line-clamp-3">
                             {template.html.replace(/<[^>]*>/g, '')}
                           </p>
                         </>
                       ) : (
-                        <p className="text-sm text-slate-500 line-clamp-3">
+                        <p className="text-sm text-blue-100/70 line-clamp-3">
                           {template.message}
                         </p>
                       )}
                       {/* Agency URL Section */}
-                      <div className="rounded-xl border border-slate-200/70 bg-white/70 p-3">
+                      <div className="rounded-xl border border-white/15 bg-white/10 p-3">
                         <div className="flex items-center justify-between">
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-medium text-gray-600 mb-1">Agency URL:</p>
@@ -1144,7 +1162,7 @@ export default function Communications() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="ml-2 h-7 w-7 rounded-full bg-slate-900/5 p-0 text-slate-600 hover:bg-slate-900/10"
+                            className="ml-2 h-7 w-7 rounded-full bg-white/10 p-0 text-blue-100/70 hover:bg-slate-900/10"
                             onClick={() => {
                               const url = `${window.location.origin}/agency/${(userData as any)?.platformUser?.tenant?.slug || 'your-agency'}`;
                               navigator.clipboard.writeText(url);
@@ -1163,7 +1181,7 @@ export default function Communications() {
                         <Button
                           variant="outline"
                           size="sm"
-                          className="flex items-center gap-2 border-slate-200 text-slate-700"
+                          className="flex items-center gap-2 rounded-full border border-white/20 bg-transparent px-3 py-1 text-xs font-semibold text-blue-100 transition hover:bg-white/10"
                           onClick={() => handlePreview(template)}
                           data-testid={`button-preview-${template.id}`}
                         >
@@ -1266,7 +1284,7 @@ export default function Communications() {
             </Dialog>
           </TabsContent>
 
-          <TabsContent value="campaigns" className="space-y-10 text-slate-900">
+          <TabsContent value="campaigns" className="space-y-10 text-white">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <h2 className="text-xl font-semibold">
@@ -1497,22 +1515,22 @@ export default function Communications() {
 
             <Card className={glassPanelClass}>
               <CardHeader className="border-b border-white/20 pb-4">
-                <CardTitle className="text-lg font-semibold text-slate-800">
+                <CardTitle className="text-lg font-semibold text-blue-50">
                   All {communicationType === "email" ? "Email" : "SMS"} Campaigns
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-6">
                 {campaignsLoading ? (
-                  <div className="py-8 text-center text-slate-500">Loading campaigns...</div>
+                  <div className="py-8 text-center text-blue-100/70">Loading campaigns...</div>
                 ) : (campaigns as any)?.length > 0 ? (
                   <div className="space-y-4">
                     {(campaigns as any).map((campaign: any) => (
                       <div
                         key={campaign.id}
-                        className="rounded-2xl border border-slate-200/70 bg-white/70 p-5 shadow-sm shadow-slate-900/5"
+                        className="rounded-2xl border border-white/15 bg-white/10 p-5 shadow-sm shadow-blue-900/10"
                       >
                         <div className="mb-3 flex items-start justify-between gap-4">
-                          <h3 className="text-base font-semibold text-slate-800">{campaign.name}</h3>
+                          <h3 className="text-base font-semibold text-blue-50">{campaign.name}</h3>
                           <div className="flex items-center gap-2">
                             <Badge
                               className={cn(
@@ -1556,51 +1574,51 @@ export default function Communications() {
                             )}
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-4 text-sm text-slate-600 md:grid-cols-4">
+                        <div className="grid grid-cols-2 gap-4 text-sm text-blue-100/70 md:grid-cols-4">
                           <div>
-                            <span className="text-xs uppercase tracking-wide text-slate-500">Template</span>
-                            <div className="mt-1 font-semibold text-slate-800">{campaign.templateName}</div>
+                            <span className="text-xs uppercase tracking-wide text-blue-100/70">Template</span>
+                            <div className="mt-1 font-semibold text-blue-50">{campaign.templateName}</div>
                           </div>
                           <div>
-                            <span className="text-xs uppercase tracking-wide text-slate-500">Target</span>
-                            <div className="mt-1 font-semibold text-slate-800">{getTargetGroupLabel(campaign)}</div>
+                            <span className="text-xs uppercase tracking-wide text-blue-100/70">Target</span>
+                            <div className="mt-1 font-semibold text-blue-50">{getTargetGroupLabel(campaign)}</div>
                           </div>
                           <div>
-                            <span className="text-xs uppercase tracking-wide text-slate-500">Recipients</span>
-                            <div className="mt-1 font-semibold text-slate-800">{campaign.totalRecipients || 0}</div>
+                            <span className="text-xs uppercase tracking-wide text-blue-100/70">Recipients</span>
+                            <div className="mt-1 font-semibold text-blue-50">{campaign.totalRecipients || 0}</div>
                           </div>
                           <div>
-                            <span className="text-xs uppercase tracking-wide text-slate-500">Sent</span>
-                            <div className="mt-1 font-semibold text-slate-800">{campaign.totalSent || 0}</div>
+                            <span className="text-xs uppercase tracking-wide text-blue-100/70">Sent</span>
+                            <div className="mt-1 font-semibold text-blue-50">{campaign.totalSent || 0}</div>
                           </div>
                         </div>
                         {/* Agency URL for reference */}
-                        <div className="mt-4 border-t border-slate-200/70 pt-4">
-                          <span className="text-[11px] uppercase tracking-wide text-slate-500">Agency URL</span>
-                          <span className="mt-1 block font-mono text-xs text-slate-800">
+                        <div className="mt-4 border-t border-white/15 pt-4">
+                          <span className="text-[11px] uppercase tracking-wide text-blue-100/70">Agency URL</span>
+                          <span className="mt-1 block font-mono text-xs text-blue-50">
                             {window.location.origin}/agency/{(userData as any)?.platformUser?.tenant?.slug || 'your-agency'}
                           </span>
                         </div>
                         {campaign.status === "completed" && (
-                          <div className="mt-4 grid grid-cols-2 gap-4 rounded-2xl border border-slate-200/70 bg-slate-50/80 p-4 text-sm text-slate-600 md:grid-cols-4">
+                          <div className="mt-4 grid grid-cols-2 gap-4 rounded-2xl border border-white/15 bg-white/5 p-4 text-sm text-blue-100/70 md:grid-cols-4">
                             <div>
-                              <span className="text-xs uppercase tracking-wide text-slate-500">Delivered</span>
+                              <span className="text-xs uppercase tracking-wide text-blue-100/70">Delivered</span>
                               <div className="mt-1 font-semibold text-emerald-600">{campaign.totalDelivered || 0}</div>
                             </div>
                             {communicationType === "email" && (
                               <>
                                 <div>
-                                  <span className="text-xs uppercase tracking-wide text-slate-500">Opened</span>
+                                  <span className="text-xs uppercase tracking-wide text-blue-100/70">Opened</span>
                                   <div className="mt-1 font-semibold text-sky-600">{campaign.totalOpened || 0}</div>
                                 </div>
                                 <div>
-                                  <span className="text-xs uppercase tracking-wide text-slate-500">Clicked</span>
+                                  <span className="text-xs uppercase tracking-wide text-blue-100/70">Clicked</span>
                                   <div className="mt-1 font-semibold text-indigo-600">{campaign.totalClicked || 0}</div>
                                 </div>
                               </>
                             )}
                             <div>
-                              <span className="text-xs uppercase tracking-wide text-slate-500">
+                              <span className="text-xs uppercase tracking-wide text-blue-100/70">
                                 {communicationType === "email" ? "Errors" : "Failed"}
                               </span>
                               <div className="mt-1 font-semibold text-rose-600">{campaign.totalErrors || 0}</div>
@@ -1611,7 +1629,7 @@ export default function Communications() {
                     ))}
                   </div>
                 ) : (
-                  <div className="rounded-2xl border border-dashed border-slate-200/70 bg-white/60 py-10 text-center text-slate-500">
+                  <div className="rounded-2xl border border-dashed border-white/15 bg-white/5 py-10 text-center text-blue-100/70">
                     No campaigns yet. Create your first {communicationType} campaign to get started.
                   </div>
                 )}
@@ -1619,14 +1637,14 @@ export default function Communications() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="requests" className="space-y-10 text-slate-900">
+          <TabsContent value="requests" className="space-y-10 text-white">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-semibold text-blue-50">Callback Requests</h2>
             </div>
 
             <Card className={glassPanelClass}>
               <CardHeader className="border-b border-white/20 pb-4">
-                <CardTitle className="flex items-center gap-2 text-lg font-semibold text-slate-800">
+                <CardTitle className="flex items-center gap-2 text-lg font-semibold text-blue-50">
                   <Phone className="h-5 w-5 text-sky-600" />
                   Consumer Callback Requests
                 </CardTitle>
@@ -1637,10 +1655,10 @@ export default function Communications() {
                     {(callbackRequests as any).map((request: any) => (
                       <div
                         key={request.id}
-                        className="rounded-2xl border border-slate-200/70 bg-white/70 p-5 shadow-sm shadow-slate-900/5"
+                        className="rounded-2xl border border-white/15 bg-white/10 p-5 shadow-sm shadow-blue-900/10"
                       >
                         <div className="mb-3 flex items-center justify-between">
-                          <h3 className="text-base font-semibold text-slate-800">
+                          <h3 className="text-base font-semibold text-blue-50">
                             {request.consumer?.firstName} {request.consumer?.lastName}
                           </h3>
                           <Badge
@@ -1654,33 +1672,33 @@ export default function Communications() {
                             {request.status}
                           </Badge>
                         </div>
-                        <div className="grid grid-cols-1 gap-4 text-sm text-slate-600 md:grid-cols-3">
+                        <div className="grid grid-cols-1 gap-4 text-sm text-blue-100/70 md:grid-cols-3">
                           <div>
-                            <span className="text-xs uppercase tracking-wide text-slate-500">Phone</span>
-                            <div className="mt-1 font-semibold text-slate-800">{request.phoneNumber}</div>
+                            <span className="text-xs uppercase tracking-wide text-blue-100/70">Phone</span>
+                            <div className="mt-1 font-semibold text-blue-50">{request.phoneNumber}</div>
                           </div>
                           <div>
-                            <span className="text-xs uppercase tracking-wide text-slate-500">Preferred Time</span>
-                            <div className="mt-1 font-semibold text-slate-800">{request.preferredTime || "Any time"}</div>
+                            <span className="text-xs uppercase tracking-wide text-blue-100/70">Preferred Time</span>
+                            <div className="mt-1 font-semibold text-blue-50">{request.preferredTime || "Any time"}</div>
                           </div>
                           <div>
-                            <span className="text-xs uppercase tracking-wide text-slate-500">Requested</span>
-                            <div className="mt-1 font-semibold text-slate-800">
+                            <span className="text-xs uppercase tracking-wide text-blue-100/70">Requested</span>
+                            <div className="mt-1 font-semibold text-blue-50">
                               {new Date(request.createdAt).toLocaleDateString()}
                             </div>
                           </div>
                         </div>
                         {request.message && (
-                          <div className="mt-4 rounded-2xl border border-slate-200/70 bg-slate-50/80 p-4 text-sm text-slate-600">
-                            <span className="text-xs uppercase tracking-wide text-slate-500">Message</span>
-                            <p className="mt-1 text-slate-700">{request.message}</p>
+                          <div className="mt-4 rounded-2xl border border-white/15 bg-white/5 p-4 text-sm text-blue-100/70">
+                            <span className="text-xs uppercase tracking-wide text-blue-100/70">Message</span>
+                            <p className="mt-1 text-blue-100/80">{request.message}</p>
                           </div>
                         )}
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="rounded-2xl border border-dashed border-slate-200/70 bg-white/60 py-10 text-center text-slate-500">
+                  <div className="rounded-2xl border border-dashed border-white/15 bg-white/5 py-10 text-center text-blue-100/70">
                     No callback requests yet.
                   </div>
                 )}
@@ -1688,7 +1706,7 @@ export default function Communications() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="automation" className="space-y-10 text-slate-900">
+          <TabsContent value="automation" className="space-y-10 text-white">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-semibold">Communication Automation</h2>
               <Dialog open={showAutomationModal} onOpenChange={setShowAutomationModal}>
@@ -2049,31 +2067,31 @@ export default function Communications() {
 
             <Card className={glassPanelClass}>
               <CardHeader className="border-b border-white/20 pb-4">
-                <CardTitle className="flex items-center gap-2 text-lg font-semibold text-slate-800">
+                <CardTitle className="flex items-center gap-2 text-lg font-semibold text-blue-50">
                   <Clock className="h-5 w-5 text-sky-600" />
                   Active Automations
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-6">
                 {automationsLoading ? (
-                  <div className="py-8 text-center text-slate-500">Loading automations...</div>
+                  <div className="py-8 text-center text-blue-100/70">Loading automations...</div>
                 ) : (automations as any[])?.length > 0 ? (
                   <div className="space-y-4">
                     {(automations as any[]).map((automation: any) => (
                       <div
                         key={automation.id}
-                        className="rounded-2xl border border-slate-200/70 bg-white/70 p-5 shadow-sm shadow-slate-900/5"
+                        className="rounded-2xl border border-white/15 bg-white/10 p-5 shadow-sm shadow-blue-900/10"
                       >
                         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                           <div className="flex flex-col gap-2">
                             <div className="flex flex-wrap items-center gap-2">
-                              <h3 className="text-base font-semibold text-slate-800">{automation.name}</h3>
+                              <h3 className="text-base font-semibold text-blue-50">{automation.name}</h3>
                               <Badge
                                 className={cn(
                                   "rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-wide",
                                   automation.isActive
                                     ? "border-emerald-200/70 bg-emerald-100/80 text-emerald-700"
-                                    : "border-slate-200/70 bg-slate-100/80 text-slate-600"
+                                    : "border-white/15 bg-slate-100/80 text-blue-100/70"
                                 )}
                               >
                                 {automation.isActive ? "Active" : "Inactive"}
@@ -2083,14 +2101,14 @@ export default function Communications() {
                               </Badge>
                             </div>
                             {automation.description && (
-                              <p className="text-sm text-slate-600">{automation.description}</p>
+                              <p className="text-sm text-blue-100/70">{automation.description}</p>
                             )}
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="rounded-full border border-slate-200/70 bg-white/70 px-4 py-1 text-xs font-semibold text-slate-700 shadow-sm hover:bg-white"
+                              className="rounded-full border border-white/15 bg-white/10 px-4 py-1 text-xs font-semibold text-blue-100/80 shadow-sm hover:bg-white"
                               onClick={() =>
                                 toggleAutomationMutation.mutate({
                                   id: automation.id,
@@ -2133,16 +2151,16 @@ export default function Communications() {
                           </div>
                         </div>
                         
-                        <div className="grid grid-cols-1 gap-4 text-sm text-slate-600 md:grid-cols-2 xl:grid-cols-4">
+                        <div className="grid grid-cols-1 gap-4 text-sm text-blue-100/70 md:grid-cols-2 xl:grid-cols-4">
                           <div>
-                            <span className="text-xs uppercase tracking-wide text-slate-500">Trigger</span>
-                            <div className="mt-1 font-semibold capitalize text-slate-800">{automation.triggerType}</div>
+                            <span className="text-xs uppercase tracking-wide text-blue-100/70">Trigger</span>
+                            <div className="mt-1 font-semibold capitalize text-blue-50">{automation.triggerType}</div>
                           </div>
                           <div>
-                            <span className="text-xs uppercase tracking-wide text-slate-500">
+                            <span className="text-xs uppercase tracking-wide text-blue-100/70">
                               Template{automation.templateIds?.length > 1 ? "s" : ""}
                             </span>
-                            <div className="mt-1 font-semibold text-slate-800">
+                            <div className="mt-1 font-semibold text-blue-50">
                               {automation.templateIds && automation.templateIds.length > 0 ? (
                                 automation.templateIds.length === 1 ? (
                                   automation.type === "email"
@@ -2159,19 +2177,19 @@ export default function Communications() {
                             </div>
                           </div>
                           <div>
-                            <span className="text-xs uppercase tracking-wide text-slate-500">Target</span>
-                            <div className="mt-1 font-semibold capitalize text-slate-800">{automation.targetType}</div>
+                            <span className="text-xs uppercase tracking-wide text-blue-100/70">Target</span>
+                            <div className="mt-1 font-semibold capitalize text-blue-50">{automation.targetType}</div>
                           </div>
                           <div>
-                            <span className="text-xs uppercase tracking-wide text-slate-500">Next Run</span>
-                            <div className="mt-1 font-semibold text-slate-800">
+                            <span className="text-xs uppercase tracking-wide text-blue-100/70">Next Run</span>
+                            <div className="mt-1 font-semibold text-blue-50">
                               {automation.nextExecution
                                 ? new Date(automation.nextExecution).toLocaleDateString()
                                 : "Not scheduled"}
                             </div>
                           </div>
                         </div>
-                        <div className="mt-4 grid grid-cols-1 gap-3 border-t border-slate-200/70 pt-4 text-sm text-slate-600 sm:grid-cols-2">
+                        <div className="mt-4 grid grid-cols-1 gap-3 border-t border-white/15 pt-4 text-sm text-blue-100/70 sm:grid-cols-2">
                           <div>Created: {new Date(automation.createdAt).toLocaleString()}</div>
                           {automation.lastRunAt && <div>Last Run: {new Date(automation.lastRunAt).toLocaleString()}</div>}
                         </div>
@@ -2179,10 +2197,10 @@ export default function Communications() {
                     ))}
                   </div>
                 ) : (
-                  <div className="rounded-2xl border border-dashed border-slate-200/70 bg-white/60 py-10 text-center text-slate-500">
-                    <Calendar className="mx-auto mb-4 h-12 w-12 text-slate-300" />
+                  <div className="rounded-2xl border border-dashed border-white/15 bg-white/5 py-10 text-center text-blue-100/70">
+                    <Calendar className="mx-auto mb-4 h-12 w-12 text-blue-200/60" />
                     <p className="text-base font-semibold">No automations created yet.</p>
-                    <p className="text-sm text-slate-500">Create your first automation to start scheduling communications.</p>
+                    <p className="text-sm text-blue-100/70">Create your first automation to start scheduling communications.</p>
                   </div>
                 )}
               </CardContent>
