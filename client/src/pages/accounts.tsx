@@ -36,6 +36,38 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { FolderOpen, Plus, Upload, Trash2, Mail, Phone, MapPin, Calendar } from "lucide-react";
 
+const FALLBACK_STATUSES = new Set([404, 405, 501]);
+
+async function deleteFolderWithFallback(folderId: string) {
+  const attempts: Array<() => Promise<Response>> = [
+    () => apiRequest("DELETE", `/api/folders/${folderId}`),
+    () => apiRequest("POST", `/api/folders/${folderId}/delete`),
+    () => apiRequest("POST", "/api/folders/delete", { folderId }),
+  ];
+
+  let lastError: unknown;
+
+  for (const attempt of attempts) {
+    try {
+      return await attempt();
+    } catch (error) {
+      lastError = error;
+
+      if (error instanceof ApiError && FALLBACK_STATUSES.has(error.status)) {
+        continue;
+      }
+
+      if (error instanceof TypeError) {
+        continue;
+      }
+
+      break;
+    }
+  }
+
+  throw lastError ?? new Error("Failed to delete folder");
+}
+
 export default function Accounts() {
   const [selectedFolderId, setSelectedFolderId] = useState<string>("all");
   const [showImportModal, setShowImportModal] = useState(false);
@@ -214,23 +246,7 @@ export default function Accounts() {
   });
 
   const deleteFolderMutation = useMutation({
-    mutationFn: async (folderId: string) => {
-      try {
-        return await apiRequest("DELETE", `/api/folders/${folderId}`);
-      } catch (error) {
-        if (error instanceof ApiError && error.status === 405) {
-          try {
-            return await apiRequest("POST", `/api/folders/${folderId}/delete`);
-          } catch (fallbackError) {
-            if (fallbackError instanceof ApiError && fallbackError.status === 405) {
-              return await apiRequest("POST", "/api/folders/delete", { folderId });
-            }
-            throw fallbackError;
-          }
-        }
-        throw error;
-      }
-    },
+    mutationFn: (folderId: string) => deleteFolderWithFallback(folderId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
