@@ -1,0 +1,99 @@
+
+https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2
+Request Method
+GET
+Status Code
+200 OK
+Remote Address
+[2607:f8b0:4006:81e::2003]:443
+Referrer Policy
+strict-origin-when-cross-origin
+accept-ranges
+bytes
+access-control-allow-origin
+*
+age
+180263
+alt-svc
+h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+cache-control
+public, max-age=31536000
+content-length
+48256
+content-security-policy-report-only
+require-trusted-types-for 'script'; report-uri https://csp.withgoogle.com/csp/apps-themes
+content-type
+font/woff2
+cross-origin-opener-policy
+same-origin; report-to="apps-themes"
+cross-origin-resource-policy
+cross-origin
+date
+Wed, 24 Sep 2025 18:35:59 GMT
+expires
+Thu, 24 Sep 2026 18:35:59 GMT
+last-modified
+Tue, 09 Sep 2025 18:33:53 GMT
+report-to
+{"group":"apps-themes","max_age":2592000,"endpoints":[{"url":"https://csp.withgoogle.com/csp/report-to/apps-themes"}]}
+server
+sffe
+timing-allow-origin
+*
+x-content-type-options
+nosniff
+x-xss-protection
+0
+:authority
+fonts.gstatic.com
+:method
+GET
+:path
+/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2
+:scheme
+https
+accept
+*/*
+accept-encoding
+gzip, deflate, br, zstd
+accept-language
+en-US,en;q=0.9
+cache-control
+no-cache
+origin
+https://www.chainsoftwaregroup.com
+pragma
+no-cache
+priority
+u=0
+referer
+https://fonts.googleapis.com/
+sec-ch-ua
+"Chromium";v="140", "Not=A?Brand";v="24", "Google Chrome";v="140"
+sec-ch-ua-mobile
+?0
+sec-ch-ua-platform
+"Windows"
+sec-fetch-dest
+font
+sec-fetch-mode
+cors
+sec-fetch-site
+cross-site
+user-agent
+Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36
+x-browser-channel
+stable
+x-browser-copyright
+Copyright 2025 Google LLC. All rights reserved.
+x-browser-validation
+DTaAFOAcbbd2xIkIWiLdbtAAhQc=
+x-browser-year
+2025
+x-client-data
+CIS2yQEIo7bJAQipncoBCOryygEIlaHLAQiapMsBCIWgzQEIjo7PAQ==
+Decoded:
+message ClientVariations {
+  // Active Google-visible variation IDs on this client. These are reported for analysis, but do not directly affect any server-side behavior.
+  repeated int32 variation_id = [3300100, 3300131, 3313321, 3324266, 3330197, 3330586, 3362821, 3393294];
+}

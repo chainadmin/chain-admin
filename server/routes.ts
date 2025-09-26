@@ -653,41 +653,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Consumer portal routes - now with authentication
-  app.get('/api/consumer/accounts/:email', authenticateConsumer, async (req: any, res) => {
-    try {
-      const { email } = req.params;
-      const normalizedEmail = (email || '').trim().toLowerCase();
-      const normalizedConsumerEmail = (req.consumer.email || '').trim().toLowerCase();
-
-      // Verify the email in the URL matches the authenticated consumer's email
-      if (!normalizedEmail || normalizedEmail !== normalizedConsumerEmail) {
-        return res.status(403).json({ message: "Access denied to this account" });
-      }
-      
-      // Get tenant from the authenticated consumer's tenantId
-      const tenant = await storage.getTenant(req.consumer.tenantId);
-      if (!tenant) {
-        return res.status(404).json({ message: "Tenant not found" });
-      }
-
-      // Get the consumer data
-      const consumers = await storage.getConsumersByTenant(tenant.id);
-      const consumer = consumers.find(c => c.id === req.consumer.id);
-      
-      if (!consumer) {
-        return res.status(404).json({ message: "Consumer not found" });
-      }
-
-      const accounts = await storage.getAccountsByConsumer(consumer.id);
-      const tenantSettings = await storage.getTenantSettings(tenant.id);
-      res.json({ consumer, accounts, tenant, tenantSettings });
-    } catch (error) {
-      console.error("Error fetching consumer accounts:", error);
-      res.status(500).json({ message: "Failed to fetch consumer accounts" });
-    }
-  });
-
   // Stats routes
   app.get('/api/stats', authenticateUser, async (req: any, res) => {
     try {
