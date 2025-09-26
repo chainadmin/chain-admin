@@ -215,13 +215,37 @@ export default function Accounts() {
 
   const deleteFolderMutation = useMutation({
     mutationFn: async (folderId: string) => {
+      const fallbackStatuses = new Set([404, 405, 501]);
+      const shouldAttemptFallback = (error: unknown) => {
+        if (error instanceof ApiError) {
+          return fallbackStatuses.has(error.status);
+        }
+
+        return error instanceof TypeError;
+      };
+
       try {
         return await apiRequest("DELETE", `/api/folders/${folderId}`);
       } catch (error) {
-        if (error instanceof ApiError && error.status === 405) {
-          return await apiRequest("POST", `/api/folders/${folderId}/delete`);
+codex/fix-405-method-not-allowed-error-on-delete-p4teey
+        if (!shouldAttemptFallback(error)) {
+          throw error;
         }
-        throw error;
+
+        try {
+        if (error instanceof ApiError && error.status === 405) { main
+          return await apiRequest("POST", `/api/folders/${folderId}/delete`);
+        } catch (fallbackError) {
+          if (!shouldAttemptFallback(fallbackError)) {
+            throw fallbackError;
+          }
+
+          try {
+            return await apiRequest("POST", "/api/folders/delete", { folderId });
+          } catch (finalError) {
+            throw finalError;
+          }
+        }
       }
     },
     onSuccess: () => {
