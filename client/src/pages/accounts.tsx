@@ -215,14 +215,44 @@ export default function Accounts() {
 
   const deleteFolderMutation = useMutation({
     mutationFn: async (folderId: string) => {
+ codex/fix-405-method-not-allowed-error-on-delete-k3zhnq
+      const fallbackStatuses = new Set([404, 405, 501]);
+      const shouldAttemptFallback = (error: unknown) => {
+        if (error instanceof ApiError) {
+          return fallbackStatuses.has(error.status);
+        }
+
+        return error instanceof TypeError;
+      };
+
+      const attempts: Array<() => Promise<Response>> = [
+        () => apiRequest("DELETE", `/api/folders/${folderId}`),
+        () => apiRequest("POST", `/api/folders/${folderId}/delete`),
+        () => apiRequest("POST", "/api/folders/delete", { folderId }),
+      ];
+
+      let lastError: unknown = new Error("Failed to delete folder");
+
+      for (const attempt of attempts) {
+        try {
+          return await attempt();
+        } catch (error) {
+          lastError = error;
+
+          if (!shouldAttemptFallback(error)) {
+            break;
+          }
+
       try {
         return await apiRequest("DELETE", `/api/folders/${folderId}`);
       } catch (error) {
         if (error instanceof ApiError && error.status === 405) {
           return await apiRequest("POST", `/api/folders/${folderId}/delete`);
+ main
         }
-        throw error;
       }
+
+      throw lastError;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
