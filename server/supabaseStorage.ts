@@ -133,4 +133,6 @@ export async function deleteLogo(logoPath: string): Promise<boolean> {
 }
 
 // Initialize bucket on module load
-initializeBucket().catch(console.error);
+if (process.env.SUPABASE_SKIP_INIT !== '1') {
+  initializeBucket().catch(console.error);
+}
