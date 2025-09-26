@@ -106,7 +106,7 @@ export default function EnhancedConsumerPortal() {
   // Mark notification as read
   const markNotificationReadMutation = useMutation({
     mutationFn: async (notificationId: string) => {
-      await apiRequest("PATCH", `/api/consumer-notifications/${notificationId}/read`);
+      await apiRequest("PATCH", `/api/consumer-notifications/read/${notificationId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({

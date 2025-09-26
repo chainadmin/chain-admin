@@ -2389,7 +2389,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Mark notification as read
-  app.patch('/api/consumer-notifications/:id/read', async (req, res) => {
+  app.patch('/api/consumer-notifications/read/:id', async (req, res) => {
     try {
       const { id } = req.params;
       await storage.markNotificationRead(id);
