@@ -38,6 +38,13 @@ export default function ConsumerDashboard() {
   const [showCallbackModal, setShowCallbackModal] = useState(false);
   const [consumerSession, setConsumerSession] = useState<any>(null);
 
+  useEffect(() => {
+    const token = localStorage.getItem("consumerToken");
+    if (!token) {
+      setLocation("/consumer-login");
+    }
+  }, [setLocation]);
+
   // Get consumer session data
   useEffect(() => {
     const sessionData = localStorage.getItem("consumerSession");

@@ -66,27 +66,38 @@ export default function ConsumerRegistration() {
 
   const registrationMutation = useMutation({
     mutationFn: async (data: any) => {
-      const response = await apiRequest("POST", "/api/consumer-registration", data);
-      return response;
+      return await (await apiRequest("POST", "/api/consumer-registration", data)).json();
     },
     onSuccess: (data: any) => {
-      if (data.tenant) {
+      const tenant = data?.tenant;
+      const consumer = data?.consumer;
+      const tenantName = typeof tenant?.name === "string" ? tenant.name : tenant?.slug;
+      const successMessage = typeof data?.message === "string"
+        ? data.message
+        : "Registration completed. Please log in to finish setting up your access.";
+
+      localStorage.removeItem("consumerSession");
+      localStorage.removeItem("consumerToken");
+
+      if (tenantName) {
         toast({
           title: "Registration Successful!",
-          description: `Your agency (${data.tenant.name}) has been automatically identified. Welcome to your portal!`,
+          description: `${tenantName} is ready to finish securing your account. Please log in to continue.`,
         });
-        // Store session and redirect to consumer portal
-        localStorage.setItem("consumerSession", JSON.stringify({
-          email: formData.email,
-          tenantSlug: data.tenant.slug,
-          consumerData: data.consumer,
-        }));
-        navigate("/consumer-dashboard");
       } else {
         toast({
           title: "Registration Complete",
-          description: data.message,
+          description: successMessage,
         });
+      }
+
+      if (tenant?.slug && consumer) {
+        const params = new URLSearchParams();
+        if (formData.email) {
+          params.set("email", formData.email);
+        }
+        params.set("tenant", tenant.slug);
+        navigate(`/consumer-login?${params.toString()}`);
       }
     },
     onError: (error: unknown) => {
@@ -233,7 +244,7 @@ export default function ConsumerRegistration() {
             <h2 className="mt-2 text-2xl font-semibold">Tell us a few details</h2>
             <p className="mt-3 text-sm text-blue-100/70">
               {effectiveTenantSlug
-                ? `We’ll connect you with ${effectiveTenantSlug.replace(/-/g, " ")} and activate your access immediately.`
+                ? `We’ll connect you with ${effectiveTenantSlug.replace(/-/g, " ")} and send you back to login so you can secure your access.`
                 : "Share your information and we’ll locate the right agency for you automatically."}
             </p>
           </div>
