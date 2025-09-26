@@ -1,3 +1,6 @@
+-- Ensure UUID generation functions are available
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
 -- Create table for storing agency login credentials aligned with shared/schema.ts
 CREATE TABLE IF NOT EXISTS agency_credentials (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -561,19 +561,25 @@ export class DatabaseStorage implements IStorage {
   }
 
   async findOrCreateConsumer(consumerData: InsertConsumer): Promise<Consumer> {
+    const trimmedEmail = consumerData.email?.trim();
+    const normalizedConsumerData =
+      trimmedEmail !== undefined && trimmedEmail !== consumerData.email
+        ? { ...consumerData, email: trimmedEmail }
+        : consumerData;
+
     // Check for existing consumer by email and tenant (unique within tenant)
-    if (!consumerData.email || !consumerData.tenantId) {
+    if (!trimmedEmail || !normalizedConsumerData.tenantId) {
       // If email or tenant is missing, create a new consumer
-      return await this.createConsumer(consumerData);
+      return await this.createConsumer(normalizedConsumerData);
     }
-    
+
     // First check if consumer already exists with this tenant
     const [existingConsumerWithTenant] = await db.select()
       .from(consumers)
       .where(
         and(
-          eq(consumers.tenantId, consumerData.tenantId),
-          sql`LOWER(${consumers.email}) = LOWER(${consumerData.email})`
+          eq(consumers.tenantId, normalizedConsumerData.tenantId),
+          sql`LOWER(${consumers.email}) = LOWER(${trimmedEmail})`
         )
       );
     
@@ -619,7 +625,7 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           sql`${consumers.tenantId} IS NULL`,
-          sql`LOWER(${consumers.email}) = LOWER(${consumerData.email})`
+          sql`LOWER(${consumers.email}) = LOWER(${trimmedEmail})`
         )
       );
 
@@ -627,22 +633,22 @@ export class DatabaseStorage implements IStorage {
       // Found unlinked consumer with matching email - auto-link to this tenant
       const [linkedConsumer] = await db.update(consumers)
         .set({ 
-          tenantId: consumerData.tenantId,
-          firstName: consumerData.firstName || unlinkedConsumer.firstName,
-          lastName: consumerData.lastName || unlinkedConsumer.lastName,
-          phone: consumerData.phone || unlinkedConsumer.phone,
-          dateOfBirth: consumerData.dateOfBirth || unlinkedConsumer.dateOfBirth,
-          ssnLast4: consumerData.ssnLast4 || unlinkedConsumer.ssnLast4,
-          address: consumerData.address || unlinkedConsumer.address,
-          city: consumerData.city || unlinkedConsumer.city,
-          state: consumerData.state || unlinkedConsumer.state,
-          zipCode: consumerData.zipCode || unlinkedConsumer.zipCode,
-          folderId: consumerData.folderId
+          tenantId: normalizedConsumerData.tenantId,
+          firstName: normalizedConsumerData.firstName || unlinkedConsumer.firstName,
+          lastName: normalizedConsumerData.lastName || unlinkedConsumer.lastName,
+          phone: normalizedConsumerData.phone || unlinkedConsumer.phone,
+          dateOfBirth: normalizedConsumerData.dateOfBirth || unlinkedConsumer.dateOfBirth,
+          ssnLast4: normalizedConsumerData.ssnLast4 || unlinkedConsumer.ssnLast4,
+          address: normalizedConsumerData.address || unlinkedConsumer.address,
+          city: normalizedConsumerData.city || unlinkedConsumer.city,
+          state: normalizedConsumerData.state || unlinkedConsumer.state,
+          zipCode: normalizedConsumerData.zipCode || unlinkedConsumer.zipCode,
+          folderId: normalizedConsumerData.folderId
         })
         .where(eq(consumers.id, unlinkedConsumer.id))
         .returning();
         
-      console.log(`Auto-linked unlinked consumer ${unlinkedConsumer.id} to tenant ${consumerData.tenantId}`);
+      console.log(`Auto-linked unlinked consumer ${unlinkedConsumer.id} to tenant ${normalizedConsumerData.tenantId}`);
       return linkedConsumer;
     }
     
@@ -651,7 +657,7 @@ export class DatabaseStorage implements IStorage {
       .from(consumers)
       .where(
         and(
-          sql`LOWER(${consumers.email}) = LOWER(${consumerData.email})`,
+          sql`LOWER(${consumers.email}) = LOWER(${trimmedEmail})`,
           sql`${consumers.tenantId} IS NOT NULL`
         )
       );
@@ -660,24 +666,24 @@ export class DatabaseStorage implements IStorage {
       // Consumer exists in another tenant - create a new consumer record for this tenant
       // Copy data from existing consumer but create a new record for multi-tenant support
       const newConsumerData = {
-        ...consumerData,
-        firstName: consumerData.firstName || existingConsumer.firstName,
-        lastName: consumerData.lastName || existingConsumer.lastName,
-        phone: consumerData.phone || existingConsumer.phone,
-        dateOfBirth: consumerData.dateOfBirth || existingConsumer.dateOfBirth,
-        address: consumerData.address || existingConsumer.address,
-        city: consumerData.city || existingConsumer.city,
-        state: consumerData.state || existingConsumer.state,
-        zipCode: consumerData.zipCode || existingConsumer.zipCode,
-        ssnLast4: consumerData.ssnLast4 || existingConsumer.ssnLast4,
+        ...normalizedConsumerData,
+        firstName: normalizedConsumerData.firstName || existingConsumer.firstName,
+        lastName: normalizedConsumerData.lastName || existingConsumer.lastName,
+        phone: normalizedConsumerData.phone || existingConsumer.phone,
+        dateOfBirth: normalizedConsumerData.dateOfBirth || existingConsumer.dateOfBirth,
+        address: normalizedConsumerData.address || existingConsumer.address,
+        city: normalizedConsumerData.city || existingConsumer.city,
+        state: normalizedConsumerData.state || existingConsumer.state,
+        zipCode: normalizedConsumerData.zipCode || existingConsumer.zipCode,
+        ssnLast4: normalizedConsumerData.ssnLast4 || existingConsumer.ssnLast4,
       };
       
-      console.log(`Creating new consumer record for tenant ${consumerData.tenantId} based on existing consumer from another tenant`);
+      console.log(`Creating new consumer record for tenant ${normalizedConsumerData.tenantId} based on existing consumer from another tenant`);
       return await this.createConsumer(newConsumerData);
     }
 
     // No existing consumer found - create new one
-    return await this.createConsumer(consumerData);
+    return await this.createConsumer(normalizedConsumerData);
   }
 
   async deleteConsumer(id: string, tenantId: string): Promise<void> {
@@ -1330,6 +1336,11 @@ export class DatabaseStorage implements IStorage {
       return undefined;
     }
 
+    const normalizedEmail = (email ?? "").trim();
+    if (!normalizedEmail) {
+      return undefined;
+    }
+
     const tenant = await this.getTenantBySlug(tenantIdentifier);
     const tenantId = tenant?.id ?? (tenantIdentifier.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
       ? tenantIdentifier
@@ -1344,7 +1355,7 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(consumers.tenantId, tenantId),
-          sql`LOWER(${consumers.email}) = LOWER(${email})`
+          sql`LOWER(${consumers.email}) = LOWER(${normalizedEmail})`
         )
       );
 
@@ -1352,10 +1363,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getConsumerByEmail(email: string): Promise<Consumer | undefined> {
+    const normalizedEmail = (email ?? "").trim();
+    if (!normalizedEmail) {
+      return undefined;
+    }
+
     // Get all consumers with this email
     const allConsumers = await db.select()
       .from(consumers)
-      .where(sql`LOWER(${consumers.email}) = LOWER(${email})`);
+      .where(sql`LOWER(${consumers.email}) = LOWER(${normalizedEmail})`);
 
     // Prioritize consumers WITH a tenantId over those without
     // This ensures we return linked consumers first
