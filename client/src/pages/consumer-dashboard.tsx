@@ -26,6 +26,53 @@ function withCacheBust(url: string): string {
   return `${url}${separator}_=${Date.now()}`;
 }
 
+async function fetchConsumerResource(url: string) {
+  const token = localStorage.getItem('consumerToken');
+  if (!token) {
+    throw new Error('No consumer token found');
+  }
+
+  const baseHeaders: Record<string, string> = {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  };
+
+  const fetchOnce = async (targetUrl: string, includeNoCacheHeaders = false) => {
+    const headers = includeNoCacheHeaders
+      ? { ...baseHeaders, 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+      : baseHeaders;
+
+    return fetch(targetUrl, {
+      headers,
+      credentials: 'include',
+      cache: 'no-store'
+    });
+  };
+
+  let response = await fetchOnce(withCacheBust(url));
+
+  if (response.status === 304) {
+    response = await fetchOnce(withCacheBust(url), true);
+  }
+
+  if (response.status === 304) {
+    throw new Error('Failed to fetch accounts: received 304 Not Modified');
+  }
+
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403 || response.status === 400) {
+      localStorage.removeItem('consumerToken');
+      localStorage.removeItem('consumerSession');
+      window.location.href = '/consumer-login';
+    }
+
+    const errorText = await response.text();
+    throw new Error(`Failed to fetch accounts: ${errorText}`);
+  }
+
+  return response;
+}
+
 export default function ConsumerDashboard() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -80,31 +127,7 @@ export default function ConsumerDashboard() {
   const { data, isLoading, error } = useQuery({
     queryKey: accountsUrl ? [accountsUrl] : ['consumer-accounts'],
     queryFn: async () => {
-      const token = localStorage.getItem('consumerToken');
-      if (!token) {
-        throw new Error('No consumer token found');
-      }
-      const response = await fetch(withCacheBust(accountsUrl), {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include',
-        cache: 'no-store'
-      });
-      if (response.status === 304) {
-        throw new Error('Failed to fetch accounts: received 304 Not Modified');
-      }
-      if (!response.ok) {
-        const error = await response.text();
-        // If unauthorized, clear old token and force re-login
-        if (response.status === 401 || response.status === 403 || response.status === 400) {
-          localStorage.removeItem('consumerToken');
-          localStorage.removeItem('consumerSession');
-          window.location.href = '/consumer-login';
-        }
-        throw new Error(`Failed to fetch accounts: ${error}`);
-      }
+      const response = await fetchConsumerResource(accountsUrl);
       return response.json();
     },
     enabled: !!accountsUrl,
