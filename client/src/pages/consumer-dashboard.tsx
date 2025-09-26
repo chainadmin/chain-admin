@@ -80,7 +80,7 @@ export default function ConsumerDashboard() {
 
   // Fetch consumer data
   const { data, isLoading, error } = useQuery({
-    queryKey: accountsUrl ? [accountsUrl] : ['consumer-accounts'],
+    queryKey: accountsUrl ? ['api', 'consumer', 'accounts', encodedEmail] : ['consumer-accounts'],
     enabled: !!accountsUrl,
   });
 
