@@ -1884,8 +1884,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const newConsumer = await storage.createConsumer(consumerData);
       console.log("New consumer created successfully:", newConsumer.id);
 
-      return res.json({ 
-        message: tenantInfo 
+      return res.json({
+        message: tenantInfo
           ? `Registration successful! You are now registered with ${tenantInfo.name}.`
           : "Registration successful! You'll be notified when your agency adds your account information.",
         consumerId: newConsumer.id,
@@ -1896,7 +1896,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           lastName: newConsumer.lastName,
           email: newConsumer.email,
         },
-        needsAgencyLink: true
+        needsAgencyLink: !tenantInfo
       });
 
     } catch (error) {
