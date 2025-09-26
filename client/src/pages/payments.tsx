@@ -139,17 +139,17 @@ export default function Payments() {
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
       case "completed":
-        return "border-emerald-200/70 bg-emerald-100/80 text-emerald-700";
+        return "border-emerald-400/40 bg-emerald-500/10 text-emerald-100";
       case "pending":
-        return "border-amber-200/70 bg-amber-100/80 text-amber-700";
+        return "border-amber-300/40 bg-amber-500/10 text-amber-100";
       case "processing":
-        return "border-sky-200/70 bg-sky-100/80 text-sky-700";
+        return "border-sky-400/40 bg-sky-500/10 text-sky-100";
       case "failed":
-        return "border-rose-200/70 bg-rose-100/80 text-rose-700";
+        return "border-rose-400/40 bg-rose-500/10 text-rose-100";
       case "refunded":
-        return "border-indigo-200/70 bg-indigo-100/80 text-indigo-700";
+        return "border-indigo-400/40 bg-indigo-500/10 text-indigo-100";
       default:
-        return "border-slate-200/70 bg-slate-100/80 text-slate-700";
+        return "border-slate-400/30 bg-slate-500/10 text-slate-100";
     }
   };
 
@@ -184,9 +184,9 @@ export default function Payments() {
   };
 
   const glassPanelClass =
-    "rounded-3xl border border-white/15 bg-white/95 text-slate-900 shadow-xl shadow-blue-900/10 backdrop-blur";
+    "rounded-3xl border border-white/15 bg-[#0b1733]/80 text-blue-50 shadow-xl shadow-blue-900/20 backdrop-blur";
   const frostedCardClass =
-    "rounded-3xl border border-white/15 bg-white/10 p-6 shadow-xl shadow-blue-900/20 backdrop-blur";
+    "rounded-3xl border border-white/15 bg-white/10 p-6 text-blue-50 shadow-xl shadow-blue-900/30 backdrop-blur";
 
   if (paymentsLoading || statsLoading) {
     return (
@@ -282,20 +282,20 @@ export default function Payments() {
             <Card className={glassPanelClass}>
               <CardHeader className="border-b border-white/20 pb-4">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <CardTitle className="text-lg font-semibold text-slate-800">
+                  <CardTitle className="text-lg font-semibold text-blue-50">
                     Payment transactions ({filteredPayments.length})
                   </CardTitle>
-                  <div className="text-sm text-slate-500">
+                  <div className="text-sm text-blue-100/70">
                     Showing {filteredPayments.length} of {(payments as any[])?.length || 0} records
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="pt-6">
                 {filteredPayments.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200/70 bg-white/60 py-16 text-center text-slate-500">
-                    <CreditCard className="mx-auto mb-4 h-12 w-12 text-slate-400" />
-                    <h3 className="text-lg font-semibold text-slate-700">No payments yet</h3>
-                    <p className="mt-2 text-sm">
+                  <div className="rounded-2xl border border-dashed border-white/20 bg-white/5 py-16 text-center text-blue-100/70">
+                    <CreditCard className="mx-auto mb-4 h-12 w-12 text-blue-200/80" />
+                    <h3 className="text-lg font-semibold text-blue-50">No payments yet</h3>
+                    <p className="mt-2 text-sm text-blue-100/70">
                       {filterStatus === "all"
                         ? "Once payments are processed through USAePay they will appear here."
                         : `No ${filterStatus} payments matched your filter.`}
@@ -306,17 +306,17 @@ export default function Payments() {
                     {filteredPayments.map((payment: any) => (
                       <div
                         key={payment.id}
-                        className="rounded-2xl border border-slate-200/70 bg-white/80 p-5 shadow-sm shadow-slate-900/5 transition hover:-translate-y-0.5 hover:shadow-lg"
+                        className="rounded-2xl border border-white/15 bg-white/5 p-5 text-blue-50 shadow-sm shadow-blue-900/10 transition hover:-translate-y-0.5 hover:border-white/25 hover:shadow-lg"
                       >
                         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                           <div className="space-y-4">
                             <div className="flex flex-wrap items-center gap-3">
-                              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900/5 text-slate-700">
+                              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-blue-100">
                                 {getPaymentMethodIcon(payment.paymentMethod)}
                               </span>
                               <div>
-                                <p className="text-xl font-semibold text-slate-800">{formatCurrency(payment.amountCents)}</p>
-                                <p className="text-sm text-slate-500">{payment.accountCreditor || "General Payment"}</p>
+                                <p className="text-xl font-semibold text-white">{formatCurrency(payment.amountCents)}</p>
+                                <p className="text-sm text-blue-100/80">{payment.accountCreditor || "General Payment"}</p>
                               </div>
                               <Badge
                                 className={cn(
@@ -327,48 +327,48 @@ export default function Payments() {
                                 {payment.status?.replace("_", " ") || "Unknown"}
                               </Badge>
                             </div>
-                            <div className="grid gap-4 text-sm text-slate-600 sm:grid-cols-2 lg:grid-cols-4">
+                            <div className="grid gap-4 text-sm text-blue-100/80 sm:grid-cols-2 lg:grid-cols-4">
                               <div>
-                                <span className="text-xs uppercase tracking-wide text-slate-500">Consumer</span>
-                                <p className="mt-1 font-semibold text-slate-800">
+                                <span className="text-xs uppercase tracking-wide text-blue-200/80">Consumer</span>
+                                <p className="mt-1 font-semibold text-blue-50">
                                   {payment.consumerName || payment.consumerEmail}
                                 </p>
                               </div>
                               <div>
-                                <span className="text-xs uppercase tracking-wide text-slate-500">Payment method</span>
-                                <p className="mt-1 font-semibold capitalize text-slate-800">
+                                <span className="text-xs uppercase tracking-wide text-blue-200/80">Payment method</span>
+                                <p className="mt-1 font-semibold capitalize text-blue-50">
                                   {payment.paymentMethod?.replace("_", " ")}
                                 </p>
                               </div>
                               <div>
-                                <span className="text-xs uppercase tracking-wide text-slate-500">Date</span>
-                                <p className="mt-1 font-semibold text-slate-800">{formatDate(payment.createdAt)}</p>
+                                <span className="text-xs uppercase tracking-wide text-blue-200/80">Date</span>
+                                <p className="mt-1 font-semibold text-blue-50">{formatDate(payment.createdAt)}</p>
                               </div>
                               <div>
-                                <span className="text-xs uppercase tracking-wide text-slate-500">Processed</span>
-                                <p className="mt-1 font-semibold text-slate-800">
+                                <span className="text-xs uppercase tracking-wide text-blue-200/80">Processed</span>
+                                <p className="mt-1 font-semibold text-blue-50">
                                   {payment.processedAt ? formatDate(payment.processedAt) : "Awaiting"}
                                 </p>
                               </div>
                             </div>
                             {payment.transactionId && (
-                              <div className="rounded-2xl border border-slate-200/70 bg-slate-50/80 p-3 text-xs text-slate-600">
-                                <span className="font-semibold text-slate-700">Transaction ID:</span> {payment.transactionId}
+                              <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-blue-100/80">
+                                <span className="font-semibold text-blue-50">Transaction ID:</span> {payment.transactionId}
                               </div>
                             )}
                             {payment.notes && (
-                              <div className="rounded-2xl border border-slate-200/70 bg-slate-50/80 p-3 text-sm text-slate-600">
-                                <span className="font-semibold text-slate-700">Notes:</span> {payment.notes}
+                              <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-blue-100/80">
+                                <span className="font-semibold text-blue-50">Notes:</span> {payment.notes}
                               </div>
                             )}
                             {payment.processorResponse && (
-                              <div className="flex items-center gap-2 text-xs text-slate-500">
+                              <div className="flex items-center gap-2 text-xs text-blue-100/70">
                                 <RefreshCw className="h-4 w-4" />
                                 <span>{payment.processorResponse.slice(0, 80)}</span>
                               </div>
                             )}
                           </div>
-                          <div className="flex items-start gap-4 text-sm text-slate-500">
+                          <div className="flex items-start gap-4 text-sm text-blue-100/80">
                             <div className="flex items-center">
                               <User className="mr-2 h-4 w-4" />
                               {payment.createdBy || "Agent"}
@@ -386,16 +386,19 @@ export default function Payments() {
           <div className="space-y-6 lg:col-span-4">
             <Card className={glassPanelClass}>
               <CardHeader className="border-b border-white/20 pb-4">
-                <CardTitle className="text-lg font-semibold text-slate-800">Filter payments</CardTitle>
+                <CardTitle className="text-lg font-semibold text-blue-50">Filter payments</CardTitle>
               </CardHeader>
               <CardContent className="pt-6">
                 <div className="space-y-2">
-                  <Label htmlFor="status-filter" className="text-sm font-semibold text-slate-700">
+                  <Label htmlFor="status-filter" className="text-sm font-semibold text-blue-100/80">
                     Status
                   </Label>
                   <Select value={filterStatus} onValueChange={setFilterStatus}>
-                    <SelectTrigger className="w-full rounded-xl border border-slate-200/70 bg-white/80" data-testid="select-payment-status">
-                      <SelectValue placeholder="All statuses" />
+                    <SelectTrigger
+                      className="w-full rounded-xl border border-white/20 bg-white/10 text-blue-50 backdrop-blur placeholder:text-blue-100/60"
+                      data-testid="select-payment-status"
+                    >
+                      <SelectValue placeholder="All statuses" className="text-blue-50" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Statuses</SelectItem>
@@ -412,39 +415,46 @@ export default function Payments() {
 
             <Card className={glassPanelClass}>
               <CardHeader className="border-b border-white/20 pb-4">
-                <CardTitle className="text-lg font-semibold text-slate-800">Process payment</CardTitle>
-                <p className="text-sm text-slate-500">
+                <CardTitle className="text-lg font-semibold text-blue-50">Process payment</CardTitle>
+                <p className="text-sm text-blue-100/70">
                   Securely collect credit card payments in real time using the USAePay gateway.
                 </p>
               </CardHeader>
               <CardContent className="pt-6">
                 <div className="mb-6 text-center">
-                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-900/5">
-                    <Lock className="h-8 w-8 text-slate-700" />
+                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-white/10">
+                    <Lock className="h-8 w-8 text-blue-100" />
                   </div>
-                  <p className="text-sm text-slate-500">
+                  <p className="text-sm text-blue-100/70">
                     Launch a secure payment flow for the selected consumer.
                   </p>
                   <Dialog open={showPayNowModal} onOpenChange={setShowPayNowModal}>
                     <DialogTrigger asChild>
-                      <Button size="lg" className="mt-4 rounded-xl bg-slate-900 px-6 py-2 text-sm font-semibold text-white shadow-lg shadow-slate-900/30" data-testid="button-pay-now">
+                      <Button
+                        size="lg"
+                        className="mt-4 rounded-xl border border-white/20 bg-white/10 px-6 py-2 text-sm font-semibold text-blue-50 shadow-lg shadow-blue-900/30 transition hover:bg-white/20"
+                        data-testid="button-pay-now"
+                      >
                         <CreditCard className="mr-2 h-5 w-5" />
                         Pay now
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="max-w-md">
+                    <DialogContent className="max-w-md rounded-3xl border border-white/20 bg-[#0b1733]/95 text-blue-50">
                       <DialogHeader>
-                        <DialogTitle className="text-lg font-semibold">Secure Payment Processing</DialogTitle>
+                        <DialogTitle className="text-lg font-semibold text-blue-50">Secure Payment Processing</DialogTitle>
                       </DialogHeader>
                       <form onSubmit={handlePayNowSubmit} className="space-y-4">
-                        <div>
-                          <Label>Consumer Email *</Label>
+                        <div className="space-y-2">
+                          <Label className="text-sm font-semibold text-blue-100/80">Consumer Email *</Label>
                           <Select
                             value={payNowForm.consumerEmail}
                             onValueChange={(value) => handlePayNowFormChange("consumerEmail", value)}
                           >
-                            <SelectTrigger data-testid="select-paynow-consumer">
-                              <SelectValue placeholder="Select consumer" />
+                            <SelectTrigger
+                              data-testid="select-paynow-consumer"
+                              className="rounded-xl border border-white/20 bg-white/10 text-blue-50 placeholder:text-blue-100/60"
+                            >
+                              <SelectValue placeholder="Select consumer" className="text-blue-50" />
                             </SelectTrigger>
                             <SelectContent>
                               {(consumers as any[])?.map((consumer: any) => (
@@ -455,8 +465,8 @@ export default function Payments() {
                             </SelectContent>
                           </Select>
                         </div>
-                        <div>
-                          <Label>Payment Amount *</Label>
+                        <div className="space-y-2">
+                          <Label className="text-sm font-semibold text-blue-100/80">Payment Amount *</Label>
                           <Input
                             type="number"
                             step="0.01"
@@ -465,13 +475,14 @@ export default function Payments() {
                             placeholder="0.00"
                             data-testid="input-paynow-amount"
                             required
+                            className="rounded-xl border border-white/20 bg-white/10 text-blue-50 placeholder:text-blue-100/60"
                           />
                         </div>
-                        <div className="border-t border-slate-200/70 pt-4">
-                          <h4 className="mb-3 text-sm font-semibold text-slate-700">Card information</h4>
+                        <div className="border-t border-white/10 pt-4">
+                          <h4 className="mb-3 text-sm font-semibold text-blue-50">Card information</h4>
                           <div className="space-y-4">
                             <div>
-                              <Label>Card Number *</Label>
+                              <Label className="text-sm font-semibold text-blue-100/80">Card Number *</Label>
                               <Input
                                 value={payNowForm.cardNumber}
                                 onChange={(e) => {
@@ -484,11 +495,12 @@ export default function Payments() {
                                 maxLength={19}
                                 data-testid="input-card-number"
                                 required
+                                className="rounded-xl border border-white/20 bg-white/10 text-blue-50 placeholder:text-blue-100/60"
                               />
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                               <div>
-                                <Label>Expiry Date *</Label>
+                                <Label className="text-sm font-semibold text-blue-100/80">Expiry Date *</Label>
                                 <Input
                                   value={payNowForm.expiryDate}
                                   onChange={(e) => {
@@ -501,10 +513,11 @@ export default function Payments() {
                                   maxLength={5}
                                   data-testid="input-expiry-date"
                                   required
+                                  className="rounded-xl border border-white/20 bg-white/10 text-blue-50 placeholder:text-blue-100/60"
                                 />
                               </div>
                               <div>
-                                <Label>CVV *</Label>
+                                <Label className="text-sm font-semibold text-blue-100/80">CVV *</Label>
                                 <Input
                                   type="password"
                                   value={payNowForm.cvv}
@@ -518,21 +531,23 @@ export default function Payments() {
                                   maxLength={4}
                                   data-testid="input-cvv"
                                   required
+                                  className="rounded-xl border border-white/20 bg-white/10 text-blue-50 placeholder:text-blue-100/60"
                                 />
                               </div>
                             </div>
                             <div>
-                              <Label>Cardholder Name *</Label>
+                              <Label className="text-sm font-semibold text-blue-100/80">Cardholder Name *</Label>
                               <Input
                                 value={payNowForm.cardName}
                                 onChange={(e) => handlePayNowFormChange("cardName", e.target.value)}
                                 placeholder="John Doe"
                                 data-testid="input-card-name"
                                 required
+                                className="rounded-xl border border-white/20 bg-white/10 text-blue-50 placeholder:text-blue-100/60"
                               />
                             </div>
                             <div>
-                              <Label>ZIP Code *</Label>
+                              <Label className="text-sm font-semibold text-blue-100/80">ZIP Code *</Label>
                               <Input
                                 value={payNowForm.zipCode}
                                 onChange={(e) => {
@@ -545,15 +560,25 @@ export default function Payments() {
                                 maxLength={5}
                                 data-testid="input-zip-code"
                                 required
+                                className="rounded-xl border border-white/20 bg-white/10 text-blue-50 placeholder:text-blue-100/60"
                               />
                             </div>
                           </div>
                         </div>
                         <div className="flex justify-end gap-3 pt-2">
-                          <Button type="button" variant="outline" onClick={() => setShowPayNowModal(false)}>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setShowPayNowModal(false)}
+                            className="rounded-xl border border-white/20 bg-transparent px-4 py-2 text-sm font-semibold text-blue-100 transition hover:bg-white/10"
+                          >
                             Cancel
                           </Button>
-                          <Button type="submit" disabled={processPaymentMutation.isPending}>
+                          <Button
+                            type="submit"
+                            disabled={processPaymentMutation.isPending}
+                            className="rounded-xl border border-sky-400/40 bg-sky-500/20 px-4 py-2 text-sm font-semibold text-blue-50 shadow-lg shadow-blue-900/20 transition hover:bg-sky-500/30"
+                          >
                             {processPaymentMutation.isPending ? (
                               <>
                                 <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
