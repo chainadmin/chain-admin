@@ -93,6 +93,23 @@ type DocumentWithAccount = Document & {
   account?: (Account & { consumer?: Consumer }) | null;
 };
 
+function normalizeEmailValue(value?: string | null): string | null {
+  if (value === undefined || value === null) return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function applyNormalizedEmail<T extends { email?: string | null }>(record: T): T {
+  if (!("email" in record) || record.email === undefined) {
+    return record;
+  }
+
+  return {
+    ...record,
+    email: normalizeEmailValue(record.email),
+  } as T;
+}
+
 export interface IStorage {
   // User operations (mandatory for Replit Auth)
   getUser(id: string): Promise<User | undefined>;
@@ -513,17 +530,19 @@ export class DatabaseStorage implements IStorage {
     // Get all consumers with this email across all tenants (case-insensitive)
     return await db.select()
       .from(consumers)
-      .where(sql`LOWER(${consumers.email}) = LOWER(${trimmedEmail})`);
+      .where(sql`LOWER(TRIM(${consumers.email})) = LOWER(${trimmedEmail})`);
   }
 
   async createConsumer(consumer: InsertConsumer): Promise<Consumer> {
-    const [newConsumer] = await db.insert(consumers).values(consumer).returning();
+    const consumerToInsert = applyNormalizedEmail(consumer);
+    const [newConsumer] = await db.insert(consumers).values(consumerToInsert).returning();
     return newConsumer;
   }
 
   async updateConsumer(id: string, updates: Partial<Consumer>): Promise<Consumer> {
+    const sanitizedUpdates = applyNormalizedEmail(updates);
     const [updatedConsumer] = await db.update(consumers)
-      .set(updates)
+      .set(sanitizedUpdates)
       .where(eq(consumers.id, id))
       .returning();
     return updatedConsumer;
@@ -538,7 +557,7 @@ export class DatabaseStorage implements IStorage {
     // Find all consumers with this email (case-insensitive)
     const consumersWithEmail = await db.select()
       .from(consumers)
-      .where(sql`LOWER(${consumers.email}) = LOWER(${trimmedEmail})`);
+      .where(sql`LOWER(TRIM(${consumers.email})) = LOWER(${trimmedEmail})`);
 
     if (consumersWithEmail.length === 0) {
       return [];
@@ -579,7 +598,7 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(consumers.tenantId, normalizedConsumerData.tenantId),
-          sql`LOWER(${consumers.email}) = LOWER(${trimmedEmail})`
+          sql`LOWER(TRIM(${consumers.email})) = LOWER(${trimmedEmail})`
         )
       );
     
@@ -625,7 +644,7 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           sql`${consumers.tenantId} IS NULL`,
-          sql`LOWER(${consumers.email}) = LOWER(${trimmedEmail})`
+          sql`LOWER(TRIM(${consumers.email})) = LOWER(${trimmedEmail})`
         )
       );
 
@@ -657,7 +676,7 @@ export class DatabaseStorage implements IStorage {
       .from(consumers)
       .where(
         and(
-          sql`LOWER(${consumers.email}) = LOWER(${trimmedEmail})`,
+          sql`LOWER(TRIM(${consumers.email})) = LOWER(${trimmedEmail})`,
           sql`${consumers.tenantId} IS NOT NULL`
         )
       );
@@ -1323,8 +1342,9 @@ export class DatabaseStorage implements IStorage {
 
   // Consumer registration operations
   async registerConsumer(consumerData: InsertConsumer): Promise<Consumer> {
+    const normalizedData = applyNormalizedEmail(consumerData);
     const [newConsumer] = await db.insert(consumers).values({
-      ...consumerData,
+      ...normalizedData,
       isRegistered: true,
       registrationDate: new Date(),
     }).returning();
@@ -1355,7 +1375,7 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(consumers.tenantId, tenantId),
-          sql`LOWER(${consumers.email}) = LOWER(${normalizedEmail})`
+          sql`LOWER(TRIM(${consumers.email})) = LOWER(${normalizedEmail})`
         )
       );
 
@@ -1371,7 +1391,7 @@ export class DatabaseStorage implements IStorage {
     // Get all consumers with this email
     const allConsumers = await db.select()
       .from(consumers)
-      .where(sql`LOWER(${consumers.email}) = LOWER(${normalizedEmail})`);
+      .where(sql`LOWER(TRIM(${consumers.email})) = LOWER(${normalizedEmail})`);
 
     // Prioritize consumers WITH a tenantId over those without
     // This ensures we return linked consumers first
