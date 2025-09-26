@@ -1,9 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  handleLoginResult,
   retryLoginWithAgencySelection,
   storeAgencyContext,
   type AgencyContext,
+  type ConsumerLoginResult,
   type LoginMutationPayload,
   type LoginForm,
 } from "../consumer-login-helpers";
@@ -73,4 +75,43 @@ test("agency context is written to both storage layers when available", () => {
   const serialized = JSON.stringify(agency);
   assert.deepEqual(storedValues.session, [`agencyContext:${serialized}`]);
   assert.deepEqual(storedValues.local, [`agencyContext:${serialized}`]);
+});
+
+test("handleLoginResult routes 409 responses requiring agency link", () => {
+  const toastCalls: unknown[] = [];
+  const pendingAgencies: AgencyContext[][] = [];
+  const dialogStates: boolean[] = [];
+  const locations: string[] = [];
+
+  const payload: ConsumerLoginResult = {
+    message: "Your account needs to be linked to an agency. Please complete registration.",
+    needsAgencyLink: true,
+  };
+
+  const handled = handleLoginResult(payload, {
+    email: "user@example.com",
+    showToast: options => {
+      toastCalls.push(options);
+    },
+    setPendingAgencies: agencies => {
+      pendingAgencies.push(agencies);
+    },
+    setAgencyDialogOpen: open => {
+      dialogStates.push(open);
+    },
+    setLocation: path => {
+      locations.push(path);
+    },
+  });
+
+  assert.equal(handled, true, "409 payloads should be handled by the helper");
+  assert.deepEqual(pendingAgencies, [], "no agencies should be queued for selection");
+  assert.deepEqual(dialogStates, [], "dialog should not open for agency link flow");
+  assert.deepEqual(locations, ["/consumer-register?email=user@example.com"]);
+  assert.deepEqual(toastCalls, [
+    {
+      title: "Agency Link Required",
+      description: payload.message,
+    },
+  ]);
 });
