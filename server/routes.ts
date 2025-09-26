@@ -24,6 +24,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
+import fs from "fs";
 import { nanoid } from "nanoid";
 import express from "express";
 import { emailService } from "./emailService";
@@ -321,6 +322,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Subdomain detection middleware
   app.use(subdomainMiddleware);
 
+  // Explicit SPA fallback for the platform admin entry point to avoid 404s
+  app.get(["/admin", "/admin/*", "/Admin", "/Admin/*"], (req, res, next) => {
+    // Let Vite handle this route in development so HMR continues to work
+    if (process.env.NODE_ENV !== "production") {
+      return next();
+    }
+
+    const candidateIndexFiles = [
+      path.resolve(process.cwd(), "dist/public/index.html"),
+      path.resolve(process.cwd(), "client/index.html"),
+    ];
+
+    const spaIndex = candidateIndexFiles.find(filePath => fs.existsSync(filePath));
+
+    if (!spaIndex) {
+      return next();
+    }
+
+    res.sendFile(spaIndex, sendError => {
+      if (sendError) {
+        next(sendError);
+      }
+    });
+  });
+
   // Health check endpoint (no auth required)
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -469,7 +495,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  const deleteFolderHandler = async (req: any, res: Response) => {
+  const deleteFolderHandler = async (
+    req: any,
+    res: Response,
+    folderIdOverride?: unknown,
+  ) => {
     try {
       const tenantId = await getTenantId(req, storage);
 
@@ -477,7 +507,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const folderId = req.params.id;
+      const folderId =
+        typeof folderIdOverride === "string" && folderIdOverride.length > 0
+          ? folderIdOverride
+          : req.params.id;
+
+      if (!folderId || typeof folderId !== "string") {
+        return res.status(400).json({ message: "Folder ID is required" });
+      }
+
       await storage.deleteFolder(folderId, tenantId);
 
       res.status(204).send();
@@ -487,8 +525,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   };
 
-  app.delete('/api/folders/:id', authenticateUser, deleteFolderHandler);
-  app.post('/api/folders/:id/delete', authenticateUser, deleteFolderHandler);
+  app.delete('/api/folders/:id', authenticateUser, (req, res) =>
+    deleteFolderHandler(req, res),
+  );
+  app.post('/api/folders/:id/delete', authenticateUser, (req, res) =>
+    deleteFolderHandler(req, res),
+  );
+  app.post('/api/folders/delete', authenticateUser, (req, res) =>
+    deleteFolderHandler(req, res, req.body?.folderId),
+  );
 
   // Consumer routes
   app.get('/api/consumers', authenticateUser, async (req: any, res) => {
