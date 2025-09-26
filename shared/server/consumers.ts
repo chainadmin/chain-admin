@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
-import { accounts, consumers, folders, type Consumer } from '../schema';
+import { accounts, consumers, folders, type Consumer } from '../schema.js';
 
 export interface DeleteConsumersResult {
   success: true;
