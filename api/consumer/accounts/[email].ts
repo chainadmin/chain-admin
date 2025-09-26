@@ -2,6 +2,8 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb } from '../../_lib/db.js';
 import { consumers, accounts, tenants, tenantSettings } from '../../../shared/schema.js';
 import { eq, and, sql } from 'drizzle-orm';
+import jwt from 'jsonwebtoken';
+import { JWT_SECRET } from '../../_lib/auth.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
@@ -9,6 +11,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    // Check for consumer token
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ message: 'No consumer token provided' });
+    }
+    
+    const token = authHeader.slice(7);
+    let decodedToken: any;
+    
+    try {
+      decodedToken = jwt.verify(token, JWT_SECRET) as any;
+      
+      // Verify this is a consumer token
+      if (decodedToken.type !== 'consumer') {
+        return res.status(401).json({ message: 'Invalid token type' });
+      }
+    } catch (error) {
+      return res.status(401).json({ message: 'Invalid consumer token' });
+    }
+
+    // Now proceed with the original logic
     const email = (req.query.email as string | undefined) ?? '';
     const rawTenantSlug = req.query.tenantSlug;
     const tenantSlug = typeof rawTenantSlug === 'string' && rawTenantSlug !== 'undefined' && rawTenantSlug.trim() !== ''
@@ -19,6 +43,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!sanitizedEmail) {
       return res.status(400).json({ error: 'Email is required' });
+    }
+
+    // Verify the consumer is requesting their own data
+    if (decodedToken.email && decodedToken.email.toLowerCase() !== sanitizedEmail.toLowerCase()) {
+      return res.status(403).json({ message: 'You can only access your own account information' });
+    }
+
+    // Verify tenant slug matches if provided in token
+    if (decodedToken.tenantSlug && tenantSlug && decodedToken.tenantSlug !== tenantSlug) {
+      return res.status(403).json({ message: 'Tenant mismatch' });
     }
 
     const db = await getDb();
