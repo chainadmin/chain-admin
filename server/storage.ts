@@ -505,10 +505,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getConsumersByEmail(email: string): Promise<Consumer[]> {
-    // Get all consumers with this email across all tenants
+    const trimmedEmail = (email ?? "").trim();
+    if (!trimmedEmail) {
+      return [];
+    }
+
+    // Get all consumers with this email across all tenants (case-insensitive)
     return await db.select()
       .from(consumers)
-      .where(eq(consumers.email, email));
+      .where(sql`LOWER(${consumers.email}) = LOWER(${trimmedEmail})`);
   }
 
   async createConsumer(consumer: InsertConsumer): Promise<Consumer> {
@@ -525,11 +530,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async findAccountsByConsumerEmail(email: string): Promise<(Account & { consumer: Consumer })[]> {
-    // Find all consumers with this email
+    const trimmedEmail = (email ?? "").trim();
+    if (!trimmedEmail) {
+      return [];
+    }
+
+    // Find all consumers with this email (case-insensitive)
     const consumersWithEmail = await db.select()
       .from(consumers)
-      .where(eq(consumers.email, email));
-    
+      .where(sql`LOWER(${consumers.email}) = LOWER(${trimmedEmail})`);
+
     if (consumersWithEmail.length === 0) {
       return [];
     }
@@ -542,7 +552,7 @@ export class DatabaseStorage implements IStorage {
     })
       .from(accounts)
       .innerJoin(consumers, eq(accounts.consumerId, consumers.id))
-      .where(sql`${accounts.consumerId} IN ${sql`(${sql.join(consumerIds.map(id => sql`${id}`), sql`, `)})`}`);
+      .where(inArray(accounts.consumerId, consumerIds));
 
     return accountsList.map(row => ({
       ...row.account,
