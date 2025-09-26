@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { ApiError, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import AdminLayout from "@/components/admin-layout";
 import ImportModal from "@/components/import-modal";
@@ -218,7 +218,7 @@ export default function Accounts() {
       try {
         return await apiRequest("DELETE", `/api/folders/${folderId}`);
       } catch (error) {
-        if (error instanceof Error && error.message.startsWith("405")) {
+        if (error instanceof ApiError && error.status === 405) {
           return await apiRequest("POST", `/api/folders/${folderId}/delete`);
         }
         throw error;
