@@ -40,6 +40,7 @@ import {
   SMS_OVERAGE_RATE_PER_SEGMENT,
   type MessagingPlanId,
 } from "@shared/billing-plans";
+import { listConsumers, updateConsumer, deleteConsumers, ConsumerNotFoundError } from "@shared/server/consumers";
 
 const csvUploadSchema = z.object({
   consumers: z.array(z.object({
@@ -544,7 +545,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const consumers = await storage.getConsumersByTenant(tenantId);
+      const consumers = await listConsumers(db, tenantId);
       res.json(consumers);
     } catch (error) {
       console.error("Error fetching consumers:", error);
@@ -561,14 +562,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { id } = req.params;
-      const consumer = await storage.getConsumer(id);
-
-      if (!consumer || consumer.tenantId !== tenantId) {
-        return res.status(404).json({ message: "Consumer not found" });
+      try {
+        const updatedConsumer = await updateConsumer(db, tenantId, id, req.body);
+        res.json(updatedConsumer);
+      } catch (error) {
+        if (error instanceof ConsumerNotFoundError) {
+          return res.status(404).json({ message: error.message });
+        }
+        throw error;
       }
-
-      const updatedConsumer = await storage.updateConsumer(id, req.body);
-      res.json(updatedConsumer);
     } catch (error) {
       console.error("Error updating consumer:", error);
       res.status(500).json({ message: "Failed to update consumer" });
@@ -584,15 +586,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { id } = req.params;
-      const consumer = await storage.getConsumer(id);
-
-      if (!consumer || consumer.tenantId !== tenantId) {
-        return res.status(404).json({ message: "Consumer not found" });
+      try {
+        const result = await deleteConsumers(db, tenantId, [id]);
+        res.status(200).json(result);
+      } catch (error) {
+        if (error instanceof ConsumerNotFoundError) {
+          return res.status(404).json({ message: error.message });
+        }
+        throw error;
       }
-
-      await storage.deleteConsumer(id, tenantId);
-
-      res.status(204).send();
     } catch (error) {
       console.error("Error deleting consumer:", error);
       res.status(500).json({ message: "Failed to delete consumer" });
