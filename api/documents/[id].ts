@@ -1,7 +1,7 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import jwt from 'jsonwebtoken';
 import { getDb } from '../_lib/db.js';
-import { accounts, consumers, documents } from '../_lib/schema.js';
+import { accounts, consumers, documents } from '../../shared/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { JWT_SECRET } from '../_lib/auth.js';
 
