@@ -93,6 +93,37 @@ type DocumentWithAccount = Document & {
   account?: (Account & { consumer?: Consumer }) | null;
 };
 
+function normalizeEmailValue(value?: string | null): string | null {
+  if (value === undefined || value === null) return null;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  return trimmed.toLowerCase();
+}
+
+function normalizeUsernameValue(value?: string | null): string | null {
+  if (value === undefined || value === null) return null;
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  return trimmed.toLowerCase();
+}
+
+function applyNormalizedEmail<T extends { email?: string | null }>(record: T): T {
+  if (!("email" in record) || record.email === undefined) {
+    return record;
+  }
+
+  return {
+    ...record,
+    email: normalizeEmailValue(record.email),
+  } as T;
+}
+
 export interface IStorage {
   // User operations (mandatory for Replit Auth)
   getUser(id: string): Promise<User | undefined>;
@@ -474,7 +505,15 @@ export class DatabaseStorage implements IStorage {
   
   // Agency credentials operations
   async getAgencyCredentialsByUsername(username: string): Promise<SelectAgencyCredentials | undefined> {
-    const [credentials] = await db.select().from(agencyCredentials).where(eq(agencyCredentials.username, username));
+    const normalizedUsername = normalizeUsernameValue(username);
+    if (!normalizedUsername) {
+      return undefined;
+    }
+
+    const [credentials] = await db
+      .select()
+      .from(agencyCredentials)
+      .where(sql`LOWER(TRIM(${agencyCredentials.username})) = ${normalizedUsername}`);
     return credentials;
   }
 
@@ -484,7 +523,25 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAgencyCredentials(credentials: InsertAgencyCredentials): Promise<SelectAgencyCredentials> {
-    const [newCredentials] = await db.insert(agencyCredentials).values(credentials).returning();
+    const normalizedUsername = normalizeUsernameValue(credentials.username);
+    const normalizedEmail = normalizeEmailValue(credentials.email);
+
+    if (!normalizedUsername) {
+      throw new Error("Username is required for agency credentials");
+    }
+
+    if (!normalizedEmail) {
+      throw new Error("Email is required for agency credentials");
+    }
+
+    const [newCredentials] = await db
+      .insert(agencyCredentials)
+      .values({
+        ...credentials,
+        username: normalizedUsername,
+        email: normalizedEmail,
+      })
+      .returning();
     return newCredentials;
   }
 
@@ -505,31 +562,43 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getConsumersByEmail(email: string): Promise<Consumer[]> {
-    // Get all consumers with this email across all tenants
+    const normalizedEmail = normalizeEmailValue(email);
+    if (!normalizedEmail) {
+      return [];
+    }
+
+    // Get all consumers with this email across all tenants (case-insensitive)
     return await db.select()
       .from(consumers)
-      .where(eq(consumers.email, email));
+      .where(sql`LOWER(TRIM(${consumers.email})) = LOWER(${normalizedEmail})`);
   }
 
   async createConsumer(consumer: InsertConsumer): Promise<Consumer> {
-    const [newConsumer] = await db.insert(consumers).values(consumer).returning();
+    const consumerToInsert = applyNormalizedEmail(consumer);
+    const [newConsumer] = await db.insert(consumers).values(consumerToInsert).returning();
     return newConsumer;
   }
 
   async updateConsumer(id: string, updates: Partial<Consumer>): Promise<Consumer> {
+    const sanitizedUpdates = applyNormalizedEmail(updates);
     const [updatedConsumer] = await db.update(consumers)
-      .set(updates)
+      .set(sanitizedUpdates)
       .where(eq(consumers.id, id))
       .returning();
     return updatedConsumer;
   }
 
   async findAccountsByConsumerEmail(email: string): Promise<(Account & { consumer: Consumer })[]> {
-    // Find all consumers with this email
+    const normalizedEmail = normalizeEmailValue(email);
+    if (!normalizedEmail) {
+      return [];
+    }
+
+    // Find all consumers with this email (case-insensitive)
     const consumersWithEmail = await db.select()
       .from(consumers)
-      .where(eq(consumers.email, email));
-    
+      .where(sql`LOWER(TRIM(${consumers.email})) = LOWER(${normalizedEmail})`);
+
     if (consumersWithEmail.length === 0) {
       return [];
     }
@@ -542,7 +611,7 @@ export class DatabaseStorage implements IStorage {
     })
       .from(accounts)
       .innerJoin(consumers, eq(accounts.consumerId, consumers.id))
-      .where(sql`${accounts.consumerId} IN ${sql`(${sql.join(consumerIds.map(id => sql`${id}`), sql`, `)})`}`);
+      .where(inArray(accounts.consumerId, consumerIds));
 
     return accountsList.map(row => ({
       ...row.account,
@@ -551,19 +620,27 @@ export class DatabaseStorage implements IStorage {
   }
 
   async findOrCreateConsumer(consumerData: InsertConsumer): Promise<Consumer> {
+    const hasEmailField = Object.prototype.hasOwnProperty.call(consumerData, "email");
+    const normalizedEmail = normalizeEmailValue(hasEmailField ? consumerData.email ?? undefined : undefined);
+
+    const normalizedConsumerData =
+      hasEmailField && normalizedEmail !== consumerData.email
+        ? { ...consumerData, email: normalizedEmail }
+        : consumerData;
+
     // Check for existing consumer by email and tenant (unique within tenant)
-    if (!consumerData.email || !consumerData.tenantId) {
+    if (!normalizedEmail || !normalizedConsumerData.tenantId) {
       // If email or tenant is missing, create a new consumer
-      return await this.createConsumer(consumerData);
+      return await this.createConsumer(normalizedConsumerData);
     }
-    
+
     // First check if consumer already exists with this tenant
     const [existingConsumerWithTenant] = await db.select()
       .from(consumers)
       .where(
         and(
-          eq(consumers.tenantId, consumerData.tenantId),
-          sql`LOWER(${consumers.email}) = LOWER(${consumerData.email})`
+          eq(consumers.tenantId, normalizedConsumerData.tenantId),
+          sql`LOWER(TRIM(${consumers.email})) = LOWER(${normalizedEmail})`
         )
       );
     
@@ -609,7 +686,7 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           sql`${consumers.tenantId} IS NULL`,
-          sql`LOWER(${consumers.email}) = LOWER(${consumerData.email})`
+          sql`LOWER(TRIM(${consumers.email})) = LOWER(${normalizedEmail})`
         )
       );
 
@@ -617,22 +694,22 @@ export class DatabaseStorage implements IStorage {
       // Found unlinked consumer with matching email - auto-link to this tenant
       const [linkedConsumer] = await db.update(consumers)
         .set({ 
-          tenantId: consumerData.tenantId,
-          firstName: consumerData.firstName || unlinkedConsumer.firstName,
-          lastName: consumerData.lastName || unlinkedConsumer.lastName,
-          phone: consumerData.phone || unlinkedConsumer.phone,
-          dateOfBirth: consumerData.dateOfBirth || unlinkedConsumer.dateOfBirth,
-          ssnLast4: consumerData.ssnLast4 || unlinkedConsumer.ssnLast4,
-          address: consumerData.address || unlinkedConsumer.address,
-          city: consumerData.city || unlinkedConsumer.city,
-          state: consumerData.state || unlinkedConsumer.state,
-          zipCode: consumerData.zipCode || unlinkedConsumer.zipCode,
-          folderId: consumerData.folderId
+          tenantId: normalizedConsumerData.tenantId,
+          firstName: normalizedConsumerData.firstName || unlinkedConsumer.firstName,
+          lastName: normalizedConsumerData.lastName || unlinkedConsumer.lastName,
+          phone: normalizedConsumerData.phone || unlinkedConsumer.phone,
+          dateOfBirth: normalizedConsumerData.dateOfBirth || unlinkedConsumer.dateOfBirth,
+          ssnLast4: normalizedConsumerData.ssnLast4 || unlinkedConsumer.ssnLast4,
+          address: normalizedConsumerData.address || unlinkedConsumer.address,
+          city: normalizedConsumerData.city || unlinkedConsumer.city,
+          state: normalizedConsumerData.state || unlinkedConsumer.state,
+          zipCode: normalizedConsumerData.zipCode || unlinkedConsumer.zipCode,
+          folderId: normalizedConsumerData.folderId
         })
         .where(eq(consumers.id, unlinkedConsumer.id))
         .returning();
         
-      console.log(`Auto-linked unlinked consumer ${unlinkedConsumer.id} to tenant ${consumerData.tenantId}`);
+      console.log(`Auto-linked unlinked consumer ${unlinkedConsumer.id} to tenant ${normalizedConsumerData.tenantId}`);
       return linkedConsumer;
     }
     
@@ -641,7 +718,7 @@ export class DatabaseStorage implements IStorage {
       .from(consumers)
       .where(
         and(
-          sql`LOWER(${consumers.email}) = LOWER(${consumerData.email})`,
+          sql`LOWER(TRIM(${consumers.email})) = LOWER(${normalizedEmail})`,
           sql`${consumers.tenantId} IS NOT NULL`
         )
       );
@@ -650,24 +727,24 @@ export class DatabaseStorage implements IStorage {
       // Consumer exists in another tenant - create a new consumer record for this tenant
       // Copy data from existing consumer but create a new record for multi-tenant support
       const newConsumerData = {
-        ...consumerData,
-        firstName: consumerData.firstName || existingConsumer.firstName,
-        lastName: consumerData.lastName || existingConsumer.lastName,
-        phone: consumerData.phone || existingConsumer.phone,
-        dateOfBirth: consumerData.dateOfBirth || existingConsumer.dateOfBirth,
-        address: consumerData.address || existingConsumer.address,
-        city: consumerData.city || existingConsumer.city,
-        state: consumerData.state || existingConsumer.state,
-        zipCode: consumerData.zipCode || existingConsumer.zipCode,
-        ssnLast4: consumerData.ssnLast4 || existingConsumer.ssnLast4,
+        ...normalizedConsumerData,
+        firstName: normalizedConsumerData.firstName || existingConsumer.firstName,
+        lastName: normalizedConsumerData.lastName || existingConsumer.lastName,
+        phone: normalizedConsumerData.phone || existingConsumer.phone,
+        dateOfBirth: normalizedConsumerData.dateOfBirth || existingConsumer.dateOfBirth,
+        address: normalizedConsumerData.address || existingConsumer.address,
+        city: normalizedConsumerData.city || existingConsumer.city,
+        state: normalizedConsumerData.state || existingConsumer.state,
+        zipCode: normalizedConsumerData.zipCode || existingConsumer.zipCode,
+        ssnLast4: normalizedConsumerData.ssnLast4 || existingConsumer.ssnLast4,
       };
       
-      console.log(`Creating new consumer record for tenant ${consumerData.tenantId} based on existing consumer from another tenant`);
+      console.log(`Creating new consumer record for tenant ${normalizedConsumerData.tenantId} based on existing consumer from another tenant`);
       return await this.createConsumer(newConsumerData);
     }
 
     // No existing consumer found - create new one
-    return await this.createConsumer(consumerData);
+    return await this.createConsumer(normalizedConsumerData);
   }
 
   async deleteConsumer(id: string, tenantId: string): Promise<void> {
@@ -1307,8 +1384,9 @@ export class DatabaseStorage implements IStorage {
 
   // Consumer registration operations
   async registerConsumer(consumerData: InsertConsumer): Promise<Consumer> {
+    const normalizedData = applyNormalizedEmail(consumerData);
     const [newConsumer] = await db.insert(consumers).values({
-      ...consumerData,
+      ...normalizedData,
       isRegistered: true,
       registrationDate: new Date(),
     }).returning();
@@ -1317,6 +1395,11 @@ export class DatabaseStorage implements IStorage {
 
   async getConsumerByEmailAndTenant(email: string, tenantIdentifier: string): Promise<Consumer | undefined> {
     if (!tenantIdentifier) {
+      return undefined;
+    }
+
+    const normalizedEmail = normalizeEmailValue(email);
+    if (!normalizedEmail) {
       return undefined;
     }
 
@@ -1334,7 +1417,7 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(consumers.tenantId, tenantId),
-          sql`LOWER(${consumers.email}) = LOWER(${email})`
+          sql`LOWER(TRIM(${consumers.email})) = LOWER(${normalizedEmail})`
         )
       );
 
@@ -1342,10 +1425,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getConsumerByEmail(email: string): Promise<Consumer | undefined> {
+    const normalizedEmail = normalizeEmailValue(email);
+    if (!normalizedEmail) {
+      return undefined;
+    }
+
     // Get all consumers with this email
     const allConsumers = await db.select()
       .from(consumers)
-      .where(sql`LOWER(${consumers.email}) = LOWER(${email})`);
+      .where(sql`LOWER(TRIM(${consumers.email})) = LOWER(${normalizedEmail})`);
 
     // Prioritize consumers WITH a tenantId over those without
     // This ensures we return linked consumers first
