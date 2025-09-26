@@ -2136,9 +2136,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Email and date of birth are required" });
       }
 
-      const trimmedEmail = String(email).trim();
+      const normalizedEmail = String(email).trim().toLowerCase();
+      if (!normalizedEmail) {
+        return res.status(400).json({ message: "A valid email address is required" });
+      }
 
-      let consumersFound = await storage.getConsumersByEmail(trimmedEmail);
+      let consumersFound = await storage.getConsumersByEmail(normalizedEmail);
 
       if (consumersFound.length === 0) {
         return res.status(404).json({
@@ -2149,7 +2152,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const unlinkedConsumers = consumersFound.filter(c => !c.tenantId);
 
       if (unlinkedConsumers.length > 0) {
-        const matchingAccounts = await storage.findAccountsByConsumerEmail(trimmedEmail);
+        const matchingAccounts = await storage.findAccountsByConsumerEmail(normalizedEmail);
         const tenantIds = new Set<string>();
         for (const account of matchingAccounts) {
           if (account.tenantId) {
@@ -2163,9 +2166,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             unlinkedConsumers.map(consumer => storage.updateConsumer(consumer.id, { tenantId: resolvedTenantId }))
           );
           console.log(
-            `Auto-linked consumer(s) with email ${trimmedEmail} to tenant ${resolvedTenantId} based on matching accounts`
+            `Auto-linked consumer(s) with email ${normalizedEmail} to tenant ${resolvedTenantId} based on matching accounts`
           );
-          consumersFound = await storage.getConsumersByEmail(trimmedEmail);
+          consumersFound = await storage.getConsumersByEmail(normalizedEmail);
         }
       }
 
@@ -2257,7 +2260,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               name: tenantRecord.name,
               slug: tenantRecord.slug,
             })),
-            email: trimmedEmail,
+            email: normalizedEmail,
           });
         }
 

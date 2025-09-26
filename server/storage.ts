@@ -96,7 +96,11 @@ type DocumentWithAccount = Document & {
 function normalizeEmailValue(value?: string | null): string | null {
   if (value === undefined || value === null) return null;
   const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  return trimmed.toLowerCase();
 }
 
 function applyNormalizedEmail<T extends { email?: string | null }>(record: T): T {
@@ -522,15 +526,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getConsumersByEmail(email: string): Promise<Consumer[]> {
-    const trimmedEmail = (email ?? "").trim();
-    if (!trimmedEmail) {
+    const normalizedEmail = normalizeEmailValue(email);
+    if (!normalizedEmail) {
       return [];
     }
 
     // Get all consumers with this email across all tenants (case-insensitive)
     return await db.select()
       .from(consumers)
-      .where(sql`LOWER(TRIM(${consumers.email})) = LOWER(${trimmedEmail})`);
+      .where(sql`LOWER(TRIM(${consumers.email})) = LOWER(${normalizedEmail})`);
   }
 
   async createConsumer(consumer: InsertConsumer): Promise<Consumer> {
@@ -549,15 +553,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async findAccountsByConsumerEmail(email: string): Promise<(Account & { consumer: Consumer })[]> {
-    const trimmedEmail = (email ?? "").trim();
-    if (!trimmedEmail) {
+    const normalizedEmail = normalizeEmailValue(email);
+    if (!normalizedEmail) {
       return [];
     }
 
     // Find all consumers with this email (case-insensitive)
     const consumersWithEmail = await db.select()
       .from(consumers)
-      .where(sql`LOWER(TRIM(${consumers.email})) = LOWER(${trimmedEmail})`);
+      .where(sql`LOWER(TRIM(${consumers.email})) = LOWER(${normalizedEmail})`);
 
     if (consumersWithEmail.length === 0) {
       return [];
@@ -580,14 +584,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async findOrCreateConsumer(consumerData: InsertConsumer): Promise<Consumer> {
-    const trimmedEmail = consumerData.email?.trim();
+    const hasEmailField = Object.prototype.hasOwnProperty.call(consumerData, "email");
+    const normalizedEmail = normalizeEmailValue(hasEmailField ? consumerData.email ?? undefined : undefined);
+
     const normalizedConsumerData =
-      trimmedEmail !== undefined && trimmedEmail !== consumerData.email
-        ? { ...consumerData, email: trimmedEmail }
+      hasEmailField && normalizedEmail !== consumerData.email
+        ? { ...consumerData, email: normalizedEmail }
         : consumerData;
 
     // Check for existing consumer by email and tenant (unique within tenant)
-    if (!trimmedEmail || !normalizedConsumerData.tenantId) {
+    if (!normalizedEmail || !normalizedConsumerData.tenantId) {
       // If email or tenant is missing, create a new consumer
       return await this.createConsumer(normalizedConsumerData);
     }
@@ -598,7 +604,7 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(consumers.tenantId, normalizedConsumerData.tenantId),
-          sql`LOWER(TRIM(${consumers.email})) = LOWER(${trimmedEmail})`
+          sql`LOWER(TRIM(${consumers.email})) = LOWER(${normalizedEmail})`
         )
       );
     
@@ -644,7 +650,7 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           sql`${consumers.tenantId} IS NULL`,
-          sql`LOWER(TRIM(${consumers.email})) = LOWER(${trimmedEmail})`
+          sql`LOWER(TRIM(${consumers.email})) = LOWER(${normalizedEmail})`
         )
       );
 
@@ -676,7 +682,7 @@ export class DatabaseStorage implements IStorage {
       .from(consumers)
       .where(
         and(
-          sql`LOWER(TRIM(${consumers.email})) = LOWER(${trimmedEmail})`,
+          sql`LOWER(TRIM(${consumers.email})) = LOWER(${normalizedEmail})`,
           sql`${consumers.tenantId} IS NOT NULL`
         )
       );
@@ -1356,7 +1362,7 @@ export class DatabaseStorage implements IStorage {
       return undefined;
     }
 
-    const normalizedEmail = (email ?? "").trim();
+    const normalizedEmail = normalizeEmailValue(email);
     if (!normalizedEmail) {
       return undefined;
     }
@@ -1383,7 +1389,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getConsumerByEmail(email: string): Promise<Consumer | undefined> {
-    const normalizedEmail = (email ?? "").trim();
+    const normalizedEmail = normalizeEmailValue(email);
     if (!normalizedEmail) {
       return undefined;
     }
