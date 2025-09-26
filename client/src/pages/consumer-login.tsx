@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { apiRequest } from "@/lib/queryClient";
+import { ApiError, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,8 +18,10 @@ import { getAgencySlugFromRequest } from "@shared/utils/subdomain";
 import PublicHeroLayout from "@/components/public-hero-layout";
 import {
   AgencyContext,
+  ConsumerLoginResult,
   LoginForm,
   LoginMutationPayload,
+  handleLoginResult,
   retryLoginWithAgencySelection,
   storeAgencyContext,
 } from "./consumer-login-helpers";
@@ -130,6 +132,18 @@ export default function ConsumerLogin() {
     }
   }, [agencyContext?.slug, fetchAgencyContext]);
 
+  const processLoginResult = useCallback(
+    (payload: ConsumerLoginResult) =>
+      handleLoginResult(payload, {
+        email: form.email,
+        showToast: toast,
+        setPendingAgencies,
+        setAgencyDialogOpen,
+        setLocation,
+      }),
+    [form.email, setLocation, setAgencyDialogOpen, setPendingAgencies, toast],
+  );
+
   const loginMutation = useMutation({
     mutationFn: async (loginData: LoginMutationPayload) => {
       // Get tenant slug from URL path (e.g., /waypoint-solutions/consumer)
@@ -144,36 +158,24 @@ export default function ConsumerLogin() {
       });
       return response.json();
     },
-    onSuccess: (data: any) => {
+    onSuccess: (data: ConsumerLoginResult & {
+      token?: string;
+      tenant?: {
+        slug: string;
+        name?: string | null;
+        logoUrl?: string | null;
+      } | null;
+      consumer?: unknown;
+    }) => {
       // Clear any old cached data first
       localStorage.removeItem("consumerToken");
       localStorage.removeItem("consumerSession");
-      
-      if (data.multipleAgencies) {
-        // Consumer has accounts with multiple agencies
-        toast({
-          title: "Choose your agency",
-          description: data.message ?? "Select which agency dashboard to open.",
-        });
-        setPendingAgencies(data.agencies ?? []);
-        setAgencyDialogOpen(true);
+
+      if (processLoginResult(data)) {
         return;
-      } else if (data.needsRegistration) {
-        // User found but needs to complete registration
-        toast({
-          title: "Complete Registration",
-          description: data.message,
-        });
-        setLocation(`/consumer-register?email=${form.email}&tenant=${data.tenant.slug}`);
-      } else if (data.needsAgencyLink) {
-        // User exists but not linked to an agency
-        toast({
-          title: "Agency Link Required",
-          description: data.message,
-        });
-        // Redirect to registration with email pre-filled
-        setLocation(`/consumer-register?email=${form.email}`);
-      } else {
+      }
+
+      {
         // Successful login
         toast({
           title: "Login Successful",
@@ -212,31 +214,62 @@ export default function ConsumerLogin() {
         });
 
         // Force a hard redirect to clear any cached state
-        window.location.href = '/consumer-dashboard';
+        window.location.href = "/consumer-dashboard";
       }
     },
-    onError: (error: any) => {
-      if (error.status === 404) {
-        // No account found
-        toast({
-          title: "No Account Found",
-          description: error.data?.message || "No account found with this email. Please contact your agency for account details.",
-          variant: "destructive",
-        });
-      } else if (error.status === 401) {
-        // Invalid credentials
-        toast({
-          title: "Invalid Credentials",
-          description: "Please check your email and date of birth.",
-          variant: "destructive",
-        });
-      } else {
+    onError: (error: unknown) => {
+      if (error instanceof ApiError) {
+        if (error.status === 409) {
+          const payload = error.data;
+          if (payload && typeof payload === "object") {
+            const handled = processLoginResult(payload as ConsumerLoginResult);
+            if (handled) {
+              return;
+            }
+          }
+        }
+
+        if (error.status === 404) {
+          // No account found
+          toast({
+            title: "No Account Found",
+            description:
+              error.data && typeof error.data === "object" && "message" in error.data
+                ? String((error.data as Record<string, unknown>).message)
+                : "No account found with this email. Please contact your agency for account details.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        if (error.status === 401) {
+          // Invalid credentials
+          toast({
+            title: "Invalid Credentials",
+            description: "Please check your email and date of birth.",
+            variant: "destructive",
+          });
+          return;
+        }
+
         toast({
           title: "Login Failed",
           description: error.message || "Unable to verify your information. Please check your details and try again.",
           variant: "destructive",
         });
+        return;
       }
+
+      const fallbackMessage =
+        error && typeof error === "object" && "message" in error
+          ? String((error as Record<string, unknown>).message)
+          : "Unable to verify your information. Please check your details and try again.";
+
+      toast({
+        title: "Login Failed",
+        description: fallbackMessage,
+        variant: "destructive",
+      });
     },
   });
 
