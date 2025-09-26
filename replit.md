@@ -33,6 +33,7 @@ Chain is a multi-tenant platform designed for agencies to manage consumer accoun
   - CSV import with folder selection for organizing uploaded accounts
   - Tabbed interface with color-coded folder display
   - Improved account organization and workflow management
+- **Consumer Registration Flow**: Registration now routes back to the consumer login page so the dashboard always loads with a fresh authentication token.
 
 # Known Issues To Address
 

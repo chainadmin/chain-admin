@@ -94,6 +94,27 @@ export default function ConsumerLogin() {
     }
   }, [currentSlug, fetchAgencyContext, persistAgencyContext]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const emailParam = params.get("email");
+    const tenantParam = params.get("tenant");
+
+    if (emailParam) {
+      setForm(prev => ({
+        ...prev,
+        email: emailParam,
+      }));
+    }
+
+    if (tenantParam && tenantParam !== agencyContext?.slug) {
+      fetchAgencyContext(tenantParam);
+    }
+  }, [agencyContext?.slug, fetchAgencyContext]);
+
   const loginMutation = useMutation({
     mutationFn: async (loginData: LoginForm) => {
       // Get tenant slug from URL path (e.g., /waypoint-solutions/consumer)
