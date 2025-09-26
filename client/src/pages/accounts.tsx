@@ -216,33 +216,35 @@ export default function Accounts() {
   const deleteFolderMutation = useMutation({
     mutationFn: async (folderId: string) => {
       const fallbackStatuses = new Set([404, 405, 501]);
-      const attempts: Array<() => Promise<Response>> = [
-        () => apiRequest("DELETE", `/api/folders/${folderId}`),
-        () => apiRequest("POST", `/api/folders/${folderId}/delete`),
-        () => apiRequest("POST", "/api/folders/delete", { folderId }),
-      ];
+      const shouldAttemptFallback = (error: unknown) => {
+        if (error instanceof ApiError) {
+          return fallbackStatuses.has(error.status);
+        }
 
-      let lastError: unknown;
+        return error instanceof TypeError;
+      };
 
-      for (const attempt of attempts) {
+      try {
+        return await apiRequest("DELETE", `/api/folders/${folderId}`);
+      } catch (error) {
+        if (!shouldAttemptFallback(error)) {
+          throw error;
+        }
+
         try {
-          return await attempt();
-        } catch (error) {
-          lastError = error;
-
-          if (error instanceof ApiError && fallbackStatuses.has(error.status)) {
-            continue;
+          return await apiRequest("POST", `/api/folders/${folderId}/delete`);
+        } catch (fallbackError) {
+          if (!shouldAttemptFallback(fallbackError)) {
+            throw fallbackError;
           }
 
-          if (error instanceof TypeError) {
-            continue;
+          try {
+            return await apiRequest("POST", "/api/folders/delete", { folderId });
+          } catch (finalError) {
+            throw finalError;
           }
-
-          break;
         }
       }
-
-      throw lastError ?? new Error("Failed to delete folder");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
