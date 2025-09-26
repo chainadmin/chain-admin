@@ -24,6 +24,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
+import fs from "fs";
 import { nanoid } from "nanoid";
 import express from "express";
 import { emailService } from "./emailService";
@@ -320,6 +321,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Subdomain detection middleware
   app.use(subdomainMiddleware);
+
+  // Explicit SPA fallback for the platform admin entry point to avoid 404s
+  app.get(["/admin", "/admin/*", "/Admin", "/Admin/*"], (req, res, next) => {
+    // Let Vite handle this route in development so HMR continues to work
+    if (process.env.NODE_ENV !== "production") {
+      return next();
+    }
+
+    const candidateIndexFiles = [
+      path.resolve(process.cwd(), "dist/public/index.html"),
+      path.resolve(process.cwd(), "client/index.html"),
+    ];
+
+    const spaIndex = candidateIndexFiles.find(filePath => fs.existsSync(filePath));
+
+    if (!spaIndex) {
+      return next();
+    }
+
+    res.sendFile(spaIndex, sendError => {
+      if (sendError) {
+        next(sendError);
+      }
+    });
+  });
 
   // Health check endpoint (no auth required)
   app.get('/api/health', (req, res) => {
@@ -2141,6 +2167,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Consumer login route
   app.post('/api/consumer/login', async (req, res) => {
     try {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+
       const { email, dateOfBirth, tenantSlug: bodyTenantSlug } = req.body ?? {};
       const rawTenantSlug = bodyTenantSlug || (req as any).agencySlug;
       const tenantSlug = rawTenantSlug ? String(rawTenantSlug).trim().toLowerCase() : undefined;
@@ -2151,9 +2181,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Email and date of birth are required" });
       }
 
-      const trimmedEmail = String(email).trim();
+      const normalizedEmail = String(email).trim().toLowerCase();
+      if (!normalizedEmail) {
+        return res.status(400).json({ message: "A valid email address is required" });
+      }
 
-      let consumersFound = await storage.getConsumersByEmail(trimmedEmail);
+      let consumersFound = await storage.getConsumersByEmail(normalizedEmail);
 
       if (consumersFound.length === 0) {
         return res.status(404).json({
@@ -2164,7 +2197,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const unlinkedConsumers = consumersFound.filter(c => !c.tenantId);
 
       if (unlinkedConsumers.length > 0) {
-        const matchingAccounts = await storage.findAccountsByConsumerEmail(trimmedEmail);
+        const matchingAccounts = await storage.findAccountsByConsumerEmail(normalizedEmail);
         const tenantIds = new Set<string>();
         for (const account of matchingAccounts) {
           if (account.tenantId) {
@@ -2178,9 +2211,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             unlinkedConsumers.map(consumer => storage.updateConsumer(consumer.id, { tenantId: resolvedTenantId }))
           );
           console.log(
-            `Auto-linked consumer(s) with email ${trimmedEmail} to tenant ${resolvedTenantId} based on matching accounts`
+            `Auto-linked consumer(s) with email ${normalizedEmail} to tenant ${resolvedTenantId} based on matching accounts`
           );
-          consumersFound = await storage.getConsumersByEmail(trimmedEmail);
+          consumersFound = await storage.getConsumersByEmail(normalizedEmail);
         }
       }
 
@@ -2272,7 +2305,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               name: tenantRecord.name,
               slug: tenantRecord.slug,
             })),
-            email: trimmedEmail,
+            email: normalizedEmail,
           });
         }
 
@@ -2341,10 +2374,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           email: consumer.email,
           tenantId: consumer.tenantId,
           tenantSlug: tenant.slug,
-          type: 'consumer',
+          type: "consumer",
         },
-        process.env.JWT_SECRET || 'your-secret-key',
-        { expiresIn: '7d' }
+        process.env.JWT_SECRET || "your-secret-key",
+        { expiresIn: "7d" }
       );
 
       res.status(200).json({

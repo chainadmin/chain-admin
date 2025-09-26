@@ -3,7 +3,7 @@ import { getDb } from '../_lib/db.js';
 import { agencyCredentials, users, platformUsers, tenants } from '../../shared/schema.js';
 import { generateToken } from '../_lib/auth.js';
 import bcrypt from 'bcryptjs';
-import { eq } from 'drizzle-orm';
+import { eq, or } from 'drizzle-orm';
 import { z } from 'zod';
 
 const loginSchema = z.object({
@@ -26,10 +26,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const db = await getDb();
 
     // Get agency credentials (username can be either username or email)
+    const normalizedUsername = username.trim();
+
     const [credentials] = await db
       .select()
       .from(agencyCredentials)
-      .where(eq(agencyCredentials.username, username))
+      .where(
+        or(
+          eq(agencyCredentials.username, normalizedUsername),
+          eq(agencyCredentials.email, normalizedUsername)
+        )
+      )
       .limit(1);
 
     if (!credentials) {
