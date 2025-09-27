@@ -5,6 +5,26 @@ import { eq, and, sql } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from '../../_lib/auth.js';
 
+const sanitizeTokenString = (value: unknown): string | null => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  const normalized =
+    typeof value === 'string'
+      ? value
+      : typeof value === 'number'
+        ? value.toString()
+        : null;
+
+  if (!normalized) {
+    return null;
+  }
+
+  const trimmed = normalized.trim();
+  return trimmed === '' || trimmed === 'undefined' ? null : trimmed;
+};
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -32,19 +52,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ message: 'Invalid consumer token' });
     }
 
+ codex/hydrate-tenantid-and-slug-from-decodedtoken-wwc7vp
+    const tokenTenantId = sanitizeTokenString(decodedToken.tenantId);
+    const tokenTenantSlug = sanitizeTokenString(decodedToken.tenantSlug);
     const tokenTenantId = typeof decodedToken.tenantId === 'string' ? decodedToken.tenantId : null;
     const tokenTenantSlug =
       typeof decodedToken.tenantSlug === 'string' && decodedToken.tenantSlug.trim() !== ''
         ? decodedToken.tenantSlug.trim()
         : null;
+    main
 
     // Now proceed with the original logic
     const email = (req.query.email as string | undefined) ?? '';
     const rawTenantSlug = req.query.tenantSlug;
+ codex/hydrate-tenantid-and-slug-from-decodedtoken-wwc7vp
+    const sanitizedRequestTenantSlug = sanitizeTokenString(rawTenantSlug);
+    const requestTenantSlug = sanitizedRequestTenantSlug ?? undefined;
+
     const requestTenantSlug =
       typeof rawTenantSlug === 'string' && rawTenantSlug !== 'undefined' && rawTenantSlug.trim() !== ''
         ? rawTenantSlug.trim()
         : undefined;
+ main
 
     const sanitizedEmail = email.trim();
 
