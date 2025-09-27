@@ -5,6 +5,26 @@ import { eq, and, sql } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from '../../_lib/auth.js';
 
+const sanitizeTokenString = (value: unknown): string | null => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  const normalized =
+    typeof value === 'string'
+      ? value
+      : typeof value === 'number'
+        ? value.toString()
+        : null;
+
+  if (!normalized) {
+    return null;
+  }
+
+  const trimmed = normalized.trim();
+  return trimmed === '' || trimmed === 'undefined' ? null : trimmed;
+};
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -23,7 +43,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     try {
       decodedToken = jwt.verify(token, JWT_SECRET) as any;
-      
+
       // Verify this is a consumer token
       if (decodedToken.type !== 'consumer') {
         return res.status(401).json({ message: 'Invalid token type' });
@@ -32,12 +52,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ message: 'Invalid consumer token' });
     }
 
+    const tokenTenantId = sanitizeTokenString(decodedToken.tenantId);
+    const tokenTenantSlug = sanitizeTokenString(decodedToken.tenantSlug);
+
     // Now proceed with the original logic
     const email = (req.query.email as string | undefined) ?? '';
     const rawTenantSlug = req.query.tenantSlug;
-    const tenantSlug = typeof rawTenantSlug === 'string' && rawTenantSlug !== 'undefined' && rawTenantSlug.trim() !== ''
-      ? rawTenantSlug.trim()
-      : undefined;
+    const sanitizedRequestTenantSlug = sanitizeTokenString(rawTenantSlug);
+    const requestTenantSlug = sanitizedRequestTenantSlug ?? undefined;
 
     const sanitizedEmail = email.trim();
 
@@ -51,21 +73,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Verify tenant slug matches if provided in token
-    if (decodedToken.tenantSlug && tenantSlug && decodedToken.tenantSlug !== tenantSlug) {
+    if (tokenTenantSlug && requestTenantSlug && tokenTenantSlug !== requestTenantSlug) {
       return res.status(403).json({ message: 'Tenant mismatch' });
     }
 
     const db = await getDb();
-    let tenantId: string | null = null;
+    const effectiveTenantSlug = requestTenantSlug ?? tokenTenantSlug ?? undefined;
+    let tenantId: string | null = tokenTenantId;
 
     // Get tenant if slug provided
     let tenantRecord: typeof tenants.$inferSelect | null = null;
 
-    if (tenantSlug) {
+    if (effectiveTenantSlug) {
       const [tenant] = await db
         .select()
         .from(tenants)
-        .where(eq(tenants.slug, tenantSlug))
+        .where(eq(tenants.slug, effectiveTenantSlug))
         .limit(1);
       if (!tenant) {
         return res.status(404).json({ error: 'Agency not found' });
