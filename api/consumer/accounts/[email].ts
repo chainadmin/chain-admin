@@ -52,14 +52,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ message: 'Invalid consumer token' });
     }
 
+ codex/hydrate-tenantid-and-slug-from-decodedtoken-wwc7vp
     const tokenTenantId = sanitizeTokenString(decodedToken.tenantId);
     const tokenTenantSlug = sanitizeTokenString(decodedToken.tenantSlug);
+    const tokenTenantId = typeof decodedToken.tenantId === 'string' ? decodedToken.tenantId : null;
+    const tokenTenantSlug =
+      typeof decodedToken.tenantSlug === 'string' && decodedToken.tenantSlug.trim() !== ''
+        ? decodedToken.tenantSlug.trim()
+        : null;
+    main
 
     // Now proceed with the original logic
     const email = (req.query.email as string | undefined) ?? '';
     const rawTenantSlug = req.query.tenantSlug;
+ codex/hydrate-tenantid-and-slug-from-decodedtoken-wwc7vp
     const sanitizedRequestTenantSlug = sanitizeTokenString(rawTenantSlug);
     const requestTenantSlug = sanitizedRequestTenantSlug ?? undefined;
+
+    const requestTenantSlug =
+      typeof rawTenantSlug === 'string' && rawTenantSlug !== 'undefined' && rawTenantSlug.trim() !== ''
+        ? rawTenantSlug.trim()
+        : undefined;
+ main
 
     const sanitizedEmail = email.trim();
 
