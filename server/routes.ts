@@ -219,6 +219,10 @@ function normalizeDateString(value?: string | null): string | null {
   return null;
 }
 
+function normalizeLowercase(value?: string | null): string {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
 function datesMatch(provided: string, stored?: string | null): boolean {
   if (!provided) return false;
 
@@ -2371,13 +2375,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Consumer notifications route
-  app.get('/api/consumer-notifications/:email/:tenantSlug', async (req, res) => {
+  app.get('/api/consumer-notifications/:email/:tenantSlug', authenticateConsumer, async (req: any, res) => {
     try {
       const { email, tenantSlug } = req.params;
-      
-      const consumer = await storage.getConsumerByEmailAndTenant(email, tenantSlug);
-      if (!consumer) {
-        return res.status(404).json({ message: "Consumer not found" });
+      const { email: tokenEmail, tenantId, tenantSlug: tokenTenantSlug, id: consumerId } = req.consumer || {};
+
+      const normalizedParamEmail = normalizeLowercase(email);
+      const normalizedTokenEmail = normalizeLowercase(tokenEmail);
+      if (!normalizedTokenEmail || normalizedParamEmail !== normalizedTokenEmail) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const normalizedRequestedTenantSlug = normalizeLowercase(tenantSlug);
+      if (!normalizedRequestedTenantSlug) {
+        return res.status(400).json({ message: "Tenant slug required" });
+      }
+
+      let tenantSlugMatch = normalizeLowercase(tokenTenantSlug);
+      let tenant = tenantId ? await storage.getTenant(tenantId) : undefined;
+
+      if (!tenant && tokenTenantSlug) {
+        tenant = await storage.getTenantBySlug(tokenTenantSlug);
+      }
+
+      if (!tenant && tenantSlug) {
+        tenant = await storage.getTenantBySlug(tenantSlug);
+      }
+
+      if (tenant) {
+        tenantSlugMatch = normalizeLowercase(tenant.slug);
+      }
+
+      if (!tenantSlugMatch || tenantSlugMatch !== normalizedRequestedTenantSlug) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      if (!tenant) {
+        return res.status(404).json({ message: "Tenant not found" });
+      }
+
+      if (!consumerId) {
+        return res.status(401).json({ message: "No consumer access" });
+      }
+
+      const consumer = await storage.getConsumer(consumerId);
+      if (!consumer || normalizeLowercase(consumer.email) !== normalizedTokenEmail || consumer.tenantId !== tenant.id) {
+        return res.status(403).json({ message: "Access denied" });
       }
 
       const notifications = await storage.getNotificationsByConsumer(consumer.id);
@@ -2389,9 +2432,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Mark notification as read
-  app.patch('/api/consumer-notifications/:id/read', async (req, res) => {
+  app.patch('/api/consumer-notifications/:id/read', authenticateConsumer, async (req: any, res) => {
     try {
       const { id } = req.params;
+      const { id: consumerId } = req.consumer || {};
+
+      if (!consumerId) {
+        return res.status(401).json({ message: "No consumer access" });
+      }
+
+      const notifications = await storage.getNotificationsByConsumer(consumerId);
+      const notification = notifications.find(item => item.id === id);
+
+      if (!notification) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
       await storage.markNotificationRead(id);
       res.json({ message: "Notification marked as read" });
     } catch (error) {
@@ -3182,28 +3238,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Consumer portal enhanced routes
-  app.get('/api/consumer/documents/:email', async (req, res) => {
+  app.get('/api/consumer/documents/:email', authenticateConsumer, async (req: any, res) => {
     try {
       const { email } = req.params;
       const { tenantSlug } = req.query;
-      
-      if (!tenantSlug) {
+      const { id: consumerId, email: tokenEmail, tenantId, tenantSlug: tokenTenantSlug } = req.consumer || {};
+
+      if (!consumerId) {
+        return res.status(401).json({ message: "No consumer access" });
+      }
+
+      const normalizedParamEmail = normalizeLowercase(email);
+      const normalizedTokenEmail = normalizeLowercase(tokenEmail);
+      if (!normalizedTokenEmail || normalizedParamEmail !== normalizedTokenEmail) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const requestedTenantSlug = typeof tenantSlug === "string" ? tenantSlug : "";
+      if (!requestedTenantSlug) {
         return res.status(400).json({ message: "Tenant slug required" });
       }
 
-      const tenant = await storage.getTenantBySlug(tenantSlug as string);
+      const normalizedRequestedTenantSlug = normalizeLowercase(requestedTenantSlug);
+
+      let tenant = tenantId ? await storage.getTenant(tenantId) : undefined;
+      if (!tenant && tokenTenantSlug) {
+        tenant = await storage.getTenantBySlug(tokenTenantSlug);
+      }
+      if (!tenant) {
+        tenant = await storage.getTenantBySlug(requestedTenantSlug);
+      }
+
       if (!tenant) {
         return res.status(404).json({ message: "Tenant not found" });
       }
 
-      const settings = await storage.getTenantSettings(tenant.id);
-      if (!settings?.showDocuments) {
-        return res.json([]);
+      const tenantSlugMatch = normalizeLowercase(tenant.slug);
+      if (!tenantSlugMatch || tenantSlugMatch !== normalizedRequestedTenantSlug) {
+        return res.status(403).json({ message: "Access denied" });
       }
 
-      const consumer = await storage.getConsumerByEmailAndTenant(email, tenantSlug as string);
+      const consumer = await storage.getConsumer(consumerId);
+      if (!consumer || normalizeLowercase(consumer.email) !== normalizedTokenEmail || consumer.tenantId !== tenant.id) {
+        return res.status(403).json({ message: "Access denied" });
+      }
 
-      if (!consumer) {
+      const settings = await storage.getTenantSettings(tenant.id);
+      if (!settings?.showDocuments) {
         return res.json([]);
       }
 
@@ -3243,18 +3324,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/consumer/arrangements/:email', async (req, res) => {
+  app.get('/api/consumer/arrangements/:email', authenticateConsumer, async (req: any, res) => {
     try {
       const { email } = req.params;
       const { tenantSlug, balance } = req.query;
-      
-      if (!tenantSlug) {
+      const { id: consumerId, email: tokenEmail, tenantId, tenantSlug: tokenTenantSlug } = req.consumer || {};
+
+      if (!consumerId) {
+        return res.status(401).json({ message: "No consumer access" });
+      }
+
+      const normalizedParamEmail = normalizeLowercase(email);
+      const normalizedTokenEmail = normalizeLowercase(tokenEmail);
+      if (!normalizedTokenEmail || normalizedParamEmail !== normalizedTokenEmail) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const requestedTenantSlug = typeof tenantSlug === "string" ? tenantSlug : "";
+      if (!requestedTenantSlug) {
         return res.status(400).json({ message: "Tenant slug required" });
       }
 
-      const tenant = await storage.getTenantBySlug(tenantSlug as string);
+      const normalizedRequestedTenantSlug = normalizeLowercase(requestedTenantSlug);
+
+      let tenant = tenantId ? await storage.getTenant(tenantId) : undefined;
+      if (!tenant && tokenTenantSlug) {
+        tenant = await storage.getTenantBySlug(tokenTenantSlug);
+      }
+      if (!tenant) {
+        tenant = await storage.getTenantBySlug(requestedTenantSlug);
+      }
+
       if (!tenant) {
         return res.status(404).json({ message: "Tenant not found" });
+      }
+
+      const tenantSlugMatch = normalizeLowercase(tenant.slug);
+      if (!tenantSlugMatch || tenantSlugMatch !== normalizedRequestedTenantSlug) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const consumer = await storage.getConsumer(consumerId);
+      if (!consumer || normalizeLowercase(consumer.email) !== normalizedTokenEmail || consumer.tenantId !== tenant.id) {
+        return res.status(403).json({ message: "Access denied" });
       }
 
       const settings = await storage.getTenantSettings(tenant.id);
