@@ -23,7 +23,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     try {
       decodedToken = jwt.verify(token, JWT_SECRET) as any;
-      
+
       // Verify this is a consumer token
       if (decodedToken.type !== 'consumer') {
         return res.status(401).json({ message: 'Invalid token type' });
@@ -32,12 +32,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ message: 'Invalid consumer token' });
     }
 
+    const tokenTenantId = typeof decodedToken.tenantId === 'string' ? decodedToken.tenantId : null;
+    const tokenTenantSlug =
+      typeof decodedToken.tenantSlug === 'string' && decodedToken.tenantSlug.trim() !== ''
+        ? decodedToken.tenantSlug.trim()
+        : null;
+
     // Now proceed with the original logic
     const email = (req.query.email as string | undefined) ?? '';
     const rawTenantSlug = req.query.tenantSlug;
-    const tenantSlug = typeof rawTenantSlug === 'string' && rawTenantSlug !== 'undefined' && rawTenantSlug.trim() !== ''
-      ? rawTenantSlug.trim()
-      : undefined;
+    const requestTenantSlug =
+      typeof rawTenantSlug === 'string' && rawTenantSlug !== 'undefined' && rawTenantSlug.trim() !== ''
+        ? rawTenantSlug.trim()
+        : undefined;
 
     const sanitizedEmail = email.trim();
 
@@ -51,21 +58,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Verify tenant slug matches if provided in token
-    if (decodedToken.tenantSlug && tenantSlug && decodedToken.tenantSlug !== tenantSlug) {
+    if (tokenTenantSlug && requestTenantSlug && tokenTenantSlug !== requestTenantSlug) {
       return res.status(403).json({ message: 'Tenant mismatch' });
     }
 
     const db = await getDb();
-    let tenantId: string | null = null;
+    const effectiveTenantSlug = requestTenantSlug ?? tokenTenantSlug ?? undefined;
+    let tenantId: string | null = tokenTenantId;
 
     // Get tenant if slug provided
     let tenantRecord: typeof tenants.$inferSelect | null = null;
 
-    if (tenantSlug) {
+    if (effectiveTenantSlug) {
       const [tenant] = await db
         .select()
         .from(tenants)
-        .where(eq(tenants.slug, tenantSlug))
+        .where(eq(tenants.slug, effectiveTenantSlug))
         .limit(1);
       if (!tenant) {
         return res.status(404).json({ error: 'Agency not found' });
