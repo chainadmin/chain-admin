@@ -17,7 +17,13 @@ function resolveFolderId(req: AuthenticatedRequest) {
     const url = new URL(req.url, 'http://localhost');
     const segments = url.pathname.split('/').filter(Boolean);
     if (segments.length > 0) {
-      return segments[segments.length - 1];
+      const lastSegment = segments[segments.length - 1];
+      if (lastSegment.toLowerCase() === 'delete' && segments.length > 1) {
+        return segments[segments.length - 2];
+      }
+      if (lastSegment.toLowerCase() !== 'delete') {
+        return lastSegment;
+      }
     }
   }
   return undefined;
@@ -31,7 +37,11 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
     return;
   }
 
-  if (method !== 'DELETE') {
+  const urlPath = req.url ? new URL(req.url, 'http://localhost').pathname.toLowerCase() : '';
+  const isDeleteRequest =
+    method === 'DELETE' || (method === 'POST' && urlPath.endsWith('/delete'));
+
+  if (!isDeleteRequest) {
     res.status(405).json({ error: 'Method not allowed' });
     return;
   }
