@@ -3,6 +3,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import {
+  clearConsumerAuth,
+  getStoredConsumerSession,
+  getStoredConsumerToken,
+} from "@/lib/consumer-auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,48 +44,58 @@ export default function ConsumerDashboard() {
   const [consumerSession, setConsumerSession] = useState<any>(null);
 
   useEffect(() => {
-    const token = localStorage.getItem("consumerToken");
+    const token = getStoredConsumerToken();
     if (!token) {
-      setLocation("/consumer-login");
-    }
-  }, [setLocation]);
-
-  // Get consumer session data
-  useEffect(() => {
-    const sessionData = localStorage.getItem("consumerSession");
-    if (!sessionData) {
-      setLocation("/consumer-login");
-      return;
-    }
-
-    try {
-      const session = JSON.parse(sessionData);
-      setConsumerSession(session);
-      setCallbackForm(prev => ({
-        ...prev,
-        emailAddress: session.email,
-      }));
-    } catch (error) {
       toast({
-        title: "Session Error",
-        description: "Your session has expired. Please log in again.",
+        title: "Not Signed In",
+        description: "Please sign in to access your dashboard.",
         variant: "destructive",
       });
       setLocation("/consumer-login");
     }
   }, [setLocation, toast]);
 
+  // Get consumer session data
+  useEffect(() => {
+    const session = getStoredConsumerSession();
+    if (!session) {
+      toast({
+        title: "Session Expired",
+        description: "We couldn't locate your saved login. Please sign in again to continue.",
+        variant: "destructive",
+      });
+      setLocation("/consumer-login");
+      return;
+    }
+    setConsumerSession(session);
+    setCallbackForm(prev => ({
+      ...prev,
+      emailAddress: session.email,
+    }));
+  }, [setLocation, toast]);
+
   const tenantSlug = consumerSession?.tenantSlug;
   const encodedEmail = consumerSession?.email ? encodeURIComponent(consumerSession.email) : "";
   const encodedTenantSlug = tenantSlug ? encodeURIComponent(tenantSlug) : "";
+  const tenantQuery = encodedTenantSlug ? `?tenantSlug=${encodedTenantSlug}` : "";
 
   const accountsUrl = encodedEmail && encodedTenantSlug
-    ? `/api/consumer/accounts/${encodedEmail}?tenantSlug=${encodedTenantSlug}`
+api/consumer/accounts/${encodedEmail}?tenantSlug=${encodedTenantSlug}`
+
+    ? `/api/consumer/accounts/${encodedEmail}${tenantQuery}`
+
     : "";
 
   // Fetch consumer data
   const { data, isLoading, error } = useQuery({
-    queryKey: accountsUrl ? [accountsUrl] : ['consumer-accounts'],
+    queryKey: accountsUrl ? [accountsUrl] : ["consumer-accounts"],
+    queryFn: async () => {
+      if (!accountsUrl) {
+        return null;
+      }
+      const response = await apiRequest("GET", accountsUrl);
+      return response.json();
+    },
     enabled: !!accountsUrl,
   });
 
@@ -90,14 +105,28 @@ export default function ConsumerDashboard() {
     : "";
 
   const { data: notifications } = useQuery({
-    queryKey: notificationsUrl ? [notificationsUrl] : ['consumer-notifications'],
+    queryKey: notificationsUrl ? [notificationsUrl] : ["consumer-notifications"],
+    queryFn: async () => {
+      if (!notificationsUrl) {
+        return null;
+      }
+      const response = await apiRequest("GET", notificationsUrl);
+      return response.json();
+    },
     enabled: !!notificationsUrl,
   });
 
   const brandingUrl = tenantSlug ? `/api/public/agency-branding?slug=${encodeURIComponent(tenantSlug)}` : "";
 
-  const { data: branding } = useQuery<AgencyBranding>({
-    queryKey: brandingUrl ? [brandingUrl] : ['consumer-agency-branding'],
+  const { data: branding } = useQuery<AgencyBranding | null>({
+    queryKey: brandingUrl ? [brandingUrl] : ["consumer-agency-branding"],
+    queryFn: async () => {
+      if (!brandingUrl) {
+        return null;
+      }
+      const response = await apiRequest("GET", brandingUrl);
+      return response.json();
+    },
     enabled: !!brandingUrl,
   });
 
@@ -169,7 +198,7 @@ export default function ConsumerDashboard() {
   });
 
   const handleLogout = () => {
-    localStorage.removeItem("consumerSession");
+    clearConsumerAuth();
     toast({
       title: "Logged Out",
       description: "You have been logged out successfully.",

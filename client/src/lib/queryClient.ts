@@ -1,5 +1,11 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { getAuthToken } from "./cookies";
+import { getStoredConsumerToken } from "./consumer-auth";
+
+function isConsumerEndpoint(url: string): boolean {
+  const normalized = url.toLowerCase();
+  return normalized.includes("/consumer/") || normalized.includes("/consumer-");
+}
 
 export class ApiError extends Error {
   status: number;
@@ -76,7 +82,7 @@ export async function apiRequest(
 ): Promise<Response> {
   const fullUrl = getApiUrl(url);
   const token = getAuthToken(); // Now checks cookies first, then localStorage
-  const consumerToken = localStorage.getItem('consumerToken'); // Check for consumer token
+  const consumerToken = getStoredConsumerToken(); // Check for consumer token
   const headers: HeadersInit = {};
   
   // Only set Content-Type for non-FormData requests
@@ -85,7 +91,7 @@ export async function apiRequest(
   }
   
   // Use consumer token for consumer endpoints, otherwise use admin token
-  if (url.includes('/consumer/') && consumerToken) {
+  if (consumerToken && isConsumerEndpoint(url)) {
     headers["Authorization"] = `Bearer ${consumerToken}`;
   } else if (token) {
     headers["Authorization"] = `Bearer ${token}`;
@@ -111,11 +117,11 @@ export const getQueryFn: <T>(options: {
   async ({ queryKey }) => {
     const url = getApiUrl(queryKey.join("/") as string);
     const token = getAuthToken(); // Now checks cookies first, then localStorage
-    const consumerToken = localStorage.getItem('consumerToken'); // Check for consumer token
+    const consumerToken = getStoredConsumerToken(); // Check for consumer token
     const headers: HeadersInit = {};
     
     // Use consumer token for consumer endpoints, otherwise use admin token
-    if (url.includes('/consumer/') && consumerToken) {
+    if (consumerToken && isConsumerEndpoint(url)) {
       headers["Authorization"] = `Bearer ${consumerToken}`;
     } else if (token) {
       headers["Authorization"] = `Bearer ${token}`;

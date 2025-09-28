@@ -25,6 +25,10 @@ import {
   retryLoginWithAgencySelection,
   storeAgencyContext,
 } from "./consumer-login-helpers";
+import {
+  clearConsumerAuth,
+  persistConsumerAuth,
+} from "@/lib/consumer-auth";
 
 export default function ConsumerLogin() {
   const [, setLocation] = useLocation();
@@ -168,8 +172,7 @@ export default function ConsumerLogin() {
       consumer?: unknown;
     }) => {
       // Clear any old cached data first
-      localStorage.removeItem("consumerToken");
-      localStorage.removeItem("consumerSession");
+      clearConsumerAuth();
 
       if (processLoginResult(data)) {
         return;
@@ -197,15 +200,23 @@ export default function ConsumerLogin() {
           return;
         }
         
-        // Store consumer session data and token
-        localStorage.setItem("consumerSession", JSON.stringify({
-          email: form.email,
-          tenantSlug: data.tenant.slug,
-          consumerData: data.consumer,
-        }));
-        
-        // Store the token for authenticated requests
-        localStorage.setItem("consumerToken", data.token);
+        const { sessionStored, tokenStored } = persistConsumerAuth({
+          session: {
+            email: form.email,
+            tenantSlug: data.tenant.slug,
+            consumerData: data.consumer,
+          },
+          token: data.token,
+        });
+
+        if (!sessionStored || !tokenStored) {
+          toast({
+            title: "Browser Storage Blocked",
+            description: "We couldn't save your login details. Please enable cookies or storage access and try again.",
+            variant: "destructive",
+          });
+          return;
+        }
 
         persistAgencyContext({
           slug: data.tenant.slug,
