@@ -83,31 +83,42 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
               </div>
 
               {/* Navigation */}
-              <nav className="mt-10 flex-1 space-y-1 px-4">
-                {navigationItems.map((item) => (
-                  <Link key={item.name} href={item.href} data-testid={`nav-${item.name.toLowerCase()}`}>
-                    <div
-                      className={cn(
-                        "group flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition",
-                        isActiveRoute(item.href)
-                          ? "bg-white/15 text-white shadow-lg shadow-blue-900/20"
-                          : "text-blue-100/80 hover:bg-white/10 hover:text-white",
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/10 text-sm transition",
-                          isActiveRoute(item.href)
-                            ? "border-white/30 bg-gradient-to-br from-sky-400/30 to-indigo-500/30 text-white"
-                            : "text-blue-100/70 group-hover:border-white/20 group-hover:bg-white/10",
-                        )}
-                      >
-                        <i className={`${item.icon} text-base`}></i>
-                      </span>
-                      <span>{item.name}</span>
-                    </div>
-                  </Link>
-                ))}
+              <nav className="mt-10 flex-1 px-4">
+                <ul className="space-y-1">
+                  {navigationItems.map((item) => {
+                    const isActive = isActiveRoute(item.href);
+
+                    return (
+                      <li key={item.name}>
+                        <Link href={item.href}>
+                          <a
+                            data-testid={`nav-${item.name.toLowerCase()}`}
+                            className={cn(
+                              "group flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition",
+                              isActive
+                                ? "bg-white/15 text-white shadow-lg shadow-blue-900/20"
+                                : "text-blue-100/80 hover:bg-white/10 hover:text-white",
+                            )}
+                            aria-current={isActive ? "page" : undefined}
+                          >
+                            <span
+                              aria-hidden="true"
+                              className={cn(
+                                "flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/10 text-sm transition",
+                                isActive
+                                  ? "border-white/30 bg-gradient-to-br from-sky-400/30 to-indigo-500/30 text-white"
+                                  : "text-blue-100/70 group-hover:border-white/20 group-hover:bg-white/10",
+                              )}
+                            >
+                              <i aria-hidden="true" className={`${item.icon} text-base`}></i>
+                            </span>
+                            <span>{item.name}</span>
+                          </a>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
               </nav>
 
               {/* User Profile */}
@@ -139,12 +150,17 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         {/* Main Content */}
         <div className="flex flex-1 flex-col overflow-hidden">
           <div className="relative z-10 flex h-20 flex-shrink-0 items-center border-b border-white/10 bg-white/5 px-4 backdrop-blur">
-            <button className="mr-4 flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-blue-100/70 transition hover:bg-white/10 md:hidden">
-              <i className="fas fa-bars text-lg"></i>
+            <button
+              type="button"
+              aria-label="Open navigation menu"
+              className="mr-4 flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-blue-100/70 transition hover:bg-white/10 md:hidden"
+            >
+              <i aria-hidden="true" className="fas fa-bars text-lg"></i>
+              <span className="sr-only">Open navigation menu</span>
             </button>
             <div className="flex flex-1 items-center justify-between gap-4">
               <div className="relative hidden w-full max-w-md md:block">
-                <i className="fas fa-search pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-blue-100/60"></i>
+                <i aria-hidden="true" className="fas fa-search pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-blue-100/60"></i>
                 <input
                   className="w-full rounded-2xl border border-white/15 bg-white/10 py-2.5 pl-11 pr-4 text-sm text-blue-50 placeholder:text-blue-100/60 focus:border-sky-400/60 focus:outline-none focus:ring-2 focus:ring-sky-400/40"
                   placeholder="Search consumers, accounts..."
@@ -152,8 +168,13 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 />
               </div>
               <div className="flex items-center gap-3">
-                <button className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-blue-100/70 transition hover:bg-white/15">
-                  <i className="fas fa-bell text-base"></i>
+                <button
+                  type="button"
+                  aria-label="View notifications"
+                  className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-blue-100/70 transition hover:bg-white/15"
+                >
+                  <i aria-hidden="true" className="fas fa-bell text-base"></i>
+                  <span className="sr-only">View notifications</span>
                 </button>
                 <Button
                   variant="ghost"
@@ -163,7 +184,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                   }}
                   className="rounded-xl border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-blue-50 hover:bg-white/20"
                 >
-                  <i className="fas fa-sign-out-alt mr-2 text-base"></i>
+                  <i aria-hidden="true" className="fas fa-sign-out-alt mr-2 text-base"></i>
                   Logout
                 </Button>
               </div>
