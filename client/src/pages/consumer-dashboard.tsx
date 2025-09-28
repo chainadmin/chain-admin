@@ -77,14 +77,22 @@ export default function ConsumerDashboard() {
   const tenantSlug = consumerSession?.tenantSlug;
   const encodedEmail = consumerSession?.email ? encodeURIComponent(consumerSession.email) : "";
   const encodedTenantSlug = tenantSlug ? encodeURIComponent(tenantSlug) : "";
+  const tenantQuery = encodedTenantSlug ? `?tenantSlug=${encodedTenantSlug}` : "";
 
   const accountsUrl = encodedEmail && encodedTenantSlug
-    ? `/api/consumer/accounts/${encodedEmail}`
+    ? `/api/consumer/accounts/${encodedEmail}${tenantQuery}`
     : "";
 
   // Fetch consumer data
   const { data, isLoading, error } = useQuery({
-    queryKey: accountsUrl ? [accountsUrl] : ['consumer-accounts'],
+    queryKey: accountsUrl ? [accountsUrl] : ["consumer-accounts"],
+    queryFn: async () => {
+      if (!accountsUrl) {
+        return null;
+      }
+      const response = await apiRequest("GET", accountsUrl);
+      return response.json();
+    },
     enabled: !!accountsUrl,
   });
 
@@ -94,14 +102,28 @@ export default function ConsumerDashboard() {
     : "";
 
   const { data: notifications } = useQuery({
-    queryKey: notificationsUrl ? [notificationsUrl] : ['consumer-notifications'],
+    queryKey: notificationsUrl ? [notificationsUrl] : ["consumer-notifications"],
+    queryFn: async () => {
+      if (!notificationsUrl) {
+        return null;
+      }
+      const response = await apiRequest("GET", notificationsUrl);
+      return response.json();
+    },
     enabled: !!notificationsUrl,
   });
 
   const brandingUrl = tenantSlug ? `/api/public/agency-branding?slug=${encodeURIComponent(tenantSlug)}` : "";
 
-  const { data: branding } = useQuery<AgencyBranding>({
-    queryKey: brandingUrl ? [brandingUrl] : ['consumer-agency-branding'],
+  const { data: branding } = useQuery<AgencyBranding | null>({
+    queryKey: brandingUrl ? [brandingUrl] : ["consumer-agency-branding"],
+    queryFn: async () => {
+      if (!brandingUrl) {
+        return null;
+      }
+      const response = await apiRequest("GET", brandingUrl);
+      return response.json();
+    },
     enabled: !!brandingUrl,
   });
 
