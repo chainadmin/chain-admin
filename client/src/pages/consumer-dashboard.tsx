@@ -75,55 +75,55 @@ export default function ConsumerDashboard() {
   }, [setLocation, toast]);
 
   const tenantSlug = consumerSession?.tenantSlug;
-  const encodedEmail = consumerSession?.email ? encodeURIComponent(consumerSession.email) : "";
-  const encodedTenantSlug = tenantSlug ? encodeURIComponent(tenantSlug) : "";
+  const encodedEmail = consumerSession?.email ? encodeURIComponent(consumerSession.email) : null;
+  const encodedTenantSlug = tenantSlug ? encodeURIComponent(tenantSlug) : null;
   const tenantQuery = encodedTenantSlug ? `?tenantSlug=${encodedTenantSlug}` : "";
 
   const accountsUrl = encodedEmail && encodedTenantSlug
     ? `/api/consumer/accounts/${encodedEmail}?tenantSlug=${encodedTenantSlug}`
-    : "";
+    : null;
 
-  // Fetch consumer data
+  // Fetch consumer data - only create query when URL is available
   const { data, isLoading, error } = useQuery({
-    queryKey: accountsUrl ? [accountsUrl] : ["consumer-accounts"],
-    enabled: !!accountsUrl,
+    queryKey: [accountsUrl || "no-fetch"],
+    enabled: !!accountsUrl && !!consumerSession,
   });
 
   // Fetch notifications
   const notificationsUrl = encodedEmail && encodedTenantSlug
     ? `/api/consumer-notifications/${encodedEmail}/${encodedTenantSlug}`
-    : "";
+    : null;
 
   const { data: notifications } = useQuery({
-    queryKey: notificationsUrl ? [notificationsUrl] : ["consumer-notifications"],
-    enabled: !!notificationsUrl,
+    queryKey: [notificationsUrl || "no-fetch-notifications"],
+    enabled: !!notificationsUrl && !!consumerSession,
   });
 
-  const brandingUrl = tenantSlug ? `/api/public/agency-branding?slug=${encodeURIComponent(tenantSlug)}` : "";
+  const brandingUrl = tenantSlug ? `/api/public/agency-branding?slug=${encodeURIComponent(tenantSlug)}` : null;
 
   const { data: branding } = useQuery<AgencyBranding | null>({
-    queryKey: brandingUrl ? [brandingUrl] : ["consumer-agency-branding"],
-    enabled: !!brandingUrl,
+    queryKey: [brandingUrl || "no-fetch-branding"],
+    enabled: !!brandingUrl && !!consumerSession,
   });
 
   // Fetch documents
   const documentsUrl = encodedEmail && encodedTenantSlug
     ? `/api/consumer/documents/${encodedEmail}?tenantSlug=${encodedTenantSlug}`
-    : "";
+    : null;
 
   const { data: documents } = useQuery({
-    queryKey: documentsUrl ? [documentsUrl] : ['consumer-documents'],
-    enabled: !!documentsUrl,
+    queryKey: [documentsUrl || "no-fetch-documents"],
+    enabled: !!documentsUrl && !!consumerSession,
   });
 
   // Fetch payment arrangements
   const arrangementsUrl = encodedEmail && encodedTenantSlug
     ? `/api/consumer/arrangements/${encodedEmail}?tenantSlug=${encodedTenantSlug}`
-    : "";
+    : null;
 
   const { data: arrangements } = useQuery({
-    queryKey: arrangementsUrl ? [arrangementsUrl] : ['consumer-arrangements'],
-    enabled: !!arrangementsUrl,
+    queryKey: [arrangementsUrl || "no-fetch-arrangements"],
+    enabled: !!arrangementsUrl && !!consumerSession,
   });
 
   // Submit callback request mutation
@@ -283,7 +283,7 @@ export default function ConsumerDashboard() {
   };
 
   const totalBalance = accounts?.reduce((sum: number, account: any) => sum + (account.balanceCents || 0), 0) || 0;
-  const unreadNotifications = (notifications as any[])?.filter(n => !n.isRead)?.length || 0;
+  const unreadNotifications = Array.isArray(notifications) ? notifications.filter(n => !n.isRead)?.length : 0;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -551,7 +551,7 @@ export default function ConsumerDashboard() {
                         </div>
                         <div>
                           <div className="text-lg font-medium text-blue-600">
-                            {(arrangements as any[])?.length || 0}
+                            {Array.isArray(arrangements) ? arrangements.length : 0}
                           </div>
                           <div className="text-xs text-gray-500">Plans Available</div>
                         </div>
@@ -569,7 +569,7 @@ export default function ConsumerDashboard() {
           </TabsContent>
 
           <TabsContent value="notifications" className="mt-6">
-            {!notifications || (notifications as any[]).length === 0 ? (
+            {!notifications || !Array.isArray(notifications) || notifications.length === 0 ? (
               <Card>
                 <CardContent className="pt-6 text-center">
                   <Bell className="h-12 w-12 text-gray-400 mx-auto mb-4" />

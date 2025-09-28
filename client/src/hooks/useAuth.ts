@@ -5,6 +5,12 @@ import { getAuthToken, getStoredTenantName, getStoredTenantSlug, persistTenantMe
 export function useAuth() {
   const [jwtAuth, setJwtAuth] = useState<any>(null);
   const [checkingJwt, setCheckingJwt] = useState(true);
+  
+  // Skip admin auth for consumer routes
+  const pathname = window.location.pathname;
+  const isConsumerRoute = pathname === '/consumer-dashboard' || 
+                         pathname === '/consumer-login' ||
+                         pathname.startsWith('/consumer-register');
 
   // Check for JWT token on mount and when localStorage/cookies change
   useEffect(() => {
@@ -64,15 +70,15 @@ export function useAuth() {
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
-  // Original Replit auth check (only run if no JWT)
+  // Original Replit auth check (only run if no JWT and not on consumer route)
   const { data: replitUser, isLoading: replitLoading } = useQuery({
     queryKey: ["/api/auth/user"],
     retry: false,
-    enabled: !jwtAuth && !checkingJwt, // Only check Replit auth if no JWT
+    enabled: !isConsumerRoute && !jwtAuth && !checkingJwt, // Skip for consumer routes
   });
 
   // Determine final auth state
-  const isLoading = checkingJwt || (!jwtAuth && replitLoading);
+  const isLoading = isConsumerRoute ? false : (checkingJwt || (!jwtAuth && replitLoading));
   const user = jwtAuth || replitUser;
   const isAuthenticated = !!(jwtAuth || replitUser);
 

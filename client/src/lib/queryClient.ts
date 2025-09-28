@@ -115,7 +115,14 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const url = getApiUrl(queryKey.join("/") as string);
+    const queryPath = queryKey.join("/") as string;
+    
+    // Skip fetching for placeholder keys
+    if (queryPath.includes("no-fetch")) {
+      return null;
+    }
+    
+    const url = getApiUrl(queryPath);
     const token = getAuthToken(); // Now checks cookies first, then localStorage
     const consumerToken = getStoredConsumerToken(); // Check for consumer token
     const headers: HeadersInit = {};
