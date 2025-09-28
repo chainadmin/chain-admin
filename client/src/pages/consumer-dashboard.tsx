@@ -75,12 +75,12 @@ export default function ConsumerDashboard() {
   const encodedTenantSlug = tenantSlug ? encodeURIComponent(tenantSlug) : "";
 
   const accountsUrl = encodedEmail && encodedTenantSlug
-    ? `/api/consumer/accounts/${encodedEmail}`
+    ? `/api/consumer/accounts/${encodedEmail}?tenantSlug=${encodedTenantSlug}`
     : "";
 
   // Fetch consumer data
   const { data, isLoading, error } = useQuery({
-    queryKey: accountsUrl ? ['api', 'consumer', 'accounts', encodedEmail] : ['consumer-accounts'],
+    queryKey: accountsUrl ? [accountsUrl] : ['consumer-accounts'],
     enabled: !!accountsUrl,
   });
 
@@ -108,13 +108,6 @@ export default function ConsumerDashboard() {
 
   const { data: documents } = useQuery({
     queryKey: documentsUrl ? [documentsUrl] : ['consumer-documents'],
-    queryFn: async () => {
-      if (!documentsUrl) {
-        return null;
-      }
-      const response = await apiRequest("GET", documentsUrl);
-      return response.json();
-    },
     enabled: !!documentsUrl,
   });
 
@@ -124,18 +117,8 @@ export default function ConsumerDashboard() {
     : "";
 
   const { data: arrangements } = useQuery({
-    queryKey: arrangementsUrl && (data as any)?.accounts ? [
-      `${arrangementsUrl}&balance=${(data as any)?.accounts?.reduce((sum: number, acc: any) => sum + (acc.balanceCents || 0), 0) || 0}`
-    ] : ['consumer-arrangements'],
-    queryFn: async () => {
-      if (!arrangementsUrl) {
-        return null;
-      }
-      const balance = (data as any)?.accounts?.reduce((sum: number, acc: any) => sum + (acc.balanceCents || 0), 0) || 0;
-      const response = await apiRequest("GET", `${arrangementsUrl}&balance=${balance}`);
-      return response.json();
-    },
-    enabled: !!(data as any)?.accounts && !!arrangementsUrl,
+    queryKey: arrangementsUrl ? [arrangementsUrl] : ['consumer-arrangements'],
+    enabled: !!arrangementsUrl,
   });
 
   // Submit callback request mutation
