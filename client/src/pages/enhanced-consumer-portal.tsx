@@ -43,19 +43,19 @@ export default function EnhancedConsumerPortal() {
 
   // Fetch consumer data
   const { data, isLoading, error } = useQuery<any>({
-    queryKey: accountsUrl ? [accountsUrl] : ['enhanced-consumer-accounts'],
+    queryKey: accountsUrl ? [accountsUrl] : ["no-fetch-enhanced-consumer-accounts"],
     enabled: !!accountsUrl,
   });
 
   // Fetch notifications
   const { data: notifications } = useQuery<any>({
-    queryKey: notificationsUrl ? [notificationsUrl] : ['enhanced-consumer-notifications'],
+    queryKey: notificationsUrl ? [notificationsUrl] : ["no-fetch-enhanced-consumer-notifications"],
     enabled: !!notificationsUrl,
   });
 
   // Fetch documents
   const { data: documents } = useQuery<any>({
-    queryKey: documentsUrl ? [documentsUrl] : ['enhanced-consumer-documents'],
+    queryKey: documentsUrl ? [documentsUrl] : ["no-fetch-enhanced-consumer-documents"],
     enabled: !!documentsUrl,
   });
 
@@ -66,7 +66,7 @@ export default function EnhancedConsumerPortal() {
   const { data: arrangements } = useQuery<any>({
     queryKey: arrangementsBaseUrl && (data as any)?.accounts ? [
       `${arrangementsBaseUrl}&balance=${totalBalanceForQuery}`
-    ] : ['enhanced-consumer-arrangements'],
+    ] : ["no-fetch-enhanced-consumer-arrangements"],
     enabled: !!((data as any)?.accounts && arrangementsBaseUrl),
   });
 

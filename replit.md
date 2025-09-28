@@ -43,7 +43,7 @@ Chain is a multi-tenant platform designed for agencies to manage consumer accoun
 
 ## Dashboard Issues
 - **View/Contact Not Working**: View and contact buttons on dashboard don't work (work on accounts page)
-- **API Endpoint Mismatch**: Dashboard uses `/api/consumer/accounts/${email}` but API expects query parameters
+- **Consumer Accounts Endpoint**: The dashboard and API now both use `/api/consumer/accounts/:email`, relying on the consumer JWT for tenant context instead of a `tenantSlug` query parameter.
 
 ## Account Management Issues  
 - **Account Deletion 405**: DELETE endpoint exists but getting method not allowed errors

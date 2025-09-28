@@ -77,6 +77,7 @@ export default function ConsumerDashboard() {
   const tenantSlug = consumerSession?.tenantSlug;
   const encodedEmail = consumerSession?.email ? encodeURIComponent(consumerSession.email) : null;
   const encodedTenantSlug = tenantSlug ? encodeURIComponent(tenantSlug) : null;
+  const tenantQuery = encodedTenantSlug ? `?tenantSlug=${encodedTenantSlug}` : "";
   const accountsUrl = encodedEmail
     ? `/api/consumer/accounts/${encodedEmail}`
     : null;
@@ -105,8 +106,8 @@ export default function ConsumerDashboard() {
   });
 
   // Fetch documents
-  const documentsUrl = encodedEmail && encodedTenantSlug
-    ? `/api/consumer/documents/${encodedEmail}?tenantSlug=${encodedTenantSlug}`
+  const documentsUrl = encodedEmail && tenantQuery
+    ? `/api/consumer/documents/${encodedEmail}${tenantQuery}`
     : null;
 
   const { data: documents } = useQuery({
@@ -115,8 +116,8 @@ export default function ConsumerDashboard() {
   });
 
   // Fetch payment arrangements
-  const arrangementsUrl = encodedEmail && encodedTenantSlug
-    ? `/api/consumer/arrangements/${encodedEmail}?tenantSlug=${encodedTenantSlug}`
+  const arrangementsUrl = encodedEmail && tenantQuery
+    ? `/api/consumer/arrangements/${encodedEmail}${tenantQuery}`
     : null;
 
   const { data: arrangements } = useQuery({
