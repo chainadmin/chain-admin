@@ -65,6 +65,7 @@ function Router() {
                        pathname === '/agency-registration' ||
                        pathname === '/agency-register' ||
                        pathname === '/consumer-login' ||
+                       pathname === '/consumer-dashboard' ||
                        pathname.startsWith('/consumer-register') ||
                        pathname === '/privacy-policy' ||
                        pathname === '/terms-of-service' ||
