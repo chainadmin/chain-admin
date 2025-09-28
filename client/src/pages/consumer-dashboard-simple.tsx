@@ -38,11 +38,15 @@ export default function ConsumerDashboardSimple() {
   }, [setLocation, toast]);
 
   // Only fetch data when we have a valid session
+  const encodedEmail = session?.email ? encodeURIComponent(session.email) : null;
+  const encodedTenantSlug = session?.tenantSlug ? encodeURIComponent(session.tenantSlug) : null;
+  const accountsUrl = encodedEmail && encodedTenantSlug
+    ? `/api/consumer/accounts/${encodedEmail}?tenantSlug=${encodedTenantSlug}`
+    : null;
+
   const { data: accountData, isLoading, error } = useQuery({
-    queryKey: session?.email && session?.tenantSlug
-      ? [`/api/consumer/accounts?email=${encodeURIComponent(session.email)}&tenantSlug=${encodeURIComponent(session.tenantSlug)}`]
-      : ["skip"],
-    enabled: !!(session?.email && session?.tenantSlug && mounted),
+    queryKey: accountsUrl ? [accountsUrl] : ["no-fetch"],
+    enabled: !!(accountsUrl && mounted),
     retry: 1,
   });
 
