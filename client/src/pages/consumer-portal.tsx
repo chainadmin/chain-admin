@@ -10,22 +10,21 @@ export default function ConsumerPortal() {
   const { tenantSlug, email } = useParams();
   const { agencySlug } = useAgencyContext();
 
-  const { encodedEmail, tenantQuery, accountsUrl, documentsUrl, arrangementsUrl } = useMemo(() => {
+  const { encodedEmail, accountsUrl, documentsUrl, arrangementsUrl } = useMemo(() => {
     const safeEmail = email ? encodeURIComponent(email) : "";
     const resolvedTenantSlug = tenantSlug && tenantSlug !== "undefined" ? tenantSlug : agencySlug;
     const safeTenantSlug = resolvedTenantSlug ? encodeURIComponent(resolvedTenantSlug) : "";
 
     return {
       encodedEmail: safeEmail,
-      tenantQuery: safeTenantSlug ? `?tenantSlug=${safeTenantSlug}` : "",
-      accountsUrl: safeEmail && safeTenantSlug ? `/api/consumer/accounts/${safeEmail}?tenantSlug=${safeTenantSlug}` : "",
+      accountsUrl: safeEmail ? `/api/consumer/accounts/${safeEmail}` : "",
       documentsUrl: safeEmail && safeTenantSlug ? `/api/consumer/documents/${safeEmail}?tenantSlug=${safeTenantSlug}` : "",
       arrangementsUrl: safeEmail && safeTenantSlug ? `/api/consumer/arrangements/${safeEmail}?tenantSlug=${safeTenantSlug}` : ""
     };
   }, [agencySlug, email, tenantSlug]);
 
   const { data, isLoading, error } = useQuery<any>({
-    queryKey: accountsUrl ? [accountsUrl] : ['consumer-portal-accounts'],
+    queryKey: accountsUrl ? ["consumer-accounts", encodedEmail] : ['consumer-portal-accounts'],
     enabled: !!accountsUrl,
   });
 
