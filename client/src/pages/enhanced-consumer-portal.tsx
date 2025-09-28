@@ -26,7 +26,7 @@ export default function EnhancedConsumerPortal() {
   const encodedEmail = email ? encodeURIComponent(email) : "";
   const encodedTenantSlug = resolvedTenantSlug ? encodeURIComponent(resolvedTenantSlug) : "";
   const tenantQuery = encodedTenantSlug ? `?tenantSlug=${encodedTenantSlug}` : "";
-  const accountsUrl = encodedEmail && encodedTenantSlug ? `/api/consumer/accounts/${encodedEmail}${tenantQuery}` : "";
+  const accountsUrl = encodedEmail ? `/api/consumer/accounts/${encodedEmail}` : "";
   const notificationsUrl = encodedEmail && encodedTenantSlug ? `/api/consumer-notifications/${encodedEmail}/${encodedTenantSlug}` : "";
   const documentsUrl = encodedEmail && encodedTenantSlug ? `/api/consumer/documents/${encodedEmail}${tenantQuery}` : "";
 
