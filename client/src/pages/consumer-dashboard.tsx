@@ -77,15 +77,13 @@ export default function ConsumerDashboard() {
   const tenantSlug = consumerSession?.tenantSlug;
   const encodedEmail = consumerSession?.email ? encodeURIComponent(consumerSession.email) : null;
   const encodedTenantSlug = tenantSlug ? encodeURIComponent(tenantSlug) : null;
-  const tenantQuery = encodedTenantSlug ? `?tenantSlug=${encodedTenantSlug}` : "";
-
-  const accountsUrl = encodedEmail && encodedTenantSlug
-    ? `/api/consumer/accounts/${encodedEmail}?tenantSlug=${encodedTenantSlug}`
+  const accountsUrl = encodedEmail
+    ? `/api/consumer/accounts/${encodedEmail}`
     : null;
 
   // Fetch consumer data - only create query when URL is available
   const { data, isLoading, error } = useQuery({
-    queryKey: [accountsUrl || "no-fetch"],
+    queryKey: accountsUrl ? ["consumer-accounts", encodedEmail] : ["no-fetch"],
     enabled: !!accountsUrl && !!consumerSession,
   });
 

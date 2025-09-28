@@ -26,7 +26,7 @@ export default function EnhancedConsumerPortal() {
   const encodedEmail = email ? encodeURIComponent(email) : "";
   const encodedTenantSlug = resolvedTenantSlug ? encodeURIComponent(resolvedTenantSlug) : "";
   const tenantQuery = encodedTenantSlug ? `?tenantSlug=${encodedTenantSlug}` : "";
-  const accountsUrl = encodedEmail && encodedTenantSlug ? `/api/consumer/accounts/${encodedEmail}${tenantQuery}` : "";
+  const accountsUrl = encodedEmail ? `/api/consumer/accounts/${encodedEmail}` : "";
   const notificationsUrl = encodedEmail && encodedTenantSlug ? `/api/consumer-notifications/${encodedEmail}/${encodedTenantSlug}` : "";
   const documentsUrl = encodedEmail && encodedTenantSlug ? `/api/consumer/documents/${encodedEmail}${tenantQuery}` : "";
 
@@ -43,7 +43,7 @@ export default function EnhancedConsumerPortal() {
 
   // Fetch consumer data
   const { data, isLoading, error } = useQuery<any>({
-    queryKey: accountsUrl ? [accountsUrl] : ['enhanced-consumer-accounts'],
+    queryKey: accountsUrl ? ["consumer-accounts", encodedEmail] : ['enhanced-consumer-accounts'],
     enabled: !!accountsUrl,
   });
 
