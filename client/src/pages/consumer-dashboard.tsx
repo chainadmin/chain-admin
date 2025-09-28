@@ -80,22 +80,12 @@ export default function ConsumerDashboard() {
   const tenantQuery = encodedTenantSlug ? `?tenantSlug=${encodedTenantSlug}` : "";
 
   const accountsUrl = encodedEmail && encodedTenantSlug
-api/consumer/accounts/${encodedEmail}?tenantSlug=${encodedTenantSlug}`
-
-    ? `/api/consumer/accounts/${encodedEmail}${tenantQuery}`
-
+    ? `/api/consumer/accounts/${encodedEmail}?tenantSlug=${encodedTenantSlug}`
     : "";
 
   // Fetch consumer data
   const { data, isLoading, error } = useQuery({
     queryKey: accountsUrl ? [accountsUrl] : ["consumer-accounts"],
-    queryFn: async () => {
-      if (!accountsUrl) {
-        return null;
-      }
-      const response = await apiRequest("GET", accountsUrl);
-      return response.json();
-    },
     enabled: !!accountsUrl,
   });
 
@@ -106,13 +96,6 @@ api/consumer/accounts/${encodedEmail}?tenantSlug=${encodedTenantSlug}`
 
   const { data: notifications } = useQuery({
     queryKey: notificationsUrl ? [notificationsUrl] : ["consumer-notifications"],
-    queryFn: async () => {
-      if (!notificationsUrl) {
-        return null;
-      }
-      const response = await apiRequest("GET", notificationsUrl);
-      return response.json();
-    },
     enabled: !!notificationsUrl,
   });
 
@@ -120,13 +103,6 @@ api/consumer/accounts/${encodedEmail}?tenantSlug=${encodedTenantSlug}`
 
   const { data: branding } = useQuery<AgencyBranding | null>({
     queryKey: brandingUrl ? [brandingUrl] : ["consumer-agency-branding"],
-    queryFn: async () => {
-      if (!brandingUrl) {
-        return null;
-      }
-      const response = await apiRequest("GET", brandingUrl);
-      return response.json();
-    },
     enabled: !!brandingUrl,
   });
 
