@@ -40,7 +40,7 @@ export default function ConsumerDashboardSimple() {
   // Only fetch data when we have a valid session
   const { data: accountData, isLoading, error } = useQuery({
     queryKey: session?.email && session?.tenantSlug
-      ? [`/api/consumer/accounts/${encodeURIComponent(session.email)}?tenantSlug=${encodeURIComponent(session.tenantSlug)}`]
+      ? [`/api/consumer/accounts?email=${encodeURIComponent(session.email)}&tenantSlug=${encodeURIComponent(session.tenantSlug)}`]
       : ["skip"],
     enabled: !!(session?.email && session?.tenantSlug && mounted),
     retry: 1,
