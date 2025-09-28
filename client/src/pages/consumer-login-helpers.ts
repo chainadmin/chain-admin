@@ -29,7 +29,7 @@ export type HandleLoginResultOptions = {
   showToast: (options: {
     title: string;
     description?: string;
-    variant?: string;
+    variant?: "default" | "destructive" | null;
   }) => void;
   setPendingAgencies: (agencies: AgencyContext[]) => void;
   setAgencyDialogOpen: (open: boolean) => void;
