@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { UserPlus, ArrowRight, Shield, MapPin, AlertTriangle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import PublicHeroLayout from "@/components/public-hero-layout";
+import { clearConsumerAuth } from "@/lib/consumer-auth";
 
 export default function ConsumerRegistration() {
   const { tenantSlug } = useParams();
@@ -76,8 +77,7 @@ export default function ConsumerRegistration() {
         ? data.message
         : "Registration completed. Please log in to finish setting up your access.";
 
-      localStorage.removeItem("consumerSession");
-      localStorage.removeItem("consumerToken");
+      clearConsumerAuth();
 
       if (tenantName) {
         toast({
