@@ -24,7 +24,7 @@ import Billing from "@/pages/billing";
 import CompanyManagement from "@/pages/company-management";
 import ConsumerPortal from "@/pages/enhanced-consumer-portal";
 import ConsumerLogin from "@/pages/consumer-login";
-import ConsumerDashboard from "@/pages/consumer-dashboard";
+import ConsumerDashboard from "@/pages/consumer-dashboard-simple";
 import ConsumerRegistration from "@/pages/consumer-registration";
 import ConsumerMobileLanding from "@/pages/consumer-mobile-landing";
 import AgencyRegistration from "@/pages/agency-registration";
