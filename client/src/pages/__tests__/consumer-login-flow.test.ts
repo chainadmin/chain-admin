@@ -20,6 +20,7 @@ test("selecting an agency persists the choice before retrying login", async () =
   const form: LoginForm = {
     email: "alpha@example.com",
     dateOfBirth: "2000-01-01",
+    agreeToSms: true,
   };
 
   const events: string[] = [];
@@ -41,6 +42,7 @@ test("selecting an agency persists the choice before retrying login", async () =
     {
       email: form.email,
       dateOfBirth: form.dateOfBirth,
+      agreeToSms: form.agreeToSms,
       tenantSlug: chosenAgency.slug,
     },
   ]);

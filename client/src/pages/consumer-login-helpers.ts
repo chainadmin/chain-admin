@@ -1,6 +1,7 @@
 export type LoginForm = {
   email: string;
   dateOfBirth: string;
+  agreeToSms: boolean;
 };
 
 export type AgencyContext = {
