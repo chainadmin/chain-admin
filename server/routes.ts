@@ -328,7 +328,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use(subdomainMiddleware);
 
   // Explicit SPA fallback for the platform admin entry point to avoid 404s
-  app.get(["/admin", "/admin/*", "/Admin", "/Admin/*"], (req, res, next) => {
+  app.get(
+    ["/admin", "/admin/", "/admin/*", "/Admin", "/Admin/", "/Admin/*"],
+    (req, res, next) => {
     // Let Vite handle this route in development so HMR continues to work
     if (process.env.NODE_ENV !== "production") {
       return next();

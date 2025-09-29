@@ -1,6 +1,6 @@
 import { Switch, Route } from "wouter";
 import { useEffect } from "react";
-import type { JSX } from "react";
+import type { ComponentType, JSX } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -44,6 +44,28 @@ function Router() {
   const { toast } = useToast();
   const isMobileApp = mobileConfig.isNativePlatform;
   const pathname = window.location.pathname;
+  const adminRoutePaths = ["/admin", "/admin/", "/Admin", "/Admin/"] as const;
+  const createRouteElements = (
+    paths: readonly string[],
+    component: ComponentType<any>,
+    keyPrefix: string
+  ): JSX.Element[] =>
+    paths.map((path) => {
+      const sanitizedKey =
+        path === "/"
+          ? "root"
+          : path
+              .replace(/[^a-zA-Z0-9]+/g, "-")
+              .replace(/^-+|-+$/g, "") || "root";
+
+      return (
+        <Route
+          key={`${keyPrefix}-${sanitizedKey}`}
+          path={path}
+          component={component}
+        />
+      );
+    });
   const smsOptInPaths = ["/sms-opt-in", "/sms-opt-in-disclosure"] as const;
   const isSmsOptInRoute = smsOptInPaths.some(
     (route) => pathname === route || pathname.startsWith(`${route}/`)
@@ -310,8 +332,7 @@ function Router() {
       <Route key="public-terms" path="/terms-of-service" component={TermsOfService} />,
       ...getSmsOptInRoutes("public-sms"),
       <Route key="public-fix-db" path="/fix-db" component={FixDatabase} />,
-      <Route key="public-admin" path="/admin" component={GlobalAdmin} />,
-      <Route key="public-admin-cap" path="/Admin" component={GlobalAdmin} />,
+      ...createRouteElements(adminRoutePaths, GlobalAdmin, "public-admin"),
       <Route key="public-fallback" path="/:rest*" component={NotFound} />
     ];
 
@@ -337,8 +358,7 @@ function Router() {
     <Route key="auth-billing" path="/billing" component={Billing} />,
     <Route key="auth-company" path="/company" component={CompanyManagement} />,
     <Route key="auth-settings" path="/settings" component={Settings} />,
-    <Route key="auth-admin" path="/admin" component={GlobalAdmin} />,
-    <Route key="auth-admin-cap" path="/Admin" component={GlobalAdmin} />,
+    ...createRouteElements(adminRoutePaths, GlobalAdmin, "auth-admin"),
     <Route key="auth-agency-register" path="/agency-register" component={AgencyRegistration} />,
     <Route key="auth-agency-registration" path="/agency-registration" component={AgencyRegistration} />,
     <Route key="auth-email-test" path="/email-test" component={EmailTest} />,
