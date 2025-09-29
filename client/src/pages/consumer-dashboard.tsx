@@ -76,8 +76,6 @@ export default function ConsumerDashboard() {
 
   const tenantSlug = consumerSession?.tenantSlug;
   const encodedEmail = consumerSession?.email ? encodeURIComponent(consumerSession.email) : null;
-  const encodedTenantSlug = tenantSlug ? encodeURIComponent(tenantSlug) : null;
-  const tenantQuery = encodedTenantSlug ? `?tenantSlug=${encodedTenantSlug}` : "";
   const accountsUrl = encodedEmail
     ? `/api/consumer/accounts/${encodedEmail}`
     : null;
@@ -87,6 +85,10 @@ export default function ConsumerDashboard() {
     queryKey: accountsUrl ? [accountsUrl] : ["no-fetch"],
     enabled: !!accountsUrl && !!consumerSession,
   });
+
+  const resolvedTenantSlug = (data as any)?.tenant?.slug ?? tenantSlug;
+  const encodedTenantSlug = resolvedTenantSlug ? encodeURIComponent(resolvedTenantSlug) : null;
+  const tenantQuery = encodedTenantSlug ? `?tenantSlug=${encodedTenantSlug}` : "";
 
   // Fetch notifications
   const notificationsUrl = encodedEmail && encodedTenantSlug
@@ -98,7 +100,7 @@ export default function ConsumerDashboard() {
     enabled: !!notificationsUrl && !!consumerSession,
   });
 
-  const brandingUrl = tenantSlug ? `/api/public/agency-branding?slug=${encodeURIComponent(tenantSlug)}` : null;
+  const brandingUrl = resolvedTenantSlug ? `/api/public/agency-branding?slug=${encodeURIComponent(resolvedTenantSlug)}` : null;
 
   const { data: branding } = useQuery<AgencyBranding | null>({
     queryKey: [brandingUrl || "no-fetch-branding"],
@@ -130,7 +132,7 @@ export default function ConsumerDashboard() {
     mutationFn: async (requestData: any) => {
       await apiRequest("POST", "/api/callback-requests", {
         ...requestData,
-        tenantSlug: consumerSession?.tenantSlug,
+        tenantSlug: resolvedTenantSlug,
         consumerEmail: consumerSession?.email,
       });
     },

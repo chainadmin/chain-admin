@@ -22,13 +22,9 @@ export default function EnhancedConsumerPortal() {
   const queryClient = useQueryClient();
   const { agencySlug } = useAgencyContext();
 
-  const resolvedTenantSlug = tenantSlug ?? agencySlug;
+  const initialTenantSlug = tenantSlug ?? agencySlug;
   const encodedEmail = email ? encodeURIComponent(email) : "";
-  const encodedTenantSlug = resolvedTenantSlug ? encodeURIComponent(resolvedTenantSlug) : "";
-  const tenantQuery = encodedTenantSlug ? `?tenantSlug=${encodedTenantSlug}` : "";
   const accountsUrl = encodedEmail ? `/api/consumer/accounts/${encodedEmail}` : "";
-  const notificationsUrl = encodedEmail && encodedTenantSlug ? `/api/consumer-notifications/${encodedEmail}/${encodedTenantSlug}` : "";
-  const documentsUrl = encodedEmail && encodedTenantSlug ? `/api/consumer/documents/${encodedEmail}${tenantQuery}` : "";
 
   const [callbackForm, setCallbackForm] = useState({
     requestType: "callback",
@@ -46,6 +42,12 @@ export default function EnhancedConsumerPortal() {
     queryKey: accountsUrl ? [accountsUrl] : ["no-fetch-enhanced-consumer-accounts"],
     enabled: !!accountsUrl,
   });
+
+  const resolvedTenantSlug = (data as any)?.tenant?.slug ?? initialTenantSlug;
+  const encodedTenantSlug = resolvedTenantSlug ? encodeURIComponent(resolvedTenantSlug) : "";
+  const tenantQuery = encodedTenantSlug ? `?tenantSlug=${encodedTenantSlug}` : "";
+  const notificationsUrl = encodedEmail && encodedTenantSlug ? `/api/consumer-notifications/${encodedEmail}/${encodedTenantSlug}` : "";
+  const documentsUrl = encodedEmail && encodedTenantSlug ? `/api/consumer/documents/${encodedEmail}${tenantQuery}` : "";
 
   // Fetch notifications
   const { data: notifications } = useQuery<any>({
@@ -109,9 +111,11 @@ export default function EnhancedConsumerPortal() {
       await apiRequest("PATCH", `/api/consumer-notifications/${notificationId}/read`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: [`/api/consumer-notifications/${encodedEmail}/${resolvedTenantSlug ?? ""}`],
-      });
+      if (notificationsUrl) {
+        queryClient.invalidateQueries({
+          queryKey: [notificationsUrl],
+        });
+      }
     },
   });
 

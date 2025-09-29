@@ -10,24 +10,28 @@ export default function ConsumerPortal() {
   const { tenantSlug, email } = useParams();
   const { agencySlug } = useAgencyContext();
 
-  const { encodedEmail, accountsUrl, documentsUrl, arrangementsUrl } = useMemo(() => {
+  const { encodedEmail, baseTenantSlug } = useMemo(() => {
     const safeEmail = email ? encodeURIComponent(email) : "";
     const resolvedTenantSlug = tenantSlug && tenantSlug !== "undefined" ? tenantSlug : agencySlug;
-    const safeTenantSlug = resolvedTenantSlug ? encodeURIComponent(resolvedTenantSlug) : "";
-    const tenantQuery = safeTenantSlug ? `?tenantSlug=${safeTenantSlug}` : "";
 
     return {
       encodedEmail: safeEmail,
-      accountsUrl: safeEmail ? `/api/consumer/accounts/${safeEmail}` : "",
-      documentsUrl: safeEmail && tenantQuery ? `/api/consumer/documents/${safeEmail}${tenantQuery}` : "",
-      arrangementsUrl: safeEmail && tenantQuery ? `/api/consumer/arrangements/${safeEmail}${tenantQuery}` : ""
+      baseTenantSlug: resolvedTenantSlug ?? ""
     };
   }, [agencySlug, email, tenantSlug]);
+
+  const accountsUrl = encodedEmail ? `/api/consumer/accounts/${encodedEmail}` : "";
 
   const { data, isLoading, error } = useQuery<any>({
     queryKey: accountsUrl ? [accountsUrl] : ["no-fetch-consumer-portal-accounts"],
     enabled: !!accountsUrl,
   });
+
+  const resolvedTenantSlug = (data as any)?.tenant?.slug ?? baseTenantSlug;
+  const encodedTenantSlug = resolvedTenantSlug ? encodeURIComponent(resolvedTenantSlug) : "";
+  const tenantQuery = encodedTenantSlug ? `?tenantSlug=${encodedTenantSlug}` : "";
+  const documentsUrl = encodedEmail && tenantQuery ? `/api/consumer/documents/${encodedEmail}${tenantQuery}` : "";
+  const arrangementsBaseUrl = encodedEmail && tenantQuery ? `/api/consumer/arrangements/${encodedEmail}${tenantQuery}` : "";
 
   const { data: documents } = useQuery<any>({
     queryKey: documentsUrl ? [documentsUrl] : ["no-fetch-consumer-portal-documents"],
@@ -35,10 +39,10 @@ export default function ConsumerPortal() {
   });
 
   const { data: arrangements } = useQuery<any>({
-    queryKey: arrangementsUrl && (data as any)?.accounts ? [
-      `${arrangementsUrl}&balance=${(data as any)?.accounts?.reduce((sum: number, acc: any) => sum + (acc.balanceCents || 0), 0) || 0}`
+    queryKey: arrangementsBaseUrl && (data as any)?.accounts ? [
+      `${arrangementsBaseUrl}&balance=${(data as any)?.accounts?.reduce((sum: number, acc: any) => sum + (acc.balanceCents || 0), 0) || 0}`
     ] : ["no-fetch-consumer-portal-arrangements"],
-    enabled: !!((data as any)?.accounts && arrangementsUrl),
+    enabled: !!((data as any)?.accounts && arrangementsBaseUrl),
   });
 
   if (isLoading) {
