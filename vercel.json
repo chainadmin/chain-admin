@@ -18,11 +18,19 @@
       "destination": "/index.html"
     },
     {
+      "source": "/admin/",
+      "destination": "/index.html"
+    },
+    {
       "source": "/admin/(.*)",
       "destination": "/index.html"
     },
     {
       "source": "/Admin",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/Admin/",
       "destination": "/index.html"
     },
     {
