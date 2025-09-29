@@ -90,9 +90,43 @@ export default function ConsumerLogin() {
     }
 
     // Attempt to hydrate from storage first
-    const storedContext =
-      window.sessionStorage.getItem("agencyContext") ||
-      window.localStorage.getItem("agencyContext");
+    const readStoredContext = () => {
+      const storageReaders: Array<() => Storage | null> = [
+        () => {
+          try {
+            return window.sessionStorage;
+          } catch (error) {
+            console.warn("Unable to access sessionStorage while reading agency context", error);
+            return null;
+          }
+        },
+        () => {
+          try {
+            return window.localStorage;
+          } catch (error) {
+            console.warn("Unable to access localStorage while reading agency context", error);
+            return null;
+          }
+        },
+      ];
+
+      for (const getStorage of storageReaders) {
+        const storage = getStorage();
+        if (!storage) continue;
+        try {
+          const value = storage.getItem("agencyContext");
+          if (value) {
+            return value;
+          }
+        } catch (error) {
+          console.warn("Failed to read agency context from storage", error);
+        }
+      }
+
+      return null;
+    };
+
+    const storedContext = readStoredContext();
     let parsedContext: AgencyContext | null = null;
 
     if (storedContext) {
