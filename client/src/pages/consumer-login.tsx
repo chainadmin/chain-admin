@@ -13,7 +13,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Building2, Mail, Lock, ArrowRight, ShieldCheck, UserCheck } from "lucide-react";
+import {
+  Building2,
+  Mail,
+  Lock,
+  ArrowRight,
+  ShieldCheck,
+  UserCheck,
+} from "lucide-react";
 import { getAgencySlugFromRequest } from "@shared/utils/subdomain";
 import PublicHeroLayout from "@/components/public-hero-layout";
 import {
@@ -318,10 +325,10 @@ export default function ConsumerLogin() {
     },
   });
 
-  const handleInputChange = (field: keyof LoginForm, value: string) => {
+  const handleInputChange = <K extends keyof LoginForm>(field: K, value: LoginForm[K]) => {
     setForm(prev => ({
       ...prev,
-      [field]: value
+      [field]: value,
     }));
   };
 

@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { UserPlus, ArrowRight, Shield, MapPin, AlertTriangle } from "lucide-react";
+import { UserPlus, ArrowRight, Shield, MapPin, AlertTriangle, MessageCircle, Check } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import PublicHeroLayout from "@/components/public-hero-layout";
 import { clearConsumerAuth } from "@/lib/consumer-auth";
@@ -63,6 +63,7 @@ export default function ConsumerRegistration() {
     state: "",
     zipCode: "",
     agreeToTerms: false,
+    agreeToSms: false,
   });
 
   const registrationMutation = useMutation({
@@ -162,6 +163,15 @@ export default function ConsumerRegistration() {
       toast({
         title: "Terms Required",
         description: "Please agree to the terms of service to continue.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!formData.agreeToSms) {
+      toast({
+        title: "SMS Consent Required",
+        description: "Please acknowledge SMS updates to continue your registration.",
         variant: "destructive",
       });
       return;
@@ -445,6 +455,44 @@ export default function ConsumerRegistration() {
                   maxLength={5}
                   className="h-11 rounded-2xl border-white/20 bg-slate-900/60 px-4 text-white placeholder:text-blue-100/50 focus-visible:ring-blue-400"
                 />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500/15">
+                <MessageCircle className="h-5 w-5 text-blue-200" />
+              </div>
+              <div className="flex-1 space-y-3 text-xs text-blue-100/80">
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-white">Confirm SMS updates *</p>
+                  <p>
+                    Let us know you’re okay receiving account-related text messages at the mobile number connected to your
+                    profile. Message and data rates may apply. Reply STOP at any time to opt out.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleInputChange("agreeToSms", !formData.agreeToSms)}
+                  className={`flex w-full items-center justify-center gap-2 rounded-xl border-white/20 bg-white/5 py-3 text-sm font-semibold transition ${
+                    formData.agreeToSms
+                      ? "bg-emerald-500/90 text-slate-900 hover:bg-emerald-500"
+                      : "text-blue-100 hover:bg-white/10"
+                  }`}
+                  aria-pressed={formData.agreeToSms}
+                  data-testid="button-agreeToSms"
+                >
+                  {formData.agreeToSms ? (
+                    <>
+                      <Check className="h-4 w-4" />
+                      Consent confirmed
+                    </>
+                  ) : (
+                    <>Acknowledge SMS updates</>
+                  )}
+                </Button>
               </div>
             </div>
           </div>
