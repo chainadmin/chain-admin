@@ -4,6 +4,7 @@ import { useLocation } from "wouter";
 import { ApiError, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -36,6 +37,7 @@ export default function ConsumerLogin() {
   const [form, setForm] = useState<LoginForm>({
     email: "",
     dateOfBirth: "",
+    agreeToSms: false,
   });
   const [agencyContext, setAgencyContext] = useState<AgencyContext | null>(null);
   const [pendingAgencies, setPendingAgencies] = useState<AgencyContext[]>([]);
@@ -318,10 +320,10 @@ export default function ConsumerLogin() {
     },
   });
 
-  const handleInputChange = (field: keyof LoginForm, value: string) => {
+  const handleInputChange = <K extends keyof LoginForm>(field: K, value: LoginForm[K]) => {
     setForm(prev => ({
       ...prev,
-      [field]: value
+      [field]: value,
     }));
   };
 
@@ -332,6 +334,15 @@ export default function ConsumerLogin() {
       toast({
         title: "Missing Information",
         description: "Please fill in all required fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!form.agreeToSms) {
+      toast({
+        title: "SMS Consent Required",
+        description: "Please confirm you agree to receive text messages before signing in.",
         variant: "destructive",
       });
       return;
@@ -466,10 +477,31 @@ export default function ConsumerLogin() {
             <p className="text-xs text-blue-100/60">We use this information only to confirm your identity.</p>
           </div>
 
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id="agreeToSms"
+                data-testid="checkbox-agreeToSms"
+                checked={form.agreeToSms}
+                onCheckedChange={checked => handleInputChange("agreeToSms", checked === true)}
+                className="mt-1 h-5 w-5 rounded-md border-white/40"
+              />
+              <div className="space-y-2 text-xs text-blue-100/80">
+                <Label htmlFor="agreeToSms" className="text-sm font-semibold text-white">
+                  I agree to receive SMS account updates *
+                </Label>
+                <p>
+                  By continuing, I confirm that I am the authorized user of this phone number and consent to receive
+                  account-related text messages. Message and data rates may apply. Reply STOP to opt out at any time.
+                </p>
+              </div>
+            </div>
+          </div>
+
           <Button
             type="submit"
             className="h-12 w-full rounded-full bg-blue-500 text-base font-medium text-white transition hover:bg-blue-400"
-            disabled={loginMutation.isPending}
+            disabled={loginMutation.isPending || !form.agreeToSms}
             data-testid="button-consumer-login"
           >
             {loginMutation.isPending ? (
