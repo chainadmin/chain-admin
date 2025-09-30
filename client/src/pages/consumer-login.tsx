@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { ApiError, apiRequest } from "@/lib/queryClient";
+import { apiCall } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -198,17 +199,15 @@ export default function ConsumerLogin() {
       const tenantSlug = loginData.tenantSlug || slugFromUrl || agencyContext?.slug;
 
       // Send email and dateOfBirth for consumer verification
-      const response = await fetch("/api/consumer/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
+      const response = await apiCall(
+        "POST",
+        "/api/consumer/login",
+        {
           email: loginData.email,
           dateOfBirth: loginData.dateOfBirth,
           tenantSlug
-        })
-      });
+        }
+      );
       
       if (!response.ok) {
         const errorData = await response.json();

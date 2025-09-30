@@ -6,6 +6,7 @@ import {
   getStoredConsumerSession,
   getStoredConsumerToken,
 } from "@/lib/consumer-auth";
+import { apiCall } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -61,11 +62,7 @@ export default function ConsumerDashboardSimple() {
           email: session.email
         });
         
-        const response = await fetch(url, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
+        const response = await apiCall("GET", url, null, token);
 
         if (!response.ok) {
           const errorText = await response.text();
