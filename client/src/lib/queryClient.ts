@@ -54,8 +54,26 @@ async function throwIfResNotOk(res: Response) {
 }
 
 // Get the API base URL - use Express in development, serverless in production
-const isDevelopment = import.meta.env.DEV || import.meta.env.MODE === 'development';
-const API_BASE = isDevelopment ? "http://localhost:5000" : "";
+function getApiBase(): string {
+  // First check if VITE_API_URL is set (allows override)
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  
+  // Check if we're in development mode (localhost)
+  const isDevelopment = import.meta.env.DEV || import.meta.env.MODE === 'development';
+  
+  // For local development, use Express server on port 5000
+  if (isDevelopment) {
+    return 'http://localhost:5000';
+  }
+  
+  // For production/preview (Vercel), use relative paths (same origin)
+  // This works for both production and Vercel preview deployments
+  return '';
+}
+
+const API_BASE = getApiBase();
 
 function getApiUrl(path: string): string {
   if (path.startsWith("http")) {
@@ -66,8 +84,6 @@ function getApiUrl(path: string): string {
     path = "/" + path;
   }
 
-  // In development, use Express server on port 5000
-  // In production, use relative paths (Vercel serverless functions)
   return API_BASE + path;
 }
 
