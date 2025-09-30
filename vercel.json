@@ -7,34 +7,17 @@
       "maxDuration": 30
     }
   },
-  "rewrites": [
+  "routes": [
     {
-      "source": "/admin",
-      "destination": "/index.html"
+      "src": "/api/(.*)",
+      "dest": "/api/$1"
     },
     {
-      "source": "/admin/",
-      "destination": "/index.html"
+      "handle": "filesystem"
     },
     {
-      "source": "/admin/(.*)",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/Admin",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/Admin/",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/Admin/(.*)",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "src": "/(.*)",
+      "dest": "/index.html"
     }
   ],
   "headers": [
