@@ -65,22 +65,18 @@ function getApiUrl(path: string): string {
 
   // First check if VITE_API_URL is set (allows override)
   if (import.meta.env.VITE_API_URL) {
-    console.log('[getApiUrl] Using VITE_API_URL:', import.meta.env.VITE_API_URL + path);
     return import.meta.env.VITE_API_URL + path;
   }
   
   // Only use localhost:5000 if we're actually on localhost
   const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
-  console.log('[getApiUrl] Hostname check:', hostname, 'isLocalhost:', hostname === 'localhost');
   
   if (hostname === 'localhost') {
-    console.log('[getApiUrl] Using localhost:5000');
     return 'http://localhost:5000' + path;
   }
   
   // For Replit webview and production, use relative URLs (same origin)
   // The Express server serves both frontend and API on the same port in Replit
-  console.log('[getApiUrl] Using relative URL:', path);
   return path;
 }
 
@@ -138,15 +134,6 @@ export const getQueryFn: <T>(options: {
     const token = getAuthToken(); // Now checks cookies first, then localStorage
     const consumerToken = getStoredConsumerToken(); // Check for consumer token
     const headers: HeadersInit = {};
-    
-    console.log('QueryClient Debug:', {
-      queryPath,
-      url,
-      isConsumerEndpoint: isConsumerEndpoint(url),
-      hasConsumerToken: !!consumerToken,
-      consumerToken: consumerToken?.substring(0, 20) + '...',
-      hasAdminToken: !!token
-    });
     
     // Use consumer token for consumer endpoints, otherwise use admin token
     if (consumerToken && isConsumerEndpoint(url)) {
