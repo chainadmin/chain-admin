@@ -115,10 +115,13 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const queryPath = queryKey.join("/") as string;
+    // Handle single string query keys (like our consumer accounts URL)
+    const queryPath = Array.isArray(queryKey) && queryKey.length === 1 && typeof queryKey[0] === 'string'
+      ? queryKey[0]
+      : queryKey.join("/") as string;
     
     // Skip fetching for placeholder keys
-    if (queryPath.includes("no-fetch")) {
+    if (queryPath.includes("no-fetch") || queryPath === "skip") {
       return null;
     }
     
@@ -126,6 +129,14 @@ export const getQueryFn: <T>(options: {
     const token = getAuthToken(); // Now checks cookies first, then localStorage
     const consumerToken = getStoredConsumerToken(); // Check for consumer token
     const headers: HeadersInit = {};
+    
+    console.log('Query function fetching:', {
+      queryPath,
+      url,
+      hasConsumerToken: !!consumerToken,
+      hasAdminToken: !!token,
+      isConsumerEndpoint: isConsumerEndpoint(url)
+    });
     
     // Use consumer token for consumer endpoints, otherwise use admin token
     if (consumerToken && isConsumerEndpoint(url)) {
