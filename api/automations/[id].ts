@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb } from '../_lib/db';
 import { withAuth, AuthenticatedRequest, JWT_SECRET } from '../_lib/auth';
-import { automations } from '../../shared/schema';
+import { communicationAutomations } from '../../shared/schema';
 import { eq, and } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 
@@ -46,10 +46,10 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
 
     const [automation] = await db
       .select()
-      .from(automations)
+      .from(communicationAutomations)
       .where(and(
-        eq(automations.id, automationId),
-        eq(automations.tenantId, tenantId)
+        eq(communicationAutomations.id, automationId),
+        eq(communicationAutomations.tenantId, tenantId)
       ))
       .limit(1);
 
@@ -59,8 +59,8 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
     }
 
     await db
-      .delete(automations)
-      .where(eq(automations.id, automationId));
+      .delete(communicationAutomations)
+      .where(eq(communicationAutomations.id, automationId));
 
     res.status(200).json({ success: true, message: 'Automation deleted successfully' });
   } catch (error: any) {

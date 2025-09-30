@@ -39,7 +39,8 @@ async function handler(req: VercelRequest, res: VercelResponse) {
     const userInfo = await db
       .select({
         id: users.id,
-        name: users.name,
+        firstName: users.firstName,
+        lastName: users.lastName,
         email: users.email,
         platformUserId: platformUsers.id,
         role: platformUsers.role,
@@ -48,7 +49,7 @@ async function handler(req: VercelRequest, res: VercelResponse) {
         tenantSlug: tenants.slug,
       })
       .from(users)
-      .leftJoin(platformUsers, eq(users.id, platformUsers.userId))
+      .leftJoin(platformUsers, eq(users.id, platformUsers.authId))
       .leftJoin(tenants, eq(platformUsers.tenantId, tenants.id))
       .where(eq(users.id, decoded.userId))
       .limit(1);
@@ -62,7 +63,8 @@ async function handler(req: VercelRequest, res: VercelResponse) {
     
     res.status(200).json({
       id: user.id,
-      name: user.name,
+      firstName: user.firstName,
+      lastName: user.lastName,
       email: user.email,
       role: user.role,
       tenantId: user.tenantId,
