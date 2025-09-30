@@ -60,16 +60,20 @@ function getApiBase(): string {
     return import.meta.env.VITE_API_URL;
   }
   
-  // Check if we're in development mode (localhost)
+  // Check if we're in development mode
   const isDevelopment = import.meta.env.DEV || import.meta.env.MODE === 'development';
   
-  // For local development, use Express server on port 5000
   if (isDevelopment) {
-    return 'http://localhost:5000';
+    // In Replit webview, use same origin (the Replit URL serves both frontend and backend)
+    // Only use localhost:5000 if actually accessing via localhost
+    if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+      return 'http://localhost:5000';
+    }
+    // For Replit webview, use same origin (empty string = relative URLs)
+    return '';
   }
   
   // For production/preview (Vercel), use relative paths (same origin)
-  // This works for both production and Vercel preview deployments
   return '';
 }
 
