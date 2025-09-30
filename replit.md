@@ -14,9 +14,13 @@ Chain is a multi-tenant platform designed for agencies to manage consumer accoun
   - Cleaned up debug logging for production readiness
   - Changed deployment strategy from dual Replit/Vercel to Replit-only with custom domain support
 
-- **Agency Login Routing Fix**: Fixed landing page agency login button
-  - "Agency Login" button on landing page was incorrectly routing to /admin (global admin) instead of /agency-login
-  - Now correctly routes all users to /agency-login regardless of environment
+- **Agency Login Routing Fix**: Fixed critical routing bugs affecting agency user access
+  - Fixed landing page "Agency Login" button routing to /agency-login instead of /admin
+  - **CRITICAL FIX**: Removed `isJwtAuth && isMainDomain` routing block that caused blank pages
+    - This block was incorrectly catching JWT-authenticated agency users and showing wrong routes
+    - Agency users now correctly flow to authenticated routes with full dashboard access
+  - Added missing `/dashboard` route to authenticated routes block
+  - JWT-authenticated users (agency login) and Replit-authenticated users (platform admin) now use same authenticated routes
   - Important routing distinctions:
     - `/agency-login` → Agency login page (for agency staff to access their dashboard)
     - `/dashboard` or `/admin-dashboard` → Agency dashboard (AdminDashboard component - for managing accounts, consumers, communications)
