@@ -102,65 +102,22 @@ export default function ConsumerLogin() {
       return;
     }
 
-    // Attempt to hydrate from storage first
-    const readStoredContext = () => {
-      const storageReaders: Array<() => Storage | null> = [
-        () => {
-          try {
-            return window.sessionStorage;
-          } catch (error) {
-            console.warn("Unable to access sessionStorage while reading agency context", error);
-            return null;
-          }
-        },
-        () => {
-          try {
-            return window.localStorage;
-          } catch (error) {
-            console.warn("Unable to access localStorage while reading agency context", error);
-            return null;
-          }
-        },
-      ];
-
-      for (const getStorage of storageReaders) {
-        const storage = getStorage();
-        if (!storage) continue;
-        try {
-          const value = storage.getItem("agencyContext");
-          if (value) {
-            return value;
-          }
-        } catch (error) {
-          console.warn("Failed to read agency context from storage", error);
-        }
-      }
-
-      return null;
-    };
-
-    const storedContext = readStoredContext();
-    let parsedContext: AgencyContext | null = null;
-
-    if (storedContext) {
-      try {
-        parsedContext = JSON.parse(storedContext) as AgencyContext;
-      } catch (error) {
-        console.error("Error parsing stored agency context", error);
-      }
-    }
-
-    if (parsedContext) {
-      persistAgencyContext(parsedContext);
-    }
-
+    // If we have a subdomain (currentSlug), fetch that agency's context
     if (currentSlug) {
-      const shouldFetch = !parsedContext || parsedContext.slug !== currentSlug;
-      if (shouldFetch) {
-        fetchAgencyContext(currentSlug);
-      }
+      fetchAgencyContext(currentSlug);
+      return;
     }
-  }, [currentSlug, fetchAgencyContext, persistAgencyContext]);
+
+    // If no subdomain, clear any stored agency context
+    // This ensures we don't show "Welcome back to [Agency]" on the generic login page
+    setAgencyContext(null);
+    try {
+      window.sessionStorage.removeItem("agencyContext");
+      window.localStorage.removeItem("agencyContext");
+    } catch (error) {
+      console.warn("Unable to clear agency context from storage", error);
+    }
+  }, [currentSlug, fetchAgencyContext]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
