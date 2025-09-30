@@ -1,11 +1,10 @@
 {
-  "buildCommand": "npx vite build",
+  "buildCommand": "vite build",
   "outputDirectory": "dist/public",
   "installCommand": "npm install",
   "functions": {
     "api/**/*.ts": {
-      "maxDuration": 30,
-      "includeFiles": "{shared/**,api/_lib/**}"
+      "maxDuration": 30
     }
   },
   "rewrites": [

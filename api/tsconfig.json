@@ -1,16 +1,16 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "lib": ["ES2022"],
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "lib": ["ES2020"],
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "outDir": "./dist",
-    "rootDir": "..",
+    "allowJs": true,
+    "noEmit": true,
     "baseUrl": ".",
     "paths": {
       "@shared/*": ["../shared/*"]
@@ -21,6 +21,8 @@
     "../shared/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "_lib/*.js",
+    "**/*.js"
   ]
 }
