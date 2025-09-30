@@ -335,6 +335,7 @@ function Router() {
     <Route key="auth-company" path="/company" component={CompanyManagement} />,
     <Route key="auth-settings" path="/settings" component={Settings} />,
     ...createRouteElements(adminRoutePaths, GlobalAdmin, "auth-admin"),
+    <Route key="auth-agency-login" path="/agency-login" component={AgencyLogin} />,
     <Route key="auth-agency-register" path="/agency-register" component={AgencyRegistration} />,
     <Route key="auth-agency-registration" path="/agency-registration" component={AgencyRegistration} />,
     <Route key="auth-email-test" path="/email-test" component={EmailTest} />,
