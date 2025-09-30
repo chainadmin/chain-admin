@@ -53,26 +53,22 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
-// Get the API base URL from environment or use relative URLs
-const API_BASE = import.meta.env.VITE_API_URL || "";
+// Get the API base URL - use Express in development, serverless in production
+const isDevelopment = import.meta.env.DEV || import.meta.env.MODE === 'development';
+const API_BASE = isDevelopment ? "http://localhost:5000" : "";
 
 function getApiUrl(path: string): string {
   if (path.startsWith("http")) {
     return path; // Already a full URL
   }
 
-  if (!API_BASE) {
-    return path;
+  if (!path.startsWith("/")) {
+    path = "/" + path;
   }
 
-  try {
-    return new URL(path, API_BASE).toString();
-  } catch (error) {
-    console.error("Failed to construct API URL", { path, API_BASE, error });
-    const normalizedBase = API_BASE.replace(/\/$/, "");
-    const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-    return `${normalizedBase}${normalizedPath}`;
-  }
+  // In development, use Express server on port 5000
+  // In production, use relative paths (Vercel serverless functions)
+  return API_BASE + path;
 }
 
 export async function apiRequest(

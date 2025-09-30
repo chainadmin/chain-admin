@@ -1,17 +1,17 @@
 // Helper functions for making API calls that work in both local and Vercel environments
 
+const isDevelopment = import.meta.env.DEV || import.meta.env.MODE === 'development';
+const API_BASE = isDevelopment ? 'http://localhost:5000' : '';
+
 export function getApiEndpoint(path: string): string {
-  // In production (Vercel), use relative paths
-  // In development, also use relative paths (Express server handles them)
-  // This ensures compatibility with both environments
-  
+  // Ensure path starts with /
   if (!path.startsWith('/')) {
     path = '/' + path;
   }
   
-  // For Vercel deployment, the API routes are serverless functions
-  // For local development, Express handles the routes
-  return path;
+  // In development, use Express server on port 5000
+  // In production, use relative paths (Vercel serverless functions)
+  return API_BASE + path;
 }
 
 export async function apiCall(
