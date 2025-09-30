@@ -23,12 +23,6 @@ export default function ConsumerDashboardSimple() {
     const token = getStoredConsumerToken();
     const storedSession = getStoredConsumerSession();
     
-    console.log('Consumer Dashboard Mount:', {
-      hasToken: !!token,
-      hasSession: !!storedSession,
-      session: storedSession
-    });
-    
     if (!token || !storedSession) {
       toast({
         title: "Please Sign In",
@@ -45,32 +39,17 @@ export default function ConsumerDashboardSimple() {
 
   // Only fetch data when we have a valid session
   const encodedEmail = session?.email ? encodeURIComponent(session.email) : null;
-  const encodedTenantSlug = session?.tenantSlug ? encodeURIComponent(session.tenantSlug) : null;
   
-  // Build URL with query parameters
-  const accountsUrl = encodedEmail && encodedTenantSlug
-    ? `/api/consumer/accounts?email=${encodedEmail}&tenantSlug=${encodedTenantSlug}`
+  // Build URL with path parameter for email
+  const accountsUrl = encodedEmail
+    ? `/api/consumer/accounts/${encodedEmail}`
     : null;
-
-  console.log('Consumer Dashboard Query:', {
-    accountsUrl,
-    mounted,
-    email: session?.email,
-    tenantSlug: session?.tenantSlug
-  });
 
   const { data: accountData, isLoading, error } = useQuery({
     queryKey: accountsUrl ? [accountsUrl] : ["no-fetch"],
     enabled: !!(accountsUrl && mounted),
     retry: 1
   });
-  
-  // Log any fetch errors
-  useEffect(() => {
-    if (error) {
-      console.error('Consumer Dashboard Fetch Error:', error);
-    }
-  }, [error]);
 
   const handleLogout = () => {
     clearConsumerAuth();

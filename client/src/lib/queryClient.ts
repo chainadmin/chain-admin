@@ -130,14 +130,6 @@ export const getQueryFn: <T>(options: {
     const consumerToken = getStoredConsumerToken(); // Check for consumer token
     const headers: HeadersInit = {};
     
-    console.log('Query function fetching:', {
-      queryPath,
-      url,
-      hasConsumerToken: !!consumerToken,
-      hasAdminToken: !!token,
-      isConsumerEndpoint: isConsumerEndpoint(url)
-    });
-    
     // Use consumer token for consumer endpoints, otherwise use admin token
     if (consumerToken && isConsumerEndpoint(url)) {
       headers["Authorization"] = `Bearer ${consumerToken}`;
