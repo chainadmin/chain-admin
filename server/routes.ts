@@ -610,13 +610,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Account routes
   app.get('/api/accounts', authenticateUser, async (req: any, res) => {
     try {
+      console.log('GET /api/accounts - User:', req.user);
       const tenantId = await getTenantId(req, storage);
+      console.log('GET /api/accounts - TenantId:', tenantId);
       
       if (!tenantId) {
+        console.log('GET /api/accounts - No tenant access');
         return res.status(403).json({ message: "No tenant access" });
       }
 
       const accounts = await storage.getAccountsByTenant(tenantId);
+      console.log('GET /api/accounts - Account count:', accounts.length);
       res.json(accounts);
     } catch (error) {
       console.error("Error fetching accounts:", error);
@@ -662,13 +666,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Stats routes
   app.get('/api/stats', authenticateUser, async (req: any, res) => {
     try {
+      console.log('GET /api/stats - User:', req.user);
       const tenantId = await getTenantId(req, storage);
+      console.log('GET /api/stats - TenantId:', tenantId);
       
       if (!tenantId) {
+        console.log('GET /api/stats - No tenant access');
         return res.status(403).json({ message: "No tenant access" });
       }
 
       const stats = await storage.getTenantStats(tenantId);
+      console.log('GET /api/stats - Stats:', stats);
       res.json(stats);
     } catch (error) {
       console.error("Error fetching stats:", error);
