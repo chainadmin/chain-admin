@@ -198,11 +198,27 @@ export default function ConsumerLogin() {
       const tenantSlug = loginData.tenantSlug || slugFromUrl || agencyContext?.slug;
 
       // Send email and dateOfBirth for consumer verification
-      const response = await apiRequest("POST", "/api/consumer/login", {
-        email: loginData.email,
-        dateOfBirth: loginData.dateOfBirth,
-        tenantSlug
+      const response = await fetch("/api/consumer/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          email: loginData.email,
+          dateOfBirth: loginData.dateOfBirth,
+          tenantSlug
+        })
       });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new ApiError(
+          response.status, 
+          errorData.message || `Login failed: ${response.status}`,
+          errorData
+        );
+      }
+      
       return response.json();
     },
     onSuccess: (data: ConsumerLoginResult & {

@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -17,6 +16,9 @@ export default function ConsumerDashboardSimple() {
   const { toast } = useToast();
   const [session, setSession] = useState<any>(null);
   const [mounted, setMounted] = useState(false);
+  const [accountData, setAccountData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Check authentication on mount
   useEffect(() => {
@@ -37,30 +39,51 @@ export default function ConsumerDashboardSimple() {
     setMounted(true);
   }, [setLocation, toast]);
 
-  // Only fetch data when we have a valid session
-  const encodedEmail = session?.email ? encodeURIComponent(session.email) : null;
-  
-  // Build URL with path parameter for email
-  const accountsUrl = encodedEmail
-    ? `/api/consumer/accounts/${encodedEmail}`
-    : null;
-    
-  // Debug logging
-  if (mounted) {
-    console.log('Consumer Dashboard Debug:', {
-      session,
-      encodedEmail,
-      accountsUrl,
-      token: getStoredConsumerToken()?.substring(0, 20) + '...',
-      mounted
-    });
-  }
+  // Fetch account data when mounted and authenticated
+  useEffect(() => {
+    if (!mounted || !session?.email) {
+      return;
+    }
 
-  const { data: accountData, isLoading, error } = useQuery({
-    queryKey: accountsUrl ? [accountsUrl] : ["no-fetch"],
-    enabled: !!(accountsUrl && mounted),
-    retry: 1
-  });
+    const fetchAccounts = async () => {
+      setIsLoading(true);
+      setError(null);
+      
+      try {
+        const token = getStoredConsumerToken();
+        const encodedEmail = encodeURIComponent(session.email);
+        const url = `/api/consumer/accounts/${encodedEmail}`;
+        
+        console.log('Fetching consumer accounts:', {
+          url,
+          token: token?.substring(0, 20) + '...',
+          email: session.email
+        });
+        
+        const response = await fetch(url, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Failed to load accounts: ${response.status} - ${errorText}`);
+        }
+
+        const data = await response.json();
+        console.log('Account data loaded:', data);
+        setAccountData(data);
+      } catch (err: any) {
+        console.error('Error loading accounts:', err);
+        setError(err.message || 'Failed to load account information');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchAccounts();
+  }, [mounted, session]);
 
   const handleLogout = () => {
     clearConsumerAuth();
