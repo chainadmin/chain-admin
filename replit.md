@@ -4,6 +4,16 @@ Chain is a multi-tenant platform designed for agencies to manage consumer accoun
 
 # Recent Changes
 
+## September 2025
+- **Replit Deployment Configuration**: Successfully configured app for Replit-only deployment
+  - Fixed critical API routing bug where hardcoded VITE_API_URL in .env files forced localhost:5000 even in Replit webview
+  - Implemented dynamic URL detection: uses relative URLs in Replit webview, localhost:5000 only when actually on localhost
+  - Removed VITE_API_URL from client/.env.development and .env.local to enable automatic API base detection
+  - Updated queryClient.ts with automatic environment detection (Replit webview vs localhost)
+  - Verified database schema: all 29 tables present and ready in Supabase PostgreSQL
+  - Cleaned up debug logging for production readiness
+  - Changed deployment strategy from dual Replit/Vercel to Replit-only with custom domain support
+
 ## January 2025
 - **Account Management Improvements**: Fixed critical account and consumer management issues
   - Fixed bulk delete functionality for accounts with correct API endpoint routing
