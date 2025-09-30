@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { apiRequest } from "@/lib/queryClient";
 import { persistConsumerAuth, getStoredConsumerToken, getStoredConsumerSession, clearConsumerAuth } from "@/lib/consumer-auth";
 
 export default function TestConsumerFlow() {
@@ -18,14 +17,27 @@ export default function TestConsumerFlow() {
   const testLogin = async () => {
     setError("");
     try {
-      const response = await apiRequest("POST", "/api/consumer/login", {
-        email,
-        dateOfBirth,
-        tenantSlug
+      console.log('Attempting login with:', { email, dateOfBirth, tenantSlug });
+      
+      const response = await fetch("/api/consumer/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          email,
+          dateOfBirth,
+          tenantSlug
+        })
       });
       
       const data = await response.json();
+      console.log('Login response:', data);
       setLoginResult(data);
+      
+      if (!response.ok) {
+        throw new Error(data.message || `Login failed: ${response.status}`);
+      }
       
       if (data.token) {
         // Store the auth data
@@ -47,6 +59,7 @@ export default function TestConsumerFlow() {
         console.log('Auth stored - token:', token?.substring(0, 20) + '...', 'session:', session);
       }
     } catch (err: any) {
+      console.error('Login error:', err);
       setError(err.message || "Login failed");
     }
   };
