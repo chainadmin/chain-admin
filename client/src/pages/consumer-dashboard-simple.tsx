@@ -44,6 +44,17 @@ export default function ConsumerDashboardSimple() {
   const accountsUrl = encodedEmail
     ? `/api/consumer/accounts/${encodedEmail}`
     : null;
+    
+  // Debug logging
+  if (mounted) {
+    console.log('Consumer Dashboard Debug:', {
+      session,
+      encodedEmail,
+      accountsUrl,
+      token: getStoredConsumerToken()?.substring(0, 20) + '...',
+      mounted
+    });
+  }
 
   const { data: accountData, isLoading, error } = useQuery({
     queryKey: accountsUrl ? [accountsUrl] : ["no-fetch"],

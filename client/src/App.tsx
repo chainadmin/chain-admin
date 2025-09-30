@@ -37,6 +37,7 @@ import TenantSetup from "@/components/tenant-setup";
 import GlobalAdmin from "@/pages/global-admin";
 import EmailTest from "@/pages/email-test";
 import FixDatabase from "@/pages/fix-db";
+import TestConsumerFlow from "@/pages/test-consumer-flow";
 
 function Router() {
   const { isAuthenticated, isLoading, user, isJwtAuth } = useAuth();
@@ -191,6 +192,7 @@ function Router() {
       <Route key="agency-home" path="/" component={AgencyLanding} />,
       <Route key="agency-consumer" path="/consumer" component={ConsumerLogin} />,
       <Route key="agency-consumer-login" path="/consumer-login" component={ConsumerLogin} />,
+      <Route key="agency-test-consumer-flow" path="/test-consumer-flow" component={TestConsumerFlow} />,
       <Route
         key="agency-consumer-register"
         path="/consumer-register/:tenantSlug?"
@@ -290,6 +292,7 @@ function Router() {
         component={ConsumerDashboard}
       />,
       <Route key="main-consumer-login" path="/consumer-login" component={ConsumerLogin} />,
+      <Route key="main-test-consumer-flow" path="/test-consumer-flow" component={TestConsumerFlow} />,
       <Route key="main-agency-login" path="/agency-login" component={AgencyLogin} />,
       <Route key="main-agency-register" path="/agency-register" component={AgencyRegistration} />,
       <Route key="main-agency-registration" path="/agency-registration" component={AgencyRegistration} />,
@@ -309,6 +312,7 @@ function Router() {
       <Route key="public-home" path="/" component={Landing} />,
       <Route key="public-consumer-login" path="/consumer-login" component={ConsumerLogin} />,
       <Route key="public-consumer-dashboard" path="/consumer-dashboard" component={ConsumerDashboard} />,
+      <Route key="public-test-consumer-flow" path="/test-consumer-flow" component={TestConsumerFlow} />,
       <Route
         key="public-consumer-portal"
         path="/consumer/:tenantSlug/:email"
