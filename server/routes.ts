@@ -2376,6 +2376,111 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Consumer accounts route
+  app.get('/api/consumer/accounts', async (req: any, res) => {
+    try {
+      // Check for consumer token
+      const authHeader = req.headers.authorization;
+      
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ message: 'No consumer token provided' });
+      }
+      
+      const token = authHeader.slice(7);
+      let decodedToken: any;
+      
+      try {
+        decodedToken = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
+
+        // Verify this is a consumer token
+        if (decodedToken.type !== 'consumer') {
+          return res.status(401).json({ message: 'Invalid token type' });
+        }
+      } catch (error) {
+        return res.status(401).json({ message: 'Invalid consumer token' });
+      }
+
+      const email = req.query.email as string;
+      const tenantSlug = req.query.tenantSlug as string;
+
+      if (!email) {
+        return res.status(400).json({ error: 'Email is required' });
+      }
+
+      // Verify the consumer is requesting their own data
+      if (decodedToken.email && decodedToken.email.toLowerCase() !== email.toLowerCase()) {
+        return res.status(403).json({ message: 'You can only access your own account information' });
+      }
+
+      // Verify tenant slug matches if provided
+      if (decodedToken.tenantSlug && tenantSlug && decodedToken.tenantSlug !== tenantSlug) {
+        return res.status(403).json({ message: 'Tenant mismatch' });
+      }
+
+      // Get tenant
+      let tenant: Tenant | undefined = undefined;
+      if (tenantSlug) {
+        tenant = await storage.getTenantBySlug(tenantSlug);
+        if (!tenant) {
+          return res.status(404).json({ error: 'Agency not found' });
+        }
+      } else if (decodedToken.tenantId) {
+        tenant = await storage.getTenant(decodedToken.tenantId);
+      }
+
+      if (!tenant) {
+        return res.status(404).json({ error: 'Tenant not found' });
+      }
+
+      // Get consumer
+      const consumers = await storage.getConsumersByEmail(email);
+      const consumer = consumers.find(c => c.tenantId === tenant!.id);
+      
+      if (!consumer) {
+        return res.status(404).json({ error: 'Consumer not found' });
+      }
+
+      // Get accounts for this consumer
+      const accounts = await storage.getAccountsByConsumer(consumer.id);
+
+      // Get tenant settings
+      const tenantSettings = await storage.getTenantSettings(tenant.id);
+
+      res.json({
+        consumer: {
+          id: consumer.id,
+          firstName: consumer.firstName,
+          lastName: consumer.lastName,
+          email: consumer.email,
+          phone: consumer.phone,
+          address: consumer.address,
+          city: consumer.city,
+          state: consumer.state,
+          ssnLast4: consumer.ssnLast4,
+        },
+        accounts: accounts.map(account => ({
+          id: account.id,
+          accountNumber: account.accountNumber,
+          creditor: account.creditor,
+          balanceCents: account.balanceCents,
+          status: account.status,
+          dueDate: account.dueDate,
+          createdAt: account.createdAt,
+        })),
+        tenant: {
+          id: tenant.id,
+          name: tenant.name,
+          slug: tenant.slug
+        },
+        tenantSettings: tenantSettings || null
+      });
+
+    } catch (error) {
+      console.error('Error fetching consumer accounts:', error);
+      res.status(500).json({ error: 'Failed to fetch accounts' });
+    }
+  });
+
   // Consumer notifications route
   app.get('/api/consumer-notifications/:email/:tenantSlug', authenticateConsumer, async (req: any, res) => {
     try {
