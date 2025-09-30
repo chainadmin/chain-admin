@@ -53,32 +53,7 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
-// Get the API base URL - use Express in development, serverless in production
-function getApiBase(): string {
-  // First check if VITE_API_URL is set (allows override)
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
-  }
-  
-  // Check if we're in development mode
-  const isDevelopment = import.meta.env.DEV || import.meta.env.MODE === 'development';
-  
-  if (isDevelopment) {
-    // In Replit webview, use same origin (the Replit URL serves both frontend and backend)
-    // Only use localhost:5000 if actually accessing via localhost
-    if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-      return 'http://localhost:5000';
-    }
-    // For Replit webview, use same origin (empty string = relative URLs)
-    return '';
-  }
-  
-  // For production/preview (Vercel), use relative paths (same origin)
-  return '';
-}
-
-const API_BASE = getApiBase();
-
+// Get the API base URL - calculated dynamically each time
 function getApiUrl(path: string): string {
   if (path.startsWith("http")) {
     return path; // Already a full URL
@@ -88,7 +63,25 @@ function getApiUrl(path: string): string {
     path = "/" + path;
   }
 
-  return API_BASE + path;
+  // First check if VITE_API_URL is set (allows override)
+  if (import.meta.env.VITE_API_URL) {
+    console.log('[getApiUrl] Using VITE_API_URL:', import.meta.env.VITE_API_URL + path);
+    return import.meta.env.VITE_API_URL + path;
+  }
+  
+  // Only use localhost:5000 if we're actually on localhost
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+  console.log('[getApiUrl] Hostname check:', hostname, 'isLocalhost:', hostname === 'localhost');
+  
+  if (hostname === 'localhost') {
+    console.log('[getApiUrl] Using localhost:5000');
+    return 'http://localhost:5000' + path;
+  }
+  
+  // For Replit webview and production, use relative URLs (same origin)
+  // The Express server serves both frontend and API on the same port in Replit
+  console.log('[getApiUrl] Using relative URL:', path);
+  return path;
 }
 
 export async function apiRequest(
