@@ -1,9 +1,9 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import jwt from 'jsonwebtoken';
-import { getDb } from '../_lib/db.js';
-import { accounts, consumers, documents } from '../../shared/schema.js';
+import { getDb } from '../_lib/db';
+import { accounts, consumers, documents } from '../../shared/schema';
 import { eq, and } from 'drizzle-orm';
-import { JWT_SECRET } from '../_lib/auth.js';
+import { JWT_SECRET } from '../_lib/auth';
 
 interface AuthenticatedRequest extends VercelRequest {
   method: string;

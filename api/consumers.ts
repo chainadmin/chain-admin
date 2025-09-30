@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getDb } from './_lib/db.js';
-import { withAuth, AuthenticatedRequest, JWT_SECRET } from './_lib/auth.js';
-import { listConsumers, updateConsumer, deleteConsumers, ConsumerNotFoundError } from '../shared/server/consumers.js';
+import { getDb } from './_lib/db';
+import { withAuth, AuthenticatedRequest, JWT_SECRET } from './_lib/auth';
+import { listConsumers, updateConsumer, deleteConsumers, ConsumerNotFoundError } from '../shared/server/consumers';
 import jwt from 'jsonwebtoken';
 
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {

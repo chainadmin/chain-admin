@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getDb } from './_lib/db.js';
-import { withAuth, AuthenticatedRequest, JWT_SECRET } from './_lib/auth.js';
-import { accounts, consumers, folders } from './_lib/schema.js';
+import { getDb } from './_lib/db';
+import { withAuth, AuthenticatedRequest, JWT_SECRET } from './_lib/auth';
+import { accounts, consumers, folders } from './_lib/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 

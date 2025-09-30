@@ -1,7 +1,7 @@
 import type { VercelResponse } from '@vercel/node';
-import { getDb } from './_lib/db.js';
-import { withAuth, AuthenticatedRequest, JWT_SECRET } from './_lib/auth.js';
-import { tenantSettings, smsTracking, smsCampaigns } from '../shared/schema.js';
+import { getDb } from './_lib/db';
+import { withAuth, AuthenticatedRequest, JWT_SECRET } from './_lib/auth';
+import { tenantSettings, smsTracking, smsCampaigns } from '../shared/schema';
 import { eq, and, sql, gte } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 

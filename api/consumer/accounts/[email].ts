@@ -1,9 +1,9 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { getDb } from '../../_lib/db.js';
-import { consumers, accounts, tenants, tenantSettings } from '../../../shared/schema.js';
+import { getDb } from '../../_lib/db';
+import { consumers, accounts, tenants, tenantSettings } from '../../../shared/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
-import { JWT_SECRET } from '../../_lib/auth.js';
+import { JWT_SECRET } from '../../_lib/auth';
 
 const sanitizeTokenString = (value: unknown): string | null => {
   if (value === null || value === undefined) {

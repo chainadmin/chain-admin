@@ -3,9 +3,9 @@ import { and, eq, sql } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 
-import { getDb } from '../_lib/db.js';
-import { JWT_SECRET } from '../_lib/auth.js';
-import { consumers, tenants } from '../../shared/schema.js';
+import { getDb } from '../_lib/db';
+import { JWT_SECRET } from '../_lib/auth';
+import { consumers, tenants } from '../../shared/schema';
 
 const loginSchema = z.object({
   email: z.string().email(),

@@ -2,7 +2,7 @@ import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { ensureCoreSchema } from '../../shared/schemaFixes.js';
+import { ensureCoreSchema } from '../../shared/schemaFixes';
 
 let db: PostgresJsDatabase | null = null;
 let client: ReturnType<typeof postgres> | null = null;

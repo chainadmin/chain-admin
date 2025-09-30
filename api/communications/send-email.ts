@@ -3,9 +3,9 @@ import { Client } from 'postmark';
 import { and, eq } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 
-import { getDb } from '../_lib/db.js';
-import { withAuth, AuthenticatedRequest, JWT_SECRET } from '../_lib/auth.js';
-import { accounts, consumers, emailTemplates, tenants } from '../_lib/schema.js';
+import { getDb } from '../_lib/db';
+import { withAuth, AuthenticatedRequest, JWT_SECRET } from '../_lib/auth';
+import { accounts, consumers, emailTemplates, tenants } from '../_lib/schema';
 
 const DEFAULT_FROM_EMAIL = 'support@chainsoftwaregroup.com';
 
