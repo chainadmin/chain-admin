@@ -23,6 +23,12 @@ export default function ConsumerDashboardSimple() {
     const token = getStoredConsumerToken();
     const storedSession = getStoredConsumerSession();
     
+    console.log('Consumer Dashboard Mount:', {
+      hasToken: !!token,
+      hasSession: !!storedSession,
+      session: storedSession
+    });
+    
     if (!token || !storedSession) {
       toast({
         title: "Please Sign In",
@@ -46,11 +52,25 @@ export default function ConsumerDashboardSimple() {
     ? `/api/consumer/accounts?email=${encodedEmail}&tenantSlug=${encodedTenantSlug}`
     : null;
 
-  const { data: accountData, isLoading, error } = useQuery({
-    queryKey: accountsUrl ? ["consumer-accounts", encodedEmail, encodedTenantSlug] : ["no-fetch"],
-    enabled: !!(accountsUrl && mounted),
-    retry: 1,
+  console.log('Consumer Dashboard Query:', {
+    accountsUrl,
+    mounted,
+    email: session?.email,
+    tenantSlug: session?.tenantSlug
   });
+
+  const { data: accountData, isLoading, error } = useQuery({
+    queryKey: accountsUrl ? [accountsUrl] : ["no-fetch"],
+    enabled: !!(accountsUrl && mounted),
+    retry: 1
+  });
+  
+  // Log any fetch errors
+  useEffect(() => {
+    if (error) {
+      console.error('Consumer Dashboard Fetch Error:', error);
+    }
+  }, [error]);
 
   const handleLogout = () => {
     clearConsumerAuth();
