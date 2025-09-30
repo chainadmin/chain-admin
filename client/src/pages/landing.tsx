@@ -274,13 +274,7 @@ export default function Landing() {
                 </a>
                 <button
                   className="hover:text-blue-100 hover:underline"
-                  onClick={() => {
-                    if (window.location.hostname === 'localhost' || window.location.hostname.includes('replit.dev')) {
-                      window.location.href = '/admin';
-                    } else {
-                      window.location.href = '/agency-login';
-                    }
-                  }}
+                  onClick={() => window.location.href = '/agency-login'}
                   data-testid="button-agency-login"
                 >
                   Agency Login
