@@ -118,8 +118,9 @@ function Router() {
     initMobileFeatures();
   }, [toast, isMobileApp]);
 
-  // Check if user needs tenant setup (only for web admin)
-  const needsTenantSetup = !isMobileApp && isAuthenticated && !(user as any)?.platformUser?.tenantId;
+  // Check if user needs tenant setup (only for web admin using Replit auth, not JWT)
+  // JWT users already have tenant info in their token, so they don't need setup
+  const needsTenantSetup = !isMobileApp && isAuthenticated && !isJwtAuth && !(user as any)?.platformUser?.tenantId;
   
   // Check if we're on the main domain (not an agency subdomain)
   const hostname = window.location.hostname;
