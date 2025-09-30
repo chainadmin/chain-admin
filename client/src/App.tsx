@@ -275,38 +275,8 @@ function Router() {
     return <Switch>{agencyLandingRoutes}</Switch>;
   }
 
-  if (isJwtAuth && isMainDomain) {
-    const authenticatedMainDomainRoutes: JSX.Element[] = [
-      <Route key="main-home" path="/" component={Landing} />,
-      <Route key="main-dashboard" path="/dashboard" component={AdminDashboard} />,
-      <Route key="main-admin-dashboard" path="/admin-dashboard" component={AdminDashboard} />,
-      <Route key="main-consumers" path="/consumers" component={Consumers} />,
-      <Route key="main-accounts" path="/accounts" component={Accounts} />,
-      <Route key="main-communications" path="/communications" component={Communications} />,
-      <Route key="main-requests" path="/requests" component={Requests} />,
-      <Route key="main-payments" path="/payments" component={Payments} />,
-      <Route key="main-billing" path="/billing" component={Billing} />,
-      <Route key="main-company" path="/company" component={CompanyManagement} />,
-      <Route key="main-settings" path="/settings" component={Settings} />,
-      <Route
-        key="main-consumer-dashboard"
-        path="/consumer-dashboard"
-        component={ConsumerDashboard}
-      />,
-      <Route key="main-consumer-login" path="/consumer-login" component={ConsumerLogin} />,
-      <Route key="main-agency-login" path="/agency-login" component={AgencyLogin} />,
-      <Route key="main-agency-register" path="/agency-register" component={AgencyRegistration} />,
-      <Route key="main-agency-registration" path="/agency-registration" component={AgencyRegistration} />,
-      <Route key="main-consumer-register" path="/consumer-register/:tenantSlug?" component={ConsumerRegistration} />,
-      <Route key="main-agency" path="/agency/:agencySlug" component={AgencyLanding} />,
-      <Route key="main-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
-      <Route key="main-terms" path="/terms-of-service" component={TermsOfService} />,
-      ...getSmsOptInRoutes("main-sms"),
-      <Route key="main-fallback" path="/:rest*" component={NotFound} />
-    ];
-
-    return <Switch>{authenticatedMainDomainRoutes}</Switch>;
-  }
+  // JWT-authenticated users (agency login) should skip to the regular authenticated routes
+  // This block was incorrectly catching them and treating them as main domain users
 
   if (!isAuthenticated) {
     const publicRoutes: JSX.Element[] = [
@@ -353,6 +323,7 @@ function Router() {
 
   const authenticatedRoutes: JSX.Element[] = [
     <Route key="auth-home" path="/" component={AdminDashboard} />,
+    <Route key="auth-dashboard" path="/dashboard" component={AdminDashboard} />,
     <Route key="auth-admin-dashboard" path="/admin-dashboard" component={AdminDashboard} />,
     <Route key="auth-consumers" path="/consumers" component={Consumers} />,
     <Route key="auth-accounts" path="/accounts" component={Accounts} />,
