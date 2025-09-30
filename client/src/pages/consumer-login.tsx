@@ -23,7 +23,7 @@ import {
   ShieldCheck,
   UserCheck,
 } from "lucide-react";
-import { getAgencySlugFromRequest } from "@shared/utils/subdomain";
+import { getAgencySlugFromRequest, extractSubdomain } from "@shared/utils/subdomain";
 import PublicHeroLayout from "@/components/public-hero-layout";
 import {
   AgencyContext,
@@ -56,7 +56,10 @@ export default function ConsumerLogin() {
     if (typeof window === "undefined") {
       return null;
     }
-    return getAgencySlugFromRequest(window.location.hostname, window.location.pathname);
+    // Only detect agency from subdomain for consumer login
+    // Do NOT detect from path - consumers should login without agency context
+    const subdomain = extractSubdomain(window.location.hostname);
+    return subdomain;
   }, []);
 
   const persistAgencyContext = useCallback((context: AgencyContext) => {
