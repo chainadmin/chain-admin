@@ -46,6 +46,7 @@ export default function ConsumerLogin() {
     email: "",
     dateOfBirth: "",
     agreeToSms: false,
+    agreeToTerms: false,
   });
   const [agencyContext, setAgencyContext] = useState<AgencyContext | null>(null);
   const [pendingAgencies, setPendingAgencies] = useState<AgencyContext[]>([]);
@@ -330,6 +331,15 @@ export default function ConsumerLogin() {
       return;
     }
 
+    if (!form.agreeToTerms) {
+      toast({
+        title: "Agreement Required",
+        description: "Please agree to the Privacy Policy and Terms of Service before signing in.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     loginMutation.mutate(form);
   };
 
@@ -480,10 +490,37 @@ export default function ConsumerLogin() {
             </div>
           </div>
 
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id="agreeToTerms"
+                data-testid="checkbox-agreeToTerms"
+                checked={form.agreeToTerms}
+                onCheckedChange={checked => handleInputChange("agreeToTerms", checked === true)}
+                className="mt-1 h-5 w-5 rounded-md border-white/40"
+              />
+              <div className="space-y-2 text-xs text-blue-100/80">
+                <Label htmlFor="agreeToTerms" className="text-sm font-semibold text-white">
+                  I agree to the Privacy Policy and Terms of Service *
+                </Label>
+                <p>
+                  By signing in, I confirm that I have read and agree to the{" "}
+                  <a href="/privacy-policy" target="_blank" className="text-blue-300 hover:text-blue-200 underline">
+                    Privacy Policy
+                  </a>
+                  {" "}and{" "}
+                  <a href="/terms-of-service" target="_blank" className="text-blue-300 hover:text-blue-200 underline">
+                    Terms of Service
+                  </a>.
+                </p>
+              </div>
+            </div>
+          </div>
+
           <Button
             type="submit"
             className="h-12 w-full rounded-full bg-blue-500 text-base font-medium text-white transition hover:bg-blue-400"
-            disabled={loginMutation.isPending || !form.agreeToSms}
+            disabled={loginMutation.isPending || !form.agreeToSms || !form.agreeToTerms}
             data-testid="button-consumer-login"
           >
             {loginMutation.isPending ? (
