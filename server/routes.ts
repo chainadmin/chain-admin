@@ -3159,6 +3159,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         twilioPhoneNumber: tenant?.twilioPhoneNumber || '',
         twilioBusinessName: tenant?.twilioBusinessName || '',
         twilioCampaignId: tenant?.twilioCampaignId || '',
+        // Redact sensitive SMAX credentials in response
+        smaxApiKey: settings?.smaxApiKey ? '••••••••' : '',
+        smaxPin: settings?.smaxPin ? '••••••••' : '',
       };
       
       res.json(combinedSettings);
@@ -3194,6 +3197,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         twilioPhoneNumber: z.string().optional(),
         twilioBusinessName: z.string().optional(),
         twilioCampaignId: z.string().optional(),
+        // SMAX integration configuration
+        smaxEnabled: z.boolean().optional(),
+        smaxApiKey: z.string().optional(),
+        smaxPin: z.string().optional(),
+        smaxBaseUrl: z.string().optional(),
       });
 
       const validatedData = settingsSchema.parse(req.body);
@@ -3205,8 +3213,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         twilioPhoneNumber, 
         twilioBusinessName, 
         twilioCampaignId,
+        smaxApiKey,
+        smaxPin,
         ...otherSettings 
       } = validatedData;
+
+      // Preserve SMAX credentials if they're submitted as masked values
+      const currentSettings = await storage.getTenantSettings(tenantId);
+      const finalSmaxApiKey = (smaxApiKey && smaxApiKey !== '••••••••') ? smaxApiKey : currentSettings?.smaxApiKey;
+      const finalSmaxPin = (smaxPin && smaxPin !== '••••••••') ? smaxPin : currentSettings?.smaxPin;
 
       // Update tenant table with Twilio settings if any provided
       if (twilioAccountSid !== undefined || 
@@ -3226,6 +3241,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update tenant settings table with other settings
       const settings = await storage.upsertTenantSettings({
         ...otherSettings,
+        smaxApiKey: finalSmaxApiKey,
+        smaxPin: finalSmaxPin,
         tenantId: tenantId,
       });
       
@@ -3233,6 +3250,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating settings:", error);
       res.status(500).json({ message: "Failed to update settings" });
+    }
+  });
+
+  // Test SMAX connection
+  app.post('/api/settings/test-smax', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { smaxService } = await import('./smaxService');
+      const result = await smaxService.testConnection(tenantId);
+      
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error testing SMAX connection:", error);
+      res.status(500).json({ 
+        success: false,
+        error: error.message || "Failed to test SMAX connection" 
+      });
     }
   });
 
@@ -3726,6 +3765,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         notes: `Online payment - ${cardName} ending in ${cardNumber.slice(-4)}`,
       });
 
+      // Notify SMAX if enabled
+      try {
+        const { smaxService } = await import('./smaxService');
+        const accounts = await storage.getAccountsByConsumer(consumer.id);
+        if (accounts && accounts.length > 0) {
+          const account = accounts[0];
+          await smaxService.insertPayment(tenantId, {
+            filenumber: account.accountNumber || account.id,
+            paymentamount: amountCents / 100,
+            paymentdate: new Date().toISOString().split('T')[0],
+            paymentmethod: 'credit_card',
+            transactionid: processorResponse.transactionId,
+            status: processorResponse.success ? 'completed' : 'failed',
+            notes: `Online payment - ${cardName} ending in ${cardNumber.slice(-4)}`,
+          });
+        }
+      } catch (smaxError) {
+        console.error('SMAX notification failed:', smaxError);
+      }
+
       res.json({
         success: true,
         payment: {
@@ -3774,6 +3833,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: "completed", // Manual payments are immediately completed
         processedAt: new Date(),
       });
+
+      // Notify SMAX if enabled
+      try {
+        const { smaxService } = await import('./smaxService');
+        let accountNumber = null;
+        if (accountId) {
+          const account = await storage.getAccount(accountId);
+          accountNumber = account?.accountNumber || accountId;
+        } else {
+          const accounts = await storage.getAccountsByConsumer(consumer.id);
+          if (accounts && accounts.length > 0) {
+            accountNumber = accounts[0].accountNumber || accounts[0].id;
+          }
+        }
+        
+        if (accountNumber) {
+          await smaxService.insertPayment(tenantId, {
+            filenumber: accountNumber,
+            paymentamount: amountCents / 100,
+            paymentdate: new Date().toISOString().split('T')[0],
+            paymentmethod: paymentMethod || 'manual',
+            transactionid: transactionId || `manual_${Date.now()}`,
+            status: 'completed',
+            notes: notes || 'Manual payment entry',
+          });
+        }
+      } catch (smaxError) {
+        console.error('SMAX notification failed:', smaxError);
+      }
 
       res.json(payment);
     } catch (error) {
@@ -4405,6 +4493,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Update campaign metrics
     if (campaignId) {
       await updateCampaignMetrics(campaignId, RecordType);
+    }
+
+    // Notify SMAX for email open events
+    if (tenantId && normalizedRecordType === 'open') {
+      try {
+        const { smaxService } = await import('./smaxService');
+        const accountNumber = Metadata?.accountNumber || Metadata?.filenumber;
+        
+        if (accountNumber) {
+          await smaxService.insertAttempt(tenantId, {
+            filenumber: accountNumber,
+            attempttype: 'email_open',
+            attemptdate: new Date().toISOString().split('T')[0],
+            notes: `Email opened by ${Recipient}`,
+            result: 'opened',
+          });
+        }
+      } catch (smaxError) {
+        console.error('SMAX email open notification failed:', smaxError);
+      }
     }
   }
 

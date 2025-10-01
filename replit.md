@@ -5,6 +5,14 @@ Chain is a multi-tenant platform designed for agencies to manage consumer accoun
 # Recent Changes
 
 ## October 2025
+- **SMAX Integration Implementation** (In Progress): Adding SMAX collection software API integration
+  - Added SMAX configuration fields to tenant settings (smaxEnabled, smaxApiKey, smaxPin, smaxBaseUrl)
+  - Created SMAX service module with JWT authentication and auto-token refresh
+  - Implemented API methods: insertPayment, insertAttempt, insertNote, getAccount, testConnection
+  - Added SMAX Integration tab in Settings page with test connection functionality
+  - Integration syncs payments, email opens, and collection attempts to SMAX in real-time
+  - Optional per-tenant feature - agencies without SMAX continue working normally
+
 - **Consumer Logout Redirect Fix**: Updated consumer portal logout to redirect to agency landing page
   - Changed logout destination from generic `/consumer-login` to agency-branded landing page
   - Uses stored tenantSlug to redirect to `/{agencySlug}` after logout

@@ -683,12 +683,15 @@ export default function Settings() {
 
         <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-blue-900/20 backdrop-blur">
           <Tabs defaultValue="general" className="space-y-8">
-            <TabsList className="grid w-full grid-cols-1 gap-2 p-2 text-blue-100 sm:grid-cols-5">
+            <TabsList className="grid w-full grid-cols-1 gap-2 p-2 text-blue-100 sm:grid-cols-6">
               <TabsTrigger value="general" className="px-4 py-2">
                 General
               </TabsTrigger>
               <TabsTrigger value="merchant" className="px-4 py-2">
                 Payment Processing
+              </TabsTrigger>
+              <TabsTrigger value="smax" className="px-4 py-2">
+                SMAX Integration
               </TabsTrigger>
               <TabsTrigger value="documents" className="px-4 py-2">
                 Documents
@@ -1134,6 +1137,155 @@ export default function Settings() {
                       </div>
                     </div>
                   )}
+                </CardContent>
+                {hasUnsavedChanges && (
+                  <CardFooter className="border-t border-white/10 pt-6">
+                    <Button
+                      onClick={handleSaveSettings}
+                      disabled={updateSettingsMutation.isPending}
+                      className={cn(
+                        "ml-auto rounded-xl bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-6 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 transition hover:from-sky-400/80 hover:to-indigo-400/80",
+                        updateSettingsMutation.isPending && "opacity-60",
+                      )}
+                    >
+                      {updateSettingsMutation.isPending ? "Saving..." : "Save changes"}
+                    </Button>
+                  </CardFooter>
+                )}
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="smax" className="space-y-6">
+              <Card className={cardBaseClasses}>
+                <CardHeader className="space-y-1 text-white">
+                  <CardTitle className="text-xl font-semibold text-white">SMAX Collection Software Integration</CardTitle>
+                  <p className="text-sm text-blue-100/70">
+                    Sync payment and communication data with your SMAX collection system in real-time.
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-6 text-sm text-blue-100/80">
+                  {/* Enable SMAX Toggle */}
+                  <div className="flex items-center justify-between space-x-4 rounded-xl border border-white/10 bg-white/5 p-4">
+                    <div className="flex-1">
+                      <Label className="text-base font-medium text-white">Enable SMAX Integration</Label>
+                      <p className="text-sm text-blue-100/70">
+                        Automatically sync payments, email opens, and collection attempts with SMAX
+                      </p>
+                    </div>
+                    <Switch
+                      checked={localSettings?.smaxEnabled || false}
+                      onCheckedChange={(checked) => handleSettingsUpdate('smaxEnabled', checked)}
+                      data-testid="switch-smax-enabled"
+                    />
+                  </div>
+
+                  {/* SMAX Configuration Fields */}
+                  {localSettings?.smaxEnabled && (
+                    <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-4">
+                      <div className="space-y-2">
+                        <Label className="text-white">SMAX API Key</Label>
+                        <Input
+                          type="text"
+                          value={localSettings?.smaxApiKey || ""}
+                          onChange={(e) => handleSettingsUpdate('smaxApiKey', e.target.value)}
+                          placeholder="Enter your SMAX API key"
+                          className={inputClasses}
+                          data-testid="input-smax-api-key"
+                        />
+                        <p className="text-xs text-blue-100/60">
+                          Your SMAX API key from the SMAX admin panel
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-white">SMAX PIN</Label>
+                        <Input
+                          type="password"
+                          value={localSettings?.smaxPin || ""}
+                          onChange={(e) => handleSettingsUpdate('smaxPin', e.target.value)}
+                          placeholder="Enter your SMAX PIN"
+                          className={inputClasses}
+                          data-testid="input-smax-pin"
+                        />
+                        <p className="text-xs text-blue-100/60">
+                          Your SMAX PIN for API authentication
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-white">SMAX Base URL (Optional)</Label>
+                        <Input
+                          type="text"
+                          value={localSettings?.smaxBaseUrl || "https://api.smaxcollectionsoftware.com:8000"}
+                          onChange={(e) => handleSettingsUpdate('smaxBaseUrl', e.target.value)}
+                          placeholder="https://api.smaxcollectionsoftware.com:8000"
+                          className={inputClasses}
+                          data-testid="input-smax-base-url"
+                        />
+                        <p className="text-xs text-blue-100/60">
+                          Leave default unless using a custom SMAX instance
+                        </p>
+                      </div>
+
+                      {/* Test Connection Button */}
+                      <div className="pt-4">
+                        <Button
+                          onClick={async () => {
+                            try {
+                              const response = await apiRequest("POST", "/api/settings/test-smax");
+                              const result = await response.json();
+                              
+                              if (result.success) {
+                                toast({
+                                  title: "Connection Successful",
+                                  description: "Successfully connected to SMAX API",
+                                });
+                              } else {
+                                toast({
+                                  title: "Connection Failed",
+                                  description: result.error || "Failed to connect to SMAX API",
+                                  variant: "destructive",
+                                });
+                              }
+                            } catch (error: any) {
+                              toast({
+                                title: "Connection Error",
+                                description: error.message || "Failed to test SMAX connection",
+                                variant: "destructive",
+                              });
+                            }
+                          }}
+                          className="rounded-xl bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-6 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 transition hover:from-sky-400/80 hover:to-indigo-400/80"
+                          data-testid="button-test-smax"
+                        >
+                          Test Connection
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* SMAX Features Info */}
+                  <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-4">
+                    <h3 className="text-base font-medium text-white">What gets synced to SMAX?</h3>
+                    <ul className="space-y-2 text-sm text-blue-100/70">
+                      <li className="flex items-start">
+                        <span className="mr-2">•</span>
+                        <span>Payment attempts and transactions (success/failure status)</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="mr-2">•</span>
+                        <span>Email opens and communication tracking</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="mr-2">•</span>
+                        <span>Collection attempt notes and consumer interactions</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="mr-2">•</span>
+                        <span>Account updates and status changes</span>
+                      </li>
+                    </ul>
+                  </div>
                 </CardContent>
                 {hasUnsavedChanges && (
                   <CardFooter className="border-t border-white/10 pt-6">

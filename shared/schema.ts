@@ -327,6 +327,11 @@ export const tenantSettings = pgTable("tenant_settings", {
   merchantApiKey: text("merchant_api_key"),
   merchantName: text("merchant_name"),
   enableOnlinePayments: boolean("enable_online_payments").default(false),
+  // SMAX integration fields
+  smaxEnabled: boolean("smax_enabled").default(false),
+  smaxApiKey: text("smax_api_key"),
+  smaxPin: text("smax_pin"),
+  smaxBaseUrl: text("smax_base_url").default("https://api.smaxcollectionsoftware.com:8000"),
 });
 
 // Consumer notifications (when accounts are added)

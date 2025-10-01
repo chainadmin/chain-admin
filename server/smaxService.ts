@@ -1,0 +1,267 @@
+import { storage } from './storage';
+
+interface SmaxAuthResponse {
+  result: {
+    access_token: string;
+  };
+  state: string;
+}
+
+interface SmaxConfig {
+  enabled: boolean;
+  apiKey: string;
+  pin: string;
+  baseUrl: string;
+}
+
+interface SmaxPaymentData {
+  filenumber: string;
+  paymentamount: number;
+  paymentdate: string;
+  paymentmethod: string;
+  transactionid?: string;
+  status: string;
+  notes?: string;
+}
+
+interface SmaxAttemptData {
+  filenumber: string;
+  attempttype: string;
+  attemptdate: string;
+  notes?: string;
+  result?: string;
+}
+
+interface SmaxNoteData {
+  filenumber: string;
+  note: string;
+  notedate: string;
+  notetype?: string;
+}
+
+class SmaxService {
+  private tokenCache: Map<string, { token: string; expires: number }> = new Map();
+
+  private async getSmaxConfig(tenantId: string): Promise<SmaxConfig | null> {
+    try {
+      const settings = await storage.getTenantSettings(tenantId);
+      
+      if (!settings?.smaxEnabled || !settings.smaxApiKey || !settings.smaxPin) {
+        return null;
+      }
+
+      return {
+        enabled: settings.smaxEnabled,
+        apiKey: settings.smaxApiKey,
+        pin: settings.smaxPin,
+        baseUrl: settings.smaxBaseUrl || 'https://api.smaxcollectionsoftware.com:8000',
+      };
+    } catch (error) {
+      console.error('Error getting SMAX config:', error);
+      return null;
+    }
+  }
+
+  private async authenticate(config: SmaxConfig): Promise<string | null> {
+    const cacheKey = `${config.apiKey}:${config.pin}`;
+    const cached = this.tokenCache.get(cacheKey);
+
+    if (cached && cached.expires > Date.now()) {
+      return cached.token;
+    }
+
+    try {
+      const response = await fetch(`${config.baseUrl}/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          apikey: config.apiKey,
+          pin: config.pin,
+        }),
+      });
+
+      if (!response.ok) {
+        console.error('SMAX authentication failed:', response.status);
+        return null;
+      }
+
+      const data: SmaxAuthResponse = await response.json();
+
+      if (data.state !== 'SUCCESS' || !data.result?.access_token) {
+        console.error('SMAX authentication unsuccessful:', data);
+        return null;
+      }
+
+      const token = data.result.access_token;
+      const expires = Date.now() + (14 * 60 * 1000);
+
+      this.tokenCache.set(cacheKey, { token, expires });
+
+      return token;
+    } catch (error) {
+      console.error('Error authenticating with SMAX:', error);
+      return null;
+    }
+  }
+
+  private async makeSmaxRequest(
+    config: SmaxConfig,
+    endpoint: string,
+    method: 'GET' | 'POST' | 'PUT',
+    body?: any
+  ): Promise<any> {
+    const token = await this.authenticate(config);
+
+    if (!token) {
+      throw new Error('Failed to authenticate with SMAX');
+    }
+
+    const url = `${config.baseUrl}${endpoint}`;
+    const options: RequestInit = {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    };
+
+    if (body && (method === 'POST' || method === 'PUT')) {
+      options.body = JSON.stringify(body);
+    }
+
+    const response = await fetch(url, options);
+
+    if (!response.ok) {
+      throw new Error(`SMAX API error: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  async insertPayment(tenantId: string, paymentData: SmaxPaymentData): Promise<boolean> {
+    try {
+      const config = await this.getSmaxConfig(tenantId);
+
+      if (!config) {
+        return false;
+      }
+
+      const result = await this.makeSmaxRequest(
+        config,
+        '/insert_payments_external',
+        'POST',
+        paymentData
+      );
+
+      console.log('SMAX payment inserted:', result);
+      return result.state === 'SUCCESS';
+    } catch (error) {
+      console.error('Error inserting payment to SMAX:', error);
+      return false;
+    }
+  }
+
+  async insertAttempt(tenantId: string, attemptData: SmaxAttemptData): Promise<boolean> {
+    try {
+      const config = await this.getSmaxConfig(tenantId);
+
+      if (!config) {
+        return false;
+      }
+
+      const result = await this.makeSmaxRequest(
+        config,
+        '/insertattempt',
+        'POST',
+        attemptData
+      );
+
+      console.log('SMAX attempt inserted:', result);
+      return result.state === 'SUCCESS';
+    } catch (error) {
+      console.error('Error inserting attempt to SMAX:', error);
+      return false;
+    }
+  }
+
+  async insertNote(tenantId: string, noteData: SmaxNoteData): Promise<boolean> {
+    try {
+      const config = await this.getSmaxConfig(tenantId);
+
+      if (!config) {
+        return false;
+      }
+
+      const result = await this.makeSmaxRequest(
+        config,
+        '/InsertNoteline',
+        'POST',
+        noteData
+      );
+
+      console.log('SMAX note inserted:', result);
+      return result.state === 'SUCCESS';
+    } catch (error) {
+      console.error('Error inserting note to SMAX:', error);
+      return false;
+    }
+  }
+
+  async getAccount(tenantId: string, fileNumber: string): Promise<any | null> {
+    try {
+      const config = await this.getSmaxConfig(tenantId);
+
+      if (!config) {
+        return null;
+      }
+
+      const result = await this.makeSmaxRequest(
+        config,
+        `/getaccount/${fileNumber}`,
+        'GET'
+      );
+
+      if (result.state === 'SUCCESS') {
+        return result.result;
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error getting account from SMAX:', error);
+      return null;
+    }
+  }
+
+  async testConnection(tenantId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const config = await this.getSmaxConfig(tenantId);
+
+      if (!config) {
+        return {
+          success: false,
+          error: 'SMAX is not enabled or configured for this tenant',
+        };
+      }
+
+      const token = await this.authenticate(config);
+
+      if (!token) {
+        return {
+          success: false,
+          error: 'Authentication failed. Please check your API key and PIN.',
+        };
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message || 'Connection test failed',
+      };
+    }
+  }
+}
+
+export const smaxService = new SmaxService();
