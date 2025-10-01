@@ -172,12 +172,13 @@ export default function ConsumerDashboard() {
   });
 
   const handleLogout = () => {
+    const agencySlug = consumerSession?.tenantSlug;
     clearConsumerAuth();
     toast({
       title: "Logged Out",
       description: "You have been logged out successfully.",
     });
-    setLocation("/consumer-login");
+    setLocation(agencySlug ? `/${agencySlug}` : "/consumer-login");
   };
 
   const handleCallbackSubmit = (e: React.FormEvent) => {

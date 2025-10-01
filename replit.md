@@ -5,6 +5,11 @@ Chain is a multi-tenant platform designed for agencies to manage consumer accoun
 # Recent Changes
 
 ## October 2025
+- **Consumer Logout Redirect Fix**: Updated consumer portal logout to redirect to agency landing page
+  - Changed logout destination from generic `/consumer-login` to agency-branded landing page
+  - Uses stored tenantSlug to redirect to `/{agencySlug}` after logout
+  - Provides better branding continuity and user experience for consumers
+
 - **Agency Path-Based Routing Fix**: Fixed critical bug preventing JWT-authenticated agency users from accessing dashboard pages
   - **ROOT CAUSE**: Path-based routing (e.g., `/waypoint-solutions/dashboard`) was blocked on Replit - only allowed on localhost
   - **SOLUTION**: Extended path-based routing support to include all Replit development domains
