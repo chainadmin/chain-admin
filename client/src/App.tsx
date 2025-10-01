@@ -258,8 +258,8 @@ function Router() {
     return <Switch>{agencySubdomainRoutes}</Switch>;
   }
 
-  // Check if we're on a path-based agency route (e.g. /waypoint-solutions/dashboard)
-  if (pathname.startsWith('/agency/') || (agencySlug && pathname.startsWith(`/${agencySlug}/`))) {
+  // Check if we're on a path-based agency route (e.g. /waypoint-solutions or /waypoint-solutions/dashboard)
+  if (pathname.startsWith('/agency/') || (agencySlug && (pathname === `/${agencySlug}` || pathname.startsWith(`/${agencySlug}/`)))) {
     const pathPrefix = pathname.startsWith('/agency/') ? '/agency/:agencySlug' : `/${agencySlug}`;
     
     const agencyPathRoutes: JSX.Element[] = [
