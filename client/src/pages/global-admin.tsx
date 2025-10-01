@@ -40,6 +40,13 @@ export default function GlobalAdmin() {
     twilioCampaignId: ''
   });
 
+  // Subscription approval state
+  const [approveDialogOpen, setApproveDialogOpen] = useState(false);
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [selectedSubscriptionRequest, setSelectedSubscriptionRequest] = useState<any>(null);
+  const [setupFeeWaived, setSetupFeeWaived] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
+
   // Check for admin authentication on component mount
   useEffect(() => {
     const adminAuth = sessionStorage.getItem("admin_authenticated");
@@ -65,6 +72,12 @@ export default function GlobalAdmin() {
   // Fetch platform stats
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ['/api/admin/stats'],
+    enabled: isPlatformAdmin
+  });
+
+  // Fetch subscription requests
+  const { data: subscriptionRequests, isLoading: subscriptionRequestsLoading } = useQuery({
+    queryKey: ['/api/admin/subscription-requests'],
     enabled: isPlatformAdmin
   });
 
@@ -158,6 +171,56 @@ export default function GlobalAdmin() {
       toast({
         title: "Failed to Create Agency",
         description: error.message || "An error occurred while creating the agency",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Mutation to approve subscription request
+  const approveSubscriptionMutation = useMutation({
+    mutationFn: async ({ id, setupFeeWaived }: { id: string; setupFeeWaived: boolean }) => {
+      return apiRequest('POST', `/api/admin/subscription-requests/${id}/approve`, { setupFeeWaived });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/subscription-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants'] });
+      setApproveDialogOpen(false);
+      setSelectedSubscriptionRequest(null);
+      setSetupFeeWaived(false);
+      toast({
+        title: "Subscription Approved",
+        description: "The subscription plan has been activated for the agency",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to approve subscription request",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Mutation to reject subscription request
+  const rejectSubscriptionMutation = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      return apiRequest('POST', `/api/admin/subscription-requests/${id}/reject`, { reason });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/subscription-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants'] });
+      setRejectDialogOpen(false);
+      setSelectedSubscriptionRequest(null);
+      setRejectionReason('');
+      toast({
+        title: "Subscription Rejected",
+        description: "The subscription request has been declined",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to reject subscription request",
         variant: "destructive",
       });
     }
@@ -393,6 +456,222 @@ export default function GlobalAdmin() {
             </Card>
           </div>
         )}
+
+        {/* Subscription Requests */}
+        <Card className="mb-8">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Subscription Requests</CardTitle>
+              {(subscriptionRequests as any[])?.length > 0 && (
+                <Badge variant="secondary" data-testid="badge-requests-count">
+                  {(subscriptionRequests as any[]).length} pending
+                </Badge>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {subscriptionRequestsLoading ? (
+              <div className="space-y-4">
+                {[...Array(2)].map((_, i) => (
+                  <div key={i} className="animate-pulse">
+                    <div className="h-20 bg-gray-200 rounded"></div>
+                  </div>
+                ))}
+              </div>
+            ) : !subscriptionRequests || (subscriptionRequests as any[]).length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <CheckCircle className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+                <p>No pending subscription requests</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {(subscriptionRequests as any[]).map((request: any) => (
+                  <div key={request.id} className="border rounded-lg p-4" data-testid={`row-request-${request.id}`}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div>
+                          <p className="text-sm font-medium text-gray-900" data-testid={`text-tenant-${request.id}`}>
+                            {request.tenantName}
+                          </p>
+                          <p className="text-xs text-gray-500">{request.tenantSlug}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-600">Requested Plan</p>
+                          <p className="text-sm font-medium text-gray-900" data-testid={`text-plan-${request.id}`}>
+                            {request.planName}
+                          </p>
+                          <p className="text-xs text-gray-500">{formatCurrency(request.monthlyPrice)}/mo</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-600">Plan Limits</p>
+                          <p className="text-xs text-gray-500">
+                            {request.includedEmails?.toLocaleString()} emails
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {request.includedSms?.toLocaleString()} SMS
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-600">Requested By</p>
+                          <p className="text-xs text-gray-500" data-testid={`text-requester-${request.id}`}>
+                            {request.requestedBy}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {new Date(request.requestedAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="default"
+                          onClick={() => {
+                            setSelectedSubscriptionRequest(request);
+                            setApproveDialogOpen(true);
+                          }}
+                          data-testid={`button-approve-${request.id}`}
+                        >
+                          <CheckCircle className="h-4 w-4 mr-1" />
+                          Approve
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => {
+                            setSelectedSubscriptionRequest(request);
+                            setRejectDialogOpen(true);
+                          }}
+                          data-testid={`button-reject-${request.id}`}
+                        >
+                          <Ban className="h-4 w-4 mr-1" />
+                          Reject
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Approval Dialog */}
+        <Dialog open={approveDialogOpen} onOpenChange={setApproveDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Approve Subscription Request</DialogTitle>
+            </DialogHeader>
+            {selectedSubscriptionRequest && (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-gray-600">Agency</p>
+                  <p className="font-medium">{selectedSubscriptionRequest.tenantName}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Plan</p>
+                  <p className="font-medium">{selectedSubscriptionRequest.planName} - {formatCurrency(selectedSubscriptionRequest.monthlyPrice)}/mo</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Setup Fee</p>
+                  <p className="font-medium">{formatCurrency(selectedSubscriptionRequest.setupFee)}</p>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="waive-setup-fee"
+                    checked={setupFeeWaived}
+                    onChange={(e) => setSetupFeeWaived(e.target.checked)}
+                    className="h-4 w-4"
+                    data-testid="checkbox-waive-setup-fee"
+                  />
+                  <Label htmlFor="waive-setup-fee">Waive setup fee</Label>
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" onClick={() => setApproveDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      approveSubscriptionMutation.mutate({
+                        id: selectedSubscriptionRequest.id,
+                        setupFeeWaived,
+                      });
+                    }}
+                    disabled={approveSubscriptionMutation.isPending}
+                    data-testid="button-confirm-approve"
+                  >
+                    {approveSubscriptionMutation.isPending ? (
+                      <>
+                        <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2" />
+                        Approving...
+                      </>
+                    ) : (
+                      'Approve'
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Rejection Dialog */}
+        <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Reject Subscription Request</DialogTitle>
+            </DialogHeader>
+            {selectedSubscriptionRequest && (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-gray-600">Agency</p>
+                  <p className="font-medium">{selectedSubscriptionRequest.tenantName}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Requested Plan</p>
+                  <p className="font-medium">{selectedSubscriptionRequest.planName}</p>
+                </div>
+                <div>
+                  <Label htmlFor="rejection-reason">Reason for rejection</Label>
+                  <textarea
+                    id="rejection-reason"
+                    value={rejectionReason}
+                    onChange={(e) => setRejectionReason(e.target.value)}
+                    className="w-full mt-1 p-2 border rounded-md"
+                    rows={3}
+                    placeholder="Please provide a reason..."
+                    data-testid="textarea-rejection-reason"
+                  />
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={() => {
+                      rejectSubscriptionMutation.mutate({
+                        id: selectedSubscriptionRequest.id,
+                        reason: rejectionReason || 'No reason provided',
+                      });
+                    }}
+                    disabled={rejectSubscriptionMutation.isPending || !rejectionReason.trim()}
+                    data-testid="button-confirm-reject"
+                  >
+                    {rejectSubscriptionMutation.isPending ? (
+                      <>
+                        <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2" />
+                        Rejecting...
+                      </>
+                    ) : (
+                      'Reject'
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
 
         {/* Tenants Table */}
         <Card>
