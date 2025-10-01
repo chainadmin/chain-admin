@@ -15,6 +15,7 @@ import {
   agencyCredentials,
   users,
   subscriptionPlans,
+  subscriptions,
   type Consumer,
   type Tenant,
   type InsertArrangementOption,
@@ -3894,10 +3895,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         planId: plan.id,
         currentPeriodStart: periodStart,
         currentPeriodEnd: periodEnd,
-        status: 'active' as const,
+        status: 'pending_approval' as const,
         billingEmail: billingEmail ?? existingSubscription?.billingEmail ?? null,
         emailsUsedThisPeriod: existingSubscription?.emailsUsedThisPeriod ?? 0,
         smsUsedThisPeriod: existingSubscription?.smsUsedThisPeriod ?? 0,
+        requestedBy: req.user.email || req.user.username || 'Unknown',
+        requestedAt: now,
       };
 
       const updatedSubscription = existingSubscription
@@ -3918,6 +3921,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         setupFee: (plan.setupFeeCents ?? 10000) / 100,
         includedEmails: plan.includedEmails,
         includedSmsSegments: plan.includedSms,
+        message: 'Subscription request submitted for admin approval',
       });
     } catch (error) {
       console.error("Error updating billing plan:", error);
@@ -4083,6 +4087,122 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error upgrading tenant:", error);
       res.status(500).json({ message: "Failed to upgrade tenant" });
+    }
+  });
+
+  // Get all subscription requests (pending approval)
+  app.get('/api/admin/subscription-requests', authenticateUser, isPlatformAdmin, async (req: any, res) => {
+    try {
+      const pendingSubscriptions = await db
+        .select({
+          subscription: subscriptions,
+          tenant: tenants,
+          plan: subscriptionPlans,
+        })
+        .from(subscriptions)
+        .innerJoin(tenants, eq(subscriptions.tenantId, tenants.id))
+        .innerJoin(subscriptionPlans, eq(subscriptions.planId, subscriptionPlans.id))
+        .where(eq(subscriptions.status, 'pending_approval'))
+        .orderBy(subscriptions.requestedAt);
+
+      const formattedRequests = pendingSubscriptions.map(({ subscription, tenant, plan }) => ({
+        id: subscription.id,
+        tenantId: tenant.id,
+        tenantName: tenant.name,
+        tenantSlug: tenant.slug,
+        planName: plan.name,
+        planSlug: plan.slug,
+        monthlyPrice: plan.monthlyPriceCents / 100,
+        setupFee: (plan.setupFeeCents ?? 10000) / 100,
+        includedEmails: plan.includedEmails,
+        includedSms: plan.includedSms,
+        requestedBy: subscription.requestedBy,
+        requestedAt: subscription.requestedAt,
+        billingEmail: subscription.billingEmail,
+      }));
+
+      res.json(formattedRequests);
+    } catch (error) {
+      console.error("Error fetching subscription requests:", error);
+      res.status(500).json({ message: "Failed to fetch subscription requests" });
+    }
+  });
+
+  // Approve subscription request
+  app.post('/api/admin/subscription-requests/:id/approve', authenticateUser, isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { setupFeeWaived } = req.body;
+      const adminEmail = req.user.email || req.user.username || 'Platform Admin';
+
+      const [subscription] = await db
+        .select()
+        .from(subscriptions)
+        .where(eq(subscriptions.id, id))
+        .limit(1);
+
+      if (!subscription) {
+        return res.status(404).json({ message: "Subscription request not found" });
+      }
+
+      if (subscription.status !== 'pending_approval') {
+        return res.status(400).json({ message: "Subscription is not pending approval" });
+      }
+
+      const updatedSubscription = await storage.updateSubscription(id, {
+        status: 'active',
+        approvedBy: adminEmail,
+        approvedAt: new Date(),
+        setupFeeWaived: setupFeeWaived ?? false,
+        updatedAt: new Date(),
+      });
+
+      res.json({
+        ...updatedSubscription,
+        message: 'Subscription approved successfully',
+      });
+    } catch (error) {
+      console.error("Error approving subscription:", error);
+      res.status(500).json({ message: "Failed to approve subscription" });
+    }
+  });
+
+  // Reject subscription request
+  app.post('/api/admin/subscription-requests/:id/reject', authenticateUser, isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+      const adminEmail = req.user.email || req.user.username || 'Platform Admin';
+
+      const [subscription] = await db
+        .select()
+        .from(subscriptions)
+        .where(eq(subscriptions.id, id))
+        .limit(1);
+
+      if (!subscription) {
+        return res.status(404).json({ message: "Subscription request not found" });
+      }
+
+      if (subscription.status !== 'pending_approval') {
+        return res.status(400).json({ message: "Subscription is not pending approval" });
+      }
+
+      const updatedSubscription = await storage.updateSubscription(id, {
+        status: 'rejected',
+        approvedBy: adminEmail,
+        approvedAt: new Date(),
+        rejectionReason: reason || 'No reason provided',
+        updatedAt: new Date(),
+      });
+
+      res.json({
+        ...updatedSubscription,
+        message: 'Subscription request rejected',
+      });
+    } catch (error) {
+      console.error("Error rejecting subscription:", error);
+      res.status(500).json({ message: "Failed to reject subscription" });
     }
   });
 

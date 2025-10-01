@@ -75,7 +75,10 @@ export default function Billing() {
       case "paid":
         return "border border-emerald-400/40 bg-emerald-500/20 text-emerald-100";
       case "pending":
+      case "pending_approval":
         return "border border-amber-400/40 bg-amber-500/20 text-amber-100";
+      case "rejected":
+        return "border border-rose-400/40 bg-rose-500/20 text-rose-100";
       case "overdue":
         return "border border-rose-400/40 bg-rose-500/20 text-rose-100";
       case "cancelled":
@@ -209,16 +212,18 @@ export default function Billing() {
         throw new Error(errorData?.message || "Unable to update plan");
       }
 
+      const result = await response.json();
+
       await queryClient.invalidateQueries({ queryKey: ["/api/billing/subscription"] });
       await queryClient.invalidateQueries({ queryKey: ["/api/billing/stats"] });
 
       toast({
-        title: "Plan updated",
-        description: `Your account is now on the ${planName} plan.`,
+        title: "Plan request submitted",
+        description: result.message || `Your request for the ${planName} plan is pending admin approval.`,
       });
     } catch (error: any) {
       toast({
-        title: "Unable to update plan",
+        title: "Unable to request plan",
         description: error?.message || "Please try again in a few moments.",
         variant: "destructive",
       });
@@ -625,11 +630,13 @@ export default function Billing() {
                           <Button
                             className="w-full rounded-xl border border-white/20 bg-white/10 py-2 text-sm font-semibold text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-70"
                             onClick={() => handleSelectPlan(plan.id, plan.name)}
-                            disabled={isCurrentPlan || isUpdating}
+                            disabled={isCurrentPlan || isUpdating || (subscription as any)?.status === 'pending_approval'}
                             data-testid={`button-select-plan-${plan.id}`}
                           >
                             {isUpdating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            {isCurrentPlan ? "Current plan" : isUpdating ? "Updating..." : "Choose plan"}
+                            {isCurrentPlan && (subscription as any)?.status === 'active' ? "Current plan" : 
+                             isCurrentPlan && (subscription as any)?.status === 'pending_approval' ? "Pending approval" :
+                             isUpdating ? "Requesting..." : "Request plan"}
                           </Button>
                         </div>
                       );
