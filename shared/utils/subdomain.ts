@@ -57,9 +57,15 @@ export function getAgencySlugFromRequest(
     return subdomain;
   }
 
+  // Allow path-based routing for development environments (localhost and Replit)
   // For production without subdomain, don't try path-based detection
-  // This prevents the root domain from being treated as an agency
-  if (!hostname.includes('localhost') && !hostname.includes('127.0.0.1')) {
+  const isDevEnvironment = hostname.includes('localhost') || 
+                          hostname.includes('127.0.0.1') ||
+                          hostname.includes('.repl.co') || 
+                          hostname.includes('.replit.dev') || 
+                          hostname.includes('.worf.replit.dev');
+  
+  if (!isDevEnvironment) {
     return null;
   }
 

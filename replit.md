@@ -5,6 +5,12 @@ Chain is a multi-tenant platform designed for agencies to manage consumer accoun
 # Recent Changes
 
 ## October 2025
+- **Agency Path-Based Routing Fix**: Fixed critical bug preventing JWT-authenticated agency users from accessing dashboard pages
+  - **ROOT CAUSE**: Path-based routing (e.g., `/waypoint-solutions/dashboard`) was blocked on Replit - only allowed on localhost
+  - **SOLUTION**: Extended path-based routing support to include all Replit development domains
+  - Now properly extracts agency slug from URLs like `/agency-slug/dashboard` on Replit
+  - Fixed blank page issue for all authenticated pages (communications, accounts, payments, settings, etc.)
+
 - **Subscription Billing System**: Implemented comprehensive subscription plan management
   - Created 4 subscription tiers: Launch ($325/mo), Growth ($525/mo), Pro ($1000/mo), Enterprise ($2000/mo)
   - Each plan includes specific email and SMS limits with overage pricing
