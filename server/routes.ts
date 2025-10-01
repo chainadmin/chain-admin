@@ -2438,6 +2438,193 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Mobile authentication endpoints
+  // Step 1: Verify email + DOB and return matching agencies
+  app.post('/api/mobile/auth/verify', async (req, res) => {
+    try {
+      const { email, dateOfBirth } = req.body;
+
+      if (!email || !dateOfBirth) {
+        return res.status(400).json({ message: "Email and date of birth are required" });
+      }
+
+      const normalizedEmail = String(email).trim().toLowerCase();
+      if (!normalizedEmail) {
+        return res.status(400).json({ message: "A valid email address is required" });
+      }
+
+      // Find all consumers matching email across all agencies
+      const allConsumers = await storage.findConsumersByEmailAndDob(normalizedEmail, dateOfBirth);
+
+      // Filter by DOB using datesMatch for flexible date format support
+      const matches = allConsumers.filter(consumer => datesMatch(dateOfBirth, consumer.dateOfBirth));
+
+      if (matches.length === 0) {
+        return res.status(404).json({
+          message: "No account found with this email and date of birth. Please contact your agency.",
+        });
+      }
+
+      // Filter to only registered consumers
+      const registeredMatches = matches.filter(m => m.isRegistered);
+      
+      if (registeredMatches.length === 0) {
+        return res.status(409).json({
+          message: "Your account is not yet activated. Please complete registration.",
+          needsRegistration: true,
+          agencies: matches.map(m => ({
+            id: m.tenant.id,
+            name: m.tenant.name,
+            slug: m.tenant.slug,
+          }))
+        });
+      }
+
+      // Return list of registered agencies only
+      const agencies = registeredMatches.map(m => ({
+        consumerId: m.id,
+        tenantId: m.tenant.id,
+        tenantName: m.tenant.name,
+        tenantSlug: m.tenant.slug,
+      }));
+
+      // If only one agency, auto-select it and return token
+      if (agencies.length === 1) {
+        const match = registeredMatches[0];
+        
+        if (!process.env.JWT_SECRET) {
+          console.error('JWT_SECRET is not set - cannot generate authentication token');
+          return res.status(500).json({ message: "Authentication service not configured" });
+        }
+        
+        const token = jwt.sign(
+          {
+            consumerId: match.id,
+            email: match.email,
+            tenantId: match.tenant.id,
+            tenantSlug: match.tenant.slug,
+            type: "consumer",
+          },
+          process.env.JWT_SECRET,
+          { expiresIn: "7d" }
+        );
+
+        return res.status(200).json({
+          autoSelected: true,
+          token,
+          consumer: {
+            id: match.id,
+            firstName: match.firstName,
+            lastName: match.lastName,
+            email: match.email,
+            phone: match.phone,
+            tenantId: match.tenant.id,
+          },
+          tenant: {
+            id: match.tenant.id,
+            name: match.tenant.name,
+            slug: match.tenant.slug,
+          },
+        });
+      }
+
+      // Multiple agencies found - return list for user to select
+      res.status(200).json({
+        multipleAgencies: true,
+        agencies,
+        message: "Your account is registered with multiple agencies. Please select one.",
+      });
+
+    } catch (error) {
+      console.error("Error during mobile auth verification:", error);
+      res.status(500).json({ message: "Verification failed" });
+    }
+  });
+
+  // Step 2: Select agency and get JWT token
+  app.post('/api/mobile/auth/select-agency', async (req, res) => {
+    try {
+      const { email, dateOfBirth, tenantId } = req.body;
+
+      if (!email || !dateOfBirth || !tenantId) {
+        return res.status(400).json({ message: "Email, date of birth, and agency selection are required" });
+      }
+
+      const normalizedEmail = String(email).trim().toLowerCase();
+      if (!normalizedEmail) {
+        return res.status(400).json({ message: "A valid email address is required" });
+      }
+
+      // Find all consumers matching email across all agencies
+      const allConsumers = await storage.findConsumersByEmailAndDob(normalizedEmail, dateOfBirth);
+      
+      // Filter by DOB using datesMatch for flexible date format support
+      const matches = allConsumers.filter(consumer => datesMatch(dateOfBirth, consumer.dateOfBirth));
+
+      // Find the specific match for the selected tenant
+      const selectedMatch = matches.find(m => m.tenant.id === tenantId);
+
+      if (!selectedMatch) {
+        return res.status(404).json({
+          message: "No account found for the selected agency with this email and date of birth.",
+        });
+      }
+
+      // Verify consumer is registered before issuing token
+      if (!selectedMatch.isRegistered) {
+        return res.status(409).json({
+          message: "Your account is not yet activated. Please complete registration.",
+          needsRegistration: true,
+          tenant: {
+            id: selectedMatch.tenant.id,
+            name: selectedMatch.tenant.name,
+            slug: selectedMatch.tenant.slug,
+          }
+        });
+      }
+
+      // Require JWT_SECRET to be set
+      if (!process.env.JWT_SECRET) {
+        console.error('JWT_SECRET is not set - cannot generate authentication token');
+        return res.status(500).json({ message: "Authentication service not configured" });
+      }
+
+      // Generate JWT token
+      const token = jwt.sign(
+        {
+          consumerId: selectedMatch.id,
+          email: selectedMatch.email,
+          tenantId: selectedMatch.tenant.id,
+          tenantSlug: selectedMatch.tenant.slug,
+          type: "consumer",
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: "7d" }
+      );
+
+      res.status(200).json({
+        token,
+        consumer: {
+          id: selectedMatch.id,
+          firstName: selectedMatch.firstName,
+          lastName: selectedMatch.lastName,
+          email: selectedMatch.email,
+          phone: selectedMatch.phone,
+          tenantId: selectedMatch.tenant.id,
+        },
+        tenant: {
+          id: selectedMatch.tenant.id,
+          name: selectedMatch.tenant.name,
+          slug: selectedMatch.tenant.slug,
+        },
+      });
+
+    } catch (error) {
+      console.error("Error during mobile agency selection:", error);
+      res.status(500).json({ message: "Agency selection failed" });
+    }
+  });
+
   // Consumer notifications route
   app.get('/api/consumer-notifications/:email/:tenantSlug', authenticateConsumer, async (req: any, res) => {
     try {

@@ -179,6 +179,7 @@ export interface IStorage {
   getConsumerByEmail(email: string): Promise<Consumer | undefined>;
   getConsumersByEmail(email: string): Promise<Consumer[]>;
   getConsumerByEmailAndTenant(email: string, tenantIdentifier: string): Promise<Consumer | undefined>;
+  findConsumersByEmailAndDob(email: string, dateOfBirth: string): Promise<(Consumer & { tenant: Tenant })[]>;
   createConsumer(consumer: InsertConsumer): Promise<Consumer>;
   updateConsumer(id: string, updates: Partial<Consumer>): Promise<Consumer>;
   findOrCreateConsumer(consumerData: InsertConsumer): Promise<Consumer>;
@@ -566,6 +567,28 @@ export class DatabaseStorage implements IStorage {
     return await db.select()
       .from(consumers)
       .where(sql`LOWER(TRIM(${consumers.email})) = LOWER(${normalizedEmail})`);
+  }
+
+  async findConsumersByEmailAndDob(email: string, dateOfBirth: string): Promise<(Consumer & { tenant: Tenant })[]> {
+    const normalizedEmail = normalizeEmailValue(email);
+    if (!normalizedEmail || !dateOfBirth) {
+      return [];
+    }
+
+    // Find all consumers with matching email across all tenants
+    // DOB comparison will be done in the route using datesMatch for flexibility
+    const results = await db.select({
+      consumer: consumers,
+      tenant: tenants
+    })
+      .from(consumers)
+      .innerJoin(tenants, eq(consumers.tenantId, tenants.id))
+      .where(sql`LOWER(TRIM(${consumers.email})) = LOWER(${normalizedEmail})`);
+
+    return results.map(row => ({
+      ...row.consumer,
+      tenant: row.tenant
+    }));
   }
 
   async createConsumer(consumer: InsertConsumer): Promise<Consumer> {
