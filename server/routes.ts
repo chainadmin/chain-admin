@@ -417,7 +417,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           firstName: consumer.firstName,
           lastName: consumer.lastName,
           email: consumer.email,
-          phone: consumer.phone
+          phone: consumer.phone,
+          address: consumer.address,
+          city: consumer.city,
+          state: consumer.state,
+          zipCode: consumer.zipCode
         },
         accounts: accountsList,
         tenant: {
@@ -430,6 +434,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching consumer accounts:", error);
       res.status(500).json({ message: "Failed to fetch accounts" });
+    }
+  });
+
+  // Consumer profile update endpoint
+  app.patch('/api/consumer/profile', authenticateConsumer, async (req: any, res) => {
+    try {
+      const { email: tokenEmail, tenantId, tenantSlug } = req.consumer;
+      const { firstName, lastName, phone, address, city, state, zipCode } = req.body;
+
+      // Get tenant identifier
+      const tenantIdentifier = tenantId ?? tenantSlug;
+      if (!tenantIdentifier) {
+        return res.status(400).json({ message: "Tenant information is missing" });
+      }
+
+      // Get consumer record
+      const consumer = await storage.getConsumerByEmailAndTenant(tokenEmail, tenantIdentifier);
+      if (!consumer) {
+        return res.status(404).json({ message: "Consumer not found" });
+      }
+
+      // Update consumer profile
+      const updatedConsumer = await storage.updateConsumer(consumer.id, {
+        firstName: firstName || consumer.firstName,
+        lastName: lastName || consumer.lastName,
+        phone: phone || consumer.phone,
+        address: address || consumer.address,
+        city: city || consumer.city,
+        state: state || consumer.state,
+        zipCode: zipCode || consumer.zipCode,
+      });
+
+      res.json({
+        message: "Profile updated successfully",
+        consumer: {
+          id: updatedConsumer.id,
+          firstName: updatedConsumer.firstName,
+          lastName: updatedConsumer.lastName,
+          email: updatedConsumer.email,
+          phone: updatedConsumer.phone,
+          address: updatedConsumer.address,
+          city: updatedConsumer.city,
+          state: updatedConsumer.state,
+          zipCode: updatedConsumer.zipCode,
+        }
+      });
+    } catch (error) {
+      console.error("Error updating consumer profile:", error);
+      res.status(500).json({ message: "Failed to update profile" });
     }
   });
 
