@@ -4,6 +4,20 @@ Chain is a multi-tenant platform designed for agencies to manage consumer accoun
 
 # Recent Changes
 
+## October 2025
+- **Path-Based Agency Routing Fix**: Fixed blank page issue for JWT-authenticated agency users
+  - **ROOT CAUSE**: After JWT login, users were redirected to `/waypoint-solutions/dashboard` (path-based route), but app only had routing for `/agency/...` paths and root paths
+  - **SOLUTION**: Added path-based agency route detection in App.tsx
+    - Detects when URL starts with `/{agencySlug}/` (e.g., `/waypoint-solutions/dashboard`)
+    - Creates dynamic routes for dashboard, accounts, communications, etc. under agency slug prefix
+    - Properly handles both `/agency/:agencySlug` and `/{agencySlug}` patterns
+  - React was attempting to render but no routes matched, causing blank page with empty DOM
+  - API calls were working correctly but pages couldn't render due to routing mismatch
+
+- **UI Consistency Fixes**: Standardized button styling across communications page
+  - Updated "Create Automation" button to match "Create Template" button visual design
+  - Both buttons now use consistent rounded-xl styling with slate-900 background and shadow effects
+
 ## September 2025
 - **Replit Deployment Configuration**: Successfully configured app for Replit-only deployment
   - Fixed critical API routing bug where hardcoded VITE_API_URL in .env files forced localhost:5000 even in Replit webview

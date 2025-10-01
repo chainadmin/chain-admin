@@ -1711,8 +1711,11 @@ export default function Communications() {
               <h2 className="text-xl font-semibold">Communication Automation</h2>
               <Dialog open={showAutomationModal} onOpenChange={setShowAutomationModal}>
                 <DialogTrigger asChild>
-                  <Button data-testid="button-create-automation">
-                    <Plus className="h-4 w-4 mr-2" />
+                  <Button 
+                    data-testid="button-create-automation"
+                    className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-md shadow-slate-400/40 transition hover:bg-slate-800"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
                     Create Automation
                   </Button>
                 </DialogTrigger>
