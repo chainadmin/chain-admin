@@ -132,7 +132,15 @@ export default function AgencyLanding() {
   }, [hasTermsContent, hasPrivacyContent, showTermsDialog, showPrivacyDialog]);
 
   const handleFindBalance = () => {
-    setLocation("/consumer-login");
+    // Check if we're on a path-based agency route (e.g., /waypoint-solutions/)
+    const currentPath = window.location.pathname;
+    if (agencySlug && currentPath.startsWith(`/${agencySlug}/`)) {
+      // We're on a path-based agency route, navigate within that context
+      setLocation(`/${agencySlug}/consumer-login`);
+    } else {
+      // Standard navigation
+      setLocation("/consumer-login");
+    }
   };
 
   if (agencyLoading) {

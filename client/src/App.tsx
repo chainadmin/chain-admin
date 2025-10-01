@@ -284,8 +284,10 @@ function Router() {
     }
     
     agencyPathRoutes.push(
-      <Route key="path-consumer-login" path="/consumer-login" component={ConsumerLogin} />,
-      <Route key="path-consumer-register" path="/consumer-register/:tenantSlug?" component={ConsumerRegistration} />,
+      <Route key="path-consumer-login" path={`${pathPrefix}/consumer-login`} component={ConsumerLogin} />,
+      <Route key="path-consumer-login-root" path="/consumer-login" component={ConsumerLogin} />,
+      <Route key="path-consumer-register" path={`${pathPrefix}/consumer-register`} component={ConsumerRegistration} />,
+      <Route key="path-consumer-register-root" path="/consumer-register/:tenantSlug?" component={ConsumerRegistration} />,
       <Route key="path-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
       <Route key="path-terms" path="/terms-of-service" component={TermsOfService} />,
       ...getSmsOptInRoutes("path-sms"),
