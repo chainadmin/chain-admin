@@ -141,6 +141,41 @@ class PostmarkServerService {
       };
     }
   }
+
+  async testConnection(): Promise<{ success: boolean; serverCount?: number; error?: string }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/servers`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'X-Postmark-Account-Token': this.accountToken,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error('Postmark connection test failed:', response.status, errorData);
+        return {
+          success: false,
+          error: `Connection failed: ${response.status} - ${errorData}`
+        };
+      }
+
+      const data = await response.json();
+      const servers = Array.isArray(data.Servers) ? data.Servers : [];
+      
+      return {
+        success: true,
+        serverCount: servers.length
+      };
+    } catch (error) {
+      console.error('Error testing Postmark connection:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred'
+      };
+    }
+  }
 }
 
 export const postmarkServerService = new PostmarkServerService();

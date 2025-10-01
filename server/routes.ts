@@ -1129,9 +1129,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const processedSubject = replaceTemplateVariables(template.subject || '', consumer, consumerAccount, tenant);
         const processedHtml = replaceTemplateVariables(template.html || '', consumer, consumerAccount, tenant);
         
+        // Create branded sender email: "Agency Name <slug@chainsoftwaregroup.com>"
+        const fromEmail = `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>`;
+        
         return {
           to: consumer.email!,
-          from: tenant.email || 'noreply@chainplatform.com', // Use tenant email or default
+          from: fromEmail,
           subject: processedSubject,
           html: processedHtml,
           tag: `campaign-${campaign.id}`,
@@ -1140,6 +1143,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             tenantId: tenantId || '',
             consumerId: consumer.id,
             templateId: templateId,
+            accountNumber: consumerAccount?.accountNumber || '',
+            filenumber: consumerAccount?.accountNumber || '',
           }
         };
       });
@@ -1215,7 +1220,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const tenant = await storage.getTenant(tenantId);
-      const fromEmail = 'support@chainsoftwaregroup.com'; // Use our configured Postmark sender
+      
+      // Create branded sender email: "Agency Name <slug@chainsoftwaregroup.com>"
+      const fromEmail = tenant ? `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>` : 'support@chainsoftwaregroup.com';
 
       const result = await emailService.sendEmail({
         to,
@@ -4291,6 +4298,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error rejecting subscription:", error);
       res.status(500).json({ message: "Failed to reject subscription" });
+    }
+  });
+
+  // Test Postmark connection
+  app.get('/api/admin/test-postmark', authenticateUser, isPlatformAdmin, async (req: any, res) => {
+    try {
+      // Test by fetching servers list
+      const result = await postmarkServerService.testConnection();
+      
+      if (result.success) {
+        res.json({
+          success: true,
+          message: 'Postmark connection successful',
+          serverCount: result.serverCount,
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          message: 'Postmark connection failed',
+          error: result.error,
+        });
+      }
+    } catch (error) {
+      console.error("Error testing Postmark connection:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to test Postmark connection",
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   });
 

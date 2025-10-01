@@ -1,136 +1,6 @@
 # Overview
 
-Chain is a multi-tenant platform designed for agencies to manage consumer accounts, streamline collections, and facilitate consumer engagement. The system provides administrative dashboards for agencies to import and manage account data, while offering consumer portals for account access. Built as a full-stack web application with real-time data management capabilities, it serves as a comprehensive solution for debt collection agencies to organize their operations and improve consumer interactions.
-
-# Recent Changes
-
-## October 2025
-- **SMAX Integration Implementation** (In Progress): Adding SMAX collection software API integration
-  - Added SMAX configuration fields to tenant settings (smaxEnabled, smaxApiKey, smaxPin, smaxBaseUrl)
-  - Created SMAX service module with JWT authentication and auto-token refresh
-  - Implemented API methods: insertPayment, insertAttempt, insertNote, getAccount, testConnection
-  - Added SMAX Integration tab in Settings page with test connection functionality
-  - Integration syncs payments, email opens, and collection attempts to SMAX in real-time
-  - Optional per-tenant feature - agencies without SMAX continue working normally
-
-- **Consumer Logout Redirect Fix**: Updated consumer portal logout to redirect to agency landing page
-  - Changed logout destination from generic `/consumer-login` to agency-branded landing page
-  - Uses stored tenantSlug to redirect to `/{agencySlug}` after logout
-  - Provides better branding continuity and user experience for consumers
-
-- **Agency Path-Based Routing Fix**: Fixed critical bug preventing JWT-authenticated agency users from accessing dashboard pages
-  - **ROOT CAUSE**: Path-based routing (e.g., `/waypoint-solutions/dashboard`) was blocked on Replit - only allowed on localhost
-  - **SOLUTION**: Extended path-based routing support to include all Replit development domains
-  - Now properly extracts agency slug from URLs like `/agency-slug/dashboard` on Replit
-  - Fixed blank page issue for all authenticated pages (communications, accounts, payments, settings, etc.)
-
-- **Subscription Billing System**: Implemented comprehensive subscription plan management
-  - Created 4 subscription tiers: Launch ($325/mo), Growth ($525/mo), Pro ($1000/mo), Enterprise ($2000/mo)
-  - Each plan includes specific email and SMS limits with overage pricing
-  - Setup fee: $100 (one-time, can be waived)
-  - Overage rates: $2.50 per 1000 emails, $0.03 per SMS segment
-  - Database schema: `subscription_plans` table for plan definitions, updated `subscriptions` table with usage tracking
-  - API endpoints: `/api/billing/plans` (get plans), `/api/billing/subscription` (get current), `/api/billing/select-plan` (choose plan)
-  - Plans stored in database for easy updates without code changes
-
-- **Path-Based Agency Routing Fix**: Fixed blank page issue for JWT-authenticated agency users
-  - **ROOT CAUSE**: After JWT login, users were redirected to `/waypoint-solutions/dashboard` (path-based route), but app only had routing for `/agency/...` paths and root paths
-  - **SOLUTION**: Added path-based agency route detection in App.tsx
-    - Detects when URL starts with `/{agencySlug}/` (e.g., `/waypoint-solutions/dashboard`)
-    - Creates dynamic routes for dashboard, accounts, communications, etc. under agency slug prefix
-    - Properly handles both `/agency/:agencySlug` and `/{agencySlug}` patterns
-  - React was attempting to render but no routes matched, causing blank page with empty DOM
-  - API calls were working correctly but pages couldn't render due to routing mismatch
-
-- **UI Consistency Fixes**: Standardized button styling across communications page
-  - Updated "Create Automation" button to match "Create Template" button visual design
-  - Both buttons now use consistent rounded-xl styling with slate-900 background and shadow effects
-
-## September 2025
-- **Replit Deployment Configuration**: Successfully configured app for Replit-only deployment
-  - Fixed critical API routing bug where hardcoded VITE_API_URL in .env files forced localhost:5000 even in Replit webview
-  - Implemented dynamic URL detection: uses relative URLs in Replit webview, localhost:5000 only when actually on localhost
-  - Removed VITE_API_URL from client/.env.development and .env.local to enable automatic API base detection
-  - Updated queryClient.ts with automatic environment detection (Replit webview vs localhost)
-  - Verified database schema: all 29 tables present and ready in Supabase PostgreSQL
-  - Cleaned up debug logging for production readiness
-  - Changed deployment strategy from dual Replit/Vercel to Replit-only with custom domain support
-
-- **Agency Login Routing Fix**: Fixed critical routing bugs affecting agency user access
-  - Fixed landing page "Agency Login" button routing to /agency-login instead of /admin
-  - **CRITICAL FIX**: Removed `isJwtAuth && isMainDomain` routing block that caused blank pages
-    - This block was incorrectly catching JWT-authenticated agency users and showing wrong routes
-    - Agency users now correctly flow to authenticated routes with full dashboard access
-  - Added missing `/dashboard` route to authenticated routes block
-  - JWT-authenticated users (agency login) and Replit-authenticated users (platform admin) now use same authenticated routes
-  - Important routing distinctions:
-    - `/agency-login` → Agency login page (for agency staff to access their dashboard)
-    - `/dashboard` or `/admin-dashboard` → Agency dashboard (AdminDashboard component - for managing accounts, consumers, communications)
-    - `/admin` → Global admin page (GlobalAdmin component - platform-level admin only, requires platform_admin role)
-
-## January 2025
-- **Account Management Improvements**: Fixed critical account and consumer management issues
-  - Fixed bulk delete functionality for accounts with correct API endpoint routing
-  - Created individual account deletion endpoint with proper authorization
-  - Unified consumers and accounts into single page without tabs - true conceptual unification
-  - Implemented cascade delete for consumer-account relationships
-  - Individual account creation form available without CSV import
-  - Fixed database schema mismatches (ssn → ssnLast4, removed updated_at from consumers)
-
-- **Unified Communications System**: Combined email and SMS functionality into a single "Communications" page
-  - Merged email templates, SMS templates, and callback requests into one interface
-  - Added toggle between email and SMS modes for templates and campaigns
-  - Integrated callback request management within communications workflow
-  - Designed for both web dashboard and mobile app accessibility
-  - Ready for external SMS service integration (Twilio, etc.)
-
-- **Phase 3 Communications Implementation**: Created campaign and automation endpoints
-  - Implemented email campaign API endpoints with target group selection (all, with-balance, overdue)
-  - Created SMS campaign API endpoints with throttle rate control
-  - Built automation system for scheduled and event-triggered communications
-  - Added proper error handling to prevent 500 errors
-  - Support for both one-time and recurring schedules
-  - Automatic removal on payment can be triggered through event-based automations
-
-- **Enhanced Folder Organization**: Implemented comprehensive folder system for account management
-  - 5 default folders: All Accounts, New, Decline, First Attempt, Second Attempt
-  - CSV import with folder selection for organizing uploaded accounts
-  - Tabbed interface with color-coded folder display
-  - Improved account organization and workflow management
-- **Consumer Registration Flow**: Registration now routes back to the consumer login page so the dashboard always loads with a fresh authentication token.
-
-# Known Issues To Address
-
-## Consumer Login Issues
-- **Login Success but No Access**: Consumer dashboard API call fails due to URL parameter mismatch (expects query param, gets path param)
-- **Registration Duplicate Error**: Registration API rejects existing unregistered consumers instead of updating them
-
-## Dashboard Issues
-- **View/Contact Not Working**: View and contact buttons on dashboard don't work (work on accounts page)
-- **API Endpoint Mismatch**: Dashboard uses `/api/consumer/accounts/${email}` but API expects query parameters
-
-## Account Management Issues  
-- **Account Deletion 405**: DELETE endpoint exists but getting method not allowed errors
-- **Folder Deletion 405**: DELETE endpoint exists but getting method not allowed errors
-- **Compose Email Integration**: Should open communications system, not basic modal
-- **Deleted Accounts Cleanup**: Deleted accounts should be removed entirely from system
-
-## Communication Issues
-- **Can't Delete Templates**: DELETE endpoints exist but not working
-- **Can't Delete SMS Campaigns**: DELETE endpoints exist but not working
-- **No Campaign Selected Error**: Automation dropdown not populating campaigns
-- **SMS Throttle Not Visible**: Frontend not displaying SMS throttle limit from tenant settings
-
-## Settings/Documents Issues
-- **Document Visibility**: Documents show globally instead of per-account
-- **Can't Delete Documents**: DELETE endpoint incomplete/not working
-- **Payment Arrangement 500**: Field validation errors on creation
-- **Payoff Amount Format**: Needs percentage, currently expects cents
-- **Payoff Terms Format**: Needs date field, currently uses months number
-
-## Payment Processing
-- **USAePay Integration Missing**: Need to integrate USAePay for payment processing
-- **Payment API Response Handling**: Need proper webhook and response handling
+Chain is a multi-tenant platform designed for agencies to manage consumer accounts, streamline collections, and facilitate consumer engagement. It provides administrative dashboards for agencies to import and manage account data, alongside consumer portals for account access. This full-stack web application offers real-time data management, serving as a comprehensive solution for debt collection agencies to organize operations and improve consumer interactions. Key capabilities include subscription plan management, branded email sending, and integration with collection software like SMAX.
 
 # User Preferences
 
@@ -138,78 +8,50 @@ Preferred communication style: Simple, everyday language.
 
 # System Architecture
 
-## Frontend Architecture
-The frontend is built using React with TypeScript in a single-page application (SPA) architecture. It uses Vite as the build tool and development server, providing fast hot module replacement and optimized builds. The UI is constructed with shadcn/ui components built on top of Radix UI primitives, styled with Tailwind CSS for consistent design patterns.
+## UI/UX Decisions
+The frontend uses React with TypeScript, built with shadcn/ui components on Radix UI primitives, and styled with Tailwind CSS for consistent design patterns. It employs a component-based architecture with clear separation between pages, reusable components, and UI primitives.
 
-State management is handled through TanStack Query (React Query) for server state management, eliminating the need for complex client-side state management solutions. The routing is implemented using Wouter, a lightweight routing library that provides declarative routing without the overhead of React Router.
+## Technical Implementations
+- **Frontend**: React, TypeScript, Vite, TanStack Query (server state management), Wouter (routing), custom hooks for authentication and mobile detection.
+- **Backend**: Express.js with TypeScript, RESTful API, layered architecture (Route, Storage, Database), Drizzle ORM for type-safe database interactions, middleware for logging, error handling, and authentication.
+- **Authentication**: Replit's OpenID Connect (OIDC) integration with Passport.js, supporting OIDC flows, session-based state management via PostgreSQL session store, multi-tenant user isolation, and secure HTTP-only cookies.
+- **Multi-Tenant Architecture**: Application-level tenant isolation with slug-based routing, platform users associated with specific tenants, tenant-level filtering on all database queries, and scoped consumer portal access.
+- **Subscription Billing System**: Implemented with defined tiers, email/SMS limits, overage pricing, and database schema for plans and usage tracking.
+- **Email Sending**: Uses agency-branded sender addresses (e.g., "Agency Name <slug@chainsoftwaregroup.com>") for improved deliverability and brand recognition.
+- **SMAX Integration**: Provides API integration for SMAX collection software, including JWT authentication, payment/attempt/note insertion, account retrieval, and test connection functionality.
 
-The application follows a component-based architecture with clear separation between pages, reusable components, and UI primitives. Custom hooks are used for common functionality like authentication and mobile detection.
-
-## Backend Architecture
-The backend is built on Express.js with TypeScript, following a RESTful API design pattern. It uses a layered architecture with clear separation of concerns:
-
-- **Route Layer**: Handles HTTP request/response and input validation
-- **Storage Layer**: Abstracts database operations with a repository pattern
-- **Database Layer**: Uses Drizzle ORM for type-safe database interactions
-
-The server includes middleware for request logging, error handling, and authentication. Static file serving is handled through Vite in development and standard Express static middleware in production.
-
-## Authentication System
-Authentication is implemented using Replit's OpenID Connect (OIDC) integration with Passport.js. The system supports:
-
-- OIDC-based authentication flow
-- Session-based state management using PostgreSQL session store
-- Multi-tenant user isolation through platform user associations
-- Secure session handling with HTTP-only cookies
-
-## Database Design
-The application uses PostgreSQL as the primary database with Drizzle ORM for schema management and queries. The schema follows a multi-tenant architecture:
-
-- **Users**: Core user authentication data
-- **Tenants**: Agency/organization isolation
-- **Platform Users**: Links users to specific tenants with role-based access
-- **Consumers**: End-user debt account holders
-- **Accounts**: Individual debt accounts linked to consumers
-- **Email Templates**: Tenant-specific communication templates
-- **Sessions**: Secure session storage
-
-The database uses UUID primary keys for security and includes proper indexing for performance optimization.
-
-## Multi-Tenant Architecture
-The system implements tenant isolation at the application level:
-
-- Each agency operates as a separate tenant with isolated data
-- Tenant identification through slug-based routing
-- Platform users are associated with specific tenants
-- All database queries include tenant-level filtering
-- Consumer portal access is scoped to specific tenant contexts
+## System Design Choices
+- **Database**: PostgreSQL with Drizzle ORM, multi-tenant schema including `Users`, `Tenants`, `Platform Users`, `Consumers`, `Accounts`, `Email Templates`, and `Sessions`. Uses UUID primary keys and proper indexing.
+- **Unified Communications System**: Merges email and SMS functionalities into a single interface, supporting templates, campaigns, and callback request management. Includes automation for scheduled and event-triggered communications.
+- **Enhanced Folder Organization**: Implemented a folder system for account management with default folders and CSV import integration.
+- **Dynamic Routing**: Supports path-based routing for agency-specific dashboards and pages (e.g., `/agency-slug/dashboard`) to ensure proper access for authenticated agency users across environments.
 
 # External Dependencies
 
 ## Database Services
-- **PostgreSQL**: Primary database for all application data
-- **Neon Database**: Serverless PostgreSQL hosting with connection pooling
-- **Drizzle ORM**: Type-safe database schema and query management
+- **PostgreSQL**
+- **Neon Database**
+- **Drizzle ORM**
 
 ## Authentication Services
-- **Replit Auth**: OpenID Connect identity provider integration
-- **Passport.js**: Authentication middleware and strategy management
+- **Replit Auth** (OpenID Connect identity provider)
+- **Passport.js**
 
 ## UI and Styling
-- **Radix UI**: Headless component primitives for accessibility
-- **shadcn/ui**: Pre-built component library with consistent styling
-- **Tailwind CSS**: Utility-first CSS framework for styling
-- **Lucide React**: Icon library for consistent iconography
+- **Radix UI**
+- **shadcn/ui**
+- **Tailwind CSS**
+- **Lucide React**
 
 ## Development and Build Tools
-- **Vite**: Fast development server and build tool
-- **TypeScript**: Type safety and enhanced developer experience
-- **PostCSS**: CSS processing and optimization
-- **ESBuild**: Fast JavaScript bundler for production builds
+- **Vite**
+- **TypeScript**
+- **PostCSS**
+- **ESBuild**
 
 ## Runtime and Utilities
-- **TanStack Query**: Server state management and caching
-- **React Hook Form**: Form handling and validation
-- **Wouter**: Lightweight client-side routing
-- **date-fns**: Date manipulation and formatting
-- **Zod**: Runtime type validation and schema definition
+- **TanStack Query**
+- **React Hook Form**
+- **Wouter**
+- **date-fns**
+- **Zod**
