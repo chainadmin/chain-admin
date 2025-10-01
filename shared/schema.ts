@@ -378,17 +378,36 @@ export const payments = pgTable("payments", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Subscription plans (platform-level plan definitions)
+export const subscriptionPlans = pgTable("subscription_plans", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(), // "Launch", "Growth", "Pro", "Enterprise"
+  slug: text("slug").notNull().unique(), // "launch", "growth", "pro", "enterprise"
+  monthlyPriceCents: bigint("monthly_price_cents", { mode: "number" }).notNull(),
+  setupFeeCents: bigint("setup_fee_cents", { mode: "number" }).default(10000), // $100 setup fee
+  includedEmails: integer("included_emails").notNull(),
+  includedSms: integer("included_sms").notNull(),
+  emailOverageRatePer1000: integer("email_overage_rate_per_1000").default(250), // $2.50 per 1000 = 250 cents
+  smsOverageRatePerSegment: integer("sms_overage_rate_per_segment").default(3), // $0.03 per segment = 3 cents
+  isActive: boolean("is_active").default(true),
+  displayOrder: integer("display_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Tenant subscriptions (for billing agencies)
 export const subscriptions = pgTable("subscriptions", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull().unique(),
-  plan: text("plan").notNull(), // "starter", "professional", "enterprise"
-  status: text("status").default("active"), // "active", "cancelled", "suspended", "past_due"
-  pricePerConsumerCents: bigint("price_per_consumer_cents", { mode: "number" }).notNull(),
-  monthlyBaseCents: bigint("monthly_base_cents", { mode: "number" }).notNull(),
+  planId: uuid("plan_id").references(() => subscriptionPlans.id).notNull(),
+  status: text("status").default("active"), // "active", "cancelled", "suspended", "past_due", "trial"
   billingEmail: text("billing_email"),
   currentPeriodStart: timestamp("current_period_start").notNull(),
   currentPeriodEnd: timestamp("current_period_end").notNull(),
+  emailsUsedThisPeriod: integer("emails_used_this_period").default(0),
+  smsUsedThisPeriod: integer("sms_used_this_period").default(0),
+  setupFeeWaived: boolean("setup_fee_waived").default(false),
+  setupFeePaidAt: timestamp("setup_fee_paid_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -594,10 +613,18 @@ export const paymentsRelations = relations(payments, ({ one }) => ({
   }),
 }));
 
+export const subscriptionPlansRelations = relations(subscriptionPlans, ({ many }) => ({
+  subscriptions: many(subscriptions),
+}));
+
 export const subscriptionsRelations = relations(subscriptions, ({ one, many }) => ({
   tenant: one(tenants, {
     fields: [subscriptions.tenantId],
     references: [tenants.id],
+  }),
+  plan: one(subscriptionPlans, {
+    fields: [subscriptions.planId],
+    references: [subscriptionPlans.id],
   }),
   invoices: many(invoices),
 }));
@@ -974,6 +1001,7 @@ export const insertEmailTrackingSchema = createInsertSchema(emailTracking).omit(
 export const insertConsumerNotificationSchema = createInsertSchema(consumerNotifications).omit({ id: true, createdAt: true });
 export const insertCallbackRequestSchema = createInsertSchema(callbackRequests).omit({ id: true, createdAt: true });
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true });
+export const insertSubscriptionPlanSchema = createInsertSchema(subscriptionPlans).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true, createdAt: true });
 export const insertMessagingUsageEventSchema = createInsertSchema(messagingUsageEvents).omit({ id: true, createdAt: true });
@@ -1019,6 +1047,8 @@ export type CallbackRequest = typeof callbackRequests.$inferSelect;
 export type InsertCallbackRequest = z.infer<typeof insertCallbackRequestSchema>;
 export type Payment = typeof payments.$inferSelect;
 export type InsertPayment = z.infer<typeof insertPaymentSchema>;
+export type SubscriptionPlan = typeof subscriptionPlans.$inferSelect;
+export type InsertSubscriptionPlan = z.infer<typeof insertSubscriptionPlanSchema>;
 export type Subscription = typeof subscriptions.$inferSelect;
 export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
 export type Invoice = typeof invoices.$inferSelect;

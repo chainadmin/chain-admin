@@ -5,6 +5,15 @@ Chain is a multi-tenant platform designed for agencies to manage consumer accoun
 # Recent Changes
 
 ## October 2025
+- **Subscription Billing System**: Implemented comprehensive subscription plan management
+  - Created 4 subscription tiers: Launch ($325/mo), Growth ($525/mo), Pro ($1000/mo), Enterprise ($2000/mo)
+  - Each plan includes specific email and SMS limits with overage pricing
+  - Setup fee: $100 (one-time, can be waived)
+  - Overage rates: $2.50 per 1000 emails, $0.03 per SMS segment
+  - Database schema: `subscription_plans` table for plan definitions, updated `subscriptions` table with usage tracking
+  - API endpoints: `/api/billing/plans` (get plans), `/api/billing/subscription` (get current), `/api/billing/select-plan` (choose plan)
+  - Plans stored in database for easy updates without code changes
+
 - **Path-Based Agency Routing Fix**: Fixed blank page issue for JWT-authenticated agency users
   - **ROOT CAUSE**: After JWT login, users were redirected to `/waypoint-solutions/dashboard` (path-based route), but app only had routing for `/agency/...` paths and root paths
   - **SOLUTION**: Added path-based agency route detection in App.tsx

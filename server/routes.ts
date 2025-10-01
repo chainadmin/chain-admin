@@ -14,6 +14,7 @@ import {
   consumers,
   agencyCredentials,
   users,
+  subscriptionPlans,
   type Consumer,
   type Tenant,
   type InsertArrangementOption,
@@ -3793,16 +3794,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json(null);
       }
 
-      const planId = subscription.plan as MessagingPlanId;
-      const plan = messagingPlans[planId];
+      // Get the plan details
+      const [plan] = await db
+        .select()
+        .from(subscriptionPlans)
+        .where(eq(subscriptionPlans.id, subscription.planId))
+        .limit(1);
+
+      if (!plan) {
+        return res.status(500).json({ message: "Subscription plan not found" });
+      }
 
       res.json({
         ...subscription,
-        planId: plan?.id ?? subscription.plan,
-        planName: plan?.name ?? subscription.plan,
-        planPrice: plan?.price ?? subscription.monthlyBaseCents / 100,
-        includedEmails: plan?.includedEmails ?? 0,
-        includedSmsSegments: plan?.includedSmsSegments ?? 0,
+        planId: plan.slug,
+        planName: plan.name,
+        planPrice: plan.monthlyPriceCents / 100,
+        setupFee: (plan.setupFeeCents ?? 10000) / 100,
+        includedEmails: plan.includedEmails,
+        includedSmsSegments: plan.includedSms,
+        emailsUsed: subscription.emailsUsedThisPeriod || 0,
+        smsUsed: subscription.smsUsedThisPeriod || 0,
       });
     } catch (error) {
       console.error("Error fetching subscription:", error);
@@ -3811,11 +3823,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get('/api/billing/plans', authenticateUser, async (_req: any, res) => {
-    res.json({
-      plans: messagingPlanList,
-      emailOverageRatePerThousand: EMAIL_OVERAGE_RATE_PER_THOUSAND,
-      smsOverageRatePerSegment: SMS_OVERAGE_RATE_PER_SEGMENT,
-    });
+    try {
+      const plans = await db
+        .select()
+        .from(subscriptionPlans)
+        .where(eq(subscriptionPlans.isActive, true))
+        .orderBy(subscriptionPlans.displayOrder);
+
+      const formattedPlans = plans.map(plan => ({
+        id: plan.slug,
+        name: plan.name,
+        price: plan.monthlyPriceCents / 100,
+        setupFee: (plan.setupFeeCents ?? 10000) / 100,
+        includedEmails: plan.includedEmails,
+        includedSmsSegments: plan.includedSms,
+        emailOverageRatePer1000: (plan.emailOverageRatePer1000 ?? 250) / 100,
+        smsOverageRatePerSegment: (plan.smsOverageRatePerSegment ?? 3) / 100,
+      }));
+
+      res.json({
+        plans: formattedPlans,
+        emailOverageRatePerThousand: 2.50,
+        smsOverageRatePerSegment: 0.03,
+      });
+    } catch (error) {
+      console.error("Error fetching subscription plans:", error);
+      res.status(500).json({ message: "Failed to fetch subscription plans" });
+    }
   });
 
   app.post('/api/billing/select-plan', authenticateUser, async (req: any, res) => {
@@ -3826,7 +3860,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const bodySchema = z.object({
-        planId: z.string(),
+        planId: z.string(), // This is the plan slug
         billingEmail: z.string().email().optional(),
       });
 
@@ -3838,8 +3872,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const { planId, billingEmail } = parseResult.data;
-      const plan = messagingPlans[planId as MessagingPlanId];
+      const { planId: planSlug, billingEmail } = parseResult.data;
+      
+      // Get the plan from database by slug
+      const [plan] = await db
+        .select()
+        .from(subscriptionPlans)
+        .where(eq(subscriptionPlans.slug, planSlug))
+        .limit(1);
 
       if (!plan) {
         return res.status(400).json({ message: "Unknown plan selection" });
@@ -3851,13 +3891,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const existingSubscription = await storage.getSubscriptionByTenant(tenantId);
       const subscriptionPayload = {
-        plan: plan.id,
-        monthlyBaseCents: plan.price * 100,
-        pricePerConsumerCents: 0,
+        planId: plan.id,
         currentPeriodStart: periodStart,
         currentPeriodEnd: periodEnd,
         status: 'active' as const,
         billingEmail: billingEmail ?? existingSubscription?.billingEmail ?? null,
+        emailsUsedThisPeriod: existingSubscription?.emailsUsedThisPeriod ?? 0,
+        smsUsedThisPeriod: existingSubscription?.smsUsedThisPeriod ?? 0,
       };
 
       const updatedSubscription = existingSubscription
@@ -3872,11 +3912,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({
         ...updatedSubscription,
-        planId: plan.id,
+        planId: plan.slug,
         planName: plan.name,
-        planPrice: plan.price,
+        planPrice: plan.monthlyPriceCents / 100,
+        setupFee: (plan.setupFeeCents ?? 10000) / 100,
         includedEmails: plan.includedEmails,
-        includedSmsSegments: plan.includedSmsSegments,
+        includedSmsSegments: plan.includedSms,
       });
     } catch (error) {
       console.error("Error updating billing plan:", error);
