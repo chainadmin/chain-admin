@@ -400,7 +400,7 @@ export const subscriptions = pgTable("subscriptions", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull().unique(),
   planId: uuid("plan_id").references(() => subscriptionPlans.id).notNull(),
-  status: text("status").default("active"), // "active", "cancelled", "suspended", "past_due", "trial"
+  status: text("status").default("pending_approval"), // "pending_approval", "active", "cancelled", "suspended", "past_due", "trial", "rejected"
   billingEmail: text("billing_email"),
   currentPeriodStart: timestamp("current_period_start").notNull(),
   currentPeriodEnd: timestamp("current_period_end").notNull(),
@@ -408,6 +408,11 @@ export const subscriptions = pgTable("subscriptions", {
   smsUsedThisPeriod: integer("sms_used_this_period").default(0),
   setupFeeWaived: boolean("setup_fee_waived").default(false),
   setupFeePaidAt: timestamp("setup_fee_paid_at"),
+  requestedBy: text("requested_by"), // Username/email of person who requested
+  requestedAt: timestamp("requested_at").defaultNow(),
+  approvedBy: text("approved_by"), // Admin who approved/rejected
+  approvedAt: timestamp("approved_at"),
+  rejectionReason: text("rejection_reason"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
