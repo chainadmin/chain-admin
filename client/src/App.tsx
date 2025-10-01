@@ -258,22 +258,41 @@ function Router() {
     return <Switch>{agencySubdomainRoutes}</Switch>;
   }
 
-  if (pathname.startsWith('/agency/')) {
-    const agencyLandingRoutes: JSX.Element[] = [
-      <Route key="landing-agency" path="/agency/:agencySlug" component={AgencyLanding} />,
-      <Route key="landing-consumer-login" path="/consumer-login" component={ConsumerLogin} />,
-      <Route
-        key="landing-consumer-register"
-        path="/consumer-register/:tenantSlug?"
-        component={ConsumerRegistration}
-      />,
-      <Route key="landing-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
-      <Route key="landing-terms" path="/terms-of-service" component={TermsOfService} />,
-      ...getSmsOptInRoutes("landing-sms"),
-      <Route key="landing-fallback" path="/:rest*" component={NotFound} />
+  // Check if we're on a path-based agency route (e.g. /waypoint-solutions/dashboard)
+  if (pathname.startsWith('/agency/') || (agencySlug && pathname.startsWith(`/${agencySlug}/`))) {
+    const pathPrefix = pathname.startsWith('/agency/') ? '/agency/:agencySlug' : `/${agencySlug}`;
+    
+    const agencyPathRoutes: JSX.Element[] = [
+      <Route key="path-agency-home" path={pathPrefix} component={AgencyLanding} />,
+      <Route key="path-agency" path="/agency/:agencySlug" component={AgencyLanding} />,
     ];
+    
+    // If authenticated with JWT, add dashboard routes
+    if (isJwtAuth) {
+      agencyPathRoutes.push(
+        <Route key="path-dashboard" path={`${pathPrefix}/dashboard`} component={AdminDashboard} />,
+        <Route key="path-admin-dashboard" path={`${pathPrefix}/admin-dashboard`} component={AdminDashboard} />,
+        <Route key="path-consumers" path={`${pathPrefix}/consumers`} component={Consumers} />,
+        <Route key="path-accounts" path={`${pathPrefix}/accounts`} component={Accounts} />,
+        <Route key="path-communications" path={`${pathPrefix}/communications`} component={Communications} />,
+        <Route key="path-requests" path={`${pathPrefix}/requests`} component={Requests} />,
+        <Route key="path-payments" path={`${pathPrefix}/payments`} component={Payments} />,
+        <Route key="path-billing" path={`${pathPrefix}/billing`} component={Billing} />,
+        <Route key="path-company" path={`${pathPrefix}/company`} component={CompanyManagement} />,
+        <Route key="path-settings" path={`${pathPrefix}/settings`} component={Settings} />
+      );
+    }
+    
+    agencyPathRoutes.push(
+      <Route key="path-consumer-login" path="/consumer-login" component={ConsumerLogin} />,
+      <Route key="path-consumer-register" path="/consumer-register/:tenantSlug?" component={ConsumerRegistration} />,
+      <Route key="path-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
+      <Route key="path-terms" path="/terms-of-service" component={TermsOfService} />,
+      ...getSmsOptInRoutes("path-sms"),
+      <Route key="path-fallback" path="/:rest*" component={NotFound} />
+    );
 
-    return <Switch>{agencyLandingRoutes}</Switch>;
+    return <Switch>{agencyPathRoutes}</Switch>;
   }
 
   // JWT-authenticated users (agency login) should skip to the regular authenticated routes
