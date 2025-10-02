@@ -31,7 +31,10 @@ export default function ConsumerDashboardSimple() {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<any>(null);
+  const [selectedArrangement, setSelectedArrangement] = useState<any>(null);
   const [paymentProcessing, setPaymentProcessing] = useState(false);
+  const [saveCard, setSaveCard] = useState(false);
+  const [setupRecurring, setSetupRecurring] = useState(false);
   const [editForm, setEditForm] = useState({
     firstName: "",
     lastName: "",
@@ -166,8 +169,19 @@ export default function ConsumerDashboardSimple() {
 
   const handlePayment = (account: any) => {
     setSelectedAccount(account);
+    setSelectedArrangement(null);
+    setSaveCard(false);
+    setSetupRecurring(false);
     setShowPaymentDialog(true);
   };
+
+  // Get arrangements applicable to the selected account
+  const applicableArrangements = selectedAccount && arrangements
+    ? (arrangements as any[]).filter(arr => 
+        selectedAccount.balanceCents >= arr.minBalance && 
+        selectedAccount.balanceCents <= arr.maxBalance
+      )
+    : [];
 
   const handlePaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -780,110 +794,208 @@ export default function ConsumerDashboardSimple() {
 
       {/* Payment Dialog */}
       <Dialog open={showPaymentDialog} onOpenChange={setShowPaymentDialog}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Make a Payment</DialogTitle>
             <DialogDescription>
-              Securely pay your account balance using a credit or debit card
+              {applicableArrangements.length > 0 
+                ? "Choose a payment plan or pay the full balance now"
+                : "Securely pay your account balance using a credit or debit card"}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handlePaymentSubmit}>
             <div className="space-y-4 py-4">
-              <div className="rounded-lg bg-blue-50 p-4 border border-blue-200">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium text-gray-700">Amount to Pay:</span>
-                  <span className="text-2xl font-bold text-blue-600">
-                    {formatCurrency(selectedAccount?.balanceCents || 0)}
-                  </span>
+              {selectedAccount && (
+                <div className="rounded-lg bg-blue-50 p-3 border border-blue-200">
+                  <p className="text-xs text-gray-600">Account: {selectedAccount.creditor}</p>
+                  <div className="flex justify-between items-center mt-1">
+                    <span className="text-sm font-medium text-gray-700">Total Balance:</span>
+                    <span className="text-xl font-bold text-blue-600">
+                      {formatCurrency(selectedAccount.balanceCents || 0)}
+                    </span>
+                  </div>
                 </div>
-                {selectedAccount && (
-                  <p className="text-xs text-gray-600 mt-1">
-                    Account: {selectedAccount.creditor}
-                  </p>
+              )}
+
+              {applicableArrangements.length > 0 && (
+                <div className="space-y-3">
+                  <Label className="text-base font-semibold">Payment Options</Label>
+                  <div className="space-y-2">
+                    {/* Pay in Full Option */}
+                    <div 
+                      onClick={() => setSelectedArrangement(null)}
+                      className={`cursor-pointer rounded-lg border-2 p-4 transition-all ${
+                        !selectedArrangement 
+                          ? 'border-blue-500 bg-blue-50' 
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                      data-testid="option-pay-full"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium">Pay Full Balance</p>
+                          <p className="text-sm text-gray-600">One-time payment</p>
+                        </div>
+                        <span className="text-lg font-bold text-blue-600">
+                          {formatCurrency(selectedAccount?.balanceCents || 0)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Arrangement Options */}
+                    {applicableArrangements.map((arrangement: any) => {
+                      const summary = getArrangementSummary(arrangement);
+                      const isSettlement = arrangement.planType === 'settlement';
+                      const isPayInFull = arrangement.planType === 'pay_in_full';
+                      
+                      return (
+                        <div
+                          key={arrangement.id}
+                          onClick={() => setSelectedArrangement(arrangement)}
+                          className={`cursor-pointer rounded-lg border-2 p-4 transition-all ${
+                            selectedArrangement?.id === arrangement.id
+                              ? 'border-blue-500 bg-blue-50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                          data-testid={`option-arrangement-${arrangement.id}`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium">{summary.headline}</p>
+                                {isSettlement && (
+                                  <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Settlement</Badge>
+                                )}
+                              </div>
+                              {summary.detail && (
+                                <p className="text-sm text-gray-600 mt-1">{summary.detail}</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="border-t pt-4 space-y-4">
+                <Label className="text-base font-semibold">Payment Information</Label>
+
+                <div>
+                  <Label htmlFor="cardName">Cardholder Name</Label>
+                  <Input
+                    id="cardName"
+                    value={paymentForm.cardName}
+                    onChange={(e) => setPaymentForm({ ...paymentForm, cardName: e.target.value })}
+                    required
+                    placeholder="John Doe"
+                    data-testid="input-card-name"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="cardNumber">Card Number</Label>
+                  <Input
+                    id="cardNumber"
+                    value={paymentForm.cardNumber}
+                    onChange={(e) => setPaymentForm({ ...paymentForm, cardNumber: e.target.value.replace(/\D/g, '') })}
+                    required
+                    maxLength={16}
+                    placeholder="1234 5678 9012 3456"
+                    data-testid="input-card-number"
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <Label htmlFor="expiryMonth">Exp Month</Label>
+                    <Input
+                      id="expiryMonth"
+                      value={paymentForm.expiryMonth}
+                      onChange={(e) => setPaymentForm({ ...paymentForm, expiryMonth: e.target.value.replace(/\D/g, '') })}
+                      required
+                      maxLength={2}
+                      placeholder="MM"
+                      data-testid="input-expiry-month"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="expiryYear">Exp Year</Label>
+                    <Input
+                      id="expiryYear"
+                      value={paymentForm.expiryYear}
+                      onChange={(e) => setPaymentForm({ ...paymentForm, expiryYear: e.target.value.replace(/\D/g, '') })}
+                      required
+                      maxLength={4}
+                      placeholder="YYYY"
+                      data-testid="input-expiry-year"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="cvv">CVV</Label>
+                    <Input
+                      id="cvv"
+                      value={paymentForm.cvv}
+                      onChange={(e) => setPaymentForm({ ...paymentForm, cvv: e.target.value.replace(/\D/g, '') })}
+                      required
+                      maxLength={4}
+                      placeholder="123"
+                      data-testid="input-cvv"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="zipCode">Billing ZIP Code</Label>
+                  <Input
+                    id="zipCode"
+                    value={paymentForm.zipCode}
+                    onChange={(e) => setPaymentForm({ ...paymentForm, zipCode: e.target.value })}
+                    placeholder="12345"
+                    data-testid="input-payment-zip"
+                  />
+                </div>
+
+                {selectedArrangement && (selectedArrangement.planType === 'fixed_monthly' || selectedArrangement.planType === 'range') && (
+                  <div className="flex items-center space-x-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                    <input
+                      type="checkbox"
+                      id="setupRecurring"
+                      checked={setupRecurring}
+                      onChange={(e) => setSetupRecurring(e.target.checked)}
+                      className="h-4 w-4 text-blue-600 rounded"
+                      data-testid="checkbox-setup-recurring"
+                    />
+                    <label htmlFor="setupRecurring" className="text-sm font-medium text-gray-700 cursor-pointer">
+                      Set up automatic recurring payments with this card
+                    </label>
+                  </div>
                 )}
-              </div>
 
-              <div>
-                <Label htmlFor="cardName">Cardholder Name</Label>
-                <Input
-                  id="cardName"
-                  value={paymentForm.cardName}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, cardName: e.target.value })}
-                  required
-                  placeholder="John Doe"
-                  data-testid="input-card-name"
-                />
-              </div>
+                {!setupRecurring && (
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="saveCard"
+                      checked={saveCard}
+                      onChange={(e) => setSaveCard(e.target.checked)}
+                      className="h-4 w-4 text-blue-600 rounded"
+                      data-testid="checkbox-save-card"
+                    />
+                    <label htmlFor="saveCard" className="text-sm text-gray-700 cursor-pointer">
+                      Save this card for future payments
+                    </label>
+                  </div>
+                )}
 
-              <div>
-                <Label htmlFor="cardNumber">Card Number</Label>
-                <Input
-                  id="cardNumber"
-                  value={paymentForm.cardNumber}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, cardNumber: e.target.value.replace(/\D/g, '') })}
-                  required
-                  maxLength={16}
-                  placeholder="1234 5678 9012 3456"
-                  data-testid="input-card-number"
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <Label htmlFor="expiryMonth">Exp Month</Label>
-                  <Input
-                    id="expiryMonth"
-                    value={paymentForm.expiryMonth}
-                    onChange={(e) => setPaymentForm({ ...paymentForm, expiryMonth: e.target.value.replace(/\D/g, '') })}
-                    required
-                    maxLength={2}
-                    placeholder="MM"
-                    data-testid="input-expiry-month"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="expiryYear">Exp Year</Label>
-                  <Input
-                    id="expiryYear"
-                    value={paymentForm.expiryYear}
-                    onChange={(e) => setPaymentForm({ ...paymentForm, expiryYear: e.target.value.replace(/\D/g, '') })}
-                    required
-                    maxLength={4}
-                    placeholder="YYYY"
-                    data-testid="input-expiry-year"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="cvv">CVV</Label>
-                  <Input
-                    id="cvv"
-                    value={paymentForm.cvv}
-                    onChange={(e) => setPaymentForm({ ...paymentForm, cvv: e.target.value.replace(/\D/g, '') })}
-                    required
-                    maxLength={4}
-                    placeholder="123"
-                    data-testid="input-cvv"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <Label htmlFor="zipCode">Billing ZIP Code</Label>
-                <Input
-                  id="zipCode"
-                  value={paymentForm.zipCode}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, zipCode: e.target.value })}
-                  placeholder="12345"
-                  data-testid="input-payment-zip"
-                />
-              </div>
-
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                <div className="flex items-center gap-2 text-xs text-gray-600">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
-                  <span>Your payment information is securely encrypted</span>
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 text-xs text-gray-600">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                    <span>Your payment information is securely encrypted</span>
+                  </div>
                 </div>
               </div>
             </div>
