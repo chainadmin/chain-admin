@@ -844,7 +844,7 @@ export default function ConsumerDashboardSimple() {
                         {selectedArrangement.planType === 'settlement' && 'Settlement payment - full balance will be cleared'}
                         {selectedArrangement.planType === 'fixed_monthly' && 'First installment payment'}
                         {selectedArrangement.planType === 'range' && 'Minimum monthly payment'}
-                        {selectedArrangement.planType === 'pay_in_full' && 'One-time payment'}
+                        {selectedArrangement.planType === 'pay_in_full' && (selectedArrangement.payoffPercentageBasisPoints ? 'Discounted payoff amount' : 'One-time payment')}
                       </p>
                     )}
                   </div>

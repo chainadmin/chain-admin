@@ -66,6 +66,10 @@ export const calculateArrangementPayment = (
       return arrangement.monthlyPaymentMin || accountBalanceCents;
     
     case 'pay_in_full':
+      // Pay in full can have a percentage discount or a fixed amount
+      if (arrangement.payoffPercentageBasisPoints) {
+        return Math.round(accountBalanceCents * arrangement.payoffPercentageBasisPoints / 10000);
+      }
       return arrangement.payInFullAmount || accountBalanceCents;
     
     case 'custom_terms':

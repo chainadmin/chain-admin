@@ -3801,6 +3801,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } else if (arrangement.planType === 'range' && arrangement.monthlyPaymentMin) {
           // Range: use minimum payment for recurring
           amountCents = arrangement.monthlyPaymentMin;
+        } else if (arrangement.planType === 'pay_in_full') {
+          // Pay in full: can be percentage discount or fixed amount
+          if (arrangement.payoffPercentageBasisPoints) {
+            amountCents = Math.round(amountCents * arrangement.payoffPercentageBasisPoints / 10000);
+          } else if (arrangement.payInFullAmount) {
+            amountCents = arrangement.payInFullAmount;
+          }
         }
       }
       
