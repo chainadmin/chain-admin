@@ -284,6 +284,7 @@ export default function Settings() {
 
   const createArrangementMutation = useMutation({
     mutationFn: async (data: any) => {
+      console.log("Creating arrangement with data:", data);
       await apiRequest("POST", "/api/arrangement-options", data);
     },
     onSuccess: () => {
@@ -295,10 +296,11 @@ export default function Settings() {
       setShowArrangementModal(false);
       setArrangementForm({ ...emptyArrangementForm });
     },
-    onError: (error) => {
+    onError: (error: any) => {
+      console.error("Arrangement creation error:", error);
       toast({
         title: "Creation Failed",
-        description: error.message,
+        description: error?.message || "Unknown error occurred",
         variant: "destructive",
       });
     },
