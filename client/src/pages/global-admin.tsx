@@ -1112,7 +1112,7 @@ export default function GlobalAdmin() {
                       </div>
                       
                       {/* Action Buttons */}
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center flex-wrap gap-2">
                         {tenant.isActive ? (
                           <Button
                             variant="destructive"
