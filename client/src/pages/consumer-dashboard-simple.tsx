@@ -28,6 +28,9 @@ export default function ConsumerDashboardSimple() {
   const [error, setError] = useState<string | null>(null);
   const [showContactDialog, setShowContactDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState<any>(null);
+  const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [editForm, setEditForm] = useState({
     firstName: "",
     lastName: "",
@@ -35,6 +38,14 @@ export default function ConsumerDashboardSimple() {
     address: "",
     city: "",
     state: "",
+    zipCode: "",
+  });
+  const [paymentForm, setPaymentForm] = useState({
+    cardNumber: "",
+    expiryMonth: "",
+    expiryYear: "",
+    cvv: "",
+    cardName: "",
     zipCode: "",
   });
 
@@ -153,10 +164,61 @@ export default function ConsumerDashboardSimple() {
   };
 
   const handlePayment = (account: any) => {
-    toast({
-      title: "Payment Processing",
-      description: "Payment functionality coming soon. Contact your agency for payment options.",
-    });
+    setSelectedAccount(account);
+    setShowPaymentDialog(true);
+  };
+
+  const handlePaymentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!selectedAccount) return;
+
+    setPaymentProcessing(true);
+
+    try {
+      const token = getStoredConsumerToken();
+      const response = await apiCall("POST", `/api/consumer/payments/process`, {
+        accountId: selectedAccount.id,
+        cardNumber: paymentForm.cardNumber,
+        expiryMonth: paymentForm.expiryMonth,
+        expiryYear: paymentForm.expiryYear,
+        cvv: paymentForm.cvv,
+        cardName: paymentForm.cardName,
+        zipCode: paymentForm.zipCode,
+      }, token);
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || "Payment failed");
+      }
+
+      toast({
+        title: "Payment Successful",
+        description: `Your payment of ${formatCurrency(selectedAccount.balanceCents || 0)} has been processed.`,
+      });
+
+      setShowPaymentDialog(false);
+      setPaymentForm({
+        cardNumber: "",
+        expiryMonth: "",
+        expiryYear: "",
+        cvv: "",
+        cardName: "",
+        zipCode: "",
+      });
+
+      // Refresh account data
+      window.location.reload();
+    } catch (err: any) {
+      toast({
+        title: "Payment Failed",
+        description: err.message || "Unable to process payment. Please try again or contact your agency.",
+        variant: "destructive",
+      });
+    } finally {
+      setPaymentProcessing(false);
+    }
   };
 
   const handleEditProfile = async () => {
@@ -707,6 +769,145 @@ export default function ConsumerDashboardSimple() {
               Save Changes
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Payment Dialog */}
+      <Dialog open={showPaymentDialog} onOpenChange={setShowPaymentDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Make a Payment</DialogTitle>
+            <DialogDescription>
+              Securely pay your account balance using a credit or debit card
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handlePaymentSubmit}>
+            <div className="space-y-4 py-4">
+              <div className="rounded-lg bg-blue-50 p-4 border border-blue-200">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium text-gray-700">Amount to Pay:</span>
+                  <span className="text-2xl font-bold text-blue-600">
+                    {formatCurrency(selectedAccount?.balanceCents || 0)}
+                  </span>
+                </div>
+                {selectedAccount && (
+                  <p className="text-xs text-gray-600 mt-1">
+                    Account: {selectedAccount.creditor}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <Label htmlFor="cardName">Cardholder Name</Label>
+                <Input
+                  id="cardName"
+                  value={paymentForm.cardName}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, cardName: e.target.value })}
+                  required
+                  placeholder="John Doe"
+                  data-testid="input-card-name"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="cardNumber">Card Number</Label>
+                <Input
+                  id="cardNumber"
+                  value={paymentForm.cardNumber}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, cardNumber: e.target.value.replace(/\D/g, '') })}
+                  required
+                  maxLength={16}
+                  placeholder="1234 5678 9012 3456"
+                  data-testid="input-card-number"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label htmlFor="expiryMonth">Exp Month</Label>
+                  <Input
+                    id="expiryMonth"
+                    value={paymentForm.expiryMonth}
+                    onChange={(e) => setPaymentForm({ ...paymentForm, expiryMonth: e.target.value.replace(/\D/g, '') })}
+                    required
+                    maxLength={2}
+                    placeholder="MM"
+                    data-testid="input-expiry-month"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="expiryYear">Exp Year</Label>
+                  <Input
+                    id="expiryYear"
+                    value={paymentForm.expiryYear}
+                    onChange={(e) => setPaymentForm({ ...paymentForm, expiryYear: e.target.value.replace(/\D/g, '') })}
+                    required
+                    maxLength={4}
+                    placeholder="YYYY"
+                    data-testid="input-expiry-year"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cvv">CVV</Label>
+                  <Input
+                    id="cvv"
+                    value={paymentForm.cvv}
+                    onChange={(e) => setPaymentForm({ ...paymentForm, cvv: e.target.value.replace(/\D/g, '') })}
+                    required
+                    maxLength={4}
+                    placeholder="123"
+                    data-testid="input-cvv"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="zipCode">Billing ZIP Code</Label>
+                <Input
+                  id="zipCode"
+                  value={paymentForm.zipCode}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, zipCode: e.target.value })}
+                  placeholder="12345"
+                  data-testid="input-payment-zip"
+                />
+              </div>
+
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                <div className="flex items-center gap-2 text-xs text-gray-600">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                  <span>Your payment information is securely encrypted</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowPaymentDialog(false)}
+                disabled={paymentProcessing}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                className="bg-blue-500 hover:bg-blue-400"
+                disabled={paymentProcessing}
+                data-testid="button-submit-payment"
+              >
+                {paymentProcessing ? (
+                  <>
+                    <div className="mr-2 h-4 w-4 animate-spin rounded-full border-b-2 border-white"></div>
+                    Processing...
+                  </>
+                ) : (
+                  `Pay ${formatCurrency(selectedAccount?.balanceCents || 0)}`
+                )}
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

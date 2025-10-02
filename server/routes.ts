@@ -3679,6 +3679,164 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Consumer payment processing endpoint
+  app.post('/api/consumer/payments/process', authenticateConsumer, async (req: any, res) => {
+    try {
+      const { id: consumerId, tenantId } = req.consumer || {};
+
+      if (!consumerId || !tenantId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { 
+        accountId,
+        cardNumber, 
+        expiryMonth,
+        expiryYear,
+        cvv, 
+        cardName, 
+        zipCode 
+      } = req.body;
+
+      if (!accountId || !cardNumber || !expiryMonth || !expiryYear || !cvv || !cardName) {
+        return res.status(400).json({ message: "Missing required payment information" });
+      }
+
+      // Fetch and validate the account belongs to this consumer
+      const account = await storage.getAccount(accountId);
+      if (!account || account.consumerId !== consumerId || account.tenantId !== tenantId) {
+        return res.status(403).json({ message: "Access denied to this account" });
+      }
+
+      // Use the actual balance from the database, not client-provided amount
+      const amountCents = account.balanceCents || 0;
+      
+      if (amountCents <= 0) {
+        return res.status(400).json({ message: "Account has no balance to pay" });
+      }
+
+      // Get tenant settings to check if online payments are enabled
+      const settings = await storage.getTenantSettings(tenantId);
+      if (!settings?.enableOnlinePayments) {
+        return res.status(403).json({ message: "Online payments are not enabled for this agency" });
+      }
+
+      // Get USAePay credentials from environment variables
+      const usaepaySourceKey = process.env.USAEPAY_SOURCE_KEY;
+      const usaepayPin = process.env.USAEPAY_PIN;
+      const usaepayBaseUrl = process.env.USAEPAY_BASE_URL || "https://sandbox.usaepay.com/api/v2";
+
+      if (!usaepaySourceKey || !usaepayPin) {
+        console.error("USAePay credentials not configured");
+        return res.status(500).json({ message: "Payment processing is not configured. Please contact your agency." });
+      }
+
+      // Process payment with USAePay REST API
+      const usaepayPayload = {
+        command: "sale",
+        amount: (amountCents / 100).toFixed(2),
+        creditcard: {
+          number: cardNumber.replace(/\s/g, ''),
+          expiration: `${expiryMonth}${expiryYear.slice(-2)}`,
+          cvv: cvv,
+          cardholder: cardName,
+          avs_street: "",
+          avs_zip: zipCode || ""
+        },
+        invoice: accountId || `consumer_${consumerId}`,
+        description: `Payment for account`
+      };
+
+      const usaepayResponse = await fetch(`${usaepayBaseUrl}/transactions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Basic ${Buffer.from(`${usaepaySourceKey}:${usaepayPin}`).toString('base64')}`
+        },
+        body: JSON.stringify(usaepayPayload)
+      });
+
+      const usaepayResult = await usaepayResponse.json();
+
+      const success = usaepayResult.result === 'Approved' || usaepayResult.status === 'Approved';
+      const transactionId = usaepayResult.refnum || usaepayResult.key || `tx_${Date.now()}`;
+
+      // Create payment record
+      const payment = await storage.createPayment({
+        tenantId: tenantId,
+        consumerId: consumerId,
+        accountId: accountId || null,
+        amountCents,
+        paymentMethod: 'credit_card',
+        status: success ? 'completed' : 'failed',
+        transactionId: transactionId,
+        processorResponse: JSON.stringify(usaepayResult),
+        processedAt: success ? new Date() : null,
+        notes: `Online payment - ${cardName} ending in ${cardNumber.slice(-4)}`,
+      });
+
+      // If account specified, update account balance
+      if (accountId && success) {
+        const account = await storage.getAccount(accountId);
+        if (account) {
+          const newBalance = (account.balanceCents || 0) - amountCents;
+          await storage.updateAccount(accountId, {
+            balanceCents: Math.max(0, newBalance)
+          });
+        }
+      }
+
+      // Notify SMAX if enabled
+      if (success) {
+        try {
+          const { smaxService } = await import('./smaxService');
+          if (accountId) {
+            const account = await storage.getAccount(accountId);
+            if (account) {
+              await smaxService.insertPayment(tenantId, {
+                filenumber: account.accountNumber || account.id,
+                paymentamount: amountCents / 100,
+                paymentdate: new Date().toISOString().split('T')[0],
+                paymentmethod: 'credit_card',
+                transactionid: transactionId,
+                status: 'completed',
+                notes: `Online consumer payment - ${cardName} ending in ${cardNumber.slice(-4)}`,
+              });
+            }
+          }
+        } catch (smaxError) {
+          console.error('SMAX notification failed:', smaxError);
+        }
+      }
+
+      if (!success) {
+        return res.status(400).json({
+          success: false,
+          message: usaepayResult.error || usaepayResult.result_code || "Payment declined. Please check your card details and try again."
+        });
+      }
+
+      res.json({
+        success: true,
+        payment: {
+          id: payment.id,
+          amount: amountCents,
+          status: payment.status,
+          transactionId: payment.transactionId,
+          processedAt: payment.processedAt,
+        },
+        message: "Payment processed successfully"
+      });
+
+    } catch (error) {
+      console.error("Error processing consumer payment:", error);
+      res.status(500).json({ 
+        success: false,
+        message: "Payment processing failed. Please try again or contact your agency." 
+      });
+    }
+  });
+
   // Company management routes
   app.get('/api/company/consumers', authenticateUser, async (req: any, res) => {
     try {
