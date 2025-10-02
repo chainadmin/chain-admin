@@ -1,7 +1,7 @@
 import type { Express, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage, type IStorage } from "./storage";
-import { authenticateUser, authenticateConsumer, getCurrentUser } from "./authMiddleware";
+import { authenticateUser, authenticateConsumer, getCurrentUser, requireEmailService, requireSmsService, requirePortalAccess, requirePaymentProcessing } from "./authMiddleware";
 import { postmarkServerService } from "./postmarkServerService";
 import {
   insertConsumerSchema,
@@ -376,7 +376,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Consumer routes - Protected by consumer JWT authentication
-  app.get('/api/consumer/accounts/:email', authenticateConsumer, async (req: any, res) => {
+  app.get('/api/consumer/accounts/:email', authenticateConsumer, requirePortalAccess, async (req: any, res) => {
     try {
       // Get consumer info from JWT token (already verified by authenticateConsumer)
       const { email: tokenEmail, tenantId, tenantSlug } = req.consumer;
@@ -1056,7 +1056,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/email-campaigns', authenticateUser, async (req: any, res) => {
+  app.post('/api/email-campaigns', authenticateUser, requireEmailService, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
       if (!tenantId) {
@@ -1375,7 +1375,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/sms-campaigns', authenticateUser, async (req: any, res) => {
+  app.post('/api/sms-campaigns', authenticateUser, requireSmsService, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
       if (!tenantId) {
@@ -4534,7 +4534,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Real-time payment processing endpoint
-  app.post('/api/payments/process', authenticateUser, async (req: any, res) => {
+  app.post('/api/payments/process', authenticateUser, requirePaymentProcessing, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
       if (!tenantId) { 

@@ -94,3 +94,131 @@ export const getCurrentUser = async (req: any) => {
     isJwtAuth: true
   };
 };
+
+// Middleware to check if email service is enabled
+export const requireEmailService: RequestHandler = async (req: any, res, next) => {
+  try {
+    const tenantId = req.user?.tenantId || req.consumer?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const tenant = await storage.getTenant(tenantId);
+    if (!tenant) {
+      return res.status(404).json({ message: "Tenant not found" });
+    }
+
+    if (tenant.isTrialAccount) {
+      return res.status(403).json({ 
+        message: "Email service is not available during trial period. Please upgrade to a paid plan to access this feature." 
+      });
+    }
+
+    if (tenant.emailServiceEnabled === false) {
+      return res.status(403).json({ 
+        message: "Email service is disabled for your account. Please contact support." 
+      });
+    }
+
+    next();
+  } catch (error) {
+    console.error("Error checking email service:", error);
+    res.status(500).json({ message: "Error checking service availability" });
+  }
+};
+
+// Middleware to check if SMS service is enabled
+export const requireSmsService: RequestHandler = async (req: any, res, next) => {
+  try {
+    const tenantId = req.user?.tenantId || req.consumer?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const tenant = await storage.getTenant(tenantId);
+    if (!tenant) {
+      return res.status(404).json({ message: "Tenant not found" });
+    }
+
+    if (tenant.isTrialAccount) {
+      return res.status(403).json({ 
+        message: "SMS service is not available during trial period. Please upgrade to a paid plan to access this feature." 
+      });
+    }
+
+    if (tenant.smsServiceEnabled === false) {
+      return res.status(403).json({ 
+        message: "SMS service is disabled for your account. Please contact support." 
+      });
+    }
+
+    next();
+  } catch (error) {
+    console.error("Error checking SMS service:", error);
+    res.status(500).json({ message: "Error checking service availability" });
+  }
+};
+
+// Middleware to check if portal access is enabled
+export const requirePortalAccess: RequestHandler = async (req: any, res, next) => {
+  try {
+    const tenantId = req.user?.tenantId || req.consumer?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const tenant = await storage.getTenant(tenantId);
+    if (!tenant) {
+      return res.status(404).json({ message: "Tenant not found" });
+    }
+
+    if (tenant.isTrialAccount) {
+      return res.status(403).json({ 
+        message: "Consumer portal access is not available during trial period. Please upgrade to a paid plan to access this feature." 
+      });
+    }
+
+    if (tenant.portalAccessEnabled === false) {
+      return res.status(403).json({ 
+        message: "Portal access is disabled for your account. Please contact support." 
+      });
+    }
+
+    next();
+  } catch (error) {
+    console.error("Error checking portal access:", error);
+    res.status(500).json({ message: "Error checking service availability" });
+  }
+};
+
+// Middleware to check if payment processing is enabled
+export const requirePaymentProcessing: RequestHandler = async (req: any, res, next) => {
+  try {
+    const tenantId = req.user?.tenantId || req.consumer?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const tenant = await storage.getTenant(tenantId);
+    if (!tenant) {
+      return res.status(404).json({ message: "Tenant not found" });
+    }
+
+    if (tenant.isTrialAccount) {
+      return res.status(403).json({ 
+        message: "Payment processing is not available during trial period. Please upgrade to a paid plan to access this feature." 
+      });
+    }
+
+    if (tenant.paymentProcessingEnabled === false) {
+      return res.status(403).json({ 
+        message: "Payment processing is disabled for your account. Please contact support." 
+      });
+    }
+
+    next();
+  } catch (error) {
+    console.error("Error checking payment processing:", error);
+    res.status(500).json({ message: "Error checking service availability" });
+  }
+};
