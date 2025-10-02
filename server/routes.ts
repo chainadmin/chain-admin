@@ -3788,15 +3788,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Online payments are not enabled for this agency" });
       }
 
-      // Get USAePay credentials from environment variables
-      const usaepaySourceKey = process.env.USAEPAY_SOURCE_KEY;
-      const usaepayPin = process.env.USAEPAY_PIN;
-      const usaepayBaseUrl = process.env.USAEPAY_BASE_URL || "https://sandbox.usaepay.com/api/v2";
+      // Get USAePay credentials from tenant settings
+      const { merchantApiKey, merchantApiPin, useSandbox } = settings;
 
-      if (!usaepaySourceKey || !usaepayPin) {
-        console.error("USAePay credentials not configured");
+      if (!merchantApiKey || !merchantApiPin) {
+        console.error("USAePay credentials not configured for tenant:", tenantId);
         return res.status(500).json({ message: "Payment processing is not configured. Please contact your agency." });
       }
+
+      // Determine API endpoint based on sandbox mode
+      const usaepayBaseUrl = useSandbox 
+        ? "https://sandbox.usaepay.com/api/v2"
+        : "https://secure.usaepay.com/api/v2";
 
       // Process payment with USAePay REST API
       const usaepayPayload = {
@@ -3818,7 +3821,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Basic ${Buffer.from(`${usaepaySourceKey}:${usaepayPin}`).toString('base64')}`
+          'Authorization': `Basic ${Buffer.from(`${merchantApiKey}:${merchantApiPin}`).toString('base64')}`
         },
         body: JSON.stringify(usaepayPayload)
       });
