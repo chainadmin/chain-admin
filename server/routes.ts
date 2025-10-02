@@ -4641,6 +4641,113 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get all consumers across all agencies (platform admin only)
+  app.get('/api/admin/consumers', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { search, tenantId, limit = 100 } = req.query;
+      
+      let query = db
+        .select({
+          consumer: consumers,
+          tenant: {
+            id: tenants.id,
+            name: tenants.name,
+            slug: tenants.slug,
+          }
+        })
+        .from(consumers)
+        .leftJoin(tenants, eq(consumers.tenantId, tenants.id));
+      
+      // Filter by tenant if specified
+      if (tenantId) {
+        query = query.where(eq(consumers.tenantId, tenantId));
+      }
+      
+      const results = await query.limit(parseInt(limit as string, 10));
+      
+      // Apply search filter in-memory if provided
+      let filteredResults = results;
+      if (search && typeof search === 'string') {
+        const searchLower = search.toLowerCase();
+        filteredResults = results.filter(r => 
+          r.consumer.firstName?.toLowerCase().includes(searchLower) ||
+          r.consumer.lastName?.toLowerCase().includes(searchLower) ||
+          r.consumer.email?.toLowerCase().includes(searchLower) ||
+          r.tenant?.name?.toLowerCase().includes(searchLower)
+        );
+      }
+      
+      res.json(filteredResults);
+    } catch (error) {
+      console.error("Error fetching all consumers:", error);
+      res.status(500).json({ message: "Failed to fetch consumers" });
+    }
+  });
+
+  // Delete consumer (platform admin only)
+  app.delete('/api/admin/consumers/:id', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const consumerId = req.params.id;
+      
+      // Get consumer to find tenant
+      const consumer = await db
+        .select()
+        .from(consumers)
+        .where(eq(consumers.id, consumerId))
+        .limit(1);
+      
+      if (!consumer || consumer.length === 0) {
+        return res.status(404).json({ message: "Consumer not found" });
+      }
+      
+      const tenantId = consumer[0].tenantId;
+      if (!tenantId) {
+        return res.status(400).json({ message: "Consumer has no tenant" });
+      }
+      
+      // Delete consumer and associated accounts
+      const result = await deleteConsumers(db, tenantId, [consumerId]);
+      res.json(result);
+    } catch (error) {
+      console.error("Error deleting consumer:", error);
+      res.status(500).json({ message: "Failed to delete consumer" });
+    }
+  });
+
+  // Update tenant service controls (platform admin only)
+  app.put('/api/admin/tenants/:id/service-controls', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { 
+        emailServiceEnabled,
+        smsServiceEnabled,
+        portalAccessEnabled,
+        paymentProcessingEnabled 
+      } = req.body;
+      
+      const updates: any = {};
+      if (emailServiceEnabled !== undefined) updates.emailServiceEnabled = emailServiceEnabled;
+      if (smsServiceEnabled !== undefined) updates.smsServiceEnabled = smsServiceEnabled;
+      if (portalAccessEnabled !== undefined) updates.portalAccessEnabled = portalAccessEnabled;
+      if (paymentProcessingEnabled !== undefined) updates.paymentProcessingEnabled = paymentProcessingEnabled;
+      
+      const updatedTenant = await db
+        .update(tenants)
+        .set(updates)
+        .where(eq(tenants.id, id))
+        .returning();
+      
+      if (!updatedTenant || updatedTenant.length === 0) {
+        return res.status(404).json({ message: "Tenant not found" });
+      }
+      
+      res.json(updatedTenant[0]);
+    } catch (error) {
+      console.error("Error updating service controls:", error);
+      res.status(500).json({ message: "Failed to update service controls" });
+    }
+  });
+
   // Twilio webhook endpoint for SMS delivery tracking and usage
   app.post('/api/webhooks/twilio', async (req, res) => {
     try {
