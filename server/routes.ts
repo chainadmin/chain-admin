@@ -3267,12 +3267,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
+      console.log("Creating arrangement option with request body:", JSON.stringify(req.body, null, 2));
       const payload = buildArrangementOptionPayload(req.body, tenantId);
+      console.log("Built payload:", JSON.stringify(payload, null, 2));
       const option = await storage.createArrangementOption(payload);
 
       res.json(option);
     } catch (error) {
       console.error("Error creating arrangement option:", error);
+      if (error instanceof z.ZodError) {
+        console.error("Zod validation errors:", JSON.stringify(error.errors, null, 2));
+      }
       const statusCode = error instanceof z.ZodError || (error as any)?.statusCode === 400 ? 400 : 500;
       res.status(statusCode).json({
         message:
