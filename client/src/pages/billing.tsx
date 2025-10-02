@@ -579,6 +579,20 @@ export default function Billing() {
                 </p>
               </CardHeader>
               <CardContent className="space-y-6 pt-6">
+                {(subscription as any)?.status === 'pending_approval' && (
+                  <div className="rounded-2xl border border-amber-400/40 bg-amber-500/20 p-4">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="h-5 w-5 text-amber-300 mt-0.5 flex-shrink-0" />
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-amber-100">Plan Change Pending Approval</h4>
+                        <p className="mt-1 text-sm text-amber-200/80">
+                          Your subscription request for <strong>{currentPlanName}</strong> is currently pending admin approval. 
+                          You cannot select a different plan until this request is processed.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {plansLoading ? (
                   <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                     {Array.from({ length: 3 }).map((_, index) => (
