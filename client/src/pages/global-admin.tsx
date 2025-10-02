@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Building2, Users, DollarSign, TrendingUp, Eye, Ban, CheckCircle, AlertTriangle, Plus, Mail, MessageSquare, Phone, Trash2, Search, Shield, CreditCard } from "lucide-react";
+import { Building2, Users, DollarSign, TrendingUp, Eye, Ban, CheckCircle, AlertTriangle, Plus, Mail, MessageSquare, Phone, Trash2, Search, Shield, CreditCard, Send } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import AdminAuth from "@/components/admin-auth";
 // Simple currency formatter
@@ -58,6 +58,11 @@ export default function GlobalAdmin() {
   const [editContactDialogOpen, setEditContactDialogOpen] = useState(false);
   const [selectedTenantForContactEdit, setSelectedTenantForContactEdit] = useState<any>(null);
   const [contactInfo, setContactInfo] = useState({ email: '', phoneNumber: '' });
+
+  // Test email state
+  const [testEmailDialogOpen, setTestEmailDialogOpen] = useState(false);
+  const [selectedTenantForTestEmail, setSelectedTenantForTestEmail] = useState<any>(null);
+  const [testEmailAddress, setTestEmailAddress] = useState('');
 
   // Payment method state
   const [paymentMethodDialogOpen, setPaymentMethodDialogOpen] = useState(false);
@@ -284,6 +289,30 @@ export default function GlobalAdmin() {
       toast({
         title: "Error",
         description: "Failed to delete consumer",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Mutation to send test email
+  const sendTestEmailMutation = useMutation({
+    mutationFn: async ({ tenantId, toEmail }: { tenantId: string; toEmail: string }) => {
+      return apiRequest('POST', '/api/admin/test-email', { tenantId, toEmail });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants'] });
+      setTestEmailDialogOpen(false);
+      setSelectedTenantForTestEmail(null);
+      setTestEmailAddress('');
+      toast({
+        title: "Test Email Sent",
+        description: "The test email has been sent successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to send test email",
         variant: "destructive",
       });
     }
@@ -1195,6 +1224,21 @@ export default function GlobalAdmin() {
                         <Button
                           variant="outline"
                           size="sm"
+                          className="border-cyan-300 text-cyan-700 hover:bg-cyan-50"
+                          onClick={() => {
+                            setSelectedTenantForTestEmail(tenant);
+                            setTestEmailAddress(tenant.email);
+                            setTestEmailDialogOpen(true);
+                          }}
+                          data-testid={`button-test-email-${tenant.id}`}
+                        >
+                          <Send className="h-4 w-4 mr-2" />
+                          Test
+                        </Button>
+
+                        <Button
+                          variant="outline"
+                          size="sm"
                           className="border-yellow-300 text-yellow-700 hover:bg-yellow-50"
                           onClick={() => handleOpenPaymentMethod(tenant)}
                           data-testid={`button-billing-${tenant.id}`}
@@ -1545,6 +1589,74 @@ export default function GlobalAdmin() {
                 }}
               >
                 Close
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Test Email Dialog */}
+      <Dialog open={testEmailDialogOpen} onOpenChange={setTestEmailDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <Send className="h-5 w-5 mr-2" />
+              Send Test Email
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+              <p className="text-sm text-blue-800">
+                Send a test email to verify email tracking for <strong>{selectedTenantForTestEmail?.name}</strong>
+              </p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="test-email-address">Email Address</Label>
+              <Input
+                id="test-email-address"
+                type="email"
+                value={testEmailAddress}
+                onChange={(e) => setTestEmailAddress(e.target.value)}
+                placeholder="recipient@example.com"
+                data-testid="input-test-email"
+              />
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setTestEmailDialogOpen(false);
+                  setSelectedTenantForTestEmail(null);
+                  setTestEmailAddress('');
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  if (selectedTenantForTestEmail && testEmailAddress) {
+                    sendTestEmailMutation.mutate({
+                      tenantId: selectedTenantForTestEmail.id,
+                      toEmail: testEmailAddress
+                    });
+                  }
+                }}
+                disabled={!testEmailAddress || sendTestEmailMutation.isPending}
+                data-testid="button-send-test-email"
+              >
+                {sendTestEmailMutation.isPending ? (
+                  <>
+                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4 mr-2" />
+                    Send Test Email
+                  </>
+                )}
               </Button>
             </div>
           </div>

@@ -5030,6 +5030,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Send test email to agency
+  app.post('/api/admin/test-email', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { tenantId, toEmail } = req.body;
+      
+      if (!tenantId || !toEmail) {
+        return res.status(400).json({ message: "Tenant ID and email address are required" });
+      }
+
+      const tenant = await storage.getTenantById(tenantId);
+      if (!tenant) {
+        return res.status(404).json({ message: "Tenant not found" });
+      }
+
+      await emailService.sendEmail({
+        to: toEmail,
+        subject: "Test Email - Chain Platform",
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2>Test Email</h2>
+            <p>This is a test email sent from the Chain platform for <strong>${tenant.name}</strong>.</p>
+            <p>This email is being sent to verify email tracking for agency-specific usage statistics.</p>
+            <hr style="margin: 20px 0;">
+            <p style="color: #666; font-size: 12px;">Agency: ${tenant.name} (${tenant.slug})</p>
+            <p style="color: #666; font-size: 12px;">Sent at: ${new Date().toISOString()}</p>
+          </div>
+        `,
+        tenantId: tenant.id,
+      });
+
+      res.json({ message: "Test email sent successfully" });
+    } catch (error) {
+      console.error("Error sending test email:", error);
+      res.status(500).json({ message: "Failed to send test email" });
+    }
+  });
+
   // Update tenant status (activate/suspend)
   app.put('/api/admin/tenants/:id/status', isPlatformAdmin, async (req: any, res) => {
     try {
