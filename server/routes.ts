@@ -3680,7 +3680,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Test USAePay connection endpoint
-  app.post('/api/usaepay/test-connection', isAuthenticated, async (req: any, res) => {
+  app.post('/api/usaepay/test-connection', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
       

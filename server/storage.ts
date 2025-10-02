@@ -24,6 +24,8 @@ import {
   consumerNotifications,
   callbackRequests,
   payments,
+  paymentMethods,
+  paymentSchedules,
   subscriptions,
   invoices,
   type User,
@@ -75,6 +77,10 @@ import {
   type InsertCallbackRequest,
   type Payment,
   type InsertPayment,
+  type PaymentMethod,
+  type InsertPaymentMethod,
+  type PaymentSchedule,
+  type InsertPaymentSchedule,
   type Subscription,
   type InsertSubscription,
   type Invoice,
@@ -319,6 +325,19 @@ export interface IStorage {
     failedPayments: number;
     pendingPayments: number;
   }>;
+  
+  // Payment method operations (saved cards)
+  getPaymentMethodsByConsumer(consumerId: string, tenantId: string): Promise<PaymentMethod[]>;
+  createPaymentMethod(paymentMethod: InsertPaymentMethod): Promise<PaymentMethod>;
+  deletePaymentMethod(id: string, tenantId: string): Promise<boolean>;
+  setDefaultPaymentMethod(id: string, consumerId: string, tenantId: string): Promise<PaymentMethod>;
+  
+  // Payment schedule operations (recurring payments)
+  getPaymentSchedulesByConsumer(consumerId: string, tenantId: string): Promise<PaymentSchedule[]>;
+  getPaymentSchedulesByAccount(accountId: string, tenantId: string): Promise<PaymentSchedule[]>;
+  createPaymentSchedule(schedule: InsertPaymentSchedule): Promise<PaymentSchedule>;
+  updatePaymentSchedule(id: string, tenantId: string, updates: Partial<PaymentSchedule>): Promise<PaymentSchedule>;
+  cancelPaymentSchedule(id: string, tenantId: string): Promise<boolean>;
   
   // Billing operations
   getSubscriptionByTenant(tenantId: string): Promise<Subscription | undefined>;
@@ -1719,6 +1738,105 @@ export class DatabaseStorage implements IStorage {
       failedPayments,
       pendingPayments,
     };
+  }
+
+  // Payment method operations (saved cards)
+  async getPaymentMethodsByConsumer(consumerId: string, tenantId: string): Promise<PaymentMethod[]> {
+    return await db
+      .select()
+      .from(paymentMethods)
+      .where(and(eq(paymentMethods.consumerId, consumerId), eq(paymentMethods.tenantId, tenantId)))
+      .orderBy(desc(paymentMethods.isDefault), desc(paymentMethods.createdAt));
+  }
+
+  async createPaymentMethod(paymentMethod: InsertPaymentMethod): Promise<PaymentMethod> {
+    const [newMethod] = await db.insert(paymentMethods).values(paymentMethod).returning();
+    return newMethod;
+  }
+
+  async deletePaymentMethod(id: string, tenantId: string): Promise<boolean> {
+    const result = await db
+      .delete(paymentMethods)
+      .where(and(eq(paymentMethods.id, id), eq(paymentMethods.tenantId, tenantId)))
+      .returning();
+    return result.length > 0;
+  }
+
+  async setDefaultPaymentMethod(id: string, consumerId: string, tenantId: string): Promise<PaymentMethod> {
+    // First verify the payment method exists and belongs to this consumer/tenant
+    const [existing] = await db
+      .select()
+      .from(paymentMethods)
+      .where(and(
+        eq(paymentMethods.id, id),
+        eq(paymentMethods.consumerId, consumerId),
+        eq(paymentMethods.tenantId, tenantId)
+      ))
+      .limit(1);
+    
+    if (!existing) {
+      throw new Error('Payment method not found or access denied');
+    }
+    
+    // Clear all default flags for this consumer
+    await db
+      .update(paymentMethods)
+      .set({ isDefault: false })
+      .where(and(eq(paymentMethods.consumerId, consumerId), eq(paymentMethods.tenantId, tenantId)));
+    
+    // Set this one as default
+    const [updated] = await db
+      .update(paymentMethods)
+      .set({ isDefault: true })
+      .where(and(eq(paymentMethods.id, id), eq(paymentMethods.tenantId, tenantId)))
+      .returning();
+    
+    return updated;
+  }
+
+  // Payment schedule operations (recurring payments)
+  async getPaymentSchedulesByConsumer(consumerId: string, tenantId: string): Promise<PaymentSchedule[]> {
+    return await db
+      .select()
+      .from(paymentSchedules)
+      .where(and(eq(paymentSchedules.consumerId, consumerId), eq(paymentSchedules.tenantId, tenantId)))
+      .orderBy(desc(paymentSchedules.createdAt));
+  }
+
+  async getPaymentSchedulesByAccount(accountId: string, tenantId: string): Promise<PaymentSchedule[]> {
+    return await db
+      .select()
+      .from(paymentSchedules)
+      .where(and(eq(paymentSchedules.accountId, accountId), eq(paymentSchedules.tenantId, tenantId)))
+      .orderBy(desc(paymentSchedules.createdAt));
+  }
+
+  async createPaymentSchedule(schedule: InsertPaymentSchedule): Promise<PaymentSchedule> {
+    const [newSchedule] = await db.insert(paymentSchedules).values(schedule).returning();
+    return newSchedule;
+  }
+
+  async updatePaymentSchedule(id: string, tenantId: string, updates: Partial<PaymentSchedule>): Promise<PaymentSchedule> {
+    const [updated] = await db
+      .update(paymentSchedules)
+      .set(updates)
+      .where(and(eq(paymentSchedules.id, id), eq(paymentSchedules.tenantId, tenantId)))
+      .returning();
+    
+    if (!updated) {
+      throw new Error('Payment schedule not found or access denied');
+    }
+    
+    return updated;
+  }
+
+  async cancelPaymentSchedule(id: string, tenantId: string): Promise<boolean> {
+    const result = await db
+      .update(paymentSchedules)
+      .set({ status: 'cancelled' })
+      .where(and(eq(paymentSchedules.id, id), eq(paymentSchedules.tenantId, tenantId)))
+      .returning();
+    return result.length > 0;
   }
 
   // Billing operations
