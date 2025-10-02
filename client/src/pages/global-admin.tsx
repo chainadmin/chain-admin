@@ -87,7 +87,20 @@ export default function GlobalAdmin() {
 
   // Fetch all consumers
   const { data: allConsumers, isLoading: consumersLoading } = useQuery({
-    queryKey: ['/api/admin/consumers', { search: consumerSearch, tenantId: selectedTenantFilter }],
+    queryKey: ['/api/admin/consumers', consumerSearch, selectedTenantFilter],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (consumerSearch) params.append('search', consumerSearch);
+      if (selectedTenantFilter) params.append('tenantId', selectedTenantFilter);
+      const url = `/api/admin/consumers${params.toString() ? `?${params.toString()}` : ''}`;
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${sessionStorage.getItem('admin_token')}`
+        }
+      });
+      if (!response.ok) throw new Error('Failed to fetch consumers');
+      return response.json();
+    },
     enabled: isPlatformAdmin
   });
 
@@ -1028,8 +1041,9 @@ export default function GlobalAdmin() {
                         )}
                         
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
+                          className="border-blue-300 text-blue-700 hover:bg-blue-50"
                           onClick={() => handleOpenSmsConfig(tenant)}
                           data-testid={`button-sms-config-${tenant.id}`}
                         >
@@ -1038,8 +1052,9 @@ export default function GlobalAdmin() {
                         </Button>
                         
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
+                          className="border-purple-300 text-purple-700 hover:bg-purple-50"
                           onClick={() => window.open(`/${tenant.slug}/dashboard`, '_blank')}
                           data-testid={`button-view-${tenant.id}`}
                         >
@@ -1048,9 +1063,9 @@ export default function GlobalAdmin() {
                         </Button>
 
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          className="border-red-300 text-red-700 hover:bg-red-50"
                           onClick={() => {
                             setSelectedAgencyForDeletion(tenant);
                             setDeleteAgencyDialogOpen(true);
