@@ -3380,7 +3380,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const settings = await storage.getTenantSettings(tenantId);
       const tenant = await storage.getTenant(tenantId);
       
-      // Combine settings with Twilio settings from tenant
+      // Combine settings with Twilio and email settings from tenant
       const combinedSettings = {
         ...(settings || {}),
         twilioAccountSid: tenant?.twilioAccountSid || '',
@@ -3388,6 +3388,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         twilioPhoneNumber: tenant?.twilioPhoneNumber || '',
         twilioBusinessName: tenant?.twilioBusinessName || '',
         twilioCampaignId: tenant?.twilioCampaignId || '',
+        customSenderEmail: tenant?.customSenderEmail || '',
         // Redact sensitive SMAX credentials in response
         smaxApiKey: settings?.smaxApiKey ? '••••••••' : '',
         smaxPin: settings?.smaxPin ? '••••••••' : '',
@@ -3420,6 +3421,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         customBranding: z.any().optional(),
         consumerPortalSettings: z.any().optional(),
         smsThrottleLimit: z.number().min(1).max(1000).optional(),
+        // Email configuration per tenant
+        customSenderEmail: z.string().email().optional().or(z.literal('')),
         // Twilio configuration per tenant
         twilioAccountSid: z.string().optional(),
         twilioAuthToken: z.string().optional(),
@@ -3435,13 +3438,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const validatedData = settingsSchema.parse(req.body);
 
-      // Separate Twilio settings from other settings
+      // Separate Twilio and email settings from other settings
       const { 
         twilioAccountSid, 
         twilioAuthToken, 
         twilioPhoneNumber, 
         twilioBusinessName, 
         twilioCampaignId,
+        customSenderEmail,
         smaxApiKey,
         smaxPin,
         ...otherSettings 
@@ -3452,18 +3456,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const finalSmaxApiKey = (smaxApiKey && smaxApiKey !== '••••••••') ? smaxApiKey : currentSettings?.smaxApiKey;
       const finalSmaxPin = (smaxPin && smaxPin !== '••••••••') ? smaxPin : currentSettings?.smaxPin;
 
-      // Update tenant table with Twilio settings if any provided
+      // Update tenant table with Twilio and email settings if any provided
       if (twilioAccountSid !== undefined || 
           twilioAuthToken !== undefined || 
           twilioPhoneNumber !== undefined || 
           twilioBusinessName !== undefined || 
-          twilioCampaignId !== undefined) {
+          twilioCampaignId !== undefined ||
+          customSenderEmail !== undefined) {
         await storage.updateTenantTwilioSettings(tenantId, {
           twilioAccountSid: twilioAccountSid || null,
           twilioAuthToken: twilioAuthToken || null,
           twilioPhoneNumber: twilioPhoneNumber || null,
           twilioBusinessName: twilioBusinessName || null,
           twilioCampaignId: twilioCampaignId || null,
+          customSenderEmail: customSenderEmail || null,
         });
       }
 

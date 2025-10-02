@@ -1045,6 +1045,49 @@ export default function Settings() {
                 )}
               </Card>
 
+              {/* Email Settings Card */}
+              <Card className={cardBaseClasses}>
+                <CardHeader className="space-y-1 text-white">
+                  <CardTitle className="text-xl font-semibold text-white">Email Settings</CardTitle>
+                  <p className="text-sm text-blue-100/70">
+                    Configure your email sender address and preferences
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-6 text-sm text-blue-100/80">
+                  <div className="space-y-4">
+                    <div>
+                      <Label className="text-base font-medium text-white">Custom Sender Email</Label>
+                      <p className="text-sm text-blue-100/70 mb-2">
+                        Set a custom sender email address for outgoing emails. If not set, emails will be sent from {(authUser as any)?.platformUser?.tenant?.slug || 'your-agency'}@chainsoftwaregroup.com
+                      </p>
+                      <Input
+                        type="email"
+                        placeholder="noreply@youragency.com"
+                        value={localSettings?.customSenderEmail || ''}
+                        onChange={(e) => handleSettingsUpdate('customSenderEmail', e.target.value)}
+                        className={inputClasses}
+                        data-testid="input-custom-sender-email"
+                      />
+                      <p className="text-xs text-blue-100/60 mt-2">
+                        Note: Custom sender email must be verified in Postmark before it can be used
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+                {hasUnsavedChanges && (
+                  <CardFooter>
+                    <Button 
+                      onClick={handleSaveSettings} 
+                      disabled={updateSettingsMutation.isPending}
+                      className="ml-auto"
+                      data-testid="button-save-email-settings"
+                    >
+                      {updateSettingsMutation.isPending ? "Saving..." : "Save Changes"}
+                    </Button>
+                  </CardFooter>
+                )}
+              </Card>
+
               {/* Email Usage Stats Card */}
               <Card className={cardBaseClasses}>
                 <CardHeader className="space-y-1 text-white">

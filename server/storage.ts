@@ -167,6 +167,14 @@ export interface IStorage {
   getPlatformStats(): Promise<any>;
   updateTenantStatus(id: string, updates: { isActive: boolean; suspensionReason?: string | null; suspendedAt?: Date | null }): Promise<Tenant>;
   upgradeTenantToPaid(id: string): Promise<Tenant>;
+  updateTenantTwilioSettings(id: string, twilioSettings: {
+    twilioAccountSid?: string | null;
+    twilioAuthToken?: string | null;
+    twilioPhoneNumber?: string | null;
+    twilioBusinessName?: string | null;
+    twilioCampaignId?: string | null;
+    customSenderEmail?: string | null;
+  }): Promise<Tenant>;
   
   // Platform user operations
   getPlatformUser(authId: string): Promise<PlatformUser | undefined>;
@@ -2074,6 +2082,7 @@ export class DatabaseStorage implements IStorage {
     twilioPhoneNumber?: string | null;
     twilioBusinessName?: string | null;
     twilioCampaignId?: string | null;
+    customSenderEmail?: string | null;
   }): Promise<Tenant> {
     const [updatedTenant] = await db.update(tenants)
       .set(twilioSettings)
