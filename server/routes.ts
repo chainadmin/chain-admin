@@ -16,6 +16,7 @@ import {
   users,
   subscriptionPlans,
   subscriptions,
+  emailLogs,
   type Consumer,
   type Tenant,
   type InsertArrangementOption,
@@ -5526,6 +5527,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
         occurredAt,
         metadata: event,
       });
+    }
+
+    // Update email_logs table based on event type
+    if (MessageID) {
+      const updateData: any = {};
+      
+      switch (normalizedRecordType) {
+        case 'delivery':
+          updateData.status = 'delivered';
+          updateData.deliveredAt = event.DeliveredAt ? new Date(event.DeliveredAt) : new Date();
+          break;
+        case 'bounce':
+          updateData.status = 'bounced';
+          updateData.bouncedAt = event.BouncedAt ? new Date(event.BouncedAt) : new Date();
+          updateData.bounceReason = event.Description || event.Type || 'Unknown bounce reason';
+          break;
+        case 'spamcomplaint':
+          updateData.status = 'complained';
+          updateData.complainedAt = new Date();
+          updateData.complaintReason = event.Description || 'Spam complaint received';
+          break;
+        case 'open':
+          updateData.status = 'opened';
+          updateData.openedAt = event.ReceivedAt ? new Date(event.ReceivedAt) : new Date();
+          break;
+      }
+
+      // Update email_logs if we have update data
+      if (Object.keys(updateData).length > 0) {
+        try {
+          await db
+            .update(emailLogs)
+            .set(updateData)
+            .where(eq(emailLogs.messageId, MessageID));
+        } catch (logUpdateError) {
+          console.error('Error updating email log:', logUpdateError);
+        }
+      }
     }
 
     // Update campaign metrics
