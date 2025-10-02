@@ -1057,29 +1057,29 @@ export default function Settings() {
                   {emailUsageStats ? (
                     <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
                       <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-                        <div className="text-2xl font-bold text-white">{emailUsageStats.total || 0}</div>
+                        <div className="text-2xl font-bold text-white">{(emailUsageStats as any).total || 0}</div>
                         <div className="text-sm text-blue-100/70">Total Sent</div>
                       </div>
                       <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-                        <div className="text-2xl font-bold text-green-400">{emailUsageStats.delivered || 0}</div>
+                        <div className="text-2xl font-bold text-green-400">{(emailUsageStats as any).delivered || 0}</div>
                         <div className="text-sm text-blue-100/70">Delivered</div>
                       </div>
                       <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-                        <div className="text-2xl font-bold text-sky-400">{emailUsageStats.opened || 0}</div>
+                        <div className="text-2xl font-bold text-sky-400">{(emailUsageStats as any).opened || 0}</div>
                         <div className="text-sm text-blue-100/70">Opened</div>
                       </div>
                       <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-                        <div className="text-2xl font-bold text-yellow-400">{emailUsageStats.bounced || 0}</div>
+                        <div className="text-2xl font-bold text-yellow-400">{(emailUsageStats as any).bounced || 0}</div>
                         <div className="text-sm text-blue-100/70">Bounced</div>
                       </div>
                       <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-                        <div className="text-2xl font-bold text-red-400">{emailUsageStats.complained || 0}</div>
+                        <div className="text-2xl font-bold text-red-400">{(emailUsageStats as any).complained || 0}</div>
                         <div className="text-sm text-blue-100/70">Complained</div>
                       </div>
                       <div className="rounded-lg border border-white/10 bg-white/5 p-4">
                         <div className="text-2xl font-bold text-blue-400">
-                          {emailUsageStats.total > 0 
-                            ? `${Math.round((emailUsageStats.opened / emailUsageStats.total) * 100)}%` 
+                          {(emailUsageStats as any).total > 0 
+                            ? `${Math.round(((emailUsageStats as any).opened / (emailUsageStats as any).total) * 100)}%` 
                             : '0%'}
                         </div>
                         <div className="text-sm text-blue-100/70">Open Rate</div>
