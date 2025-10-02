@@ -4093,6 +4093,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Consumer payment methods management
+  app.get('/api/consumer/payment-methods', authenticateConsumer, async (req: any, res) => {
+    try {
+      const { id: consumerId, tenantId } = req.consumer || {};
+
+      if (!consumerId || !tenantId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const paymentMethods = await storage.getPaymentMethodsByConsumer(consumerId, tenantId);
+      res.json(paymentMethods);
+    } catch (error) {
+      console.error("Error fetching payment methods:", error);
+      res.status(500).json({ message: "Failed to fetch payment methods" });
+    }
+  });
+
+  app.delete('/api/consumer/payment-methods/:id', authenticateConsumer, async (req: any, res) => {
+    try {
+      const { id: consumerId, tenantId } = req.consumer || {};
+      const { id: paymentMethodId } = req.params;
+
+      if (!consumerId || !tenantId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const deleted = await storage.deletePaymentMethod(paymentMethodId, consumerId, tenantId);
+      
+      if (!deleted) {
+        return res.status(404).json({ message: "Payment method not found" });
+      }
+
+      res.json({ message: "Payment method deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting payment method:", error);
+      res.status(500).json({ message: "Failed to delete payment method" });
+    }
+  });
+
+  app.put('/api/consumer/payment-methods/:id/default', authenticateConsumer, async (req: any, res) => {
+    try {
+      const { id: consumerId, tenantId } = req.consumer || {};
+      const { id: paymentMethodId } = req.params;
+
+      if (!consumerId || !tenantId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const updatedMethod = await storage.setDefaultPaymentMethod(paymentMethodId, consumerId, tenantId);
+      
+      if (!updatedMethod) {
+        return res.status(404).json({ message: "Payment method not found" });
+      }
+
+      res.json(updatedMethod);
+    } catch (error) {
+      console.error("Error setting default payment method:", error);
+      res.status(500).json({ message: "Failed to set default payment method" });
+    }
+  });
+
   // Process scheduled payments (called by cron/scheduler)
   app.post('/api/payments/process-scheduled', async (req: any, res) => {
     try {

@@ -1,6 +1,7 @@
 import { Client } from 'postmark';
 import { db } from './db';
-import { emailLogs } from '@shared/schema';
+import { emailLogs, tenants } from '@shared/schema';
+import { eq } from 'drizzle-orm';
 
 if (!process.env.POSTMARK_SERVER_TOKEN) {
   throw new Error('Missing required Postmark Server Token: POSTMARK_SERVER_TOKEN');
@@ -25,7 +26,27 @@ const DEFAULT_FROM_EMAIL = 'support@chainsoftwaregroup.com';
 export class EmailService {
   async sendEmail(options: EmailOptions): Promise<{ messageId: string; success: boolean; error?: string }> {
     try {
-      const fromEmail = options.from || DEFAULT_FROM_EMAIL;
+      let fromEmail = options.from || DEFAULT_FROM_EMAIL;
+      
+      // If tenantId is provided, check for custom sender email
+      if (options.tenantId) {
+        const [tenant] = await db
+          .select({ customSenderEmail: tenants.customSenderEmail, slug: tenants.slug, name: tenants.name })
+          .from(tenants)
+          .where(eq(tenants.id, options.tenantId))
+          .limit(1);
+        
+        if (tenant) {
+          // Priority: customSenderEmail > slug-based email > provided from > default
+          if (tenant.customSenderEmail) {
+            fromEmail = tenant.customSenderEmail;
+          } else {
+            // Use slug-based email as default for tenant emails (overrides options.from)
+            fromEmail = `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>`;
+          }
+        }
+      }
+      
       const textBody = options.text || this.htmlToText(options.html);
       
       const result = await postmarkClient.sendEmail({

@@ -19,6 +19,159 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertCircle, LogOut, User, Building2, CreditCard, DollarSign, TrendingUp, Mail, Phone, Edit, FileText, MessageSquare, Calendar } from "lucide-react";
 import chainLogo from "@/assets/chain-logo.png";
 
+// Payment Methods Tab Component
+function PaymentMethodsTab({ session }: { session: any }) {
+  const { toast } = useToast();
+  const token = getStoredConsumerToken();
+
+  const { data: paymentMethods, isLoading, refetch } = useQuery({
+    queryKey: ['consumer-payment-methods', session?.email],
+    queryFn: async () => {
+      const response = await apiCall("GET", "/api/consumer/payment-methods", null, token);
+      if (!response.ok) {
+        throw new Error("Failed to fetch payment methods");
+      }
+      return response.json();
+    },
+    enabled: !!session?.email && !!token,
+  });
+
+  const handleDelete = async (methodId: string) => {
+    try {
+      const response = await apiCall("DELETE", `/api/consumer/payment-methods/${methodId}`, null, token);
+      if (!response.ok) {
+        throw new Error("Failed to delete payment method");
+      }
+
+      toast({
+        title: "Card Removed",
+        description: "Your payment method has been deleted successfully.",
+      });
+
+      refetch();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete payment method",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSetDefault = async (methodId: string) => {
+    try {
+      const response = await apiCall("PUT", `/api/consumer/payment-methods/${methodId}/default`, null, token);
+      if (!response.ok) {
+        throw new Error("Failed to set default payment method");
+      }
+
+      toast({
+        title: "Default Card Updated",
+        description: "Your default payment method has been updated.",
+      });
+
+      refetch();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to set default payment method",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const getCardBrandIcon = (brand: string) => {
+    const brandLower = brand?.toLowerCase() || '';
+    if (brandLower.includes('visa')) return '💳';
+    if (brandLower.includes('master')) return '💳';
+    if (brandLower.includes('amex')) return '💳';
+    if (brandLower.includes('discover')) return '💳';
+    return '💳';
+  };
+
+  return (
+    <Card className="border-white/10 bg-white/5 backdrop-blur">
+      <CardHeader className="border-b border-white/10">
+        <CardTitle className="flex items-center text-white">
+          <CreditCard className="h-5 w-5 mr-2 text-blue-400" />
+          Saved Payment Methods
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-6">
+        {isLoading ? (
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
+            <p className="text-blue-100/70 mt-4">Loading payment methods...</p>
+          </div>
+        ) : !paymentMethods || (paymentMethods as any[]).length === 0 ? (
+          <div className="text-center py-12">
+            <CreditCard className="h-12 w-12 mx-auto mb-4 text-blue-400/30" />
+            <p className="text-blue-100/70">No saved payment methods</p>
+            <p className="text-sm text-blue-100/50 mt-2">
+              Save a card during your next payment for faster checkout
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {(paymentMethods as any[]).map((method: any) => (
+              <div
+                key={method.id}
+                className="rounded-xl border border-white/10 bg-white/5 p-4 hover:bg-white/10 transition-colors"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-2xl">{getCardBrandIcon(method.cardBrand)}</span>
+                      <div>
+                        <p className="text-white font-medium">
+                          {method.cardBrand} ending in {method.cardLast4}
+                        </p>
+                        <p className="text-sm text-blue-100/70">
+                          Expires {method.expiryMonth}/{method.expiryYear}
+                        </p>
+                      </div>
+                    </div>
+                    {method.cardholderName && (
+                      <p className="text-sm text-blue-100/60">
+                        {method.cardholderName}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {method.isDefault && (
+                      <Badge className="border-emerald-400/30 bg-emerald-500/10 text-emerald-200 border">
+                        Default
+                      </Badge>
+                    )}
+                    {!method.isDefault && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleSetDefault(method.id)}
+                        className="border-white/20 bg-white/5 text-blue-100 hover:bg-white/10"
+                      >
+                        Set Default
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => handleDelete(method.id)}
+                      className="bg-red-500/20 text-red-200 hover:bg-red-500/30 border-red-400/30"
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function ConsumerDashboardSimple() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -491,6 +644,10 @@ export default function ConsumerDashboardSimple() {
               <Calendar className="h-4 w-4 mr-2" />
               Arrangements
             </TabsTrigger>
+            <TabsTrigger value="payment-methods" className="data-[state=active]:bg-white/20">
+              <CreditCard className="h-4 w-4 mr-2" />
+              Saved Cards
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="accounts" className="mt-6">
@@ -662,6 +819,10 @@ export default function ConsumerDashboardSimple() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="payment-methods" className="mt-6">
+            <PaymentMethodsTab session={session} />
           </TabsContent>
         </Tabs>
       </div>

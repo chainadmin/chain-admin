@@ -337,7 +337,7 @@ export interface IStorage {
   // Payment method operations (saved cards)
   getPaymentMethodsByConsumer(consumerId: string, tenantId: string): Promise<PaymentMethod[]>;
   createPaymentMethod(paymentMethod: InsertPaymentMethod): Promise<PaymentMethod>;
-  deletePaymentMethod(id: string, tenantId: string): Promise<boolean>;
+  deletePaymentMethod(id: string, consumerId: string, tenantId: string): Promise<boolean>;
   setDefaultPaymentMethod(id: string, consumerId: string, tenantId: string): Promise<PaymentMethod>;
   
   // Payment schedule operations (recurring payments)
@@ -1762,10 +1762,14 @@ export class DatabaseStorage implements IStorage {
     return newMethod;
   }
 
-  async deletePaymentMethod(id: string, tenantId: string): Promise<boolean> {
+  async deletePaymentMethod(id: string, consumerId: string, tenantId: string): Promise<boolean> {
     const result = await db
       .delete(paymentMethods)
-      .where(and(eq(paymentMethods.id, id), eq(paymentMethods.tenantId, tenantId)))
+      .where(and(
+        eq(paymentMethods.id, id),
+        eq(paymentMethods.consumerId, consumerId),
+        eq(paymentMethods.tenantId, tenantId)
+      ))
       .returning();
     return result.length > 0;
   }
