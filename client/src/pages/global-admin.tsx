@@ -54,6 +54,23 @@ export default function GlobalAdmin() {
   const [deleteAgencyDialogOpen, setDeleteAgencyDialogOpen] = useState(false);
   const [selectedAgencyForDeletion, setSelectedAgencyForDeletion] = useState<any>(null);
 
+  // Contact info edit state
+  const [editContactDialogOpen, setEditContactDialogOpen] = useState(false);
+  const [selectedTenantForContactEdit, setSelectedTenantForContactEdit] = useState<any>(null);
+  const [contactInfo, setContactInfo] = useState({ email: '', phoneNumber: '' });
+
+  // Payment method state
+  const [paymentMethodDialogOpen, setPaymentMethodDialogOpen] = useState(false);
+  const [selectedTenantForPayment, setSelectedTenantForPayment] = useState<any>(null);
+  const [paymentInfo, setPaymentInfo] = useState({
+    paymentMethodType: 'card',
+    cardNumber: '',
+    cardExpiry: '',
+    cardCvc: '',
+    bankAccountNumber: '',
+    bankRoutingNumber: ''
+  });
+
   // Check for admin authentication on component mount
   useEffect(() => {
     const adminAuth = sessionStorage.getItem("admin_authenticated");
@@ -317,6 +334,52 @@ export default function GlobalAdmin() {
     }
   });
 
+  // Mutation to update contact information
+  const updateContactMutation = useMutation({
+    mutationFn: async ({ tenantId, contactInfo }: { tenantId: string; contactInfo: any }) => {
+      return apiRequest('PUT', `/api/admin/tenants/${tenantId}/contact`, contactInfo);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants'] });
+      setEditContactDialogOpen(false);
+      setSelectedTenantForContactEdit(null);
+      toast({
+        title: "Contact Information Updated",
+        description: "Agency contact details have been updated successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to update contact information",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Mutation to update payment method
+  const updatePaymentMethodMutation = useMutation({
+    mutationFn: async ({ tenantId, paymentMethod }: { tenantId: string; paymentMethod: any }) => {
+      return apiRequest('PUT', `/api/admin/tenants/${tenantId}/payment-method`, paymentMethod);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants'] });
+      setPaymentMethodDialogOpen(false);
+      setSelectedTenantForPayment(null);
+      toast({
+        title: "Payment Method Updated",
+        description: "Billing information has been saved securely",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to update payment method",
+        variant: "destructive",
+      });
+    }
+  });
+
   const handleCreateAgency = () => {
     if (!newAgencyName.trim() || !newAgencyEmail.trim()) {
       toast({
@@ -352,6 +415,57 @@ export default function GlobalAdmin() {
       tenantId: selectedTenantForSms.id,
       config: smsConfig
     });
+  };
+
+  const handleOpenEditContact = (tenant: any) => {
+    setSelectedTenantForContactEdit(tenant);
+    setContactInfo({
+      email: tenant.email || '',
+      phoneNumber: tenant.phoneNumber || ''
+    });
+    setEditContactDialogOpen(true);
+  };
+
+  const handleSaveContact = () => {
+    if (!selectedTenantForContactEdit) return;
+    
+    updateContactMutation.mutate({
+      tenantId: selectedTenantForContactEdit.id,
+      contactInfo
+    });
+  };
+
+  const handleOpenPaymentMethod = (tenant: any) => {
+    setSelectedTenantForPayment(tenant);
+    setPaymentInfo({
+      paymentMethodType: tenant.paymentMethodType || 'card',
+      cardNumber: '',
+      cardExpiry: '',
+      cardCvc: '',
+      bankAccountNumber: '',
+      bankRoutingNumber: ''
+    });
+    setPaymentMethodDialogOpen(true);
+  };
+
+  const handleSavePaymentMethod = () => {
+    if (!selectedTenantForPayment) return;
+    
+    // IMPORTANT: This is a placeholder implementation
+    // In production, you MUST integrate Stripe.js to tokenize card/bank info
+    // NEVER send raw card numbers to your server
+    
+    toast({
+      title: "Stripe Integration Required",
+      description: "Please configure Stripe API keys to securely process payment methods. Raw payment data cannot be processed without PCI compliance.",
+      variant: "destructive",
+    });
+    
+    // Production implementation would:
+    // 1. Use Stripe Elements to collect payment info
+    // 2. Call stripe.createPaymentMethod() to tokenize
+    // 3. Send only the Stripe payment method ID to backend
+    // 4. Backend stores only: stripePaymentMethodId, last4, brand/type
   };
 
   // Show admin authentication form if not authenticated
@@ -1037,6 +1151,28 @@ export default function GlobalAdmin() {
                           <MessageSquare className="h-4 w-4 mr-2" />
                           SMS
                         </Button>
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-green-300 text-green-700 hover:bg-green-50"
+                          onClick={() => handleOpenEditContact(tenant)}
+                          data-testid={`button-edit-contact-${tenant.id}`}
+                        >
+                          <Mail className="h-4 w-4 mr-2" />
+                          Edit
+                        </Button>
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-yellow-300 text-yellow-700 hover:bg-yellow-50"
+                          onClick={() => handleOpenPaymentMethod(tenant)}
+                          data-testid={`button-billing-${tenant.id}`}
+                        >
+                          <CreditCard className="h-4 w-4 mr-2" />
+                          Billing
+                        </Button>
                         
                         <Button
                           variant="outline"
@@ -1253,6 +1389,133 @@ export default function GlobalAdmin() {
                     Save Configuration
                   </>
                 )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Contact Information Dialog */}
+      <Dialog open={editContactDialogOpen} onOpenChange={setEditContactDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <Mail className="h-5 w-5 mr-2" />
+              Edit Contact Information
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-email">Email Address</Label>
+              <Input
+                id="edit-email"
+                type="email"
+                value={contactInfo.email}
+                onChange={(e) => setContactInfo({ ...contactInfo, email: e.target.value })}
+                placeholder="agency@example.com"
+                data-testid="input-edit-email"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="edit-phone">Phone Number</Label>
+              <Input
+                id="edit-phone"
+                type="tel"
+                value={contactInfo.phoneNumber}
+                onChange={(e) => setContactInfo({ ...contactInfo, phoneNumber: e.target.value })}
+                placeholder="+1 (555) 123-4567"
+                data-testid="input-edit-phone"
+              />
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setEditContactDialogOpen(false);
+                  setSelectedTenantForContactEdit(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveContact}
+                disabled={updateContactMutation.isPending}
+                data-testid="button-save-contact"
+              >
+                {updateContactMutation.isPending ? (
+                  <>
+                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Mail className="h-4 w-4 mr-2" />
+                    Save Changes
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Payment Method Dialog */}
+      <Dialog open={paymentMethodDialogOpen} onOpenChange={setPaymentMethodDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <CreditCard className="h-5 w-5 mr-2" />
+              Add Payment Method
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div className="bg-red-50 border border-red-200 p-4 rounded-lg">
+              <div className="flex items-start">
+                <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 mr-3 flex-shrink-0" />
+                <div className="text-sm">
+                  <p className="font-medium text-red-900">Stripe Integration Required</p>
+                  <p className="text-red-700 mt-1">
+                    To securely process payment methods, you must configure Stripe API keys. Raw card or bank account details cannot be processed without PCI compliance.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 p-4 rounded-lg">
+              <div className="text-sm">
+                <p className="font-medium text-blue-900 mb-2">Required for Production:</p>
+                <ul className="text-blue-700 list-disc list-inside space-y-1">
+                  <li>Install and configure Stripe.js / Stripe Elements</li>
+                  <li>Tokenize payment data on the client side</li>
+                  <li>Send only Stripe payment method IDs to backend</li>
+                  <li>Store only: Stripe customer ID, payment method ID, and last 4 digits</li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <p className="text-sm text-gray-700">
+                Current payment method: {selectedTenantForPayment?.cardLast4 ? (
+                  <span className="font-medium">Card ending in {selectedTenantForPayment.cardLast4}</span>
+                ) : selectedTenantForPayment?.bankAccountLast4 ? (
+                  <span className="font-medium">Bank account ending in {selectedTenantForPayment.bankAccountLast4}</span>
+                ) : (
+                  <span className="text-gray-500">No payment method on file</span>
+                )}
+              </p>
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setPaymentMethodDialogOpen(false);
+                  setSelectedTenantForPayment(null);
+                }}
+              >
+                Close
               </Button>
             </div>
           </div>

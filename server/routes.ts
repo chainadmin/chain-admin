@@ -4764,6 +4764,116 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update tenant contact information (platform admin only)
+  app.put('/api/admin/tenants/:id/contact', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Validate input
+      const contactSchema = z.object({
+        email: z.string().email().optional(),
+        phoneNumber: z.string().min(10).optional()
+      });
+      
+      const validation = contactSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: "Invalid contact information", 
+          errors: validation.error.errors 
+        });
+      }
+      
+      const { email, phoneNumber } = validation.data;
+      
+      const updates: any = {};
+      if (email !== undefined) updates.email = email;
+      if (phoneNumber !== undefined) updates.phoneNumber = phoneNumber;
+      
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ message: "No fields to update" });
+      }
+      
+      const updatedTenant = await db
+        .update(tenants)
+        .set(updates)
+        .where(eq(tenants.id, id))
+        .returning();
+      
+      if (!updatedTenant || updatedTenant.length === 0) {
+        return res.status(404).json({ message: "Tenant not found" });
+      }
+      
+      res.json(updatedTenant[0]);
+    } catch (error) {
+      console.error("Error updating contact info:", error);
+      res.status(500).json({ message: "Failed to update contact information" });
+    }
+  });
+
+  // Update tenant payment method (platform admin only)
+  // SECURITY: This endpoint only accepts Stripe tokens, never raw payment data
+  app.put('/api/admin/tenants/:id/payment-method', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Validate that only Stripe tokens and metadata are accepted
+      const paymentMethodSchema = z.object({
+        paymentMethodType: z.enum(['card', 'bank_account']),
+        stripeCustomerId: z.string().min(1, "Stripe customer ID required"),
+        stripePaymentMethodId: z.string().min(1, "Stripe payment method ID required"),
+        // Only last 4 digits for display - never full numbers
+        cardLast4: z.string().length(4).optional(),
+        cardBrand: z.string().optional(),
+        bankAccountLast4: z.string().length(4).optional(),
+        bankRoutingLast4: z.string().length(4).optional()
+      });
+      
+      const validation = paymentMethodSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: "Invalid payment method data. Must include Stripe customer and payment method IDs.", 
+          errors: validation.error.errors 
+        });
+      }
+      
+      const { 
+        paymentMethodType,
+        stripeCustomerId,
+        stripePaymentMethodId,
+        cardLast4,
+        cardBrand,
+        bankAccountLast4,
+        bankRoutingLast4
+      } = validation.data;
+      
+      const updates: any = {
+        paymentMethodType,
+        stripeCustomerId,
+        stripePaymentMethodId
+      };
+      
+      if (cardLast4) updates.cardLast4 = cardLast4;
+      if (cardBrand) updates.cardBrand = cardBrand;
+      if (bankAccountLast4) updates.bankAccountLast4 = bankAccountLast4;
+      if (bankRoutingLast4) updates.bankRoutingLast4 = bankRoutingLast4;
+      
+      const updatedTenant = await db
+        .update(tenants)
+        .set(updates)
+        .where(eq(tenants.id, id))
+        .returning();
+      
+      if (!updatedTenant || updatedTenant.length === 0) {
+        return res.status(404).json({ message: "Tenant not found" });
+      }
+      
+      res.json(updatedTenant[0]);
+    } catch (error) {
+      console.error("Error updating payment method:", error);
+      res.status(500).json({ message: "Failed to update payment method" });
+    }
+  });
+
   // Twilio webhook endpoint for SMS delivery tracking and usage
   app.post('/api/webhooks/twilio', async (req, res) => {
     try {
