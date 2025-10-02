@@ -1240,7 +1240,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         metadata: {
           type: 'test',
           tenantId: tenantId,
-        }
+        },
+        tenantId: tenantId, // Track email usage by tenant
       });
 
       res.json(result);

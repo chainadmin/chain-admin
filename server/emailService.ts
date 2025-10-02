@@ -1,4 +1,6 @@
 import { Client } from 'postmark';
+import { db } from './db';
+import { emailLogs } from '@shared/schema';
 
 if (!process.env.POSTMARK_SERVER_TOKEN) {
   throw new Error('Missing required Postmark Server Token: POSTMARK_SERVER_TOKEN');
@@ -14,6 +16,7 @@ export interface EmailOptions {
   text?: string;
   tag?: string;
   metadata?: Record<string, string>;
+  tenantId?: string; // For usage tracking
 }
 
 // Default sender address - verified in Postmark
@@ -22,16 +25,35 @@ const DEFAULT_FROM_EMAIL = 'support@chainsoftwaregroup.com';
 export class EmailService {
   async sendEmail(options: EmailOptions): Promise<{ messageId: string; success: boolean; error?: string }> {
     try {
+      const fromEmail = options.from || DEFAULT_FROM_EMAIL;
+      const textBody = options.text || this.htmlToText(options.html);
+      
       const result = await postmarkClient.sendEmail({
-        From: options.from || DEFAULT_FROM_EMAIL,
+        From: fromEmail,
         To: options.to,
         Subject: options.subject,
         HtmlBody: options.html,
-        TextBody: options.text || this.htmlToText(options.html),
+        TextBody: textBody,
         Tag: options.tag,
         Metadata: options.metadata,
         TrackOpens: true, // Enable open tracking
       });
+
+      // Log email to database if tenantId is provided
+      if (options.tenantId) {
+        await db.insert(emailLogs).values({
+          tenantId: options.tenantId,
+          messageId: result.MessageID,
+          fromEmail: fromEmail,
+          toEmail: options.to,
+          subject: options.subject,
+          htmlBody: options.html,
+          textBody: textBody,
+          status: 'sent',
+          tag: options.tag,
+          metadata: options.metadata || {},
+        });
+      }
 
       return {
         messageId: result.MessageID,
