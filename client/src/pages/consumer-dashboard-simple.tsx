@@ -125,16 +125,20 @@ export default function ConsumerDashboardSimple() {
     enabled: !!session?.email && !!session?.tenantSlug,
   });
 
+  // Calculate total balance from account data
+  const totalBalanceForArrangements = accountData?.accounts?.reduce((sum: number, account: any) => 
+    sum + (account.balanceCents || 0), 0) || 0;
+
   // Fetch payment arrangements
   const { data: arrangements } = useQuery({
-    queryKey: [`/api/consumer/arrangements/${session?.email}?tenantSlug=${session?.tenantSlug}`],
+    queryKey: [`/api/consumer/arrangements/${session?.email}?tenantSlug=${session?.tenantSlug}&balance=${totalBalanceForArrangements}`],
     queryFn: async () => {
       const token = getStoredConsumerToken();
-      const response = await apiCall("GET", `/api/consumer/arrangements/${session?.email}?tenantSlug=${session?.tenantSlug}`, null, token);
+      const response = await apiCall("GET", `/api/consumer/arrangements/${session?.email}?tenantSlug=${session?.tenantSlug}&balance=${totalBalanceForArrangements}`, null, token);
       if (!response.ok) throw new Error("Failed to fetch arrangements");
       return response.json();
     },
-    enabled: !!session?.email && !!session?.tenantSlug,
+    enabled: !!session?.email && !!session?.tenantSlug && !!accountData?.accounts,
   });
 
   const handleLogout = () => {
