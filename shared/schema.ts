@@ -75,6 +75,14 @@ export const tenants = pgTable("tenants", {
   twilioCampaignId: text("twilio_campaign_id"), // 10DLC Campaign ID if applicable
   notifiedOwners: boolean("notified_owners").default(false), // Track if owners were notified
   notificationSentAt: timestamp("notification_sent_at"),
+  // Stripe billing integration
+  stripeCustomerId: text("stripe_customer_id"), // Stripe customer ID for billing
+  stripePaymentMethodId: text("stripe_payment_method_id"), // Default payment method (card or bank account)
+  paymentMethodType: text("payment_method_type"), // 'card' or 'bank_account'
+  cardLast4: text("card_last4"), // Last 4 digits of card for display
+  cardBrand: text("card_brand"), // Card brand (Visa, Mastercard, etc.)
+  bankAccountLast4: text("bank_account_last4"), // Last 4 digits of account number
+  bankRoutingLast4: text("bank_routing_last4"), // Last 4 digits of routing number
   createdAt: timestamp("created_at").defaultNow(),
 });
 
