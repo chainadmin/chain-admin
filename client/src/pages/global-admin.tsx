@@ -51,6 +51,10 @@ export default function GlobalAdmin() {
   const [deleteConsumerDialogOpen, setDeleteConsumerDialogOpen] = useState(false);
   const [selectedConsumerForDeletion, setSelectedConsumerForDeletion] = useState<any>(null);
 
+  // Agency deletion state
+  const [deleteAgencyDialogOpen, setDeleteAgencyDialogOpen] = useState(false);
+  const [selectedAgencyForDeletion, setSelectedAgencyForDeletion] = useState<any>(null);
+
   // Check for admin authentication on component mount
   useEffect(() => {
     const adminAuth = sessionStorage.getItem("admin_authenticated");
@@ -251,6 +255,30 @@ export default function GlobalAdmin() {
       toast({
         title: "Error",
         description: "Failed to delete consumer",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Mutation to delete agency
+  const deleteAgencyMutation = useMutation({
+    mutationFn: async (agencyId: string) => {
+      return apiRequest('DELETE', `/api/admin/agencies/${agencyId}`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/stats'] });
+      setDeleteAgencyDialogOpen(false);
+      setSelectedAgencyForDeletion(null);
+      toast({
+        title: "Agency Deleted",
+        description: "The agency and all associated data have been permanently deleted",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete agency",
         variant: "destructive",
       });
     }
@@ -909,10 +937,10 @@ export default function GlobalAdmin() {
                             tenantId: tenant.id,
                             controls: { emailServiceEnabled: !tenant.emailServiceEnabled }
                           })}
-                          className={`flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                          className={`flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium transition-colors border ${
                             tenant.emailServiceEnabled !== false
-                              ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                              ? 'bg-green-100 text-green-800 hover:bg-green-200 border-green-300'
+                              : 'bg-red-50 text-red-700 hover:bg-red-100 border-red-300'
                           }`}
                           data-testid={`toggle-email-${tenant.id}`}
                         >
@@ -925,10 +953,10 @@ export default function GlobalAdmin() {
                             tenantId: tenant.id,
                             controls: { smsServiceEnabled: !tenant.smsServiceEnabled }
                           })}
-                          className={`flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                          className={`flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium transition-colors border ${
                             tenant.smsServiceEnabled !== false
-                              ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                              ? 'bg-green-100 text-green-800 hover:bg-green-200 border-green-300'
+                              : 'bg-red-50 text-red-700 hover:bg-red-100 border-red-300'
                           }`}
                           data-testid={`toggle-sms-${tenant.id}`}
                         >
@@ -941,10 +969,10 @@ export default function GlobalAdmin() {
                             tenantId: tenant.id,
                             controls: { portalAccessEnabled: !tenant.portalAccessEnabled }
                           })}
-                          className={`flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                          className={`flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium transition-colors border ${
                             tenant.portalAccessEnabled !== false
-                              ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                              ? 'bg-green-100 text-green-800 hover:bg-green-200 border-green-300'
+                              : 'bg-red-50 text-red-700 hover:bg-red-100 border-red-300'
                           }`}
                           data-testid={`toggle-portal-${tenant.id}`}
                         >
@@ -957,10 +985,10 @@ export default function GlobalAdmin() {
                             tenantId: tenant.id,
                             controls: { paymentProcessingEnabled: !tenant.paymentProcessingEnabled }
                           })}
-                          className={`flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                          className={`flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium transition-colors border ${
                             tenant.paymentProcessingEnabled !== false
-                              ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                              ? 'bg-green-100 text-green-800 hover:bg-green-200 border-green-300'
+                              : 'bg-red-50 text-red-700 hover:bg-red-100 border-red-300'
                           }`}
                           data-testid={`toggle-payment-${tenant.id}`}
                         >
@@ -1012,11 +1040,25 @@ export default function GlobalAdmin() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => window.open(`/${tenant.slug}`, '_blank')}
+                          onClick={() => window.open(`/${tenant.slug}/dashboard`, '_blank')}
                           data-testid={`button-view-${tenant.id}`}
                         >
                           <Eye className="h-4 w-4 mr-2" />
                           View
+                        </Button>
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => {
+                            setSelectedAgencyForDeletion(tenant);
+                            setDeleteAgencyDialogOpen(true);
+                          }}
+                          data-testid={`button-delete-${tenant.id}`}
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete
                         </Button>
                       </div>
                     </div>
@@ -1034,6 +1076,76 @@ export default function GlobalAdmin() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Delete Agency Confirmation Dialog */}
+      <Dialog open={deleteAgencyDialogOpen} onOpenChange={setDeleteAgencyDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center text-red-600">
+              <AlertTriangle className="h-5 w-5 mr-2" />
+              Delete Agency
+            </DialogTitle>
+          </DialogHeader>
+          {selectedAgencyForDeletion && (
+            <div className="space-y-4">
+              <div className="bg-red-50 p-4 rounded-lg">
+                <p className="text-sm text-red-800 font-medium">
+                  ⚠️ WARNING: This action cannot be undone!
+                </p>
+                <p className="text-sm text-red-800 mt-2">
+                  This will permanently delete the agency and ALL associated data including:
+                </p>
+                <ul className="text-sm text-red-800 mt-2 list-disc list-inside">
+                  <li>All consumers and their accounts</li>
+                  <li>All payment records</li>
+                  <li>All communication history</li>
+                  <li>All settings and configurations</li>
+                </ul>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 font-medium">Agency Details:</p>
+                <p className="font-medium mt-1">{selectedAgencyForDeletion.name}</p>
+                <p className="text-sm text-gray-600">{selectedAgencyForDeletion.email}</p>
+                <p className="text-sm text-gray-600">Slug: {selectedAgencyForDeletion.slug}</p>
+                <p className="text-sm text-gray-600 mt-2">
+                  {selectedAgencyForDeletion.stats?.consumerCount || 0} consumers • {selectedAgencyForDeletion.stats?.accountCount || 0} accounts
+                </p>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setDeleteAgencyDialogOpen(false);
+                    setSelectedAgencyForDeletion(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    deleteAgencyMutation.mutate(selectedAgencyForDeletion.id);
+                  }}
+                  disabled={deleteAgencyMutation.isPending}
+                  data-testid="button-confirm-delete-agency"
+                >
+                  {deleteAgencyMutation.isPending ? (
+                    <>
+                      <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2" />
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete Agency
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
       
       {/* SMS Configuration Dialog */}
       <Dialog open={smsConfigDialogOpen} onOpenChange={setSmsConfigDialogOpen}>

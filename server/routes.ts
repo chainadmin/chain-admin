@@ -4641,12 +4641,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Delete agency (platform admin only)
+  app.delete('/api/admin/agencies/:id', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Delete the tenant (cascade will handle related records)
+      await db.delete(tenants).where(eq(tenants.id, id));
+      
+      res.json({ 
+        success: true, 
+        message: "Agency deleted successfully" 
+      });
+    } catch (error) {
+      console.error("Error deleting agency:", error);
+      res.status(500).json({ message: "Failed to delete agency" });
+    }
+  });
+
   // Get all consumers across all agencies (platform admin only)
   app.get('/api/admin/consumers', isPlatformAdmin, async (req: any, res) => {
     try {
       const { search, tenantId, limit = 100 } = req.query;
       
-      let query = db
+      const baseQuery = db
         .select({
           consumer: consumers,
           tenant: {
@@ -4659,11 +4677,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .leftJoin(tenants, eq(consumers.tenantId, tenants.id));
       
       // Filter by tenant if specified
-      if (tenantId) {
-        query = query.where(eq(consumers.tenantId, tenantId));
-      }
-      
-      const results = await query.limit(parseInt(limit as string, 10));
+      const results = tenantId
+        ? await baseQuery.where(eq(consumers.tenantId, tenantId)).limit(parseInt(limit as string, 10))
+        : await baseQuery.limit(parseInt(limit as string, 10));
       
       // Apply search filter in-memory if provided
       let filteredResults = results;
