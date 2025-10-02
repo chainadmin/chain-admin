@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +19,6 @@ const formatCurrency = (amount: number) => {
 };
 
 export default function GlobalAdmin() {
-  const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   
@@ -55,13 +53,9 @@ export default function GlobalAdmin() {
     }
   }, []);
 
-  // Check if user is platform admin
-  const { data: userData } = useQuery({
-    queryKey: ['/api/auth/user'],
-    enabled: !!user
-  });
-
-  const isPlatformAdmin = (userData as any)?.platformUser?.role === 'platform_admin';
+  // For the simple admin portal, if authenticated via sessionStorage, treat as platform admin
+  // No need to check Replit auth or database roles
+  const isPlatformAdmin = isAdminAuthenticated;
 
   // Fetch all tenants
   const { data: tenants, isLoading: tenantsLoading } = useQuery({
@@ -266,30 +260,6 @@ export default function GlobalAdmin() {
   // Show admin authentication form if not authenticated
   if (!isAdminAuthenticated) {
     return <AdminAuth onAuthenticated={() => setIsAdminAuthenticated(true)} />;
-  }
-
-  if (authLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
-      </div>
-    );
-  }
-
-  if (!isPlatformAdmin) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Card className="w-full max-w-md">
-          <CardContent className="pt-6">
-            <div className="text-center">
-              <AlertTriangle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
-              <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
-              <p className="text-gray-600">You need platform admin access to view this page.</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
   }
 
   return (
