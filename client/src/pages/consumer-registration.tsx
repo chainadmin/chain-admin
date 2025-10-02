@@ -490,7 +490,7 @@ export default function ConsumerRegistration() {
                       Consent confirmed
                     </>
                   ) : (
-                    <>Acknowledge SMS updates</>
+                    <>I acknowledge I may receive messages from Chain Software Group</>
                   )}
                 </Button>
               </div>
