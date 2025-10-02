@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import AdminLayout from "@/components/admin-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -201,18 +202,7 @@ export default function Billing() {
     setUpdatingPlanId(planId);
 
     try {
-      const response = await fetch("/api/billing/select-plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        throw new Error(errorData?.message || "Unable to update plan");
-      }
-
-      const result = await response.json();
+      const result = await apiRequest("POST", "/api/billing/select-plan", { planId }) as any;
 
       await queryClient.invalidateQueries({ queryKey: ["/api/billing/subscription"] });
       await queryClient.invalidateQueries({ queryKey: ["/api/billing/stats"] });
