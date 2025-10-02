@@ -3757,12 +3757,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { 
         accountId,
+        arrangementId,
         cardNumber, 
         expiryMonth,
         expiryYear,
         cvv, 
         cardName, 
-        zipCode 
+        zipCode,
+        saveCard,
+        setupRecurring
       } = req.body;
 
       if (!accountId || !cardNumber || !expiryMonth || !expiryYear || !cvv || !cardName) {
@@ -3775,11 +3778,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Access denied to this account" });
       }
 
-      // Use the actual balance from the database, not client-provided amount
-      const amountCents = account.balanceCents || 0;
+      // Get arrangement if specified
+      let arrangement = null;
+      let amountCents = account.balanceCents || 0;
+      
+      if (arrangementId) {
+        const arrangements = await storage.getArrangementOptionsByTenant(tenantId);
+        arrangement = arrangements.find(arr => arr.id === arrangementId);
+        
+        if (!arrangement) {
+          return res.status(400).json({ message: "Invalid arrangement selected" });
+        }
+
+        // Calculate payment amount based on arrangement type
+        if (arrangement.planType === 'settlement' && arrangement.payoffPercentageBasisPoints) {
+          // Settlement: percentage of balance
+          amountCents = Math.round(amountCents * arrangement.payoffPercentageBasisPoints / 10000);
+        } else if (arrangement.planType === 'fixed_monthly' && arrangement.fixedMonthlyPayment) {
+          // Fixed monthly payment
+          amountCents = arrangement.fixedMonthlyPayment;
+        } else if (arrangement.planType === 'range' && arrangement.monthlyPaymentMin) {
+          // Range: use minimum payment for recurring
+          amountCents = arrangement.monthlyPaymentMin;
+        }
+      }
       
       if (amountCents <= 0) {
-        return res.status(400).json({ message: "Account has no balance to pay" });
+        return res.status(400).json({ message: "Invalid payment amount" });
       }
 
       // Get tenant settings to check if online payments are enabled
@@ -3801,27 +3826,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ? "https://sandbox.usaepay.com/api/v2"
         : "https://secure.usaepay.com/api/v2";
 
-      // Process payment with USAePay REST API
-      const usaepayPayload = {
+      const authHeader = `Basic ${Buffer.from(`${merchantApiKey}:${merchantApiPin}`).toString('base64')}`;
+      
+      // Step 1: Tokenize the card if we need to save it
+      let paymentToken = null;
+      let cardLast4 = cardNumber.slice(-4);
+      let cardBrand = null;
+
+      if (saveCard || setupRecurring) {
+        const tokenPayload = {
+          creditcard: {
+            number: cardNumber.replace(/\s/g, ''),
+            expiration: `${expiryMonth}${expiryYear.slice(-2)}`,
+            cardholder: cardName,
+            avs_zip: zipCode || ""
+          }
+        };
+
+        const tokenResponse = await fetch(`${usaepayBaseUrl}/paymentmethods`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': authHeader
+          },
+          body: JSON.stringify(tokenPayload)
+        });
+
+        if (tokenResponse.ok) {
+          const tokenResult = await tokenResponse.json();
+          paymentToken = tokenResult.key || tokenResult.token;
+          cardBrand = tokenResult.cardtype || tokenResult.card_type;
+        }
+      }
+
+      // Step 2: Process payment (use token if available, otherwise use card directly)
+      let usaepayPayload: any = {
         command: "sale",
         amount: (amountCents / 100).toFixed(2),
-        creditcard: {
+        invoice: accountId || `consumer_${consumerId}`,
+        description: arrangement 
+          ? `${arrangement.name} - Payment for account`
+          : `Payment for account`
+      };
+
+      if (paymentToken) {
+        // Use saved token for payment
+        usaepayPayload.paymentkey = paymentToken;
+        usaepayPayload.cvv = cvv; // CVV still required for token payments
+      } else {
+        // Use card directly
+        usaepayPayload.creditcard = {
           number: cardNumber.replace(/\s/g, ''),
           expiration: `${expiryMonth}${expiryYear.slice(-2)}`,
           cvv: cvv,
           cardholder: cardName,
           avs_street: "",
           avs_zip: zipCode || ""
-        },
-        invoice: accountId || `consumer_${consumerId}`,
-        description: `Payment for account`
-      };
+        };
+      }
 
       const usaepayResponse = await fetch(`${usaepayBaseUrl}/transactions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Basic ${Buffer.from(`${merchantApiKey}:${merchantApiPin}`).toString('base64')}`
+          'Authorization': authHeader
         },
         body: JSON.stringify(usaepayPayload)
       });
@@ -3830,6 +3898,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const success = usaepayResult.result === 'Approved' || usaepayResult.status === 'Approved';
       const transactionId = usaepayResult.refnum || usaepayResult.key || `tx_${Date.now()}`;
+      
+      // Extract card brand if not already set
+      if (!cardBrand && usaepayResult.cardtype) {
+        cardBrand = usaepayResult.cardtype;
+      }
 
       // Create payment record
       const payment = await storage.createPayment({
@@ -3842,14 +3915,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
         transactionId: transactionId,
         processorResponse: JSON.stringify(usaepayResult),
         processedAt: success ? new Date() : null,
-        notes: `Online payment - ${cardName} ending in ${cardNumber.slice(-4)}`,
+        notes: arrangement 
+          ? `${arrangement.name} - ${cardName} ending in ${cardLast4}`
+          : `Online payment - ${cardName} ending in ${cardLast4}`,
       });
 
-      // If account specified, update account balance
+      // Step 3: Save payment method if requested and payment successful
+      let savedPaymentMethod = null;
+      if (success && paymentToken && (saveCard || setupRecurring)) {
+        savedPaymentMethod = await storage.createPaymentMethod({
+          tenantId,
+          consumerId,
+          paymentToken,
+          cardLast4,
+          cardBrand: cardBrand || 'unknown',
+          cardholderName: cardName,
+          expiryMonth: expiryMonth,
+          expiryYear: expiryYear,
+          billingZip: zipCode || null,
+          isDefault: true, // First card is default
+        });
+      }
+
+      // Step 4: Create payment schedule if requested
+      if (success && setupRecurring && arrangement && savedPaymentMethod) {
+        const today = new Date();
+        const nextMonth = new Date(today);
+        nextMonth.setMonth(nextMonth.getMonth() + 1);
+        
+        // Determine number of payments based on arrangement
+        let remainingPayments = null;
+        let endDate = null;
+        
+        if (arrangement.planType === 'settlement') {
+          // Settlement is one-time, no recurring
+          // Skip creating schedule
+        } else if (arrangement.planType === 'fixed_monthly' && arrangement.maxTermMonths) {
+          remainingPayments = Number(arrangement.maxTermMonths) - 1; // Minus the one we just made
+          endDate = new Date(today);
+          endDate.setMonth(endDate.getMonth() + Number(arrangement.maxTermMonths));
+        }
+        
+        // Only create schedule for non-settlement arrangements
+        if (arrangement.planType !== 'settlement' && arrangementId) {
+          await storage.createPaymentSchedule({
+            tenantId,
+            consumerId,
+            accountId,
+            paymentMethodId: savedPaymentMethod.id,
+            arrangementType: arrangement.planType,
+            amountCents,
+            frequency: 'monthly',
+            startDate: today.toISOString().split('T')[0],
+            endDate: endDate ? endDate.toISOString().split('T')[0] : null,
+            nextPaymentDate: nextMonth.toISOString().split('T')[0],
+            remainingPayments,
+            status: 'active',
+          });
+        }
+      }
+
+      // Step 5: Update account balance
       if (accountId && success) {
         const account = await storage.getAccount(accountId);
         if (account) {
-          const newBalance = (account.balanceCents || 0) - amountCents;
+          let newBalance = (account.balanceCents || 0) - amountCents;
+          
+          // For settlement, pay off the full balance
+          if (arrangement && arrangement.planType === 'settlement') {
+            newBalance = 0;
+          }
+          
           await storage.updateAccount(accountId, {
             balanceCents: Math.max(0, newBalance)
           });
@@ -3904,6 +4040,160 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: false,
         message: "Payment processing failed. Please try again or contact your agency." 
       });
+    }
+  });
+
+  // Process scheduled payments (called by cron/scheduler)
+  app.post('/api/payments/process-scheduled', async (req: any, res) => {
+    try {
+      const { apiKey } = req.body;
+      
+      // Simple API key check (you should use a proper auth mechanism)
+      if (apiKey !== process.env.CRON_API_KEY) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Get all active payment schedules due today
+      const allTenants = await storage.getAllTenants();
+      const processedPayments = [];
+      const failedPayments = [];
+
+      for (const tenant of allTenants) {
+        const consumers = await storage.getConsumersByTenant(tenant.id);
+        
+        for (const consumer of consumers) {
+          const schedules = await storage.getPaymentSchedulesByConsumer(consumer.id, tenant.id);
+          
+          for (const schedule of schedules) {
+            // Check if payment is due today and schedule is active
+            if (schedule.status === 'active' && schedule.nextPaymentDate === today) {
+              try {
+                // Get payment method
+                const paymentMethods = await storage.getPaymentMethodsByConsumer(consumer.id, tenant.id);
+                const paymentMethod = paymentMethods.find(pm => pm.id === schedule.paymentMethodId);
+                
+                if (!paymentMethod) {
+                  console.error(`Payment method not found for schedule ${schedule.id}`);
+                  continue;
+                }
+
+                // Get tenant settings for USAePay credentials
+                const settings = await storage.getTenantSettings(tenant.id);
+                if (!settings?.merchantApiKey || !settings?.merchantApiPin) {
+                  console.error(`USAePay not configured for tenant ${tenant.id}`);
+                  continue;
+                }
+
+                const usaepayBaseUrl = settings.useSandbox 
+                  ? "https://sandbox.usaepay.com/api/v2"
+                  : "https://secure.usaepay.com/api/v2";
+
+                const authHeader = `Basic ${Buffer.from(`${settings.merchantApiKey}:${settings.merchantApiPin}`).toString('base64')}`;
+
+                // Process payment using saved token
+                const paymentPayload = {
+                  command: "sale",
+                  amount: (schedule.amountCents / 100).toFixed(2),
+                  paymentkey: paymentMethod.paymentToken,
+                  invoice: schedule.accountId,
+                  description: `Scheduled ${schedule.arrangementType} payment`
+                };
+
+                const paymentResponse = await fetch(`${usaepayBaseUrl}/transactions`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': authHeader
+                  },
+                  body: JSON.stringify(paymentPayload)
+                });
+
+                const paymentResult = await paymentResponse.json();
+                const success = paymentResult.result === 'Approved' || paymentResult.status === 'Approved';
+
+                // Create payment record
+                await storage.createPayment({
+                  tenantId: tenant.id,
+                  consumerId: consumer.id,
+                  accountId: schedule.accountId,
+                  amountCents: schedule.amountCents,
+                  paymentMethod: 'credit_card',
+                  status: success ? 'completed' : 'failed',
+                  transactionId: paymentResult.refnum || paymentResult.key || `tx_${Date.now()}`,
+                  processorResponse: JSON.stringify(paymentResult),
+                  processedAt: success ? new Date() : null,
+                  notes: `Scheduled payment - ${paymentMethod.cardholderName} ending in ${paymentMethod.cardLast4}`,
+                });
+
+                if (success) {
+                  // Update account balance
+                  const account = await storage.getAccount(schedule.accountId);
+                  if (account) {
+                    const newBalance = (account.balanceCents || 0) - schedule.amountCents;
+                    await storage.updateAccount(schedule.accountId, {
+                      balanceCents: Math.max(0, newBalance)
+                    });
+                  }
+
+                  // Update schedule for next payment
+                  const nextPayment = new Date(schedule.nextPaymentDate);
+                  nextPayment.setMonth(nextPayment.getMonth() + 1);
+                  
+                  const updatedRemainingPayments = schedule.remainingPayments !== null 
+                    ? schedule.remainingPayments - 1 
+                    : null;
+                  
+                  const scheduleStatus = updatedRemainingPayments === 0 ? 'completed' : 'active';
+
+                  await storage.updatePaymentSchedule(schedule.id, tenant.id, {
+                    nextPaymentDate: nextPayment.toISOString().split('T')[0],
+                    remainingPayments: updatedRemainingPayments,
+                    lastProcessedAt: new Date(),
+                    status: scheduleStatus,
+                    failedAttempts: 0,
+                  });
+
+                  processedPayments.push({ scheduleId: schedule.id, consumerId: consumer.id });
+                } else {
+                  // Payment failed - update failed attempts
+                  const failedAttempts = (schedule.failedAttempts || 0) + 1;
+                  const scheduleStatus = failedAttempts >= 3 ? 'failed' : 'active';
+
+                  await storage.updatePaymentSchedule(schedule.id, tenant.id, {
+                    failedAttempts,
+                    status: scheduleStatus,
+                  });
+
+                  failedPayments.push({ 
+                    scheduleId: schedule.id, 
+                    consumerId: consumer.id, 
+                    error: paymentResult.error || 'Payment declined'
+                  });
+                }
+              } catch (err) {
+                console.error(`Error processing schedule ${schedule.id}:`, err);
+                failedPayments.push({ 
+                  scheduleId: schedule.id, 
+                  error: err instanceof Error ? err.message : 'Unknown error'
+                });
+              }
+            }
+          }
+        }
+      }
+
+      res.json({
+        success: true,
+        processed: processedPayments.length,
+        failed: failedPayments.length,
+        details: { processedPayments, failedPayments }
+      });
+
+    } catch (error) {
+      console.error("Error processing scheduled payments:", error);
+      res.status(500).json({ message: "Failed to process scheduled payments" });
     }
   });
 

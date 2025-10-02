@@ -194,12 +194,15 @@ export default function ConsumerDashboardSimple() {
       const token = getStoredConsumerToken();
       const response = await apiCall("POST", `/api/consumer/payments/process`, {
         accountId: selectedAccount.id,
+        arrangementId: selectedArrangement?.id || null,
         cardNumber: paymentForm.cardNumber,
         expiryMonth: paymentForm.expiryMonth,
         expiryYear: paymentForm.expiryYear,
         cvv: paymentForm.cvv,
         cardName: paymentForm.cardName,
         zipCode: paymentForm.zipCode,
+        saveCard: saveCard,
+        setupRecurring: setupRecurring,
       }, token);
 
       const result = await response.json();

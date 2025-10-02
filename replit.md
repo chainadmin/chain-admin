@@ -20,6 +20,15 @@ The frontend uses React with TypeScript, built with shadcn/ui components on Radi
 - **Subscription Billing System**: Implemented with defined tiers, email/SMS limits, overage pricing, and database schema for plans and usage tracking.
 - **Email Sending**: Uses agency-branded sender addresses (e.g., "Agency Name <slug@chainsoftwaregroup.com>") for improved deliverability and brand recognition.
 - **SMAX Integration**: Provides API integration for SMAX collection software, including JWT authentication, payment/attempt/note insertion, account retrieval, and test connection functionality.
+- **Payment Processing with Arrangements**: Complete payment system with USAePay integration. Features:
+  - Tenant-specific USAePay credentials (API Key, API PIN, merchant name/type, sandbox mode toggle) stored in database
+  - Test connection endpoint to validate credentials before processing
+  - Card tokenization - saves payment tokens (not raw card data) to payment_methods table
+  - Arrangement-based payments (range, fixed_monthly, settlement, pay_in_full, custom_terms)
+  - Recurring payment schedules with saved cards
+  - Automated scheduled payment processing endpoint (`/api/payments/process-scheduled`)
+  - Settlement payments automatically clear account balance
+  - Failed payment tracking with retry limits (3 attempts)
 
 ## System Design Choices
 - **Database**: PostgreSQL with Drizzle ORM, multi-tenant schema including `Users`, `Tenants`, `Platform Users`, `Consumers`, `Accounts`, `Email Templates`, and `Sessions`. Uses UUID primary keys and proper indexing.
