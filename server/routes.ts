@@ -3218,12 +3218,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       monthlyPaymentMax: planType === "range" ? monthlyPaymentMax : null,
       fixedMonthlyPayment: planType === "fixed_monthly" ? fixedMonthlyPayment : null,
       payInFullAmount: planType === "pay_in_full" ? payInFullAmount : null,
-      payoffText: planType === "pay_in_full" ? payoffText : null,
-      payoffPercentageBasisPoints: planType === "pay_in_full" ? payoffPercentage : null,
-      payoffDueDate: planType === "pay_in_full" ? payoffDueDate : null,
+      payoffText: planType === "pay_in_full" || planType === "settlement" ? payoffText : null,
+      payoffPercentageBasisPoints: planType === "pay_in_full" || planType === "settlement" ? payoffPercentage : null,
+      payoffDueDate: planType === "pay_in_full" || planType === "settlement" ? payoffDueDate : null,
       customTermsText: planType === "custom_terms" ? customTermsText : null,
       maxTermMonths:
-        planType === "pay_in_full" || planType === "custom_terms"
+        planType === "pay_in_full" || planType === "settlement" || planType === "custom_terms"
           ? null
           : planType === "range"
             ? maxTermMonths ?? 12
@@ -3267,17 +3267,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      console.log("Creating arrangement option with request body:", JSON.stringify(req.body, null, 2));
       const payload = buildArrangementOptionPayload(req.body, tenantId);
-      console.log("Built payload:", JSON.stringify(payload, null, 2));
       const option = await storage.createArrangementOption(payload);
 
       res.json(option);
     } catch (error) {
       console.error("Error creating arrangement option:", error);
-      if (error instanceof z.ZodError) {
-        console.error("Zod validation errors:", JSON.stringify(error.errors, null, 2));
-      }
       const statusCode = error instanceof z.ZodError || (error as any)?.statusCode === 400 ? 400 : 500;
       res.status(statusCode).json({
         message:

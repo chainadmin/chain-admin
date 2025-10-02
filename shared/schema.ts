@@ -291,6 +291,7 @@ export const arrangementPlanTypes = [
   "range",
   "fixed_monthly",
   "pay_in_full",
+  "settlement",
   "custom_terms",
 ] as const;
 
@@ -987,6 +988,30 @@ export const insertArrangementOptionSchema = createInsertSchema(arrangementOptio
             code: z.ZodIssueCode.custom,
             path: ["payoffDueDate"],
             message: "Payoff due date is required",
+          });
+        }
+        break;
+      }
+      case "settlement": {
+        if (data.payoffPercentageBasisPoints == null) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["payoffPercentageBasisPoints"],
+            message: "Settlement percentage is required",
+          });
+        } else if (data.payoffPercentageBasisPoints <= 0 || data.payoffPercentageBasisPoints > 10000) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["payoffPercentageBasisPoints"],
+            message: "Settlement percentage must be between 0 and 100",
+          });
+        }
+
+        if (!data.payoffDueDate) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["payoffDueDate"],
+            message: "Settlement due date is required",
           });
         }
         break;

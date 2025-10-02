@@ -72,7 +72,7 @@ export default function Settings() {
     description: string;
     minBalance: string;
     maxBalance: string;
-    planType: "range" | "fixed_monthly" | "pay_in_full" | "custom_terms";
+    planType: "range" | "fixed_monthly" | "pay_in_full" | "settlement" | "custom_terms";
     monthlyPaymentMin: string;
     monthlyPaymentMax: string;
     fixedMonthlyPayment: string;
@@ -284,9 +284,6 @@ export default function Settings() {
 
   const createArrangementMutation = useMutation({
     mutationFn: async (data: any) => {
-      console.log("Creating arrangement with data:", data);
-      console.log("Auth token:", localStorage.getItem('authToken'));
-      console.log("Cookies:", document.cookie);
       await apiRequest("POST", "/api/arrangement-options", data);
     },
     onSuccess: () => {
@@ -299,7 +296,6 @@ export default function Settings() {
       setArrangementForm({ ...emptyArrangementForm });
     },
     onError: (error: any) => {
-      console.error("Arrangement creation error:", error);
       toast({
         title: "Creation Failed",
         description: error?.message || "Unknown error occurred",
@@ -580,6 +576,42 @@ export default function Settings() {
       payload.payoffPercentageBasisPoints = payoffPercentage;
       payload.payoffDueDate = payoffDueDate;
       payload.payoffText = payoffText || undefined;
+      payload.maxTermMonths = null;
+    } else if (planType === "settlement") {
+      const settlementPercentage = parsePercentageInput(arrangementForm.payoffPercentage);
+      const settlementDueDate = parseDateInput(arrangementForm.payoffDueDate);
+      const settlementText = arrangementForm.payoffText.trim();
+
+      if (settlementPercentage === null || settlementPercentage <= 0) {
+        toast({
+          title: "Settlement Percentage Required",
+          description: "Enter a valid settlement percentage greater than zero.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (settlementPercentage > 10000) {
+        toast({
+          title: "Invalid Percentage",
+          description: "Settlement percentage cannot exceed 100%.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!settlementDueDate) {
+        toast({
+          title: "Settlement Due Date Required",
+          description: "Select a valid date for the settlement terms.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      payload.payoffPercentageBasisPoints = settlementPercentage;
+      payload.payoffDueDate = settlementDueDate;
+      payload.payoffText = settlementText || undefined;
       payload.maxTermMonths = null;
     } else if (planType === "custom_terms") {
       const customText = arrangementForm.customTermsText.trim();
@@ -1641,6 +1673,7 @@ export default function Settings() {
                                 <SelectItem value="range">Monthly range (legacy)</SelectItem>
                                 <SelectItem value="fixed_monthly">Fixed monthly amount</SelectItem>
                                 <SelectItem value="pay_in_full">Pay in full</SelectItem>
+                                <SelectItem value="settlement">Settlement (% of balance)</SelectItem>
                                 <SelectItem value="custom_terms">Custom terms copy</SelectItem>
                               </SelectContent>
                             </Select>
@@ -1720,6 +1753,45 @@ export default function Settings() {
                                   value={arrangementForm.payoffText}
                                   onChange={(e) => setArrangementForm({ ...arrangementForm, payoffText: e.target.value })}
                                   placeholder="Describe any additional payoff instructions"
+                                  className={textareaClasses}
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {arrangementForm.planType === "settlement" && (
+                            <div className="space-y-4">
+                              <div>
+                                <Label className="text-white">Settlement Percentage (%) *</Label>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  max="100"
+                                  value={arrangementForm.payoffPercentage}
+                                  onChange={(e) => setArrangementForm({ ...arrangementForm, payoffPercentage: e.target.value })}
+                                  placeholder="60"
+                                  className={inputClasses}
+                                />
+                                <p className="mt-1 text-xs text-blue-100/70">
+                                  Enter the percentage of balance required to settle this debt (e.g., 60% means consumer pays 60% of their balance).
+                                </p>
+                              </div>
+                              <div>
+                                <Label className="text-white">Settlement Due Date *</Label>
+                                <Input
+                                  type="date"
+                                  value={arrangementForm.payoffDueDate}
+                                  onChange={(e) => setArrangementForm({ ...arrangementForm, payoffDueDate: e.target.value })}
+                                  className={inputClasses}
+                                />
+                              </div>
+                              <div>
+                                <Label className="text-white">Settlement Terms</Label>
+                                <Textarea
+                                  value={arrangementForm.payoffText}
+                                  onChange={(e) => setArrangementForm({ ...arrangementForm, payoffText: e.target.value })}
+                                  placeholder="Describe settlement terms and conditions"
                                   className={textareaClasses}
                                 />
                               </div>

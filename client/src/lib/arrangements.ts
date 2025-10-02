@@ -33,6 +33,8 @@ export const getPlanTypeLabel = (planType?: string | null): string => {
       return 'Fixed monthly';
     case 'pay_in_full':
       return 'Pay in full';
+    case 'settlement':
+      return 'Settlement';
     case 'custom_terms':
       return 'Custom terms';
     case 'range':
@@ -110,6 +112,43 @@ export const getArrangementSummary = (arrangement: ArrangementLike) => {
       }
 
       const supplementalText = payoffText && payoffText !== headline ? payoffText : null;
+      if (supplementalText) {
+        detailParts.push(supplementalText);
+      }
+
+      return { planType, headline, detail: detailParts.length ? detailParts.join(' • ') : undefined };
+    }
+    case 'settlement': {
+      const settlementText = arrangement.payoffText?.trim();
+      const percentageBasisPoints = typeof arrangement.payoffPercentageBasisPoints === 'number'
+        ? arrangement.payoffPercentageBasisPoints
+        : null;
+      const dueDate = arrangement.payoffDueDate;
+
+      const formattedPercentage = percentageBasisPoints !== null
+        ? (percentageBasisPoints / 100).toLocaleString('en-US', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 2,
+          }) + '%'
+        : null;
+
+      const formattedDueDate = dueDate
+        ? (() => {
+            const parsedDate = new Date(dueDate);
+            return Number.isNaN(parsedDate.getTime()) ? null : dateFormatter.format(parsedDate);
+          })()
+        : null;
+
+      const headline = formattedPercentage
+        ? `Settle for ${formattedPercentage} of balance`
+        : settlementText || 'Settlement offer';
+
+      const detailParts: string[] = [];
+      if (formattedDueDate) {
+        detailParts.push(`Due by ${formattedDueDate}`);
+      }
+
+      const supplementalText = settlementText && settlementText !== headline ? settlementText : null;
       if (supplementalText) {
         detailParts.push(supplementalText);
       }
