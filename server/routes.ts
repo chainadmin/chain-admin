@@ -1222,8 +1222,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const tenant = await storage.getTenant(tenantId);
       
-      // Create branded sender email: "Agency Name <slug@chainsoftwaregroup.com>"
-      const fromEmail = tenant ? `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>` : 'support@chainsoftwaregroup.com';
+      // Use custom sender email if configured, otherwise use branded slug email
+      let fromEmail;
+      if (tenant?.customSenderEmail) {
+        fromEmail = `${tenant.name} <${tenant.customSenderEmail}>`;
+      } else {
+        fromEmail = tenant ? `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>` : 'support@chainsoftwaregroup.com';
+      }
 
       const result = await emailService.sendEmail({
         to,
