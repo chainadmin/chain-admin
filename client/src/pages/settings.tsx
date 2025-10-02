@@ -132,6 +132,10 @@ export default function Settings() {
     queryKey: ["/api/arrangement-options"],
   });
 
+  const { data: emailUsageStats } = useQuery({
+    queryKey: ["/api/email-usage-stats"],
+  });
+
   const quickStatusItems = [
     {
       label: "Portal branding",
@@ -1039,6 +1043,52 @@ export default function Settings() {
                     </Button>
                   </CardFooter>
                 )}
+              </Card>
+
+              {/* Email Usage Stats Card */}
+              <Card className={cardBaseClasses}>
+                <CardHeader className="space-y-1 text-white">
+                  <CardTitle className="text-xl font-semibold text-white">Email Usage Statistics</CardTitle>
+                  <p className="text-sm text-blue-100/70">
+                    Track your email sending activity and delivery metrics
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {emailUsageStats ? (
+                    <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
+                      <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+                        <div className="text-2xl font-bold text-white">{emailUsageStats.total || 0}</div>
+                        <div className="text-sm text-blue-100/70">Total Sent</div>
+                      </div>
+                      <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+                        <div className="text-2xl font-bold text-green-400">{emailUsageStats.delivered || 0}</div>
+                        <div className="text-sm text-blue-100/70">Delivered</div>
+                      </div>
+                      <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+                        <div className="text-2xl font-bold text-sky-400">{emailUsageStats.opened || 0}</div>
+                        <div className="text-sm text-blue-100/70">Opened</div>
+                      </div>
+                      <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+                        <div className="text-2xl font-bold text-yellow-400">{emailUsageStats.bounced || 0}</div>
+                        <div className="text-sm text-blue-100/70">Bounced</div>
+                      </div>
+                      <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+                        <div className="text-2xl font-bold text-red-400">{emailUsageStats.complained || 0}</div>
+                        <div className="text-sm text-blue-100/70">Complained</div>
+                      </div>
+                      <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+                        <div className="text-2xl font-bold text-blue-400">
+                          {emailUsageStats.total > 0 
+                            ? `${Math.round((emailUsageStats.opened / emailUsageStats.total) * 100)}%` 
+                            : '0%'}
+                        </div>
+                        <div className="text-sm text-blue-100/70">Open Rate</div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center text-blue-100/70 py-8">Loading email statistics...</div>
+                  )}
+                </CardContent>
               </Card>
             </TabsContent>
 

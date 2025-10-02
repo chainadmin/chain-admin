@@ -1268,6 +1268,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Email usage stats route
+  app.get('/api/email-usage-stats', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      // Get email stats from email_logs table
+      const stats = await db
+        .select({
+          total: sql<number>`COUNT(*)`,
+          sent: sql<number>`COUNT(CASE WHEN status = 'sent' THEN 1 END)`,
+          delivered: sql<number>`COUNT(CASE WHEN status = 'delivered' THEN 1 END)`,
+          opened: sql<number>`COUNT(CASE WHEN status = 'opened' THEN 1 END)`,
+          bounced: sql<number>`COUNT(CASE WHEN status = 'bounced' THEN 1 END)`,
+          complained: sql<number>`COUNT(CASE WHEN status = 'complained' THEN 1 END)`,
+        })
+        .from(emailLogs)
+        .where(eq(emailLogs.tenantId, tenantId));
+
+      res.json(stats[0] || { total: 0, sent: 0, delivered: 0, opened: 0, bounced: 0, complained: 0 });
+    } catch (error) {
+      console.error("Error fetching email usage stats:", error);
+      res.status(500).json({ message: "Failed to fetch email usage stats" });
+    }
+  });
+
   // SMS template routes
   app.get('/api/sms-templates', authenticateUser, async (req: any, res) => {
     try {
