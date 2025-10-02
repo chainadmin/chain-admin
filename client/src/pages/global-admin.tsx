@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -361,13 +360,13 @@ export default function GlobalAdmin() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-[#0a0f1e] p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8 flex justify-between items-start">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900" data-testid="text-global-admin-title">Global Admin Dashboard</h1>
-            <p className="text-gray-600 mt-2">Platform-wide overview and management</p>
+            <h1 className="text-3xl font-bold text-blue-50" data-testid="text-global-admin-title">Global Admin Dashboard</h1>
+            <p className="text-blue-100/70 mt-2">Platform-wide overview and management</p>
           </div>
           
           {/* Create Agency Button */}
@@ -457,134 +456,122 @@ export default function GlobalAdmin() {
         {statsLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             {[...Array(4)].map((_, i) => (
-              <Card key={i}>
-                <CardContent className="pt-6">
-                  <div className="animate-pulse">
-                    <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-                    <div className="h-8 bg-gray-200 rounded w-1/2"></div>
-                  </div>
-                </CardContent>
-              </Card>
+              <div key={i} className="rounded-3xl border border-white/10 bg-white/10 p-6 shadow-lg shadow-blue-900/20 backdrop-blur animate-pulse">
+                <div className="h-3 w-24 rounded-full bg-white/10" />
+                <div className="mt-6 h-8 w-28 rounded-full bg-white/10" />
+              </div>
             ))}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Agencies</CardTitle>
-                <Building2 className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold" data-testid="text-total-agencies">{(stats as any)?.totalTenants || 0}</div>
-                <p className="text-xs text-muted-foreground">
-                  {(stats as any)?.activeTenants || 0} active
-                </p>
-              </CardContent>
-            </Card>
+            <div className="rounded-3xl border border-white/10 bg-white/10 p-6 shadow-lg shadow-blue-900/20 backdrop-blur">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-medium text-blue-100/80">Total Agencies</p>
+                <Building2 className="h-4 w-4 text-blue-300/60" />
+              </div>
+              <div className="text-3xl font-bold text-blue-50" data-testid="text-total-agencies">{(stats as any)?.totalTenants || 0}</div>
+              <p className="text-xs text-blue-100/60 mt-1">
+                {(stats as any)?.activeTenants || 0} active
+              </p>
+            </div>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Trial vs Paid</CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold" data-testid="text-paid-agencies">{(stats as any)?.paidTenants || 0}</div>
-                <p className="text-xs text-muted-foreground">
-                  {(stats as any)?.trialTenants || 0} on trial
-                </p>
-              </CardContent>
-            </Card>
+            <div className="rounded-3xl border border-white/10 bg-white/10 p-6 shadow-lg shadow-blue-900/20 backdrop-blur">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-medium text-blue-100/80">Trial vs Paid</p>
+                <TrendingUp className="h-4 w-4 text-blue-300/60" />
+              </div>
+              <div className="text-3xl font-bold text-blue-50" data-testid="text-paid-agencies">{(stats as any)?.paidTenants || 0}</div>
+              <p className="text-xs text-blue-100/60 mt-1">
+                {(stats as any)?.trialTenants || 0} on trial
+              </p>
+            </div>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Consumers</CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold" data-testid="text-total-consumers">{(stats as any)?.totalConsumers || 0}</div>
-                <p className="text-xs text-muted-foreground">
-                  {(stats as any)?.totalAccounts || 0} accounts
-                </p>
-              </CardContent>
-            </Card>
+            <div className="rounded-3xl border border-white/10 bg-white/10 p-6 shadow-lg shadow-blue-900/20 backdrop-blur">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-medium text-blue-100/80">Total Consumers</p>
+                <Users className="h-4 w-4 text-blue-300/60" />
+              </div>
+              <div className="text-3xl font-bold text-blue-50" data-testid="text-total-consumers">{(stats as any)?.totalConsumers || 0}</div>
+              <p className="text-xs text-blue-100/60 mt-1">
+                {(stats as any)?.totalAccounts || 0} accounts
+              </p>
+            </div>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Balance</CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold" data-testid="text-total-balance">
-                  {formatCurrency(((stats as any)?.totalBalanceCents || 0) / 100)}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Platform-wide
-                </p>
-              </CardContent>
-            </Card>
+            <div className="rounded-3xl border border-white/10 bg-white/10 p-6 shadow-lg shadow-blue-900/20 backdrop-blur">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-medium text-blue-100/80">Total Balance</p>
+                <DollarSign className="h-4 w-4 text-blue-300/60" />
+              </div>
+              <div className="text-3xl font-bold text-blue-50" data-testid="text-total-balance">
+                {formatCurrency(((stats as any)?.totalBalanceCents || 0) / 100)}
+              </div>
+              <p className="text-xs text-blue-100/60 mt-1">
+                Platform-wide
+              </p>
+            </div>
           </div>
         )}
 
         {/* Subscription Requests */}
-        <Card className="mb-8">
-          <CardHeader>
+        <div className="mb-8 rounded-3xl border border-white/10 bg-white/5 shadow-lg shadow-blue-900/20 backdrop-blur">
+          <div className="p-6 border-b border-white/10">
             <div className="flex items-center justify-between">
-              <CardTitle>Subscription Requests</CardTitle>
+              <h2 className="text-xl font-semibold text-blue-50">Subscription Requests</h2>
               {(subscriptionRequests as any[])?.length > 0 && (
                 <Badge variant="secondary" data-testid="badge-requests-count">
                   {(subscriptionRequests as any[]).length} pending
                 </Badge>
               )}
             </div>
-          </CardHeader>
-          <CardContent>
+          </div>
+          <div className="p-6">
             {subscriptionRequestsLoading ? (
               <div className="space-y-4">
                 {[...Array(2)].map((_, i) => (
                   <div key={i} className="animate-pulse">
-                    <div className="h-20 bg-gray-200 rounded"></div>
+                    <div className="h-20 bg-white/10 rounded"></div>
                   </div>
                 ))}
               </div>
             ) : !subscriptionRequests || (subscriptionRequests as any[]).length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <CheckCircle className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+              <div className="text-center py-8 text-blue-100/60">
+                <CheckCircle className="h-12 w-12 mx-auto mb-2 text-blue-300/40" />
                 <p>No pending subscription requests</p>
               </div>
             ) : (
               <div className="space-y-4">
                 {(subscriptionRequests as any[]).map((request: any) => (
-                  <div key={request.id} className="border rounded-lg p-4" data-testid={`row-request-${request.id}`}>
+                  <div key={request.id} className="border border-white/10 rounded-lg p-4 bg-white/5" data-testid={`row-request-${request.id}`}>
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div>
-                          <p className="text-sm font-medium text-gray-900" data-testid={`text-tenant-${request.id}`}>
+                          <p className="text-sm font-medium text-blue-50" data-testid={`text-tenant-${request.id}`}>
                             {request.tenantName}
                           </p>
-                          <p className="text-xs text-gray-500">{request.tenantSlug}</p>
+                          <p className="text-xs text-blue-100/60">{request.tenantSlug}</p>
                         </div>
                         <div>
-                          <p className="text-sm text-gray-600">Requested Plan</p>
-                          <p className="text-sm font-medium text-gray-900" data-testid={`text-plan-${request.id}`}>
+                          <p className="text-sm text-blue-100/70">Requested Plan</p>
+                          <p className="text-sm font-medium text-blue-50" data-testid={`text-plan-${request.id}`}>
                             {request.planName}
                           </p>
-                          <p className="text-xs text-gray-500">{formatCurrency(request.monthlyPrice)}/mo</p>
+                          <p className="text-xs text-blue-100/60">{formatCurrency(request.monthlyPrice)}/mo</p>
                         </div>
                         <div>
-                          <p className="text-sm text-gray-600">Plan Limits</p>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-sm text-blue-100/70">Plan Limits</p>
+                          <p className="text-xs text-blue-100/60">
                             {request.includedEmails?.toLocaleString()} emails
                           </p>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs text-blue-100/60">
                             {request.includedSms?.toLocaleString()} SMS
                           </p>
                         </div>
                         <div>
-                          <p className="text-sm text-gray-600">Requested By</p>
-                          <p className="text-xs text-gray-500" data-testid={`text-requester-${request.id}`}>
+                          <p className="text-sm text-blue-100/70">Requested By</p>
+                          <p className="text-xs text-blue-100/60" data-testid={`text-requester-${request.id}`}>
                             {request.requestedBy}
                           </p>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs text-blue-100/60">
                             {new Date(request.requestedAt).toLocaleDateString()}
                           </p>
                         </div>
@@ -620,8 +607,8 @@ export default function GlobalAdmin() {
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {/* Approval Dialog */}
         <Dialog open={approveDialogOpen} onOpenChange={setApproveDialogOpen}>
@@ -742,10 +729,10 @@ export default function GlobalAdmin() {
         </Dialog>
 
         {/* Global Consumer Management */}
-        <Card className="mb-8">
-          <CardHeader>
+        <div className="mb-8 rounded-3xl border border-white/10 bg-white/5 shadow-lg shadow-blue-900/20 backdrop-blur">
+          <div className="p-6 border-b border-white/10">
             <div className="flex items-center justify-between">
-              <CardTitle>Global Consumer Management</CardTitle>
+              <h2 className="text-xl font-semibold text-blue-50">Global Consumer Management</h2>
               <div className="flex items-center space-x-2">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -770,13 +757,13 @@ export default function GlobalAdmin() {
                 </select>
               </div>
             </div>
-          </CardHeader>
-          <CardContent>
+          </div>
+          <div className="p-6">
             {consumersLoading ? (
               <div className="space-y-3">
                 {[...Array(5)].map((_, i) => (
                   <div key={i} className="animate-pulse">
-                    <div className="h-12 bg-gray-200 rounded"></div>
+                    <div className="h-12 bg-white/10 rounded"></div>
                   </div>
                 ))}
               </div>
@@ -787,27 +774,27 @@ export default function GlobalAdmin() {
                     {(allConsumers as any[]).map((item: any) => (
                       <div
                         key={item.consumer.id}
-                        className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50"
+                        className="flex items-center justify-between p-3 border border-white/10 rounded-lg hover:bg-white/5 bg-white/[0.02]"
                         data-testid={`consumer-row-${item.consumer.id}`}
                       >
                         <div className="flex-1">
-                          <div className="font-medium" data-testid={`text-consumer-name-${item.consumer.id}`}>
+                          <div className="font-medium text-blue-50" data-testid={`text-consumer-name-${item.consumer.id}`}>
                             {item.consumer.firstName} {item.consumer.lastName}
                           </div>
-                          <div className="text-sm text-gray-600">
+                          <div className="text-sm text-blue-100/70">
                             <span data-testid={`text-consumer-email-${item.consumer.id}`}>{item.consumer.email}</span>
                             {item.consumer.phone && (
                               <> • <span data-testid={`text-consumer-phone-${item.consumer.id}`}>{item.consumer.phone}</span></>
                             )}
                           </div>
-                          <div className="text-xs text-gray-500 mt-1">
+                          <div className="text-xs text-blue-100/60 mt-1">
                             Agency: <span data-testid={`text-consumer-agency-${item.consumer.id}`}>{item.tenant?.name || 'Unknown'}</span>
                           </div>
                         </div>
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
                           onClick={() => {
                             setSelectedConsumerForDeletion(item);
                             setDeleteConsumerDialogOpen(true);
@@ -821,8 +808,8 @@ export default function GlobalAdmin() {
                   </div>
                 ) : (
                   <div className="text-center py-8">
-                    <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600">
+                    <Users className="h-12 w-12 text-blue-300/40 mx-auto mb-4" />
+                    <p className="text-blue-100/60">
                       {consumerSearch || selectedTenantFilter
                         ? 'No consumers found matching your filters'
                         : 'No consumers in the system'}
@@ -831,8 +818,8 @@ export default function GlobalAdmin() {
                 )}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {/* Delete Consumer Confirmation Dialog */}
         <Dialog open={deleteConsumerDialogOpen} onOpenChange={setDeleteConsumerDialogOpen}>
@@ -895,28 +882,28 @@ export default function GlobalAdmin() {
         </Dialog>
 
         {/* Tenants Table */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Agency Management</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <div className="rounded-3xl border border-white/10 bg-white/5 shadow-lg shadow-blue-900/20 backdrop-blur">
+          <div className="p-6 border-b border-white/10">
+            <h2 className="text-xl font-semibold text-blue-50">Agency Management</h2>
+          </div>
+          <div className="p-6">
             {tenantsLoading ? (
               <div className="space-y-4">
                 {[...Array(3)].map((_, i) => (
                   <div key={i} className="animate-pulse">
-                    <div className="h-16 bg-gray-200 rounded"></div>
+                    <div className="h-16 bg-white/10 rounded"></div>
                   </div>
                 ))}
               </div>
             ) : (
               <div className="space-y-4">
                 {(tenants as any[])?.map((tenant: any) => (
-                  <div key={tenant.id} className="border rounded-lg p-4" data-testid={`card-tenant-${tenant.id}`}>
+                  <div key={tenant.id} className="border border-white/10 rounded-lg p-4 bg-white/[0.02]" data-testid={`card-tenant-${tenant.id}`}>
                     {/* Header Section */}
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex-1">
                         <div className="flex items-center space-x-3">
-                          <h3 className="text-lg font-semibold" data-testid={`text-tenant-name-${tenant.id}`}>{tenant.name}</h3>
+                          <h3 className="text-lg font-semibold text-blue-50" data-testid={`text-tenant-name-${tenant.id}`}>{tenant.name}</h3>
                           {tenant.isTrialAccount && (
                             <Badge variant="secondary" data-testid={`badge-trial-${tenant.id}`}>Trial</Badge>
                           )}
@@ -927,14 +914,14 @@ export default function GlobalAdmin() {
                             <Badge variant="destructive" data-testid={`badge-suspended-${tenant.id}`}>Suspended</Badge>
                           )}
                         </div>
-                        <div className="text-sm text-gray-600 mt-1">
+                        <div className="text-sm text-blue-100/70 mt-1">
                           <span data-testid={`text-email-${tenant.id}`}>{tenant.email}</span> • <span data-testid={`text-slug-${tenant.id}`}>{tenant.slug}</span>
                         </div>
-                        <div className="text-sm text-gray-500 mt-1">
+                        <div className="text-sm text-blue-100/60 mt-1">
                           {tenant.stats?.consumerCount || 0} consumers • {tenant.stats?.accountCount || 0} accounts • {formatCurrency((tenant.stats?.totalBalanceCents || 0) / 100)} total balance
                         </div>
                         {tenant.suspensionReason && (
-                          <div className="text-sm text-red-600 mt-2">
+                          <div className="text-sm text-red-400 mt-2">
                             Suspended: {tenant.suspensionReason}
                           </div>
                         )}
@@ -942,9 +929,9 @@ export default function GlobalAdmin() {
                     </div>
                     
                     {/* Service Controls Section */}
-                    <div className="flex items-center justify-between pt-3 border-t">
+                    <div className="flex items-center justify-between pt-3 border-t border-white/10">
                       <div className="flex items-center space-x-2">
-                        <span className="text-xs text-gray-500 mr-2">Services:</span>
+                        <span className="text-xs text-blue-100/60 mr-2">Services:</span>
                         <button
                           onClick={() => updateServiceControlsMutation.mutate({
                             tenantId: tenant.id,
@@ -1082,14 +1069,14 @@ export default function GlobalAdmin() {
                 
                 {(!(tenants as any[]) || (tenants as any[]).length === 0) && (
                   <div className="text-center py-8">
-                    <Building2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600">No agencies registered yet</p>
+                    <Building2 className="h-12 w-12 text-blue-300/40 mx-auto mb-4" />
+                    <p className="text-blue-100/60">No agencies registered yet</p>
                   </div>
                 )}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
 
       {/* Delete Agency Confirmation Dialog */}
