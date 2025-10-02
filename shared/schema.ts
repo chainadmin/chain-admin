@@ -218,6 +218,28 @@ export const emailTracking = pgTable("email_tracking", {
   trackingData: jsonb("tracking_data").default(sql`'{}'::jsonb`),
 });
 
+// Email logs for all sent emails (usage tracking)
+export const emailLogs = pgTable("email_logs", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  messageId: text("message_id"), // Postmark message ID
+  fromEmail: text("from_email").notNull(),
+  toEmail: text("to_email").notNull(),
+  subject: text("subject").notNull(),
+  htmlBody: text("html_body"),
+  textBody: text("text_body"),
+  status: text("status").default("sent"), // "sent", "delivered", "bounced", "complained", "opened"
+  tag: text("tag"), // For categorizing emails (e.g., "test-email", "campaign", "notification")
+  metadata: jsonb("metadata").default(sql`'{}'::jsonb`),
+  sentAt: timestamp("sent_at").defaultNow(),
+  deliveredAt: timestamp("delivered_at"),
+  openedAt: timestamp("opened_at"),
+  bouncedAt: timestamp("bounced_at"),
+  complainedAt: timestamp("complained_at"),
+  bounceReason: text("bounce_reason"),
+  complaintReason: text("complaint_reason"),
+});
+
 // SMS templates (per tenant)
 export const smsTemplates = pgTable("sms_templates", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1118,6 +1140,7 @@ export const insertArrangementOptionSchema = createInsertSchema(arrangementOptio
 export const insertTenantSettingsSchema = createInsertSchema(tenantSettings).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertEmailCampaignSchema = createInsertSchema(emailCampaigns).omit({ id: true, createdAt: true, completedAt: true });
 export const insertEmailTrackingSchema = createInsertSchema(emailTracking).omit({ id: true });
+export const insertEmailLogSchema = createInsertSchema(emailLogs).omit({ id: true, sentAt: true, deliveredAt: true, openedAt: true, bouncedAt: true, complainedAt: true });
 export const insertConsumerNotificationSchema = createInsertSchema(consumerNotifications).omit({ id: true, createdAt: true });
 export const insertCallbackRequestSchema = createInsertSchema(callbackRequests).omit({ id: true, createdAt: true });
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true });
@@ -1163,6 +1186,8 @@ export type EmailCampaign = typeof emailCampaigns.$inferSelect;
 export type InsertEmailCampaign = z.infer<typeof insertEmailCampaignSchema>;
 export type EmailTracking = typeof emailTracking.$inferSelect;
 export type InsertEmailTracking = z.infer<typeof insertEmailTrackingSchema>;
+export type EmailLog = typeof emailLogs.$inferSelect;
+export type InsertEmailLog = z.infer<typeof insertEmailLogSchema>;
 export type ConsumerNotification = typeof consumerNotifications.$inferSelect;
 export type InsertConsumerNotification = z.infer<typeof insertConsumerNotificationSchema>;
 export type CallbackRequest = typeof callbackRequests.$inferSelect;
