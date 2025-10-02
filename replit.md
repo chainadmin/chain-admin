@@ -26,6 +26,12 @@ The frontend uses React with TypeScript, built with shadcn/ui components on Radi
 - **Unified Communications System**: Merges email and SMS functionalities into a single interface, supporting templates, campaigns, and callback request management. Includes automation for scheduled and event-triggered communications.
 - **Enhanced Folder Organization**: Implemented a folder system for account management with default folders and CSV import integration.
 - **Dynamic Routing**: Supports path-based routing for agency-specific dashboards and pages (e.g., `/agency-slug/dashboard`) to ensure proper access for authenticated agency users across environments.
+- **Global Admin Portal**: Platform admin dashboard (`/global-admin`) with JWT-based authentication (ChainAdmin/W@yp0intsolutions). Features:
+  - Global consumer management with cross-agency search, filtering, and deletion
+  - Service cutoff controls per agency (Email, SMS, Portal Access, Payment Processing toggles)
+  - Subscription request approval/rejection workflow
+  - Platform-wide statistics and agency monitoring
+  - SMS configuration management for Twilio subaccounts
 
 # External Dependencies
 

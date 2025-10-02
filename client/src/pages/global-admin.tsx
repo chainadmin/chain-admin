@@ -871,11 +871,11 @@ export default function GlobalAdmin() {
               <div className="space-y-4">
                 {(tenants as any[])?.map((tenant: any) => (
                   <div key={tenant.id} className="border rounded-lg p-4" data-testid={`card-tenant-${tenant.id}`}>
-                    <div className="flex items-center justify-between">
+                    {/* Header Section */}
+                    <div className="flex items-start justify-between mb-3">
                       <div className="flex-1">
                         <div className="flex items-center space-x-3">
                           <h3 className="text-lg font-semibold" data-testid={`text-tenant-name-${tenant.id}`}>{tenant.name}</h3>
-                          
                           {tenant.isTrialAccount && (
                             <Badge variant="secondary" data-testid={`badge-trial-${tenant.id}`}>Trial</Badge>
                           )}
@@ -886,111 +886,91 @@ export default function GlobalAdmin() {
                             <Badge variant="destructive" data-testid={`badge-suspended-${tenant.id}`}>Suspended</Badge>
                           )}
                         </div>
-                        
                         <div className="text-sm text-gray-600 mt-1">
                           <span data-testid={`text-email-${tenant.id}`}>{tenant.email}</span> • <span data-testid={`text-slug-${tenant.id}`}>{tenant.slug}</span>
                         </div>
-                        
                         <div className="text-sm text-gray-500 mt-1">
                           {tenant.stats?.consumerCount || 0} consumers • {tenant.stats?.accountCount || 0} accounts • {formatCurrency((tenant.stats?.totalBalanceCents || 0) / 100)} total balance
                         </div>
-                        
-                        {/* Service Controls */}
-                        <div className="flex items-center space-x-4 mt-3 pt-3 border-t">
-                          <div className="flex items-center space-x-2">
-                            <button
-                              onClick={() => updateServiceControlsMutation.mutate({
-                                tenantId: tenant.id,
-                                controls: { emailServiceEnabled: !tenant.emailServiceEnabled }
-                              })}
-                              className={`flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
-                                tenant.emailServiceEnabled !== false
-                                  ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                              }`}
-                              data-testid={`toggle-email-${tenant.id}`}
-                            >
-                              <Mail className="h-3 w-3" />
-                              <span>Email</span>
-                            </button>
-                          </div>
-                          
-                          <div className="flex items-center space-x-2">
-                            <button
-                              onClick={() => updateServiceControlsMutation.mutate({
-                                tenantId: tenant.id,
-                                controls: { smsServiceEnabled: !tenant.smsServiceEnabled }
-                              })}
-                              className={`flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
-                                tenant.smsServiceEnabled !== false
-                                  ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                              }`}
-                              data-testid={`toggle-sms-${tenant.id}`}
-                            >
-                              <MessageSquare className="h-3 w-3" />
-                              <span>SMS</span>
-                            </button>
-                          </div>
-                          
-                          <div className="flex items-center space-x-2">
-                            <button
-                              onClick={() => updateServiceControlsMutation.mutate({
-                                tenantId: tenant.id,
-                                controls: { portalAccessEnabled: !tenant.portalAccessEnabled }
-                              })}
-                              className={`flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
-                                tenant.portalAccessEnabled !== false
-                                  ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                              }`}
-                              data-testid={`toggle-portal-${tenant.id}`}
-                            >
-                              <Shield className="h-3 w-3" />
-                              <span>Portal</span>
-                            </button>
-                          </div>
-                          
-                          <div className="flex items-center space-x-2">
-                            <button
-                              onClick={() => updateServiceControlsMutation.mutate({
-                                tenantId: tenant.id,
-                                controls: { paymentProcessingEnabled: !tenant.paymentProcessingEnabled }
-                              })}
-                              className={`flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
-                                tenant.paymentProcessingEnabled !== false
-                                  ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                              }`}
-                              data-testid={`toggle-payment-${tenant.id}`}
-                            >
-                              <CreditCard className="h-3 w-3" />
-                              <span>Payments</span>
-                            </button>
-                          </div>
-                        </div>
-                        
                         {tenant.suspensionReason && (
-                          <div className="text-sm text-red-600 mt-1">
+                          <div className="text-sm text-red-600 mt-2">
                             Suspended: {tenant.suspensionReason}
                           </div>
                         )}
                       </div>
-                      
+                    </div>
+                    
+                    {/* Service Controls Section */}
+                    <div className="flex items-center justify-between pt-3 border-t">
                       <div className="flex items-center space-x-2">
-                        {tenant.isTrialAccount && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => upgradeMutation.mutate(tenant.id)}
-                            disabled={upgradeMutation.isPending}
-                            data-testid={`button-upgrade-${tenant.id}`}
-                          >
-                            <CheckCircle className="h-4 w-4 mr-2" />
-                            Upgrade to Paid
-                          </Button>
-                        )}
+                        <span className="text-xs text-gray-500 mr-2">Services:</span>
+                        <button
+                          onClick={() => updateServiceControlsMutation.mutate({
+                            tenantId: tenant.id,
+                            controls: { emailServiceEnabled: !tenant.emailServiceEnabled }
+                          })}
+                          className={`flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                            tenant.emailServiceEnabled !== false
+                              ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}
+                          data-testid={`toggle-email-${tenant.id}`}
+                        >
+                          <Mail className="h-3 w-3" />
+                          <span>Email</span>
+                        </button>
                         
+                        <button
+                          onClick={() => updateServiceControlsMutation.mutate({
+                            tenantId: tenant.id,
+                            controls: { smsServiceEnabled: !tenant.smsServiceEnabled }
+                          })}
+                          className={`flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                            tenant.smsServiceEnabled !== false
+                              ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}
+                          data-testid={`toggle-sms-${tenant.id}`}
+                        >
+                          <MessageSquare className="h-3 w-3" />
+                          <span>SMS</span>
+                        </button>
+                        
+                        <button
+                          onClick={() => updateServiceControlsMutation.mutate({
+                            tenantId: tenant.id,
+                            controls: { portalAccessEnabled: !tenant.portalAccessEnabled }
+                          })}
+                          className={`flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                            tenant.portalAccessEnabled !== false
+                              ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}
+                          data-testid={`toggle-portal-${tenant.id}`}
+                        >
+                          <Shield className="h-3 w-3" />
+                          <span>Portal</span>
+                        </button>
+                        
+                        <button
+                          onClick={() => updateServiceControlsMutation.mutate({
+                            tenantId: tenant.id,
+                            controls: { paymentProcessingEnabled: !tenant.paymentProcessingEnabled }
+                          })}
+                          className={`flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                            tenant.paymentProcessingEnabled !== false
+                              ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}
+                          data-testid={`toggle-payment-${tenant.id}`}
+                        >
+                          <CreditCard className="h-3 w-3" />
+                          <span>Payments</span>
+                        </button>
+                      </div>
+                      
+                      {/* Action Buttons */}
+                      <div className="flex items-center space-x-2">
                         {tenant.isActive ? (
                           <Button
                             variant="destructive"
@@ -1026,7 +1006,7 @@ export default function GlobalAdmin() {
                           data-testid={`button-sms-config-${tenant.id}`}
                         >
                           <MessageSquare className="h-4 w-4 mr-2" />
-                          SMS Config
+                          SMS
                         </Button>
                         
                         <Button
@@ -1036,7 +1016,7 @@ export default function GlobalAdmin() {
                           data-testid={`button-view-${tenant.id}`}
                         >
                           <Eye className="h-4 w-4 mr-2" />
-                          View Portal
+                          View
                         </Button>
                       </div>
                     </div>
