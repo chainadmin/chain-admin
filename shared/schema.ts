@@ -335,11 +335,14 @@ export const tenantSettings = pgTable("tenant_settings", {
   smsThrottleLimit: bigint("sms_throttle_limit", { mode: "number" }).default(10), // SMS per minute limit
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-  // Payment processor fields
+  // Payment processor fields (USAePay)
   merchantProvider: text("merchant_provider"),
   merchantAccountId: text("merchant_account_id"),
   merchantApiKey: text("merchant_api_key"),
+  merchantApiPin: text("merchant_api_pin"),
   merchantName: text("merchant_name"),
+  merchantType: text("merchant_type"),
+  useSandbox: boolean("use_sandbox").default(true),
   enableOnlinePayments: boolean("enable_online_payments").default(false),
   // SMAX integration fields
   smaxEnabled: boolean("smax_enabled").default(false),

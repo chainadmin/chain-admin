@@ -1096,30 +1096,106 @@ export default function Settings() {
                         />
                       </div>
 
-                      <div>
-                        <Label className="text-white">API Key</Label>
-                        <Input
-                          type="password"
-                          value={localSettings?.merchantApiKey || ""}
-                          onChange={(e) => handleSettingsUpdate('merchantApiKey', e.target.value)}
-                          placeholder="Your merchant API key"
-                          data-testid="input-merchant-key"
-                          className={inputClasses}
-                        />
-                        <p className="mt-1 text-xs text-blue-100/70">
-                          This key is encrypted and stored securely
-                        </p>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-white">API Key</Label>
+                          <Input
+                            type="password"
+                            value={localSettings?.merchantApiKey || ""}
+                            onChange={(e) => handleSettingsUpdate('merchantApiKey', e.target.value)}
+                            placeholder="Your USAePay API key"
+                            data-testid="input-merchant-key"
+                            className={inputClasses}
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-white">API PIN</Label>
+                          <Input
+                            type="password"
+                            value={localSettings?.merchantApiPin || ""}
+                            onChange={(e) => handleSettingsUpdate('merchantApiPin', e.target.value)}
+                            placeholder="Your USAePay API PIN"
+                            data-testid="input-merchant-pin"
+                            className={inputClasses}
+                          />
+                        </div>
+                      </div>
+                      <p className="mt-1 text-xs text-blue-100/70">
+                        Your credentials are encrypted and stored securely
+                      </p>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-white">Merchant Name</Label>
+                          <Input
+                            value={localSettings?.merchantName || ""}
+                            onChange={(e) => handleSettingsUpdate('merchantName', e.target.value)}
+                            placeholder="Name displayed on receipts"
+                            data-testid="input-merchant-name"
+                            className={inputClasses}
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-white">Merchant Type</Label>
+                          <Input
+                            value={localSettings?.merchantType || ""}
+                            onChange={(e) => handleSettingsUpdate('merchantType', e.target.value)}
+                            placeholder="e.g., retail, services"
+                            data-testid="input-merchant-type"
+                            className={inputClasses}
+                          />
+                        </div>
                       </div>
 
-                      <div>
-                        <Label className="text-white">Merchant Name</Label>
-                        <Input
-                          value={localSettings?.merchantName || ""}
-                          onChange={(e) => handleSettingsUpdate('merchantName', e.target.value)}
-                          placeholder="Name displayed on payment receipts"
-                          data-testid="input-merchant-name"
-                          className={inputClasses}
+                      <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 p-4">
+                        <div className="space-y-0.5">
+                          <Label className="text-white">Use Sandbox Mode</Label>
+                          <p className="text-sm text-blue-100/70">
+                            Test payments without charging real cards
+                          </p>
+                        </div>
+                        <Switch
+                          checked={localSettings?.useSandbox ?? true}
+                          onCheckedChange={(checked) => handleSettingsUpdate('useSandbox', checked)}
+                          data-testid="switch-sandbox-mode"
                         />
+                      </div>
+
+                      <div className="border-t border-white/10 pt-4">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={async () => {
+                            try {
+                              const response = await apiRequest("POST", "/api/usaepay/test-connection");
+                              const result = await response.json();
+                              
+                              if (result.success) {
+                                toast({
+                                  title: "Connection Successful",
+                                  description: "USAePay credentials are valid and working.",
+                                });
+                              } else {
+                                toast({
+                                  title: "Connection Failed",
+                                  description: result.message || "Unable to connect to USAePay. Please check your credentials.",
+                                  variant: "destructive",
+                                });
+                              }
+                            } catch (err: any) {
+                              toast({
+                                title: "Connection Error",
+                                description: "Failed to test USAePay connection. Please try again.",
+                                variant: "destructive",
+                              });
+                            }
+                          }}
+                          data-testid="button-test-connection"
+                          className="w-full border-white/20 bg-white/5 text-white hover:bg-white/10"
+                        >
+                          <i className="fas fa-plug mr-2"></i>
+                          Test USAePay Connection
+                        </Button>
                       </div>
 
                       <div className="flex items-center justify-between border-t border-white/10 pt-4">

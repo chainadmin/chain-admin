@@ -3679,6 +3679,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Test USAePay connection endpoint
+  app.post('/api/usaepay/test-connection', isAuthenticated, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      
+      if (!tenantId) {
+        return res.status(403).json({ success: false, message: "Access denied" });
+      }
+
+      const settings = await storage.getTenantSettings(tenantId);
+      
+      if (!settings) {
+        return res.status(404).json({ success: false, message: "Settings not found" });
+      }
+
+      const { merchantApiKey, merchantApiPin, merchantName, useSandbox } = settings;
+
+      if (!merchantApiKey || !merchantApiPin) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "USAePay credentials not configured. Please add your API Key and PIN." 
+        });
+      }
+
+      // Determine API endpoint based on sandbox mode
+      const baseUrl = useSandbox 
+        ? "https://sandbox.usaepay.com/api/v2"
+        : "https://secure.usaepay.com/api/v2";
+
+      // Create Basic Auth header
+      const authString = Buffer.from(`${merchantApiKey}:${merchantApiPin}`).toString('base64');
+
+      // Test connection by making a simple API call (get merchant info)
+      const testResponse = await fetch(`${baseUrl}/merchant`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Basic ${authString}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (testResponse.ok) {
+        const merchantData = await testResponse.json();
+        return res.json({ 
+          success: true, 
+          message: `Successfully connected to ${useSandbox ? 'Sandbox' : 'Production'} USAePay`,
+          merchantName: merchantData.name || merchantName || "Unknown",
+          mode: useSandbox ? 'sandbox' : 'production'
+        });
+      } else {
+        const errorData = await testResponse.text();
+        return res.json({ 
+          success: false, 
+          message: `Connection failed: ${testResponse.statusText}. Please verify your credentials.`,
+          error: errorData
+        });
+      }
+    } catch (error: any) {
+      console.error("USAePay test connection error:", error);
+      return res.status(500).json({ 
+        success: false, 
+        message: "Failed to test connection. Please check your credentials and try again.",
+        error: error.message 
+      });
+    }
+  });
+
   // Consumer payment processing endpoint
   app.post('/api/consumer/payments/process', authenticateConsumer, async (req: any, res) => {
     try {
