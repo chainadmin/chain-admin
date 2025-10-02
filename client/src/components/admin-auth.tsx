@@ -16,28 +16,48 @@ export default function AdminAuth({ onAuthenticated }: AdminAuthProps) {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Check credentials
-    if (username === "ChainAdmin" && password === "W@yp0intsolutions") {
-      // Store authentication in sessionStorage (clears when browser closes)
-      sessionStorage.setItem("admin_authenticated", "true");
-      onAuthenticated();
-      toast({
-        title: "Access Granted",
-        description: "Welcome to the administrative panel",
+    try {
+      // Call backend admin login endpoint
+      const response = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
       });
-    } else {
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        // Store authentication token in sessionStorage
+        sessionStorage.setItem("admin_authenticated", "true");
+        sessionStorage.setItem("admin_token", data.token);
+        
+        onAuthenticated();
+        toast({
+          title: "Access Granted",
+          description: "Welcome to the administrative panel",
+        });
+      } else {
+        toast({
+          title: "Access Denied",
+          description: data.message || "Invalid username or password",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
       toast({
-        title: "Access Denied",
-        description: "Invalid username or password",
+        title: "Error",
+        description: "Failed to authenticate. Please try again.",
         variant: "destructive",
       });
+    } finally {
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
   };
 
   return (

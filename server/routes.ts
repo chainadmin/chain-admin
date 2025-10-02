@@ -4257,7 +4257,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Global Admin Routes (Platform Owner Only)
+  
+  // Admin login endpoint (simple password-based)
+  app.post('/api/admin/login', async (req, res) => {
+    try {
+      const { username, password } = req.body;
+      
+      // Hardcoded admin credentials (same as frontend)
+      if (username === 'ChainAdmin' && password === 'W@yp0intsolutions') {
+        if (!process.env.JWT_SECRET) {
+          return res.status(500).json({ message: "Server configuration error" });
+        }
+        
+        // Create admin token
+        const adminToken = jwt.sign(
+          {
+            isAdmin: true,
+            type: 'global_admin'
+          },
+          process.env.JWT_SECRET,
+          { expiresIn: '24h' }
+        );
+        
+        res.json({ 
+          success: true,
+          token: adminToken,
+          message: "Admin authenticated successfully"
+        });
+      } else {
+        res.status(401).json({ 
+          success: false,
+          message: "Invalid credentials" 
+        });
+      }
+    } catch (error) {
+      console.error('Admin login error:', error);
+      res.status(500).json({ message: "Login failed" });
+    }
+  });
+  
   const isPlatformAdmin = async (req: any, res: any, next: any) => {
+    // Check for admin token first
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.slice(7);
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
+        if (decoded.isAdmin && decoded.type === 'global_admin') {
+          req.user = { isGlobalAdmin: true };
+          return next();
+        }
+      } catch (error) {
+        // Token invalid, fall through to normal auth check
+      }
+    }
+    
     const userId = req.user?.id ?? req.user?.userId;
 
     if (!userId) {
@@ -4276,7 +4330,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   };
 
   // Update tenant SMS configuration (platform admin only)
-  app.put('/api/admin/tenants/:id/sms-config', authenticateUser, isPlatformAdmin, async (req: any, res) => {
+  app.put('/api/admin/tenants/:id/sms-config', isPlatformAdmin, async (req: any, res) => {
     try {
       const { 
         twilioAccountSid, 
@@ -4303,7 +4357,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get all tenants for platform admin overview
-  app.get('/api/admin/tenants', authenticateUser, isPlatformAdmin, async (req: any, res) => {
+  app.get('/api/admin/tenants', isPlatformAdmin, async (req: any, res) => {
     try {
       const tenants = await storage.getAllTenants();
       
@@ -4333,7 +4387,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get platform-wide statistics
-  app.get('/api/admin/stats', authenticateUser, isPlatformAdmin, async (req: any, res) => {
+  app.get('/api/admin/stats', isPlatformAdmin, async (req: any, res) => {
     try {
       const stats = await storage.getPlatformStats();
       res.json(stats);
@@ -4344,7 +4398,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update tenant status (activate/suspend)
-  app.put('/api/admin/tenants/:id/status', authenticateUser, isPlatformAdmin, async (req: any, res) => {
+  app.put('/api/admin/tenants/:id/status', isPlatformAdmin, async (req: any, res) => {
     try {
       const { isActive, suspensionReason } = req.body;
       
@@ -4362,7 +4416,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Upgrade tenant from trial to paid
-  app.put('/api/admin/tenants/:id/upgrade', authenticateUser, isPlatformAdmin, async (req: any, res) => {
+  app.put('/api/admin/tenants/:id/upgrade', isPlatformAdmin, async (req: any, res) => {
     try {
       const updatedTenant = await storage.upgradeTenantToPaid(req.params.id);
       res.json(updatedTenant);
@@ -4373,7 +4427,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get all subscription requests (pending approval)
-  app.get('/api/admin/subscription-requests', authenticateUser, isPlatformAdmin, async (req: any, res) => {
+  app.get('/api/admin/subscription-requests', isPlatformAdmin, async (req: any, res) => {
     try {
       const pendingSubscriptions = await db
         .select({
@@ -4411,7 +4465,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Approve subscription request
-  app.post('/api/admin/subscription-requests/:id/approve', authenticateUser, isPlatformAdmin, async (req: any, res) => {
+  app.post('/api/admin/subscription-requests/:id/approve', isPlatformAdmin, async (req: any, res) => {
     try {
       const { id } = req.params;
       const { setupFeeWaived } = req.body;
@@ -4450,7 +4504,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Reject subscription request
-  app.post('/api/admin/subscription-requests/:id/reject', authenticateUser, isPlatformAdmin, async (req: any, res) => {
+  app.post('/api/admin/subscription-requests/:id/reject', isPlatformAdmin, async (req: any, res) => {
     try {
       const { id } = req.params;
       const { reason } = req.body;
@@ -4489,7 +4543,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Test Postmark connection
-  app.get('/api/admin/test-postmark', authenticateUser, isPlatformAdmin, async (req: any, res) => {
+  app.get('/api/admin/test-postmark', isPlatformAdmin, async (req: any, res) => {
     try {
       // Test by fetching servers list
       const result = await postmarkServerService.testConnection();
@@ -4518,7 +4572,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create new agency with Postmark server
-  app.post('/api/admin/agencies', authenticateUser, isPlatformAdmin, async (req: any, res) => {
+  app.post('/api/admin/agencies', isPlatformAdmin, async (req: any, res) => {
     try {
       const { name, email } = req.body;
       
