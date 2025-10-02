@@ -1055,7 +1055,7 @@ export default function GlobalAdmin() {
                           variant="outline"
                           size="sm"
                           className="border-purple-300 text-purple-700 hover:bg-purple-50"
-                          onClick={() => window.open(`/${tenant.slug}/dashboard`, '_blank')}
+                          onClick={() => window.open(`/${tenant.slug}`, '_blank')}
                           data-testid={`button-view-${tenant.id}`}
                         >
                           <Eye className="h-4 w-4 mr-2" />
