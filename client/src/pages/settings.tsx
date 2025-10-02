@@ -285,6 +285,8 @@ export default function Settings() {
   const createArrangementMutation = useMutation({
     mutationFn: async (data: any) => {
       console.log("Creating arrangement with data:", data);
+      console.log("Auth token:", localStorage.getItem('authToken'));
+      console.log("Cookies:", document.cookie);
       await apiRequest("POST", "/api/arrangement-options", data);
     },
     onSuccess: () => {
