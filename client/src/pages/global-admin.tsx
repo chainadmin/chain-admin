@@ -1058,7 +1058,10 @@ export default function GlobalAdmin() {
                           <span data-testid={`text-email-${tenant.id}`}>{tenant.email}</span> • <span data-testid={`text-slug-${tenant.id}`}>{tenant.slug}</span>
                         </div>
                         <div className="text-sm text-blue-100/60 mt-1">
-                          {tenant.stats?.consumerCount || 0} consumers • {tenant.stats?.accountCount || 0} accounts • {formatCurrency((tenant.stats?.totalBalanceCents || 0) / 100)} total balance
+                          {tenant.stats?.consumerCount || 0} consumers • {tenant.stats?.accountCount || 0} accounts
+                        </div>
+                        <div className="text-sm text-blue-100/60 mt-1">
+                          {formatCurrency((tenant.stats?.totalBalanceCents || 0) / 100)} balance • {tenant.stats?.emailCount || 0} emails • {tenant.stats?.smsCount || 0} SMS
                         </div>
                         {tenant.suspensionReason && (
                           <div className="text-sm text-red-400 mt-2">

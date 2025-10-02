@@ -165,6 +165,8 @@ export interface IStorage {
   getConsumerCountByTenant(tenantId: string): Promise<number>;
   getAccountCountByTenant(tenantId: string): Promise<number>;
   getTotalBalanceByTenant(tenantId: string): Promise<number>;
+  getEmailCountByTenant(tenantId: string): Promise<number>;
+  getSmsCountByTenant(tenantId: string): Promise<number>;
   getPlatformStats(): Promise<any>;
   updateTenantStatus(id: string, updates: { isActive: boolean; suspensionReason?: string | null; suspendedAt?: Date | null }): Promise<Tenant>;
   upgradeTenantToPaid(id: string): Promise<Tenant>;
@@ -2036,6 +2038,23 @@ export class DatabaseStorage implements IStorage {
   async getTotalBalanceByTenant(tenantId: string): Promise<number> {
     const tenantAccounts = await db.select().from(accounts).where(eq(accounts.tenantId, tenantId));
     return tenantAccounts.reduce((sum: number, account: any) => sum + (account.balanceCents || 0), 0);
+  }
+
+  async getEmailCountByTenant(tenantId: string): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(emailLogs)
+      .where(eq(emailLogs.tenantId, tenantId));
+    return result[0]?.count || 0;
+  }
+
+  async getSmsCountByTenant(tenantId: string): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(smsTracking)
+      .innerJoin(smsCampaigns, eq(smsTracking.campaignId, smsCampaigns.id))
+      .where(eq(smsCampaigns.tenantId, tenantId));
+    return result[0]?.count || 0;
   }
 
   async getPlatformStats(): Promise<any> {

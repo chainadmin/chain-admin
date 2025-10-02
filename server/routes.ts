@@ -4996,6 +4996,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const consumerCount = await storage.getConsumerCountByTenant(tenant.id);
           const accountCount = await storage.getAccountCountByTenant(tenant.id);
           const totalBalance = await storage.getTotalBalanceByTenant(tenant.id);
+          const emailCount = await storage.getEmailCountByTenant(tenant.id);
+          const smsCount = await storage.getSmsCountByTenant(tenant.id);
           
           return {
             ...tenant,
@@ -5003,6 +5005,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               consumerCount,
               accountCount,
               totalBalanceCents: totalBalance,
+              emailCount,
+              smsCount,
             }
           };
         })
