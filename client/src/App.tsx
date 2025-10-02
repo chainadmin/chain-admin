@@ -44,7 +44,7 @@ function Router() {
   const { toast } = useToast();
   const isMobileApp = mobileConfig.isNativePlatform;
   const pathname = window.location.pathname;
-  const adminRoutePaths = ["/admin", "/admin/", "/Admin", "/Admin/"] as const;
+  const adminRoutePaths = ["/admin", "/admin/", "/Admin", "/Admin/", "/global-admin", "/global-admin/"] as const;
   const createRouteElements = (
     paths: readonly string[],
     component: ComponentType<any>,
