@@ -8,6 +8,7 @@ import {
   getStoredConsumerToken,
 } from "@/lib/consumer-auth";
 import { apiCall } from "@/lib/api";
+import { getArrangementSummary } from "@/lib/arrangements";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -607,24 +608,29 @@ export default function ConsumerDashboardSimple() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {(arrangements as any[]).map((arrangement: any) => (
-                      <div
-                        key={arrangement.id}
-                        className="rounded-xl border border-white/10 bg-white/5 p-4 hover:bg-white/10 transition-colors"
-                      >
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <p className="text-white font-medium">{arrangement.description || 'Payment Plan'}</p>
-                            <p className="text-sm text-blue-100/70 mt-1">
-                              {arrangement.installments} payments of {formatCurrency(arrangement.installmentAmount)}
-                            </p>
+                    {(arrangements as any[]).map((arrangement: any) => {
+                      const summary = getArrangementSummary(arrangement);
+                      return (
+                        <div
+                          key={arrangement.id}
+                          className="rounded-xl border border-white/10 bg-white/5 p-4 hover:bg-white/10 transition-colors"
+                        >
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="text-white font-medium">{summary.headline}</p>
+                              {summary.detail && (
+                                <p className="text-sm text-blue-100/70 mt-1">
+                                  {summary.detail}
+                                </p>
+                              )}
+                            </div>
+                            <Badge className="border-emerald-400/30 bg-emerald-500/10 text-emerald-200 border">
+                              Available
+                            </Badge>
                           </div>
-                          <Badge className="border-emerald-400/30 bg-emerald-500/10 text-emerald-200 border">
-                            Active
-                          </Badge>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
