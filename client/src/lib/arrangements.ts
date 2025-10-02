@@ -46,6 +46,36 @@ export const getPlanTypeLabel = (planType?: string | null): string => {
   }
 };
 
+export const calculateArrangementPayment = (
+  arrangement: ArrangementLike,
+  accountBalanceCents: number
+): number => {
+  const planType = arrangement.planType ?? 'range';
+
+  switch (planType) {
+    case 'settlement':
+      if (arrangement.payoffPercentageBasisPoints) {
+        return Math.round(accountBalanceCents * arrangement.payoffPercentageBasisPoints / 10000);
+      }
+      return accountBalanceCents;
+    
+    case 'fixed_monthly':
+      return arrangement.fixedMonthlyPayment || accountBalanceCents;
+    
+    case 'range':
+      return arrangement.monthlyPaymentMin || accountBalanceCents;
+    
+    case 'pay_in_full':
+      return arrangement.payInFullAmount || accountBalanceCents;
+    
+    case 'custom_terms':
+      return accountBalanceCents;
+    
+    default:
+      return accountBalanceCents;
+  }
+};
+
 export const getArrangementSummary = (arrangement: ArrangementLike) => {
   const planType = arrangement.planType ?? 'range';
   const maxTerm = typeof arrangement.maxTermMonths === 'number' && arrangement.maxTermMonths > 0

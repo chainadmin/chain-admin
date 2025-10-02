@@ -3765,7 +3765,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         cardName, 
         zipCode,
         saveCard,
-        setupRecurring
+        setupRecurring,
+        firstPaymentDate
       } = req.body;
 
       if (!accountId || !cardNumber || !expiryMonth || !expiryYear || !cvv || !cardName) {
@@ -3939,8 +3940,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Step 4: Create payment schedule if requested
       if (success && setupRecurring && arrangement && savedPaymentMethod) {
-        const today = new Date();
-        const nextMonth = new Date(today);
+        // Use firstPaymentDate if provided, otherwise use today
+        const paymentStartDate = firstPaymentDate ? new Date(firstPaymentDate) : new Date();
+        const nextMonth = new Date(paymentStartDate);
         nextMonth.setMonth(nextMonth.getMonth() + 1);
         
         // Determine number of payments based on arrangement
@@ -3952,7 +3954,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Skip creating schedule
         } else if (arrangement.planType === 'fixed_monthly' && arrangement.maxTermMonths) {
           remainingPayments = Number(arrangement.maxTermMonths) - 1; // Minus the one we just made
-          endDate = new Date(today);
+          endDate = new Date(paymentStartDate);
           endDate.setMonth(endDate.getMonth() + Number(arrangement.maxTermMonths));
         }
         
@@ -3966,7 +3968,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             arrangementType: arrangement.planType,
             amountCents,
             frequency: 'monthly',
-            startDate: today.toISOString().split('T')[0],
+            startDate: paymentStartDate.toISOString().split('T')[0],
             endDate: endDate ? endDate.toISOString().split('T')[0] : null,
             nextPaymentDate: nextMonth.toISOString().split('T')[0],
             remainingPayments,

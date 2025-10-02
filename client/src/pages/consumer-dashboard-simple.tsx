@@ -8,7 +8,7 @@ import {
   getStoredConsumerToken,
 } from "@/lib/consumer-auth";
 import { apiCall } from "@/lib/api";
-import { getArrangementSummary } from "@/lib/arrangements";
+import { getArrangementSummary, calculateArrangementPayment } from "@/lib/arrangements";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +35,7 @@ export default function ConsumerDashboardSimple() {
   const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [saveCard, setSaveCard] = useState(false);
   const [setupRecurring, setSetupRecurring] = useState(false);
+  const [firstPaymentDate, setFirstPaymentDate] = useState<string>("");
   const [editForm, setEditForm] = useState({
     firstName: "",
     lastName: "",
@@ -172,6 +173,7 @@ export default function ConsumerDashboardSimple() {
     setSelectedArrangement(null);
     setSaveCard(false);
     setSetupRecurring(false);
+    setFirstPaymentDate("");
     setShowPaymentDialog(true);
   };
 
@@ -182,6 +184,13 @@ export default function ConsumerDashboardSimple() {
         selectedAccount.balanceCents <= arr.maxBalance
       )
     : [];
+
+  // Calculate payment amount based on selected arrangement
+  const paymentAmountCents = selectedAccount
+    ? selectedArrangement
+      ? calculateArrangementPayment(selectedArrangement, selectedAccount.balanceCents || 0)
+      : selectedAccount.balanceCents || 0
+    : 0;
 
   const handlePaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -203,6 +212,7 @@ export default function ConsumerDashboardSimple() {
         zipCode: paymentForm.zipCode,
         saveCard: saveCard,
         setupRecurring: setupRecurring,
+        firstPaymentDate: firstPaymentDate || null,
       }, token);
 
       const result = await response.json();
@@ -213,7 +223,7 @@ export default function ConsumerDashboardSimple() {
 
       toast({
         title: "Payment Successful",
-        description: `Your payment of ${formatCurrency(selectedAccount.balanceCents || 0)} has been processed.`,
+        description: `Your payment of ${formatCurrency(paymentAmountCents)} has been processed.`,
       });
 
       setShowPaymentDialog(false);
@@ -809,15 +819,36 @@ export default function ConsumerDashboardSimple() {
           <form onSubmit={handlePaymentSubmit}>
             <div className="space-y-4 py-4">
               {selectedAccount && (
-                <div className="rounded-lg bg-blue-50 p-3 border border-blue-200">
-                  <p className="text-xs text-gray-600">Account: {selectedAccount.creditor}</p>
-                  <div className="flex justify-between items-center mt-1">
-                    <span className="text-sm font-medium text-gray-700">Total Balance:</span>
-                    <span className="text-xl font-bold text-blue-600">
-                      {formatCurrency(selectedAccount.balanceCents || 0)}
-                    </span>
+                <>
+                  <div className="rounded-lg bg-blue-50 p-3 border border-blue-200">
+                    <p className="text-xs text-gray-600">Account: {selectedAccount.creditor}</p>
+                    <div className="flex justify-between items-center mt-1">
+                      <span className="text-sm font-medium text-gray-700">Total Balance:</span>
+                      <span className="text-xl font-bold text-blue-600">
+                        {formatCurrency(selectedAccount.balanceCents || 0)}
+                      </span>
+                    </div>
                   </div>
-                </div>
+                  
+                  <div className="rounded-lg bg-green-50 p-4 border-2 border-green-500">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-semibold text-gray-700">
+                        {selectedArrangement ? 'Payment Amount:' : 'Amount to Pay:'}
+                      </span>
+                      <span className="text-2xl font-bold text-green-600">
+                        {formatCurrency(paymentAmountCents)}
+                      </span>
+                    </div>
+                    {selectedArrangement && (
+                      <p className="text-xs text-gray-600 mt-1">
+                        {selectedArrangement.planType === 'settlement' && 'Settlement payment - full balance will be cleared'}
+                        {selectedArrangement.planType === 'fixed_monthly' && 'First installment payment'}
+                        {selectedArrangement.planType === 'range' && 'Minimum monthly payment'}
+                        {selectedArrangement.planType === 'pay_in_full' && 'One-time payment'}
+                      </p>
+                    )}
+                  </div>
+                </>
               )}
 
               {applicableArrangements.length > 0 && (
@@ -959,6 +990,30 @@ export default function ConsumerDashboardSimple() {
                     data-testid="input-payment-zip"
                   />
                 </div>
+
+                {selectedArrangement && (
+                  <div>
+                    <Label htmlFor="firstPaymentDate">
+                      {selectedArrangement.planType === 'settlement' || selectedArrangement.planType === 'pay_in_full' 
+                        ? 'Payment Date' 
+                        : 'First Payment Date'}
+                    </Label>
+                    <Input
+                      type="date"
+                      id="firstPaymentDate"
+                      value={firstPaymentDate}
+                      onChange={(e) => setFirstPaymentDate(e.target.value)}
+                      required={!!selectedArrangement}
+                      min={new Date().toISOString().split('T')[0]}
+                      data-testid="input-first-payment-date"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      {selectedArrangement.planType === 'settlement' || selectedArrangement.planType === 'pay_in_full'
+                        ? 'When should this payment be processed?'
+                        : 'When should the first payment be processed?'}
+                    </p>
+                  </div>
+                )}
 
                 {selectedArrangement && (selectedArrangement.planType === 'fixed_monthly' || selectedArrangement.planType === 'range') && (
                   <div className="flex items-center space-x-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
