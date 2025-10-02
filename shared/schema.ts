@@ -48,6 +48,11 @@ export const tenants = pgTable("tenants", {
   isActive: boolean("is_active").default(true), // Can be suspended by platform owner
   suspendedAt: timestamp("suspended_at"),
   suspensionReason: text("suspension_reason"),
+  // Service cutoff controls (platform admin can disable specific services)
+  emailServiceEnabled: boolean("email_service_enabled").default(true),
+  smsServiceEnabled: boolean("sms_service_enabled").default(true),
+  portalAccessEnabled: boolean("portal_access_enabled").default(true),
+  paymentProcessingEnabled: boolean("payment_processing_enabled").default(true),
   // Trial registration fields
   isTrialAccount: boolean("is_trial_account").default(true), // New agencies start as trial
   isPaidAccount: boolean("is_paid_account").default(false), // Upgraded by admin
