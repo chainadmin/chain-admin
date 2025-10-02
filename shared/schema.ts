@@ -397,6 +397,44 @@ export const payments = pgTable("payments", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Consumer saved payment methods (tokenized cards)
+export const paymentMethods = pgTable("payment_methods", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "cascade" }).notNull(),
+  paymentToken: text("payment_token").notNull(), // USAePay token or similar (never store raw card data)
+  cardLast4: text("card_last4").notNull(), // Last 4 digits for display
+  cardBrand: text("card_brand"), // "Visa", "Mastercard", "Amex", "Discover"
+  cardholderName: text("cardholder_name"),
+  expiryMonth: text("expiry_month"), // MM
+  expiryYear: text("expiry_year"), // YYYY
+  billingZip: text("billing_zip"),
+  isDefault: boolean("is_default").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Recurring payment schedules for arrangements
+export const paymentSchedules = pgTable("payment_schedules", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "cascade" }).notNull(),
+  accountId: uuid("account_id").references(() => accounts.id, { onDelete: "cascade" }).notNull(),
+  paymentMethodId: uuid("payment_method_id").references(() => paymentMethods.id, { onDelete: "cascade" }).notNull(),
+  arrangementType: text("arrangement_type").notNull(), // "fixed_monthly", "range", "settlement", etc.
+  amountCents: bigint("amount_cents", { mode: "number" }).notNull(), // Amount to charge each period
+  frequency: text("frequency").default("monthly"), // "weekly", "biweekly", "monthly"
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date"), // Null for indefinite
+  nextPaymentDate: date("next_payment_date").notNull(),
+  remainingPayments: integer("remaining_payments"), // Null for indefinite
+  status: text("status").default("active"), // "active", "paused", "completed", "cancelled", "failed"
+  failedAttempts: integer("failed_attempts").default(0),
+  lastProcessedAt: timestamp("last_processed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Subscription plans (platform-level plan definitions)
 export const subscriptionPlans = pgTable("subscription_plans", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -634,6 +672,37 @@ export const paymentsRelations = relations(payments, ({ one }) => ({
   account: one(accounts, {
     fields: [payments.accountId],
     references: [accounts.id],
+  }),
+}));
+
+export const paymentMethodsRelations = relations(paymentMethods, ({ one, many }) => ({
+  tenant: one(tenants, {
+    fields: [paymentMethods.tenantId],
+    references: [tenants.id],
+  }),
+  consumer: one(consumers, {
+    fields: [paymentMethods.consumerId],
+    references: [consumers.id],
+  }),
+  schedules: many(paymentSchedules),
+}));
+
+export const paymentSchedulesRelations = relations(paymentSchedules, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [paymentSchedules.tenantId],
+    references: [tenants.id],
+  }),
+  consumer: one(consumers, {
+    fields: [paymentSchedules.consumerId],
+    references: [consumers.id],
+  }),
+  account: one(accounts, {
+    fields: [paymentSchedules.accountId],
+    references: [accounts.id],
+  }),
+  paymentMethod: one(paymentMethods, {
+    fields: [paymentSchedules.paymentMethodId],
+    references: [paymentMethods.id],
   }),
 }));
 
@@ -1049,6 +1118,8 @@ export const insertEmailTrackingSchema = createInsertSchema(emailTracking).omit(
 export const insertConsumerNotificationSchema = createInsertSchema(consumerNotifications).omit({ id: true, createdAt: true });
 export const insertCallbackRequestSchema = createInsertSchema(callbackRequests).omit({ id: true, createdAt: true });
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true });
+export const insertPaymentMethodSchema = createInsertSchema(paymentMethods).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertPaymentScheduleSchema = createInsertSchema(paymentSchedules).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertSubscriptionPlanSchema = createInsertSchema(subscriptionPlans).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true, createdAt: true });
@@ -1095,6 +1166,10 @@ export type CallbackRequest = typeof callbackRequests.$inferSelect;
 export type InsertCallbackRequest = z.infer<typeof insertCallbackRequestSchema>;
 export type Payment = typeof payments.$inferSelect;
 export type InsertPayment = z.infer<typeof insertPaymentSchema>;
+export type PaymentMethod = typeof paymentMethods.$inferSelect;
+export type InsertPaymentMethod = z.infer<typeof insertPaymentMethodSchema>;
+export type PaymentSchedule = typeof paymentSchedules.$inferSelect;
+export type InsertPaymentSchedule = z.infer<typeof insertPaymentScheduleSchema>;
 export type SubscriptionPlan = typeof subscriptionPlans.$inferSelect;
 export type InsertSubscriptionPlan = z.infer<typeof insertSubscriptionPlanSchema>;
 export type Subscription = typeof subscriptions.$inferSelect;
