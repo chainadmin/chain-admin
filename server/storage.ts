@@ -9,6 +9,7 @@ import {
   emailTemplates,
   emailCampaigns,
   emailTracking,
+  emailLogs,
   smsTemplates,
   smsCampaigns,
   smsTracking,
@@ -2042,6 +2043,10 @@ export class DatabaseStorage implements IStorage {
     const allConsumers = await db.select().from(consumers);
     const allAccounts = await db.select().from(accounts);
     
+    // Get email and SMS usage counts
+    const allEmails = await db.select({ tenantId: emailLogs.tenantId }).from(emailLogs);
+    const allSms = await db.select({ campaignId: smsTracking.campaignId }).from(smsTracking);
+    
     const totalTenants = allTenants.length;
     const activeTenants = allTenants.filter(t => t.isActive).length;
     const trialTenants = allTenants.filter(t => t.isTrialAccount).length;
@@ -2049,6 +2054,8 @@ export class DatabaseStorage implements IStorage {
     const totalConsumers = allConsumers.length;
     const totalAccounts = allAccounts.length;
     const totalBalanceCents = allAccounts.reduce((sum: number, account: any) => sum + (account.balanceCents || 0), 0);
+    const totalEmailsSent = allEmails.length;
+    const totalSmsSent = allSms.length;
     
     return {
       totalTenants,
@@ -2057,7 +2064,9 @@ export class DatabaseStorage implements IStorage {
       paidTenants,
       totalConsumers,
       totalAccounts,
-      totalBalanceCents
+      totalBalanceCents,
+      totalEmailsSent,
+      totalSmsSent
     };
   }
 

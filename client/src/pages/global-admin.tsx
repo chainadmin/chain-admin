@@ -568,8 +568,8 @@ export default function GlobalAdmin() {
 
         {/* Platform Stats */}
         {statsLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            {[...Array(4)].map((_, i) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+            {[...Array(6)].map((_, i) => (
               <div key={i} className="rounded-3xl border border-white/10 bg-white/10 p-6 shadow-lg shadow-blue-900/20 backdrop-blur animate-pulse">
                 <div className="h-3 w-24 rounded-full bg-white/10" />
                 <div className="mt-6 h-8 w-28 rounded-full bg-white/10" />
@@ -577,7 +577,7 @@ export default function GlobalAdmin() {
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
             <div className="rounded-3xl border border-white/10 bg-white/10 p-6 shadow-lg shadow-blue-900/20 backdrop-blur">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-sm font-medium text-blue-100/80">Total Agencies</p>
@@ -618,6 +618,32 @@ export default function GlobalAdmin() {
               </div>
               <div className="text-3xl font-bold text-blue-50" data-testid="text-total-balance">
                 {formatCurrency(((stats as any)?.totalBalanceCents || 0) / 100)}
+              </div>
+              <p className="text-xs text-blue-100/60 mt-1">
+                Platform-wide
+              </p>
+            </div>
+
+            <div className="rounded-3xl border border-white/10 bg-white/10 p-6 shadow-lg shadow-blue-900/20 backdrop-blur">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-medium text-blue-100/80">Emails Sent</p>
+                <Mail className="h-4 w-4 text-blue-300/60" />
+              </div>
+              <div className="text-3xl font-bold text-blue-50" data-testid="text-total-emails">
+                {((stats as any)?.totalEmailsSent || 0).toLocaleString()}
+              </div>
+              <p className="text-xs text-blue-100/60 mt-1">
+                Platform-wide
+              </p>
+            </div>
+
+            <div className="rounded-3xl border border-white/10 bg-white/10 p-6 shadow-lg shadow-blue-900/20 backdrop-blur">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-medium text-blue-100/80">SMS Sent</p>
+                <MessageSquare className="h-4 w-4 text-blue-300/60" />
+              </div>
+              <div className="text-3xl font-bold text-blue-50" data-testid="text-total-sms">
+                {((stats as any)?.totalSmsSent || 0).toLocaleString()}
               </div>
               <p className="text-xs text-blue-100/60 mt-1">
                 Platform-wide
