@@ -1240,7 +1240,7 @@ export default function ConsumerDashboardSimple() {
                     Processing...
                   </>
                 ) : (
-                  `Pay ${formatCurrency(selectedAccount?.balanceCents || 0)}`
+                  `Pay ${formatCurrency(paymentAmountCents)}`
                 )}
               </Button>
             </div>
