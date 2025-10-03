@@ -1,0 +1,17 @@
+node_modules
+dist
+.git
+.github
+*.md
+.env
+.env.local
+.replit
+replit.nix
+.config
+tmp
+logs
+*.log
+.DS_Store
+coverage
+.vscode
+.idea
