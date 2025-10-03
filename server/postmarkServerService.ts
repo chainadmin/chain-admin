@@ -29,37 +29,25 @@ export interface PostmarkServerResult {
 }
 
 class PostmarkServerService {
-  private readonly accountToken: string | null;
+  private readonly accountToken: string;
   private readonly baseUrl = 'https://api.postmarkapp.com';
 
   constructor() {
-    this.accountToken = process.env.POSTMARK_ACCOUNT_TOKEN || null;
+    if (!process.env.POSTMARK_ACCOUNT_TOKEN) {
+      throw new Error('REQUIRED: POSTMARK_ACCOUNT_TOKEN environment variable must be set');
+    }
     
-    if (!this.accountToken) {
-      console.warn('WARNING: POSTMARK_ACCOUNT_TOKEN not set - Postmark features will be disabled');
-    }
-  }
-
-  private checkToken(): boolean {
-    if (!this.accountToken) {
-      console.error('Postmark operation attempted but POSTMARK_ACCOUNT_TOKEN is not configured');
-      return false;
-    }
-    return true;
+    this.accountToken = process.env.POSTMARK_ACCOUNT_TOKEN;
   }
 
   async createServer(config: PostmarkServerConfig): Promise<PostmarkServerResult> {
-    if (!this.checkToken()) {
-      return { success: false, error: 'POSTMARK_ACCOUNT_TOKEN not configured' };
-    }
-    
     try {
       const response = await fetch(`${this.baseUrl}/servers`, {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
-          'X-Postmark-Account-Token': this.accountToken!,
+          'X-Postmark-Account-Token': this.accountToken,
         },
         body: JSON.stringify({
           Name: config.name,
@@ -95,16 +83,12 @@ class PostmarkServerService {
   }
 
   async getServer(serverId: number): Promise<PostmarkServerResult> {
-    if (!this.checkToken()) {
-      return { success: false, error: 'POSTMARK_ACCOUNT_TOKEN not configured' };
-    }
-    
     try {
       const response = await fetch(`${this.baseUrl}/servers/${serverId}`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
-          'X-Postmark-Account-Token': this.accountToken!,
+          'X-Postmark-Account-Token': this.accountToken,
         },
       });
 
@@ -132,15 +116,11 @@ class PostmarkServerService {
   }
 
   async deleteServer(serverId: number): Promise<{ success: boolean; error?: string }> {
-    if (!this.checkToken()) {
-      return { success: false, error: 'POSTMARK_ACCOUNT_TOKEN not configured' };
-    }
-    
     try {
       const response = await fetch(`${this.baseUrl}/servers/${serverId}`, {
         method: 'DELETE',
         headers: {
-          'X-Postmark-Account-Token': this.accountToken!,
+          'X-Postmark-Account-Token': this.accountToken,
         },
       });
 
@@ -163,16 +143,13 @@ class PostmarkServerService {
   }
 
   async testConnection(): Promise<{ success: boolean; serverCount?: number; error?: string }> {
-    if (!this.checkToken()) {
-      return { success: false, error: 'POSTMARK_ACCOUNT_TOKEN not configured' };
-    }
     
     try {
       const response = await fetch(`${this.baseUrl}/servers`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
-          'X-Postmark-Account-Token': this.accountToken!,
+          'X-Postmark-Account-Token': this.accountToken,
         },
       });
 
