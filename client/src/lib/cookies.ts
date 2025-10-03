@@ -17,9 +17,12 @@ export function setCookie(name: string, value: string, days: number = 7) {
   // Set cookie with domain support for subdomains
   const hostname = window.location.hostname;
   const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+  const isSecure = window.location.protocol === 'https:';
+  
   const domain = isLocalhost ? '' : `domain=.${hostname.split('.').slice(-2).join('.')};`;
+  const secure = isSecure ? 'Secure;' : '';
 
-  document.cookie = `${name}=${value};${expires};path=/;${domain}SameSite=Lax`;
+  document.cookie = `${name}=${value};${expires};path=/;${domain}${secure}SameSite=Lax`;
 }
 
 export function persistTenantMetadata({ slug, name }: { slug?: string | null; name?: string | null }) {
