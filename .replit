@@ -7,7 +7,7 @@ channel = "stable-24_05"
 
 [deployment]
 deploymentTarget = "autoscale"
-build = ["sh", "-c", "npm run db:push && npm run build"]
+build = ["sh", "-c", "sh -c \"npx drizzle-kit push --force && npm run build\""]
 run = ["npm", "run", "start"]
 
 [env]
