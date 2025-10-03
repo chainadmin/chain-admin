@@ -797,9 +797,7 @@ export default function Settings() {
                           }
                           
                           if (fallbackSlug) {
-                            const agencyUrl = isSubdomainSupported() 
-                              ? `https://${fallbackSlug}.${window.location.hostname.split('.').slice(-2).join('.')}`
-                              : `${window.location.origin}/agency/${fallbackSlug}`;
+                            const agencyUrl = `${window.location.origin}/agency/${fallbackSlug}`;
                             
                             return (
                               <>
@@ -859,24 +857,8 @@ export default function Settings() {
                         
                         let agencyUrl = '';
                         
-                        if (isSubdomainSupported() && agencySlug) {
-                          // Production with custom domain - use subdomain
-                          const url = new URL(window.location.origin);
-                          const parts = url.hostname.split('.');
-                          
-                          if (parts.length >= 2) {
-                            // Replace or add subdomain
-                            if (parts[0] === 'www' || parts.length === 2) {
-                              url.hostname = `${agencySlug}.${parts.slice(-2).join('.')}`;
-                            } else {
-                              parts[0] = agencySlug;
-                              url.hostname = parts.join('.');
-                            }
-                          }
-                          
-                          agencyUrl = url.origin;
-                        } else if (agencySlug) {
-                          // Development or no subdomain support - use path-based
+                        if (agencySlug) {
+                          // Always use path-based routing for agency URLs
                           agencyUrl = `${window.location.origin}/agency/${agencySlug}`;
                         }
                         
@@ -887,9 +869,7 @@ export default function Settings() {
                             try {
                               const parsed = JSON.parse(storedContext);
                               agencySlug = parsed.slug;
-                              agencyUrl = isSubdomainSupported() 
-                                ? `https://${agencySlug}.${window.location.hostname.split('.').slice(-2).join('.')}`
-                                : `${window.location.origin}/agency/${agencySlug}`;
+                              agencyUrl = `${window.location.origin}/agency/${agencySlug}`;
                             } catch (e) {}
                           }
                           
