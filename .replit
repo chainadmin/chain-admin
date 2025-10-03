@@ -7,7 +7,7 @@ channel = "stable-24_05"
 
 [deployment]
 deploymentTarget = "autoscale"
-build = ["npm", "run", "build"]
+build = ["sh", "-c", "npm run db:push && npm run build"]
 run = ["npm", "run", "start"]
 
 [env]
@@ -57,10 +57,6 @@ externalPort = 8080
 [[ports]]
 localPort = 35527
 externalPort = 5173
-
-[[ports]]
-localPort = 37771
-externalPort = 9000
 
 [[ports]]
 localPort = 39659
