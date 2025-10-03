@@ -22,7 +22,6 @@ async function main() {
   // Validate required environment variables at startup
   const requiredEnvVars = [
     'POSTMARK_SERVER_TOKEN',
-    'POSTMARK_ACCOUNT_TOKEN',
     'DATABASE_URL',
     'JWT_SECRET'
   ];
@@ -34,6 +33,11 @@ async function main() {
     missing.forEach(varName => console.error(`   - ${varName}`));
     console.error('\nThe application cannot start without these variables.');
     process.exit(1);
+  }
+  
+  // Optional but recommended
+  if (!process.env.POSTMARK_ACCOUNT_TOKEN) {
+    console.warn('⚠️  POSTMARK_ACCOUNT_TOKEN not set - Admin features for creating Postmark servers will be disabled');
   }
   
   console.log('✅ All required environment variables are present');
