@@ -3,11 +3,13 @@ import { db } from './db';
 import { emailLogs, tenants } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 
-if (!process.env.POSTMARK_SERVER_TOKEN) {
-  throw new Error('Missing required Postmark Server Token: POSTMARK_SERVER_TOKEN');
+const postmarkToken = process.env.POSTMARK_SERVER_TOKEN;
+
+if (!postmarkToken) {
+  console.warn('WARNING: POSTMARK_SERVER_TOKEN not set - Email features will be disabled');
 }
 
-const postmarkClient = new Client(process.env.POSTMARK_SERVER_TOKEN);
+const postmarkClient = postmarkToken ? new Client(postmarkToken) : null;
 
 export interface EmailOptions {
   to: string;
@@ -25,6 +27,15 @@ const DEFAULT_FROM_EMAIL = 'support@chainsoftwaregroup.com';
 
 export class EmailService {
   async sendEmail(options: EmailOptions): Promise<{ messageId: string; success: boolean; error?: string }> {
+    if (!postmarkClient) {
+      console.error('Email send attempted but Postmark is not configured');
+      return {
+        messageId: '',
+        success: false,
+        error: 'Email service not configured - POSTMARK_SERVER_TOKEN missing',
+      };
+    }
+    
     try {
       let fromEmail = options.from || DEFAULT_FROM_EMAIL;
       
