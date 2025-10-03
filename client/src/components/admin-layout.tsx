@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import chainLogo from "@/assets/chain-logo.png";
 import { useAgencyContext } from "@/hooks/useAgencyContext";
 import { cn } from "@/lib/utils";
+import { clearAuth } from "@/lib/cookies";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -179,8 +180,13 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 <Button
                   variant="ghost"
                   onClick={() => {
-                    localStorage.removeItem('authToken');
-                    window.location.href = '/api/logout';
+                    if (isJwtAuth) {
+                      clearAuth();
+                      window.location.href = '/agency-login';
+                    } else {
+                      localStorage.removeItem('authToken');
+                      window.location.href = '/api/logout';
+                    }
                   }}
                   className="rounded-xl border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-blue-50 hover:bg-white/20"
                   data-testid="button-logout"
