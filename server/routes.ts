@@ -154,8 +154,8 @@ function replaceTemplateVariables(
     consumerPortalLink: consumerPortalUrl,
     appDownloadLink: appDownloadUrl,
     agencyName: tenant?.name || '',
-    agencyEmail: tenant?.email || '',
-    agencyPhone: tenant?.phoneNumber || tenant?.twilioPhoneNumber || '',
+    agencyEmail: (tenant as any)?.contactEmail || tenant?.email || '',
+    agencyPhone: (tenant as any)?.contactPhone || tenant?.phoneNumber || tenant?.twilioPhoneNumber || '',
   };
 
   let processedTemplate = template;
@@ -323,9 +323,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     next();
   });
 
-  // Body parser middleware
-  app.use(express.json());
-  app.use(express.urlencoded({ extended: true }));
+  // Body parser middleware with increased limits for CSV imports
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
   // Subdomain detection middleware
   app.use(subdomainMiddleware);
@@ -1116,6 +1116,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Tenant not found" });
       }
 
+      // Get tenant settings for contact info (email/phone)
+      const tenantSettings = await storage.getTenantSettings(tenantId);
+      const tenantWithSettings = { 
+        ...tenant, 
+        contactEmail: tenantSettings?.contactEmail,
+        contactPhone: tenantSettings?.contactPhone
+      };
+
       // Process variables for each consumer and prepare email content
       const accountsData = await storage.getAccountsByTenant(tenantId);
       
@@ -1127,8 +1135,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const consumerAccount = accountsData.find(acc => acc.consumerId === consumer.id);
         
         // Replace variables in both subject and HTML content
-        const processedSubject = replaceTemplateVariables(template.subject || '', consumer, consumerAccount, tenant);
-        const processedHtml = replaceTemplateVariables(template.html || '', consumer, consumerAccount, tenant);
+        const processedSubject = replaceTemplateVariables(template.subject || '', consumer, consumerAccount, tenantWithSettings);
+        const processedHtml = replaceTemplateVariables(template.html || '', consumer, consumerAccount, tenantWithSettings);
         
         // Create branded sender email: "Agency Name <slug@chainsoftwaregroup.com>"
         const fromEmail = `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>`;
@@ -1433,11 +1441,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Tenant not found" });
       }
 
+      // Get tenant settings for contact info (email/phone)
+      const tenantSettings = await storage.getTenantSettings(tenantId);
+      const tenantWithSettings = { 
+        ...tenant, 
+        contactEmail: tenantSettings?.contactEmail,
+        contactPhone: tenantSettings?.contactPhone
+      };
+
       const processedMessages = targetedConsumers
         .filter(consumer => consumer.phone)
         .map(consumer => {
           const consumerAccount = accountsData.find(acc => acc.consumerId === consumer.id);
-          const processedMessage = replaceTemplateVariables(template.message || '', consumer, consumerAccount, tenant);
+          const processedMessage = replaceTemplateVariables(template.message || '', consumer, consumerAccount, tenantWithSettings);
           return {
             to: consumer.phone!,
             message: processedMessage,
