@@ -180,9 +180,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                   variant="ghost"
                   onClick={() => {
                     localStorage.removeItem('authToken');
-                    window.location.href = '/';
+                    window.location.href = '/api/logout';
                   }}
                   className="rounded-xl border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-blue-50 hover:bg-white/20"
+                  data-testid="button-logout"
                 >
                   <i aria-hidden="true" className="fas fa-sign-out-alt mr-2 text-base"></i>
                   Logout
