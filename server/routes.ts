@@ -3510,8 +3510,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Logo upload route
-  app.post('/api/upload/logo', authenticateUser, upload.single('logo'), async (req: any, res) => {
+  // Logo upload route (handles JSON with base64)
+  app.post('/api/upload/logo', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
       
@@ -3519,12 +3519,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      if (!req.file) {
-        return res.status(400).json({ message: "No file uploaded" });
+      const { image, filename } = req.body;
+      
+      if (!image || !filename) {
+        return res.status(400).json({ message: "No image data provided" });
       }
 
+      // Convert base64 to buffer
+      const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
+      const buffer = Buffer.from(base64Data, 'base64');
+      
+      // Determine mimetype from base64 prefix
+      const mimetypeMatch = image.match(/^data:(image\/\w+);base64,/);
+      const mimetype = mimetypeMatch ? mimetypeMatch[1] : 'image/png';
+      
+      // Create file object similar to multer
+      const file = {
+        buffer,
+        originalname: filename,
+        mimetype
+      } as Express.Multer.File;
+
       // Upload to Supabase Storage
-      const logoResult = await uploadLogo(req.file, tenantId);
+      const logoResult = await uploadLogo(file, tenantId);
       
       if (!logoResult) {
         return res.status(500).json({ message: "Failed to upload logo to storage" });
