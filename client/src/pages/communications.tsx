@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -36,7 +36,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Mail, MessageSquare, Plus, Send, FileText, Trash2, Eye, TrendingUp, Users, AlertCircle, MousePointer, UserMinus, Phone, Clock, Calendar, Settings, Copy, Sparkles, Megaphone, Zap, BarChart3 } from "lucide-react";
+import { Mail, MessageSquare, Plus, Send, FileText, Trash2, Eye, TrendingUp, Users, AlertCircle, MousePointer, UserMinus, Phone, Clock, Calendar, Settings, Copy, Sparkles, Megaphone, Zap, BarChart3, Code } from "lucide-react";
 
 export default function Communications() {
   const [activeTab, setActiveTab] = useState("overview");
@@ -45,6 +45,9 @@ export default function Communications() {
   const [showCampaignModal, setShowCampaignModal] = useState(false);
   const [showCampaignConfirmation, setShowCampaignConfirmation] = useState(false);
   const [previewTemplate, setPreviewTemplate] = useState<any>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const emailTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const smsTextareaRef = useRef<HTMLTextAreaElement>(null);
   
   const [emailTemplateForm, setEmailTemplateForm] = useState({
     name: "",
@@ -155,6 +158,74 @@ export default function Communications() {
   const { data: tenantSettings } = useQuery({
     queryKey: ["/api/settings"],
   });
+
+  // Template variables available for insertion
+  const templateVariables = [
+    { label: "First Name", value: "{{firstName}}", category: "consumer" },
+    { label: "Last Name", value: "{{lastName}}", category: "consumer" },
+    { label: "Full Name", value: "{{fullName}}", category: "consumer" },
+    { label: "Email", value: "{{email}}", category: "consumer" },
+    { label: "Phone", value: "{{phone}}", category: "consumer" },
+    { label: "Account Number", value: "{{accountNumber}}", category: "account" },
+    { label: "Creditor", value: "{{creditor}}", category: "account" },
+    { label: "Balance", value: "{{balance}}", category: "account" },
+    { label: "Due Date", value: "{{dueDate}}", category: "account" },
+    { label: "Consumer Portal Link", value: "{{consumerPortalLink}}", category: "links" },
+    { label: "App Download Link", value: "{{appDownloadLink}}", category: "links" },
+    { label: "Agency Name", value: "{{agencyName}}", category: "agency" },
+    { label: "Agency Email", value: "{{agencyEmail}}", category: "agency" },
+    { label: "Agency Phone", value: "{{agencyPhone}}", category: "agency" },
+  ];
+
+  // Function to insert variable at cursor position
+  const insertVariable = (variable: string) => {
+    const textarea = communicationType === "email" ? emailTextareaRef.current : smsTextareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = communicationType === "email" ? emailTemplateForm.html : smsTemplateForm.message;
+    const before = text.substring(0, start);
+    const after = text.substring(end);
+    
+    const newText = before + variable + after;
+    
+    if (communicationType === "email") {
+      setEmailTemplateForm({ ...emailTemplateForm, html: newText });
+    } else {
+      setSmsTemplateForm({ ...smsTemplateForm, message: newText });
+    }
+    
+    // Set cursor position after inserted variable
+    setTimeout(() => {
+      textarea.focus();
+      const newPosition = start + variable.length;
+      textarea.setSelectionRange(newPosition, newPosition);
+    }, 0);
+  };
+
+  // Function to render preview with actual data
+  const renderPreview = () => {
+    let preview = emailTemplateForm.html;
+    
+    // Replace variables with sample data
+    preview = preview.replace(/\{\{firstName\}\}/g, "John");
+    preview = preview.replace(/\{\{lastName\}\}/g, "Doe");
+    preview = preview.replace(/\{\{fullName\}\}/g, "John Doe");
+    preview = preview.replace(/\{\{email\}\}/g, "john.doe@example.com");
+    preview = preview.replace(/\{\{phone\}\}/g, "(555) 123-4567");
+    preview = preview.replace(/\{\{accountNumber\}\}/g, "ACC-12345");
+    preview = preview.replace(/\{\{creditor\}\}/g, "Sample Creditor");
+    preview = preview.replace(/\{\{balance\}\}/g, "$1,234.56");
+    preview = preview.replace(/\{\{dueDate\}\}/g, "12/31/2024");
+    preview = preview.replace(/\{\{consumerPortalLink\}\}/g, "#");
+    preview = preview.replace(/\{\{appDownloadLink\}\}/g, "#");
+    preview = preview.replace(/\{\{agencyName\}\}/g, (tenantSettings as any)?.agencyName || "Your Agency");
+    preview = preview.replace(/\{\{agencyEmail\}\}/g, (tenantSettings as any)?.agencyEmail || "info@agency.com");
+    preview = preview.replace(/\{\{agencyPhone\}\}/g, (tenantSettings as any)?.agencyPhone || "(555) 000-0000");
+
+    return preview;
+  };
 
   // Email Mutations
   const createEmailTemplateMutation = useMutation({
@@ -985,139 +1056,243 @@ export default function Communications() {
                     Create {communicationType === "email" ? "email" : "SMS"} template
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-2xl">
-                  <DialogHeader>
-                    <DialogTitle>Create {communicationType === "email" ? "Email" : "SMS"} Template</DialogTitle>
-                    <p className="text-sm text-muted-foreground">
-                      Create a new {communicationType === "email" ? "email" : "SMS"} template for your campaigns.
-                    </p>
-                  </DialogHeader>
-                  <form onSubmit={handleTemplateSubmit} className="space-y-4">
-                    <div>
-                      <Label htmlFor="template-name">Template Name</Label>
-                      <Input
-                        id="template-name"
-                        data-testid="input-template-name"
-                        value={communicationType === "email" ? emailTemplateForm.name : smsTemplateForm.name}
-                        onChange={(e) => {
-                          if (communicationType === "email") {
-                            setEmailTemplateForm({ ...emailTemplateForm, name: e.target.value });
-                          } else {
-                            setSmsTemplateForm({ ...smsTemplateForm, name: e.target.value });
-                          }
-                        }}
-                        placeholder="Enter template name"
-                        required
-                      />
-                    </div>
-                    
-                    {communicationType === "email" ? (
-                      <>
-                        <div>
-                          <Label htmlFor="subject">Subject Line</Label>
-                          <Input
-                            id="subject"
-                            data-testid="input-subject"
-                            value={emailTemplateForm.subject}
-                            onChange={(e) => setEmailTemplateForm({ ...emailTemplateForm, subject: e.target.value })}
-                            placeholder="Enter email subject"
-                            required
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="html">Email Content</Label>
-                          <Textarea
-                            id="html"
-                            data-testid="textarea-html"
-                            value={emailTemplateForm.html}
-                            onChange={(e) => setEmailTemplateForm({ ...emailTemplateForm, html: e.target.value })}
-                            placeholder="Enter your email content. Use {{firstName}} or {balance}."
-                            rows={8}
-                            required
-                          />
-                        </div>
-                        <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
-                          <h4 className="font-medium text-blue-900 text-sm mb-1">Available Variables</h4>
-                          <p className="text-xs text-blue-700 mb-2">
-                            Use <code className="font-mono">{"{{variable}}"}</code> or <code className="font-mono">{"{variable}"}</code> syntax to personalize each message.
-                          </p>
-                          <div className="text-xs text-blue-800 grid grid-cols-2 md:grid-cols-3 gap-1">
-                            <div>• {"{{firstName}}"}</div>
-                            <div>• {"{{lastName}}"}</div>
-                            <div>• {"{{fullName}}"}</div>
-                            <div>• {"{{email}}"}</div>
-                            <div>• {"{{phone}}"}</div>
-                            <div>• {"{{accountNumber}}"}</div>
-                            <div>• {"{{creditor}}"}</div>
-                            <div>• {"{{balance}}"}</div>
-                            <div>• {"{{dueDate}}"}</div>
-                            <div>• {"{{consumerPortalLink}}"}</div>
-                            <div>• {"{{appDownloadLink}}"}</div>
-                            <div>• {"{{agencyName}}"}</div>
-                            <div>• {"{{agencyEmail}}"}</div>
-                            <div>• {"{{agencyPhone}}"}</div>
-                            <div className="col-span-full">• Plus any additional CSV columns</div>
+                <DialogContent className={communicationType === "email" ? "max-w-[95vw] w-full h-[90vh] max-h-[900px]" : "max-w-2xl"}>
+                  {communicationType === "email" ? (
+                    <>
+                      <DialogHeader className="pb-4 border-b">
+                        <div className="flex items-center justify-between">
+                          <DialogTitle className="flex items-center gap-2">
+                            <Sparkles className="h-5 w-5 text-blue-600" />
+                            Create Email Template
+                          </DialogTitle>
+                          <div className="flex gap-2">
+                            <Button
+                              variant={!showPreview ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setShowPreview(false)}
+                              data-testid="button-code-view"
+                            >
+                              <Code className="h-4 w-4 mr-1" />
+                              Code
+                            </Button>
+                            <Button
+                              variant={showPreview ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setShowPreview(true)}
+                              data-testid="button-preview-view"
+                            >
+                              <Eye className="h-4 w-4 mr-1" />
+                              Preview
+                            </Button>
                           </div>
                         </div>
-                      </>
-                    ) : (
-                      <div>
-                        <Label htmlFor="message">Message Content</Label>
-                        <Textarea
-                          id="message"
-                          data-testid="textarea-message"
-                          value={smsTemplateForm.message}
-                          onChange={(e) => setSmsTemplateForm({ ...smsTemplateForm, message: e.target.value })}
-                          placeholder="Enter your SMS message. Use {{firstName}} or {balance}."
-                          rows={6}
-                          maxLength={1600}
-                          required
-                        />
-                        <p className="mt-1 text-sm text-blue-100/70">
-                          {smsTemplateForm.message.length}/1600 characters
-                        </p>
-                        <div className="mt-3 bg-blue-50 border border-blue-200 rounded-md p-3">
-                          <h4 className="font-medium text-blue-900 text-sm mb-1">Available Variables</h4>
-                          <p className="text-xs text-blue-700 mb-2">
-                            Use <code className="font-mono">{"{{variable}}"}</code> or <code className="font-mono">{"{variable}"}</code> syntax to personalize each message.
-                          </p>
-                          <div className="text-xs text-blue-800 grid grid-cols-2 gap-1">
-                            <div>• {"{{firstName}}"}</div>
-                            <div>• {"{{lastName}}"}</div>
-                            <div>• {"{{fullName}}"}</div>
-                            <div>• {"{{phone}}"}</div>
-                            <div>• {"{{accountNumber}}"}</div>
-                            <div>• {"{{creditor}}"}</div>
-                            <div>• {"{{balance}}"}</div>
-                            <div>• {"{{dueDate}}"}</div>
-                            <div>• {"{{consumerPortalLink}}"}</div>
-                            <div>• {"{{appDownloadLink}}"}</div>
-                            <div>• {"{{agencyName}}"}</div>
-                            <div>• {"{{agencyPhone}}"}</div>
-                            <div className="col-span-full">• Plus any additional CSV columns</div>
+                      </DialogHeader>
+
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-[calc(100%-140px)] overflow-hidden">
+                        {/* Left Panel - Template Editor */}
+                        <div className="flex flex-col space-y-3 overflow-y-auto pr-2">
+                          <div>
+                            <Label className="text-sm font-medium">Template Name *</Label>
+                            <Input
+                              value={emailTemplateForm.name}
+                              onChange={(e) => setEmailTemplateForm({...emailTemplateForm, name: e.target.value})}
+                              placeholder="e.g., Payment Reminder"
+                              className="mt-1"
+                              data-testid="input-template-name"
+                            />
+                          </div>
+                          
+                          <div>
+                            <Label className="text-sm font-medium">Subject Line *</Label>
+                            <Input
+                              value={emailTemplateForm.subject}
+                              onChange={(e) => setEmailTemplateForm({...emailTemplateForm, subject: e.target.value})}
+                              placeholder="e.g., Payment Required - Account {{accountNumber}}"
+                              className="mt-1"
+                              data-testid="input-subject"
+                            />
+                          </div>
+
+                          <div>
+                            <Label className="text-sm font-medium mb-2 block">Insert Variables</Label>
+                            <div className="flex flex-wrap gap-1.5 p-3 bg-gray-50 rounded-lg border mb-2">
+                              {templateVariables.map((variable) => (
+                                <Button
+                                  key={variable.value}
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => insertVariable(variable.value)}
+                                  className="text-xs h-7 px-2 bg-white hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300"
+                                  data-testid={`button-var-${variable.value.replace(/[{}]/g, '')}`}
+                                >
+                                  {variable.label}
+                                </Button>
+                              ))}
+                            </div>
+                          </div>
+                          
+                          <div className="flex-1">
+                            <Label className="text-sm font-medium">Email Content (HTML) *</Label>
+                            <Textarea
+                              ref={emailTextareaRef}
+                              rows={16}
+                              value={emailTemplateForm.html}
+                              onChange={(e) => setEmailTemplateForm({...emailTemplateForm, html: e.target.value})}
+                              placeholder="Enter your HTML email content. Click variables above to insert them."
+                              className="font-mono text-sm mt-1 resize-none"
+                              data-testid="textarea-html"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Right Panel - Preview */}
+                        <div className="flex flex-col border-l pl-4 overflow-hidden">
+                          <div className="mb-3">
+                            <Label className="text-sm font-medium flex items-center gap-2">
+                              <Eye className="h-4 w-4" />
+                              Email Preview
+                            </Label>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Preview with sample data
+                            </p>
+                          </div>
+                          
+                          <div className="flex-1 border rounded-lg overflow-auto bg-gray-50 p-4">
+                            {showPreview && emailTemplateForm.html ? (
+                              <div className="bg-white rounded shadow-sm p-6 mx-auto max-w-2xl">
+                                {/* Logo if available */}
+                                {(tenantSettings as any)?.logoUrl && (
+                                  <div className="text-center mb-6 pb-6 border-b">
+                                    <img 
+                                      src={(tenantSettings as any).logoUrl} 
+                                      alt="Agency Logo" 
+                                      className="h-12 mx-auto"
+                                    />
+                                  </div>
+                                )}
+                                {/* Subject */}
+                                <div className="mb-4 pb-4 border-b">
+                                  <div className="text-xs text-gray-500 mb-1">Subject:</div>
+                                  <div className="font-semibold text-gray-900">
+                                    {emailTemplateForm.subject.replace(/\{\{accountNumber\}\}/g, "ACC-12345").replace(/\{\{firstName\}\}/g, "John") || "No subject"}
+                                  </div>
+                                </div>
+                                {/* Rendered HTML */}
+                                <div 
+                                  className="prose prose-sm max-w-none"
+                                  dangerouslySetInnerHTML={{ __html: renderPreview() }}
+                                />
+                              </div>
+                            ) : (
+                              <div className="h-full flex items-center justify-center text-gray-400">
+                                <div className="text-center">
+                                  <Eye className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                                  <p className="text-sm">
+                                    {showPreview ? "Add content to see preview" : "Click Preview to see your email"}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
-                    )}
-                    
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setShowTemplateModal(false)}
-                        data-testid="button-cancel-template"
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        type="submit"
-                        disabled={createEmailTemplateMutation.isPending || createSmsTemplateMutation.isPending}
-                        data-testid="button-save-template"
-                      >
-                        {(createEmailTemplateMutation.isPending || createSmsTemplateMutation.isPending) ? "Creating..." : "Create Template"}
-                      </Button>
-                    </div>
-                  </form>
+                      
+                      <div className="flex justify-end space-x-3 pt-4 border-t">
+                        <Button type="button" variant="outline" onClick={() => setShowTemplateModal(false)}>
+                          Cancel
+                        </Button>
+                        <Button onClick={handleTemplateSubmit} disabled={createEmailTemplateMutation.isPending}>
+                          {createEmailTemplateMutation.isPending ? (
+                            <>
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                              Creating...
+                            </>
+                          ) : (
+                            <>
+                              <Plus className="h-4 w-4 mr-2" />
+                              Create Template
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <DialogHeader>
+                        <DialogTitle>Create SMS Template</DialogTitle>
+                        <p className="text-sm text-muted-foreground">
+                          Create a new SMS template for your campaigns.
+                        </p>
+                      </DialogHeader>
+                      <form onSubmit={handleTemplateSubmit} className="space-y-4">
+                        <div>
+                          <Label htmlFor="template-name">Template Name</Label>
+                          <Input
+                            id="template-name"
+                            data-testid="input-template-name"
+                            value={smsTemplateForm.name}
+                            onChange={(e) => setSmsTemplateForm({ ...smsTemplateForm, name: e.target.value })}
+                            placeholder="Enter template name"
+                            required
+                          />
+                        </div>
+                        
+                        <div>
+                          <Label htmlFor="message" className="mb-2 block">Insert Variables</Label>
+                          <div className="flex flex-wrap gap-1.5 p-3 bg-gray-50 rounded-lg border mb-2">
+                            {templateVariables.filter(v => v.category !== "account" || v.value === "{{accountNumber}}" || v.value === "{{balance}}" || v.value === "{{dueDate}}").map((variable) => (
+                              <Button
+                                key={variable.value}
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => insertVariable(variable.value)}
+                                className="text-xs h-7 px-2 bg-white hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300"
+                              >
+                                {variable.label}
+                              </Button>
+                            ))}
+                          </div>
+                          
+                          <Label htmlFor="message">Message Content</Label>
+                          <Textarea
+                            id="message"
+                            ref={smsTextareaRef}
+                            data-testid="textarea-message"
+                            value={smsTemplateForm.message}
+                            onChange={(e) => setSmsTemplateForm({ ...smsTemplateForm, message: e.target.value })}
+                            placeholder="Enter your SMS message. Click variables above to insert them."
+                            rows={6}
+                            maxLength={1600}
+                            required
+                            className="font-mono text-sm"
+                          />
+                          <p className="mt-1 text-sm text-gray-500">
+                            {smsTemplateForm.message.length}/1600 characters
+                          </p>
+                        </div>
+                        
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setShowTemplateModal(false)}
+                            data-testid="button-cancel-template"
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            type="submit"
+                            disabled={createSmsTemplateMutation.isPending}
+                            data-testid="button-save-template"
+                          >
+                            {createSmsTemplateMutation.isPending ? "Creating..." : "Create Template"}
+                          </Button>
+                        </div>
+                      </form>
+                    </>
+                  )}
                 </DialogContent>
               </Dialog>
             </div>
