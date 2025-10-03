@@ -1,0 +1,94 @@
+3
+User
+[⣽] Pulling schema from database...
+2025-10-03 10:18:54.41
+42b29de3
+User
+[⣷] Pulling schema from database...
+2025-10-03 10:18:54.54
+42b29de3
+User
+[⣯] Pulling schema from database...
+2025-10-03 10:18:54.57
+42b29de3
+User
+[✓] Pulling schema from database...
+2025-10-03 10:18:54.61
+42b29de3
+User
+2025-10-03 10:18:54.61
+42b29de3
+User
+Is plan_id column in subscriptions table created or renamed from another column?
+2025-10-03 10:18:54.61
+42b29de3
+User
+❯ + plan_id create column
+2025-10-03 10:18:54.61
+42b29de3
+User
+~ plan › plan_id rename column
+2025-10-03 10:18:54.61
+42b29de3
+User
+~ price_per_consumer_cents › plan_id rename column
+2025-10-03 10:18:54.61
+42b29de3
+User
+~ monthly_base_cents › plan_id rename column
+2025-10-03 10:19:04.63
+42b29de3
+User
+2:19:04 PM [express] Database schema synchronized successfully
+2025-10-03 10:19:04.64
+42b29de3
+User
+2:19:04 PM [express] serving on port 5000
+2025-10-03 10:19:04.81
+42b29de3
+User
+Could not list buckets (may not have permission): StorageUnknownError: Unexpected token '<', "
+2025-10-03 10:19:04.81
+42b29de3
+User
+at /home/runner/workspace/node_modules/@supabase/storage-js/dist/main/lib/fetch.js:27:20
+2025-10-03 10:19:04.81
+42b29de3
+User
+at process.processTicksAndRejections (node:internal/process/task_queues:95:5) {
+2025-10-03 10:19:04.81
+42b29de3
+User
+__isStorageError: true,
+2025-10-03 10:19:04.81
+42b29de3
+User
+originalError: SyntaxError: Unexpected token '<', "
+2025-10-03 10:19:04.81
+42b29de3
+User
+at JSON.parse ()
+2025-10-03 10:19:04.81
+42b29de3
+User
+at parseJSONFromBytes (node:internal/deps/undici/undici:5738:19)
+2025-10-03 10:19:04.81
+42b29de3
+User
+at successSteps (node:internal/deps/undici/undici:5719:27)
+2025-10-03 10:19:04.81
+42b29de3
+User
+at fullyReadBody (node:internal/deps/undici/undici:4609:9)
+2025-10-03 10:19:04.81
+42b29de3
+User
+at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+2025-10-03 10:19:04.81
+42b29de3
+User
+at async consumeBody (node:internal/deps/undici/undici:5728:7)
+2025-10-03 10:19:04.81
+42b29de3
+User
+}

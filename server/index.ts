@@ -25,7 +25,7 @@ async function ensureDatabaseSchema() {
   if (isProduction && process.env.DATABASE_URL) {
     try {
       log("Checking database schema...");
-      execSync("npm run db:push", { 
+      execSync("npx drizzle-kit push --force", { 
         stdio: "inherit",
         env: { ...process.env }
       });
