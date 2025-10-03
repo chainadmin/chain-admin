@@ -23,7 +23,6 @@ export function setCookie(name: string, value: string, days: number = 7) {
   const secure = isSecure ? 'Secure;' : '';
 
   const cookieString = `${name}=${value};${expires};path=/;${domain}${secure}SameSite=Lax`;
-  console.log('[setCookie]', { name, valueLength: value.length, hostname, domain, secure, cookieString: cookieString.substring(0, 100) + '...' });
   document.cookie = cookieString;
 }
 
@@ -118,19 +117,9 @@ export function deleteCookie(name: string) {
 export function getAuthToken(): string | null {
   // Check cookies first, then localStorage for backwards compatibility
   const cookieToken = getCookie('authToken');
-  const localToken = localStorage.getItem('authToken');
-  
-  console.log('[getAuthToken]', { 
-    hostname: window.location.hostname,
-    hasCookieToken: !!cookieToken,
-    hasLocalToken: !!localToken,
-    cookieTokenLength: cookieToken?.length || 0,
-    localTokenLength: localToken?.length || 0,
-    allCookies: document.cookie.split(';').map(c => c.trim().split('=')[0])
-  });
-  
   if (cookieToken) return cookieToken;
-  return localToken;
+  
+  return localStorage.getItem('authToken');
 }
 
 export function clearAuth() {

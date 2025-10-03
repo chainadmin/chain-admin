@@ -37,12 +37,6 @@ export default function AgencyLogin() {
       
       // Store the JWT token
       if (result.token) {
-        console.log('[Agency Login] Storing auth token:', {
-          tokenLength: result.token.length,
-          hostname: window.location.hostname,
-          protocol: window.location.protocol,
-          isSubdomainSupported: isSubdomainSupported()
-        });
         localStorage.setItem('authToken', result.token);
         setCookie('authToken', result.token);
       }
