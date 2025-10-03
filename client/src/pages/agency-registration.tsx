@@ -199,7 +199,7 @@ export default function AgencyRegistration() {
             </p>
             {successInfo?.slug ? (
               <p className="text-sm text-gray-500">
-                Your agency dashboard URL: <span className="font-semibold">{successInfo.slug}.chainsoftwaregroup.com</span>
+                Your agency dashboard URL: <span className="font-semibold">{window.location.origin}/agency/{successInfo.slug}</span>
               </p>
             ) : null}
             <Button
