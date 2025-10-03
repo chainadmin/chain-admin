@@ -33,11 +33,9 @@ class PostmarkServerService {
   private readonly baseUrl = 'https://api.postmarkapp.com';
 
   constructor() {
-    if (!process.env.POSTMARK_ACCOUNT_TOKEN) {
-      throw new Error('REQUIRED: POSTMARK_ACCOUNT_TOKEN environment variable must be set');
-    }
-    
-    this.accountToken = process.env.POSTMARK_ACCOUNT_TOKEN;
+    // Account token will be validated at server startup, not module load
+    // This allows Docker build to succeed without runtime env vars
+    this.accountToken = process.env.POSTMARK_ACCOUNT_TOKEN || 'will-be-validated-at-startup';
   }
 
   async createServer(config: PostmarkServerConfig): Promise<PostmarkServerResult> {

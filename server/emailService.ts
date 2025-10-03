@@ -3,11 +3,9 @@ import { db } from './db';
 import { emailLogs, tenants } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 
-if (!process.env.POSTMARK_SERVER_TOKEN) {
-  throw new Error('REQUIRED: POSTMARK_SERVER_TOKEN environment variable must be set');
-}
-
-const postmarkClient = new Client(process.env.POSTMARK_SERVER_TOKEN);
+// Postmark client will be validated at server startup, not module load
+// This allows Docker build to succeed without runtime env vars
+const postmarkClient = new Client(process.env.POSTMARK_SERVER_TOKEN || 'will-be-validated-at-startup');
 
 export interface EmailOptions {
   to: string;
