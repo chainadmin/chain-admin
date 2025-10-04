@@ -5,9 +5,7 @@ const config: CapacitorConfig = {
   appName: 'Chain',
   webDir: 'dist/public',
   server: {
-    androidScheme: 'https',
-    url: 'https://chain-production-05d7.up.railway.app/consumer-login',
-    cleartext: true
+    androidScheme: 'https'
   },
   plugins: {
     SplashScreen: {
