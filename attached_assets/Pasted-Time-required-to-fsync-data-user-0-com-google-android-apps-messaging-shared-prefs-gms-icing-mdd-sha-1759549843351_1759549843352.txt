@@ -1,0 +1,26 @@
+Time required to fsync /data/user/0/com.google.android.apps.messaging/shared_prefs/gms_icing_mdd_shared_files.xml: [<1: 0, <2: 0, <4: 0, <8: 3, <16: 7, <32: 7, <64: 7, <128: 6, <256: 4, <512: 4, <1024: 4, <2048: 2, <4096: 1, <8192: 0, <16384: 1, >=16384: 0]
+Load libcurve25519.so using class loader ns product-clns-10 (caller=/product/priv-app/PrebuiltBugle/PrebuiltBugle.apk!classes6.dex): dlopen failed: library "libcurve25519.so" not found
+Drained
+Slow delivery took 314ms main app=system_server main=true group=FOREGROUND h=com.android.server.power.Notifier$NotifierHandler c=com.android.server.power.Notifier$$ExternalSyntheticLambda2@209503d m=0
+runtime.cc:715] Runtime aborting --- recursively, so no thread-specific detail!
+runtime.cc:715] #00 pc 0080e510  /apex/com.android.art/lib64/libart.so (art::DumpNativeStack+192) (BuildId: 7fce8771a37d55180c606dfb09705274)
+runtime.cc:715] #01 pc 0080e413  /apex/com.android.art/lib64/libart.so (art::DumpNativeStack+227) (BuildId: 7fce8771a37d55180c606dfb09705274)
+runtime.cc:715] #02 pc 008c7d0d  /apex/com.android.art/lib64/libart.so (art::Runtime::Abort+1693) (BuildId: 7fce8771a37d55180c606dfb09705274)
+runtime.cc:715] #03 pc 000167fe  /apex/com.android.art/lib64/libbase.so (android::base::SetAborter::$_0::__invoke+62) (BuildId: 990dec0703584e4ec1cc9fdc0262002b)
+runtime.cc:715] #04 pc 00015ce6  /apex/com.android.art/lib64/libbase.so (android::base::LogMessage::~LogMessage+534) (BuildId: 990dec0703584e4ec1cc9fdc0262002b)
+runtime.cc:715] #05 pc 0093192d  /apex/com.android.art/lib64/libart.so (art::Thread::AbortInThis+1325) (BuildId: 7fce8771a37d55180c606dfb09705274)
+runtime.cc:715] #06 pc 00942123  /apex/com.android.art/lib64/libart.so (art::ThreadList::SuspendThread+4435) (BuildId: 7fce8771a37d55180c606dfb09705274)
+runtime.cc:715] #07 pc 00942c41  /apex/com.android.art/lib64/libart.so (art::ThreadList::SuspendThreadByThreadId+1025) (BuildId: 7fce8771a37d55180c606dfb09705274)
+runtime.cc:715] #08 pc 007be652  /apex/com.android.art/lib64/libart.so (art::Monitor::InflateThinLocked+370) (BuildId: 7fce8771a37d55180c606dfb09705274)
+runtime.cc:715] #09 pc 007bebcc  /apex/com.android.art/lib64/libart.so (art::Monitor::MonitorEnter+796) (BuildId: 7fce8771a37d55180c606dfb09705274)
+runtime.cc:715] #10 pc 009d3d9e  /apex/com.android.art/lib64/libart.so (artLockObjectFromCode+30) (BuildId: 7fce8771a37d55180c606dfb09705274)
+runtime.cc:715] #11 pc 00228652  /apex/com.android.art/lib64/libart.so (art_quick_lock_object_no_inline+82) (BuildId: 7fce8771a37d55180c606dfb09705274)
+runtime.cc:715] #12 pc 0020160d  /apex/com.android.art/lib64/libart.so (nterp_op_monitor_enter+13) (BuildId: 7fce8771a37d55180c606dfb09705274)
+runtime.cc:715] #13 pc 0050c56c  /product/priv-app/SettingsIntelligenceGooglePrebuilt/SettingsIntelligenceGooglePrebuilt.apk (offset 1000) (klb.run+460)
+runtime.cc:715] #14 pc 00212114  /apex/com.android.art/lib64/libart.so (art_quick_invoke_stub+756) (BuildId: 7fce8771a37d55180c606dfb09705274)
+runtime.cc:715] #15 pc 00466d9e  /apex/com.android.art/lib64/libart.so (art::ArtMethod::Invoke+190) (BuildId: 7fce8771a37d55180c606dfb09705274)
+runtime.cc:715] #16 pc 00917493  /apex/com.android.art/lib64/libart.so (art::Thread::CreateCallback+1603) (BuildId: 7fce8771a37d55180c606dfb09705274)
+runtime.cc:715] #17 pc 00916e48  /apex/com.android.art/lib64/libart.so (art::Thread::CreateCallbackWithUffdGc+8) (BuildId: 7fce8771a37d55180c606dfb09705274)
+runtime.cc:715] #18 pc 0007fb0f  /apex/com.android.runtime/lib64/bionic/libc.so (__pthread_start +63) (BuildId: 70186b954acd7efd976aada9b3a226e8)
+runtime.cc:715] #19 pc 0007230d  /apex/com.android.runtime/lib64/bionic/libc.so (__start_thread+61) (BuildId: 70186b954acd7efd976aada9b3a226e8)
+runtime.cc:715] 
