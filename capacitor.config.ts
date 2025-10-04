@@ -6,7 +6,7 @@ const config: CapacitorConfig = {
   webDir: 'dist/public',
   server: {
     androidScheme: 'https',
-    url: 'https://chain-production-05d7.up.railway.app',
+    url: 'https://chain-production-05d7.up.railway.app/consumer-login',
     cleartext: true
   },
   plugins: {
