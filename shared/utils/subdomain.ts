@@ -24,9 +24,11 @@ export function extractSubdomain(hostname: string): string | null {
   }
 
   // For production (ONLY on custom domain)
-  // Example: abc-company.chainsoftwaregroup.com
-  // Only process subdomains on the actual production domain
-  if (hostname.includes('chainsoftwaregroup.com')) {
+  // Example: abc-company.yourdomain.com
+  // Replace 'yourdomain.com' with your actual domain
+  const productionDomain = 'chainsoftwaregroup.com'; // TODO: Update this to your domain (e.g., 'chain.com')
+  
+  if (hostname.includes(productionDomain)) {
     const parts = hostname.split('.');
     
     // Must have at least 3 parts for subdomain.domain.tld
@@ -134,8 +136,9 @@ export function isSubdomainSupported(): boolean {
   }
 
   const hostname = globalWindow.location.hostname;
+  const productionDomain = 'chainsoftwaregroup.com'; // TODO: Update this to your domain
   
   // Subdomain support is ONLY available on the actual production domain
   // Not on localhost, Replit, Vercel, or any other hosting platform
-  return hostname.includes('chainsoftwaregroup.com');
+  return hostname.includes(productionDomain);
 }
