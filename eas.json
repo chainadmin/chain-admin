@@ -27,7 +27,8 @@
     "production": {
       "autoIncrement": true,
       "env": {
-        "VITE_API_URL": "https://chainsoftwaregroup.com"
+        "VITE_API_URL": "https://chainsoftwaregroup.com",
+        "OVERRIDE_JAVA_VERSION": "21"
       },
       "ios": {
         "buildConfiguration": "Release",
