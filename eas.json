@@ -13,8 +13,14 @@
     },
     "preview": {
       "distribution": "internal",
+      "env": {
+        "VITE_API_URL": "https://chainsoftwaregroup.com"
+      },
       "ios": {
         "buildConfiguration": "Release"
+      },
+      "android": {
+        "buildType": "apk"
       }
     },
     "production": {
@@ -24,6 +30,11 @@
       },
       "ios": {
         "buildConfiguration": "Release",
+        "resourceClass": "m-medium"
+      },
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease",
         "resourceClass": "m-medium"
       }
     }
