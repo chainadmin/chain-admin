@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "Chain",
+    "slug": "chain-consumer-portal",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./client/public/chain-logo.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./client/public/chain-logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.chaincomms.chain",
+      "buildNumber": "1"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./client/public/chain-logo.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.chaincomms.chain",
+      "versionCode": 1
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./client/public/chain-logo.png"
+    },
+    "plugins": [],
+    "extra": {
+      "eas": {
+        "projectId": "UPDATE_THIS_AFTER_EAS_INIT"
+      }
+    }
+  }
+}
