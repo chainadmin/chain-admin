@@ -59,6 +59,14 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync
 
+      - name: Ensure iOS Shared Scheme Exists
+        run: |
+          mkdir -p ios/App/App.xcodeproj/xcshareddata/xcschemes
+          if [ ! -f "ios/App/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme" ]; then
+            echo "Shared scheme missing after cap sync, restoring from git"
+            git checkout ios/App/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme
+          fi
+
       - name: Build on EAS
         run: eas build --platform ${{ github.event.inputs.platform }} --profile ${{ github.event.inputs.profile }} --non-interactive --no-wait
 
