@@ -30,12 +30,12 @@
       },
       "ios": {
         "buildConfiguration": "Release",
-        "resourceClass": "m-medium"
+        "resourceClass": "medium"
       },
       "android": {
         "buildType": "apk",
         "gradleCommand": ":app:assembleRelease",
-        "resourceClass": "m-medium"
+        "resourceClass": "medium"
       }
     }
   },
