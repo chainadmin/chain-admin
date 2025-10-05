@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Chain",
-    "slug": "chain-consumer-portal",
+    "slug": "chain",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./client/public/chain-logo.png",
