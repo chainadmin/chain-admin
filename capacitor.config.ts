@@ -5,7 +5,9 @@ const config: CapacitorConfig = {
   appName: 'Chain',
   webDir: 'dist/public',
   server: {
-    androidScheme: 'https'
+    androidScheme: 'https',
+    hostname: 'chainsoftwaregroup.com',
+    iosScheme: 'https'
   },
   plugins: {
     SplashScreen: {

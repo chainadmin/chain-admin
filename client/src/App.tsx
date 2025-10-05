@@ -27,6 +27,7 @@ import ConsumerLogin from "@/pages/consumer-login";
 import ConsumerDashboard from "@/pages/consumer-dashboard-simple";
 import ConsumerRegistration from "@/pages/consumer-registration";
 import ConsumerMobileLanding from "@/pages/consumer-mobile-landing";
+import MobileAppLogin from "@/pages/mobile-app-login";
 import AgencyRegistration from "@/pages/agency-registration";
 import AgencyLogin from "@/pages/agency-login";
 import AgencyLanding from "@/pages/agency-landing";
@@ -151,8 +152,8 @@ function Router() {
       );
     } else {
       mobileRoutes.push(
-        <Route key="mobile-home" path="/" component={ConsumerMobileLanding} />,
-        <Route key="mobile-consumer-login" path="/consumer-login" component={ConsumerLogin} />,
+        <Route key="mobile-home" path="/" component={isMobileApp ? MobileAppLogin : ConsumerMobileLanding} />,
+        <Route key="mobile-consumer-login" path="/consumer-login" component={isMobileApp ? MobileAppLogin : ConsumerLogin} />,
         <Route key="mobile-consumer-dashboard" path="/consumer-dashboard" component={ConsumerDashboard} />,
         <Route
           key="mobile-consumer-portal"
