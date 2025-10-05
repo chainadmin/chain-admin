@@ -36,7 +36,8 @@
       "android": {
         "buildType": "apk",
         "gradleCommand": ":app:assembleRelease",
-        "resourceClass": "medium"
+        "resourceClass": "medium",
+        "image": "latest"
       }
     }
   },
