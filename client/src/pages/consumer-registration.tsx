@@ -57,6 +57,7 @@ export default function ConsumerRegistration() {
     firstName: "",
     lastName: "",
     email: queryParams.email || "",
+    phone: "",
     dateOfBirth: "",
     address: "",
     city: "",
@@ -317,6 +318,22 @@ export default function ConsumerRegistration() {
               required
             />
             <p className="text-xs text-blue-100/60">We’ll use this to locate your account and send secure updates.</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="phone" className="text-sm font-medium text-blue-100">
+              Phone number (optional)
+            </Label>
+            <Input
+              id="phone"
+              type="tel"
+              data-testid="input-phone"
+              value={formData.phone}
+              onChange={(e) => handleInputChange("phone", e.target.value)}
+              placeholder="(555) 123-4567"
+              className="h-11 rounded-2xl border-white/20 bg-slate-900/60 px-4 text-white placeholder:text-blue-100/50 focus-visible:ring-blue-400"
+            />
+            <p className="text-xs text-blue-100/60">Provide your phone number to receive text message updates.</p>
           </div>
 
           <div className="space-y-2">
