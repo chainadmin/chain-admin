@@ -468,8 +468,7 @@ export default function ConsumerRegistration() {
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-white">Confirm SMS updates *</p>
                   <p>
-                    Let us know you’re okay receiving account-related text messages at the mobile number connected to your
-                    profile. Message and data rates may apply. Reply STOP at any time to opt out.
+                    By providing your phone number you agree to receive informational text messages from Chain Software Group. Consent is not a mandatory condition. Message frequency may vary. Msg and data rates may apply. Reply HELP for help or STOP to cancel.
                   </p>
                 </div>
                 <Button
