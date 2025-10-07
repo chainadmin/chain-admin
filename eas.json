@@ -5,7 +5,7 @@
   },
   "build": {
     "base": {
-      "prebuildCommand": "node eas-hooks/eas-build-pre-install.cjs"
+      "postInstall": "node eas-hooks/eas-build-post-install.cjs"
     },
     "development": {
       "developmentClient": true,
