@@ -973,6 +973,59 @@ export default function Settings() {
                     )}
                   </div>
 
+                  {/* Landing Page Customization Section */}
+                  <div className="space-y-4 border-b pb-6">
+                    <div>
+                      <Label className="text-base font-medium text-white">Landing Page Welcome Message</Label>
+                      <p className="text-sm text-blue-100/70">
+                        Customize the greeting consumers see when they visit your agency portal
+                      </p>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="landing-headline">Main Headline</Label>
+                        <Input
+                          id="landing-headline"
+                          placeholder={`${(authUser as any)?.platformUser?.tenant?.name || 'Your Agency'} gives you a smarter way to stay current`}
+                          value={(localSettings?.customBranding as any)?.landingPageHeadline || ''}
+                          onChange={(e) => {
+                            const customBranding = (localSettings?.customBranding as any) || {};
+                            handleSettingsUpdate('customBranding', {
+                              ...customBranding,
+                              landingPageHeadline: e.target.value
+                            });
+                          }}
+                          className={inputClasses}
+                        />
+                        <p className="text-xs text-blue-100/70 mt-1">
+                          Leave blank to use the default message
+                        </p>
+                      </div>
+                      
+                      <div>
+                        <Label htmlFor="landing-subheadline">Subheadline</Label>
+                        <Textarea
+                          id="landing-subheadline"
+                          placeholder="Access your secure portal to review balances, explore payment plans, and stay in control every step of the way. Available 24/7 from any device."
+                          value={(localSettings?.customBranding as any)?.landingPageSubheadline || ''}
+                          onChange={(e) => {
+                            const customBranding = (localSettings?.customBranding as any) || {};
+                            handleSettingsUpdate('customBranding', {
+                              ...customBranding,
+                              landingPageSubheadline: e.target.value
+                            });
+                          }}
+                          className={textareaClasses}
+                          rows={3}
+                        />
+                        <p className="text-xs text-blue-100/70 mt-1">
+                          Leave blank to use the default message
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
                       <Label>Show Payment Plans</Label>

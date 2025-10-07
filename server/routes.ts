@@ -1855,6 +1855,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         hasTermsOfService: !!settings?.termsOfService,
         privacyPolicy: settings?.privacyPolicy || null,
         termsOfService: settings?.termsOfService || null,
+        landingPageHeadline: customBranding?.landingPageHeadline || null,
+        landingPageSubheadline: customBranding?.landingPageSubheadline || null,
       };
 
       res.status(200).json(branding);

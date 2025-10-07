@@ -39,6 +39,8 @@ interface AgencyBranding {
   hasTermsOfService: boolean;
   privacyPolicy?: string | null;
   termsOfService?: string | null;
+  landingPageHeadline?: string | null;
+  landingPageSubheadline?: string | null;
 }
 
 export default function AgencyLanding() {
@@ -253,11 +255,10 @@ export default function AgencyLanding() {
                 Powered by Chain Software Group
               </Badge>
               <h1 className="mt-6 text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-                {resolvedBranding.agencyName} gives you a smarter way to stay current
+                {resolvedBranding.landingPageHeadline || `${resolvedBranding.agencyName} gives you a smarter way to stay current`}
               </h1>
               <p className="mt-6 max-w-xl text-lg text-blue-100/80">
-                Access your secure portal to review balances, explore payment plans, and stay in control every step of the way.
-                Available 24/7 from any device.
+                {resolvedBranding.landingPageSubheadline || 'Access your secure portal to review balances, explore payment plans, and stay in control every step of the way. Available 24/7 from any device.'}
               </p>
               <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center">
                 <Button

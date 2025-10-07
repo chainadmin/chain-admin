@@ -35,7 +35,12 @@ The frontend uses React with TypeScript, built with shadcn/ui components on Radi
 - **File Storage**: Logo and document uploads stored in Cloudflare R2 (S3-compatible object storage). Files served via public R2 URLs with automatic CDN caching for optimal performance.
 - **Unified Communications System**: Merges email and SMS functionalities into a single interface, supporting templates, campaigns, and callback request management. Includes automation for scheduled and event-triggered communications.
 - **Enhanced Folder Organization**: Implemented a folder system for account management with default folders and CSV import integration.
-- **Dynamic Routing**: Supports path-based routing for agency-specific dashboards and pages (e.g., `/agency-slug/dashboard`) to ensure proper access for authenticated agency users across environments.
+- **Dynamic Routing**: Subdomain-based routing (e.g., `tenantslug.chainsoftwaregroup.com`) for agency-specific portals. Each agency gets their own branded subdomain for consumer access. Path-based routing (`/agency/:slug`) maintained for backward compatibility on public landing pages.
+- **Customizable Landing Pages**: Agencies can customize their consumer portal landing page through settings. Features include:
+  - Custom welcome headline (main greeting message)
+  - Custom subheadline (supporting description text)
+  - Stored in `customBranding` JSONB field in `tenant_settings` table
+  - Falls back to default agency-specific messaging if not customized
 - **Global Admin Portal**: Platform admin dashboard (`/global-admin`) with JWT-based authentication (ChainAdmin/W@yp0intsolutions). Features:
   - Global consumer management with cross-agency search, filtering, and deletion
   - Service cutoff controls per agency (Email, SMS, Portal Access, Payment Processing toggles)
