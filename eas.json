@@ -31,7 +31,8 @@
       },
       "ios": {
         "buildConfiguration": "Release",
-        "resourceClass": "medium"
+        "resourceClass": "medium",
+        "scheme": "App"
       },
       "android": {
         "buildType": "apk",
