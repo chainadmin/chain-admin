@@ -116,14 +116,4 @@ async function seedSubscriptionPlans() {
   }
 }
 
-// Run if called directly
-if (require.main === module) {
-  seedSubscriptionPlans()
-    .then(() => process.exit(0))
-    .catch((error) => {
-      console.error(error);
-      process.exit(1);
-    });
-}
-
 export { seedSubscriptionPlans };
