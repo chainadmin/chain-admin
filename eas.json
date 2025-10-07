@@ -4,23 +4,26 @@
     "appVersionSource": "remote"
   },
   "build": {
+    "base": {
+      "prebuildCommand": "node eas-hooks/eas-build-pre-install.cjs"
+    },
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "extends": "base",
       "ios": {
         "simulator": true,
-        "buildConfiguration": "Debug",
-        "prebuildCommand": "bash scripts/restore-ios-scheme.sh"
+        "buildConfiguration": "Debug"
       }
     },
     "preview": {
       "distribution": "internal",
+      "extends": "base",
       "env": {
         "VITE_API_URL": "https://chainsoftwaregroup.com"
       },
       "ios": {
-        "buildConfiguration": "Release",
-        "prebuildCommand": "bash scripts/restore-ios-scheme.sh"
+        "buildConfiguration": "Release"
       },
       "android": {
         "buildType": "apk"
@@ -28,13 +31,13 @@
     },
     "production": {
       "autoIncrement": true,
+      "extends": "base",
       "env": {
         "VITE_API_URL": "https://chainsoftwaregroup.com"
       },
       "ios": {
         "buildConfiguration": "Release",
-        "resourceClass": "medium",
-        "prebuildCommand": "bash scripts/restore-ios-scheme.sh"
+        "resourceClass": "medium"
       },
       "android": {
         "buildType": "apk",
