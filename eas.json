@@ -18,7 +18,8 @@
         "VITE_API_URL": "https://chainsoftwaregroup.com"
       },
       "ios": {
-        "buildConfiguration": "Release"
+        "buildConfiguration": "Release",
+        "prebuildCommand": "mkdir -p ios/App/App.xcodeproj/xcshareddata/xcschemes && if [ ! -f ios/App/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme ]; then git checkout ios/App/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme || true; fi"
       },
       "android": {
         "buildType": "apk"
@@ -31,7 +32,8 @@
       },
       "ios": {
         "buildConfiguration": "Release",
-        "resourceClass": "medium"
+        "resourceClass": "medium",
+        "prebuildCommand": "mkdir -p ios/App/App.xcodeproj/xcshareddata/xcschemes && if [ ! -f ios/App/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme ]; then git checkout ios/App/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme || true; fi"
       },
       "android": {
         "buildType": "apk",
