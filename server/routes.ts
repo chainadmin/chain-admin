@@ -4981,6 +4981,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Global Admin Routes (Platform Owner Only)
   
   // Seed subscription plans endpoint (no auth required - safe to call multiple times)
+  // Support both GET and POST for easy browser access
+  app.get('/api/admin/seed-plans', async (req, res) => {
+    try {
+      const { seedSubscriptionPlans } = await import('./seed-subscription-plans');
+      await seedSubscriptionPlans();
+      res.json({ success: true, message: 'Subscription plans seeded successfully' });
+    } catch (error) {
+      console.error('Error seeding plans:', error);
+      res.status(500).json({ success: false, message: 'Failed to seed subscription plans' });
+    }
+  });
+  
   app.post('/api/admin/seed-plans', async (req, res) => {
     try {
       const { seedSubscriptionPlans } = await import('./seed-subscription-plans');
