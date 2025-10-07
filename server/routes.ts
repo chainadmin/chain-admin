@@ -63,7 +63,7 @@ const csvUploadSchema = z.object({
   })),
 });
 
-// Multer configuration for image uploads - using memory storage for Supabase
+// Multer configuration for image uploads - using memory storage
 const upload = multer({ 
   storage: multer.memoryStorage(),
   limits: {
