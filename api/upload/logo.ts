@@ -4,7 +4,7 @@ import { withAuth, AuthenticatedRequest, JWT_SECRET } from '../_lib/auth';
 import { tenants, tenantSettings } from '../_lib/schema';
 import { eq } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
-import { uploadLogo } from '../../server/fileStorage';
+import { uploadLogo } from '../../server/r2Storage';
 
 export const config = {
   api: {

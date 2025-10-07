@@ -32,7 +32,7 @@ import { nanoid } from "nanoid";
 import express from "express";
 import { emailService } from "./emailService";
 import { smsService } from "./smsService";
-import { getStorageDir, uploadLogo } from "./fileStorage";
+import { uploadLogo } from "./r2Storage";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { subdomainMiddleware } from "./middleware/subdomain";
@@ -362,12 +362,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
-  // Serve uploaded files (logos) from filesystem/Railway Volume
-  app.use('/uploads', express.static(getStorageDir(), {
-    maxAge: '1y', // Cache for 1 year
-    etag: true,
-    lastModified: true
-  }));
+  // Note: Logos are now served from Cloudflare R2 via public URLs
 
   // Auth routes - Updated to support both JWT and Replit auth
   app.get('/api/auth/user', authenticateUser, async (req: any, res) => {
