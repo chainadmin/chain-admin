@@ -4,13 +4,9 @@
     "appVersionSource": "remote"
   },
   "build": {
-    "base": {
-      "postInstall": "node eas-hooks/eas-build-post-install.cjs"
-    },
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "extends": "base",
       "ios": {
         "simulator": true,
         "buildConfiguration": "Debug"
@@ -18,7 +14,6 @@
     },
     "preview": {
       "distribution": "internal",
-      "extends": "base",
       "env": {
         "VITE_API_URL": "https://chainsoftwaregroup.com"
       },
@@ -31,7 +26,6 @@
     },
     "production": {
       "autoIncrement": true,
-      "extends": "base",
       "env": {
         "VITE_API_URL": "https://chainsoftwaregroup.com"
       },
