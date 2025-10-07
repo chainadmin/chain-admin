@@ -4,10 +4,7 @@ import { withAuth, AuthenticatedRequest, JWT_SECRET } from '../_lib/auth';
 import { tenants, tenantSettings } from '../_lib/schema';
 import { eq } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
-import { createClient } from '@supabase/supabase-js';
-
-const SUPABASE_URL = process.env.SUPABASE_URL!;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+import { uploadLogo } from '../../server/fileStorage';
 
 export const config = {
   api: {
@@ -69,48 +66,18 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       }
     }
 
-    // Check Supabase configuration
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      res.status(500).json({ error: 'Storage not configured' });
-      return;
-    }
-
-    // Initialize Supabase client
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false
-      }
-    });
-
     // Convert base64 to buffer
     const fileBuffer = Buffer.from(base64Data, 'base64');
     
-    // Determine file extension
-    const fileExt = mimeType.split('/')[1] || 'png';
-    const fileName = `${tenantId}/${Date.now()}.${fileExt}`;
+    // Upload to filesystem (Railway Volume)
+    const uploadResult = await uploadLogo(fileBuffer, tenantId, mimeType);
     
-    // Upload to Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('tenant-logos')
-      .upload(fileName, fileBuffer, {
-        contentType: mimeType,
-        upsert: true,
-        cacheControl: '31536000' // Cache for 1 year
-      });
-
-    if (uploadError) {
-      console.error('Supabase upload error:', uploadError);
-      res.status(500).json({ error: 'Failed to upload logo', details: uploadError.message });
+    if (!uploadResult) {
+      res.status(500).json({ error: 'Failed to upload logo' });
       return;
     }
-
-    // Get public URL
-    const { data: urlData } = supabase.storage
-      .from('tenant-logos')
-      .getPublicUrl(uploadData.path);
     
-    const logoUrl = urlData.publicUrl;
+    const logoUrl = uploadResult.url;
     
     // Check if settings exist
     const [existingSettings] = await db
