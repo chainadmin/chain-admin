@@ -3517,6 +3517,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         smaxApiKey: z.string().optional(),
         smaxPin: z.string().optional(),
         smaxBaseUrl: z.string().optional(),
+        // USAePay merchant configuration
+        merchantProvider: z.string().optional(),
+        merchantApiKey: z.string().optional(),
+        merchantApiPin: z.string().optional(),
+        merchantName: z.string().optional(),
+        merchantType: z.string().optional(),
+        useSandbox: z.boolean().optional(),
       });
 
       const validatedData = settingsSchema.parse(req.body);
