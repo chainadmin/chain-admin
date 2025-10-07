@@ -743,6 +743,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { consumers: consumersData, accounts: accountsData, folderId } = req.body;
       
+      // Validate input data
+      if (!consumersData || !Array.isArray(consumersData)) {
+        return res.status(400).json({ message: "Invalid consumer data format" });
+      }
+      
+      if (!accountsData || !Array.isArray(accountsData)) {
+        return res.status(400).json({ message: "Invalid account data format" });
+      }
+      
+      if (consumersData.length === 0) {
+        return res.status(400).json({ message: "No consumer data found in CSV" });
+      }
+      
+      if (accountsData.length === 0) {
+        return res.status(400).json({ message: "No account data found in CSV" });
+      }
+      
+      // Validate consumer data has required fields
+      for (let i = 0; i < consumersData.length; i++) {
+        const consumer = consumersData[i];
+        if (!consumer.email || !consumer.email.trim()) {
+          return res.status(400).json({ 
+            message: `Row ${i + 2}: Consumer email is required` 
+          });
+        }
+        if (!consumer.firstName || !consumer.firstName.trim()) {
+          return res.status(400).json({ 
+            message: `Row ${i + 2}: Consumer first name is required for ${consumer.email}` 
+          });
+        }
+        if (!consumer.lastName || !consumer.lastName.trim()) {
+          return res.status(400).json({ 
+            message: `Row ${i + 2}: Consumer last name is required for ${consumer.email}` 
+          });
+        }
+      }
+      
+      // Validate account data has required fields
+      for (let i = 0; i < accountsData.length; i++) {
+        const account = accountsData[i];
+        if (!account.creditor || !account.creditor.trim()) {
+          return res.status(400).json({ 
+            message: `Row ${i + 2}: Creditor is required` 
+          });
+        }
+        if (account.balanceCents === undefined || account.balanceCents === null || isNaN(account.balanceCents)) {
+          return res.status(400).json({ 
+            message: `Row ${i + 2}: Valid balance is required for ${account.creditor}` 
+          });
+        }
+      }
+      
       // Get default folder if no folder is specified
       let targetFolderId = folderId;
       if (!targetFolderId) {
@@ -754,17 +806,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Find or create consumers
       const createdConsumers = new Map();
       for (const consumerData of consumersData) {
-        const consumer = await storage.findOrCreateConsumer({
-          ...consumerData,
-          tenantId: tenantId,
-          folderId: targetFolderId,
-        });
-        createdConsumers.set(consumer.email, consumer);
+        try {
+          const consumer = await storage.findOrCreateConsumer({
+            ...consumerData,
+            tenantId: tenantId,
+            folderId: targetFolderId,
+          });
+          createdConsumers.set(consumer.email.toLowerCase(), consumer);
+        } catch (consumerError: any) {
+          console.error(`Error creating consumer ${consumerData.email}:`, consumerError);
+          return res.status(500).json({ 
+            message: `Failed to create consumer ${consumerData.email}: ${consumerError.message}` 
+          });
+        }
       }
 
       // Create accounts
       const accountsToCreate = accountsData.map((accountData: any) => {
-        const consumer = createdConsumers.get(accountData.consumerEmail);
+        const consumer = createdConsumers.get(accountData.consumerEmail.toLowerCase());
         if (!consumer) {
           throw new Error(`Consumer not found for email: ${accountData.consumerEmail}`);
         }
@@ -773,7 +832,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           tenantId: tenantId,
           consumerId: consumer.id,
           folderId: targetFolderId,
-          accountNumber: accountData.accountNumber,
+          accountNumber: accountData.accountNumber || null,
           creditor: accountData.creditor,
           balanceCents: accountData.balanceCents,
           dueDate: accountData.dueDate || null,
@@ -789,9 +848,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         consumersCreated: createdConsumers.size,
         accountsCreated: createdAccounts.length,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error importing CSV:", error);
-      res.status(500).json({ message: "Failed to import CSV data" });
+      const errorMessage = error.message || "Failed to import CSV data";
+      res.status(500).json({ message: errorMessage });
     }
   });
 
