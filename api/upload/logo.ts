@@ -4,12 +4,7 @@ import { withAuth, AuthenticatedRequest, JWT_SECRET } from '../_lib/auth';
 import { tenants, tenantSettings } from '../_lib/schema';
 import { eq } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
-import { createClient } from '@supabase/supabase-js';
-import { writeFile } from 'fs/promises';
-import { join } from 'path';
-
-const SUPABASE_URL = process.env.SUPABASE_URL!;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+import { ObjectStorageService } from '../../server/objectStorage';
 
 export const config = {
   api: {
@@ -71,9 +66,17 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       }
     }
 
-    // For development/Replit, store logo as base64 in database
-    // In production with Vercel, you'd upload to object storage
-    const logoDataUrl = image.startsWith('data:') ? image : `data:${mimeType};base64,${base64Data}`;
+    // Convert base64 to buffer
+    const fileBuffer = Buffer.from(base64Data, 'base64');
+    
+    // Upload to object storage
+    const objectStorageService = new ObjectStorageService();
+    const uploadResult = await objectStorageService.uploadLogo(fileBuffer, tenantId, mimeType);
+    
+    if (!uploadResult) {
+      res.status(500).json({ error: 'Failed to upload logo to storage' });
+      return;
+    }
     
     // Check if settings exist
     const [existingSettings] = await db
@@ -83,13 +86,13 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       .limit(1);
     
     if (existingSettings) {
-      // Update existing settings
+      // Update existing settings with logo URL
       await db
         .update(tenantSettings)
         .set({
           customBranding: {
             ...(existingSettings.customBranding as any || {}),
-            logoUrl: logoDataUrl
+            logoUrl: uploadResult.url
           }
         })
         .where(eq(tenantSettings.tenantId, tenantId));
@@ -100,14 +103,14 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         .values({
           tenantId,
           customBranding: {
-            logoUrl: logoDataUrl
+            logoUrl: uploadResult.url
           }
         });
     }
 
     res.status(200).json({
       success: true,
-      url: logoDataUrl,
+      url: uploadResult.url,
       message: 'Logo uploaded successfully'
     });
   } catch (error: any) {

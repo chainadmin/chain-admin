@@ -32,7 +32,7 @@ import { nanoid } from "nanoid";
 import express from "express";
 import { emailService } from "./emailService";
 import { smsService } from "./smsService";
-import { uploadLogo } from "./supabaseStorage";
+import { ObjectStorageService } from "./objectStorage";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { subdomainMiddleware } from "./middleware/subdomain";
@@ -362,7 +362,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
-  // Note: Logos are now served from Supabase Storage, not local uploads
+  // Serve public objects (logos, assets) from object storage
+  app.get('/public-objects/:filePath(*)', async (req, res) => {
+    const filePath = req.params.filePath;
+    const objectStorageService = new ObjectStorageService();
+    try {
+      const file = await objectStorageService.searchPublicObject(filePath);
+      if (!file) {
+        return res.status(404).json({ error: 'File not found' });
+      }
+      objectStorageService.downloadObject(file, res);
+    } catch (error) {
+      console.error('Error searching for public object:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  });
 
   // Auth routes - Updated to support both JWT and Replit auth
   app.get('/api/auth/user', authenticateUser, async (req: any, res) => {
