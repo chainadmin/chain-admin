@@ -16,8 +16,11 @@ export const biometricAuth = {
       return {
         isAvailable: false,
         biometryType: BiometryType.none,
+        strongBiometryIsAvailable: false,
+        biometryTypes: [],
+        deviceIsSecure: false,
         reason: 'Not running on a native platform',
-        code: 'NOT_NATIVE'
+        code: 'biometryNotEnrolled'
       };
     }
 
@@ -28,8 +31,11 @@ export const biometricAuth = {
       return {
         isAvailable: false,
         biometryType: BiometryType.none,
+        strongBiometryIsAvailable: false,
+        biometryTypes: [],
+        deviceIsSecure: false,
         reason: error instanceof Error ? error.message : 'Unknown error',
-        code: 'ERROR'
+        code: 'biometryNotEnrolled'
       };
     }
   },
@@ -64,8 +70,7 @@ export const biometricAuth = {
         iosFallbackTitle: 'Use Passcode',
         androidTitle: 'Biometric Authentication',
         androidSubtitle: reason,
-        androidConfirmationRequired: false,
-        androidBiometryStrength: 'strong'
+        androidConfirmationRequired: false
       });
 
       return {

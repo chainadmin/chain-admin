@@ -9,7 +9,8 @@
       "distribution": "internal",
       "ios": {
         "simulator": true,
-        "buildConfiguration": "Debug"
+        "buildConfiguration": "Debug",
+        "prebuildCommand": "bash scripts/restore-ios-scheme.sh"
       }
     },
     "preview": {
@@ -19,7 +20,7 @@
       },
       "ios": {
         "buildConfiguration": "Release",
-        "prebuildCommand": "mkdir -p ios/App/App.xcodeproj/xcshareddata/xcschemes && if [ ! -f ios/App/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme ]; then git checkout ios/App/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme || true; fi"
+        "prebuildCommand": "bash scripts/restore-ios-scheme.sh"
       },
       "android": {
         "buildType": "apk"
@@ -33,7 +34,7 @@
       "ios": {
         "buildConfiguration": "Release",
         "resourceClass": "medium",
-        "prebuildCommand": "mkdir -p ios/App/App.xcodeproj/xcshareddata/xcschemes && if [ ! -f ios/App/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme ]; then git checkout ios/App/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme || true; fi"
+        "prebuildCommand": "bash scripts/restore-ios-scheme.sh"
       },
       "android": {
         "buildType": "apk",
