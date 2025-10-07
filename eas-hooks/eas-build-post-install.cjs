@@ -9,7 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-const SCHEME_DIR = 'ios/App/App.xcodeproj/xcshareddata/xcschemes';
+const SCHEME_DIR = 'ios/App/App.xcworkspace/xcshareddata/xcschemes';
 const SCHEME_FILE = path.join(SCHEME_DIR, 'App.xcscheme');
 
 console.log('🔍 Checking for iOS shared scheme after Capacitor sync...');
