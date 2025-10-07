@@ -184,11 +184,26 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
           !standardConsumerFields.includes(h) && !standardAccountFields.includes(h)
         );
         
+        // Validate that all consumers have required fields including dateOfBirth
+        const missingDOBConsumers = data.consumers.filter((c: any) => !c.dateOfBirth);
+        const missingNameConsumers = data.consumers.filter((c: any) => !c.firstName || !c.lastName);
+        
+        const validationErrors = [];
+        if (missingDOBConsumers.length > 0) {
+          validationErrors.push(`${missingDOBConsumers.length} consumer(s) missing date of birth (required for account linking)`);
+        }
+        if (missingNameConsumers.length > 0) {
+          validationErrors.push(`${missingNameConsumers.length} consumer(s) missing first or last name`);
+        }
+        
         setValidationResults({
           consumersCount: data.consumers.length,
           accountsCount: data.accounts.length,
           additionalColumns: additionalColumns,
-          isValid: data.consumers.length > 0 && data.accounts.length > 0,
+          missingDOBCount: missingDOBConsumers.length,
+          missingNameCount: missingNameConsumers.length,
+          validationErrors: validationErrors,
+          isValid: data.consumers.length > 0 && data.accounts.length > 0 && validationErrors.length === 0,
         });
       } catch (error) {
         toast({
@@ -370,13 +385,29 @@ Jane,Smith,jane.smith@email.com,Medical Services,875.25,MED789012
                   <div className={`mt-2 text-sm ${
                     validationResults.isValid ? 'text-green-700' : 'text-red-700'
                   }`}>
-                    <p>
-                      Ready to import {validationResults.accountsCount} accounts for {validationResults.consumersCount} consumers
-                    </p>
-                    {validationResults.additionalColumns && validationResults.additionalColumns.length > 0 && (
-                      <p className="mt-1">
-                        Additional fields detected: {validationResults.additionalColumns.join(', ')}
-                      </p>
+                    {validationResults.isValid ? (
+                      <>
+                        <p>
+                          Ready to import {validationResults.accountsCount} accounts for {validationResults.consumersCount} consumers
+                        </p>
+                        {validationResults.additionalColumns && validationResults.additionalColumns.length > 0 && (
+                          <p className="mt-1">
+                            Additional fields detected: {validationResults.additionalColumns.join(', ')}
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <p className="font-medium">Validation errors found:</p>
+                        <ul className="mt-1 list-disc list-inside space-y-1">
+                          {validationResults.validationErrors?.map((error: string, index: number) => (
+                            <li key={index}>{error}</li>
+                          ))}
+                        </ul>
+                        <p className="mt-2 text-xs">
+                          Please ensure your CSV includes: first_name, last_name, email, date_of_birth (YYYY-MM-DD format)
+                        </p>
+                      </>
                     )}
                   </div>
                 </div>
