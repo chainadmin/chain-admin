@@ -285,15 +285,6 @@ export default function Billing() {
                   <i className="fas fa-id-card mr-2 text-base" />
                   Update billing info
                 </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleManageSubscription}
-                  disabled={isPortalLoading}
-                  className="rounded-2xl border border-white/20 bg-transparent px-5 py-2 text-sm font-semibold text-blue-100 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-70"
-                >
-                  {isPortalLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin text-sky-200" />}
-                  {isPortalLoading ? "Opening portal" : "Manage subscription"}
-                </Button>
               </div>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -694,23 +685,11 @@ export default function Billing() {
                       </p>
                     </div>
                   </div>
-                  <div className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/5 p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-xs uppercase tracking-wide text-blue-100/70">Current billing period</p>
-                      <p className="mt-2 text-sm text-blue-100/70" data-testid="text-current-period">
-                        {formatDate((subscription as any).currentPeriodStart)} – {formatDate((subscription as any).currentPeriodEnd)}
-                      </p>
-                    </div>
-                    <Button
-                      variant="outline"
-                      data-testid="button-manage-subscription"
-                      onClick={handleManageSubscription}
-                      disabled={isPortalLoading}
-                      className="rounded-xl border border-white/20 bg-transparent px-4 py-2 text-sm font-semibold text-blue-100 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-70"
-                    >
-                      {isPortalLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      {isPortalLoading ? "Opening portal" : "Manage subscription"}
-                    </Button>
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-xs uppercase tracking-wide text-blue-100/70">Current billing period</p>
+                    <p className="mt-2 text-sm text-blue-100/70" data-testid="text-current-period">
+                      {formatDate((subscription as any).currentPeriodStart)} – {formatDate((subscription as any).currentPeriodEnd)}
+                    </p>
                   </div>
                 </CardContent>
               </Card>

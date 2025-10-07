@@ -48,6 +48,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     { name: "Accounts", href: buildNavHref("/accounts"), icon: "fas fa-file-invoice-dollar" },
     { name: "Communications", href: buildNavHref("/communications"), icon: "fas fa-comments" },
     { name: "Payments", href: buildNavHref("/payments"), icon: "fas fa-credit-card" },
+    { name: "Billing", href: buildNavHref("/billing"), icon: "fas fa-receipt" },
     ...(isOwner ? [{ name: "Company", href: buildNavHref("/company"), icon: "fas fa-building" }] : []),
     { name: "Settings", href: buildNavHref("/settings"), icon: "fas fa-cog" },
   ];
