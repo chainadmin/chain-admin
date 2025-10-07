@@ -32,7 +32,7 @@ The frontend uses React with TypeScript, built with shadcn/ui components on Radi
 
 ## System Design Choices
 - **Database**: PostgreSQL (hosted on Railway) with Drizzle ORM, multi-tenant schema including `Users`, `Tenants`, `Platform Users`, `Consumers`, `Accounts`, `Email Templates`, and `Sessions`. Uses UUID primary keys and proper indexing.
-- **File Storage**: Logo and document uploads stored in Railway Volumes at `/uploads` directory. Served via Express static middleware with 1-year cache headers for optimal performance.
+- **File Storage**: Logo and document uploads stored in Cloudflare R2 (S3-compatible object storage). Files served via public R2 URLs with automatic CDN caching for optimal performance.
 - **Unified Communications System**: Merges email and SMS functionalities into a single interface, supporting templates, campaigns, and callback request management. Includes automation for scheduled and event-triggered communications.
 - **Enhanced Folder Organization**: Implemented a folder system for account management with default folders and CSV import integration.
 - **Dynamic Routing**: Supports path-based routing for agency-specific dashboards and pages (e.g., `/agency-slug/dashboard`) to ensure proper access for authenticated agency users across environments.
@@ -54,8 +54,9 @@ The frontend uses React with TypeScript, built with shadcn/ui components on Radi
 - **Drizzle ORM**
 
 ## File Storage
-- **Railway Volumes** - Persistent filesystem storage for uploaded files (logos, documents)
-- Files stored in `/uploads` directory, served via Express static middleware
+- **Cloudflare R2** - S3-compatible object storage for uploaded files (logos, documents)
+- Provides 10 GB free storage with no egress fees
+- Files served via R2 public URLs with CDN caching
 
 ## Authentication Services
 - **Replit Auth** (OpenID Connect identity provider)
