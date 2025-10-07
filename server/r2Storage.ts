@@ -58,10 +58,13 @@ export async function uploadLogo(
     await client.send(command);
 
     // Generate public URL
-    // If R2_PUBLIC_URL is set (custom domain), use it. Otherwise use R2 public bucket URL
-    const publicUrl = R2_PUBLIC_URL 
-      ? `${R2_PUBLIC_URL}/${fileName}`
-      : `https://pub-${R2_ACCOUNT_ID}.r2.dev/${fileName}`;
+    // R2_PUBLIC_URL must be set - get this from Cloudflare R2 dashboard after enabling public access
+    if (!R2_PUBLIC_URL) {
+      console.error('R2_PUBLIC_URL not configured. Enable public access on your R2 bucket and set the public URL.');
+      throw new Error('R2 public URL not configured');
+    }
+    
+    const publicUrl = `${R2_PUBLIC_URL}/${fileName}`;
 
     return {
       url: publicUrl,
