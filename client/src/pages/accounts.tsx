@@ -1129,36 +1129,16 @@ export default function Accounts() {
                       {selectedAccount.consumer?.email || "Not provided"}
                     </p>
                   </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="rounded-lg border border-white/10 bg-white/5 px-3 text-blue-100 hover:bg-white/10"
-                      onClick={() => selectedAccount && handleComposeEmail(selectedAccount)}
-                      disabled={!selectedAccount.consumer?.email}
-                    >
-                      Compose
-                    </Button>
-                    {selectedAccount.consumer?.email ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        asChild
-                        className="rounded-lg border border-white/10 bg-white/5 px-3 text-blue-100 hover:bg-white/10"
-                      >
-                        <a href={`mailto:${selectedAccount.consumer.email}`}>Email</a>
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled
-                        className="rounded-lg border border-white/10 bg-white/5 px-3 text-blue-100/50"
-                      >
-                        Email
-                      </Button>
-                    )}
-                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-lg border border-white/10 bg-white/5 px-3 text-blue-100 hover:bg-white/10"
+                    onClick={() => selectedAccount && handleComposeEmail(selectedAccount)}
+                    disabled={!selectedAccount.consumer?.email}
+                    data-testid="button-compose-email"
+                  >
+                    Compose Email
+                  </Button>
                 </div>
 
                 <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
