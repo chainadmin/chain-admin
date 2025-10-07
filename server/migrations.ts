@@ -6,40 +6,62 @@ export async function runMigrations() {
   try {
     console.log('🔄 Running database migrations...');
     
-    // Add USAePay merchant configuration columns if they don't exist
+    // Add USAePay merchant configuration columns one by one
     console.log('Adding USAePay columns...');
-    await client.query(`
-      ALTER TABLE tenant_settings 
-      ADD COLUMN IF NOT EXISTS merchant_provider TEXT,
-      ADD COLUMN IF NOT EXISTS merchant_account_id TEXT,
-      ADD COLUMN IF NOT EXISTS merchant_api_key TEXT,
-      ADD COLUMN IF NOT EXISTS merchant_api_pin TEXT,
-      ADD COLUMN IF NOT EXISTS merchant_name TEXT,
-      ADD COLUMN IF NOT EXISTS merchant_type TEXT,
-      ADD COLUMN IF NOT EXISTS use_sandbox BOOLEAN DEFAULT true,
-      ADD COLUMN IF NOT EXISTS enable_online_payments BOOLEAN DEFAULT false
-    `);
-    console.log('✓ USAePay columns added');
+    const usaepayColumns = [
+      { name: 'merchant_provider', type: 'TEXT' },
+      { name: 'merchant_account_id', type: 'TEXT' },
+      { name: 'merchant_api_key', type: 'TEXT' },
+      { name: 'merchant_api_pin', type: 'TEXT' },
+      { name: 'merchant_name', type: 'TEXT' },
+      { name: 'merchant_type', type: 'TEXT' },
+      { name: 'use_sandbox', type: 'BOOLEAN', default: 'true' },
+      { name: 'enable_online_payments', type: 'BOOLEAN', default: 'false' }
+    ];
     
-    // Add SMAX integration columns if they don't exist
+    for (const col of usaepayColumns) {
+      try {
+        const defaultClause = col.default ? ` DEFAULT ${col.default}` : '';
+        await client.query(`ALTER TABLE tenant_settings ADD COLUMN IF NOT EXISTS ${col.name} ${col.type}${defaultClause}`);
+        console.log(`  ✓ ${col.name}`);
+      } catch (err) {
+        console.log(`  ⚠ ${col.name} (already exists or error)`);
+      }
+    }
+    
+    // Add SMAX integration columns one by one
     console.log('Adding SMAX columns...');
-    await client.query(`
-      ALTER TABLE tenant_settings 
-      ADD COLUMN IF NOT EXISTS smax_enabled BOOLEAN DEFAULT false,
-      ADD COLUMN IF NOT EXISTS smax_api_key TEXT,
-      ADD COLUMN IF NOT EXISTS smax_pin TEXT,
-      ADD COLUMN IF NOT EXISTS smax_base_url TEXT
-    `);
-    console.log('✓ SMAX columns added');
+    const smaxColumns = [
+      { name: 'smax_enabled', type: 'BOOLEAN', default: 'false' },
+      { name: 'smax_api_key', type: 'TEXT' },
+      { name: 'smax_pin', type: 'TEXT' },
+      { name: 'smax_base_url', type: 'TEXT' }
+    ];
+    
+    for (const col of smaxColumns) {
+      try {
+        const defaultClause = col.default ? ` DEFAULT ${col.default}` : '';
+        await client.query(`ALTER TABLE tenant_settings ADD COLUMN IF NOT EXISTS ${col.name} ${col.type}${defaultClause}`);
+        console.log(`  ✓ ${col.name}`);
+      } catch (err) {
+        console.log(`  ⚠ ${col.name} (already exists or error)`);
+      }
+    }
     
     // Verify columns exist
     const result = await client.query(`
       SELECT column_name 
       FROM information_schema.columns 
       WHERE table_name = 'tenant_settings' 
-      AND column_name IN ('merchant_api_key', 'merchant_api_pin', 'smax_enabled')
+      ORDER BY column_name
     `);
-    console.log('Verified columns:', result.rows.map(r => r.column_name));
+    console.log('\n📋 All tenant_settings columns:', result.rows.map(r => r.column_name).join(', '));
+    
+    // Check specifically for our new columns
+    const newColumns = result.rows.filter(r => 
+      ['merchant_api_key', 'merchant_api_pin', 'smax_enabled', 'smax_api_key'].includes(r.column_name)
+    );
+    console.log('✅ Verified new columns:', newColumns.map(r => r.column_name).join(', '));
     
     console.log('✅ Database migrations completed successfully');
   } catch (error) {
