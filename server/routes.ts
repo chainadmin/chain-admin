@@ -3879,21 +3879,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       if (testResponse.ok) {
-        const merchantData = await testResponse.json();
-        console.log('✅ USAePay connection successful:', merchantData);
-        return res.json({ 
-          success: true, 
-          message: `Successfully connected to ${useSandbox ? 'Sandbox' : 'Production'} USAePay`,
-          merchantName: merchantData.name || merchantName || "Unknown",
-          mode: useSandbox ? 'sandbox' : 'production'
-        });
+        try {
+          const merchantData = await testResponse.json();
+          console.log('✅ USAePay connection successful:', merchantData);
+          return res.json({ 
+            success: true, 
+            message: `Successfully connected to ${useSandbox ? 'Sandbox' : 'Production'} USAePay`,
+            merchantName: merchantData.name || merchantName || "Unknown",
+            mode: useSandbox ? 'sandbox' : 'production'
+          });
+        } catch (e) {
+          // Empty response body but 200 OK - consider it a success
+          console.log('✅ USAePay connection successful (empty response)');
+          return res.json({ 
+            success: true, 
+            message: `Successfully connected to ${useSandbox ? 'Sandbox' : 'Production'} USAePay`,
+            merchantName: merchantName || "Unknown",
+            mode: useSandbox ? 'sandbox' : 'production'
+          });
+        }
       } else {
         const errorData = await testResponse.text();
         console.error('❌ USAePay connection failed:', errorData);
+        
+        // Common error messages
+        let message = 'Connection failed. ';
+        if (testResponse.status === 401) {
+          message += 'Invalid API Key or PIN. Please verify your credentials.';
+        } else if (testResponse.status === 403) {
+          message += 'Access forbidden. Please check your account permissions.';
+        } else if (testResponse.status === 404) {
+          message += 'API endpoint not found. Please verify your USAePay account.';
+        } else {
+          message += `${testResponse.statusText}. Please verify your credentials.`;
+        }
+        
         return res.json({ 
           success: false, 
-          message: `Connection failed: ${testResponse.statusText}. Please verify your credentials.`,
-          error: errorData
+          message,
+          error: errorData,
+          status: testResponse.status
         });
       }
     } catch (error: any) {
