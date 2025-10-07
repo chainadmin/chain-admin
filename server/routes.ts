@@ -812,7 +812,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             tenantId: tenantId,
             folderId: targetFolderId,
           });
-          createdConsumers.set(consumer.email.toLowerCase(), consumer);
+          if (consumer.email) {
+            createdConsumers.set(consumer.email.toLowerCase(), consumer);
+          }
         } catch (consumerError: any) {
           console.error(`Error creating consumer ${consumerData.email}:`, consumerError);
           return res.status(500).json({ 
