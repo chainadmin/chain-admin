@@ -5412,6 +5412,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log(`✅ Agency created: ${name} with Postmark server ${server.ID}`);
 
+      // Auto-seed subscription plans (safe to call even if already exists)
+      try {
+        const { seedSubscriptionPlans } = await import('./seed-subscription-plans');
+        await seedSubscriptionPlans();
+        console.log('✅ Subscription plans auto-seeded for new agency');
+      } catch (seedError) {
+        console.error('Warning: Failed to auto-seed subscription plans:', seedError);
+        // Don't fail agency creation if seeding fails
+      }
+
       res.status(201).json({
         message: "Agency created successfully with dedicated email server",
         tenant: {
