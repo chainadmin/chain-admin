@@ -238,6 +238,16 @@ class SmaxService {
     try {
       const config = await this.getSmaxConfig(tenantId);
 
+      console.log('🔍 SMAX Test - Config found:', {
+        hasConfig: !!config,
+        enabled: config?.enabled,
+        hasApiKey: !!config?.apiKey,
+        apiKeyLength: config?.apiKey?.length || 0,
+        hasPin: !!config?.pin,
+        pinLength: config?.pin?.length || 0,
+        baseUrl: config?.baseUrl
+      });
+
       if (!config) {
         return {
           success: false,
@@ -245,17 +255,22 @@ class SmaxService {
         };
       }
 
+      console.log('🔗 Testing SMAX connection to:', config.baseUrl);
+
       const token = await this.authenticate(config);
 
       if (!token) {
+        console.error('❌ SMAX authentication failed');
         return {
           success: false,
           error: 'Authentication failed. Please check your API key and PIN.',
         };
       }
 
+      console.log('✅ SMAX connection successful, token received');
       return { success: true };
     } catch (error: any) {
+      console.error('❌ SMAX test connection error:', error);
       return {
         success: false,
         error: error.message || 'Connection test failed',

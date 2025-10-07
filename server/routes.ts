@@ -3837,6 +3837,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { merchantApiKey, merchantApiPin, merchantName, useSandbox } = settings;
 
+      console.log('🔍 USAePay Test - Credentials found:', {
+        hasApiKey: !!merchantApiKey,
+        apiKeyLength: merchantApiKey?.length || 0,
+        hasApiPin: !!merchantApiPin,
+        apiPinLength: merchantApiPin?.length || 0,
+        merchantName,
+        useSandbox
+      });
+
       if (!merchantApiKey || !merchantApiPin) {
         return res.status(400).json({ 
           success: false, 
@@ -3848,6 +3857,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const baseUrl = useSandbox 
         ? "https://sandbox.usaepay.com/api/v2"
         : "https://secure.usaepay.com/api/v2";
+
+      console.log('🔗 Testing connection to:', baseUrl);
 
       // Create Basic Auth header
       const authString = Buffer.from(`${merchantApiKey}:${merchantApiPin}`).toString('base64');
@@ -3861,8 +3872,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
       });
 
+      console.log('📡 USAePay Response:', {
+        status: testResponse.status,
+        statusText: testResponse.statusText,
+        ok: testResponse.ok
+      });
+
       if (testResponse.ok) {
         const merchantData = await testResponse.json();
+        console.log('✅ USAePay connection successful:', merchantData);
         return res.json({ 
           success: true, 
           message: `Successfully connected to ${useSandbox ? 'Sandbox' : 'Production'} USAePay`,
@@ -3871,6 +3889,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       } else {
         const errorData = await testResponse.text();
+        console.error('❌ USAePay connection failed:', errorData);
         return res.json({ 
           success: false, 
           message: `Connection failed: ${testResponse.statusText}. Please verify your credentials.`,
@@ -3878,7 +3897,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
     } catch (error: any) {
-      console.error("USAePay test connection error:", error);
+      console.error("❌ USAePay test connection error:", error);
       return res.status(500).json({ 
         success: false, 
         message: "Failed to test connection. Please check your credentials and try again.",
