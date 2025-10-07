@@ -1145,8 +1145,7 @@ export default function Settings() {
                   </div>
 
                   {/* Merchant Account Configuration */}
-                  {(settings as any)?.merchantAccountId ? (
-                    <div className="space-y-4">
+                  <div className="space-y-4">
                       <div>
                         <Label className="text-white">Merchant Provider</Label>
                         <Input
@@ -1285,43 +1284,6 @@ export default function Settings() {
                         />
                       </div>
                     </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-white/20 bg-white/5 px-6 py-10 text-center">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/15 bg-white/10">
-                        <i className="fas fa-credit-card text-sky-300 text-xl"></i>
-                      </div>
-                      <div className="space-y-2">
-                        <h3 className="text-lg font-semibold text-white">Set Up Payment Processing</h3>
-                        <p className="text-sm text-blue-100/70">
-                          Configure your merchant account to start accepting online payments from consumers. If you don't have a merchant account, we can help you get one.
-                        </p>
-                      </div>
-                      <div className="flex flex-col justify-center gap-3 sm:flex-row">
-                        <Button
-                          onClick={() => handleSettingsUpdate('merchantAccountId', 'setup')}
-                          data-testid="button-setup-merchant"
-                          className="rounded-xl bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-6 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 transition hover:from-sky-400/80 hover:to-indigo-400/80"
-                        >
-                          <i className="fas fa-cog mr-2"></i>
-                          Configure Existing Account
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            toast({
-                              title: "Merchant Request Submitted",
-                              description: "We'll contact you within 24 hours to help set up your merchant account.",
-                            });
-                          }}
-                          data-testid="button-request-merchant"
-                          className="rounded-xl border-white/20 bg-white/5 px-6 py-2 text-sm font-semibold text-blue-50 transition hover:bg-white/10"
-                        >
-                          <i className="fas fa-handshake mr-2"></i>
-                          Request Merchant Account
-                        </Button>
-                      </div>
-                    </div>
-                  )}
                 </CardContent>
                 {hasUnsavedChanges && (
                   <CardFooter className="border-t border-white/10 pt-6">
