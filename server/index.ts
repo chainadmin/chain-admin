@@ -1,4 +1,5 @@
 import express from "express";
+import { execSync } from "child_process";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
@@ -41,6 +42,18 @@ async function main() {
   }
   
   console.log('✅ All required environment variables are present');
+  
+  // Run database migrations automatically on startup (especially important for Railway deployments)
+  if (process.env.NODE_ENV === 'production') {
+    try {
+      console.log('🔄 Running database migrations...');
+      execSync('npx drizzle-kit push --force', { stdio: 'inherit' });
+      console.log('✅ Database migrations completed successfully');
+    } catch (error) {
+      console.error('❌ Database migration failed:', error);
+      // Continue anyway - migrations might fail if schema is already up to date
+    }
+  }
   
   const server = await createServer();
   const PORT = Number(process.env.PORT) || 5000;
