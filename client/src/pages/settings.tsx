@@ -858,8 +858,8 @@ export default function Settings() {
                         let agencyUrl = '';
                         
                         if (agencySlug) {
-                          // Always use path-based routing for agency URLs
-                          agencyUrl = `${window.location.origin}/agency/${agencySlug}`;
+                          // Use subdomain-based routing for agency URLs
+                          agencyUrl = `https://${agencySlug}.chainsoftwaregroup.com`;
                         }
                         
                         if (!agencySlug) {
