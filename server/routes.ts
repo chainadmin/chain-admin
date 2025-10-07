@@ -32,7 +32,7 @@ import { nanoid } from "nanoid";
 import express from "express";
 import { emailService } from "./emailService";
 import { smsService } from "./smsService";
-import { getStorageDir } from "./fileStorage";
+import { getStorageDir, uploadLogo } from "./fileStorage";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { subdomainMiddleware } from "./middleware/subdomain";
@@ -3553,16 +3553,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Determine mimetype from base64 prefix
       const mimetypeMatch = image.match(/^data:(image\/\w+);base64,/);
       const mimetype = mimetypeMatch ? mimetypeMatch[1] : 'image/png';
-      
-      // Create file object similar to multer
-      const file = {
-        buffer,
-        originalname: filename,
-        mimetype
-      } as Express.Multer.File;
 
-      // Upload to Supabase Storage
-      const logoResult = await uploadLogo(file, tenantId);
+      // Upload to filesystem (Railway Volume)
+      const logoResult = await uploadLogo(buffer, tenantId, mimetype);
       
       if (!logoResult) {
         return res.status(500).json({ message: "Failed to upload logo to storage" });
