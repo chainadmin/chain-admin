@@ -3494,10 +3494,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Validate and filter the settings data
       const settingsSchema = z.object({
-        privacyPolicy: z.string().optional(),
-        termsOfService: z.string().optional(),
-        contactEmail: z.string().email().optional(),
-        contactPhone: z.string().optional(),
+        privacyPolicy: z.string().nullable().optional(),
+        termsOfService: z.string().nullable().optional(),
+        contactEmail: z.string().email().nullable().optional(),
+        contactPhone: z.string().nullable().optional(),
         showPaymentPlans: z.boolean().optional(),
         showDocuments: z.boolean().optional(),
         allowSettlementRequests: z.boolean().optional(),
@@ -3505,24 +3505,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         consumerPortalSettings: z.any().optional(),
         smsThrottleLimit: z.number().min(1).max(1000).optional(),
         // Email configuration per tenant
-        customSenderEmail: z.string().email().optional().or(z.literal('')),
+        customSenderEmail: z.string().email().nullable().optional().or(z.literal('')),
         // Twilio configuration per tenant
-        twilioAccountSid: z.string().optional(),
-        twilioAuthToken: z.string().optional(),
-        twilioPhoneNumber: z.string().optional(),
-        twilioBusinessName: z.string().optional(),
-        twilioCampaignId: z.string().optional(),
+        twilioAccountSid: z.string().nullable().optional(),
+        twilioAuthToken: z.string().nullable().optional(),
+        twilioPhoneNumber: z.string().nullable().optional(),
+        twilioBusinessName: z.string().nullable().optional(),
+        twilioCampaignId: z.string().nullable().optional(),
         // SMAX integration configuration
         smaxEnabled: z.boolean().optional(),
-        smaxApiKey: z.string().optional(),
-        smaxPin: z.string().optional(),
-        smaxBaseUrl: z.string().optional(),
+        smaxApiKey: z.string().nullable().optional(),
+        smaxPin: z.string().nullable().optional(),
+        smaxBaseUrl: z.string().nullable().optional(),
         // USAePay merchant configuration
-        merchantProvider: z.string().optional(),
-        merchantApiKey: z.string().optional(),
-        merchantApiPin: z.string().optional(),
-        merchantName: z.string().optional(),
-        merchantType: z.string().optional(),
+        merchantProvider: z.string().nullable().optional(),
+        merchantApiKey: z.string().nullable().optional(),
+        merchantApiPin: z.string().nullable().optional(),
+        merchantName: z.string().nullable().optional(),
+        merchantType: z.string().nullable().optional(),
         useSandbox: z.boolean().optional(),
       });
 
