@@ -3519,6 +3519,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         smaxBaseUrl: z.string().nullable().optional(),
         // USAePay merchant configuration
         merchantProvider: z.string().nullable().optional(),
+        merchantAccountId: z.string().nullable().optional(),
         merchantApiKey: z.string().nullable().optional(),
         merchantApiPin: z.string().nullable().optional(),
         merchantName: z.string().nullable().optional(),
