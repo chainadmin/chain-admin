@@ -149,8 +149,8 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
             });
           }
 
-          // Extract account data
-          if (row.creditor && row.balance) {
+          // Extract account data - only if we have a valid consumer email
+          if (consumerKey && row.creditor && row.balance) {
             // Extract additional account data (any non-standard columns)
             const additionalAccountData: any = {};
             headers.forEach(header => {

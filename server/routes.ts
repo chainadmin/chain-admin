@@ -824,10 +824,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Create accounts
-      const accountsToCreate = accountsData.map((accountData: any) => {
-        const consumer = createdConsumers.get(accountData.consumerEmail.toLowerCase());
+      const accountsToCreate = accountsData.map((accountData: any, index: number) => {
+        if (!accountData.consumerEmail) {
+          throw new Error(`Row ${index + 2}: Missing consumer email for account`);
+        }
+        
+        const consumerEmailLower = accountData.consumerEmail.toLowerCase();
+        const consumer = createdConsumers.get(consumerEmailLower);
         if (!consumer) {
-          throw new Error(`Consumer not found for email: ${accountData.consumerEmail}`);
+          throw new Error(`Row ${index + 2}: Consumer not found for email: ${accountData.consumerEmail}`);
         }
 
         return {
