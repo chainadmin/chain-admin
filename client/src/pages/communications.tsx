@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import AdminLayout from "@/components/admin-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -98,10 +99,12 @@ export default function Communications() {
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { isJwtAuth } = useAuth();
 
-  // Get user data for agency URL
+  // Get user data for agency URL (only for Replit auth, not JWT)
   const { data: userData } = useQuery({
     queryKey: ["/api/auth/user"],
+    enabled: !isJwtAuth,
   });
 
   // Queries
