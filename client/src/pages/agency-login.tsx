@@ -41,6 +41,14 @@ export default function AgencyLogin() {
       if (result.token) {
         localStorage.setItem('authToken', result.token);
         setCookie('authToken', result.token);
+        
+        // Trigger storage event so useAuth hook picks up the change
+        window.dispatchEvent(new StorageEvent('storage', {
+          key: 'authToken',
+          newValue: result.token,
+          url: window.location.href,
+          storageArea: localStorage
+        }));
       }
 
       // Persist tenant details for cross-subdomain navigation

@@ -16,6 +16,7 @@ export function useAuth() {
   useEffect(() => {
     const checkJwtToken = () => {
       const token = getAuthToken(); // Checks cookies first, then localStorage
+      console.log('🔐 useAuth: Checking JWT token', { hasToken: !!token });
       if (token) {
         // Parse the JWT payload (not secure, but fine for client-side auth check)
         try {
@@ -29,6 +30,7 @@ export function useAuth() {
           
           // Check if token is expired
           if (payload.exp && payload.exp * 1000 < Date.now()) {
+            console.log('🔐 useAuth: Token expired');
             localStorage.removeItem('authToken');
             setJwtAuth(null);
           } else {
@@ -38,6 +40,7 @@ export function useAuth() {
 
             persistTenantMetadata({ slug: tenantSlug, name: tenantName });
 
+            console.log('🔐 useAuth: JWT valid, setting auth', { tenantSlug, userId: payload.userId });
             setJwtAuth({
               id: payload.userId,
               tenantId: payload.tenantId,
@@ -47,11 +50,12 @@ export function useAuth() {
             });
           }
         } catch (e) {
-          console.error('Invalid JWT token:', e);
+          console.error('🔐 useAuth: Invalid JWT token:', e);
           localStorage.removeItem('authToken');
           setJwtAuth(null);
         }
       } else {
+        console.log('🔐 useAuth: No token found');
         setJwtAuth(null);
       }
       setCheckingJwt(false);
