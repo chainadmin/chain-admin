@@ -126,10 +126,10 @@ function Router() {
   // Check if we're on the main domain (not an agency subdomain)
   const hostname = window.location.hostname;
   
-  // Main domain is ONLY the production domain without subdomain
-  // Railway, localhost, and other dev URLs should support agency routing
-  const isMainDomain = hostname === 'chainsoftwaregroup.com' || 
-                       hostname === 'www.chainsoftwaregroup.com';
+  // TEMPORARILY: Allow path-based routing even on main domain
+  // When we detect an agency slug from the path, treat it like a subdomain
+  const isMainDomain = (hostname === 'chainsoftwaregroup.com' || 
+                       hostname === 'www.chainsoftwaregroup.com') && !agencySlug;
 
   // Mobile app routes - Consumer only
   const LoadingScreen = () => (
