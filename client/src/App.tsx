@@ -126,10 +126,10 @@ function Router() {
   // Check if we're on the main domain (not an agency subdomain)
   const hostname = window.location.hostname;
   
-  // TEMPORARILY: Allow path-based routing even on main domain
-  // When we detect an agency slug from the path, treat it like a subdomain
-  const isMainDomain = (hostname === 'chainsoftwaregroup.com' || 
-                       hostname === 'www.chainsoftwaregroup.com') && !agencySlug;
+  // Main domain is ONLY the production domain without subdomain
+  // Railway, localhost, and other dev URLs should support agency routing
+  const isMainDomain = hostname === 'chainsoftwaregroup.com' || 
+                       hostname === 'www.chainsoftwaregroup.com';
 
   // Mobile app routes - Consumer only
   const LoadingScreen = () => (
@@ -257,51 +257,18 @@ function Router() {
     return <Switch>{agencySubdomainRoutes}</Switch>;
   }
 
-  // Path-based routing: /agency-slug/... routes
-  // Supports both /agency/:slug (backward compatibility) and /:slug/... (new format)
-  if (pathname.startsWith('/agency/') || (agencySlug && !pathname.startsWith('/admin') && !pathname.startsWith('/global-admin'))) {
-    // Show loading screen while checking JWT auth
-    if (isLoading) {
-      return <Switch><Route key="path-loading" path="/:rest*" component={LoadingScreen} /></Switch>;
-    }
-    
+  // Path-based routing disabled - using subdomain routing only
+  // Keeping /agency/:slug for public landing pages only (backward compatibility)
+  if (pathname.startsWith('/agency/')) {
     const agencyPathRoutes: JSX.Element[] = [
       <Route key="path-agency" path="/agency/:agencySlug" component={AgencyLanding} />,
-      <Route key="path-slug-home" path={`/${agencySlug}`} component={AgencyLanding} />,
-      <Route key="path-slug-consumer" path={`/${agencySlug}/consumer`} component={ConsumerLogin} />,
-      <Route key="path-slug-consumer-login" path={`/${agencySlug}/consumer-login`} component={ConsumerLogin} />,
-      <Route key="path-slug-login" path={`/${agencySlug}/login`} component={ConsumerLogin} />,
-      <Route key="path-slug-consumer-register" path={`/${agencySlug}/consumer-register`} component={ConsumerRegistration} />,
-      <Route key="path-slug-consumer-portal" path={`/${agencySlug}/consumer/:email`} component={ConsumerPortal} />,
-      <Route key="path-slug-consumer-dashboard" path={`/${agencySlug}/consumer-dashboard`} component={ConsumerDashboard} />,
-      <Route key="path-slug-dashboard" path={`/${agencySlug}/dashboard`} component={AdminDashboard} />,
-      <Route key="path-slug-admin-dashboard" path={`/${agencySlug}/admin-dashboard`} component={AdminDashboard} />,
-      <Route key="path-slug-agency-login" path={`/${agencySlug}/agency-login`} component={AgencyLogin} />,
-      <Route key="path-slug-privacy" path={`/${agencySlug}/privacy-policy`} component={PrivacyPolicy} />,
-      <Route key="path-slug-terms" path={`/${agencySlug}/terms-of-service`} component={TermsOfService} />,
       <Route key="path-consumer-login" path="/consumer-login" component={ConsumerLogin} />,
       <Route key="path-consumer-register" path="/consumer-register/:tenantSlug?" component={ConsumerRegistration} />,
       <Route key="path-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
       <Route key="path-terms" path="/terms-of-service" component={TermsOfService} />,
-      ...getSmsOptInRoutes("path-sms")
+      ...getSmsOptInRoutes("path-sms"),
+      <Route key="path-fallback" path="/:rest*" component={AgencyLanding} />
     ];
-
-    if (isJwtAuth && agencySlug) {
-      agencyPathRoutes.push(
-        <Route key="path-slug-consumers" path={`/${agencySlug}/consumers`} component={Consumers} />,
-        <Route key="path-slug-accounts" path={`/${agencySlug}/accounts`} component={Accounts} />,
-        <Route key="path-slug-communications" path={`/${agencySlug}/communications`} component={Communications} />,
-        <Route key="path-slug-requests" path={`/${agencySlug}/requests`} component={Requests} />,
-        <Route key="path-slug-payments" path={`/${agencySlug}/payments`} component={Payments} />,
-        <Route key="path-slug-billing" path={`/${agencySlug}/billing`} component={Billing} />,
-        <Route key="path-slug-company" path={`/${agencySlug}/company`} component={CompanyManagement} />,
-        <Route key="path-slug-settings" path={`/${agencySlug}/settings`} component={Settings} />
-      );
-    }
-
-    agencyPathRoutes.push(
-      <Route key="path-fallback" path="/:rest*" component={agencySlug ? AgencyLanding : NotFound} />
-    );
 
     return <Switch>{agencyPathRoutes}</Switch>;
   }

@@ -39,14 +39,6 @@ export default function AgencyLogin() {
       if (result.token) {
         localStorage.setItem('authToken', result.token);
         setCookie('authToken', result.token);
-        
-        // Trigger storage event so useAuth hook picks up the change
-        window.dispatchEvent(new StorageEvent('storage', {
-          key: 'authToken',
-          newValue: result.token,
-          url: window.location.href,
-          storageArea: localStorage
-        }));
       }
 
       // Persist tenant details for cross-subdomain navigation
@@ -58,29 +50,26 @@ export default function AgencyLogin() {
       return result;
     },
     onSuccess: (data) => {
-      const userName = data.user.firstName && data.user.lastName 
-        ? `${data.user.firstName} ${data.user.lastName}`
-        : data.user.username || data.user.email;
-      
       toast({
         title: "Login Successful",
-        description: `Welcome back, ${userName}!`,
+        description: `Welcome back, ${data.user.name || data.user.email}!`,
       });
       
       // Invalidate queries to refresh authentication state
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       
-      // Redirect to agency dashboard with page reload to ensure cookie is available
-      const agencySlug = data.tenant?.slug;
-      
-      // Use window.location to force reload so cookies are available
+      // Redirect to agency-specific subdomain dashboard
       setTimeout(() => {
+        const agencySlug = data.tenant?.slug;
+        
         if (agencySlug) {
-          window.location.href = `/${agencySlug}/dashboard`;
+          // Use subdomain-based routing
+          window.location.href = `https://${agencySlug}.chainsoftwaregroup.com/dashboard`;
         } else {
+          // Fallback to regular dashboard
           window.location.href = "/dashboard";
         }
-      }, 100);
+      }, 500);
     },
     onError: (error: any) => {
       toast({

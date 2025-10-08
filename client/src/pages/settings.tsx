@@ -114,7 +114,7 @@ export default function Settings() {
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { user: authUser, isLoading: authLoading, isJwtAuth } = useAuth();
+  const { user: authUser, isLoading: authLoading } = useAuth();
 
   const { data: settings, isLoading: settingsLoading } = useQuery({
     queryKey: ["/api/settings"],
@@ -171,11 +171,11 @@ export default function Settings() {
     },
   ];
 
-  // Fetch full user data with tenant info if needed (only for Replit auth, not JWT)
+  // Fetch full user data with tenant info if needed
   const { data: userData, isLoading: userLoading, error: userError } = useQuery({
     queryKey: ["/api/auth/user"],
     retry: 1,
-    enabled: !!authUser && !isJwtAuth, // Only fetch if authenticated with Replit (not JWT)
+    enabled: !!authUser, // Only fetch if authenticated
   });
 
   // Initialize local settings when data loads

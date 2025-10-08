@@ -5334,15 +5334,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updatedAt: new Date(),
       });
 
-      // Update tenant to convert from trial to paid account
-      await db
-        .update(tenants)
-        .set({
-          isTrialAccount: false,
-          isPaidAccount: true,
-        })
-        .where(eq(tenants.id, subscription.tenantId));
-
       res.json({
         ...updatedSubscription,
         message: 'Subscription approved successfully',
