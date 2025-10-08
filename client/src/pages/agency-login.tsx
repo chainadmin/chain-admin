@@ -8,7 +8,6 @@ import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Building2, Lock, Sparkles, UserCheck } from "lucide-react";
 import { z } from "zod";
-import { useLocation } from "wouter";
 import { isSubdomainSupported } from "@shared/utils/subdomain";
 import { persistTenantMetadata, setCookie } from "@/lib/cookies";
 import AgencyAuthLayout from "@/components/agency-auth-layout";
@@ -22,7 +21,6 @@ type LoginData = z.infer<typeof loginSchema>;
 
 export default function AgencyLogin() {
   const { toast } = useToast();
-  const [, setLocation] = useLocation();
 
   const form = useForm<LoginData>({
     resolver: zodResolver(loginSchema),
