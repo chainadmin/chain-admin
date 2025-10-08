@@ -77,9 +77,9 @@ export function getAgencySlugFromRequest(
   // Check if path starts with an agency slug pattern
   const pathParts = pathname.split('/').filter(Boolean);
   
-  // Pattern: /agency-slug/dashboard or /agency-slug/consumer/...
-  // Must have at least 2 parts for agency routing (e.g., /abc-company/dashboard)
-  if (pathParts.length >= 2) {
+  // Pattern: /agency-slug or /agency-slug/dashboard or /agency-slug/consumer/...
+  // Can have 1 or more parts (e.g., /abc-company or /abc-company/dashboard)
+  if (pathParts.length >= 1) {
     const potentialSlug = pathParts[0];
     // Basic validation - agency slugs are lowercase with hyphens
     if (/^[a-z0-9-]+$/.test(potentialSlug)) {
@@ -88,7 +88,8 @@ export function getAgencySlugFromRequest(
         'api', 'admin', 'login', 'register', 'agency-login', 'agency-register',
         'consumer-login', 'consumer-register', 'privacy-policy', 'assets', 'src',
         'admin-dashboard', 'consumers', 'accounts', 'communications', 'payments',
-        'billing', 'company', 'settings'
+        'billing', 'company', 'settings', 'global-admin', 'fix-db', 'email-test',
+        'terms-of-service', 'sms-opt-in', 'sms-opt-in-disclosure'
       ];
       
       if (!knownRoutes.includes(potentialSlug)) {
