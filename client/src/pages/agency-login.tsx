@@ -50,21 +50,25 @@ export default function AgencyLogin() {
       return result;
     },
     onSuccess: (data) => {
+      const userName = data.user.firstName && data.user.lastName 
+        ? `${data.user.firstName} ${data.user.lastName}`
+        : data.user.username || data.user.email;
+      
       toast({
         title: "Login Successful",
-        description: `Welcome back, ${data.user.name || data.user.email}!`,
+        description: `Welcome back, ${userName}!`,
       });
       
       // Invalidate queries to refresh authentication state
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       
-      // Redirect to agency-specific subdomain dashboard
+      // Redirect to agency dashboard
       setTimeout(() => {
         const agencySlug = data.tenant?.slug;
         
         if (agencySlug) {
-          // Use subdomain-based routing
-          window.location.href = `https://${agencySlug}.chainsoftwaregroup.com/dashboard`;
+          // Use path-based routing (works immediately without SSL issues)
+          window.location.href = `/${agencySlug}/dashboard`;
         } else {
           // Fallback to regular dashboard
           window.location.href = "/dashboard";
