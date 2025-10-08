@@ -60,13 +60,14 @@ export function getAgencySlugFromRequest(
   }
 
   // Allow path-based routing for development environments (localhost, Replit, and Railway)
-  // For production without subdomain, don't try path-based detection
+  // TEMPORARILY allow path-based routing on production domain for testing
   const isDevEnvironment = hostname.includes('localhost') || 
                           hostname.includes('127.0.0.1') ||
                           hostname.includes('.repl.co') || 
                           hostname.includes('.replit.dev') || 
                           hostname.includes('.worf.replit.dev') ||
-                          hostname.includes('.up.railway.app'); // Enable path-based routing on Railway for testing
+                          hostname.includes('.up.railway.app') ||
+                          hostname.includes('chainsoftwaregroup.com'); // TEMPORARY: Enable path-based routing on production
   
   if (!isDevEnvironment) {
     return null;
@@ -104,18 +105,19 @@ export function buildAgencyUrl(
   path: string,
   baseUrl?: string
 ): string {
-  // If we have a base URL with subdomain support (production only - not Railway)
+  // TEMPORARILY: Always use path-based routing (even on production)
+  // This allows chainsoftwaregroup.com/tenant-slug to work while DNS is being fixed
+  return `/${agencySlug}${path}`;
+  
+  // Original subdomain logic (commented out temporarily)
+  /*
   if (baseUrl && !baseUrl.includes('localhost') && !baseUrl.includes('repl') && !baseUrl.includes('.up.railway.app')) {
     const url = new URL(baseUrl);
-    // Replace or add subdomain
     const parts = url.hostname.split('.');
     if (parts.length >= 2) {
-      // Replace existing subdomain or add new one
       if (parts.length === 2) {
-        // domain.com -> agency.domain.com
         url.hostname = `${agencySlug}.${url.hostname}`;
       } else {
-        // xxx.domain.com -> agency.domain.com
         parts[0] = agencySlug;
         url.hostname = parts.join('.');
       }
@@ -123,9 +125,8 @@ export function buildAgencyUrl(
     url.pathname = path;
     return url.toString();
   }
-
-  // Fallback to path-based routing (development/Replit/Railway)
   return `/${agencySlug}${path}`;
+  */
 }
 
 export function isSubdomainSupported(): boolean {
