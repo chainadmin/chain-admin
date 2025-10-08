@@ -11,6 +11,9 @@ export function useAuth() {
   const isConsumerRoute = pathname === '/consumer-dashboard' || 
                          pathname === '/consumer-login' ||
                          pathname.startsWith('/consumer-register');
+  
+  // Force re-check on pathname change
+  const [lastPath, setLastPath] = useState(pathname);
 
   // Check for JWT token on mount and when localStorage/cookies change
   useEffect(() => {
@@ -72,7 +75,14 @@ export function useAuth() {
     
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
+  }, [pathname]); // Re-run when pathname changes
+  
+  // Update lastPath when pathname changes
+  useEffect(() => {
+    if (pathname !== lastPath) {
+      setLastPath(pathname);
+    }
+  }, [pathname, lastPath]);
 
   // Original Replit auth check (only run if no JWT and not on consumer route)
   const { data: replitUser, isLoading: replitLoading } = useQuery({
