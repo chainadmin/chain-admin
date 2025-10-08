@@ -1,0 +1,148 @@
+2025-10-08 16:01:18.48
+b3cdcd23
+User
+table: undefined,
+2025-10-08 16:01:18.48
+b3cdcd23
+User
+column: undefined,
+2025-10-08 16:01:18.48
+b3cdcd23
+User
+dataType: undefined,
+2025-10-08 16:01:18.48
+b3cdcd23
+User
+constraint: undefined,
+2025-10-08 16:01:18.48
+b3cdcd23
+User
+file: 'parse_relation.c',
+2025-10-08 16:01:18.48
+b3cdcd23
+User
+line: '1449',
+2025-10-08 16:01:18.48
+b3cdcd23
+User
+routine: 'parserOpenTable'
+2025-10-08 16:01:18.48
+b3cdcd23
+User
+}
+2025-10-08 16:01:39.38
+b3cdcd23
+User
+Error during agency login: error: relation "agency_credentials" does not exist
+2025-10-08 16:01:39.38
+b3cdcd23
+User
+at /home/runner/workspace/node_modules/pg-pool/index.js:45:11
+2025-10-08 16:01:39.38
+b3cdcd23
+User
+at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+2025-10-08 16:01:39.38
+b3cdcd23
+User
+at async file:///home/runner/workspace/node_modules/drizzle-orm/node-postgres/session.js:83:22
+2025-10-08 16:01:39.38
+b3cdcd23
+User
+at async DatabaseStorage.getAgencyCredentialsByUsername (file:///home/runner/workspace/dist/index.js:1555:31)
+2025-10-08 16:01:39.38
+b3cdcd23
+User
+at async file:///home/runner/workspace/dist/index.js:5524:27 {
+2025-10-08 16:01:39.38
+b3cdcd23
+User
+length: 118,
+2025-10-08 16:01:39.38
+b3cdcd23
+User
+severity: 'ERROR',
+2025-10-08 16:01:39.38
+b3cdcd23
+User
+code: '42P01',
+2025-10-08 16:01:39.38
+b3cdcd23
+User
+detail: undefined,
+2025-10-08 16:01:39.38
+b3cdcd23
+User
+hint: undefined,
+2025-10-08 16:01:39.38
+b3cdcd23
+User
+position: '162',
+2025-10-08 16:01:39.38
+b3cdcd23
+User
+internalPosition: undefined,
+2025-10-08 16:01:39.38
+b3cdcd23
+User
+internalQuery: undefined,
+2025-10-08 16:01:39.38
+b3cdcd23
+User
+where: undefined,
+2025-10-08 16:01:39.38
+b3cdcd23
+User
+schema: undefined,
+2025-10-08 16:01:39.38
+b3cdcd23
+User
+table: undefined,
+2025-10-08 16:01:39.38
+b3cdcd23
+User
+column: undefined,
+2025-10-08 16:01:39.38
+b3cdcd23
+User
+dataType: undefined,
+2025-10-08 16:01:39.38
+b3cdcd23
+User
+constraint: undefined,
+2025-10-08 16:01:39.38
+b3cdcd23
+User
+file: 'parse_relation.c',
+2025-10-08 16:01:39.38
+b3cdcd23
+User
+line: '1449',
+2025-10-08 16:01:39.38
+b3cdcd23
+User
+routine: 'parserOpenTable'
+2025-10-08 16:01:39.38
+b3cdcd23
+User
+}
+2025-10-08 16:02:42.53
+b3cdcd23
+User
+Consumer login attempt: {
+2025-10-08 16:02:42.53
+b3cdcd23
+User
+email: 'jacobbimccant@gmail.com',
+2025-10-08 16:02:42.53
+b3cdcd23
+User
+dateOfBirth: '1992-10-06',
+2025-10-08 16:02:42.53
+b3cdcd23
+User
+tenantSlug: undefined
+2025-10-08 16:02:42.53
+b3cdcd23
+User
+}
