@@ -72,16 +72,17 @@ export default function AgencyLogin() {
       // Invalidate queries to refresh authentication state
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       
-      // Redirect to agency dashboard (use wouter to avoid full page reload)
+      // Redirect to agency dashboard with page reload to ensure cookie is available
       const agencySlug = data.tenant?.slug;
       
-      if (agencySlug) {
-        // Use path-based routing (works immediately without SSL issues)
-        setLocation(`/${agencySlug}/dashboard`);
-      } else {
-        // Fallback to regular dashboard
-        setLocation("/dashboard");
-      }
+      // Use window.location to force reload so cookies are available
+      setTimeout(() => {
+        if (agencySlug) {
+          window.location.href = `/${agencySlug}/dashboard`;
+        } else {
+          window.location.href = "/dashboard";
+        }
+      }, 100);
     },
     onError: (error: any) => {
       toast({
