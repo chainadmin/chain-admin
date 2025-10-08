@@ -22,6 +22,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 export default function AdminDashboard() {
+  console.log('🎯 AdminDashboard: Component rendering');
   const { toast } = useToast();
   const [showImportModal, setShowImportModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);

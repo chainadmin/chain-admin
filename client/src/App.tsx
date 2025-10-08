@@ -45,6 +45,8 @@ function Router() {
   const { toast } = useToast();
   const isMobileApp = mobileConfig.isNativePlatform;
   const pathname = window.location.pathname;
+  
+  console.log('🔀 Router:', { pathname, agencySlug, isJwtAuth, isAuthenticated, isLoading });
   const adminRoutePaths = ["/admin", "/admin/", "/Admin", "/Admin/", "/global-admin", "/global-admin/"] as const;
   const createRouteElements = (
     paths: readonly string[],
@@ -260,6 +262,16 @@ function Router() {
   // Path-based routing: /agency-slug/... routes
   // Supports both /agency/:slug (backward compatibility) and /:slug/... (new format)
   if (pathname.startsWith('/agency/') || (agencySlug && !pathname.startsWith('/admin') && !pathname.startsWith('/global-admin'))) {
+    // Show loading screen while checking JWT auth for protected routes
+    const isProtectedRoute = pathname.includes('/dashboard') || pathname.includes('/accounts') || 
+                            pathname.includes('/communications') || pathname.includes('/payments') ||
+                            pathname.includes('/billing') || pathname.includes('/company') || 
+                            pathname.includes('/settings') || pathname.includes('/consumers');
+    
+    if (isLoading && isProtectedRoute) {
+      return <Switch><Route key="path-loading" path="/:rest*" component={LoadingScreen} /></Switch>;
+    }
+    
     const agencyPathRoutes: JSX.Element[] = [
       <Route key="path-agency" path="/agency/:agencySlug" component={AgencyLanding} />,
       <Route key="path-slug-home" path={`/${agencySlug}`} component={AgencyLanding} />,
