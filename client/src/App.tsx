@@ -126,12 +126,10 @@ function Router() {
   // Check if we're on the main domain (not an agency subdomain)
   const hostname = window.location.hostname;
   
-  // Main domain if:
-  // 1. It's the production domain (chainsoftwaregroup.com) without subdomain
-  // 2. It's development/Replit (for testing purposes)
+  // Main domain is ONLY the production domain without subdomain
+  // Railway, localhost, and other dev URLs should support agency routing
   const isMainDomain = hostname === 'chainsoftwaregroup.com' || 
-                       hostname === 'www.chainsoftwaregroup.com' ||
-                       (!hostname.includes('chainsoftwaregroup.com'));
+                       hostname === 'www.chainsoftwaregroup.com';
 
   // Mobile app routes - Consumer only
   const LoadingScreen = () => (

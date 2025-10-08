@@ -59,13 +59,14 @@ export function getAgencySlugFromRequest(
     return subdomain;
   }
 
-  // Allow path-based routing for development environments (localhost and Replit)
+  // Allow path-based routing for development environments (localhost, Replit, and Railway)
   // For production without subdomain, don't try path-based detection
   const isDevEnvironment = hostname.includes('localhost') || 
                           hostname.includes('127.0.0.1') ||
                           hostname.includes('.repl.co') || 
                           hostname.includes('.replit.dev') || 
-                          hostname.includes('.worf.replit.dev');
+                          hostname.includes('.worf.replit.dev') ||
+                          hostname.includes('.up.railway.app'); // Enable path-based routing on Railway for testing
   
   if (!isDevEnvironment) {
     return null;
@@ -103,8 +104,8 @@ export function buildAgencyUrl(
   path: string,
   baseUrl?: string
 ): string {
-  // If we have a base URL with subdomain support (production)
-  if (baseUrl && !baseUrl.includes('localhost') && !baseUrl.includes('repl')) {
+  // If we have a base URL with subdomain support (production only - not Railway)
+  if (baseUrl && !baseUrl.includes('localhost') && !baseUrl.includes('repl') && !baseUrl.includes('.up.railway.app')) {
     const url = new URL(baseUrl);
     // Replace or add subdomain
     const parts = url.hostname.split('.');
@@ -123,7 +124,7 @@ export function buildAgencyUrl(
     return url.toString();
   }
 
-  // Fallback to path-based routing (development/Replit)
+  // Fallback to path-based routing (development/Replit/Railway)
   return `/${agencySlug}${path}`;
 }
 
@@ -139,6 +140,10 @@ export function isSubdomainSupported(): boolean {
   const productionDomain = 'chainsoftwaregroup.com'; // TODO: Update this to your domain
   
   // Subdomain support is ONLY available on the actual production domain
-  // Not on localhost, Replit, Vercel, or any other hosting platform
+  // Not on localhost, Replit, Railway, or any other hosting platform
+  if (hostname.includes('.up.railway.app')) {
+    return false; // Railway uses path-based routing for testing
+  }
+  
   return hostname.includes(productionDomain);
 }
