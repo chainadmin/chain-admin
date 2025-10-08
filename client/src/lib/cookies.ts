@@ -19,7 +19,9 @@ export function setCookie(name: string, value: string, days: number = 7) {
   const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
   const isSecure = window.location.protocol === 'https:';
   
-  const domain = isLocalhost ? '' : `domain=.${hostname.split('.').slice(-2).join('.')};`;
+  // Don't set domain for localhost or Replit/public hosting (prevents public suffix issues)
+  const isReplitOrPublic = hostname.endsWith('.replit.app') || hostname.endsWith('.replit.dev') || hostname.endsWith('.repl.co');
+  const domain = (isLocalhost || isReplitOrPublic) ? '' : `domain=.${hostname.split('.').slice(-2).join('.')};`;
   const secure = isSecure ? 'Secure;' : '';
 
   const cookieString = `${name}=${value};${expires};path=/;${domain}${secure}SameSite=Lax`;
