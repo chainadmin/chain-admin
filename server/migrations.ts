@@ -48,6 +48,46 @@ export async function runMigrations() {
       }
     }
     
+    // Add missing tenants table columns for trial and service controls
+    console.log('Adding tenants table service control columns...');
+    const tenantColumns = [
+      { name: 'is_trial_account', type: 'BOOLEAN', default: 'true' },
+      { name: 'email_service_enabled', type: 'BOOLEAN', default: 'true' },
+      { name: 'sms_service_enabled', type: 'BOOLEAN', default: 'true' },
+      { name: 'portal_access_enabled', type: 'BOOLEAN', default: 'true' },
+      { name: 'payment_processing_enabled', type: 'BOOLEAN', default: 'true' }
+    ];
+    
+    for (const col of tenantColumns) {
+      try {
+        const defaultClause = col.default ? ` DEFAULT ${col.default}` : '';
+        await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS ${col.name} ${col.type}${defaultClause}`);
+        console.log(`  ✓ ${col.name}`);
+      } catch (err) {
+        console.log(`  ⚠ ${col.name} (already exists or error)`);
+      }
+    }
+    
+    // Fix any tenants with approved subscriptions still in trial mode
+    console.log('Fixing trial status for tenants with active subscriptions...');
+    try {
+      const fixResult = await client.query(`
+        UPDATE tenants t
+        SET is_trial_account = false
+        FROM subscriptions s
+        WHERE s.tenant_id = t.id 
+          AND s.status = 'active'
+          AND t.is_trial_account = true
+      `);
+      if (fixResult.rowCount && fixResult.rowCount > 0) {
+        console.log(`  ✓ Fixed ${fixResult.rowCount} tenant(s) with active subscriptions`);
+      } else {
+        console.log('  ✓ No tenants needed fixing');
+      }
+    } catch (err) {
+      console.log('  ⚠ Could not fix trial status:', err);
+    }
+    
     // Verify columns exist
     const result = await client.query(`
       SELECT column_name 
