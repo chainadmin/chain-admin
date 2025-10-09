@@ -192,6 +192,7 @@ export default function ConsumerDashboardSimple() {
   const [saveCard, setSaveCard] = useState(false);
   const [setupRecurring, setSetupRecurring] = useState(false);
   const [firstPaymentDate, setFirstPaymentDate] = useState<string>("");
+  const [customPaymentAmount, setCustomPaymentAmount] = useState<string>("");
   const [editForm, setEditForm] = useState({
     firstName: "",
     lastName: "",
@@ -374,6 +375,7 @@ export default function ConsumerDashboardSimple() {
     setSaveCard(false);
     setSetupRecurring(false);
     setFirstPaymentDate("");
+    setCustomPaymentAmount("");
     setShowPaymentDialog(true);
   };
 
@@ -388,7 +390,9 @@ export default function ConsumerDashboardSimple() {
   // Calculate payment amount based on selected arrangement
   const paymentAmountCents = selectedAccount
     ? selectedArrangement
-      ? calculateArrangementPayment(selectedArrangement, selectedAccount.balanceCents || 0)
+      ? (selectedArrangement.planType === 'one_time_payment' && customPaymentAmount
+          ? Math.round(parseFloat(customPaymentAmount) * 100) // Convert dollars to cents
+          : calculateArrangementPayment(selectedArrangement, selectedAccount.balanceCents || 0))
       : selectedAccount.balanceCents || 0
     : 0;
 
@@ -397,10 +401,49 @@ export default function ConsumerDashboardSimple() {
     
     if (!selectedAccount) return;
 
+    // Validate one-time payment amount
+    if (selectedArrangement?.planType === 'one_time_payment') {
+      const amount = parseFloat(customPaymentAmount);
+      const minAmount = (selectedArrangement.oneTimePaymentMin || 0) / 100;
+      const maxAmount = (selectedAccount.balanceCents || 0) / 100;
+      
+      if (!customPaymentAmount || isNaN(amount)) {
+        toast({
+          title: "Invalid Amount",
+          description: "Please enter a valid payment amount",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      if (amount < minAmount) {
+        toast({
+          title: "Amount Too Low",
+          description: `Minimum payment is $${minAmount.toFixed(2)}`,
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      if (amount > maxAmount) {
+        toast({
+          title: "Amount Too High",
+          description: `Maximum payment is $${maxAmount.toFixed(2)} (your balance)`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     setPaymentProcessing(true);
 
     try {
       const token = getStoredConsumerToken();
+      // For one-time payments, use today's date automatically
+      const paymentDate = selectedArrangement?.planType === 'one_time_payment' 
+        ? new Date().toISOString().split('T')[0]
+        : firstPaymentDate || null;
+      
       const response = await apiCall("POST", `/api/consumer/payments/process`, {
         accountId: selectedAccount.id,
         arrangementId: selectedArrangement?.id || null,
@@ -412,7 +455,10 @@ export default function ConsumerDashboardSimple() {
         zipCode: paymentForm.zipCode,
         saveCard: saveCard,
         setupRecurring: setupRecurring,
-        firstPaymentDate: firstPaymentDate || null,
+        firstPaymentDate: paymentDate,
+        customPaymentAmountCents: selectedArrangement?.planType === 'one_time_payment' && customPaymentAmount
+          ? Math.round(parseFloat(customPaymentAmount) * 100)
+          : null,
       }, token);
 
       const result = await response.json();
@@ -1161,6 +1207,7 @@ export default function ConsumerDashboardSimple() {
                         {selectedArrangement.planType === 'fixed_monthly' && 'First installment payment'}
                         {selectedArrangement.planType === 'range' && 'Minimum monthly payment'}
                         {selectedArrangement.planType === 'pay_in_full' && (selectedArrangement.payoffPercentageBasisPoints ? 'Discounted payoff amount' : 'One-time payment')}
+                        {selectedArrangement.planType === 'one_time_payment' && (customPaymentAmount ? 'Custom one-time payment' : 'Enter payment amount below')}
                       </p>
                     )}
                   </div>
@@ -1307,7 +1354,32 @@ export default function ConsumerDashboardSimple() {
                   />
                 </div>
 
-                {selectedArrangement && (
+                {selectedArrangement && selectedArrangement.planType === 'one_time_payment' && (
+                  <div>
+                    <Label htmlFor="customAmount">Payment Amount *</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                      <Input
+                        type="number"
+                        id="customAmount"
+                        value={customPaymentAmount}
+                        onChange={(e) => setCustomPaymentAmount(e.target.value)}
+                        min={(selectedArrangement.oneTimePaymentMin || 0) / 100}
+                        max={(selectedAccount?.balanceCents || 0) / 100}
+                        step="0.01"
+                        placeholder="0.00"
+                        className="pl-8"
+                        required
+                        data-testid="input-custom-payment-amount"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Min: ${((selectedArrangement.oneTimePaymentMin || 0) / 100).toFixed(2)} | Max: ${((selectedAccount?.balanceCents || 0) / 100).toFixed(2)} (Full Balance)
+                    </p>
+                  </div>
+                )}
+
+                {selectedArrangement && selectedArrangement.planType !== 'one_time_payment' && (
                   <div>
                     <Label htmlFor="firstPaymentDate">
                       {selectedArrangement.planType === 'settlement' || selectedArrangement.planType === 'pay_in_full' 
