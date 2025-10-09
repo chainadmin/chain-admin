@@ -24,11 +24,13 @@ The frontend uses React with TypeScript, built with shadcn/ui components on Radi
   - Tenant-specific USAePay credentials (API Key, API PIN, merchant name/type, sandbox mode toggle) stored in database
   - Test connection endpoint to validate credentials before processing
   - Card tokenization - saves payment tokens (not raw card data) to payment_methods table
-  - Arrangement-based payments (range, fixed_monthly, settlement, pay_in_full, custom_terms)
+  - Arrangement-based payments (range, fixed_monthly, settlement, pay_in_full, custom_terms, one_time_payment)
   - Recurring payment schedules with saved cards
   - Automated scheduled payment processing endpoint (`/api/payments/process-scheduled`)
   - Settlement payments automatically clear account balance
   - Failed payment tracking with retry limits (3 attempts)
+  - **Automatic Email Confirmations**: Sends branded thank you emails after successful payments and arrangement setup
+  - **Callback Requests**: Consumers can request callbacks with time preferences; all agency admins notified via email
 
 ## System Design Choices
 - **Database**: PostgreSQL (hosted on Railway) with Drizzle ORM, multi-tenant schema including `Users`, `Tenants`, `Platform Users`, `Consumers`, `Accounts`, `Email Templates`, and `Sessions`. Uses UUID primary keys and proper indexing.
