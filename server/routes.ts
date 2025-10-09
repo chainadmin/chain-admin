@@ -3849,6 +3849,86 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get consumer's active payment schedules with details
+  app.get('/api/consumer/payment-schedules/:email', authenticateConsumer, async (req: any, res) => {
+    try {
+      const { email } = req.params;
+      const { tenantSlug } = req.query;
+      const { id: consumerId, email: tokenEmail, tenantId, tenantSlug: tokenTenantSlug } = req.consumer || {};
+
+      if (!consumerId) {
+        return res.status(401).json({ message: "No consumer access" });
+      }
+
+      const normalizedParamEmail = normalizeLowercase(email);
+      const normalizedTokenEmail = normalizeLowercase(tokenEmail);
+      if (!normalizedTokenEmail || normalizedParamEmail !== normalizedTokenEmail) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const requestedTenantSlug = typeof tenantSlug === "string" ? tenantSlug : "";
+      if (!requestedTenantSlug) {
+        return res.status(400).json({ message: "Tenant slug required" });
+      }
+
+      const normalizedRequestedTenantSlug = normalizeLowercase(requestedTenantSlug);
+
+      let tenant = tenantId ? await storage.getTenant(tenantId) : undefined;
+      if (!tenant && tokenTenantSlug) {
+        tenant = await storage.getTenantBySlug(tokenTenantSlug);
+      }
+      if (!tenant) {
+        tenant = await storage.getTenantBySlug(requestedTenantSlug);
+      }
+
+      if (!tenant) {
+        return res.status(404).json({ message: "Tenant not found" });
+      }
+
+      const tenantSlugMatch = normalizeLowercase(tenant.slug);
+      if (!tenantSlugMatch || tenantSlugMatch !== normalizedRequestedTenantSlug) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const consumer = await storage.getConsumer(consumerId);
+      if (!consumer || normalizeLowercase(consumer.email) !== normalizedTokenEmail || consumer.tenantId !== tenant.id) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      // Get active payment schedules
+      const schedules = await storage.getPaymentSchedulesByConsumer(consumerId, tenant.id);
+      const activeSchedules = schedules.filter(s => s.status === 'active');
+
+      // Enrich schedules with payment method and account details
+      const enrichedSchedules = await Promise.all(activeSchedules.map(async (schedule) => {
+        // Get payment methods for this consumer
+        const consumerPaymentMethods = await storage.getPaymentMethodsByConsumer(consumerId, tenant.id);
+        const paymentMethod = consumerPaymentMethods.find(pm => pm.id === schedule.paymentMethodId);
+
+        const account = await storage.getAccount(schedule.accountId);
+
+        return {
+          id: schedule.id,
+          arrangementType: schedule.arrangementType,
+          amountCents: schedule.amountCents,
+          frequency: schedule.frequency,
+          nextPaymentDate: schedule.nextPaymentDate,
+          remainingPayments: schedule.remainingPayments,
+          status: schedule.status,
+          cardLast4: paymentMethod?.cardLast4,
+          cardBrand: paymentMethod?.cardBrand,
+          accountNumber: account?.accountNumber,
+          accountCreditor: account?.creditor,
+        };
+      }));
+
+      res.json(enrichedSchedules);
+    } catch (error) {
+      console.error("Error fetching payment schedules:", error);
+      res.status(500).json({ message: "Failed to fetch payment schedules" });
+    }
+  });
+
   // Test USAePay connection endpoint
   app.post('/api/usaepay/test-connection', authenticateUser, async (req: any, res) => {
     try {

@@ -310,6 +310,19 @@ export default function ConsumerDashboardSimple() {
     enabled: !!session?.email && !!session?.tenantSlug && !!accountData?.accounts,
   });
 
+  // Fetch active payment schedules
+  const { data: paymentSchedules } = useQuery({
+    queryKey: [`/api/consumer/payment-schedules/${session?.email}?tenantSlug=${session?.tenantSlug}`],
+    queryFn: async () => {
+      const token = getStoredConsumerToken();
+      const encodedEmail = encodeURIComponent(session?.email || '');
+      const response = await apiCall("GET", `/api/consumer/payment-schedules/${encodedEmail}?tenantSlug=${session?.tenantSlug}`, null, token);
+      if (!response.ok) throw new Error("Failed to fetch payment schedules");
+      return response.json();
+    },
+    enabled: !!session?.email && !!session?.tenantSlug,
+  });
+
   const handleLogout = () => {
     clearConsumerAuth();
     toast({
@@ -777,43 +790,80 @@ export default function ConsumerDashboardSimple() {
               <CardHeader className="border-b border-white/10">
                 <CardTitle className="flex items-center text-white">
                   <Calendar className="h-5 w-5 mr-2 text-blue-400" />
-                  Payment Arrangements
+                  Active Payment Arrangements
                 </CardTitle>
+                <p className="text-sm text-blue-100/70 mt-2">
+                  View your scheduled payment arrangements and upcoming payment dates
+                </p>
               </CardHeader>
               <CardContent className="p-6">
-                {(!arrangements || !(arrangements as any)?.length) ? (
+                {(!paymentSchedules || !(paymentSchedules as any)?.length) ? (
                   <div className="text-center py-12">
                     <Calendar className="h-12 w-12 mx-auto mb-4 text-blue-400/30" />
-                    <p className="text-blue-100/70">No payment arrangements</p>
+                    <p className="text-blue-100/70">No active payment arrangements</p>
                     <p className="text-sm text-blue-100/50 mt-2">
-                      Contact your agency to set up a payment plan
+                      Set up a payment arrangement when making a payment on any account
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    {(arrangements as any[]).map((arrangement: any) => {
-                      const summary = getArrangementSummary(arrangement);
-                      return (
-                        <div
-                          key={arrangement.id}
-                          className="rounded-xl border border-white/10 bg-white/5 p-4 hover:bg-white/10 transition-colors"
-                        >
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <p className="text-white font-medium">{summary.headline}</p>
-                              {summary.detail && (
-                                <p className="text-sm text-blue-100/70 mt-1">
-                                  {summary.detail}
-                                </p>
-                              )}
-                            </div>
-                            <Badge className="border-emerald-400/30 bg-emerald-500/10 text-emerald-200 border">
-                              Available
-                            </Badge>
+                  <div className="space-y-4">
+                    {(paymentSchedules as any[]).map((schedule: any) => (
+                      <div
+                        key={schedule.id}
+                        className="rounded-xl border border-white/10 bg-white/5 p-6 hover:bg-white/10 transition-colors"
+                        data-testid={`payment-schedule-${schedule.id}`}
+                      >
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <h4 className="text-white font-semibold text-lg">
+                              {schedule.accountCreditor || "Payment Plan"}
+                            </h4>
+                            <p className="text-sm text-blue-100/70 mt-1">
+                              Account: {schedule.accountNumber || "N/A"}
+                            </p>
+                          </div>
+                          <Badge className="border-emerald-400/30 bg-emerald-500/10 text-emerald-200 border">
+                            Active
+                          </Badge>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4 mt-4">
+                          <div className="rounded-lg bg-white/5 p-3">
+                            <p className="text-xs text-blue-100/60">Next Payment</p>
+                            <p className="text-white font-semibold mt-1">
+                              {schedule.nextPaymentDate ? new Date(schedule.nextPaymentDate).toLocaleDateString('en-US', { 
+                                month: 'long', 
+                                day: 'numeric', 
+                                year: 'numeric' 
+                              }) : 'Not scheduled'}
+                            </p>
+                          </div>
+                          
+                          <div className="rounded-lg bg-white/5 p-3">
+                            <p className="text-xs text-blue-100/60">Payment Amount</p>
+                            <p className="text-white font-semibold mt-1">
+                              {formatCurrency(schedule.amountCents || 0)}
+                            </p>
                           </div>
                         </div>
-                      );
-                    })}
+                        
+                        <div className="mt-4 pt-4 border-t border-white/10">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <CreditCard className="h-4 w-4 text-blue-400" />
+                              <span className="text-sm text-blue-100/70">
+                                {schedule.cardBrand || 'Card'} ending in {schedule.cardLast4 || '****'}
+                              </span>
+                            </div>
+                            {schedule.remainingPayments && (
+                              <span className="text-sm text-blue-100/70">
+                                {schedule.remainingPayments} payment{schedule.remainingPayments !== 1 ? 's' : ''} remaining
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </CardContent>
