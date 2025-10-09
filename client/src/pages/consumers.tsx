@@ -144,14 +144,65 @@ export default function Consumers() {
     }
   };
 
+  // Send message mutation
+  const sendMessageMutation = useMutation({
+    mutationFn: async ({ method, to, message }: { method: string; to: string; message: string }) => {
+      if (method === "email") {
+        return apiRequest("POST", "/api/test-email", {
+          to,
+          subject: `Message from ${(selectedConsumer?.firstName || '')} ${(selectedConsumer?.lastName || '')}`,
+          message,
+        });
+      } else {
+        return apiRequest("POST", "/api/send-test-sms", {
+          to,
+          message,
+        });
+      }
+    },
+    onSuccess: (_, variables) => {
+      toast({
+        title: "Message Sent",
+        description: `${variables.method === "email" ? "Email" : "SMS"} sent to ${selectedConsumer?.firstName} ${selectedConsumer?.lastName}`,
+      });
+      setShowContactDialog(false);
+      setContactForm({ method: "email", message: "" });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to send message",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleContactSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Implement sending message via email or SMS
-    toast({
-      title: "Message Sent",
-      description: `Message sent to ${selectedConsumer?.firstName} ${selectedConsumer?.lastName} via ${contactForm.method}`,
+    if (!contactForm.message.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a message",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const to = contactForm.method === "email" ? selectedConsumer?.email : selectedConsumer?.phone;
+    if (!to) {
+      toast({
+        title: "Error",
+        description: `Consumer has no ${contactForm.method} address`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    sendMessageMutation.mutate({
+      method: contactForm.method,
+      to,
+      message: contactForm.message,
     });
-    setShowContactDialog(false);
   };
 
   return (

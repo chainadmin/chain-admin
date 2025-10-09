@@ -77,6 +77,13 @@ export default function Communications() {
     },
   });
 
+  const [sendEmailForm, setSendEmailForm] = useState({
+    to: "",
+    templateId: "",
+    subject: "",
+    message: "",
+  });
+
   const [automationForm, setAutomationForm] = useState({
     name: "",
     description: "",
@@ -490,6 +497,61 @@ export default function Communications() {
     },
   });
 
+  // Send individual email mutation
+  const sendIndividualEmailMutation = useMutation({
+    mutationFn: async (data: any) => {
+      return apiRequest("POST", "/api/test-email", {
+        to: data.to,
+        subject: data.subject,
+        message: data.message,
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Email Sent",
+        description: "Your email has been sent successfully",
+      });
+      setSendEmailForm({ to: "", templateId: "", subject: "", message: "" });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to send email",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Handle template selection for send email
+  const handleTemplateChange = (templateId: string) => {
+    setSendEmailForm({ ...sendEmailForm, templateId });
+    
+    if (templateId && emailTemplates) {
+      const template = (emailTemplates as any).find((t: any) => t.id === templateId);
+      if (template) {
+        setSendEmailForm({
+          ...sendEmailForm,
+          templateId,
+          subject: template.subject || sendEmailForm.subject,
+          message: template.html || sendEmailForm.message,
+        });
+      }
+    }
+  };
+
+  const handleSendEmail = () => {
+    if (!sendEmailForm.to || !sendEmailForm.subject || !sendEmailForm.message) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    sendIndividualEmailMutation.mutate(sendEmailForm);
+  };
+
   const handleEditTemplate = (template: any) => {
     setEditingTemplate(template);
     if (communicationType === "email") {
@@ -791,12 +853,19 @@ export default function Communications() {
         </section>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-10">
-          <TabsList className="grid w-full grid-cols-5 gap-2 rounded-2xl border border-white/15 bg-white/10 p-2 text-blue-100 backdrop-blur">
+          <TabsList className="grid w-full grid-cols-6 gap-2 rounded-2xl border border-white/15 bg-white/10 p-2 text-blue-100 backdrop-blur">
             <TabsTrigger
               value="overview"
               className="rounded-xl px-4 py-2.5 text-sm font-semibold text-blue-100 transition data-[state=active]:bg-[#0b1733]/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/20"
             >
               Overview
+            </TabsTrigger>
+            <TabsTrigger
+              value="send"
+              className="rounded-xl px-4 py-2.5 text-sm font-semibold text-blue-100 transition data-[state=active]:bg-[#0b1733]/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/20"
+            >
+              <Mail className="h-4 w-4 mr-1.5 inline" />
+              Send Email
             </TabsTrigger>
             <TabsTrigger
               value="templates"
@@ -1070,6 +1139,103 @@ export default function Communications() {
                     No campaigns yet. Create your first {communicationType} campaign to get started.
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="send" className="space-y-6 text-white">
+            <Card className="border-white/20 bg-white/5 backdrop-blur">
+              <CardHeader>
+                <CardTitle className="text-blue-50 flex items-center gap-2">
+                  <Mail className="h-5 w-5" />
+                  Send Individual Email
+                </CardTitle>
+                <p className="text-sm text-blue-100/70">Send a quick email to a specific consumer</p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <Label className="text-blue-100">To (Email Address) *</Label>
+                    <Input
+                      type="email"
+                      value={sendEmailForm.to}
+                      onChange={(e) => setSendEmailForm({ ...sendEmailForm, to: e.target.value })}
+                      placeholder="consumer@example.com"
+                      className="mt-1 bg-white/10 border-white/20 text-white placeholder:text-blue-100/50"
+                      data-testid="input-send-to"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-blue-100">Template (Optional)</Label>
+                    <select
+                      value={sendEmailForm.templateId}
+                      onChange={(e) => handleTemplateChange(e.target.value)}
+                      className="mt-1 w-full rounded-md border border-white/20 bg-white/10 px-3 py-2 text-white"
+                      data-testid="select-template"
+                    >
+                      <option value="" className="bg-slate-800">No Template (Plain Email)</option>
+                      {(emailTemplates as any)?.map((template: any) => (
+                        <option key={template.id} value={template.id} className="bg-slate-800">
+                          {template.name}
+                        </option>
+                      ))}
+                    </select>
+                    {sendEmailForm.templateId && (
+                      <p className="text-xs text-blue-100/60 mt-1">Template subject and content loaded</p>
+                    )}
+                  </div>
+                </div>
+                
+                <div>
+                  <Label className="text-blue-100">Subject *</Label>
+                  <Input
+                    value={sendEmailForm.subject}
+                    onChange={(e) => setSendEmailForm({ ...sendEmailForm, subject: e.target.value })}
+                    placeholder="Email subject"
+                    className="mt-1 bg-white/10 border-white/20 text-white placeholder:text-blue-100/50"
+                    data-testid="input-send-subject"
+                  />
+                </div>
+                
+                <div>
+                  <Label className="text-blue-100">Message *</Label>
+                  <Textarea
+                    rows={8}
+                    value={sendEmailForm.message}
+                    onChange={(e) => setSendEmailForm({ ...sendEmailForm, message: e.target.value })}
+                    placeholder="Type your message here..."
+                    className="mt-1 bg-white/10 border-white/20 text-white placeholder:text-blue-100/50"
+                    data-testid="textarea-send-message"
+                  />
+                </div>
+                
+                <div className="flex justify-end gap-3 pt-4">
+                  <Button
+                    variant="outline"
+                    className="border-white/20 text-blue-100 hover:bg-white/10"
+                    onClick={() => setSendEmailForm({ to: "", templateId: "", subject: "", message: "" })}
+                  >
+                    Clear
+                  </Button>
+                  <Button
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                    onClick={handleSendEmail}
+                    disabled={sendIndividualEmailMutation.isPending}
+                    data-testid="button-send-email"
+                  >
+                    {sendIndividualEmailMutation.isPending ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Mail className="h-4 w-4 mr-2" />
+                        Send Email
+                      </>
+                    )}
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
