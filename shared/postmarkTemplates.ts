@@ -329,6 +329,131 @@ export const POSTMARK_TEMPLATES = {
 </style>`
   },
   
+  'postmark-access': {
+    name: 'Portal Access',
+    description: 'Account portal access notification with action button',
+    thumbnail: '🔑',
+    html: `
+<h1>Hi {{fullName}},</h1>
+<p>You can now access your account portal with {{agencyName}}. Use the button below to view your account details and make payments. <strong>Access your account anytime, anywhere.</strong></p>
+<!-- Action -->
+<table class="body-action" align="center" width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td align="center">
+      <!-- Border based button https://litmus.com/blog/a-guide-to-bulletproof-buttons-in-email-design -->
+      <table width="100%" border="0" cellspacing="0" cellpadding="0">
+        <tr>
+          <td align="center">
+            <table border="0" cellspacing="0" cellpadding="0">
+              <tr>
+                <td>
+                  <a href="{{consumerPortalLink}}" class="button button--green" target="_blank">Access Your Account</a>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+<p>Your account information:</p>
+<table class="attribute-list" width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td class="attribute-list-container">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td class="attribute-list-item"><strong>Account Number:</strong> {{accountNumber}}</td>
+        </tr>
+        <tr>
+          <td class="attribute-list-item"><strong>Current Balance:</strong> {{balance}}</td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+<p>If you have any questions, please don't hesitate to contact us.</p>
+<p>Thanks,
+  <br>The {{agencyName}} Team</p>
+<!-- Sub copy -->
+<table class="body-sub">
+  <tr>
+    <td>
+      <p class="sub">If you're having trouble with the button above, copy and paste the URL below into your web browser.</p>
+      <p class="sub">{{consumerPortalLink}}</p>
+    </td>
+  </tr>
+</table>`,
+    styles: `
+<style>
+  body {
+    width: 100% !important;
+    height: 100%;
+    margin: 0;
+    -webkit-text-size-adjust: none;
+  }
+  
+  a {
+    color: #3869D4;
+  }
+  
+  .button {
+    background-color: #3869D4;
+    border-top: 10px solid #3869D4;
+    border-right: 18px solid #3869D4;
+    border-bottom: 10px solid #3869D4;
+    border-left: 18px solid #3869D4;
+    display: inline-block;
+    color: #FFF;
+    text-decoration: none;
+    border-radius: 3px;
+    box-shadow: 0 2px 3px rgba(0, 0, 0, 0.16);
+    -webkit-text-size-adjust: none;
+    box-sizing: border-box;
+  }
+  
+  .button--green {
+    background-color: #22BC66;
+    border-top: 10px solid #22BC66;
+    border-right: 18px solid #22BC66;
+    border-bottom: 10px solid #22BC66;
+    border-left: 18px solid #22BC66;
+  }
+  
+  .attribute-list {
+    font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif;
+    margin: 0 0 21px;
+  }
+  
+  .attribute-list-container {
+    background-color: #F4F4F7;
+    padding: 16px;
+  }
+  
+  .attribute-list-item {
+    padding: 8px 0;
+  }
+  
+  .body-action {
+    width: 100%;
+    margin: 30px auto;
+    padding: 0;
+    text-align: center;
+  }
+  
+  .body-sub {
+    margin-top: 25px;
+    padding-top: 25px;
+    border-top: 1px solid #EAEAEC;
+  }
+  
+  .sub {
+    color: #6B6E76;
+    font-size: 13px;
+  }
+</style>`
+  },
+  
   'postmark-reminder': {
     name: 'Payment Reminder',
     description: 'Friendly payment reminder with action button',
