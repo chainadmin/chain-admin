@@ -1,4 +1,4 @@
-import { BiometricAuth, BiometryType, CheckBiometryResult } from '@aparajita/capacitor-biometric-auth';
+import { BiometricAuth, BiometryType, BiometryErrorType, CheckBiometryResult } from '@aparajita/capacitor-biometric-auth';
 import { Capacitor } from '@capacitor/core';
 
 export interface BiometricAuthResult {
@@ -20,7 +20,7 @@ export const biometricAuth = {
         biometryTypes: [],
         deviceIsSecure: false,
         reason: 'Not running on a native platform',
-        code: 'biometryNotEnrolled'
+        code: BiometryErrorType.biometryNotAvailable
       };
     }
 
@@ -35,7 +35,7 @@ export const biometricAuth = {
         biometryTypes: [],
         deviceIsSecure: false,
         reason: error instanceof Error ? error.message : 'Unknown error',
-        code: 'biometryNotEnrolled'
+        code: BiometryErrorType.biometryNotAvailable
       };
     }
   },
