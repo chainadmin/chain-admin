@@ -269,7 +269,9 @@ export default function Communications() {
     previewHtml = previewHtml.replace(/\{\{appDownloadLink\}\}/g, "#");
     previewHtml = previewHtml.replace(/\{\{agencyName\}\}/g, (tenantSettings as any)?.agencyName || "Your Agency");
     
-    return previewHtml;
+    // Include styles for proper rendering
+    const stylesHtml = template.styles || '';
+    return stylesHtml + previewHtml;
   };
 
   // Email Mutations
