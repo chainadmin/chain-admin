@@ -210,10 +210,12 @@ export default function Communications() {
   // Function to handle design selection
   const handleDesignSelect = (designType: PostmarkTemplateType) => {
     const template = POSTMARK_TEMPLATES[designType];
+    // Combine styles and HTML for storage
+    const fullHtml = template.styles ? template.styles + '\n' + template.html : template.html;
     setEmailTemplateForm({
       ...emailTemplateForm,
       designType,
-      html: template.html,
+      html: fullHtml,
     });
   };
 
@@ -236,12 +238,6 @@ export default function Communications() {
     preview = preview.replace(/\{\{agencyName\}\}/g, (tenantSettings as any)?.agencyName || "Your Agency");
     preview = preview.replace(/\{\{agencyEmail\}\}/g, (tenantSettings as any)?.agencyEmail || "info@agency.com");
     preview = preview.replace(/\{\{agencyPhone\}\}/g, (tenantSettings as any)?.agencyPhone || "(555) 000-0000");
-
-    // Add Postmark styles if using a Postmark template
-    const template = POSTMARK_TEMPLATES[emailTemplateForm.designType];
-    if (template.styles) {
-      return template.styles + preview;
-    }
 
     return preview;
   };
