@@ -54,7 +54,8 @@ export default function Communications() {
   const [emailTemplateForm, setEmailTemplateForm] = useState({
     name: "",
     subject: "",
-    html: "",
+    content: "", // User-editable message content only
+    html: "", // Full template HTML (for storage/sending)
     designType: "postmark-invoice" as PostmarkTemplateType,
   });
   
@@ -194,14 +195,14 @@ export default function Communications() {
 
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
-    const text = communicationType === "email" ? emailTemplateForm.html : smsTemplateForm.message;
+    const text = communicationType === "email" ? emailTemplateForm.content : smsTemplateForm.message;
     const before = text.substring(0, start);
     const after = text.substring(end);
     
     const newText = before + variable + after;
     
     if (communicationType === "email") {
-      setEmailTemplateForm({ ...emailTemplateForm, html: newText });
+      setEmailTemplateForm({ ...emailTemplateForm, content: newText });
     } else {
       setSmsTemplateForm({ ...smsTemplateForm, message: newText });
     }
@@ -217,36 +218,47 @@ export default function Communications() {
   // Function to handle design selection
   const handleDesignSelect = (designType: PostmarkTemplateType) => {
     const template = POSTMARK_TEMPLATES[designType];
-    // Combine styles and HTML for storage
     const fullHtml = template.styles ? template.styles + '\n' + template.html : template.html;
+    
+    // Provide default content if none exists
+    const defaultContent = emailTemplateForm.content || 
+      `Hi {{firstName}},\n\nWe wanted to send you this important update about your account.\n\nYour current balance is {{balance}} for account {{accountNumber}}.\n\nIf you have any questions, please don't hesitate to contact us.\n\nBest regards,\n{{agencyName}} Team`;
+    
     setEmailTemplateForm({
       ...emailTemplateForm,
       designType,
-      html: fullHtml,
+      content: defaultContent,
+      html: fullHtml, // Store full template for reference
     });
   };
 
   // Function to render preview with actual data
   const renderPreview = () => {
-    let preview = emailTemplateForm.html;
+    let content = emailTemplateForm.content;
     
     // Replace variables with sample data
-    preview = preview.replace(/\{\{firstName\}\}/g, "John");
-    preview = preview.replace(/\{\{lastName\}\}/g, "Doe");
-    preview = preview.replace(/\{\{fullName\}\}/g, "John Doe");
-    preview = preview.replace(/\{\{email\}\}/g, "john.doe@example.com");
-    preview = preview.replace(/\{\{phone\}\}/g, "(555) 123-4567");
-    preview = preview.replace(/\{\{accountNumber\}\}/g, "ACC-12345");
-    preview = preview.replace(/\{\{creditor\}\}/g, "Sample Creditor");
-    preview = preview.replace(/\{\{balance\}\}/g, "$1,234.56");
-    preview = preview.replace(/\{\{dueDate\}\}/g, "12/31/2024");
-    preview = preview.replace(/\{\{consumerPortalLink\}\}/g, "#");
-    preview = preview.replace(/\{\{appDownloadLink\}\}/g, "#");
-    preview = preview.replace(/\{\{agencyName\}\}/g, (tenantSettings as any)?.agencyName || "Your Agency");
-    preview = preview.replace(/\{\{agencyEmail\}\}/g, (tenantSettings as any)?.agencyEmail || "info@agency.com");
-    preview = preview.replace(/\{\{agencyPhone\}\}/g, (tenantSettings as any)?.agencyPhone || "(555) 000-0000");
+    content = content.replace(/\{\{firstName\}\}/g, "John");
+    content = content.replace(/\{\{lastName\}\}/g, "Doe");
+    content = content.replace(/\{\{fullName\}\}/g, "John Doe");
+    content = content.replace(/\{\{email\}\}/g, "john.doe@example.com");
+    content = content.replace(/\{\{phone\}\}/g, "(555) 123-4567");
+    content = content.replace(/\{\{accountNumber\}\}/g, "ACC-12345");
+    content = content.replace(/\{\{creditor\}\}/g, "Sample Creditor");
+    content = content.replace(/\{\{balance\}\}/g, "$1,234.56");
+    content = content.replace(/\{\{dueDate\}\}/g, "12/31/2024");
+    content = content.replace(/\{\{consumerPortalLink\}\}/g, "#");
+    content = content.replace(/\{\{appDownloadLink\}\}/g, "#");
+    content = content.replace(/\{\{agencyName\}\}/g, (tenantSettings as any)?.agencyName || "Your Agency");
+    content = content.replace(/\{\{agencyEmail\}\}/g, (tenantSettings as any)?.agencyEmail || "info@agency.com");
+    content = content.replace(/\{\{agencyPhone\}\}/g, (tenantSettings as any)?.agencyPhone || "(555) 000-0000");
 
-    return preview;
+    // Convert content to HTML paragraphs (handle newlines)
+    const paragraphs = content.split('\n\n').map(para => {
+      const lines = para.split('\n').join('<br>');
+      return `<p style="margin-bottom: 16px; line-height: 1.6;">${lines}</p>`;
+    }).join('');
+
+    return paragraphs;
   };
 
   // Email Mutations
@@ -1355,18 +1367,21 @@ export default function Communications() {
                           </div>
 
                           <div>
-                            <Label className="text-sm font-medium mb-2 block">Template Content *</Label>
+                            <Label className="text-sm font-medium mb-2 block">Message Content *</Label>
                             <p className="text-xs text-gray-500 mb-2">
-                              Edit the HTML content. Click variables below to insert them.
+                              Type your message content here. The selected design template will style it automatically.
                             </p>
                             <Textarea
                               ref={emailTextareaRef}
-                              value={emailTemplateForm.html}
-                              onChange={(e) => setEmailTemplateForm({...emailTemplateForm, html: e.target.value})}
-                              placeholder="Edit your email template HTML here..."
-                              className="mt-1 font-mono text-sm min-h-[200px]"
-                              data-testid="textarea-template-html"
+                              value={emailTemplateForm.content}
+                              onChange={(e) => setEmailTemplateForm({...emailTemplateForm, content: e.target.value})}
+                              placeholder="Type your message here... Example: We wanted to remind you about your upcoming payment. Your current balance is {{balance}}."
+                              className="mt-1 text-base min-h-[200px] leading-relaxed"
+                              data-testid="textarea-template-content"
                             />
+                            <p className="text-xs text-gray-400 mt-2">
+                              💡 Tip: Click variables below to insert dynamic information like customer name, balance, etc.
+                            </p>
                           </div>
 
                           <div>
@@ -1406,7 +1421,7 @@ export default function Communications() {
                           </div>
                           
                           <div className="flex-1 border rounded-lg overflow-auto bg-gray-50 p-4">
-                            {emailTemplateForm.html ? (
+                            {emailTemplateForm.content ? (
                               <div className="bg-white rounded shadow-sm p-6 mx-auto max-w-2xl">
                                 {/* Logo if available */}
                                 {(tenantSettings as any)?.logoUrl && (
