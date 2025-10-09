@@ -3929,6 +3929,98 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Consumer callback request endpoint
+  app.post('/api/consumer/callback-request', authenticateConsumer, async (req: any, res) => {
+    try {
+      const { email: tokenEmail, tenantId: tokenTenantId, tenantSlug: tokenTenantSlug } = req.consumer;
+      const { preferredTime, phoneNumber, message } = req.body;
+
+      if (!tokenEmail || !tokenTenantSlug) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Get tenant
+      let tenant = tokenTenantId ? await storage.getTenant(tokenTenantId) : undefined;
+      if (!tenant && tokenTenantSlug) {
+        tenant = await storage.getTenantBySlug(tokenTenantSlug);
+      }
+
+      if (!tenant) {
+        return res.status(404).json({ message: "Agency not found" });
+      }
+
+      // Get consumer
+      const consumer = await storage.getConsumerByEmailAndTenant(tokenEmail, tenant.slug);
+      if (!consumer) {
+        return res.status(404).json({ message: "Consumer not found" });
+      }
+
+      // Create callback request
+      const callbackRequest = await storage.createCallbackRequest({
+        tenantId: tenant.id,
+        consumerId: consumer.id,
+        requestType: 'callback',
+        preferredTime: preferredTime || 'anytime',
+        phoneNumber: phoneNumber || consumer.phone || '',
+        emailAddress: consumer.email,
+        message: message || '',
+        status: 'pending',
+        priority: 'normal',
+      });
+
+      // Send notification to agency
+      try {
+        // Get admin users for this tenant
+        const adminUsers = await storage.getPlatformUsersByTenant(tenant.id);
+        
+        if (adminUsers.length > 0) {
+          const consumerName = `${consumer.firstName} ${consumer.lastName}`;
+          const emailSubject = `New Callback Request from ${consumerName}`;
+          const emailBody = `
+            <h2>New Callback Request</h2>
+            <p>A consumer has requested a callback.</p>
+            <h3>Consumer Details:</h3>
+            <ul>
+              <li><strong>Name:</strong> ${consumerName}</li>
+              <li><strong>Email:</strong> ${consumer.email}</li>
+              <li><strong>Phone:</strong> ${phoneNumber || consumer.phone || 'Not provided'}</li>
+            </ul>
+            <h3>Request Details:</h3>
+            <ul>
+              <li><strong>Preferred Time:</strong> ${preferredTime || 'Anytime'}</li>
+              ${message ? `<li><strong>Message:</strong> ${message}</li>` : ''}
+              <li><strong>Requested At:</strong> ${new Date().toLocaleString()}</li>
+            </ul>
+            <p>Please log in to your agency dashboard to respond to this request.</p>
+          `;
+
+          // Send email to all admin users
+          for (const admin of adminUsers) {
+            if (admin.email) {
+              await sendEmail({
+                to: admin.email,
+                subject: emailSubject,
+                html: emailBody,
+                from: `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>`,
+              });
+            }
+          }
+        }
+      } catch (emailError) {
+        console.error("Error sending callback notification email:", emailError);
+        // Don't fail the request if email fails
+      }
+
+      res.json({ 
+        message: "Callback request submitted successfully", 
+        requestId: callbackRequest.id 
+      });
+    } catch (error) {
+      console.error("Error creating consumer callback request:", error);
+      res.status(500).json({ message: "Failed to submit callback request" });
+    }
+  });
+
   // Test USAePay connection endpoint
   app.post('/api/usaepay/test-connection', authenticateUser, async (req: any, res) => {
     try {

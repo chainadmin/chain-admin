@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import {
   clearConsumerAuth,
@@ -8,12 +8,15 @@ import {
   getStoredConsumerToken,
 } from "@/lib/consumer-auth";
 import { apiCall } from "@/lib/api";
+import { apiRequest } from "@/lib/queryClient";
 import { getArrangementSummary, calculateArrangementPayment } from "@/lib/arrangements";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertCircle, LogOut, User, Building2, CreditCard, DollarSign, TrendingUp, Mail, Phone, Edit, FileText, MessageSquare, Calendar } from "lucide-react";
@@ -206,6 +209,38 @@ export default function ConsumerDashboardSimple() {
     cardName: "",
     zipCode: "",
   });
+  const [callbackForm, setCallbackForm] = useState({
+    preferredTime: "anytime",
+    phoneNumber: "",
+    message: "",
+  });
+
+  // Callback request mutation
+  const callbackMutation = useMutation({
+    mutationFn: async (data: { preferredTime: string; phoneNumber: string; message: string }) => {
+      const token = getStoredConsumerToken();
+      return apiRequest("POST", "/api/consumer/callback-request", data, token);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Request Submitted",
+        description: "Your callback request has been sent to the agency. They will contact you soon.",
+      });
+      setShowContactDialog(false);
+      setCallbackForm({ preferredTime: "anytime", phoneNumber: "", message: "" });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Request Failed",
+        description: error.message || "Failed to submit callback request. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleCallbackRequest = () => {
+    callbackMutation.mutate(callbackForm);
+  };
 
   // Check authentication on mount
   useEffect(() => {
@@ -878,41 +913,112 @@ export default function ConsumerDashboardSimple() {
 
       {/* Contact Us Dialog */}
       <Dialog open={showContactDialog} onOpenChange={setShowContactDialog}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Contact {agencyName}</DialogTitle>
             <DialogDescription>
               Get in touch with us for questions about your account
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            {contactPhone && (
-              <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/50 p-4">
+          <div className="space-y-6 py-4">
+            {/* Contact Information Section */}
+            <div className="space-y-3">
+              <h4 className="text-sm font-semibold">Direct Contact</h4>
+              {contactPhone && (
+                <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/50 p-4">
+                  <Phone className="h-5 w-5 text-blue-500" />
+                  <div>
+                    <p className="text-sm font-medium">Phone</p>
+                    <a href={`tel:${contactPhone}`} className="text-sm text-blue-600 hover:underline">
+                      {contactPhone}
+                    </a>
+                  </div>
+                </div>
+              )}
+              {contactEmail && (
+                <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/50 p-4">
+                  <Mail className="h-5 w-5 text-blue-500" />
+                  <div>
+                    <p className="text-sm font-medium">Email</p>
+                    <a href={`mailto:${contactEmail}`} className="text-sm text-blue-600 hover:underline">
+                      {contactEmail}
+                    </a>
+                  </div>
+                </div>
+              )}
+              {!contactPhone && !contactEmail && (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  Contact information not available. Please check your account statements or documents.
+                </p>
+              )}
+            </div>
+
+            {/* Request Callback Section */}
+            <div className="space-y-3 pt-4 border-t">
+              <div className="flex items-center gap-2 mb-3">
                 <Phone className="h-5 w-5 text-blue-500" />
-                <div>
-                  <p className="text-sm font-medium">Phone</p>
-                  <a href={`tel:${contactPhone}`} className="text-sm text-blue-600 hover:underline">
-                    {contactPhone}
-                  </a>
-                </div>
+                <h4 className="text-sm font-semibold">Request a Callback</h4>
               </div>
-            )}
-            {contactEmail && (
-              <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/50 p-4">
-                <Mail className="h-5 w-5 text-blue-500" />
-                <div>
-                  <p className="text-sm font-medium">Email</p>
-                  <a href={`mailto:${contactEmail}`} className="text-sm text-blue-600 hover:underline">
-                    {contactEmail}
-                  </a>
-                </div>
-              </div>
-            )}
-            {!contactPhone && !contactEmail && (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                Contact information not available. Please check your account statements or documents.
+              <p className="text-sm text-muted-foreground mb-4">
+                We'll contact you at your preferred time
               </p>
-            )}
+              
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="callback-time">Preferred Time</Label>
+                  <Select 
+                    value={callbackForm.preferredTime} 
+                    onValueChange={(value) => setCallbackForm({ ...callbackForm, preferredTime: value })}
+                  >
+                    <SelectTrigger id="callback-time" data-testid="select-callback-time">
+                      <SelectValue placeholder="Select a time" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="anytime">Anytime</SelectItem>
+                      <SelectItem value="morning">Morning (8 AM - 12 PM)</SelectItem>
+                      <SelectItem value="afternoon">Afternoon (12 PM - 5 PM)</SelectItem>
+                      <SelectItem value="evening">Evening (5 PM - 8 PM)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="callback-phone">Phone Number (Optional)</Label>
+                  <Input
+                    id="callback-phone"
+                    type="tel"
+                    placeholder="Enter phone number"
+                    value={callbackForm.phoneNumber}
+                    onChange={(e) => setCallbackForm({ ...callbackForm, phoneNumber: e.target.value })}
+                    data-testid="input-callback-phone"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Leave blank to use phone number on file
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="callback-message">Message (Optional)</Label>
+                  <Textarea
+                    id="callback-message"
+                    placeholder="What would you like to discuss?"
+                    value={callbackForm.message}
+                    onChange={(e) => setCallbackForm({ ...callbackForm, message: e.target.value })}
+                    rows={3}
+                    data-testid="textarea-callback-message"
+                  />
+                </div>
+
+                <Button 
+                  onClick={handleCallbackRequest}
+                  disabled={callbackMutation.isPending}
+                  className="w-full"
+                  data-testid="button-submit-callback"
+                >
+                  {callbackMutation.isPending ? "Submitting..." : "Request Callback"}
+                </Button>
+              </div>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
