@@ -1130,32 +1130,10 @@ export default function Communications() {
                   {communicationType === "email" ? (
                     <>
                       <DialogHeader className="pb-4 border-b">
-                        <div className="flex items-center justify-between">
-                          <DialogTitle className="flex items-center gap-2">
-                            <Sparkles className="h-5 w-5 text-blue-600" />
-                            {editingTemplate ? "Edit" : "Create"} Email Template
-                          </DialogTitle>
-                          <div className="flex gap-2">
-                            <Button
-                              variant={!showPreview ? "default" : "outline"}
-                              size="sm"
-                              onClick={() => setShowPreview(false)}
-                              data-testid="button-code-view"
-                            >
-                              <Code className="h-4 w-4 mr-1" />
-                              Code
-                            </Button>
-                            <Button
-                              variant={showPreview ? "default" : "outline"}
-                              size="sm"
-                              onClick={() => setShowPreview(true)}
-                              data-testid="button-preview-view"
-                            >
-                              <Eye className="h-4 w-4 mr-1" />
-                              Preview
-                            </Button>
-                          </div>
-                        </div>
+                        <DialogTitle className="flex items-center gap-2">
+                          <Sparkles className="h-5 w-5 text-blue-600" />
+                          {editingTemplate ? "Edit" : "Create"} Email Template
+                        </DialogTitle>
                       </DialogHeader>
 
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-[calc(100%-140px)] overflow-hidden">
@@ -1211,52 +1189,41 @@ export default function Communications() {
                           </div>
 
                           <div>
-                            <Label className="text-sm font-medium mb-2 block">Insert Variables</Label>
-                            <div className="flex flex-wrap gap-1.5 p-3 bg-gray-50 rounded-lg border mb-2">
+                            <Label className="text-sm font-medium mb-2 block">Available Variables</Label>
+                            <p className="text-xs text-gray-500 mb-2">
+                              These variables are automatically included in your selected template design:
+                            </p>
+                            <div className="flex flex-wrap gap-1.5 p-3 bg-gray-50 rounded-lg border">
                               {templateVariables.map((variable) => (
-                                <Button
+                                <span
                                   key={variable.value}
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => insertVariable(variable.value)}
-                                  className="text-xs h-7 px-2 bg-white hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300"
-                                  data-testid={`button-var-${variable.value.replace(/[{}]/g, '')}`}
+                                  className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded border border-blue-200"
+                                  data-testid={`var-${variable.value.replace(/[{}]/g, '')}`}
                                 >
                                   {variable.label}
-                                </Button>
+                                </span>
                               ))}
                             </div>
-                          </div>
-                          
-                          <div className="flex-1">
-                            <Label className="text-sm font-medium">Email Content (HTML) *</Label>
-                            <Textarea
-                              ref={emailTextareaRef}
-                              rows={16}
-                              value={emailTemplateForm.html}
-                              onChange={(e) => setEmailTemplateForm({...emailTemplateForm, html: e.target.value})}
-                              placeholder="Enter your HTML email content. Click variables above to insert them."
-                              className="font-mono text-sm mt-1 resize-none"
-                              data-testid="textarea-html"
-                            />
+                            <p className="text-xs text-gray-500 mt-2">
+                              Tip: You can also use variables in the subject line by typing them (e.g., {'{'}firstName{'}'})
+                            </p>
                           </div>
                         </div>
 
-                        {/* Right Panel - Preview */}
+                        {/* Right Panel - Live Preview */}
                         <div className="flex flex-col border-l pl-4 overflow-hidden">
                           <div className="mb-3">
                             <Label className="text-sm font-medium flex items-center gap-2">
                               <Eye className="h-4 w-4" />
-                              Email Preview
+                              Live Preview
                             </Label>
                             <p className="text-xs text-gray-500 mt-1">
-                              Preview with sample data
+                              See how your email will look with sample data
                             </p>
                           </div>
                           
                           <div className="flex-1 border rounded-lg overflow-auto bg-gray-50 p-4">
-                            {showPreview && emailTemplateForm.html ? (
+                            {emailTemplateForm.html ? (
                               <div className="bg-white rounded shadow-sm p-6 mx-auto max-w-2xl">
                                 {/* Logo if available */}
                                 {(tenantSettings as any)?.logoUrl && (
@@ -1285,9 +1252,7 @@ export default function Communications() {
                               <div className="h-full flex items-center justify-center text-gray-400">
                                 <div className="text-center">
                                   <Eye className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                                  <p className="text-sm">
-                                    {showPreview ? "Add content to see preview" : "Click Preview to see your email"}
-                                  </p>
+                                  <p className="text-sm">Select a template design to see preview</p>
                                 </div>
                               </div>
                             )}
