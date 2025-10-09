@@ -4179,8 +4179,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           endDate.setMonth(endDate.getMonth() + Number(arrangement.maxTermMonths));
         }
         
-        // Only create schedule for non-settlement arrangements
-        if (arrangement.planType !== 'settlement' && arrangementId) {
+        // Only create schedule for non-settlement and non-one-time-payment arrangements
+        if (arrangement.planType !== 'settlement' && arrangement.planType !== 'one_time_payment' && arrangementId) {
+          // Check if consumer already has an active payment schedule for this account
+          const existingSchedules = await storage.getActivePaymentSchedulesByConsumerAndAccount(consumerId, accountId, tenantId);
+          
+          if (existingSchedules && existingSchedules.length > 0) {
+            return res.status(400).json({
+              success: false,
+              message: "You already have an active payment arrangement for this account. Please cancel your existing arrangement before creating a new one."
+            });
+          }
+
           await storage.createPaymentSchedule({
             tenantId,
             consumerId,

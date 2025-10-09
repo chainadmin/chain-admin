@@ -4,6 +4,7 @@ export interface ArrangementLike {
   monthlyPaymentMax?: number | null;
   fixedMonthlyPayment?: number | null;
   payInFullAmount?: number | null;
+  oneTimePaymentMin?: number | null;
   payoffText?: string | null;
   customTermsText?: string | null;
   maxTermMonths?: number | null;
@@ -37,6 +38,8 @@ export const getPlanTypeLabel = (planType?: string | null): string => {
       return 'Settlement';
     case 'custom_terms':
       return 'Custom terms';
+    case 'one_time_payment':
+      return 'One-time payment';
     case 'range':
     case undefined:
     case null:
@@ -71,6 +74,9 @@ export const calculateArrangementPayment = (
         return Math.round(accountBalanceCents * arrangement.payoffPercentageBasisPoints / 10000);
       }
       return arrangement.payInFullAmount || accountBalanceCents;
+    
+    case 'one_time_payment':
+      return arrangement.oneTimePaymentMin || accountBalanceCents;
     
     case 'custom_terms':
       return accountBalanceCents;
@@ -194,6 +200,17 @@ export const getArrangementSummary = (arrangement: ArrangementLike) => {
       return {
         planType,
         headline: customText || 'Contact us to discuss terms',
+      };
+    }
+    case 'one_time_payment': {
+      const minAmount = typeof arrangement.oneTimePaymentMin === 'number' ? arrangement.oneTimePaymentMin : null;
+      const headline = minAmount !== null
+        ? `Minimum payment: ${formatCurrencyFromCents(minAmount)}`
+        : 'One-time payment option';
+      return {
+        planType,
+        headline,
+        detail: 'Make a single payment without setting up a plan',
       };
     }
     default: {

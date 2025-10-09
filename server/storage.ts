@@ -347,6 +347,7 @@ export interface IStorage {
   // Payment schedule operations (recurring payments)
   getPaymentSchedulesByConsumer(consumerId: string, tenantId: string): Promise<PaymentSchedule[]>;
   getPaymentSchedulesByAccount(accountId: string, tenantId: string): Promise<PaymentSchedule[]>;
+  getActivePaymentSchedulesByConsumerAndAccount(consumerId: string, accountId: string, tenantId: string): Promise<PaymentSchedule[]>;
   createPaymentSchedule(schedule: InsertPaymentSchedule): Promise<PaymentSchedule>;
   updatePaymentSchedule(id: string, tenantId: string, updates: Partial<PaymentSchedule>): Promise<PaymentSchedule>;
   cancelPaymentSchedule(id: string, tenantId: string): Promise<boolean>;
@@ -1839,6 +1840,18 @@ export class DatabaseStorage implements IStorage {
       .from(paymentSchedules)
       .where(and(eq(paymentSchedules.accountId, accountId), eq(paymentSchedules.tenantId, tenantId)))
       .orderBy(desc(paymentSchedules.createdAt));
+  }
+
+  async getActivePaymentSchedulesByConsumerAndAccount(consumerId: string, accountId: string, tenantId: string): Promise<PaymentSchedule[]> {
+    return await db
+      .select()
+      .from(paymentSchedules)
+      .where(and(
+        eq(paymentSchedules.consumerId, consumerId), 
+        eq(paymentSchedules.accountId, accountId),
+        eq(paymentSchedules.tenantId, tenantId),
+        eq(paymentSchedules.status, 'active')
+      ));
   }
 
   async createPaymentSchedule(schedule: InsertPaymentSchedule): Promise<PaymentSchedule> {

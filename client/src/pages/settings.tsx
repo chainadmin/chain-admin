@@ -72,10 +72,11 @@ export default function Settings() {
     description: string;
     minBalance: string;
     maxBalance: string;
-    planType: "range" | "fixed_monthly" | "pay_in_full" | "settlement" | "custom_terms";
+    planType: "range" | "fixed_monthly" | "pay_in_full" | "settlement" | "custom_terms" | "one_time_payment";
     monthlyPaymentMin: string;
     monthlyPaymentMax: string;
     fixedMonthlyPayment: string;
+    oneTimePaymentMin: string;
     payoffPercentage: string;
     payoffDueDate: string;
     payoffText: string;
@@ -92,6 +93,7 @@ export default function Settings() {
     monthlyPaymentMin: "",
     monthlyPaymentMax: "",
     fixedMonthlyPayment: "",
+    oneTimePaymentMin: "",
     payoffPercentage: "",
     payoffDueDate: "",
     payoffText: "",
@@ -629,6 +631,19 @@ export default function Settings() {
       }
 
       payload.customTermsText = customText;
+      payload.maxTermMonths = null;
+    } else if (planType === "one_time_payment") {
+      const oneTimeMin = parseCurrencyInput(arrangementForm.oneTimePaymentMin);
+      if (oneTimeMin === null || oneTimeMin <= 0) {
+        toast({
+          title: "Minimum Amount Required",
+          description: "Enter a valid minimum payment amount for one-time payments.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      payload.oneTimePaymentMin = oneTimeMin;
       payload.maxTermMonths = null;
     }
 
@@ -1839,6 +1854,7 @@ export default function Settings() {
                                 <SelectItem value="pay_in_full">Pay in full</SelectItem>
                                 <SelectItem value="settlement">Settlement (% of balance)</SelectItem>
                                 <SelectItem value="custom_terms">Custom terms copy</SelectItem>
+                                <SelectItem value="one_time_payment">One-time payment</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>
@@ -1971,6 +1987,23 @@ export default function Settings() {
                                 placeholder="Enter the custom terms consumers should see"
                                 className={textareaClasses}
                               />
+                            </div>
+                          )}
+
+                          {arrangementForm.planType === "one_time_payment" && (
+                            <div>
+                              <Label className="text-white">Minimum Payment Amount ($) *</Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                value={arrangementForm.oneTimePaymentMin}
+                                onChange={(e) => setArrangementForm({ ...arrangementForm, oneTimePaymentMin: e.target.value })}
+                                placeholder="25.00"
+                                className={inputClasses}
+                              />
+                              <p className="mt-1 text-xs text-blue-100/70">
+                                Minimum amount required for a one-time payment. Customers can pay any amount equal to or greater than this minimum.
+                              </p>
                             </div>
                           )}
 

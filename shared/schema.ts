@@ -317,6 +317,7 @@ export const arrangementPlanTypes = [
   "pay_in_full",
   "settlement",
   "custom_terms",
+  "one_time_payment",
 ] as const;
 
 export type ArrangementPlanType = (typeof arrangementPlanTypes)[number];
@@ -333,6 +334,7 @@ export const arrangementOptions = pgTable("arrangement_options", {
   monthlyPaymentMax: bigint("monthly_payment_max", { mode: "number" }), // In cents
   fixedMonthlyPayment: bigint("fixed_monthly_payment", { mode: "number" }), // In cents
   payInFullAmount: bigint("pay_in_full_amount", { mode: "number" }), // In cents
+  oneTimePaymentMin: bigint("one_time_payment_min", { mode: "number" }), // In cents - minimum for one-time payments
   payoffText: text("payoff_text"),
   payoffPercentageBasisPoints: integer("payoff_percentage_basis_points"),
   payoffDueDate: date("payoff_due_date"),
