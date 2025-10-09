@@ -311,14 +311,13 @@ export default function ConsumerDashboardSimple() {
   });
 
   const handleLogout = () => {
-    const agencySlug = session?.tenantSlug;
     clearConsumerAuth();
     toast({
       title: "Signed Out",
       description: "You have been signed out successfully.",
     });
-    // Redirect to agency branded landing page
-    setLocation(agencySlug ? `/${agencySlug}` : "/consumer-login");
+    // Redirect to root of subdomain (agency landing page)
+    setLocation("/");
   };
 
   const handlePayment = (account: any) => {
