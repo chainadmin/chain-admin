@@ -1069,7 +1069,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const { name, subject, html } = req.body;
+      const { name, subject, html, designType } = req.body;
       
       if (!name || !subject || !html) {
         return res.status(400).json({ message: "Name, subject, and HTML content are required" });
@@ -1080,6 +1080,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         name,
         subject,
         html,
+        designType: designType || 'custom',
         status: 'draft',
       });
       

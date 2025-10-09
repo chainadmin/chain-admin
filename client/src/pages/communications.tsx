@@ -37,6 +37,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Mail, MessageSquare, Plus, Send, FileText, Trash2, Eye, TrendingUp, Users, AlertCircle, MousePointer, UserMinus, Phone, Clock, Calendar, Settings, Copy, Sparkles, Megaphone, Zap, BarChart3, Code } from "lucide-react";
+import { POSTMARK_TEMPLATES, type PostmarkTemplateType } from "@shared/postmarkTemplates";
 
 export default function Communications() {
   const [activeTab, setActiveTab] = useState("overview");
@@ -53,6 +54,7 @@ export default function Communications() {
     name: "",
     subject: "",
     html: "",
+    designType: "custom" as PostmarkTemplateType,
   });
   
   const [smsTemplateForm, setSmsTemplateForm] = useState({
@@ -204,6 +206,16 @@ export default function Communications() {
     }, 0);
   };
 
+  // Function to handle design selection
+  const handleDesignSelect = (designType: PostmarkTemplateType) => {
+    const template = POSTMARK_TEMPLATES[designType];
+    setEmailTemplateForm({
+      ...emailTemplateForm,
+      designType,
+      html: template.html,
+    });
+  };
+
   // Function to render preview with actual data
   const renderPreview = () => {
     let preview = emailTemplateForm.html;
@@ -224,6 +236,12 @@ export default function Communications() {
     preview = preview.replace(/\{\{agencyEmail\}\}/g, (tenantSettings as any)?.agencyEmail || "info@agency.com");
     preview = preview.replace(/\{\{agencyPhone\}\}/g, (tenantSettings as any)?.agencyPhone || "(555) 000-0000");
 
+    // Add Postmark styles if using a Postmark template
+    const template = POSTMARK_TEMPLATES[emailTemplateForm.designType];
+    if (template.styles) {
+      return template.styles + preview;
+    }
+
     return preview;
   };
 
@@ -233,7 +251,7 @@ export default function Communications() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/email-templates"] });
       setShowTemplateModal(false);
-      setEmailTemplateForm({ name: "", subject: "", html: "" });
+      setEmailTemplateForm({ name: "", subject: "", html: "", designType: "custom" });
       toast({
         title: "Success",
         description: "Email template created successfully",
@@ -1091,6 +1109,33 @@ export default function Communications() {
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-[calc(100%-140px)] overflow-hidden">
                         {/* Left Panel - Template Editor */}
                         <div className="flex flex-col space-y-3 overflow-y-auto pr-2">
+                          <div>
+                            <Label className="text-sm font-medium mb-2 block">Choose Template Design</Label>
+                            <div className="grid grid-cols-2 gap-2">
+                              {(Object.keys(POSTMARK_TEMPLATES) as PostmarkTemplateType[]).map((key) => {
+                                const template = POSTMARK_TEMPLATES[key];
+                                return (
+                                  <button
+                                    key={key}
+                                    type="button"
+                                    onClick={() => handleDesignSelect(key)}
+                                    className={cn(
+                                      "p-3 border-2 rounded-lg text-left transition hover:border-blue-400",
+                                      emailTemplateForm.designType === key
+                                        ? "border-blue-500 bg-blue-50"
+                                        : "border-gray-200 bg-white"
+                                    )}
+                                    data-testid={`button-design-${key}`}
+                                  >
+                                    <div className="text-2xl mb-1">{template.thumbnail}</div>
+                                    <div className="font-medium text-sm">{template.name}</div>
+                                    <div className="text-xs text-gray-500 mt-1">{template.description}</div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                          
                           <div>
                             <Label className="text-sm font-medium">Template Name *</Label>
                             <Input
