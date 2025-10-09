@@ -267,7 +267,7 @@ export default function Communications() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/email-templates"] });
       setShowTemplateModal(false);
-      setEmailTemplateForm({ name: "", subject: "", html: "", designType: "postmark-invoice" });
+      setEmailTemplateForm({ name: "", subject: "", content: "", html: "", designType: "postmark-invoice" });
       toast({
         title: "Success",
         description: "Email template created successfully",
@@ -289,7 +289,7 @@ export default function Communications() {
       queryClient.invalidateQueries({ queryKey: ["/api/email-templates"] });
       setShowTemplateModal(false);
       setEditingTemplate(null);
-      setEmailTemplateForm({ name: "", subject: "", html: "", designType: "postmark-invoice" });
+      setEmailTemplateForm({ name: "", subject: "", content: "", html: "", designType: "postmark-invoice" });
       toast({
         title: "Success",
         description: "Email template updated successfully",
@@ -567,10 +567,24 @@ export default function Communications() {
   const handleEditTemplate = (template: any) => {
     setEditingTemplate(template);
     if (communicationType === "email") {
+      // Extract plain text content from HTML or use stored content
+      // For existing templates that have full HTML, strip it to just text
+      let contentText = template.content || "";
+      
+      if (!contentText && template.html) {
+        // Remove HTML tags and extract text content
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = template.html;
+        contentText = tempDiv.textContent || tempDiv.innerText || "";
+        // Clean up extra whitespace
+        contentText = contentText.replace(/\s+/g, ' ').trim();
+      }
+      
       setEmailTemplateForm({
         name: template.name,
         subject: template.subject,
-        html: template.html,
+        content: contentText,
+        html: template.html, // Keep original for reference
         designType: (template.designType === "custom" || !template.designType) ? "postmark-invoice" : template.designType,
       });
     } else {
@@ -585,7 +599,7 @@ export default function Communications() {
   const handleTemplateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (communicationType === "email") {
-      if (!emailTemplateForm.name.trim() || !emailTemplateForm.subject.trim() || !emailTemplateForm.html.trim()) {
+      if (!emailTemplateForm.name.trim() || !emailTemplateForm.subject.trim() || !emailTemplateForm.content.trim()) {
         toast({
           title: "Error",
           description: "Please fill in all required fields",
@@ -594,13 +608,27 @@ export default function Communications() {
         return;
       }
       
+      // Combine the selected template design with user content
+      const template = POSTMARK_TEMPLATES[emailTemplateForm.designType];
+      const fullHtml = template.styles ? template.styles + '\n' + template.html : template.html;
+      
+      // Replace the template's placeholder content with user's actual content
+      // For now, we'll store the content and full template separately
+      const dataToSend = {
+        name: emailTemplateForm.name,
+        subject: emailTemplateForm.subject,
+        html: fullHtml, // Store full template for sending
+        content: emailTemplateForm.content, // Store plain content for editing
+        designType: emailTemplateForm.designType,
+      };
+      
       if (editingTemplate) {
         updateEmailTemplateMutation.mutate({ 
           id: editingTemplate.id, 
-          data: emailTemplateForm 
+          data: dataToSend 
         });
       } else {
-        createEmailTemplateMutation.mutate(emailTemplateForm);
+        createEmailTemplateMutation.mutate(dataToSend);
       }
     } else {
       if (!smsTemplateForm.name.trim() || !smsTemplateForm.message.trim()) {
@@ -1291,7 +1319,7 @@ export default function Communications() {
                 setShowTemplateModal(open);
                 if (!open) {
                   setEditingTemplate(null);
-                  setEmailTemplateForm({ name: "", subject: "", html: "", designType: "postmark-invoice" });
+                  setEmailTemplateForm({ name: "", subject: "", content: "", html: "", designType: "postmark-invoice" });
                   setSmsTemplateForm({ name: "", message: "" });
                 }
               }}>
