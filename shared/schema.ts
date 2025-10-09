@@ -181,6 +181,7 @@ export const emailTemplates = pgTable("email_templates", {
   name: text("name").notNull(),
   subject: text("subject").notNull(),
   html: text("html").notNull(),
+  designType: text("design_type").default("custom"), // "custom", "postmark-invoice", "postmark-welcome", etc.
   status: text("status").default("draft"),
   createdAt: timestamp("created_at").defaultNow(),
 });
