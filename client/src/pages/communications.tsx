@@ -239,39 +239,23 @@ export default function Communications() {
 
   // Function to render preview with actual data
   const renderPreview = () => {
+    const template = POSTMARK_TEMPLATES[emailTemplateForm.designType] as any;
+    
     const greeting = emailTemplateForm.greeting || "Hi {{firstName}},";
     const mainMessage = emailTemplateForm.mainMessage || "";
-    const buttonText = emailTemplateForm.buttonText || "";
-    const closingMessage = emailTemplateForm.closingMessage || "";
+    const buttonText = emailTemplateForm.buttonText || "View Account";
+    const closingMessage = emailTemplateForm.closingMessage || "If you have any questions, please don't hesitate to contact us.";
     const signOff = emailTemplateForm.signOff || "Thanks,<br>The {{agencyName}} Team";
     
-    // Build preview HTML
-    let previewHtml = `<h1 style="margin-bottom: 16px;">${greeting}</h1><p style="margin-bottom: 16px; line-height: 1.6;">${mainMessage}</p>`;
+    // Replace custom placeholders with user's content
+    let previewHtml = template.html;
+    previewHtml = previewHtml.replace('{{CUSTOM_GREETING}}', greeting);
+    previewHtml = previewHtml.replace('{{CUSTOM_MESSAGE}}', mainMessage);
+    previewHtml = previewHtml.replace('{{CUSTOM_BUTTON_TEXT}}', buttonText);
+    previewHtml = previewHtml.replace('{{CUSTOM_CLOSING_MESSAGE}}', closingMessage);
+    previewHtml = previewHtml.replace('{{CUSTOM_SIGNOFF}}', signOff);
     
-    if (buttonText) {
-      previewHtml += `
-        <table class="body-action" align="center" width="100%" cellpadding="0" cellspacing="0" style="margin: 30px auto;">
-          <tr>
-            <td align="center">
-              <table border="0" cellspacing="0" cellpadding="0">
-                <tr>
-                  <td>
-                    <a href="#" class="button button--green" style="background-color: #22BC66; color: #FFF; text-decoration: none; border-radius: 3px; padding: 10px 18px; display: inline-block;">${buttonText}</a>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-        </table>`;
-    }
-    
-    if (closingMessage) {
-      previewHtml += `<p style="margin-bottom: 16px; line-height: 1.6;">${closingMessage}</p>`;
-    }
-    
-    previewHtml += `<p style="margin-bottom: 16px; line-height: 1.6;">${signOff}</p>`;
-    
-    // Replace variables with sample data
+    // Replace variables with sample data for preview
     previewHtml = previewHtml.replace(/\{\{firstName\}\}/g, "John");
     previewHtml = previewHtml.replace(/\{\{lastName\}\}/g, "Doe");
     previewHtml = previewHtml.replace(/\{\{fullName\}\}/g, "John Doe");
@@ -646,41 +630,24 @@ export default function Communications() {
         return;
       }
       
-      // Build the HTML from user's custom content
+      // Get the base Postmark template and inject user's custom content
+      const template = POSTMARK_TEMPLATES[emailTemplateForm.designType] as any;
+      
+      // Replace custom placeholders with user's actual content
       const greeting = emailTemplateForm.greeting || "Hi {{firstName}},";
+      const mainMessage = emailTemplateForm.mainMessage;
       const buttonText = emailTemplateForm.buttonText || "View Account";
-      const closingMsg = emailTemplateForm.closingMessage || "";
+      const closingMessage = emailTemplateForm.closingMessage || "If you have any questions, please don't hesitate to contact us.";
       const signOff = emailTemplateForm.signOff || "Thanks,<br>The {{agencyName}} Team";
       
-      // Build complete HTML using Postmark template structure
-      const template = POSTMARK_TEMPLATES[emailTemplateForm.designType];
-      const customHtml = `
-<h1>${greeting}</h1>
-<p>${emailTemplateForm.mainMessage}</p>
-${buttonText ? `
-<table class="body-action" align="center" width="100%" cellpadding="0" cellspacing="0">
-  <tr>
-    <td align="center">
-      <table width="100%" border="0" cellspacing="0" cellpadding="0">
-        <tr>
-          <td align="center">
-            <table border="0" cellspacing="0" cellpadding="0">
-              <tr>
-                <td>
-                  <a href="{{consumerPortalLink}}" class="button button--green" target="_blank">${buttonText}</a>
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-</table>` : ''}
-${closingMsg ? `<p>${closingMsg}</p>` : ''}
-<p>${signOff}</p>`;
+      let customizedHtml = template.html;
+      customizedHtml = customizedHtml.replace('{{CUSTOM_GREETING}}', greeting);
+      customizedHtml = customizedHtml.replace('{{CUSTOM_MESSAGE}}', mainMessage);
+      customizedHtml = customizedHtml.replace('{{CUSTOM_BUTTON_TEXT}}', buttonText);
+      customizedHtml = customizedHtml.replace('{{CUSTOM_CLOSING_MESSAGE}}', closingMessage);
+      customizedHtml = customizedHtml.replace('{{CUSTOM_SIGNOFF}}', signOff);
       
-      const fullHtml = (template.styles || '') + '\n' + customHtml;
+      const fullHtml = (template.styles || '') + '\n' + customizedHtml;
       
       const dataToSend = {
         name: emailTemplateForm.name,

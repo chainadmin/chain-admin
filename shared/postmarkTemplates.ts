@@ -5,8 +5,8 @@ export const POSTMARK_TEMPLATES = {
     description: 'Professional invoice layout with payment button',
     thumbnail: '📄',
     html: `
-<h1>Hi {{fullName}},</h1>
-<p>Thanks for using {{agencyName}}. This is a statement for your account.</p>
+<h1>{{CUSTOM_GREETING}}</h1>
+<p>{{CUSTOM_MESSAGE}}</p>
 <table class="attribute-list" width="100%" cellpadding="0" cellspacing="0">
   <tr>
     <td class="attribute-list-container">
@@ -32,7 +32,7 @@ export const POSTMARK_TEMPLATES = {
             <table border="0" cellspacing="0" cellpadding="0">
               <tr>
                 <td>
-                  <a href="{{consumerPortalLink}}" class="button button--green" target="_blank">View Account & Make Payment</a>
+                  <a href="{{consumerPortalLink}}" class="button button--green" target="_blank">{{CUSTOM_BUTTON_TEXT}}</a>
                 </td>
               </tr>
             </table>
@@ -78,9 +78,8 @@ export const POSTMARK_TEMPLATES = {
     </td>
   </tr>
 </table>
-<p>If you have any questions about this account, simply reply to this email or reach out to our support team for help.</p>
-<p>Cheers,
-  <br>The {{agencyName}} Team</p>
+<p>{{CUSTOM_CLOSING_MESSAGE}}</p>
+<p>{{CUSTOM_SIGNOFF}}</p>
 <!-- Sub copy -->
 <table class="body-sub">
   <tr>
@@ -226,8 +225,8 @@ export const POSTMARK_TEMPLATES = {
     description: 'Clean welcome message with call-to-action',
     thumbnail: '👋',
     html: `
-<h1>Welcome, {{fullName}}!</h1>
-<p>Thanks for choosing {{agencyName}}. We're here to help you manage your account.</p>
+<h1>{{CUSTOM_GREETING}}</h1>
+<p>{{CUSTOM_MESSAGE}}</p>
 <p>Your account details:</p>
 <table class="attribute-list" width="100%" cellpadding="0" cellspacing="0">
   <tr>
@@ -255,7 +254,7 @@ export const POSTMARK_TEMPLATES = {
             <table border="0" cellspacing="0" cellpadding="0">
               <tr>
                 <td>
-                  <a href="{{consumerPortalLink}}" class="button button--green" target="_blank">Access Your Account</a>
+                  <a href="{{consumerPortalLink}}" class="button button--green" target="_blank">{{CUSTOM_BUTTON_TEXT}}</a>
                 </td>
               </tr>
             </table>
@@ -265,11 +264,8 @@ export const POSTMARK_TEMPLATES = {
     </td>
   </tr>
 </table>
-<p>You can also download our mobile app for easy access on the go:</p>
-<p><a href="{{appDownloadLink}}">Download Mobile App</a></p>
-<p>If you have any questions, feel free to reach out to us.</p>
-<p>Best regards,
-  <br>The {{agencyName}} Team</p>`,
+<p>{{CUSTOM_CLOSING_MESSAGE}}</p>
+<p>{{CUSTOM_SIGNOFF}}</p>`,
     styles: `
 <style>
   body {
@@ -334,8 +330,8 @@ export const POSTMARK_TEMPLATES = {
     description: 'Account portal access notification with action button',
     thumbnail: '🔑',
     html: `
-<h1>Hi {{fullName}},</h1>
-<p>You can now access your account portal with {{agencyName}}. Use the button below to view your account details and make payments. <strong>Access your account anytime, anywhere.</strong></p>
+<h1>{{CUSTOM_GREETING}}</h1>
+<p>{{CUSTOM_MESSAGE}}</p>
 <!-- Action -->
 <table class="body-action" align="center" width="100%" cellpadding="0" cellspacing="0">
   <tr>
@@ -347,7 +343,7 @@ export const POSTMARK_TEMPLATES = {
             <table border="0" cellspacing="0" cellpadding="0">
               <tr>
                 <td>
-                  <a href="{{consumerPortalLink}}" class="button button--green" target="_blank">Access Your Account</a>
+                  <a href="{{consumerPortalLink}}" class="button button--green" target="_blank">{{CUSTOM_BUTTON_TEXT}}</a>
                 </td>
               </tr>
             </table>
@@ -372,9 +368,8 @@ export const POSTMARK_TEMPLATES = {
     </td>
   </tr>
 </table>
-<p>If you have any questions, please don't hesitate to contact us.</p>
-<p>Thanks,
-  <br>The {{agencyName}} Team</p>
+<p>{{CUSTOM_CLOSING_MESSAGE}}</p>
+<p>{{CUSTOM_SIGNOFF}}</p>
 <!-- Sub copy -->
 <table class="body-sub">
   <tr>
@@ -459,8 +454,8 @@ export const POSTMARK_TEMPLATES = {
     description: 'Friendly payment reminder with action button',
     thumbnail: '⏰',
     html: `
-<h1>Hi {{firstName}},</h1>
-<p>This is a friendly reminder about your account with {{agencyName}}.</p>
+<h1>{{CUSTOM_GREETING}}</h1>
+<p>{{CUSTOM_MESSAGE}}</p>
 <table class="attribute-list" width="100%" cellpadding="0" cellspacing="0">
   <tr>
     <td class="attribute-list-container">
@@ -490,7 +485,7 @@ export const POSTMARK_TEMPLATES = {
             <table border="0" cellspacing="0" cellpadding="0">
               <tr>
                 <td>
-                  <a href="{{consumerPortalLink}}" class="button button--green" target="_blank">Make a Payment</a>
+                  <a href="{{consumerPortalLink}}" class="button button--green" target="_blank">{{CUSTOM_BUTTON_TEXT}}</a>
                 </td>
               </tr>
             </table>
@@ -500,9 +495,8 @@ export const POSTMARK_TEMPLATES = {
     </td>
   </tr>
 </table>
-<p>Making a payment is quick and easy through our secure portal. If you have any questions or need assistance, please don't hesitate to contact us.</p>
-<p>Thank you,
-  <br>{{agencyName}}</p>
+<p>{{CUSTOM_CLOSING_MESSAGE}}</p>
+<p>{{CUSTOM_SIGNOFF}}</p>
 <table class="body-sub">
   <tr>
     <td>
