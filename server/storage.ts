@@ -222,6 +222,7 @@ export interface IStorage {
   // Email template operations
   getEmailTemplatesByTenant(tenantId: string): Promise<EmailTemplate[]>;
   createEmailTemplate(template: InsertEmailTemplate): Promise<EmailTemplate>;
+  updateEmailTemplate(id: string, tenantId: string, updates: Partial<EmailTemplate>): Promise<EmailTemplate>;
   deleteEmailTemplate(id: string, tenantId: string): Promise<void>;
   
   // Email campaign operations
@@ -979,6 +980,20 @@ export class DatabaseStorage implements IStorage {
   async createEmailTemplate(template: InsertEmailTemplate): Promise<EmailTemplate> {
     const [newTemplate] = await db.insert(emailTemplates).values(template).returning();
     return newTemplate;
+  }
+
+  async updateEmailTemplate(id: string, tenantId: string, updates: Partial<EmailTemplate>): Promise<EmailTemplate> {
+    const [updated] = await db
+      .update(emailTemplates)
+      .set(updates)
+      .where(and(eq(emailTemplates.id, id), eq(emailTemplates.tenantId, tenantId)))
+      .returning();
+    
+    if (!updated) {
+      throw new Error('Email template not found');
+    }
+    
+    return updated;
   }
 
   async deleteEmailTemplate(id: string, tenantId: string): Promise<void> {

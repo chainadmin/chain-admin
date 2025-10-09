@@ -47,6 +47,7 @@ export default function Communications() {
   const [showCampaignConfirmation, setShowCampaignConfirmation] = useState(false);
   const [previewTemplate, setPreviewTemplate] = useState<any>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<any>(null);
   const emailTextareaRef = useRef<HTMLTextAreaElement>(null);
   const smsTextareaRef = useRef<HTMLTextAreaElement>(null);
   
@@ -266,6 +267,28 @@ export default function Communications() {
     },
   });
 
+  const updateEmailTemplateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => 
+      apiRequest("PUT", `/api/email-templates/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/email-templates"] });
+      setShowTemplateModal(false);
+      setEditingTemplate(null);
+      setEmailTemplateForm({ name: "", subject: "", html: "", designType: "custom" });
+      toast({
+        title: "Success",
+        description: "Email template updated successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update email template",
+        variant: "destructive",
+      });
+    },
+  });
+
   const deleteEmailTemplateMutation = useMutation({
     mutationFn: (id: string) => apiRequest("DELETE", `/api/email-templates/${id}`),
     onSuccess: () => {
@@ -471,6 +494,24 @@ export default function Communications() {
     },
   });
 
+  const handleEditTemplate = (template: any) => {
+    setEditingTemplate(template);
+    if (communicationType === "email") {
+      setEmailTemplateForm({
+        name: template.name,
+        subject: template.subject,
+        html: template.html,
+        designType: template.designType || "custom",
+      });
+    } else {
+      setSmsTemplateForm({
+        name: template.name,
+        message: template.message,
+      });
+    }
+    setShowTemplateModal(true);
+  };
+
   const handleTemplateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (communicationType === "email") {
@@ -482,7 +523,15 @@ export default function Communications() {
         });
         return;
       }
-      createEmailTemplateMutation.mutate(emailTemplateForm);
+      
+      if (editingTemplate) {
+        updateEmailTemplateMutation.mutate({ 
+          id: editingTemplate.id, 
+          data: emailTemplateForm 
+        });
+      } else {
+        createEmailTemplateMutation.mutate(emailTemplateForm);
+      }
     } else {
       if (!smsTemplateForm.name.trim() || !smsTemplateForm.message.trim()) {
         toast({
@@ -1064,7 +1113,14 @@ export default function Communications() {
                   </Button>
                 </div>
               </div>
-              <Dialog open={showTemplateModal} onOpenChange={setShowTemplateModal}>
+              <Dialog open={showTemplateModal} onOpenChange={(open) => {
+                setShowTemplateModal(open);
+                if (!open) {
+                  setEditingTemplate(null);
+                  setEmailTemplateForm({ name: "", subject: "", html: "", designType: "custom" });
+                  setSmsTemplateForm({ name: "", message: "" });
+                }
+              }}>
                 <DialogTrigger asChild>
                   <Button
                     data-testid="button-create-template"
@@ -1081,7 +1137,7 @@ export default function Communications() {
                         <div className="flex items-center justify-between">
                           <DialogTitle className="flex items-center gap-2">
                             <Sparkles className="h-5 w-5 text-blue-600" />
-                            Create Email Template
+                            {editingTemplate ? "Edit" : "Create"} Email Template
                           </DialogTitle>
                           <div className="flex gap-2">
                             <Button
@@ -1247,16 +1303,19 @@ export default function Communications() {
                         <Button type="button" variant="outline" onClick={() => setShowTemplateModal(false)}>
                           Cancel
                         </Button>
-                        <Button onClick={handleTemplateSubmit} disabled={createEmailTemplateMutation.isPending}>
-                          {createEmailTemplateMutation.isPending ? (
+                        <Button 
+                          onClick={handleTemplateSubmit} 
+                          disabled={createEmailTemplateMutation.isPending || updateEmailTemplateMutation.isPending}
+                        >
+                          {(createEmailTemplateMutation.isPending || updateEmailTemplateMutation.isPending) ? (
                             <>
                               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                              Creating...
+                              {editingTemplate ? "Updating..." : "Creating..."}
                             </>
                           ) : (
                             <>
                               <Plus className="h-4 w-4 mr-2" />
-                              Create Template
+                              {editingTemplate ? "Update Template" : "Create Template"}
                             </>
                           )}
                         </Button>
@@ -1397,7 +1456,7 @@ export default function Communications() {
                           </Button>
                         </div>
                       </div>
-                      <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <Button
                           variant="outline"
                           size="sm"
@@ -1406,6 +1465,15 @@ export default function Communications() {
                           data-testid={`button-preview-${template.id}`}
                         >
                           <Eye className="h-4 w-4" /> Preview
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex items-center gap-2 rounded-full border border-white/20 bg-transparent px-3 py-1 text-xs font-semibold text-blue-100 transition hover:bg-white/10"
+                          onClick={() => handleEditTemplate(template)}
+                          data-testid={`button-edit-${template.id}`}
+                        >
+                          <Settings className="h-4 w-4" /> Edit
                         </Button>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>

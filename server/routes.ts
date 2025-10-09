@@ -1091,6 +1091,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.put('/api/email-templates/:id', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { id } = req.params;
+      const { name, subject, html, designType } = req.body;
+      
+      const updates: Partial<any> = {};
+      if (name !== undefined) updates.name = name;
+      if (subject !== undefined) updates.subject = subject;
+      if (html !== undefined) updates.html = html;
+      if (designType !== undefined) updates.designType = designType;
+
+      const updatedTemplate = await storage.updateEmailTemplate(id, tenantId, updates);
+      
+      res.json(updatedTemplate);
+    } catch (error) {
+      console.error("Error updating email template:", error);
+      res.status(500).json({ message: "Failed to update email template" });
+    }
+  });
+
   app.delete('/api/email-templates/:id', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
