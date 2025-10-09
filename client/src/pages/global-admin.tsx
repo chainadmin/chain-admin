@@ -76,6 +76,12 @@ export default function GlobalAdmin() {
     bankRoutingNumber: ''
   });
 
+  // Plan assignment state
+  const [planAssignmentDialogOpen, setPlanAssignmentDialogOpen] = useState(false);
+  const [selectedTenantForPlan, setSelectedTenantForPlan] = useState<any>(null);
+  const [selectedPlanId, setSelectedPlanId] = useState('');
+  const [waiveSetupFee, setWaiveSetupFee] = useState(false);
+
   // Check for admin authentication on component mount
   useEffect(() => {
     const adminAuth = sessionStorage.getItem("admin_authenticated");
@@ -120,6 +126,21 @@ export default function GlobalAdmin() {
         }
       });
       if (!response.ok) throw new Error('Failed to fetch consumers');
+      return response.json();
+    },
+    enabled: isPlatformAdmin
+  });
+
+  // Fetch subscription plans
+  const { data: subscriptionPlans, isLoading: plansLoading } = useQuery({
+    queryKey: ['/api/admin/subscription-plans'],
+    queryFn: async () => {
+      const response = await fetch('/api/admin/subscription-plans', {
+        headers: {
+          'Authorization': `Bearer ${sessionStorage.getItem('admin_token')}`
+        }
+      });
+      if (!response.ok) throw new Error('Failed to fetch subscription plans');
       return response.json();
     },
     enabled: isPlatformAdmin
@@ -265,6 +286,32 @@ export default function GlobalAdmin() {
       toast({
         title: "Error",
         description: "Failed to reject subscription request",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Mutation to assign plan to tenant
+  const assignPlanMutation = useMutation({
+    mutationFn: async ({ tenantId, planId, setupFeeWaived }: { tenantId: string; planId: string; setupFeeWaived: boolean }) => {
+      return apiRequest('POST', `/api/admin/tenants/${tenantId}/assign-plan`, { planId, setupFeeWaived });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/subscription-requests'] });
+      setPlanAssignmentDialogOpen(false);
+      setSelectedTenantForPlan(null);
+      setSelectedPlanId('');
+      setWaiveSetupFee(false);
+      toast({
+        title: "Plan Assigned",
+        description: "Subscription plan has been successfully assigned to the agency",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to assign plan",
         variant: "destructive",
       });
     }
@@ -1246,6 +1293,22 @@ export default function GlobalAdmin() {
                           <CreditCard className="h-4 w-4 mr-2" />
                           Billing
                         </Button>
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+                          onClick={() => {
+                            setSelectedTenantForPlan(tenant);
+                            setSelectedPlanId('');
+                            setWaiveSetupFee(false);
+                            setPlanAssignmentDialogOpen(true);
+                          }}
+                          data-testid={`button-manage-plan-${tenant.id}`}
+                        >
+                          <CreditCard className="h-4 w-4 mr-2" />
+                          Manage Plan
+                        </Button>
                         
                         <Button
                           variant="outline"
@@ -1660,6 +1723,117 @@ export default function GlobalAdmin() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Plan Assignment Dialog */}
+      <Dialog open={planAssignmentDialogOpen} onOpenChange={setPlanAssignmentDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <CreditCard className="h-5 w-5 mr-2" />
+              Manage Subscription Plan
+            </DialogTitle>
+          </DialogHeader>
+          {selectedTenantForPlan && (
+            <div className="space-y-4">
+              <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                <p className="text-sm text-blue-800">
+                  Assign a subscription plan to <strong>{selectedTenantForPlan.name}</strong>
+                </p>
+                <p className="text-xs text-blue-600 mt-1">
+                  This will mark the agency as a paid account and deactivate trial mode.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="plan-select">Select Plan</Label>
+                {plansLoading ? (
+                  <div className="h-10 bg-gray-100 animate-pulse rounded"></div>
+                ) : (
+                  <select
+                    id="plan-select"
+                    value={selectedPlanId}
+                    onChange={(e) => setSelectedPlanId(e.target.value)}
+                    className="w-full p-2 border rounded-md"
+                    data-testid="select-plan"
+                  >
+                    <option value="">Choose a plan...</option>
+                    {(subscriptionPlans as any[])?.map((plan: any) => (
+                      <option key={plan.id} value={plan.id}>
+                        {plan.name} - ${(plan.monthlyPriceCents / 100).toFixed(2)}/month
+                        {plan.setupFeeCents > 0 && ` (Setup: $${(plan.setupFeeCents / 100).toFixed(2)})`}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="waive-setup-fee"
+                  checked={waiveSetupFee}
+                  onChange={(e) => setWaiveSetupFee(e.target.checked)}
+                  className="w-4 h-4"
+                  data-testid="checkbox-waive-setup-fee"
+                />
+                <Label htmlFor="waive-setup-fee" className="cursor-pointer">
+                  Waive setup fee
+                </Label>
+              </div>
+
+              <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                <p className="text-sm text-gray-700">
+                  <strong>Current Status:</strong>
+                </p>
+                <div className="flex gap-2 mt-2">
+                  {selectedTenantForPlan.isTrialAccount && (
+                    <Badge variant="secondary">Trial Account</Badge>
+                  )}
+                  {selectedTenantForPlan.isPaidAccount && (
+                    <Badge variant="default">Paid Account</Badge>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex gap-2 justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setPlanAssignmentDialogOpen(false);
+                    setSelectedTenantForPlan(null);
+                    setSelectedPlanId('');
+                    setWaiveSetupFee(false);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (selectedPlanId) {
+                      assignPlanMutation.mutate({
+                        tenantId: selectedTenantForPlan.id,
+                        planId: selectedPlanId,
+                        setupFeeWaived: waiveSetupFee,
+                      });
+                    }
+                  }}
+                  disabled={!selectedPlanId || assignPlanMutation.isPending}
+                  data-testid="button-assign-plan"
+                >
+                  {assignPlanMutation.isPending ? (
+                    <>
+                      <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2" />
+                      Assigning...
+                    </>
+                  ) : (
+                    'Assign Plan'
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
