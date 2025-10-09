@@ -1124,6 +1124,11 @@ export const insertArrangementOptionSchema = createInsertSchema(arrangementOptio
         }
         break;
       }
+      case "one_time_payment": {
+        // One-time payment has no additional validation requirements
+        // It just needs the base fields (minBalance, maxBalance, name)
+        break;
+      }
       default: {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
