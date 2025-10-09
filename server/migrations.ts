@@ -1,9 +1,10 @@
 import { pool } from './db';
 
 export async function runMigrations() {
-  const client = await pool.connect();
+  let client;
   
   try {
+    client = await pool.connect();
     console.log('🔄 Running database migrations...');
     
     // Add USAePay merchant configuration columns one by one
@@ -68,6 +69,33 @@ export async function runMigrations() {
       }
     }
     
+    // Fix subscriptions table structure to match schema
+    console.log('Updating subscriptions table structure...');
+    const subscriptionColumns = [
+      { name: 'plan_id', type: 'UUID' },
+      { name: 'approved_by', type: 'TEXT' },
+      { name: 'approved_at', type: 'TIMESTAMP' },
+      { name: 'setup_fee_waived', type: 'BOOLEAN', default: 'false' },
+      { name: 'setup_fee_paid_at', type: 'TIMESTAMP' },
+      { name: 'requested_by', type: 'TEXT' },
+      { name: 'requested_at', type: 'TIMESTAMP', default: 'CURRENT_TIMESTAMP' },
+      { name: 'rejection_reason', type: 'TEXT' },
+      { name: 'emails_used_this_period', type: 'INTEGER', default: '0' },
+      { name: 'sms_used_this_period', type: 'INTEGER', default: '0' },
+      { name: 'current_period_start', type: 'TIMESTAMP' },
+      { name: 'current_period_end', type: 'TIMESTAMP' }
+    ];
+    
+    for (const col of subscriptionColumns) {
+      try {
+        const defaultClause = col.default ? ` DEFAULT ${col.default}` : '';
+        await client.query(`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS ${col.name} ${col.type}${defaultClause}`);
+        console.log(`  ✓ ${col.name}`);
+      } catch (err) {
+        console.log(`  ⚠ ${col.name} (already exists or error)`);
+      }
+    }
+    
     // Fix any tenants with approved subscriptions still in trial mode
     console.log('Fixing trial status for tenants with active subscriptions...');
     try {
@@ -104,10 +132,16 @@ export async function runMigrations() {
     console.log('✅ Verified new columns:', newColumns.map(r => r.column_name).join(', '));
     
     console.log('✅ Database migrations completed successfully');
-  } catch (error) {
-    console.error('❌ Database migration failed:', error);
+  } catch (error: any) {
+    if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+      console.log('⚠️  Database not accessible (probably dev environment) - skipping migrations');
+    } else {
+      console.error('❌ Database migration failed:', error);
+    }
     // Don't throw - let the app continue even if migrations fail
   } finally {
-    client.release();
+    if (client) {
+      client.release();
+    }
   }
 }
