@@ -5334,6 +5334,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updatedAt: new Date(),
       });
 
+      // Update tenant to remove trial status
+      await db
+        .update(tenants)
+        .set({ isTrialAccount: false })
+        .where(eq(tenants.id, subscription.tenantId));
+
       res.json({
         ...updatedSubscription,
         message: 'Subscription approved successfully',
