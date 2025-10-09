@@ -220,7 +220,7 @@ export default function ConsumerDashboardSimple() {
   const callbackMutation = useMutation({
     mutationFn: async (data: { preferredTime: string; phoneNumber: string; message: string }) => {
       const token = getStoredConsumerToken();
-      return apiRequest("POST", "/api/consumer/callback-request", data, token);
+      return apiCall("POST", "/api/consumer/callback-request", data, token);
     },
     onSuccess: () => {
       toast({
@@ -1393,12 +1393,17 @@ export default function ConsumerDashboardSimple() {
                       onChange={(e) => setFirstPaymentDate(e.target.value)}
                       required={!!selectedArrangement}
                       min={new Date().toISOString().split('T')[0]}
+                      max={(() => {
+                        const maxDate = new Date();
+                        maxDate.setMonth(maxDate.getMonth() + 1);
+                        return maxDate.toISOString().split('T')[0];
+                      })()}
                       data-testid="input-first-payment-date"
                     />
                     <p className="text-xs text-gray-500 mt-1">
                       {selectedArrangement.planType === 'settlement' || selectedArrangement.planType === 'pay_in_full'
-                        ? 'When should this payment be processed?'
-                        : 'When should the first payment be processed?'}
+                        ? 'Select a date within the next 30 days'
+                        : 'Select first payment date (within next 30 days)'}
                     </p>
                   </div>
                 )}
