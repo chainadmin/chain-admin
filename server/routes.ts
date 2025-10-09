@@ -3997,7 +3997,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Send email to all admin users
           for (const admin of adminUsers) {
             if (admin.email) {
-              await sendEmail({
+              await emailService.sendEmail({
                 to: admin.email,
                 subject: emailSubject,
                 html: emailBody,
@@ -4425,6 +4425,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
           success: false,
           message: usaepayResult.error || usaepayResult.result_code || "Payment declined. Please check your card details and try again."
         });
+      }
+
+      // Send thank you email for payment
+      try {
+        const consumer = await storage.getConsumer(consumerId);
+        const tenant = await storage.getTenant(tenantId);
+        const account = await storage.getAccount(accountId);
+        
+        if (consumer && tenant && consumer.email) {
+          const paymentAmountFormatted = `$${(amountCents / 100).toFixed(2)}`;
+          const consumerName = `${consumer.firstName} ${consumer.lastName}`;
+          
+          let emailSubject = 'Thank You for Your Payment';
+          let emailBody = `
+            <h2>Payment Received</h2>
+            <p>Dear ${consumerName},</p>
+            <p>Thank you for your payment. We have successfully received your payment and it has been applied to your account.</p>
+            <h3>Payment Details:</h3>
+            <ul>
+              <li><strong>Amount Paid:</strong> ${paymentAmountFormatted}</li>
+              <li><strong>Payment Date:</strong> ${new Date().toLocaleDateString('en-US', { 
+                month: 'long', 
+                day: 'numeric', 
+                year: 'numeric' 
+              })}</li>
+              <li><strong>Account:</strong> ${account?.creditor || 'Your Account'}</li>
+              <li><strong>Transaction ID:</strong> ${transactionId}</li>
+            </ul>`;
+
+          // Check if payment schedule was created (need to recalculate next payment date)
+          if (setupRecurring && arrangement && arrangement.planType !== 'settlement' && arrangement.planType !== 'one_time_payment' && savedPaymentMethod) {
+            // Calculate next payment date (1 month from first payment or today)
+            const paymentStartDate = firstPaymentDate ? new Date(firstPaymentDate) : new Date();
+            const nextPaymentDate = new Date(paymentStartDate);
+            nextPaymentDate.setMonth(nextPaymentDate.getMonth() + 1);
+            
+            emailSubject = 'Payment Arrangement Confirmed';
+            emailBody += `
+            <h3>Payment Arrangement:</h3>
+            <p>You have successfully set up a recurring payment arrangement for this account.</p>
+            <ul>
+              <li><strong>Payment Amount:</strong> ${paymentAmountFormatted}</li>
+              <li><strong>Frequency:</strong> Monthly</li>
+              <li><strong>Next Payment Date:</strong> ${nextPaymentDate.toLocaleDateString('en-US', { 
+                month: 'long', 
+                day: 'numeric', 
+                year: 'numeric' 
+              })}</li>
+            </ul>
+            <p>Your payment method will be automatically charged on the scheduled dates. You can manage your payment arrangements anytime through your consumer portal.</p>`;
+          }
+
+          emailBody += `
+            <p>If you have any questions about this payment, please don't hesitate to contact us.</p>
+            <p>Best regards,<br>${tenant.name}</p>`;
+
+          await emailService.sendEmail({
+            to: consumer.email,
+            subject: emailSubject,
+            html: emailBody,
+            from: `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>`,
+          });
+        }
+      } catch (emailError) {
+        console.error("Error sending payment confirmation email:", emailError);
+        // Don't fail the payment if email fails
       }
 
       res.json({
