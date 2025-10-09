@@ -5608,10 +5608,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updatedAt: new Date(),
       });
 
-      // Update tenant to remove trial status
+      // Update tenant to remove trial status and mark as paid
       await db
         .update(tenants)
-        .set({ isTrialAccount: false })
+        .set({ 
+          isTrialAccount: false,
+          isPaidAccount: true 
+        })
         .where(eq(tenants.id, subscription.tenantId));
 
       res.json({
@@ -5660,6 +5663,104 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error rejecting subscription:", error);
       res.status(500).json({ message: "Failed to reject subscription" });
+    }
+  });
+
+  // Get all subscription plans for admin
+  app.get('/api/admin/subscription-plans', isPlatformAdmin, async (_req: any, res) => {
+    try {
+      const plans = await db
+        .select()
+        .from(subscriptionPlans)
+        .where(eq(subscriptionPlans.isActive, true))
+        .orderBy(subscriptionPlans.displayOrder);
+
+      res.json(plans);
+    } catch (error) {
+      console.error("Error fetching subscription plans:", error);
+      res.status(500).json({ message: "Failed to fetch subscription plans" });
+    }
+  });
+
+  // Manually assign plan to tenant (skip approval workflow)
+  app.post('/api/admin/tenants/:tenantId/assign-plan', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { tenantId } = req.params;
+      const { planId, setupFeeWaived } = req.body;
+      const adminEmail = req.user.email || req.user.username || 'Platform Admin';
+
+      // Verify tenant exists
+      const tenant = await storage.getTenant(tenantId);
+      if (!tenant) {
+        return res.status(404).json({ message: "Agency not found" });
+      }
+
+      // Verify plan exists
+      const [plan] = await db
+        .select()
+        .from(subscriptionPlans)
+        .where(eq(subscriptionPlans.id, planId))
+        .limit(1);
+
+      if (!plan) {
+        return res.status(404).json({ message: "Subscription plan not found" });
+      }
+
+      // Check if tenant already has an active subscription
+      const [existingSubscription] = await db
+        .select()
+        .from(subscriptions)
+        .where(and(
+          eq(subscriptions.tenantId, tenantId),
+          eq(subscriptions.status, 'active')
+        ))
+        .limit(1);
+
+      let subscription;
+      if (existingSubscription) {
+        // Update existing subscription
+        subscription = await storage.updateSubscription(existingSubscription.id, {
+          planId: planId,
+          approvedBy: adminEmail,
+          approvedAt: new Date(),
+          setupFeeWaived: setupFeeWaived ?? false,
+          updatedAt: new Date(),
+        });
+      } else {
+        // Create new subscription
+        const now = new Date();
+        subscription = await storage.createSubscription({
+          tenantId,
+          planId,
+          status: 'active',
+          approvedBy: adminEmail,
+          approvedAt: now,
+          setupFeeWaived: setupFeeWaived ?? false,
+          setupFeePaidAt: setupFeeWaived ? now : null,
+          currentPeriodStart: now,
+          currentPeriodEnd: new Date(now.getFullYear(), now.getMonth() + 1, now.getDate()),
+          emailsUsedThisPeriod: 0,
+          smsUsedThisPeriod: 0,
+        });
+      }
+
+      // Update tenant to remove trial status and mark as paid
+      await db
+        .update(tenants)
+        .set({ 
+          isTrialAccount: false,
+          isPaidAccount: true 
+        })
+        .where(eq(tenants.id, tenantId));
+
+      res.json({
+        ...subscription,
+        planName: plan.name,
+        message: 'Plan assigned successfully',
+      });
+    } catch (error) {
+      console.error("Error assigning plan:", error);
+      res.status(500).json({ message: "Failed to assign plan" });
     }
   });
 
