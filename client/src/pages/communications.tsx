@@ -54,7 +54,11 @@ export default function Communications() {
   const [emailTemplateForm, setEmailTemplateForm] = useState({
     name: "",
     subject: "",
-    content: "", // User-editable message content only
+    greeting: "", // e.g., "Hi {{firstName}},"
+    mainMessage: "", // Main body text
+    buttonText: "", // Call to action button text (optional)
+    closingMessage: "", // Additional message before sign-off
+    signOff: "", // e.g., "Thanks, The {{agencyName}} Team"
     html: "", // Full template HTML (for storage/sending)
     designType: "postmark-invoice" as PostmarkTemplateType,
   });
@@ -195,14 +199,14 @@ export default function Communications() {
 
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
-    const text = communicationType === "email" ? emailTemplateForm.content : smsTemplateForm.message;
+    const text = communicationType === "email" ? emailTemplateForm.mainMessage : smsTemplateForm.message;
     const before = text.substring(0, start);
     const after = text.substring(end);
     
     const newText = before + variable + after;
     
     if (communicationType === "email") {
-      setEmailTemplateForm({ ...emailTemplateForm, content: newText });
+      setEmailTemplateForm({ ...emailTemplateForm, mainMessage: newText });
     } else {
       setSmsTemplateForm({ ...smsTemplateForm, message: newText });
     }
@@ -217,48 +221,71 @@ export default function Communications() {
 
   // Function to handle design selection
   const handleDesignSelect = (designType: PostmarkTemplateType) => {
-    const template = POSTMARK_TEMPLATES[designType];
+    const template = POSTMARK_TEMPLATES[designType] as any;
     const fullHtml = template.styles ? template.styles + '\n' + template.html : template.html;
     
-    // Provide default content if none exists
-    const defaultContent = emailTemplateForm.content || 
-      `Hi {{firstName}},\n\nWe wanted to send you this important update about your account.\n\nYour current balance is {{balance}} for account {{accountNumber}}.\n\nIf you have any questions, please don't hesitate to contact us.\n\nBest regards,\n{{agencyName}} Team`;
-    
+    // Only set defaults if fields are empty
     setEmailTemplateForm({
       ...emailTemplateForm,
       designType,
-      content: defaultContent,
-      html: fullHtml, // Store full template for reference
+      greeting: emailTemplateForm.greeting || "Hi {{firstName}},",
+      mainMessage: emailTemplateForm.mainMessage || "This is a friendly reminder about your account. Your current balance is {{balance}} for account {{accountNumber}}.",
+      buttonText: emailTemplateForm.buttonText || "View Account",
+      closingMessage: emailTemplateForm.closingMessage || "If you have any questions, please don't hesitate to contact us.",
+      signOff: emailTemplateForm.signOff || "Thanks,<br>The {{agencyName}} Team",
+      html: fullHtml,
     });
   };
 
   // Function to render preview with actual data
   const renderPreview = () => {
-    let content = emailTemplateForm.content;
+    const greeting = emailTemplateForm.greeting || "Hi {{firstName}},";
+    const mainMessage = emailTemplateForm.mainMessage || "";
+    const buttonText = emailTemplateForm.buttonText || "";
+    const closingMessage = emailTemplateForm.closingMessage || "";
+    const signOff = emailTemplateForm.signOff || "Thanks,<br>The {{agencyName}} Team";
+    
+    // Build preview HTML
+    let previewHtml = `<h1 style="margin-bottom: 16px;">${greeting}</h1><p style="margin-bottom: 16px; line-height: 1.6;">${mainMessage}</p>`;
+    
+    if (buttonText) {
+      previewHtml += `
+        <table class="body-action" align="center" width="100%" cellpadding="0" cellspacing="0" style="margin: 30px auto;">
+          <tr>
+            <td align="center">
+              <table border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td>
+                    <a href="#" class="button button--green" style="background-color: #22BC66; color: #FFF; text-decoration: none; border-radius: 3px; padding: 10px 18px; display: inline-block;">${buttonText}</a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>`;
+    }
+    
+    if (closingMessage) {
+      previewHtml += `<p style="margin-bottom: 16px; line-height: 1.6;">${closingMessage}</p>`;
+    }
+    
+    previewHtml += `<p style="margin-bottom: 16px; line-height: 1.6;">${signOff}</p>`;
     
     // Replace variables with sample data
-    content = content.replace(/\{\{firstName\}\}/g, "John");
-    content = content.replace(/\{\{lastName\}\}/g, "Doe");
-    content = content.replace(/\{\{fullName\}\}/g, "John Doe");
-    content = content.replace(/\{\{email\}\}/g, "john.doe@example.com");
-    content = content.replace(/\{\{phone\}\}/g, "(555) 123-4567");
-    content = content.replace(/\{\{accountNumber\}\}/g, "ACC-12345");
-    content = content.replace(/\{\{creditor\}\}/g, "Sample Creditor");
-    content = content.replace(/\{\{balance\}\}/g, "$1,234.56");
-    content = content.replace(/\{\{dueDate\}\}/g, "12/31/2024");
-    content = content.replace(/\{\{consumerPortalLink\}\}/g, "#");
-    content = content.replace(/\{\{appDownloadLink\}\}/g, "#");
-    content = content.replace(/\{\{agencyName\}\}/g, (tenantSettings as any)?.agencyName || "Your Agency");
-    content = content.replace(/\{\{agencyEmail\}\}/g, (tenantSettings as any)?.agencyEmail || "info@agency.com");
-    content = content.replace(/\{\{agencyPhone\}\}/g, (tenantSettings as any)?.agencyPhone || "(555) 000-0000");
-
-    // Convert content to HTML paragraphs (handle newlines)
-    const paragraphs = content.split('\n\n').map(para => {
-      const lines = para.split('\n').join('<br>');
-      return `<p style="margin-bottom: 16px; line-height: 1.6;">${lines}</p>`;
-    }).join('');
-
-    return paragraphs;
+    previewHtml = previewHtml.replace(/\{\{firstName\}\}/g, "John");
+    previewHtml = previewHtml.replace(/\{\{lastName\}\}/g, "Doe");
+    previewHtml = previewHtml.replace(/\{\{fullName\}\}/g, "John Doe");
+    previewHtml = previewHtml.replace(/\{\{email\}\}/g, "john.doe@example.com");
+    previewHtml = previewHtml.replace(/\{\{phone\}\}/g, "(555) 123-4567");
+    previewHtml = previewHtml.replace(/\{\{accountNumber\}\}/g, "ACC-12345");
+    previewHtml = previewHtml.replace(/\{\{creditor\}\}/g, "Sample Creditor");
+    previewHtml = previewHtml.replace(/\{\{balance\}\}/g, "$1,234.56");
+    previewHtml = previewHtml.replace(/\{\{dueDate\}\}/g, "12/31/2024");
+    previewHtml = previewHtml.replace(/\{\{consumerPortalLink\}\}/g, "#");
+    previewHtml = previewHtml.replace(/\{\{appDownloadLink\}\}/g, "#");
+    previewHtml = previewHtml.replace(/\{\{agencyName\}\}/g, (tenantSettings as any)?.agencyName || "Your Agency");
+    
+    return previewHtml;
   };
 
   // Email Mutations
@@ -267,7 +294,17 @@ export default function Communications() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/email-templates"] });
       setShowTemplateModal(false);
-      setEmailTemplateForm({ name: "", subject: "", content: "", html: "", designType: "postmark-invoice" });
+      setEmailTemplateForm({ 
+        name: "", 
+        subject: "", 
+        greeting: "",
+        mainMessage: "",
+        buttonText: "",
+        closingMessage: "",
+        signOff: "",
+        html: "", 
+        designType: "postmark-invoice" 
+      });
       toast({
         title: "Success",
         description: "Email template created successfully",
@@ -289,7 +326,17 @@ export default function Communications() {
       queryClient.invalidateQueries({ queryKey: ["/api/email-templates"] });
       setShowTemplateModal(false);
       setEditingTemplate(null);
-      setEmailTemplateForm({ name: "", subject: "", content: "", html: "", designType: "postmark-invoice" });
+      setEmailTemplateForm({ 
+        name: "", 
+        subject: "", 
+        greeting: "",
+        mainMessage: "",
+        buttonText: "",
+        closingMessage: "",
+        signOff: "",
+        html: "", 
+        designType: "postmark-invoice" 
+      });
       toast({
         title: "Success",
         description: "Email template updated successfully",
@@ -567,24 +614,15 @@ export default function Communications() {
   const handleEditTemplate = (template: any) => {
     setEditingTemplate(template);
     if (communicationType === "email") {
-      // Extract plain text content from HTML or use stored content
-      // For existing templates that have full HTML, strip it to just text
-      let contentText = template.content || "";
-      
-      if (!contentText && template.html) {
-        // Remove HTML tags and extract text content
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = template.html;
-        contentText = tempDiv.textContent || tempDiv.innerText || "";
-        // Clean up extra whitespace
-        contentText = contentText.replace(/\s+/g, ' ').trim();
-      }
-      
       setEmailTemplateForm({
-        name: template.name,
-        subject: template.subject,
-        content: contentText,
-        html: template.html, // Keep original for reference
+        name: template.name || "",
+        subject: template.subject || "",
+        greeting: template.greeting || "Hi {{firstName}},",
+        mainMessage: template.mainMessage || "",
+        buttonText: template.buttonText || "",
+        closingMessage: template.closingMessage || "",
+        signOff: template.signOff || "Thanks,<br>The {{agencyName}} Team",
+        html: template.html || "",
         designType: (template.designType === "custom" || !template.designType) ? "postmark-invoice" : template.designType,
       });
     } else {
@@ -599,26 +637,60 @@ export default function Communications() {
   const handleTemplateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (communicationType === "email") {
-      if (!emailTemplateForm.name.trim() || !emailTemplateForm.subject.trim() || !emailTemplateForm.content.trim()) {
+      if (!emailTemplateForm.name.trim() || !emailTemplateForm.subject.trim() || !emailTemplateForm.mainMessage.trim()) {
         toast({
           title: "Error",
-          description: "Please fill in all required fields",
+          description: "Please fill in all required fields (Name, Subject, Main Message)",
           variant: "destructive",
         });
         return;
       }
       
-      // Combine the selected template design with user content
-      const template = POSTMARK_TEMPLATES[emailTemplateForm.designType];
-      const fullHtml = template.styles ? template.styles + '\n' + template.html : template.html;
+      // Build the HTML from user's custom content
+      const greeting = emailTemplateForm.greeting || "Hi {{firstName}},";
+      const buttonText = emailTemplateForm.buttonText || "View Account";
+      const closingMsg = emailTemplateForm.closingMessage || "";
+      const signOff = emailTemplateForm.signOff || "Thanks,<br>The {{agencyName}} Team";
       
-      // Replace the template's placeholder content with user's actual content
-      // For now, we'll store the content and full template separately
+      // Build complete HTML using Postmark template structure
+      const template = POSTMARK_TEMPLATES[emailTemplateForm.designType];
+      const customHtml = `
+<h1>${greeting}</h1>
+<p>${emailTemplateForm.mainMessage}</p>
+${buttonText ? `
+<table class="body-action" align="center" width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td align="center">
+      <table width="100%" border="0" cellspacing="0" cellpadding="0">
+        <tr>
+          <td align="center">
+            <table border="0" cellspacing="0" cellpadding="0">
+              <tr>
+                <td>
+                  <a href="{{consumerPortalLink}}" class="button button--green" target="_blank">${buttonText}</a>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>` : ''}
+${closingMsg ? `<p>${closingMsg}</p>` : ''}
+<p>${signOff}</p>`;
+      
+      const fullHtml = (template.styles || '') + '\n' + customHtml;
+      
       const dataToSend = {
         name: emailTemplateForm.name,
         subject: emailTemplateForm.subject,
-        html: fullHtml, // Store full template for sending
-        content: emailTemplateForm.content, // Store plain content for editing
+        html: fullHtml,
+        greeting: emailTemplateForm.greeting,
+        mainMessage: emailTemplateForm.mainMessage,
+        buttonText: emailTemplateForm.buttonText,
+        closingMessage: emailTemplateForm.closingMessage,
+        signOff: emailTemplateForm.signOff,
         designType: emailTemplateForm.designType,
       };
       
@@ -1319,7 +1391,17 @@ export default function Communications() {
                 setShowTemplateModal(open);
                 if (!open) {
                   setEditingTemplate(null);
-                  setEmailTemplateForm({ name: "", subject: "", content: "", html: "", designType: "postmark-invoice" });
+                  setEmailTemplateForm({ 
+                    name: "", 
+                    subject: "", 
+                    greeting: "",
+                    mainMessage: "",
+                    buttonText: "",
+                    closingMessage: "",
+                    signOff: "",
+                    html: "", 
+                    designType: "postmark-invoice" 
+                  });
                   setSmsTemplateForm({ name: "", message: "" });
                 }
               }}>
@@ -1394,22 +1476,64 @@ export default function Communications() {
                             />
                           </div>
 
-                          <div>
-                            <Label className="text-sm font-medium mb-2 block">Message Content *</Label>
-                            <p className="text-xs text-gray-500 mb-2">
-                              Type your message content here. The selected design template will style it automatically.
-                            </p>
-                            <Textarea
-                              ref={emailTextareaRef}
-                              value={emailTemplateForm.content}
-                              onChange={(e) => setEmailTemplateForm({...emailTemplateForm, content: e.target.value})}
-                              placeholder="Type your message here... Example: We wanted to remind you about your upcoming payment. Your current balance is {{balance}}."
-                              className="mt-1 text-base min-h-[200px] leading-relaxed"
-                              data-testid="textarea-template-content"
-                            />
-                            <p className="text-xs text-gray-400 mt-2">
-                              💡 Tip: Click variables below to insert dynamic information like customer name, balance, etc.
-                            </p>
+                          <div className="space-y-4 border rounded-lg p-4 bg-gray-50">
+                            <h4 className="font-medium text-sm">✏️ Customize Your Message</h4>
+                            
+                            <div>
+                              <Label className="text-xs font-medium">Greeting</Label>
+                              <Input
+                                value={emailTemplateForm.greeting}
+                                onChange={(e) => setEmailTemplateForm({...emailTemplateForm, greeting: e.target.value})}
+                                placeholder="e.g., Hi {{firstName}},"
+                                className="mt-1"
+                                data-testid="input-greeting"
+                              />
+                            </div>
+                            
+                            <div>
+                              <Label className="text-xs font-medium">Main Message *</Label>
+                              <Textarea
+                                ref={emailTextareaRef}
+                                value={emailTemplateForm.mainMessage}
+                                onChange={(e) => setEmailTemplateForm({...emailTemplateForm, mainMessage: e.target.value})}
+                                placeholder="This is a friendly reminder about your account. Your current balance is {{balance}} on account {{accountNumber}}."
+                                className="mt-1 min-h-[100px]"
+                                data-testid="textarea-main-message"
+                              />
+                            </div>
+                            
+                            <div>
+                              <Label className="text-xs font-medium">Button Text (Optional)</Label>
+                              <Input
+                                value={emailTemplateForm.buttonText}
+                                onChange={(e) => setEmailTemplateForm({...emailTemplateForm, buttonText: e.target.value})}
+                                placeholder="e.g., Make a Payment, View Account"
+                                className="mt-1"
+                                data-testid="input-button-text"
+                              />
+                            </div>
+                            
+                            <div>
+                              <Label className="text-xs font-medium">Additional Message</Label>
+                              <Textarea
+                                value={emailTemplateForm.closingMessage}
+                                onChange={(e) => setEmailTemplateForm({...emailTemplateForm, closingMessage: e.target.value})}
+                                placeholder="If you have any questions, please contact us."
+                                className="mt-1 min-h-[60px]"
+                                data-testid="textarea-closing-message"
+                              />
+                            </div>
+                            
+                            <div>
+                              <Label className="text-xs font-medium">Sign-off</Label>
+                              <Input
+                                value={emailTemplateForm.signOff}
+                                onChange={(e) => setEmailTemplateForm({...emailTemplateForm, signOff: e.target.value})}
+                                placeholder="e.g., Thanks, The {{agencyName}} Team"
+                                className="mt-1"
+                                data-testid="input-signoff"
+                              />
+                            </div>
                           </div>
 
                           <div>
@@ -1449,7 +1573,7 @@ export default function Communications() {
                           </div>
                           
                           <div className="flex-1 border rounded-lg overflow-auto bg-gray-50 p-4">
-                            {emailTemplateForm.content ? (
+                            {emailTemplateForm.mainMessage ? (
                               <div className="bg-white rounded shadow-sm p-6 mx-auto max-w-2xl">
                                 {/* Logo if available */}
                                 {(tenantSettings as any)?.logoUrl && (
