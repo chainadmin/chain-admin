@@ -3,10 +3,12 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2 } from "lucide-react";
+import { Loader2, Fingerprint } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiCall } from "@/lib/api";
 import { persistConsumerAuth } from "@/lib/consumer-auth";
+import { biometricAuth } from "@/lib/biometric-auth";
+import { pushNotificationService } from "@/lib/push-notifications";
 
 interface AgencyContext {
   slug: string;
@@ -21,6 +23,8 @@ export default function MobileAppLogin() {
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [loading, setLoading] = useState(false);
   const [agencyContext, setAgencyContext] = useState<AgencyContext | null>(null);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricType, setBiometricType] = useState<string>("");
 
   // Check for deep link agency parameter
   useEffect(() => {
@@ -43,6 +47,103 @@ export default function MobileAppLogin() {
         });
     }
   }, []);
+
+  // Check for biometric availability and saved credentials
+  useEffect(() => {
+    const checkBiometric = async () => {
+      const result = await biometricAuth.isAvailable();
+      
+      if (result.isAvailable) {
+        setBiometricAvailable(true);
+        setBiometricType(biometricAuth.getBiometryTypeName(result.biometryType));
+        
+        // Check if we have saved credentials
+        const savedEmail = localStorage.getItem('biometric_email');
+        const savedDOB = localStorage.getItem('biometric_dob');
+        
+        if (savedEmail && savedDOB) {
+          // Auto-fill the form
+          setEmail(savedEmail);
+          setDateOfBirth(savedDOB);
+        }
+      }
+    };
+
+    checkBiometric();
+
+    // Initialize push notifications
+    pushNotificationService.initialize().catch(err => {
+      console.error('Failed to initialize push notifications:', err);
+    });
+  }, []);
+
+  // Handle biometric login
+  const handleBiometricLogin = async () => {
+    const savedEmail = localStorage.getItem('biometric_email');
+    const savedDOB = localStorage.getItem('biometric_dob');
+    
+    if (!savedEmail || !savedDOB) {
+      toast({
+        title: "No Saved Credentials",
+        description: "Please sign in with email and date of birth first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // Perform biometric authentication
+      const authResult = await biometricAuth.authenticate("Authenticate to sign in");
+      
+      if (!authResult.success) {
+        throw new Error(authResult.error || "Biometric authentication failed");
+      }
+
+      // If biometric succeeds, log in with saved credentials
+      const response = await apiCall("POST", "/api/mobile/auth/verify", {
+        email: savedEmail,
+        dateOfBirth: savedDOB,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Login failed");
+      }
+
+      const data = await response.json();
+
+      if (data.token && data.agency) {
+        persistConsumerAuth({
+          session: {
+            email: savedEmail,
+            tenantSlug: data.agency.slug,
+            consumerData: data.consumer,
+          },
+          token: data.token,
+        });
+
+        // Register any pending push notification token
+        await pushNotificationService.registerPendingToken();
+
+        toast({
+          title: "Welcome Back!",
+          description: `Signed in with ${biometricType}`,
+        });
+
+        setLocation("/consumer-dashboard");
+      }
+    } catch (error: any) {
+      toast({
+        title: "Authentication Failed",
+        description: error.message || "Please try again",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,6 +192,15 @@ export default function MobileAppLogin() {
           },
           token: data.token,
         });
+
+        // Save credentials for biometric authentication
+        if (biometricAvailable) {
+          localStorage.setItem('biometric_email', email);
+          localStorage.setItem('biometric_dob', dateOfBirth);
+        }
+
+        // Register any pending push notification token
+        await pushNotificationService.registerPendingToken();
 
         setLocation("/consumer-dashboard");
       }
@@ -184,6 +294,32 @@ export default function MobileAppLogin() {
               "Sign In"
             )}
           </Button>
+
+          {/* Biometric Login Button */}
+          {biometricAvailable && localStorage.getItem('biometric_email') && (
+            <>
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t border-gray-300" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-white px-2 text-gray-500">Or</span>
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleBiometricLogin}
+                disabled={loading}
+                className="h-12 w-full text-base font-semibold border-2"
+                data-testid="button-biometric-login"
+              >
+                <Fingerprint className="mr-2 h-5 w-5" />
+                Sign in with {biometricType}
+              </Button>
+            </>
+          )}
         </form>
 
         {/* Footer */}
