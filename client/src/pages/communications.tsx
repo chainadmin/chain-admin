@@ -1355,23 +1355,40 @@ export default function Communications() {
                           </div>
 
                           <div>
-                            <Label className="text-sm font-medium mb-2 block">Available Variables</Label>
+                            <Label className="text-sm font-medium mb-2 block">Template Content *</Label>
                             <p className="text-xs text-gray-500 mb-2">
-                              These variables are automatically included in your selected template design:
+                              Edit the HTML content. Click variables below to insert them.
+                            </p>
+                            <Textarea
+                              ref={emailTextareaRef}
+                              value={emailTemplateForm.html}
+                              onChange={(e) => setEmailTemplateForm({...emailTemplateForm, html: e.target.value})}
+                              placeholder="Edit your email template HTML here..."
+                              className="mt-1 font-mono text-sm min-h-[200px]"
+                              data-testid="textarea-template-html"
+                            />
+                          </div>
+
+                          <div>
+                            <Label className="text-sm font-medium mb-2 block">Insert Variables</Label>
+                            <p className="text-xs text-gray-500 mb-2">
+                              Click a variable to insert it at cursor position
                             </p>
                             <div className="flex flex-wrap gap-1.5 p-3 bg-gray-50 rounded-lg border">
                               {templateVariables.map((variable) => (
-                                <span
+                                <button
                                   key={variable.value}
-                                  className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded border border-blue-200"
+                                  type="button"
+                                  onClick={() => insertVariable(variable.value)}
+                                  className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded border border-blue-200 hover:bg-blue-200 transition cursor-pointer"
                                   data-testid={`var-${variable.value.replace(/[{}]/g, '')}`}
                                 >
                                   {variable.label}
-                                </span>
+                                </button>
                               ))}
                             </div>
                             <p className="text-xs text-gray-500 mt-2">
-                              Tip: You can also use variables in the subject line by typing them (e.g., {'{'}firstName{'}'})
+                              Tip: Variables work in both the subject line and template content
                             </p>
                           </div>
                         </div>
