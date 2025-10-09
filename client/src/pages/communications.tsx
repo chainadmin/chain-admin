@@ -55,7 +55,7 @@ export default function Communications() {
     name: "",
     subject: "",
     html: "",
-    designType: "custom" as PostmarkTemplateType,
+    designType: "postmark-invoice" as PostmarkTemplateType,
   });
   
   const [smsTemplateForm, setSmsTemplateForm] = useState({
@@ -248,7 +248,7 @@ export default function Communications() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/email-templates"] });
       setShowTemplateModal(false);
-      setEmailTemplateForm({ name: "", subject: "", html: "", designType: "custom" });
+      setEmailTemplateForm({ name: "", subject: "", html: "", designType: "postmark-invoice" });
       toast({
         title: "Success",
         description: "Email template created successfully",
@@ -270,7 +270,7 @@ export default function Communications() {
       queryClient.invalidateQueries({ queryKey: ["/api/email-templates"] });
       setShowTemplateModal(false);
       setEditingTemplate(null);
-      setEmailTemplateForm({ name: "", subject: "", html: "", designType: "custom" });
+      setEmailTemplateForm({ name: "", subject: "", html: "", designType: "postmark-invoice" });
       toast({
         title: "Success",
         description: "Email template updated successfully",
@@ -497,7 +497,7 @@ export default function Communications() {
         name: template.name,
         subject: template.subject,
         html: template.html,
-        designType: template.designType || "custom",
+        designType: (template.designType === "custom" || !template.designType) ? "postmark-invoice" : template.designType,
       });
     } else {
       setSmsTemplateForm({
@@ -1113,7 +1113,7 @@ export default function Communications() {
                 setShowTemplateModal(open);
                 if (!open) {
                   setEditingTemplate(null);
-                  setEmailTemplateForm({ name: "", subject: "", html: "", designType: "custom" });
+                  setEmailTemplateForm({ name: "", subject: "", html: "", designType: "postmark-invoice" });
                   setSmsTemplateForm({ name: "", message: "" });
                 }
               }}>

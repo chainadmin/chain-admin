@@ -579,14 +579,6 @@ export const POSTMARK_TEMPLATES = {
     font-size: 13px;
   }
 </style>`
-  },
-  
-  'custom': {
-    name: 'Custom HTML',
-    description: 'Create your own custom email design',
-    thumbnail: '✏️',
-    html: '',
-    styles: ''
   }
 } as const;
 
