@@ -17,7 +17,10 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
     const masked = { ...settings };
     // Never return the actual API key to frontend
     if (masked.merchantApiKey) {
-      masked.merchantApiKey = masked.merchantApiKey ? '****' + masked.merchantApiKey.slice(-4) : null;
+      masked.merchantApiKey = '****' + String(masked.merchantApiKey).slice(-4);
+    }
+    if (masked.merchantApiPin) {
+      masked.merchantApiPin = '****';
     }
     return masked;
   };
@@ -98,8 +101,29 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         // Payment processor fields
         if (updates.merchantProvider !== undefined) updateData.merchantProvider = updates.merchantProvider;
         if (updates.merchantAccountId !== undefined) updateData.merchantAccountId = updates.merchantAccountId;
-        if (updates.merchantApiKey !== undefined) updateData.merchantApiKey = updates.merchantApiKey;
+        if (updates.merchantApiKey !== undefined) {
+          const newKey = updates.merchantApiKey;
+          if (
+            typeof newKey === 'string' &&
+            newKey.startsWith('****') &&
+            existingSettings?.merchantApiKey
+          ) {
+            // Keep existing key if the incoming value is just the masked placeholder
+          } else {
+            updateData.merchantApiKey = newKey;
+          }
+        }
+        if (updates.merchantApiPin !== undefined) {
+          const newPin = updates.merchantApiPin;
+          if (typeof newPin === 'string' && newPin === '****' && existingSettings?.merchantApiPin) {
+            // Keep existing pin if the incoming value is just the masked placeholder
+          } else {
+            updateData.merchantApiPin = newPin;
+          }
+        }
         if (updates.merchantName !== undefined) updateData.merchantName = updates.merchantName;
+        if (updates.merchantType !== undefined) updateData.merchantType = updates.merchantType;
+        if (updates.useSandbox !== undefined) updateData.useSandbox = updates.useSandbox;
         if (updates.enableOnlinePayments !== undefined) updateData.enableOnlinePayments = updates.enableOnlinePayments;
 
         const [updatedSettings] = await db
@@ -126,11 +150,14 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
             customBranding: updates.customBranding || {},
             consumerPortalSettings: updates.consumerPortalSettings || {},
             // Payment processor fields
-            merchantProvider: updates.merchantProvider || null,
-            merchantAccountId: updates.merchantAccountId || null,
-            merchantApiKey: updates.merchantApiKey || null,
-            merchantName: updates.merchantName || null,
-            enableOnlinePayments: updates.enableOnlinePayments || false,
+            merchantProvider: updates.merchantProvider ?? null,
+            merchantAccountId: updates.merchantAccountId ?? null,
+            merchantApiKey: updates.merchantApiKey ?? null,
+            merchantApiPin: updates.merchantApiPin ?? null,
+            merchantName: updates.merchantName ?? null,
+            merchantType: updates.merchantType ?? null,
+            useSandbox: updates.useSandbox ?? true,
+            enableOnlinePayments: updates.enableOnlinePayments ?? false,
           })
           .returning();
 
