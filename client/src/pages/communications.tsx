@@ -300,7 +300,7 @@ export default function Communications() {
     previewHtml = previewHtml.replace('{{CUSTOM_BUTTON_URL}}', buttonUrl);
     previewHtml = previewHtml.replace('{{CUSTOM_CLOSING_MESSAGE}}', closingMessage);
     previewHtml = previewHtml.replace('{{CUSTOM_SIGNOFF}}', signOff);
-    // Replace account detail labels
+    // Replace account detail labels (may contain variables themselves)
     previewHtml = previewHtml.replace(/\{\{ACCOUNT_LABEL\}\}/g, emailTemplateForm.accountLabel || "Account:");
     previewHtml = previewHtml.replace(/\{\{CREDITOR_LABEL\}\}/g, emailTemplateForm.creditorLabel || "Creditor:");
     previewHtml = previewHtml.replace(/\{\{BALANCE_LABEL\}\}/g, emailTemplateForm.balanceLabel || "Balance:");
@@ -320,7 +320,7 @@ export default function Communications() {
       previewHtml = previewHtml.replace(/\{\{COMPANY_LOGO\}\}/g, '');
     }
     
-    // Replace variables with sample data for preview
+    // Replace ALL variables with sample data for preview (including those in labels)
     previewHtml = previewHtml.replace(/\{\{firstName\}\}/g, "John");
     previewHtml = previewHtml.replace(/\{\{lastName\}\}/g, "Doe");
     previewHtml = previewHtml.replace(/\{\{fullName\}\}/g, "John Doe");
@@ -1669,10 +1669,11 @@ export default function Communications() {
                                   <Input
                                     value={emailTemplateForm.accountLabel}
                                     onChange={(e) => setEmailTemplateForm({...emailTemplateForm, accountLabel: e.target.value})}
-                                    placeholder="Account:"
+                                    placeholder="e.g. Account: {{accountNumber}}"
                                     className="mt-1"
                                     data-testid="input-account-label"
                                   />
+                                  <p className="text-xs text-gray-500 mt-1">Use variables like {{accountNumber}}</p>
                                 </div>
                                 
                                 <div>
@@ -1680,10 +1681,11 @@ export default function Communications() {
                                   <Input
                                     value={emailTemplateForm.creditorLabel}
                                     onChange={(e) => setEmailTemplateForm({...emailTemplateForm, creditorLabel: e.target.value})}
-                                    placeholder="Creditor:"
+                                    placeholder="e.g. Creditor: {{creditor}}"
                                     className="mt-1"
                                     data-testid="input-creditor-label"
                                   />
+                                  <p className="text-xs text-gray-500 mt-1">Use variables like {{creditor}}</p>
                                 </div>
                                 
                                 <div>
@@ -1691,10 +1693,11 @@ export default function Communications() {
                                   <Input
                                     value={emailTemplateForm.balanceLabel}
                                     onChange={(e) => setEmailTemplateForm({...emailTemplateForm, balanceLabel: e.target.value})}
-                                    placeholder="Balance:"
+                                    placeholder="e.g. Balance: {{balance}}"
                                     className="mt-1"
                                     data-testid="input-balance-label"
                                   />
+                                  <p className="text-xs text-gray-500 mt-1">Use variables like {{balance}}</p>
                                 </div>
                                 
                                 <div>
@@ -1702,10 +1705,11 @@ export default function Communications() {
                                   <Input
                                     value={emailTemplateForm.dueDateLabel}
                                     onChange={(e) => setEmailTemplateForm({...emailTemplateForm, dueDateLabel: e.target.value})}
-                                    placeholder="Due Date:"
+                                    placeholder="e.g. Due: {{dueDate}}"
                                     className="mt-1"
                                     data-testid="input-due-date-label"
                                   />
+                                  <p className="text-xs text-gray-500 mt-1">Use variables like {{dueDate}}</p>
                                 </div>
                               </div>
                             )}
