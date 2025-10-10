@@ -3513,8 +3513,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         smaxApiKey: settings?.smaxApiKey ? '••••••••' : '',
         smaxPin: settings?.smaxPin ? '••••••••' : '',
       };
-      
-      res.json(combinedSettings);
+
+      const maskedSettings = { ...combinedSettings } as typeof combinedSettings;
+
+      if (settings?.merchantApiKey) {
+        maskedSettings.merchantApiKey = `****${settings.merchantApiKey.slice(-4)}`;
+      }
+
+      if (settings?.merchantApiPin) {
+        maskedSettings.merchantApiPin = '****';
+      }
+
+      res.json(maskedSettings);
     } catch (error) {
       console.error("Error fetching settings:", error);
       res.status(500).json({ message: "Failed to fetch settings" });
@@ -3562,6 +3572,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         merchantName: z.string().nullable().optional(),
         merchantType: z.string().nullable().optional(),
         useSandbox: z.boolean().optional(),
+        enableOnlinePayments: z.boolean().optional(),
       });
 
       const validatedData = settingsSchema.parse(req.body);
@@ -3576,13 +3587,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         customSenderEmail,
         smaxApiKey,
         smaxPin,
-        ...otherSettings 
+        merchantApiKey,
+        merchantApiPin,
+        ...otherSettings
       } = validatedData;
 
       // Preserve SMAX credentials if they're submitted as masked values
       const currentSettings = await storage.getTenantSettings(tenantId);
       const finalSmaxApiKey = (smaxApiKey && smaxApiKey !== '••••••••') ? smaxApiKey : currentSettings?.smaxApiKey;
       const finalSmaxPin = (smaxPin && smaxPin !== '••••••••') ? smaxPin : currentSettings?.smaxPin;
+
+      let finalMerchantApiKey = merchantApiKey;
+      if (typeof merchantApiKey === 'string' && merchantApiKey.startsWith('****') && currentSettings?.merchantApiKey) {
+        finalMerchantApiKey = currentSettings.merchantApiKey;
+      }
+
+      let finalMerchantApiPin = merchantApiPin;
+      if (typeof merchantApiPin === 'string' && merchantApiPin === '****' && currentSettings?.merchantApiPin) {
+        finalMerchantApiPin = currentSettings.merchantApiPin;
+      }
 
       // Update tenant table with Twilio and email settings if any provided
       if (twilioAccountSid !== undefined || 
@@ -3602,14 +3625,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Update tenant settings table with other settings
-      const settings = await storage.upsertTenantSettings({
+      const tenantSettingsPayload: Record<string, any> = {
         ...otherSettings,
         smaxApiKey: finalSmaxApiKey,
         smaxPin: finalSmaxPin,
         tenantId: tenantId,
-      });
-      
-      res.json(settings);
+      };
+
+      if (merchantApiKey !== undefined) {
+        tenantSettingsPayload.merchantApiKey = finalMerchantApiKey || null;
+      }
+
+      if (merchantApiPin !== undefined) {
+        tenantSettingsPayload.merchantApiPin = finalMerchantApiPin || null;
+      }
+
+      const updatedSettings = await storage.upsertTenantSettings(tenantSettingsPayload);
+
+      const maskedUpdatedSettings = { ...updatedSettings } as typeof updatedSettings;
+
+      if (updatedSettings.merchantApiKey) {
+        maskedUpdatedSettings.merchantApiKey = `****${updatedSettings.merchantApiKey.slice(-4)}`;
+      }
+
+      if (updatedSettings.merchantApiPin) {
+        maskedUpdatedSettings.merchantApiPin = '****';
+      }
+
+      res.json(maskedUpdatedSettings);
     } catch (error) {
       console.error("Error updating settings:", error);
       res.status(500).json({ message: "Failed to update settings" });
