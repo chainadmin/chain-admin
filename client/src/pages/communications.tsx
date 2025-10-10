@@ -281,6 +281,25 @@ export default function Communications() {
     });
   };
 
+  const removeAccountDetailsTables = (html: string) => {
+    if (!html) return html;
+
+    if (typeof window !== "undefined" && typeof DOMParser !== "undefined") {
+      try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, "text/html");
+        doc.querySelectorAll("table.attribute-list").forEach((table) => {
+          table.remove();
+        });
+        return doc.body.innerHTML;
+      } catch (error) {
+        console.error("Failed to strip account details table from template preview", error);
+      }
+    }
+
+    return html.replace(/<table class="attribute-list"[\s\S]*?<\/table>\s*<\/td>\s*<\/tr>\s*<\/table>/gi, "");
+  };
+
   // Function to render preview with actual data
   const renderPreview = () => {
     const template = POSTMARK_TEMPLATES[emailTemplateForm.designType] as any;
@@ -308,7 +327,7 @@ export default function Communications() {
     
     // Remove account details box if showAccountDetails is false
     if (!emailTemplateForm.showAccountDetails) {
-      previewHtml = previewHtml.replace(/<table class="attribute-list"[\s\S]*?<\/table>/g, '');
+      previewHtml = removeAccountDetailsTables(previewHtml);
     }
     
     // Replace company logo
@@ -743,7 +762,7 @@ export default function Communications() {
       
       // Remove account details box if showAccountDetails is false
       if (!emailTemplateForm.showAccountDetails) {
-        customizedHtml = customizedHtml.replace(/<table class="attribute-list"[\s\S]*?<\/table>/g, '');
+        customizedHtml = removeAccountDetailsTables(customizedHtml);
       }
       
       // Note: Logo will be replaced at send time with tenant's actual logo in server/routes.ts
