@@ -98,6 +98,17 @@ export default function Emails() {
     queryKey: ["/api/settings"],
   });
 
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      try {
+        document.execCommand("defaultParagraphSeparator", false, "p");
+        document.execCommand("styleWithCSS", false, "true");
+      } catch (error) {
+        // Ignore browsers that no longer support execCommand
+      }
+    }
+  }, []);
+
   // Template variables available for insertion
   const templateVariables = [
     { label: "First Name", value: "{{firstName}}", category: "consumer" },
@@ -159,6 +170,9 @@ export default function Emails() {
     const editor = editorRef.current;
     if (!editor) return;
     editor.focus();
+    if (command === "foreColor") {
+      document.execCommand("styleWithCSS", false, "true");
+    }
     document.execCommand(command, false, value);
     setTimeout(syncEditorHtml, 0);
   };

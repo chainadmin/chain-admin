@@ -1,5 +1,9 @@
+
+import { useState, useRef, useEffect, type RefObject } from "react";
+=======
 import { useState, useRef, useEffect } from "react";
 import type { RefObject } from "react";
+
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -38,7 +42,42 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+
+import {
+  Mail,
+  MessageSquare,
+  Plus,
+  Send,
+  FileText,
+  Trash2,
+  Eye,
+  TrendingUp,
+  Users,
+  AlertCircle,
+  MousePointer,
+  UserMinus,
+  Phone,
+  Clock,
+  Calendar,
+  Settings,
+  Copy,
+  Sparkles,
+  Megaphone,
+  Zap,
+  BarChart3,
+  Code,
+  Bold as BoldIcon,
+  Italic as ItalicIcon,
+  Underline as UnderlineIcon,
+  Strikethrough,
+  List as ListIcon,
+  ListOrdered,
+  Eraser,
+  Palette,
+} from "lucide-react";
+
 import { Mail, MessageSquare, Plus, Send, FileText, Trash2, Eye, TrendingUp, Users, AlertCircle, MousePointer, UserMinus, Phone, Clock, Calendar, Settings, Copy, Sparkles, Megaphone, Zap, BarChart3, Code, Bold as BoldIcon, Italic as ItalicIcon, Underline as UnderlineIcon, Strikethrough, List as ListIcon, ListOrdered, Eraser, Palette, Link2, Link2Off } from "lucide-react";
+
 import { POSTMARK_TEMPLATES, type PostmarkTemplateType } from "@shared/postmarkTemplates";
 
 export default function Communications() {
@@ -59,7 +98,7 @@ export default function Communications() {
   const buttonTextRef = useRef<HTMLInputElement>(null);
   const buttonUrlRef = useRef<HTMLInputElement>(null);
   const closingMessageRef = useRef<HTMLDivElement>(null);
-  const signOffRef = useRef<HTMLInputElement>(null);
+  const signOffRef = useRef<HTMLDivElement>(null);
   
   // Track which field is currently focused for variable insertion
   const [activeField, setActiveField] = useState<string>("mainMessage");
@@ -330,6 +369,17 @@ export default function Communications() {
 
   const [showAutomationModal, setShowAutomationModal] = useState(false);
 
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      try {
+        document.execCommand("defaultParagraphSeparator", false, "p");
+        document.execCommand("styleWithCSS", false, "true");
+      } catch (error) {
+        // Ignore browsers that no longer support execCommand
+      }
+    }
+  }, []);
+
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -411,6 +461,179 @@ export default function Communications() {
     { label: "Agency Phone", value: "{{agencyPhone}}", category: "agency" },
   ];
 
+  type RichTextField = "mainMessage" | "closingMessage" | "signOff";
+
+  const richTextEditors: Record<RichTextField, RefObject<HTMLDivElement>> = {
+    mainMessage: mainMessageRef,
+    closingMessage: closingMessageRef,
+    signOff: signOffRef,
+  };
+
+  const syncRichTextField = (field: RichTextField) => {
+    const editor = richTextEditors[field].current;
+    if (!editor) return;
+    const html = editor.innerHTML;
+    const textContent = editor.textContent?.replace(/\u00a0/g, " ").trim() ?? "";
+    setEmailTemplateForm((prev) => ({
+      ...prev,
+      [field]: textContent ? html : "",
+    }));
+  };
+
+  const focusRichTextField = (field: RichTextField) => {
+    const editor = richTextEditors[field].current;
+    if (editor) {
+      editor.focus();
+    }
+  };
+
+  const applyRichTextCommand = (field: RichTextField, command: string, value?: string) => {
+    focusRichTextField(field);
+    if (command === "foreColor") {
+      document.execCommand("styleWithCSS", false, "true");
+    }
+    document.execCommand(command, false, value);
+    setTimeout(() => syncRichTextField(field), 0);
+  };
+
+  const getPlainText = (html: string) =>
+    html
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]*>/g, " ")
+      .replace(/&nbsp;/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const renderToolbar = (field: RichTextField) => (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => {
+          setActiveField(field);
+          applyRichTextCommand(field, "bold");
+        }}
+        className="h-8"
+      >
+        <BoldIcon className="mr-1 h-3.5 w-3.5" />
+        Bold
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => {
+          setActiveField(field);
+          applyRichTextCommand(field, "italic");
+        }}
+        className="h-8"
+      >
+        <ItalicIcon className="mr-1 h-3.5 w-3.5" />
+        Italic
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => {
+          setActiveField(field);
+          applyRichTextCommand(field, "underline");
+        }}
+        className="h-8"
+      >
+        <UnderlineIcon className="mr-1 h-3.5 w-3.5" />
+        Underline
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => {
+          setActiveField(field);
+          applyRichTextCommand(field, "strikeThrough");
+        }}
+        className="h-8"
+      >
+        <Strikethrough className="mr-1 h-3.5 w-3.5" />
+        Strike
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => {
+          setActiveField(field);
+          applyRichTextCommand(field, "insertUnorderedList");
+        }}
+        className="h-8"
+      >
+        <ListIcon className="mr-1 h-3.5 w-3.5" />
+        Bullets
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => {
+          setActiveField(field);
+          applyRichTextCommand(field, "insertOrderedList");
+        }}
+        className="h-8"
+      >
+        <ListOrdered className="mr-1 h-3.5 w-3.5" />
+        Numbered
+      </Button>
+      <div className="flex items-center gap-1">
+        <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+          <Palette className="h-3.5 w-3.5" />
+          Color
+        </span>
+        <input
+          type="color"
+          className="h-8 w-8 cursor-pointer rounded border"
+          onChange={(event) => {
+            setActiveField(field);
+            applyRichTextCommand(field, "foreColor", event.target.value);
+          }}
+          aria-label="Text color"
+        />
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => {
+          setActiveField(field);
+          applyRichTextCommand(field, "removeFormat");
+        }}
+        className="h-8"
+      >
+        <Eraser className="mr-1 h-3.5 w-3.5" />
+        Clear
+      </Button>
+    </div>
+  );
+
+  useEffect(() => {
+    const fields: RichTextField[] = ["mainMessage", "closingMessage", "signOff"];
+    fields.forEach((field) => {
+      const editor = richTextEditors[field].current;
+      if (!editor) return;
+      const value = emailTemplateForm[field] || "";
+      if (editor.innerHTML !== value) {
+        editor.innerHTML = value;
+      }
+    });
+  }, [emailTemplateForm.mainMessage, emailTemplateForm.closingMessage, emailTemplateForm.signOff, showTemplateModal]);
+
   // Function to insert variable at cursor position (works with any field)
   const insertVariable = (variable: string) => {
     if (communicationType === "sms") {
@@ -430,6 +653,26 @@ export default function Communications() {
       return;
     }
     
+    // Email template - insert into active field
+    const fieldMap: Record<
+      string,
+      {
+        ref:
+          | RefObject<HTMLInputElement>
+          | RefObject<HTMLTextAreaElement>
+          | RefObject<HTMLDivElement>;
+        field: keyof typeof emailTemplateForm;
+        type: "input" | "textarea" | "editor";
+      }
+    > = {
+      subject: { ref: subjectRef, field: "subject", type: "input" },
+      greeting: { ref: greetingRef, field: "greeting", type: "input" },
+      mainMessage: { ref: mainMessageRef, field: "mainMessage", type: "editor" },
+      buttonText: { ref: buttonTextRef, field: "buttonText", type: "input" },
+      buttonUrl: { ref: buttonUrlRef, field: "buttonUrl", type: "input" },
+      closingMessage: { ref: closingMessageRef, field: "closingMessage", type: "editor" },
+      signOff: { ref: signOffRef, field: "signOff", type: "editor" },
+
     if (isRichTextField(activeField)) {
       const editor = richTextFieldRefs[activeField].current;
       if (!editor) return;
@@ -467,12 +710,45 @@ export default function Communications() {
       buttonText: { ref: buttonTextRef, field: "buttonText" },
       buttonUrl: { ref: buttonUrlRef, field: "buttonUrl" },
       signOff: { ref: signOffRef, field: "signOff" },
+
     };
 
     const currentField = fieldMap[activeField];
     if (!currentField || !currentField.ref.current) return;
 
+
+    if (currentField.type === "editor") {
+      const editorField = currentField.field as RichTextField;
+      const editor = richTextEditors[editorField].current;
+      if (!editor) return;
+      focusRichTextField(editorField);
+      const selection = window.getSelection();
+      if (!selection) return;
+
+      if (selection.rangeCount === 0 || !editor.contains(selection.anchorNode)) {
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        range.collapse(false);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+
+      const range = selection.getRangeAt(0);
+      range.deleteContents();
+      const textNode = document.createTextNode(variable);
+      range.insertNode(textNode);
+      range.setStartAfter(textNode);
+      range.setEndAfter(textNode);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      setTimeout(() => syncRichTextField(editorField), 0);
+      return;
+    }
+
+    const element = currentField.ref.current as HTMLInputElement | HTMLTextAreaElement;
+
     const element = currentField.ref.current;
+
     const start = element.selectionStart || 0;
     const end = element.selectionEnd || 0;
     const text = String(emailTemplateForm[currentField.field] || "");
@@ -499,15 +775,17 @@ export default function Communications() {
       ...emailTemplateForm,
       designType,
       greeting: emailTemplateForm.greeting || "Hi {{firstName}},",
-      mainMessage: emailTemplateForm.mainMessage
-        ? ensureEditorHtml(emailTemplateForm.mainMessage)
-        : ensureEditorHtml("This is a friendly reminder about your account. Your current balance is {{balance}} for account {{accountNumber}}."),
+      mainMessage:
+        emailTemplateForm.mainMessage ||
+        "<p>This is a friendly reminder about your account. Your current balance is {{balance}} for account {{accountNumber}}.</p>",
       buttonText: emailTemplateForm.buttonText || "View Account",
       buttonUrl: emailTemplateForm.buttonUrl || "{{consumerPortalLink}}",
-      closingMessage: emailTemplateForm.closingMessage
-        ? ensureEditorHtml(emailTemplateForm.closingMessage)
-        : ensureEditorHtml("If you have any questions, please don't hesitate to contact us."),
-      signOff: emailTemplateForm.signOff || "Thanks,<br>The {{agencyName}} Team",
+      closingMessage:
+        emailTemplateForm.closingMessage ||
+        "<p>If you have any questions, please don't hesitate to contact us.</p>",
+      signOff:
+        emailTemplateForm.signOff ||
+        "<p>Thanks,<br>The {{agencyName}} Team</p>",
       html: fullHtml,
     });
   };
@@ -953,8 +1231,8 @@ export default function Communications() {
         mainMessage: ensureEditorHtml(template.mainMessage || ""),
         buttonText: template.buttonText || "",
         buttonUrl: template.buttonUrl || "{{consumerPortalLink}}",
-        closingMessage: ensureEditorHtml(template.closingMessage || ""),
-        signOff: template.signOff || "Thanks,<br>The {{agencyName}} Team",
+        closingMessage: template.closingMessage || "",
+        signOff: template.signOff || "<p>Thanks,<br>The {{agencyName}} Team</p>",
         showAccountDetails: template.showAccountDetails !== undefined ? template.showAccountDetails : true,
         accountLabel: template.accountLabel || "Account:",
         creditorLabel: template.creditorLabel || "Creditor:",
@@ -975,7 +1253,8 @@ export default function Communications() {
   const handleTemplateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (communicationType === "email") {
-      if (!emailTemplateForm.name.trim() || !emailTemplateForm.subject.trim() || !emailTemplateForm.mainMessage.trim()) {
+      const mainMessageText = getPlainText(emailTemplateForm.mainMessage || "");
+      if (!emailTemplateForm.name.trim() || !emailTemplateForm.subject.trim() || !mainMessageText) {
         toast({
           title: "Error",
           description: "Please fill in all required fields (Name, Subject, Main Message)",
@@ -1848,25 +2127,23 @@ export default function Communications() {
                             <div>
                               <Label className="text-xs font-medium">Main Message *</Label>
                               <div className="mt-2 space-y-2">
-                                {renderFormattingToolbar()}
-
+                                {renderToolbar("mainMessage")}
                                 <div className="relative">
                                   {!emailTemplateForm.mainMessage && (
                                     <div className="pointer-events-none absolute left-3 top-3 text-sm text-gray-400">
-                                      Start writing your email body or paste formatted content.
+                                      {"This is a friendly reminder about your account. Your current balance is {{balance}} on account {{accountNumber}}."}
                                     </div>
                                   )}
                                   <div
                                     ref={mainMessageRef}
-                                    className="min-h-[140px] w-full rounded-md border border-gray-200 bg-white p-3 text-sm text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="min-h-[160px] rounded-md border border-gray-200 bg-white p-3 text-sm text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     contentEditable
-                                    role="textbox"
-                                    aria-multiline="true"
                                     suppressContentEditableWarning
-                                    onInput={() => syncEditorHtml("mainMessage")}
-                                    onBlur={() => syncEditorHtml("mainMessage")}
+                                    onInput={() => syncRichTextField("mainMessage")}
+                                    onBlur={() => syncRichTextField("mainMessage")}
                                     onFocus={() => setActiveField("mainMessage")}
-                                    data-testid="editor-main-message"
+                                    spellCheck={true}
+                                    data-testid="textarea-main-message"
                                   />
                                 </div>
                               </div>
@@ -1904,25 +2181,23 @@ export default function Communications() {
                             <div>
                               <Label className="text-xs font-medium">Additional Message</Label>
                               <div className="mt-2 space-y-2">
-                                {renderFormattingToolbar()}
-
+                                {renderToolbar("closingMessage")}
                                 <div className="relative">
                                   {!emailTemplateForm.closingMessage && (
                                     <div className="pointer-events-none absolute left-3 top-3 text-sm text-gray-400">
-                                      Add any final notes or next steps for the recipient.
+                                      If you have any questions, please contact us.
                                     </div>
                                   )}
                                   <div
                                     ref={closingMessageRef}
-                                    className="min-h-[100px] w-full rounded-md border border-gray-200 bg-white p-3 text-sm text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="min-h-[120px] rounded-md border border-gray-200 bg-white p-3 text-sm text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     contentEditable
-                                    role="textbox"
-                                    aria-multiline="true"
                                     suppressContentEditableWarning
-                                    onInput={() => syncEditorHtml("closingMessage")}
-                                    onBlur={() => syncEditorHtml("closingMessage")}
+                                    onInput={() => syncRichTextField("closingMessage")}
+                                    onBlur={() => syncRichTextField("closingMessage")}
                                     onFocus={() => setActiveField("closingMessage")}
-                                    data-testid="editor-closing-message"
+                                    spellCheck={true}
+                                    data-testid="textarea-closing-message"
                                   />
                                 </div>
                               </div>
@@ -1930,15 +2205,27 @@ export default function Communications() {
                             
                             <div>
                               <Label className="text-xs font-medium">Sign-off</Label>
-                              <Input
-                                ref={signOffRef}
-                                value={emailTemplateForm.signOff}
-                                onChange={(e) => setEmailTemplateForm({...emailTemplateForm, signOff: e.target.value})}
-                                onFocus={() => setActiveField('signOff')}
-                                placeholder="e.g., Thanks, The {{agencyName}} Team"
-                                className="mt-1"
-                                data-testid="input-signoff"
-                              />
+                              <div className="mt-2 space-y-2">
+                                {renderToolbar("signOff")}
+                                <div className="relative">
+                                  {!emailTemplateForm.signOff && (
+                                    <div className="pointer-events-none absolute left-3 top-3 text-sm text-gray-400">
+                                      {"e.g., Thanks, The {{agencyName}} Team"}
+                                    </div>
+                                  )}
+                                  <div
+                                    ref={signOffRef}
+                                    className="min-h-[100px] rounded-md border border-gray-200 bg-white p-3 text-sm text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    contentEditable
+                                    suppressContentEditableWarning
+                                    onInput={() => syncRichTextField("signOff")}
+                                    onBlur={() => syncRichTextField("signOff")}
+                                    onFocus={() => setActiveField("signOff")}
+                                    spellCheck={true}
+                                    data-testid="input-signoff"
+                                  />
+                                </div>
+                              </div>
                             </div>
                           </div>
 
@@ -2048,6 +2335,9 @@ export default function Communications() {
                             </Label>
                             <p className="text-xs text-gray-500 mt-1">
                               See how your email will look with sample data
+                            </p>
+                            <p className="text-xs text-gray-400 mt-1">
+                              Sample values are for preview only — real consumer and account details will populate automatically.
                             </p>
                           </div>
                           
