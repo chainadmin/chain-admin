@@ -187,6 +187,12 @@ export const emailTemplates = pgTable("email_templates", {
   buttonUrl: text("button_url"), // Button URL (can be variable or custom URL)
   closingMessage: text("closing_message"), // Additional message before sign-off
   signOff: text("sign_off"), // Sign-off text
+  // Account details box customization
+  showAccountDetails: boolean("show_account_details").default(true), // Show/hide account details box
+  accountLabel: text("account_label").default("Account:"), // Custom label for account number
+  creditorLabel: text("creditor_label").default("Creditor:"), // Custom label for creditor
+  balanceLabel: text("balance_label").default("Balance:"), // Custom label for balance
+  dueDateLabel: text("due_date_label").default("Due Date:"), // Custom label for due date
   designType: text("design_type").default("custom"), // "custom", "postmark-invoice", "postmark-welcome", etc.
   status: text("status").default("draft"),
   createdAt: timestamp("created_at").defaultNow(),
