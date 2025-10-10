@@ -327,6 +327,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+  // Make storage available to all middlewares
+  app.use((req, res, next) => {
+    req.storage = storage;
+    next();
+  });
+
   // Subdomain detection middleware
   app.use(subdomainMiddleware);
 
