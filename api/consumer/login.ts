@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { and, eq, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 
@@ -12,6 +12,18 @@ const loginSchema = z.object({
   dateOfBirth: z.string().min(1),
   tenantSlug: z.string().optional()
 });
+
+const normalizeDate = (value: string) => {
+  try {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return null;
+    }
+    return date.toISOString().split('T')[0];
+  } catch {
+    return null;
+  }
+};
 
 function preventCaching(res: VercelResponse) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -32,12 +44,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const { email, dateOfBirth, tenantSlug: bodyTenantSlug } = parsed.data;
-    const tenantSlug = bodyTenantSlug || (req as any)?.agencySlug;
+    const tenantSlug = (bodyTenantSlug || (req as any)?.agencySlug || '').trim() || undefined;
 
     const db = await getDb();
 
-    let tenant: typeof tenants.$inferSelect | null = null;
-    let consumer: typeof consumers.$inferSelect | null = null;
+    let requestedTenant: typeof tenants.$inferSelect | null = null;
 
     if (tenantSlug) {
       const [tenantMatch] = await db
@@ -50,50 +61,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(404).json({ message: 'Agency not found' });
       }
 
-      tenant = tenantMatch;
+      requestedTenant = tenantMatch;
+    }
 
-      const consumerMatches = await db
-        .select({ consumer: consumers })
-        .from(consumers)
-        .where(
-          and(
-            eq(consumers.tenantId, tenant.id),
-            sql`LOWER(${consumers.email}) = LOWER(${email})`
-          )
-        )
-        .limit(1);
+    const consumerRows = await db
+      .select({ consumer: consumers, tenant: tenants })
+      .from(consumers)
+      .leftJoin(tenants, eq(consumers.tenantId, tenants.id))
+      .where(sql`LOWER(${consumers.email}) = LOWER(${email})`);
 
-      if (consumerMatches.length === 0) {
-        return res.status(404).json({
-          message: 'No account found with this email for this agency. Would you like to create a new account?',
-          canRegister: true,
-          suggestedAction: 'register'
-        });
-      }
+    const filteredRows = tenantSlug
+      ? consumerRows.filter(row => row.tenant?.slug === tenantSlug)
+      : consumerRows;
 
-      consumer = consumerMatches[0].consumer;
-    } else {
-      const consumerRows = await db
-        .select({
-          consumer: consumers,
-          tenant: tenants
-        })
-        .from(consumers)
-        .leftJoin(tenants, eq(consumers.tenantId, tenants.id))
-        .where(sql`LOWER(${consumers.email}) = LOWER(${email})`);
+    if (filteredRows.length === 0) {
+      return res.status(404).json({
+        message: tenantSlug
+          ? 'No account found with this email for this agency. Would you like to create a new account?'
+          : 'No account found with this email. Would you like to create a new account?',
+        canRegister: true,
+        suggestedAction: 'register'
+      });
+    }
 
-      if (consumerRows.length === 0) {
-        return res.status(404).json({
-          message: 'No account found with this email. Would you like to create a new account?',
-          canRegister: true,
-          suggestedAction: 'register'
-        });
-      }
+    const consumer = filteredRows.find(row => row.consumer)?.consumer;
 
-      const linkedConsumers = consumerRows.filter(row => row.consumer.tenantId && row.tenant);
+    if (!consumer) {
+      return res.status(404).json({
+        message: 'No account found with this email. Would you like to create a new account?',
+        canRegister: true,
+        suggestedAction: 'register'
+      });
+    }
+
+    let tenant = filteredRows.find(row => row.tenant)?.tenant ?? requestedTenant;
+
+    if (!tenant && !tenantSlug && consumerRows.length > 1) {
       const uniqueLinkedConsumers = Array.from(
         new Map(
-          linkedConsumers.map(row => [row.tenant!.id, row])
+          consumerRows
+            .filter(row => row.tenant)
+            .map(row => [row.tenant!.id, row])
         ).values()
       );
 
@@ -113,47 +121,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       if (uniqueLinkedConsumers.length === 1) {
-        consumer = uniqueLinkedConsumers[0].consumer;
         tenant = uniqueLinkedConsumers[0].tenant!;
-      } else {
-        const firstConsumer = consumerRows[0]?.consumer;
-        if (!firstConsumer) {
-          return res.status(404).json({
-            message: 'No account found with this email. Would you like to create a new account?',
-            canRegister: true,
-            suggestedAction: 'register'
-          });
-        }
-
-        // If consumer has a tenant_id, let the flow continue to fetch the tenant by ID
-        // Only return needsAgencyLink if truly no tenant_id exists
-        if (firstConsumer.tenantId) {
-          consumer = firstConsumer;
-          // Flow will continue and fetch tenant by ID below
-        } else {
-          return res.status(409).json({
-            message: 'Your account needs to be linked to an agency. Please complete registration.',
-            needsAgencyLink: true,
-            consumer: {
-              id: firstConsumer.id,
-              firstName: firstConsumer.firstName,
-              lastName: firstConsumer.lastName,
-              email: firstConsumer.email
-            },
-            suggestedAction: 'register'
-          });
-        }
       }
-    }
-
-    if (!consumer) {
-      return res.status(404).json({
-        message: tenantSlug
-          ? 'No account found with this email for this agency. Would you like to create a new account?'
-          : 'No account found with this email. Would you like to create a new account?',
-        canRegister: true,
-        suggestedAction: 'register'
-      });
     }
 
     if (!tenant && consumer.tenantId) {
@@ -162,6 +131,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .from(tenants)
         .where(eq(tenants.id, consumer.tenantId))
         .limit(1);
+
       if (tenantById) {
         tenant = tenantById;
       }
@@ -203,21 +173,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!consumer.dateOfBirth) {
       return res.status(401).json({ message: 'Date of birth verification required. Please contact your agency.' });
     }
-
-    // Normalize date format (both should be YYYY-MM-DD)
-    const normalizeDate = (dateStr: string) => {
-      try {
-        // Create date object to validate, then extract components to avoid timezone issues
-        const date = new Date(dateStr);
-        if (Number.isNaN(date.getTime())) {
-          return null;
-        }
-        // Return in YYYY-MM-DD format
-        return date.toISOString().split('T')[0];
-      } catch {
-        return null;
-      }
-    };
 
     const normalizedProvided = normalizeDate(dateOfBirth);
     const normalizedStored = normalizeDate(consumer.dateOfBirth);
