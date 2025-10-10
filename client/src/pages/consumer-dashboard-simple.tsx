@@ -485,11 +485,17 @@ export default function ConsumerDashboardSimple() {
       // Refresh account data
       window.location.reload();
     } catch (err: any) {
+      const errorMessage = err.message || "Unable to process payment. Please try again or contact your agency.";
+      
+      // Show toast notification
       toast({
         title: "Payment Failed",
-        description: err.message || "Unable to process payment. Please try again or contact your agency.",
+        description: errorMessage,
         variant: "destructive",
       });
+      
+      // Also show alert dialog for more visibility
+      alert(`Payment Declined\n\n${errorMessage}\n\nPlease check your card details and try again, or contact your agency for assistance.`);
     } finally {
       setPaymentProcessing(false);
     }
