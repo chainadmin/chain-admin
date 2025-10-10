@@ -103,6 +103,8 @@ function applyCorsHeaders(req: AuthenticatedRequest, res: VercelResponse) {
       origin.includes('replit.dev') ||
       origin.includes('replit.app') ||
       origin.includes('repl.co') ||
+      origin.includes('railway.app') ||
+      origin.includes('railway.internal') ||
       origin.endsWith('.chainsoftwaregroup.com');
   }
 
