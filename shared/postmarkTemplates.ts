@@ -233,13 +233,13 @@ export const POSTMARK_TEMPLATES = {
     <td class="attribute-list-container">
       <table width="100%" cellpadding="0" cellspacing="0">
         <tr>
-          <td class="attribute-list-item"><strong>Account Number:</strong> {{accountNumber}}</td>
+          <td class="attribute-list-item"><strong>{{ACCOUNT_LABEL}}</strong> {{accountNumber}}</td>
         </tr>
         <tr>
-          <td class="attribute-list-item"><strong>Current Balance:</strong> {{balance}}</td>
+          <td class="attribute-list-item"><strong>{{BALANCE_LABEL}}</strong> {{balance}}</td>
         </tr>
         <tr>
-          <td class="attribute-list-item"><strong>Creditor:</strong> {{creditor}}</td>
+          <td class="attribute-list-item"><strong>{{CREDITOR_LABEL}}</strong> {{creditor}}</td>
         </tr>
       </table>
     </td>
@@ -359,10 +359,10 @@ export const POSTMARK_TEMPLATES = {
     <td class="attribute-list-container">
       <table width="100%" cellpadding="0" cellspacing="0">
         <tr>
-          <td class="attribute-list-item"><strong>Account Number:</strong> {{accountNumber}}</td>
+          <td class="attribute-list-item"><strong>{{ACCOUNT_LABEL}}</strong> {{accountNumber}}</td>
         </tr>
         <tr>
-          <td class="attribute-list-item"><strong>Current Balance:</strong> {{balance}}</td>
+          <td class="attribute-list-item"><strong>{{BALANCE_LABEL}}</strong> {{balance}}</td>
         </tr>
       </table>
     </td>
