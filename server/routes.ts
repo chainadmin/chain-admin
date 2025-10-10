@@ -4430,6 +4430,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (!success) {
+        // Send payment failure notification to consumer
+        try {
+          const consumer = await storage.getConsumer(consumerId);
+          const tenant = await storage.getTenant(tenantId);
+          const account = await storage.getAccount(accountId);
+          
+          if (consumer && tenant && consumer.email) {
+            const paymentAmountFormatted = `$${(amountCents / 100).toFixed(2)}`;
+            const consumerName = `${consumer.firstName} ${consumer.lastName}`;
+            const errorMessage = usaepayResult.error || usaepayResult.result_code || "Payment was declined";
+            
+            const emailSubject = 'Payment Processing Failed';
+            const emailBody = `
+              <h2>Payment Could Not Be Processed</h2>
+              <p>Dear ${consumerName},</p>
+              <p>We were unable to process your recent payment. Please review the details below and try again.</p>
+              <h3>Payment Details:</h3>
+              <ul>
+                <li><strong>Amount:</strong> ${paymentAmountFormatted}</li>
+                <li><strong>Account:</strong> ${account?.creditor || 'Your Account'}</li>
+                <li><strong>Date:</strong> ${new Date().toLocaleDateString('en-US', { 
+                  month: 'long', 
+                  day: 'numeric', 
+                  year: 'numeric' 
+                })}</li>
+                <li><strong>Reason:</strong> ${errorMessage}</li>
+              </ul>
+              <p>Please check your card details and try again, or contact us if you need assistance.</p>
+              <p>Thank you,<br/>${tenant.name}</p>
+            `;
+            
+            await sendEmail({
+              to: consumer.email,
+              subject: emailSubject,
+              html: emailBody,
+              from: `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>`,
+            });
+            
+            // Also notify agency admin about failed payment
+            const tenantSettings = await storage.getTenantSettings(tenantId);
+            const adminEmail = (tenantSettings as any)?.contactEmail || (tenant as any)?.contactEmail || tenant?.email;
+            
+            if (adminEmail) {
+              const adminEmailSubject = `Payment Failed - ${consumerName}`;
+              const adminEmailBody = `
+                <h2>Payment Processing Failed</h2>
+                <p>A payment attempt from ${consumerName} has failed.</p>
+                <h3>Details:</h3>
+                <ul>
+                  <li><strong>Consumer:</strong> ${consumerName}</li>
+                  <li><strong>Consumer Email:</strong> ${consumer.email}</li>
+                  <li><strong>Amount:</strong> ${paymentAmountFormatted}</li>
+                  <li><strong>Account:</strong> ${account?.accountNumber || account?.id}</li>
+                  <li><strong>Creditor:</strong> ${account?.creditor || 'N/A'}</li>
+                  <li><strong>Date:</strong> ${new Date().toLocaleDateString('en-US', { 
+                    month: 'long', 
+                    day: 'numeric', 
+                    year: 'numeric' 
+                  })}</li>
+                  <li><strong>Reason:</strong> ${errorMessage}</li>
+                </ul>
+                <p>The consumer has been notified about this failed payment attempt.</p>
+              `;
+              
+              await sendEmail({
+                to: adminEmail,
+                subject: adminEmailSubject,
+                html: adminEmailBody,
+                from: `Chain Software <noreply@chainsoftwaregroup.com>`,
+              });
+            }
+          }
+        } catch (emailError) {
+          console.error("Error sending payment failure notification:", emailError);
+          // Don't fail the response if email fails
+        }
+        
         return res.status(400).json({
           success: false,
           message: usaepayResult.error || usaepayResult.result_code || "Payment declined. Please check your card details and try again."
