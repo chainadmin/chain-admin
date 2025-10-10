@@ -181,6 +181,12 @@ export const emailTemplates = pgTable("email_templates", {
   name: text("name").notNull(),
   subject: text("subject").notNull(),
   html: text("html").notNull(),
+  greeting: text("greeting"), // User's custom greeting
+  mainMessage: text("main_message"), // User's main message content
+  buttonText: text("button_text"), // Button text
+  buttonUrl: text("button_url"), // Button URL (can be variable or custom URL)
+  closingMessage: text("closing_message"), // Additional message before sign-off
+  signOff: text("sign_off"), // Sign-off text
   designType: text("design_type").default("custom"), // "custom", "postmark-invoice", "postmark-welcome", etc.
   status: text("status").default("draft"),
   createdAt: timestamp("created_at").defaultNow(),

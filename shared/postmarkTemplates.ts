@@ -32,7 +32,7 @@ export const POSTMARK_TEMPLATES = {
             <table border="0" cellspacing="0" cellpadding="0">
               <tr>
                 <td>
-                  <a href="{{consumerPortalLink}}" class="button button--green" target="_blank">{{CUSTOM_BUTTON_TEXT}}</a>
+                  <a href="{{CUSTOM_BUTTON_URL}}" class="button button--green" target="_blank">{{CUSTOM_BUTTON_TEXT}}</a>
                 </td>
               </tr>
             </table>
@@ -254,7 +254,7 @@ export const POSTMARK_TEMPLATES = {
             <table border="0" cellspacing="0" cellpadding="0">
               <tr>
                 <td>
-                  <a href="{{consumerPortalLink}}" class="button button--green" target="_blank">{{CUSTOM_BUTTON_TEXT}}</a>
+                  <a href="{{CUSTOM_BUTTON_URL}}" class="button button--green" target="_blank">{{CUSTOM_BUTTON_TEXT}}</a>
                 </td>
               </tr>
             </table>
@@ -343,7 +343,7 @@ export const POSTMARK_TEMPLATES = {
             <table border="0" cellspacing="0" cellpadding="0">
               <tr>
                 <td>
-                  <a href="{{consumerPortalLink}}" class="button button--green" target="_blank">{{CUSTOM_BUTTON_TEXT}}</a>
+                  <a href="{{CUSTOM_BUTTON_URL}}" class="button button--green" target="_blank">{{CUSTOM_BUTTON_TEXT}}</a>
                 </td>
               </tr>
             </table>
@@ -485,7 +485,7 @@ export const POSTMARK_TEMPLATES = {
             <table border="0" cellspacing="0" cellpadding="0">
               <tr>
                 <td>
-                  <a href="{{consumerPortalLink}}" class="button button--green" target="_blank">{{CUSTOM_BUTTON_TEXT}}</a>
+                  <a href="{{CUSTOM_BUTTON_URL}}" class="button button--green" target="_blank">{{CUSTOM_BUTTON_TEXT}}</a>
                 </td>
               </tr>
             </table>

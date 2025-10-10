@@ -51,12 +51,25 @@ export default function Communications() {
   const emailTextareaRef = useRef<HTMLTextAreaElement>(null);
   const smsTextareaRef = useRef<HTMLTextAreaElement>(null);
   
+  // Refs for all email template fields to enable variable insertion
+  const subjectRef = useRef<HTMLInputElement>(null);
+  const greetingRef = useRef<HTMLInputElement>(null);
+  const mainMessageRef = useRef<HTMLTextAreaElement>(null);
+  const buttonTextRef = useRef<HTMLInputElement>(null);
+  const buttonUrlRef = useRef<HTMLInputElement>(null);
+  const closingMessageRef = useRef<HTMLTextAreaElement>(null);
+  const signOffRef = useRef<HTMLInputElement>(null);
+  
+  // Track which field is currently focused for variable insertion
+  const [activeField, setActiveField] = useState<string>('mainMessage');
+  
   const [emailTemplateForm, setEmailTemplateForm] = useState({
     name: "",
     subject: "",
     greeting: "", // e.g., "Hi {{firstName}},"
     mainMessage: "", // Main body text
     buttonText: "", // Call to action button text (optional)
+    buttonUrl: "", // Custom button URL (e.g., {{consumerPortalLink}}, {{appDownloadLink}}, or custom URL)
     closingMessage: "", // Additional message before sign-off
     signOff: "", // e.g., "Thanks, The {{agencyName}} Team"
     html: "", // Full template HTML (for storage/sending)
@@ -192,30 +205,53 @@ export default function Communications() {
     { label: "Agency Phone", value: "{{agencyPhone}}", category: "agency" },
   ];
 
-  // Function to insert variable at cursor position
+  // Function to insert variable at cursor position (works with any field)
   const insertVariable = (variable: string) => {
-    const textarea = communicationType === "email" ? emailTextareaRef.current : smsTextareaRef.current;
-    if (!textarea) return;
-
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const text = communicationType === "email" ? emailTemplateForm.mainMessage : smsTemplateForm.message;
-    const before = text.substring(0, start);
-    const after = text.substring(end);
-    
-    const newText = before + variable + after;
-    
-    if (communicationType === "email") {
-      setEmailTemplateForm({ ...emailTemplateForm, mainMessage: newText });
-    } else {
+    if (communicationType === "sms") {
+      const textarea = smsTextareaRef.current;
+      if (!textarea) return;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const text = smsTemplateForm.message;
+      const before = text.substring(0, start);
+      const after = text.substring(end);
+      const newText = before + variable + after;
       setSmsTemplateForm({ ...smsTemplateForm, message: newText });
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + variable.length, start + variable.length);
+      }, 0);
+      return;
     }
     
-    // Set cursor position after inserted variable
+    // Email template - insert into active field
+    const fieldMap: Record<string, { ref: React.RefObject<HTMLInputElement | HTMLTextAreaElement>, field: keyof typeof emailTemplateForm }> = {
+      subject: { ref: subjectRef, field: 'subject' },
+      greeting: { ref: greetingRef, field: 'greeting' },
+      mainMessage: { ref: mainMessageRef, field: 'mainMessage' },
+      buttonText: { ref: buttonTextRef, field: 'buttonText' },
+      buttonUrl: { ref: buttonUrlRef, field: 'buttonUrl' },
+      closingMessage: { ref: closingMessageRef, field: 'closingMessage' },
+      signOff: { ref: signOffRef, field: 'signOff' },
+    };
+    
+    const currentField = fieldMap[activeField];
+    if (!currentField || !currentField.ref.current) return;
+    
+    const element = currentField.ref.current;
+    const start = element.selectionStart || 0;
+    const end = element.selectionEnd || 0;
+    const text = String(emailTemplateForm[currentField.field] || '');
+    const before = text.substring(0, start);
+    const after = text.substring(end);
+    const newText = before + variable + after;
+    
+    setEmailTemplateForm({ ...emailTemplateForm, [currentField.field]: newText });
+    
     setTimeout(() => {
-      textarea.focus();
+      element.focus();
       const newPosition = start + variable.length;
-      textarea.setSelectionRange(newPosition, newPosition);
+      element.setSelectionRange(newPosition, newPosition);
     }, 0);
   };
 
@@ -231,6 +267,7 @@ export default function Communications() {
       greeting: emailTemplateForm.greeting || "Hi {{firstName}},",
       mainMessage: emailTemplateForm.mainMessage || "This is a friendly reminder about your account. Your current balance is {{balance}} for account {{accountNumber}}.",
       buttonText: emailTemplateForm.buttonText || "View Account",
+      buttonUrl: emailTemplateForm.buttonUrl || "{{consumerPortalLink}}",
       closingMessage: emailTemplateForm.closingMessage || "If you have any questions, please don't hesitate to contact us.",
       signOff: emailTemplateForm.signOff || "Thanks,<br>The {{agencyName}} Team",
       html: fullHtml,
@@ -244,6 +281,7 @@ export default function Communications() {
     const greeting = emailTemplateForm.greeting || "Hi {{firstName}},";
     const mainMessage = emailTemplateForm.mainMessage || "";
     const buttonText = emailTemplateForm.buttonText || "View Account";
+    const buttonUrl = emailTemplateForm.buttonUrl || "{{consumerPortalLink}}";
     const closingMessage = emailTemplateForm.closingMessage || "If you have any questions, please don't hesitate to contact us.";
     const signOff = emailTemplateForm.signOff || "Thanks,<br>The {{agencyName}} Team";
     
@@ -252,6 +290,7 @@ export default function Communications() {
     previewHtml = previewHtml.replace('{{CUSTOM_GREETING}}', greeting);
     previewHtml = previewHtml.replace('{{CUSTOM_MESSAGE}}', mainMessage);
     previewHtml = previewHtml.replace('{{CUSTOM_BUTTON_TEXT}}', buttonText);
+    previewHtml = previewHtml.replace('{{CUSTOM_BUTTON_URL}}', buttonUrl);
     previewHtml = previewHtml.replace('{{CUSTOM_CLOSING_MESSAGE}}', closingMessage);
     previewHtml = previewHtml.replace('{{CUSTOM_SIGNOFF}}', signOff);
     
@@ -265,9 +304,11 @@ export default function Communications() {
     previewHtml = previewHtml.replace(/\{\{creditor\}\}/g, "Sample Creditor");
     previewHtml = previewHtml.replace(/\{\{balance\}\}/g, "$1,234.56");
     previewHtml = previewHtml.replace(/\{\{dueDate\}\}/g, "12/31/2024");
-    previewHtml = previewHtml.replace(/\{\{consumerPortalLink\}\}/g, "#");
-    previewHtml = previewHtml.replace(/\{\{appDownloadLink\}\}/g, "#");
+    previewHtml = previewHtml.replace(/\{\{consumerPortalLink\}\}/g, "https://yourportal.example.com/account");
+    previewHtml = previewHtml.replace(/\{\{appDownloadLink\}\}/g, "https://app.example.com/download");
     previewHtml = previewHtml.replace(/\{\{agencyName\}\}/g, (tenantSettings as any)?.agencyName || "Your Agency");
+    previewHtml = previewHtml.replace(/\{\{agencyEmail\}\}/g, (tenantSettings as any)?.agencyEmail || "support@example.com");
+    previewHtml = previewHtml.replace(/\{\{agencyPhone\}\}/g, (tenantSettings as any)?.agencyPhone || "(555) 123-4567");
     
     // Include styles for proper rendering
     const stylesHtml = template.styles || '';
@@ -286,6 +327,7 @@ export default function Communications() {
         greeting: "",
         mainMessage: "",
         buttonText: "",
+        buttonUrl: "",
         closingMessage: "",
         signOff: "",
         html: "", 
@@ -318,6 +360,7 @@ export default function Communications() {
         greeting: "",
         mainMessage: "",
         buttonText: "",
+        buttonUrl: "",
         closingMessage: "",
         signOff: "",
         html: "", 
@@ -606,6 +649,7 @@ export default function Communications() {
         greeting: template.greeting || "Hi {{firstName}},",
         mainMessage: template.mainMessage || "",
         buttonText: template.buttonText || "",
+        buttonUrl: template.buttonUrl || "{{consumerPortalLink}}",
         closingMessage: template.closingMessage || "",
         signOff: template.signOff || "Thanks,<br>The {{agencyName}} Team",
         html: template.html || "",
@@ -639,6 +683,7 @@ export default function Communications() {
       const greeting = emailTemplateForm.greeting || "Hi {{firstName}},";
       const mainMessage = emailTemplateForm.mainMessage;
       const buttonText = emailTemplateForm.buttonText || "View Account";
+      const buttonUrl = emailTemplateForm.buttonUrl || "{{consumerPortalLink}}";
       const closingMessage = emailTemplateForm.closingMessage || "If you have any questions, please don't hesitate to contact us.";
       const signOff = emailTemplateForm.signOff || "Thanks,<br>The {{agencyName}} Team";
       
@@ -646,6 +691,7 @@ export default function Communications() {
       customizedHtml = customizedHtml.replace('{{CUSTOM_GREETING}}', greeting);
       customizedHtml = customizedHtml.replace('{{CUSTOM_MESSAGE}}', mainMessage);
       customizedHtml = customizedHtml.replace('{{CUSTOM_BUTTON_TEXT}}', buttonText);
+      customizedHtml = customizedHtml.replace('{{CUSTOM_BUTTON_URL}}', buttonUrl);
       customizedHtml = customizedHtml.replace('{{CUSTOM_CLOSING_MESSAGE}}', closingMessage);
       customizedHtml = customizedHtml.replace('{{CUSTOM_SIGNOFF}}', signOff);
       
@@ -658,6 +704,7 @@ export default function Communications() {
         greeting: emailTemplateForm.greeting,
         mainMessage: emailTemplateForm.mainMessage,
         buttonText: emailTemplateForm.buttonText,
+        buttonUrl: emailTemplateForm.buttonUrl,
         closingMessage: emailTemplateForm.closingMessage,
         signOff: emailTemplateForm.signOff,
         designType: emailTemplateForm.designType,
@@ -1366,6 +1413,7 @@ export default function Communications() {
                     greeting: "",
                     mainMessage: "",
                     buttonText: "",
+                    buttonUrl: "",
                     closingMessage: "",
                     signOff: "",
                     html: "", 
@@ -1437,8 +1485,10 @@ export default function Communications() {
                           <div>
                             <Label className="text-sm font-medium">Subject Line *</Label>
                             <Input
+                              ref={subjectRef}
                               value={emailTemplateForm.subject}
                               onChange={(e) => setEmailTemplateForm({...emailTemplateForm, subject: e.target.value})}
+                              onFocus={() => setActiveField('subject')}
                               placeholder="e.g., Payment Required - Account {{accountNumber}}"
                               className="mt-1"
                               data-testid="input-subject"
@@ -1451,8 +1501,10 @@ export default function Communications() {
                             <div>
                               <Label className="text-xs font-medium">Greeting</Label>
                               <Input
+                                ref={greetingRef}
                                 value={emailTemplateForm.greeting}
                                 onChange={(e) => setEmailTemplateForm({...emailTemplateForm, greeting: e.target.value})}
+                                onFocus={() => setActiveField('greeting')}
                                 placeholder="e.g., Hi {{firstName}},"
                                 className="mt-1"
                                 data-testid="input-greeting"
@@ -1462,9 +1514,10 @@ export default function Communications() {
                             <div>
                               <Label className="text-xs font-medium">Main Message *</Label>
                               <Textarea
-                                ref={emailTextareaRef}
+                                ref={mainMessageRef}
                                 value={emailTemplateForm.mainMessage}
                                 onChange={(e) => setEmailTemplateForm({...emailTemplateForm, mainMessage: e.target.value})}
+                                onFocus={() => setActiveField('mainMessage')}
                                 placeholder="This is a friendly reminder about your account. Your current balance is {{balance}} on account {{accountNumber}}."
                                 className="mt-1 min-h-[100px]"
                                 data-testid="textarea-main-message"
@@ -1474,8 +1527,10 @@ export default function Communications() {
                             <div>
                               <Label className="text-xs font-medium">Button Text (Optional)</Label>
                               <Input
+                                ref={buttonTextRef}
                                 value={emailTemplateForm.buttonText}
                                 onChange={(e) => setEmailTemplateForm({...emailTemplateForm, buttonText: e.target.value})}
+                                onFocus={() => setActiveField('buttonText')}
                                 placeholder="e.g., Make a Payment, View Account"
                                 className="mt-1"
                                 data-testid="input-button-text"
@@ -1483,10 +1538,28 @@ export default function Communications() {
                             </div>
                             
                             <div>
+                              <Label className="text-xs font-medium">Button URL (Optional)</Label>
+                              <Input
+                                ref={buttonUrlRef}
+                                value={emailTemplateForm.buttonUrl}
+                                onChange={(e) => setEmailTemplateForm({...emailTemplateForm, buttonUrl: e.target.value})}
+                                onFocus={() => setActiveField('buttonUrl')}
+                                placeholder="e.g., {{consumerPortalLink}}, {{appDownloadLink}}, or custom URL"
+                                className="mt-1"
+                                data-testid="input-button-url"
+                              />
+                              <p className="text-xs text-gray-500 mt-1">
+                                Use variables like {'{'}{'{'} consumerPortalLink {'}'}{'}'}  or {'{'}{'{'} appDownloadLink {'}'}{'}'},  or enter a custom URL
+                              </p>
+                            </div>
+                            
+                            <div>
                               <Label className="text-xs font-medium">Additional Message</Label>
                               <Textarea
+                                ref={closingMessageRef}
                                 value={emailTemplateForm.closingMessage}
                                 onChange={(e) => setEmailTemplateForm({...emailTemplateForm, closingMessage: e.target.value})}
+                                onFocus={() => setActiveField('closingMessage')}
                                 placeholder="If you have any questions, please contact us."
                                 className="mt-1 min-h-[60px]"
                                 data-testid="textarea-closing-message"
@@ -1496,8 +1569,10 @@ export default function Communications() {
                             <div>
                               <Label className="text-xs font-medium">Sign-off</Label>
                               <Input
+                                ref={signOffRef}
                                 value={emailTemplateForm.signOff}
                                 onChange={(e) => setEmailTemplateForm({...emailTemplateForm, signOff: e.target.value})}
+                                onFocus={() => setActiveField('signOff')}
                                 placeholder="e.g., Thanks, The {{agencyName}} Team"
                                 className="mt-1"
                                 data-testid="input-signoff"
@@ -1508,7 +1583,7 @@ export default function Communications() {
                           <div>
                             <Label className="text-sm font-medium mb-2 block">Insert Variables</Label>
                             <p className="text-xs text-gray-500 mb-2">
-                              Click a variable to insert it at cursor position
+                              Click a variable to insert it into the focused field (click any field above first)
                             </p>
                             <div className="flex flex-wrap gap-1.5 p-3 bg-gray-50 rounded-lg border">
                               {templateVariables.map((variable) => (
@@ -1524,7 +1599,7 @@ export default function Communications() {
                               ))}
                             </div>
                             <p className="text-xs text-gray-500 mt-2">
-                              Tip: Variables work in both the subject line and template content
+                              💡 Tip: Variables work in ALL fields - Subject, Greeting, Message, Button URL, etc.
                             </p>
                           </div>
                         </div>
