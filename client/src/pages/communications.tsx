@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -72,6 +73,12 @@ export default function Communications() {
     buttonUrl: "", // Custom button URL (e.g., {{consumerPortalLink}}, {{appDownloadLink}}, or custom URL)
     closingMessage: "", // Additional message before sign-off
     signOff: "", // e.g., "Thanks, The {{agencyName}} Team"
+    // Account details box customization
+    showAccountDetails: true,
+    accountLabel: "Account:",
+    creditorLabel: "Creditor:",
+    balanceLabel: "Balance:",
+    dueDateLabel: "Due Date:",
     html: "", // Full template HTML (for storage/sending)
     designType: "postmark-invoice" as PostmarkTemplateType,
   });
@@ -330,6 +337,11 @@ export default function Communications() {
         buttonUrl: "",
         closingMessage: "",
         signOff: "",
+        showAccountDetails: true,
+        accountLabel: "Account:",
+        creditorLabel: "Creditor:",
+        balanceLabel: "Balance:",
+        dueDateLabel: "Due Date:",
         html: "", 
         designType: "postmark-invoice" 
       });
@@ -363,6 +375,11 @@ export default function Communications() {
         buttonUrl: "",
         closingMessage: "",
         signOff: "",
+        showAccountDetails: true,
+        accountLabel: "Account:",
+        creditorLabel: "Creditor:",
+        balanceLabel: "Balance:",
+        dueDateLabel: "Due Date:",
         html: "", 
         designType: "postmark-invoice" 
       });
@@ -652,6 +669,11 @@ export default function Communications() {
         buttonUrl: template.buttonUrl || "{{consumerPortalLink}}",
         closingMessage: template.closingMessage || "",
         signOff: template.signOff || "Thanks,<br>The {{agencyName}} Team",
+        showAccountDetails: template.showAccountDetails !== undefined ? template.showAccountDetails : true,
+        accountLabel: template.accountLabel || "Account:",
+        creditorLabel: template.creditorLabel || "Creditor:",
+        balanceLabel: template.balanceLabel || "Balance:",
+        dueDateLabel: template.dueDateLabel || "Due Date:",
         html: template.html || "",
         designType: (template.designType === "custom" || !template.designType) ? "postmark-invoice" : template.designType,
       });
@@ -1416,6 +1438,11 @@ export default function Communications() {
                     buttonUrl: "",
                     closingMessage: "",
                     signOff: "",
+                    showAccountDetails: true,
+                    accountLabel: "Account:",
+                    creditorLabel: "Creditor:",
+                    balanceLabel: "Balance:",
+                    dueDateLabel: "Due Date:",
                     html: "", 
                     designType: "postmark-invoice" 
                   });
@@ -1579,6 +1606,75 @@ export default function Communications() {
                               />
                             </div>
                           </div>
+
+                          <Separator className="my-4" />
+                          
+                          <div>
+                            <Label className="text-sm font-medium mb-3 block">Account Details Box</Label>
+                            <p className="text-xs text-gray-500 mb-3">Customize the account information box shown in payment reminder and invoice templates</p>
+                            
+                            <div className="flex items-center space-x-2 mb-4">
+                              <input
+                                type="checkbox"
+                                id="show-account-details"
+                                checked={emailTemplateForm.showAccountDetails}
+                                onChange={(e) => setEmailTemplateForm({...emailTemplateForm, showAccountDetails: e.target.checked})}
+                                className="h-4 w-4"
+                                data-testid="checkbox-show-account-details"
+                              />
+                              <Label htmlFor="show-account-details" className="text-xs cursor-pointer">Show account details box</Label>
+                            </div>
+
+                            {emailTemplateForm.showAccountDetails && (
+                              <div className="space-y-3 pl-6 border-l-2 border-gray-200">
+                                <div>
+                                  <Label className="text-xs font-medium">Account Label</Label>
+                                  <Input
+                                    value={emailTemplateForm.accountLabel}
+                                    onChange={(e) => setEmailTemplateForm({...emailTemplateForm, accountLabel: e.target.value})}
+                                    placeholder="Account:"
+                                    className="mt-1"
+                                    data-testid="input-account-label"
+                                  />
+                                </div>
+                                
+                                <div>
+                                  <Label className="text-xs font-medium">Creditor Label</Label>
+                                  <Input
+                                    value={emailTemplateForm.creditorLabel}
+                                    onChange={(e) => setEmailTemplateForm({...emailTemplateForm, creditorLabel: e.target.value})}
+                                    placeholder="Creditor:"
+                                    className="mt-1"
+                                    data-testid="input-creditor-label"
+                                  />
+                                </div>
+                                
+                                <div>
+                                  <Label className="text-xs font-medium">Balance Label</Label>
+                                  <Input
+                                    value={emailTemplateForm.balanceLabel}
+                                    onChange={(e) => setEmailTemplateForm({...emailTemplateForm, balanceLabel: e.target.value})}
+                                    placeholder="Balance:"
+                                    className="mt-1"
+                                    data-testid="input-balance-label"
+                                  />
+                                </div>
+                                
+                                <div>
+                                  <Label className="text-xs font-medium">Due Date Label</Label>
+                                  <Input
+                                    value={emailTemplateForm.dueDateLabel}
+                                    onChange={(e) => setEmailTemplateForm({...emailTemplateForm, dueDateLabel: e.target.value})}
+                                    placeholder="Due Date:"
+                                    className="mt-1"
+                                    data-testid="input-due-date-label"
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          <Separator className="my-4" />
 
                           <div>
                             <Label className="text-sm font-medium mb-2 block">Insert Variables</Label>
