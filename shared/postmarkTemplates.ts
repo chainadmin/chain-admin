@@ -43,42 +43,6 @@ export const POSTMARK_TEMPLATES = {
     </td>
   </tr>
 </table>
-<table class="purchase" width="100%" cellpadding="0" cellspacing="0">
-  <tr>
-    <td>
-      <h3>Account #{{accountNumber}}</h3>
-    </td>
-    <td>
-      <h3 class="align-right">{{dueDate}}</h3>
-    </td>
-  </tr>
-  <tr>
-    <td colspan="2">
-      <table class="purchase_content" width="100%" cellpadding="0" cellspacing="0">
-        <tr>
-          <th class="purchase_heading">
-            <p>Description</p>
-          </th>
-          <th class="purchase_heading">
-            <p class="align-right">Amount</p>
-          </th>
-        </tr>
-        <tr>
-          <td width="80%" class="purchase_item">{{creditor}} - Account Balance</td>
-          <td class="align-right purchase_item" width="20%">{{balance}}</td>
-        </tr>
-        <tr>
-          <td width="80%" class="purchase_footer" valign="middle">
-            <p class="purchase_total purchase_total--label">Total Due</p>
-          </td>
-          <td width="20%" class="purchase_footer" valign="middle">
-            <p class="purchase_total">{{balance}}</p>
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-</table>
 <p>{{CUSTOM_CLOSING_MESSAGE}}</p>
 <p>{{CUSTOM_SIGNOFF}}</p>
 <!-- Sub copy -->
