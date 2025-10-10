@@ -281,16 +281,42 @@ export default function Communications() {
     });
   };
 
+  const formatMultilineText = (text: string) => {
+    if (!text) return "";
+    return text.replace(/\r?\n/g, "<br>");
+  };
+
+  const removeAccountDetailsTables = (html: string) => {
+    if (!html) return html;
+
+    if (typeof window !== "undefined" && typeof DOMParser !== "undefined") {
+      try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, "text/html");
+        doc.querySelectorAll("table.attribute-list").forEach((table) => {
+          table.remove();
+        });
+        return doc.body.innerHTML;
+      } catch (error) {
+        console.error("Failed to strip account details table from template preview", error);
+      }
+    }
+
+    return html.replace(/<table class="attribute-list"[\s\S]*?<\/table>\s*<\/td>\s*<\/tr>\s*<\/table>/gi, "");
+  };
+
   // Function to render preview with actual data
   const renderPreview = () => {
     const template = POSTMARK_TEMPLATES[emailTemplateForm.designType] as any;
     
-    const greeting = emailTemplateForm.greeting || "Hi {{firstName}},";
-    const mainMessage = emailTemplateForm.mainMessage || "";
+    const greeting = formatMultilineText(emailTemplateForm.greeting || "Hi {{firstName}},");
+    const mainMessage = formatMultilineText(emailTemplateForm.mainMessage || "");
     const buttonText = emailTemplateForm.buttonText || "View Account";
     const buttonUrl = emailTemplateForm.buttonUrl || "{{consumerPortalLink}}";
-    const closingMessage = emailTemplateForm.closingMessage || "If you have any questions, please don't hesitate to contact us.";
-    const signOff = emailTemplateForm.signOff || "Thanks,<br>The {{agencyName}} Team";
+    const closingMessage = formatMultilineText(
+      emailTemplateForm.closingMessage || "If you have any questions, please don't hesitate to contact us."
+    );
+    const signOff = formatMultilineText(emailTemplateForm.signOff || "Thanks,<br>The {{agencyName}} Team");
     
     // Replace custom placeholders with user's content
     let previewHtml = template.html;
@@ -308,7 +334,7 @@ export default function Communications() {
     
     // Remove account details box if showAccountDetails is false
     if (!emailTemplateForm.showAccountDetails) {
-      previewHtml = previewHtml.replace(/<table class="attribute-list"[\s\S]*?<\/table>/g, '');
+      previewHtml = removeAccountDetailsTables(previewHtml);
     }
     
     // Replace company logo
@@ -721,12 +747,14 @@ export default function Communications() {
       const template = POSTMARK_TEMPLATES[emailTemplateForm.designType] as any;
       
       // Replace custom placeholders with user's actual content
-      const greeting = emailTemplateForm.greeting || "Hi {{firstName}},";
-      const mainMessage = emailTemplateForm.mainMessage;
+      const greeting = formatMultilineText(emailTemplateForm.greeting || "Hi {{firstName}},");
+      const mainMessage = formatMultilineText(emailTemplateForm.mainMessage);
       const buttonText = emailTemplateForm.buttonText || "View Account";
       const buttonUrl = emailTemplateForm.buttonUrl || "{{consumerPortalLink}}";
-      const closingMessage = emailTemplateForm.closingMessage || "If you have any questions, please don't hesitate to contact us.";
-      const signOff = emailTemplateForm.signOff || "Thanks,<br>The {{agencyName}} Team";
+      const closingMessage = formatMultilineText(
+        emailTemplateForm.closingMessage || "If you have any questions, please don't hesitate to contact us."
+      );
+      const signOff = formatMultilineText(emailTemplateForm.signOff || "Thanks,<br>The {{agencyName}} Team");
       
       let customizedHtml = template.html;
       customizedHtml = customizedHtml.replace('{{CUSTOM_GREETING}}', greeting);
@@ -743,7 +771,7 @@ export default function Communications() {
       
       // Remove account details box if showAccountDetails is false
       if (!emailTemplateForm.showAccountDetails) {
-        customizedHtml = customizedHtml.replace(/<table class="attribute-list"[\s\S]*?<\/table>/g, '');
+        customizedHtml = removeAccountDetailsTables(customizedHtml);
       }
       
       // Note: Logo will be replaced at send time with tenant's actual logo in server/routes.ts
