@@ -1669,11 +1669,11 @@ export default function Communications() {
                                   <Input
                                     value={emailTemplateForm.accountLabel}
                                     onChange={(e) => setEmailTemplateForm({...emailTemplateForm, accountLabel: e.target.value})}
-                                    placeholder="e.g. Account: {{accountNumber}}"
+                                    placeholder="e.g. Account: {accountNumber}"
                                     className="mt-1"
                                     data-testid="input-account-label"
                                   />
-                                  <p className="text-xs text-gray-500 mt-1">Use variables like {{accountNumber}}</p>
+                                  <p className="text-xs text-gray-500 mt-1">Use variables like {'{'}{'{'}{'}'}accountNumber{'}'}{'}'}</p>
                                 </div>
                                 
                                 <div>
@@ -1681,11 +1681,11 @@ export default function Communications() {
                                   <Input
                                     value={emailTemplateForm.creditorLabel}
                                     onChange={(e) => setEmailTemplateForm({...emailTemplateForm, creditorLabel: e.target.value})}
-                                    placeholder="e.g. Creditor: {{creditor}}"
+                                    placeholder="e.g. Creditor: {creditor}"
                                     className="mt-1"
                                     data-testid="input-creditor-label"
                                   />
-                                  <p className="text-xs text-gray-500 mt-1">Use variables like {{creditor}}</p>
+                                  <p className="text-xs text-gray-500 mt-1">Use variables like {'{'}{'{'}{'}'}creditor{'}'}{'}'}</p>
                                 </div>
                                 
                                 <div>
@@ -1693,11 +1693,11 @@ export default function Communications() {
                                   <Input
                                     value={emailTemplateForm.balanceLabel}
                                     onChange={(e) => setEmailTemplateForm({...emailTemplateForm, balanceLabel: e.target.value})}
-                                    placeholder="e.g. Balance: {{balance}}"
+                                    placeholder="e.g. Balance: {balance}"
                                     className="mt-1"
                                     data-testid="input-balance-label"
                                   />
-                                  <p className="text-xs text-gray-500 mt-1">Use variables like {{balance}}</p>
+                                  <p className="text-xs text-gray-500 mt-1">Use variables like {'{'}{'{'}{'}'}balance{'}'}{'}'}</p>
                                 </div>
                                 
                                 <div>
@@ -1705,11 +1705,11 @@ export default function Communications() {
                                   <Input
                                     value={emailTemplateForm.dueDateLabel}
                                     onChange={(e) => setEmailTemplateForm({...emailTemplateForm, dueDateLabel: e.target.value})}
-                                    placeholder="e.g. Due: {{dueDate}}"
+                                    placeholder="e.g. Due: {dueDate}"
                                     className="mt-1"
                                     data-testid="input-due-date-label"
                                   />
-                                  <p className="text-xs text-gray-500 mt-1">Use variables like {{dueDate}}</p>
+                                  <p className="text-xs text-gray-500 mt-1">Use variables like {'{'}{'{'}{'}'}dueDate{'}'}{'}'}</p>
                                 </div>
                               </div>
                             )}
