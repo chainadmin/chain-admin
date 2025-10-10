@@ -1441,10 +1441,41 @@ export default function Settings() {
                       <div className="pt-4">
                         <Button
                           onClick={async () => {
+                            const REDACTED_VALUE = "••••••••";
+                            const apiKeyInput = localSettings?.smaxApiKey?.trim();
+                            const pinInput = localSettings?.smaxPin?.trim();
+                            const baseUrl = localSettings?.smaxBaseUrl?.trim();
+
+                            const useStoredApiKey = apiKeyInput === REDACTED_VALUE;
+                            const useStoredPin = pinInput === REDACTED_VALUE;
+
+                            if (!useStoredApiKey && !apiKeyInput) {
+                              toast({
+                                title: "Missing Credentials",
+                                description: "Please enter your SMAX API key before testing.",
+                                variant: "destructive",
+                              });
+                              return;
+                            }
+
+                            if (!useStoredPin && !pinInput) {
+                              toast({
+                                title: "Missing Credentials",
+                                description: "Please enter your SMAX PIN before testing.",
+                                variant: "destructive",
+                              });
+                              return;
+                            }
+
                             try {
-                              const response = await apiRequest("POST", "/api/settings/test-smax");
+                              const response = await apiRequest("POST", "/api/settings/test-smax", {
+                                smaxEnabled: localSettings?.smaxEnabled ?? false,
+                                smaxApiKey: useStoredApiKey ? undefined : apiKeyInput,
+                                smaxPin: useStoredPin ? undefined : pinInput,
+                                smaxBaseUrl: baseUrl || undefined,
+                              });
                               const result = await response.json();
-                              
+
                               if (result.success) {
                                 toast({
                                   title: "Connection Successful",

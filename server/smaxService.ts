@@ -42,19 +42,29 @@ interface SmaxNoteData {
 class SmaxService {
   private tokenCache: Map<string, { token: string; expires: number }> = new Map();
 
-  private async getSmaxConfig(tenantId: string): Promise<SmaxConfig | null> {
+  private async getSmaxConfig(
+    tenantId: string,
+    overrides?: Partial<SmaxConfig>
+  ): Promise<SmaxConfig | null> {
     try {
       const settings = await storage.getTenantSettings(tenantId);
-      
-      if (!settings?.smaxEnabled || !settings.smaxApiKey || !settings.smaxPin) {
+
+      const enabled = overrides?.enabled ?? settings?.smaxEnabled;
+      const apiKey = (overrides?.apiKey ?? settings?.smaxApiKey)?.trim();
+      const pin = (overrides?.pin ?? settings?.smaxPin)?.trim();
+      const rawBaseUrl = overrides?.baseUrl ?? settings?.smaxBaseUrl;
+      const baseUrl = (rawBaseUrl?.trim() || 'https://api.smaxcollectionsoftware.com:8000')
+        .replace(/\/$/, '');
+
+      if (!enabled || !apiKey || !pin) {
         return null;
       }
 
       return {
-        enabled: settings.smaxEnabled,
-        apiKey: settings.smaxApiKey,
-        pin: settings.smaxPin,
-        baseUrl: settings.smaxBaseUrl || 'https://api.smaxcollectionsoftware.com:8000',
+        enabled,
+        apiKey,
+        pin,
+        baseUrl,
       };
     } catch (error) {
       console.error('Error getting SMAX config:', error);
@@ -63,7 +73,7 @@ class SmaxService {
   }
 
   private async authenticate(config: SmaxConfig): Promise<string | null> {
-    const cacheKey = `${config.apiKey}:${config.pin}`;
+    const cacheKey = `${config.apiKey}:${config.pin}:${config.baseUrl}`;
     const cached = this.tokenCache.get(cacheKey);
 
     if (cached && cached.expires > Date.now()) {
@@ -234,9 +244,19 @@ class SmaxService {
     }
   }
 
-  async testConnection(tenantId: string): Promise<{ success: boolean; error?: string }> {
+  async testConnection(
+    tenantId: string,
+    overrides?: Partial<SmaxConfig>
+  ): Promise<{ success: boolean; error?: string }> {
     try {
-      const config = await this.getSmaxConfig(tenantId);
+      if (overrides?.enabled === false) {
+        return {
+          success: false,
+          error: 'Enable the SMAX integration before testing the connection.',
+        };
+      }
+
+      const config = await this.getSmaxConfig(tenantId, overrides);
 
       console.log('🔍 SMAX Test - Config found:', {
         hasConfig: !!config,
@@ -249,6 +269,12 @@ class SmaxService {
       });
 
       if (!config) {
+        if (overrides) {
+          return {
+            success: false,
+            error: 'Missing SMAX configuration. Please ensure API key, PIN, and enable toggle are provided.',
+          };
+        }
         return {
           success: false,
           error: 'SMAX is not enabled or configured for this tenant',

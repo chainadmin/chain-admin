@@ -1,4 +1,9 @@
+
 import { useState, useRef, useEffect, type RefObject } from "react";
+=======
+import { useState, useRef, useEffect } from "react";
+import type { RefObject } from "react";
+
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -37,6 +42,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+
 import {
   Mail,
   MessageSquare,
@@ -69,6 +75,9 @@ import {
   Eraser,
   Palette,
 } from "lucide-react";
+
+import { Mail, MessageSquare, Plus, Send, FileText, Trash2, Eye, TrendingUp, Users, AlertCircle, MousePointer, UserMinus, Phone, Clock, Calendar, Settings, Copy, Sparkles, Megaphone, Zap, BarChart3, Code, Bold as BoldIcon, Italic as ItalicIcon, Underline as UnderlineIcon, Strikethrough, List as ListIcon, ListOrdered, Eraser, Palette, Link2, Link2Off } from "lucide-react";
+
 import { POSTMARK_TEMPLATES, type PostmarkTemplateType } from "@shared/postmarkTemplates";
 
 export default function Communications() {
@@ -92,7 +101,206 @@ export default function Communications() {
   const signOffRef = useRef<HTMLDivElement>(null);
   
   // Track which field is currently focused for variable insertion
-  const [activeField, setActiveField] = useState<string>('mainMessage');
+  const [activeField, setActiveField] = useState<string>("mainMessage");
+
+  type RichTextField = "mainMessage" | "closingMessage";
+
+  const richTextFieldRefs: Record<RichTextField, RefObject<HTMLDivElement>> = {
+    mainMessage: mainMessageRef,
+    closingMessage: closingMessageRef,
+  };
+
+  const isRichTextField = (field: string): field is RichTextField =>
+    field === "mainMessage" || field === "closingMessage";
+
+  const escapeHtml = (value: string) =>
+    value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+
+  const looksLikeHtml = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return false;
+    return /<[^>]+>/.test(trimmed) || trimmed.includes("<br") || trimmed.includes("&lt;");
+  };
+
+  const ensureEditorHtml = (value: string) => {
+    if (!value) return "";
+    if (looksLikeHtml(value)) {
+      return value;
+    }
+    return escapeHtml(value).replace(/\r?\n/g, "<br>");
+  };
+
+  const formatTemplateContent = (value: string, fallback = "") => {
+    const source = value && value.trim() ? value : fallback;
+    if (!source) return "";
+    if (looksLikeHtml(source)) {
+      return source;
+    }
+    return escapeHtml(source).replace(/\r?\n/g, "<br>");
+  };
+
+  const syncEditorHtml = (field: RichTextField) => {
+    const editor = richTextFieldRefs[field].current;
+    if (!editor) return;
+    const html = editor.innerHTML;
+    const textContent = editor.textContent?.replace(/\u00a0/g, " ").trim() ?? "";
+    setEmailTemplateForm((prev) => ({
+      ...prev,
+      [field]: textContent ? html : "",
+    }));
+  };
+
+  const applyEditorCommand = (command: string, value?: string) => {
+    if (typeof window === "undefined") return;
+    if (!isRichTextField(activeField)) return;
+    const editor = richTextFieldRefs[activeField].current;
+    if (!editor) return;
+    editor.focus();
+    document.execCommand(command, false, value);
+    setTimeout(() => syncEditorHtml(activeField), 0);
+  };
+
+  const handleCreateLink = () => {
+    if (typeof window === "undefined") return;
+    if (!isRichTextField(activeField)) return;
+    const url = window.prompt("Enter the URL", "https://");
+    if (!url) return;
+    applyEditorCommand("createLink", url);
+  };
+
+  const handleRemoveLink = () => {
+    applyEditorCommand("unlink");
+  };
+
+  const renderFormattingToolbar = () => (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => applyEditorCommand("bold")}
+        className="h-7"
+      >
+        <BoldIcon className="mr-1 h-3.5 w-3.5" />
+        Bold
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => applyEditorCommand("italic")}
+        className="h-7"
+      >
+        <ItalicIcon className="mr-1 h-3.5 w-3.5" />
+        Italic
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => applyEditorCommand("underline")}
+        className="h-7"
+      >
+        <UnderlineIcon className="mr-1 h-3.5 w-3.5" />
+        Underline
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => applyEditorCommand("strikeThrough")}
+        className="h-7"
+      >
+        <Strikethrough className="mr-1 h-3.5 w-3.5" />
+        Strike
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => applyEditorCommand("insertUnorderedList")}
+        className="h-7"
+      >
+        <ListIcon className="mr-1 h-3.5 w-3.5" />
+        Bullets
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => applyEditorCommand("insertOrderedList")}
+        className="h-7"
+      >
+        <ListOrdered className="mr-1 h-3.5 w-3.5" />
+        Numbered
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={handleCreateLink}
+        className="h-7"
+      >
+        <Link2 className="mr-1 h-3.5 w-3.5" />
+        Link
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={handleRemoveLink}
+        className="h-7"
+      >
+        <Link2Off className="mr-1 h-3.5 w-3.5" />
+        Remove Link
+      </Button>
+      <div className="flex items-center gap-1">
+        <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+          <Palette className="h-3.5 w-3.5" />
+          Color
+        </span>
+        <input
+          type="color"
+          className="h-7 w-7 cursor-pointer rounded border"
+          onChange={(event) => applyEditorCommand("foreColor", event.target.value)}
+          aria-label="Text color"
+        />
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => applyEditorCommand("removeFormat")}
+        className="h-7"
+      >
+        <Eraser className="mr-1 h-3.5 w-3.5" />
+        Clear
+      </Button>
+    </div>
+  );
+
+  useEffect(() => {
+    const editor = mainMessageRef.current;
+    if (!editor) return;
+    const desiredHtml = emailTemplateForm.mainMessage || "";
+    if (editor.innerHTML !== desiredHtml) {
+      editor.innerHTML = desiredHtml;
+    }
+  }, [emailTemplateForm.mainMessage, showTemplateModal]);
+
+  useEffect(() => {
+    const editor = closingMessageRef.current;
+    if (!editor) return;
+    const desiredHtml = emailTemplateForm.closingMessage || "";
+    if (editor.innerHTML !== desiredHtml) {
+      editor.innerHTML = desiredHtml;
+    }
+  }, [emailTemplateForm.closingMessage, showTemplateModal]);
   
   const [emailTemplateForm, setEmailTemplateForm] = useState({
     name: "",
@@ -464,10 +672,50 @@ export default function Communications() {
       buttonUrl: { ref: buttonUrlRef, field: "buttonUrl", type: "input" },
       closingMessage: { ref: closingMessageRef, field: "closingMessage", type: "editor" },
       signOff: { ref: signOffRef, field: "signOff", type: "editor" },
+
+    if (isRichTextField(activeField)) {
+      const editor = richTextFieldRefs[activeField].current;
+      if (!editor) return;
+      editor.focus();
+      if (typeof window === "undefined") return;
+      const selection = window.getSelection();
+      if (!selection) return;
+
+      if (
+        selection.rangeCount === 0 ||
+        (selection.anchorNode && !editor.contains(selection.anchorNode))
+      ) {
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        range.collapse(false);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+
+      const range = selection.getRangeAt(0);
+      range.deleteContents();
+      const textNode = document.createTextNode(variable);
+      range.insertNode(textNode);
+      range.setStartAfter(textNode);
+      range.setEndAfter(textNode);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      syncEditorHtml(activeField);
+      return;
+    }
+
+    const fieldMap: Record<string, { ref: RefObject<HTMLInputElement | HTMLTextAreaElement>; field: keyof typeof emailTemplateForm }> = {
+      subject: { ref: subjectRef, field: "subject" },
+      greeting: { ref: greetingRef, field: "greeting" },
+      buttonText: { ref: buttonTextRef, field: "buttonText" },
+      buttonUrl: { ref: buttonUrlRef, field: "buttonUrl" },
+      signOff: { ref: signOffRef, field: "signOff" },
+
     };
 
     const currentField = fieldMap[activeField];
     if (!currentField || !currentField.ref.current) return;
+
 
     if (currentField.type === "editor") {
       const editorField = currentField.field as RichTextField;
@@ -498,6 +746,9 @@ export default function Communications() {
     }
 
     const element = currentField.ref.current as HTMLInputElement | HTMLTextAreaElement;
+
+    const element = currentField.ref.current;
+
     const start = element.selectionStart || 0;
     const end = element.selectionEnd || 0;
     const text = String(emailTemplateForm[currentField.field] || "");
@@ -539,16 +790,38 @@ export default function Communications() {
     });
   };
 
+  const removeAccountDetailsTables = (html: string) => {
+    if (!html) return html;
+
+    if (typeof window !== "undefined" && typeof DOMParser !== "undefined") {
+      try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, "text/html");
+        doc.querySelectorAll("table.attribute-list").forEach((table) => {
+          table.remove();
+        });
+        return doc.body.innerHTML;
+      } catch (error) {
+        console.error("Failed to strip account details table from template preview", error);
+      }
+    }
+
+    return html.replace(/<table class="attribute-list"[\s\S]*?<\/table>\s*<\/td>\s*<\/tr>\s*<\/table>/gi, "");
+  };
+
   // Function to render preview with actual data
   const renderPreview = () => {
     const template = POSTMARK_TEMPLATES[emailTemplateForm.designType] as any;
     
-    const greeting = emailTemplateForm.greeting || "Hi {{firstName}},";
-    const mainMessage = emailTemplateForm.mainMessage || "";
+    const greeting = formatTemplateContent(emailTemplateForm.greeting, "Hi {{firstName}},");
+    const mainMessage = formatTemplateContent(emailTemplateForm.mainMessage);
     const buttonText = emailTemplateForm.buttonText || "View Account";
     const buttonUrl = emailTemplateForm.buttonUrl || "{{consumerPortalLink}}";
-    const closingMessage = emailTemplateForm.closingMessage || "If you have any questions, please don't hesitate to contact us.";
-    const signOff = emailTemplateForm.signOff || "Thanks,<br>The {{agencyName}} Team";
+    const closingMessage = formatTemplateContent(
+      emailTemplateForm.closingMessage,
+      "If you have any questions, please don't hesitate to contact us."
+    );
+    const signOff = formatTemplateContent(emailTemplateForm.signOff, "Thanks,<br>The {{agencyName}} Team");
     
     // Replace custom placeholders with user's content
     let previewHtml = template.html;
@@ -566,7 +839,7 @@ export default function Communications() {
     
     // Remove account details box if showAccountDetails is false
     if (!emailTemplateForm.showAccountDetails) {
-      previewHtml = previewHtml.replace(/<table class="attribute-list"[\s\S]*?<\/table>/g, '');
+      previewHtml = removeAccountDetailsTables(previewHtml);
     }
     
     // Replace company logo
@@ -584,10 +857,24 @@ export default function Communications() {
     previewHtml = previewHtml.replace(/\{\{fullName\}\}/g, "John Doe");
     previewHtml = previewHtml.replace(/\{\{email\}\}/g, "john.doe@example.com");
     previewHtml = previewHtml.replace(/\{\{phone\}\}/g, "(555) 123-4567");
-    previewHtml = previewHtml.replace(/\{\{accountNumber\}\}/g, "ACC-12345");
-    previewHtml = previewHtml.replace(/\{\{creditor\}\}/g, "Sample Creditor");
-    previewHtml = previewHtml.replace(/\{\{balance\}\}/g, "$1,234.56");
-    previewHtml = previewHtml.replace(/\{\{dueDate\}\}/g, "12/31/2024");
+    const accountPlaceholder = (message: string) =>
+      `<span style="color:#6B7280; font-style: italic;">${message}</span>`;
+    previewHtml = previewHtml.replace(
+      /\{\{accountNumber\}\}/g,
+      accountPlaceholder("Account number auto-fills for each recipient")
+    );
+    previewHtml = previewHtml.replace(
+      /\{\{creditor\}\}/g,
+      accountPlaceholder("Creditor auto-fills for each recipient")
+    );
+    previewHtml = previewHtml.replace(
+      /\{\{balance\}\}/g,
+      accountPlaceholder("Balance auto-fills for each recipient")
+    );
+    previewHtml = previewHtml.replace(
+      /\{\{dueDate\}\}/g,
+      accountPlaceholder("Due date auto-fills for each recipient")
+    );
     previewHtml = previewHtml.replace(/\{\{consumerPortalLink\}\}/g, "https://yourportal.example.com/account");
     previewHtml = previewHtml.replace(/\{\{appDownloadLink\}\}/g, "https://app.example.com/download");
     previewHtml = previewHtml.replace(/\{\{agencyName\}\}/g, (tenantSettings as any)?.agencyName || "Your Agency");
@@ -941,7 +1228,7 @@ export default function Communications() {
         name: template.name || "",
         subject: template.subject || "",
         greeting: template.greeting || "Hi {{firstName}},",
-        mainMessage: template.mainMessage || "",
+        mainMessage: ensureEditorHtml(template.mainMessage || ""),
         buttonText: template.buttonText || "",
         buttonUrl: template.buttonUrl || "{{consumerPortalLink}}",
         closingMessage: template.closingMessage || "",
@@ -980,12 +1267,15 @@ export default function Communications() {
       const template = POSTMARK_TEMPLATES[emailTemplateForm.designType] as any;
       
       // Replace custom placeholders with user's actual content
-      const greeting = emailTemplateForm.greeting || "Hi {{firstName}},";
-      const mainMessage = emailTemplateForm.mainMessage;
+      const greeting = formatTemplateContent(emailTemplateForm.greeting, "Hi {{firstName}},");
+      const mainMessage = formatTemplateContent(emailTemplateForm.mainMessage);
       const buttonText = emailTemplateForm.buttonText || "View Account";
       const buttonUrl = emailTemplateForm.buttonUrl || "{{consumerPortalLink}}";
-      const closingMessage = emailTemplateForm.closingMessage || "If you have any questions, please don't hesitate to contact us.";
-      const signOff = emailTemplateForm.signOff || "Thanks,<br>The {{agencyName}} Team";
+      const closingMessage = formatTemplateContent(
+        emailTemplateForm.closingMessage,
+        "If you have any questions, please don't hesitate to contact us."
+      );
+      const signOff = formatTemplateContent(emailTemplateForm.signOff, "Thanks,<br>The {{agencyName}} Team");
       
       let customizedHtml = template.html;
       customizedHtml = customizedHtml.replace('{{CUSTOM_GREETING}}', greeting);
@@ -1002,7 +1292,7 @@ export default function Communications() {
       
       // Remove account details box if showAccountDetails is false
       if (!emailTemplateForm.showAccountDetails) {
-        customizedHtml = customizedHtml.replace(/<table class="attribute-list"[\s\S]*?<\/table>/g, '');
+        customizedHtml = removeAccountDetailsTables(customizedHtml);
       }
       
       // Note: Logo will be replaced at send time with tenant's actual logo in server/routes.ts
