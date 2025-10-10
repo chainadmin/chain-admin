@@ -13,6 +13,12 @@ export const POSTMARK_TEMPLATES = {
     <td class="attribute-list-container">
       <table width="100%" cellpadding="0" cellspacing="0">
         <tr>
+          <td class="attribute-list-item"><strong>{{ACCOUNT_LABEL}}</strong> {{accountNumber}}</td>
+        </tr>
+        <tr>
+          <td class="attribute-list-item"><strong>{{CREDITOR_LABEL}}</strong> {{creditor}}</td>
+        </tr>
+        <tr>
           <td class="attribute-list-item"><strong>{{BALANCE_LABEL}}</strong> {{balance}}</td>
         </tr>
         <tr>
