@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -35,13 +34,35 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Mail, Plus, Send, FileText, Trash2, Eye, TrendingUp, Users, AlertCircle, MousePointer, UserMinus, Code, Sparkles } from "lucide-react";
+import {
+  Mail,
+  Plus,
+  Send,
+  FileText,
+  Trash2,
+  Eye,
+  TrendingUp,
+  Users,
+  AlertCircle,
+  MousePointer,
+  UserMinus,
+  Code,
+  Sparkles,
+  Bold as BoldIcon,
+  Italic as ItalicIcon,
+  Underline as UnderlineIcon,
+  Strikethrough,
+  List as ListIcon,
+  ListOrdered,
+  Eraser,
+  Palette,
+} from "lucide-react";
 
 export default function Emails() {
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showCampaignModal, setShowCampaignModal] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
   const [templateForm, setTemplateForm] = useState({
     name: "",
     subject: "",
@@ -77,6 +98,17 @@ export default function Emails() {
     queryKey: ["/api/settings"],
   });
 
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      try {
+        document.execCommand("defaultParagraphSeparator", false, "p");
+        document.execCommand("styleWithCSS", false, "true");
+      } catch (error) {
+        // Ignore browsers that no longer support execCommand
+      }
+    }
+  }, []);
+
   // Template variables available for insertion
   const templateVariables = [
     { label: "First Name", value: "{{firstName}}", category: "consumer" },
@@ -96,26 +128,63 @@ export default function Emails() {
   ];
 
   // Function to insert variable at cursor position
-  const insertVariable = (variable: string) => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const text = templateForm.html;
-    const before = text.substring(0, start);
-    const after = text.substring(end);
-    
-    const newText = before + variable + after;
-    setTemplateForm({ ...templateForm, html: newText });
-    
-    // Set cursor position after inserted variable
-    setTimeout(() => {
-      textarea.focus();
-      const newPosition = start + variable.length;
-      textarea.setSelectionRange(newPosition, newPosition);
-    }, 0);
+  const syncEditorHtml = () => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const html = editor.innerHTML;
+    const textContent = editor.textContent?.trim() ?? "";
+    setTemplateForm((prev) => ({
+      ...prev,
+      html: textContent ? html : "",
+    }));
   };
+
+  const insertVariable = (variable: string) => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    editor.focus();
+    const selection = window.getSelection();
+    if (!selection) return;
+
+    if (selection.rangeCount === 0 || !editor.contains(selection.anchorNode)) {
+      const range = document.createRange();
+      range.selectNodeContents(editor);
+      range.collapse(false);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+
+    const range = selection.getRangeAt(0);
+    range.deleteContents();
+    const textNode = document.createTextNode(variable);
+    range.insertNode(textNode);
+    range.setStartAfter(textNode);
+    range.setEndAfter(textNode);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    syncEditorHtml();
+  };
+
+  const applyEditorCommand = (command: string, value?: string) => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.focus();
+    if (command === "foreColor") {
+      document.execCommand("styleWithCSS", false, "true");
+    }
+    document.execCommand(command, false, value);
+    setTimeout(syncEditorHtml, 0);
+  };
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const currentHtml = editor.innerHTML;
+    if ((templateForm.html || "") !== currentHtml) {
+      editor.innerHTML = templateForm.html || "";
+    }
+  }, [templateForm.html, showTemplateModal]);
 
   // Function to render preview with actual data
   const renderPreview = () => {
@@ -221,7 +290,8 @@ export default function Emails() {
   });
 
   const handleCreateTemplate = () => {
-    if (!templateForm.name || !templateForm.subject || !templateForm.html) {
+    const editorContent = editorRef.current?.textContent?.trim() ?? "";
+    if (!templateForm.name || !templateForm.subject || !editorContent) {
       toast({
         title: "Missing Information",
         description: "Please fill in all required fields.",
@@ -229,7 +299,10 @@ export default function Emails() {
       });
       return;
     }
-    createTemplateMutation.mutate(templateForm);
+    createTemplateMutation.mutate({
+      ...templateForm,
+      html: templateForm.html || editorRef.current?.innerHTML || "",
+    });
   };
 
   const handleCreateCampaign = () => {
@@ -340,16 +413,112 @@ export default function Emails() {
                       </div>
                       
                       <div className="flex-1">
-                        <Label className="text-sm font-medium">Email Content (HTML) *</Label>
-                        <Textarea
-                          ref={textareaRef}
-                          rows={16}
-                          value={templateForm.html}
-                          onChange={(e) => setTemplateForm({...templateForm, html: e.target.value})}
-                          placeholder="Enter your HTML email content. Click variables above to insert them."
-                          className="font-mono text-sm mt-1 resize-none"
-                          data-testid="input-template-html"
-                        />
+                        <Label className="text-sm font-medium">Email Content *</Label>
+                        <div className="mt-2 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => applyEditorCommand("bold")}
+                              className="h-8"
+                            >
+                              <BoldIcon className="mr-1 h-3.5 w-3.5" />
+                              Bold
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => applyEditorCommand("italic")}
+                              className="h-8"
+                            >
+                              <ItalicIcon className="mr-1 h-3.5 w-3.5" />
+                              Italic
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => applyEditorCommand("underline")}
+                              className="h-8"
+                            >
+                              <UnderlineIcon className="mr-1 h-3.5 w-3.5" />
+                              Underline
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => applyEditorCommand("strikeThrough")}
+                              className="h-8"
+                            >
+                              <Strikethrough className="mr-1 h-3.5 w-3.5" />
+                              Strike
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => applyEditorCommand("insertUnorderedList")}
+                              className="h-8"
+                            >
+                              <ListIcon className="mr-1 h-3.5 w-3.5" />
+                              Bullets
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => applyEditorCommand("insertOrderedList")}
+                              className="h-8"
+                            >
+                              <ListOrdered className="mr-1 h-3.5 w-3.5" />
+                              Numbered
+                            </Button>
+                            <div className="flex items-center gap-1">
+                              <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+                                <Palette className="h-3.5 w-3.5" />
+                                Color
+                              </span>
+                              <input
+                                type="color"
+                                className="h-8 w-8 cursor-pointer rounded border"
+                                onChange={(event) => applyEditorCommand("foreColor", event.target.value)}
+                                aria-label="Text color"
+                              />
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => applyEditorCommand("removeFormat")}
+                              className="h-8"
+                            >
+                              <Eraser className="mr-1 h-3.5 w-3.5" />
+                              Clear
+                            </Button>
+                          </div>
+
+                          <div className="relative">
+                            {!templateForm.html && (
+                              <div className="pointer-events-none absolute left-3 top-3 text-sm text-gray-400">
+                                Write your email content or paste existing HTML here.
+                              </div>
+                            )}
+                            <div
+                              ref={editorRef}
+                              className="min-h-[280px] w-full rounded-md border border-gray-200 bg-white p-3 text-sm text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              contentEditable
+                              role="textbox"
+                              aria-multiline="true"
+                              suppressContentEditableWarning
+                              onInput={syncEditorHtml}
+                              onBlur={syncEditorHtml}
+                              data-testid="input-template-html"
+                            />
+                          </div>
+                        </div>
                       </div>
                     </div>
 
