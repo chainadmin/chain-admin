@@ -1,4 +1,5 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
+import type { RefObject } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -37,7 +38,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Mail, MessageSquare, Plus, Send, FileText, Trash2, Eye, TrendingUp, Users, AlertCircle, MousePointer, UserMinus, Phone, Clock, Calendar, Settings, Copy, Sparkles, Megaphone, Zap, BarChart3, Code } from "lucide-react";
+import { Mail, MessageSquare, Plus, Send, FileText, Trash2, Eye, TrendingUp, Users, AlertCircle, MousePointer, UserMinus, Phone, Clock, Calendar, Settings, Copy, Sparkles, Megaphone, Zap, BarChart3, Code, Bold as BoldIcon, Italic as ItalicIcon, Underline as UnderlineIcon, Strikethrough, List as ListIcon, ListOrdered, Eraser, Palette, Link2, Link2Off } from "lucide-react";
 import { POSTMARK_TEMPLATES, type PostmarkTemplateType } from "@shared/postmarkTemplates";
 
 export default function Communications() {
@@ -49,20 +50,218 @@ export default function Communications() {
   const [previewTemplate, setPreviewTemplate] = useState<any>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<any>(null);
-  const emailTextareaRef = useRef<HTMLTextAreaElement>(null);
   const smsTextareaRef = useRef<HTMLTextAreaElement>(null);
   
   // Refs for all email template fields to enable variable insertion
   const subjectRef = useRef<HTMLInputElement>(null);
   const greetingRef = useRef<HTMLInputElement>(null);
-  const mainMessageRef = useRef<HTMLTextAreaElement>(null);
+  const mainMessageRef = useRef<HTMLDivElement>(null);
   const buttonTextRef = useRef<HTMLInputElement>(null);
   const buttonUrlRef = useRef<HTMLInputElement>(null);
-  const closingMessageRef = useRef<HTMLTextAreaElement>(null);
+  const closingMessageRef = useRef<HTMLDivElement>(null);
   const signOffRef = useRef<HTMLInputElement>(null);
   
   // Track which field is currently focused for variable insertion
-  const [activeField, setActiveField] = useState<string>('mainMessage');
+  const [activeField, setActiveField] = useState<string>("mainMessage");
+
+  type RichTextField = "mainMessage" | "closingMessage";
+
+  const richTextFieldRefs: Record<RichTextField, RefObject<HTMLDivElement>> = {
+    mainMessage: mainMessageRef,
+    closingMessage: closingMessageRef,
+  };
+
+  const isRichTextField = (field: string): field is RichTextField =>
+    field === "mainMessage" || field === "closingMessage";
+
+  const escapeHtml = (value: string) =>
+    value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+
+  const looksLikeHtml = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return false;
+    return /<[^>]+>/.test(trimmed) || trimmed.includes("<br") || trimmed.includes("&lt;");
+  };
+
+  const ensureEditorHtml = (value: string) => {
+    if (!value) return "";
+    if (looksLikeHtml(value)) {
+      return value;
+    }
+    return escapeHtml(value).replace(/\r?\n/g, "<br>");
+  };
+
+  const formatTemplateContent = (value: string, fallback = "") => {
+    const source = value && value.trim() ? value : fallback;
+    if (!source) return "";
+    if (looksLikeHtml(source)) {
+      return source;
+    }
+    return escapeHtml(source).replace(/\r?\n/g, "<br>");
+  };
+
+  const syncEditorHtml = (field: RichTextField) => {
+    const editor = richTextFieldRefs[field].current;
+    if (!editor) return;
+    const html = editor.innerHTML;
+    const textContent = editor.textContent?.replace(/\u00a0/g, " ").trim() ?? "";
+    setEmailTemplateForm((prev) => ({
+      ...prev,
+      [field]: textContent ? html : "",
+    }));
+  };
+
+  const applyEditorCommand = (command: string, value?: string) => {
+    if (typeof window === "undefined") return;
+    if (!isRichTextField(activeField)) return;
+    const editor = richTextFieldRefs[activeField].current;
+    if (!editor) return;
+    editor.focus();
+    document.execCommand(command, false, value);
+    setTimeout(() => syncEditorHtml(activeField), 0);
+  };
+
+  const handleCreateLink = () => {
+    if (typeof window === "undefined") return;
+    if (!isRichTextField(activeField)) return;
+    const url = window.prompt("Enter the URL", "https://");
+    if (!url) return;
+    applyEditorCommand("createLink", url);
+  };
+
+  const handleRemoveLink = () => {
+    applyEditorCommand("unlink");
+  };
+
+  const renderFormattingToolbar = () => (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => applyEditorCommand("bold")}
+        className="h-7"
+      >
+        <BoldIcon className="mr-1 h-3.5 w-3.5" />
+        Bold
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => applyEditorCommand("italic")}
+        className="h-7"
+      >
+        <ItalicIcon className="mr-1 h-3.5 w-3.5" />
+        Italic
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => applyEditorCommand("underline")}
+        className="h-7"
+      >
+        <UnderlineIcon className="mr-1 h-3.5 w-3.5" />
+        Underline
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => applyEditorCommand("strikeThrough")}
+        className="h-7"
+      >
+        <Strikethrough className="mr-1 h-3.5 w-3.5" />
+        Strike
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => applyEditorCommand("insertUnorderedList")}
+        className="h-7"
+      >
+        <ListIcon className="mr-1 h-3.5 w-3.5" />
+        Bullets
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => applyEditorCommand("insertOrderedList")}
+        className="h-7"
+      >
+        <ListOrdered className="mr-1 h-3.5 w-3.5" />
+        Numbered
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={handleCreateLink}
+        className="h-7"
+      >
+        <Link2 className="mr-1 h-3.5 w-3.5" />
+        Link
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={handleRemoveLink}
+        className="h-7"
+      >
+        <Link2Off className="mr-1 h-3.5 w-3.5" />
+        Remove Link
+      </Button>
+      <div className="flex items-center gap-1">
+        <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+          <Palette className="h-3.5 w-3.5" />
+          Color
+        </span>
+        <input
+          type="color"
+          className="h-7 w-7 cursor-pointer rounded border"
+          onChange={(event) => applyEditorCommand("foreColor", event.target.value)}
+          aria-label="Text color"
+        />
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => applyEditorCommand("removeFormat")}
+        className="h-7"
+      >
+        <Eraser className="mr-1 h-3.5 w-3.5" />
+        Clear
+      </Button>
+    </div>
+  );
+
+  useEffect(() => {
+    const editor = mainMessageRef.current;
+    if (!editor) return;
+    const desiredHtml = emailTemplateForm.mainMessage || "";
+    if (editor.innerHTML !== desiredHtml) {
+      editor.innerHTML = desiredHtml;
+    }
+  }, [emailTemplateForm.mainMessage, showTemplateModal]);
+
+  useEffect(() => {
+    const editor = closingMessageRef.current;
+    if (!editor) return;
+    const desiredHtml = emailTemplateForm.closingMessage || "";
+    if (editor.innerHTML !== desiredHtml) {
+      editor.innerHTML = desiredHtml;
+    }
+  }, [emailTemplateForm.closingMessage, showTemplateModal]);
   
   const [emailTemplateForm, setEmailTemplateForm] = useState({
     name: "",
@@ -231,30 +430,58 @@ export default function Communications() {
       return;
     }
     
-    // Email template - insert into active field
-    const fieldMap: Record<string, { ref: React.RefObject<HTMLInputElement | HTMLTextAreaElement>, field: keyof typeof emailTemplateForm }> = {
-      subject: { ref: subjectRef, field: 'subject' },
-      greeting: { ref: greetingRef, field: 'greeting' },
-      mainMessage: { ref: mainMessageRef, field: 'mainMessage' },
-      buttonText: { ref: buttonTextRef, field: 'buttonText' },
-      buttonUrl: { ref: buttonUrlRef, field: 'buttonUrl' },
-      closingMessage: { ref: closingMessageRef, field: 'closingMessage' },
-      signOff: { ref: signOffRef, field: 'signOff' },
+    if (isRichTextField(activeField)) {
+      const editor = richTextFieldRefs[activeField].current;
+      if (!editor) return;
+      editor.focus();
+      if (typeof window === "undefined") return;
+      const selection = window.getSelection();
+      if (!selection) return;
+
+      if (
+        selection.rangeCount === 0 ||
+        (selection.anchorNode && !editor.contains(selection.anchorNode))
+      ) {
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        range.collapse(false);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+
+      const range = selection.getRangeAt(0);
+      range.deleteContents();
+      const textNode = document.createTextNode(variable);
+      range.insertNode(textNode);
+      range.setStartAfter(textNode);
+      range.setEndAfter(textNode);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      syncEditorHtml(activeField);
+      return;
+    }
+
+    const fieldMap: Record<string, { ref: RefObject<HTMLInputElement | HTMLTextAreaElement>; field: keyof typeof emailTemplateForm }> = {
+      subject: { ref: subjectRef, field: "subject" },
+      greeting: { ref: greetingRef, field: "greeting" },
+      buttonText: { ref: buttonTextRef, field: "buttonText" },
+      buttonUrl: { ref: buttonUrlRef, field: "buttonUrl" },
+      signOff: { ref: signOffRef, field: "signOff" },
     };
-    
+
     const currentField = fieldMap[activeField];
     if (!currentField || !currentField.ref.current) return;
-    
+
     const element = currentField.ref.current;
     const start = element.selectionStart || 0;
     const end = element.selectionEnd || 0;
-    const text = String(emailTemplateForm[currentField.field] || '');
+    const text = String(emailTemplateForm[currentField.field] || "");
     const before = text.substring(0, start);
     const after = text.substring(end);
     const newText = before + variable + after;
-    
+
     setEmailTemplateForm({ ...emailTemplateForm, [currentField.field]: newText });
-    
+
     setTimeout(() => {
       element.focus();
       const newPosition = start + variable.length;
@@ -272,18 +499,17 @@ export default function Communications() {
       ...emailTemplateForm,
       designType,
       greeting: emailTemplateForm.greeting || "Hi {{firstName}},",
-      mainMessage: emailTemplateForm.mainMessage || "This is a friendly reminder about your account. Your current balance is {{balance}} for account {{accountNumber}}.",
+      mainMessage: emailTemplateForm.mainMessage
+        ? ensureEditorHtml(emailTemplateForm.mainMessage)
+        : ensureEditorHtml("This is a friendly reminder about your account. Your current balance is {{balance}} for account {{accountNumber}}."),
       buttonText: emailTemplateForm.buttonText || "View Account",
       buttonUrl: emailTemplateForm.buttonUrl || "{{consumerPortalLink}}",
-      closingMessage: emailTemplateForm.closingMessage || "If you have any questions, please don't hesitate to contact us.",
+      closingMessage: emailTemplateForm.closingMessage
+        ? ensureEditorHtml(emailTemplateForm.closingMessage)
+        : ensureEditorHtml("If you have any questions, please don't hesitate to contact us."),
       signOff: emailTemplateForm.signOff || "Thanks,<br>The {{agencyName}} Team",
       html: fullHtml,
     });
-  };
-
-  const formatMultilineText = (text: string) => {
-    if (!text) return "";
-    return text.replace(/\r?\n/g, "<br>");
   };
 
   const removeAccountDetailsTables = (html: string) => {
@@ -309,14 +535,15 @@ export default function Communications() {
   const renderPreview = () => {
     const template = POSTMARK_TEMPLATES[emailTemplateForm.designType] as any;
     
-    const greeting = formatMultilineText(emailTemplateForm.greeting || "Hi {{firstName}},");
-    const mainMessage = formatMultilineText(emailTemplateForm.mainMessage || "");
+    const greeting = formatTemplateContent(emailTemplateForm.greeting, "Hi {{firstName}},");
+    const mainMessage = formatTemplateContent(emailTemplateForm.mainMessage);
     const buttonText = emailTemplateForm.buttonText || "View Account";
     const buttonUrl = emailTemplateForm.buttonUrl || "{{consumerPortalLink}}";
-    const closingMessage = formatMultilineText(
-      emailTemplateForm.closingMessage || "If you have any questions, please don't hesitate to contact us."
+    const closingMessage = formatTemplateContent(
+      emailTemplateForm.closingMessage,
+      "If you have any questions, please don't hesitate to contact us."
     );
-    const signOff = formatMultilineText(emailTemplateForm.signOff || "Thanks,<br>The {{agencyName}} Team");
+    const signOff = formatTemplateContent(emailTemplateForm.signOff, "Thanks,<br>The {{agencyName}} Team");
     
     // Replace custom placeholders with user's content
     let previewHtml = template.html;
@@ -352,10 +579,24 @@ export default function Communications() {
     previewHtml = previewHtml.replace(/\{\{fullName\}\}/g, "John Doe");
     previewHtml = previewHtml.replace(/\{\{email\}\}/g, "john.doe@example.com");
     previewHtml = previewHtml.replace(/\{\{phone\}\}/g, "(555) 123-4567");
-    previewHtml = previewHtml.replace(/\{\{accountNumber\}\}/g, "ACC-12345");
-    previewHtml = previewHtml.replace(/\{\{creditor\}\}/g, "Sample Creditor");
-    previewHtml = previewHtml.replace(/\{\{balance\}\}/g, "$1,234.56");
-    previewHtml = previewHtml.replace(/\{\{dueDate\}\}/g, "12/31/2024");
+    const accountPlaceholder = (message: string) =>
+      `<span style="color:#6B7280; font-style: italic;">${message}</span>`;
+    previewHtml = previewHtml.replace(
+      /\{\{accountNumber\}\}/g,
+      accountPlaceholder("Account number auto-fills for each recipient")
+    );
+    previewHtml = previewHtml.replace(
+      /\{\{creditor\}\}/g,
+      accountPlaceholder("Creditor auto-fills for each recipient")
+    );
+    previewHtml = previewHtml.replace(
+      /\{\{balance\}\}/g,
+      accountPlaceholder("Balance auto-fills for each recipient")
+    );
+    previewHtml = previewHtml.replace(
+      /\{\{dueDate\}\}/g,
+      accountPlaceholder("Due date auto-fills for each recipient")
+    );
     previewHtml = previewHtml.replace(/\{\{consumerPortalLink\}\}/g, "https://yourportal.example.com/account");
     previewHtml = previewHtml.replace(/\{\{appDownloadLink\}\}/g, "https://app.example.com/download");
     previewHtml = previewHtml.replace(/\{\{agencyName\}\}/g, (tenantSettings as any)?.agencyName || "Your Agency");
@@ -709,10 +950,10 @@ export default function Communications() {
         name: template.name || "",
         subject: template.subject || "",
         greeting: template.greeting || "Hi {{firstName}},",
-        mainMessage: template.mainMessage || "",
+        mainMessage: ensureEditorHtml(template.mainMessage || ""),
         buttonText: template.buttonText || "",
         buttonUrl: template.buttonUrl || "{{consumerPortalLink}}",
-        closingMessage: template.closingMessage || "",
+        closingMessage: ensureEditorHtml(template.closingMessage || ""),
         signOff: template.signOff || "Thanks,<br>The {{agencyName}} Team",
         showAccountDetails: template.showAccountDetails !== undefined ? template.showAccountDetails : true,
         accountLabel: template.accountLabel || "Account:",
@@ -747,14 +988,15 @@ export default function Communications() {
       const template = POSTMARK_TEMPLATES[emailTemplateForm.designType] as any;
       
       // Replace custom placeholders with user's actual content
-      const greeting = formatMultilineText(emailTemplateForm.greeting || "Hi {{firstName}},");
-      const mainMessage = formatMultilineText(emailTemplateForm.mainMessage);
+      const greeting = formatTemplateContent(emailTemplateForm.greeting, "Hi {{firstName}},");
+      const mainMessage = formatTemplateContent(emailTemplateForm.mainMessage);
       const buttonText = emailTemplateForm.buttonText || "View Account";
       const buttonUrl = emailTemplateForm.buttonUrl || "{{consumerPortalLink}}";
-      const closingMessage = formatMultilineText(
-        emailTemplateForm.closingMessage || "If you have any questions, please don't hesitate to contact us."
+      const closingMessage = formatTemplateContent(
+        emailTemplateForm.closingMessage,
+        "If you have any questions, please don't hesitate to contact us."
       );
-      const signOff = formatMultilineText(emailTemplateForm.signOff || "Thanks,<br>The {{agencyName}} Team");
+      const signOff = formatTemplateContent(emailTemplateForm.signOff, "Thanks,<br>The {{agencyName}} Team");
       
       let customizedHtml = template.html;
       customizedHtml = customizedHtml.replace('{{CUSTOM_GREETING}}', greeting);
@@ -1605,15 +1847,29 @@ export default function Communications() {
                             
                             <div>
                               <Label className="text-xs font-medium">Main Message *</Label>
-                              <Textarea
-                                ref={mainMessageRef}
-                                value={emailTemplateForm.mainMessage}
-                                onChange={(e) => setEmailTemplateForm({...emailTemplateForm, mainMessage: e.target.value})}
-                                onFocus={() => setActiveField('mainMessage')}
-                                placeholder="This is a friendly reminder about your account. Your current balance is {{balance}} on account {{accountNumber}}."
-                                className="mt-1 min-h-[100px]"
-                                data-testid="textarea-main-message"
-                              />
+                              <div className="mt-2 space-y-2">
+                                {renderFormattingToolbar()}
+
+                                <div className="relative">
+                                  {!emailTemplateForm.mainMessage && (
+                                    <div className="pointer-events-none absolute left-3 top-3 text-sm text-gray-400">
+                                      Start writing your email body or paste formatted content.
+                                    </div>
+                                  )}
+                                  <div
+                                    ref={mainMessageRef}
+                                    className="min-h-[140px] w-full rounded-md border border-gray-200 bg-white p-3 text-sm text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    contentEditable
+                                    role="textbox"
+                                    aria-multiline="true"
+                                    suppressContentEditableWarning
+                                    onInput={() => syncEditorHtml("mainMessage")}
+                                    onBlur={() => syncEditorHtml("mainMessage")}
+                                    onFocus={() => setActiveField("mainMessage")}
+                                    data-testid="editor-main-message"
+                                  />
+                                </div>
+                              </div>
                             </div>
                             
                             <div>
@@ -1647,15 +1903,29 @@ export default function Communications() {
                             
                             <div>
                               <Label className="text-xs font-medium">Additional Message</Label>
-                              <Textarea
-                                ref={closingMessageRef}
-                                value={emailTemplateForm.closingMessage}
-                                onChange={(e) => setEmailTemplateForm({...emailTemplateForm, closingMessage: e.target.value})}
-                                onFocus={() => setActiveField('closingMessage')}
-                                placeholder="If you have any questions, please contact us."
-                                className="mt-1 min-h-[60px]"
-                                data-testid="textarea-closing-message"
-                              />
+                              <div className="mt-2 space-y-2">
+                                {renderFormattingToolbar()}
+
+                                <div className="relative">
+                                  {!emailTemplateForm.closingMessage && (
+                                    <div className="pointer-events-none absolute left-3 top-3 text-sm text-gray-400">
+                                      Add any final notes or next steps for the recipient.
+                                    </div>
+                                  )}
+                                  <div
+                                    ref={closingMessageRef}
+                                    className="min-h-[100px] w-full rounded-md border border-gray-200 bg-white p-3 text-sm text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    contentEditable
+                                    role="textbox"
+                                    aria-multiline="true"
+                                    suppressContentEditableWarning
+                                    onInput={() => syncEditorHtml("closingMessage")}
+                                    onBlur={() => syncEditorHtml("closingMessage")}
+                                    onFocus={() => setActiveField("closingMessage")}
+                                    data-testid="editor-closing-message"
+                                  />
+                                </div>
+                              </div>
                             </div>
                             
                             <div>
