@@ -12,10 +12,10 @@ export const POSTMARK_TEMPLATES = {
     <td class="attribute-list-container">
       <table width="100%" cellpadding="0" cellspacing="0">
         <tr>
-          <td class="attribute-list-item"><strong>Amount Due:</strong> {{balance}}</td>
+          <td class="attribute-list-item"><strong>{{BALANCE_LABEL}}</strong> {{balance}}</td>
         </tr>
         <tr>
-          <td class="attribute-list-item"><strong>Due By:</strong> {{dueDate}}</td>
+          <td class="attribute-list-item"><strong>{{DUE_DATE_LABEL}}</strong> {{dueDate}}</td>
         </tr>
       </table>
     </td>
@@ -461,16 +461,16 @@ export const POSTMARK_TEMPLATES = {
     <td class="attribute-list-container">
       <table width="100%" cellpadding="0" cellspacing="0">
         <tr>
-          <td class="attribute-list-item"><strong>Account:</strong> {{accountNumber}}</td>
+          <td class="attribute-list-item"><strong>{{ACCOUNT_LABEL}}</strong> {{accountNumber}}</td>
         </tr>
         <tr>
-          <td class="attribute-list-item"><strong>Creditor:</strong> {{creditor}}</td>
+          <td class="attribute-list-item"><strong>{{CREDITOR_LABEL}}</strong> {{creditor}}</td>
         </tr>
         <tr>
-          <td class="attribute-list-item"><strong>Balance:</strong> {{balance}}</td>
+          <td class="attribute-list-item"><strong>{{BALANCE_LABEL}}</strong> {{balance}}</td>
         </tr>
         <tr>
-          <td class="attribute-list-item"><strong>Due Date:</strong> {{dueDate}}</td>
+          <td class="attribute-list-item"><strong>{{DUE_DATE_LABEL}}</strong> {{dueDate}}</td>
         </tr>
       </table>
     </td>

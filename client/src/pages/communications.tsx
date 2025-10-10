@@ -300,6 +300,16 @@ export default function Communications() {
     previewHtml = previewHtml.replace('{{CUSTOM_BUTTON_URL}}', buttonUrl);
     previewHtml = previewHtml.replace('{{CUSTOM_CLOSING_MESSAGE}}', closingMessage);
     previewHtml = previewHtml.replace('{{CUSTOM_SIGNOFF}}', signOff);
+    // Replace account detail labels
+    previewHtml = previewHtml.replace(/\{\{ACCOUNT_LABEL\}\}/g, emailTemplateForm.accountLabel || "Account:");
+    previewHtml = previewHtml.replace(/\{\{CREDITOR_LABEL\}\}/g, emailTemplateForm.creditorLabel || "Creditor:");
+    previewHtml = previewHtml.replace(/\{\{BALANCE_LABEL\}\}/g, emailTemplateForm.balanceLabel || "Balance:");
+    previewHtml = previewHtml.replace(/\{\{DUE_DATE_LABEL\}\}/g, emailTemplateForm.dueDateLabel || "Due Date:");
+    
+    // Remove account details box if showAccountDetails is false
+    if (!emailTemplateForm.showAccountDetails) {
+      previewHtml = previewHtml.replace(/<table class="attribute-list"[\s\S]*?<\/table>/g, '');
+    }
     
     // Replace variables with sample data for preview
     previewHtml = previewHtml.replace(/\{\{firstName\}\}/g, "John");
@@ -716,6 +726,16 @@ export default function Communications() {
       customizedHtml = customizedHtml.replace('{{CUSTOM_BUTTON_URL}}', buttonUrl);
       customizedHtml = customizedHtml.replace('{{CUSTOM_CLOSING_MESSAGE}}', closingMessage);
       customizedHtml = customizedHtml.replace('{{CUSTOM_SIGNOFF}}', signOff);
+      // Replace account detail labels
+      customizedHtml = customizedHtml.replace(/\{\{ACCOUNT_LABEL\}\}/g, emailTemplateForm.accountLabel || "Account:");
+      customizedHtml = customizedHtml.replace(/\{\{CREDITOR_LABEL\}\}/g, emailTemplateForm.creditorLabel || "Creditor:");
+      customizedHtml = customizedHtml.replace(/\{\{BALANCE_LABEL\}\}/g, emailTemplateForm.balanceLabel || "Balance:");
+      customizedHtml = customizedHtml.replace(/\{\{DUE_DATE_LABEL\}\}/g, emailTemplateForm.dueDateLabel || "Due Date:");
+      
+      // Remove account details box if showAccountDetails is false
+      if (!emailTemplateForm.showAccountDetails) {
+        customizedHtml = customizedHtml.replace(/<table class="attribute-list"[\s\S]*?<\/table>/g, '');
+      }
       
       const fullHtml = (template.styles || '') + '\n' + customizedHtml;
       
@@ -729,6 +749,11 @@ export default function Communications() {
         buttonUrl: emailTemplateForm.buttonUrl,
         closingMessage: emailTemplateForm.closingMessage,
         signOff: emailTemplateForm.signOff,
+        showAccountDetails: emailTemplateForm.showAccountDetails,
+        accountLabel: emailTemplateForm.accountLabel,
+        creditorLabel: emailTemplateForm.creditorLabel,
+        balanceLabel: emailTemplateForm.balanceLabel,
+        dueDateLabel: emailTemplateForm.dueDateLabel,
         designType: emailTemplateForm.designType,
       };
       
