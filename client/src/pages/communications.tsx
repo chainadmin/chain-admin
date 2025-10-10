@@ -1,9 +1,5 @@
 
 import { useState, useRef, useEffect, type RefObject } from "react";
-=======
-import { useState, useRef, useEffect } from "react";
-import type { RefObject } from "react";
-
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -74,9 +70,9 @@ import {
   ListOrdered,
   Eraser,
   Palette,
+  Link2,
+  Link2Off,
 } from "lucide-react";
-
-import { Mail, MessageSquare, Plus, Send, FileText, Trash2, Eye, TrendingUp, Users, AlertCircle, MousePointer, UserMinus, Phone, Clock, Calendar, Settings, Copy, Sparkles, Megaphone, Zap, BarChart3, Code, Bold as BoldIcon, Italic as ItalicIcon, Underline as UnderlineIcon, Strikethrough, List as ListIcon, ListOrdered, Eraser, Palette, Link2, Link2Off } from "lucide-react";
 
 import { POSTMARK_TEMPLATES, type PostmarkTemplateType } from "@shared/postmarkTemplates";
 
@@ -103,15 +99,7 @@ export default function Communications() {
   // Track which field is currently focused for variable insertion
   const [activeField, setActiveField] = useState<string>("mainMessage");
 
-  type RichTextField = "mainMessage" | "closingMessage";
-
-  const richTextFieldRefs: Record<RichTextField, RefObject<HTMLDivElement>> = {
-    mainMessage: mainMessageRef,
-    closingMessage: closingMessageRef,
-  };
-
-  const isRichTextField = (field: string): field is RichTextField =>
-    field === "mainMessage" || field === "closingMessage";
+  type RichTextField = "mainMessage" | "closingMessage" | "signOff";
 
   const escapeHtml = (value: string) =>
     value
@@ -143,164 +131,6 @@ export default function Communications() {
     }
     return escapeHtml(source).replace(/\r?\n/g, "<br>");
   };
-
-  const syncEditorHtml = (field: RichTextField) => {
-    const editor = richTextFieldRefs[field].current;
-    if (!editor) return;
-    const html = editor.innerHTML;
-    const textContent = editor.textContent?.replace(/\u00a0/g, " ").trim() ?? "";
-    setEmailTemplateForm((prev) => ({
-      ...prev,
-      [field]: textContent ? html : "",
-    }));
-  };
-
-  const applyEditorCommand = (command: string, value?: string) => {
-    if (typeof window === "undefined") return;
-    if (!isRichTextField(activeField)) return;
-    const editor = richTextFieldRefs[activeField].current;
-    if (!editor) return;
-    editor.focus();
-    document.execCommand(command, false, value);
-    setTimeout(() => syncEditorHtml(activeField), 0);
-  };
-
-  const handleCreateLink = () => {
-    if (typeof window === "undefined") return;
-    if (!isRichTextField(activeField)) return;
-    const url = window.prompt("Enter the URL", "https://");
-    if (!url) return;
-    applyEditorCommand("createLink", url);
-  };
-
-  const handleRemoveLink = () => {
-    applyEditorCommand("unlink");
-  };
-
-  const renderFormattingToolbar = () => (
-    <div className="flex flex-wrap items-center gap-2">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() => applyEditorCommand("bold")}
-        className="h-7"
-      >
-        <BoldIcon className="mr-1 h-3.5 w-3.5" />
-        Bold
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() => applyEditorCommand("italic")}
-        className="h-7"
-      >
-        <ItalicIcon className="mr-1 h-3.5 w-3.5" />
-        Italic
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() => applyEditorCommand("underline")}
-        className="h-7"
-      >
-        <UnderlineIcon className="mr-1 h-3.5 w-3.5" />
-        Underline
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() => applyEditorCommand("strikeThrough")}
-        className="h-7"
-      >
-        <Strikethrough className="mr-1 h-3.5 w-3.5" />
-        Strike
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() => applyEditorCommand("insertUnorderedList")}
-        className="h-7"
-      >
-        <ListIcon className="mr-1 h-3.5 w-3.5" />
-        Bullets
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() => applyEditorCommand("insertOrderedList")}
-        className="h-7"
-      >
-        <ListOrdered className="mr-1 h-3.5 w-3.5" />
-        Numbered
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={handleCreateLink}
-        className="h-7"
-      >
-        <Link2 className="mr-1 h-3.5 w-3.5" />
-        Link
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={handleRemoveLink}
-        className="h-7"
-      >
-        <Link2Off className="mr-1 h-3.5 w-3.5" />
-        Remove Link
-      </Button>
-      <div className="flex items-center gap-1">
-        <span className="inline-flex items-center gap-1 text-xs text-gray-500">
-          <Palette className="h-3.5 w-3.5" />
-          Color
-        </span>
-        <input
-          type="color"
-          className="h-7 w-7 cursor-pointer rounded border"
-          onChange={(event) => applyEditorCommand("foreColor", event.target.value)}
-          aria-label="Text color"
-        />
-      </div>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() => applyEditorCommand("removeFormat")}
-        className="h-7"
-      >
-        <Eraser className="mr-1 h-3.5 w-3.5" />
-        Clear
-      </Button>
-    </div>
-  );
-
-  useEffect(() => {
-    const editor = mainMessageRef.current;
-    if (!editor) return;
-    const desiredHtml = emailTemplateForm.mainMessage || "";
-    if (editor.innerHTML !== desiredHtml) {
-      editor.innerHTML = desiredHtml;
-    }
-  }, [emailTemplateForm.mainMessage, showTemplateModal]);
-
-  useEffect(() => {
-    const editor = closingMessageRef.current;
-    if (!editor) return;
-    const desiredHtml = emailTemplateForm.closingMessage || "";
-    if (editor.innerHTML !== desiredHtml) {
-      editor.innerHTML = desiredHtml;
-    }
-  }, [emailTemplateForm.closingMessage, showTemplateModal]);
   
   const [emailTemplateForm, setEmailTemplateForm] = useState({
     name: "",
@@ -461,8 +291,6 @@ export default function Communications() {
     { label: "Agency Phone", value: "{{agencyPhone}}", category: "agency" },
   ];
 
-  type RichTextField = "mainMessage" | "closingMessage" | "signOff";
-
   const richTextEditors: Record<RichTextField, RefObject<HTMLDivElement>> = {
     mainMessage: mainMessageRef,
     closingMessage: closingMessageRef,
@@ -494,6 +322,19 @@ export default function Communications() {
     }
     document.execCommand(command, false, value);
     setTimeout(() => syncRichTextField(field), 0);
+  };
+
+  const handleCreateLink = (field: RichTextField) => {
+    if (typeof window === "undefined") return;
+    const url = window.prompt("Enter the URL", "https://");
+    if (!url) return;
+    setActiveField(field);
+    applyRichTextCommand(field, "createLink", url);
+  };
+
+  const handleRemoveLink = (field: RichTextField) => {
+    setActiveField(field);
+    applyRichTextCommand(field, "unlink");
   };
 
   const getPlainText = (html: string) =>
@@ -590,6 +431,28 @@ export default function Communications() {
         <ListOrdered className="mr-1 h-3.5 w-3.5" />
         Numbered
       </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => handleCreateLink(field)}
+        className="h-8"
+      >
+        <Link2 className="mr-1 h-3.5 w-3.5" />
+        Link
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => handleRemoveLink(field)}
+        className="h-8"
+      >
+        <Link2Off className="mr-1 h-3.5 w-3.5" />
+        Remove Link
+      </Button>
       <div className="flex items-center gap-1">
         <span className="inline-flex items-center gap-1 text-xs text-gray-500">
           <Palette className="h-3.5 w-3.5" />
@@ -672,11 +535,16 @@ export default function Communications() {
       buttonUrl: { ref: buttonUrlRef, field: "buttonUrl", type: "input" },
       closingMessage: { ref: closingMessageRef, field: "closingMessage", type: "editor" },
       signOff: { ref: signOffRef, field: "signOff", type: "editor" },
+    };
 
-    if (isRichTextField(activeField)) {
-      const editor = richTextFieldRefs[activeField].current;
+    const currentField = fieldMap[activeField];
+    if (!currentField || !currentField.ref.current) return;
+
+    if (currentField.type === "editor") {
+      const editorField = currentField.field as RichTextField;
+      const editor = richTextEditors[editorField].current;
       if (!editor) return;
-      editor.focus();
+      focusRichTextField(editorField);
       if (typeof window === "undefined") return;
       const selection = window.getSelection();
       if (!selection) return;
@@ -700,57 +568,13 @@ export default function Communications() {
       range.setEndAfter(textNode);
       selection.removeAllRanges();
       selection.addRange(range);
-      syncEditorHtml(activeField);
-      return;
-    }
-
-    const fieldMap: Record<string, { ref: RefObject<HTMLInputElement | HTMLTextAreaElement>; field: keyof typeof emailTemplateForm }> = {
-      subject: { ref: subjectRef, field: "subject" },
-      greeting: { ref: greetingRef, field: "greeting" },
-      buttonText: { ref: buttonTextRef, field: "buttonText" },
-      buttonUrl: { ref: buttonUrlRef, field: "buttonUrl" },
-      signOff: { ref: signOffRef, field: "signOff" },
-
-    };
-
-    const currentField = fieldMap[activeField];
-    if (!currentField || !currentField.ref.current) return;
-
-
-    if (currentField.type === "editor") {
-      const editorField = currentField.field as RichTextField;
-      const editor = richTextEditors[editorField].current;
-      if (!editor) return;
-      focusRichTextField(editorField);
-      const selection = window.getSelection();
-      if (!selection) return;
-
-      if (selection.rangeCount === 0 || !editor.contains(selection.anchorNode)) {
-        const range = document.createRange();
-        range.selectNodeContents(editor);
-        range.collapse(false);
-        selection.removeAllRanges();
-        selection.addRange(range);
-      }
-
-      const range = selection.getRangeAt(0);
-      range.deleteContents();
-      const textNode = document.createTextNode(variable);
-      range.insertNode(textNode);
-      range.setStartAfter(textNode);
-      range.setEndAfter(textNode);
-      selection.removeAllRanges();
-      selection.addRange(range);
       setTimeout(() => syncRichTextField(editorField), 0);
       return;
     }
 
     const element = currentField.ref.current as HTMLInputElement | HTMLTextAreaElement;
-
-    const element = currentField.ref.current;
-
-    const start = element.selectionStart || 0;
-    const end = element.selectionEnd || 0;
+    const start = element.selectionStart ?? 0;
+    const end = element.selectionEnd ?? 0;
     const text = String(emailTemplateForm[currentField.field] || "");
     const before = text.substring(0, start);
     const after = text.substring(end);
