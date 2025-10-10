@@ -381,8 +381,6 @@ export const tenantSettings = pgTable("tenant_settings", {
   smaxApiKey: text("smax_api_key"),
   smaxPin: text("smax_pin"),
   smaxBaseUrl: text("smax_base_url").default("https://api.smaxcollectionsoftware.com:8000"),
-  // Custom domain mapping
-  customDomain: text("custom_domain"), // Optional custom domain (e.g., waypointsolutions.com)
 });
 
 // Consumer notifications (when accounts are added)

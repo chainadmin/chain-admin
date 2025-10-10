@@ -140,7 +140,6 @@ export interface IStorage {
   getTenant(id: string): Promise<Tenant | undefined>;
   getTenantBySlug(slug: string): Promise<Tenant | undefined>;
   getTenantByEmail(email: string): Promise<Tenant | undefined>;
-  getTenantByCustomDomain(domain: string): Promise<Tenant | undefined>;
   createTenant(tenant: InsertTenant): Promise<Tenant>;
   createTrialTenant(data: {
     name: string;
@@ -446,19 +445,6 @@ export class DatabaseStorage implements IStorage {
   async getTenantByEmail(email: string): Promise<Tenant | undefined> {
     const [tenant] = await db.select().from(tenants).where(eq(tenants.email, email));
     return tenant;
-  }
-
-  async getTenantByCustomDomain(domain: string): Promise<Tenant | undefined> {
-    const result = await db
-      .select({
-        tenant: tenants,
-      })
-      .from(tenants)
-      .leftJoin(tenantSettings, eq(tenants.id, tenantSettings.tenantId))
-      .where(eq(tenantSettings.customDomain, domain))
-      .limit(1);
-    
-    return result[0]?.tenant;
   }
 
   async createTrialTenant(data: {

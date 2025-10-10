@@ -939,31 +939,6 @@ export default function Settings() {
                     </p>
                   </div>
 
-                  {/* Custom Domain Section */}
-                  <div className="space-y-4 border-b pb-6">
-                    <div>
-                      <Label className="text-base font-medium text-white">Custom Domain (Optional)</Label>
-                      <p className="text-sm text-blue-100/70">
-                        Use your own domain instead of the Chain subdomain
-                      </p>
-                    </div>
-                    
-                    <div>
-                      <Label htmlFor="custom-domain">Domain Name</Label>
-                      <Input
-                        id="custom-domain"
-                        placeholder="e.g., waypointsolutions.com"
-                        value={localSettings?.customDomain || ''}
-                        onChange={(e) => handleSettingsUpdate('customDomain', e.target.value)}
-                        className={inputClasses}
-                        data-testid="input-custom-domain"
-                      />
-                      <p className="text-xs text-blue-100/70 mt-2">
-                        <strong>How to set up:</strong> Point your domain's DNS A record to Chain's server IP. Contact support for the IP address.
-                      </p>
-                    </div>
-                  </div>
-
                   {/* Logo Upload Section */}
                   <div className="space-y-4 border-b pb-6">
                     <div>

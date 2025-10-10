@@ -283,7 +283,7 @@ async function getTenantId(req: any, storage: IStorage): Promise<string | null> 
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // CORS middleware - Allow Vercel frontend to connect
-  app.use(async (req, res, next) => {
+  app.use((req, res, next) => {
     const allowedOrigins = [
       'https://chainsoftwaregroup.com',
       'https://www.chainsoftwaregroup.com',
@@ -298,7 +298,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const origin = req.headers.origin as string;
     
     // Check if origin is allowed
-    let isAllowed = !origin || 
+    const isAllowed = !origin || 
         allowedOrigins.includes(origin) || 
         origin.includes('vercel.app') || 
         origin.includes('vercel.sh') ||
@@ -307,19 +307,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         origin.includes('repl.co') ||
         // Allow all subdomains of chainsoftwaregroup.com (for agency subdomains)
         origin.endsWith('.chainsoftwaregroup.com');
-    
-    // Check if origin is a custom domain for any tenant
-    if (!isAllowed && origin) {
-      try {
-        const originHostname = new URL(origin).hostname;
-        const tenant = await storage.getTenantByCustomDomain(originHostname);
-        if (tenant) {
-          isAllowed = true;
-        }
-      } catch (error) {
-        // Invalid origin URL or database error, keep isAllowed as false
-      }
-    }
     
     if (isAllowed) {
       res.header('Access-Control-Allow-Origin', origin || '*');
@@ -339,12 +326,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Body parser middleware with increased limits for CSV imports
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-
-  // Make storage available to all middlewares
-  app.use((req, res, next) => {
-    req.storage = storage;
-    next();
-  });
 
   // Subdomain detection middleware
   app.use(subdomainMiddleware);
