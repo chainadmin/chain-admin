@@ -4213,7 +4213,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get tenant settings to check if online payments are enabled
       const settings = await storage.getTenantSettings(tenantId);
       if (!settings?.enableOnlinePayments) {
-        return res.status(403).json({ message: "Online payments are not enabled for this agency" });
+        return res.status(403).json({ 
+          success: false,
+          message: "Online payments are currently disabled. Please contact your agency to make a payment." 
+        });
       }
 
       // Get USAePay credentials from tenant settings
@@ -4461,11 +4464,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
               <p>Thank you,<br/>${tenant.name}</p>
             `;
             
-            await sendEmail({
+            await emailService.sendEmail({
               to: consumer.email,
               subject: emailSubject,
               html: emailBody,
               from: `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>`,
+              tenantId,
             });
             
             // Also notify agency admin about failed payment
@@ -4494,11 +4498,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 <p>The consumer has been notified about this failed payment attempt.</p>
               `;
               
-              await sendEmail({
+              await emailService.sendEmail({
                 to: adminEmail,
                 subject: adminEmailSubject,
                 html: adminEmailBody,
                 from: `Chain Software <noreply@chainsoftwaregroup.com>`,
+                tenantId,
               });
             }
           }

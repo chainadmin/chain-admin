@@ -1203,9 +1203,11 @@ export default function Settings() {
                           Payment Processing Status
                         </h3>
                         <p className="text-sm text-blue-100/70">
-                          {(settings as any)?.merchantAccountId ?
-                            "Your merchant account is configured and ready to process payments." :
-                            "No merchant account configured. Set up payment processing to accept consumer payments."
+                          {localSettings?.enableOnlinePayments ?
+                            "✓ Online payments are active. Consumers can make payments through their portal." :
+                            localSettings?.merchantApiKey && localSettings?.merchantApiPin ?
+                            "⚠️ Credentials configured but online payments are disabled. Toggle 'Enable Online Payments' below to activate." :
+                            "No payment credentials configured. Set up USAePay credentials and enable online payments."
                           }
                         </p>
                       </div>
