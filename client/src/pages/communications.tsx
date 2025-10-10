@@ -64,6 +64,205 @@ export default function Communications() {
   // Track which field is currently focused for variable insertion
   const [activeField, setActiveField] = useState<string>("mainMessage");
 
+  type RichTextField = "mainMessage" | "closingMessage";
+
+  const richTextFieldRefs: Record<RichTextField, RefObject<HTMLDivElement>> = {
+    mainMessage: mainMessageRef,
+    closingMessage: closingMessageRef,
+  };
+
+  const isRichTextField = (field: string): field is RichTextField =>
+    field === "mainMessage" || field === "closingMessage";
+
+  const escapeHtml = (value: string) =>
+    value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+
+  const looksLikeHtml = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return false;
+    return /<[^>]+>/.test(trimmed) || trimmed.includes("<br") || trimmed.includes("&lt;");
+  };
+
+  const ensureEditorHtml = (value: string) => {
+    if (!value) return "";
+    if (looksLikeHtml(value)) {
+      return value;
+    }
+    return escapeHtml(value).replace(/\r?\n/g, "<br>");
+  };
+
+  const formatTemplateContent = (value: string, fallback = "") => {
+    const source = value && value.trim() ? value : fallback;
+    if (!source) return "";
+    if (looksLikeHtml(source)) {
+      return source;
+    }
+    return escapeHtml(source).replace(/\r?\n/g, "<br>");
+  };
+
+  const syncEditorHtml = (field: RichTextField) => {
+    const editor = richTextFieldRefs[field].current;
+    if (!editor) return;
+    const html = editor.innerHTML;
+    const textContent = editor.textContent?.replace(/\u00a0/g, " ").trim() ?? "";
+    setEmailTemplateForm((prev) => ({
+      ...prev,
+      [field]: textContent ? html : "",
+    }));
+  };
+
+  const applyEditorCommand = (command: string, value?: string) => {
+    if (typeof window === "undefined") return;
+    if (!isRichTextField(activeField)) return;
+    const editor = richTextFieldRefs[activeField].current;
+    if (!editor) return;
+    editor.focus();
+    document.execCommand(command, false, value);
+    setTimeout(() => syncEditorHtml(activeField), 0);
+  };
+
+  const handleCreateLink = () => {
+    if (typeof window === "undefined") return;
+    if (!isRichTextField(activeField)) return;
+    const url = window.prompt("Enter the URL", "https://");
+    if (!url) return;
+    applyEditorCommand("createLink", url);
+  };
+
+  const handleRemoveLink = () => {
+    applyEditorCommand("unlink");
+  };
+
+  const renderFormattingToolbar = () => (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => applyEditorCommand("bold")}
+        className="h-7"
+      >
+        <BoldIcon className="mr-1 h-3.5 w-3.5" />
+        Bold
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => applyEditorCommand("italic")}
+        className="h-7"
+      >
+        <ItalicIcon className="mr-1 h-3.5 w-3.5" />
+        Italic
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => applyEditorCommand("underline")}
+        className="h-7"
+      >
+        <UnderlineIcon className="mr-1 h-3.5 w-3.5" />
+        Underline
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => applyEditorCommand("strikeThrough")}
+        className="h-7"
+      >
+        <Strikethrough className="mr-1 h-3.5 w-3.5" />
+        Strike
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => applyEditorCommand("insertUnorderedList")}
+        className="h-7"
+      >
+        <ListIcon className="mr-1 h-3.5 w-3.5" />
+        Bullets
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => applyEditorCommand("insertOrderedList")}
+        className="h-7"
+      >
+        <ListOrdered className="mr-1 h-3.5 w-3.5" />
+        Numbered
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={handleCreateLink}
+        className="h-7"
+      >
+        <Link2 className="mr-1 h-3.5 w-3.5" />
+        Link
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={handleRemoveLink}
+        className="h-7"
+      >
+        <Link2Off className="mr-1 h-3.5 w-3.5" />
+        Remove Link
+      </Button>
+      <div className="flex items-center gap-1">
+        <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+          <Palette className="h-3.5 w-3.5" />
+          Color
+        </span>
+        <input
+          type="color"
+          className="h-7 w-7 cursor-pointer rounded border"
+          onChange={(event) => applyEditorCommand("foreColor", event.target.value)}
+          aria-label="Text color"
+        />
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => applyEditorCommand("removeFormat")}
+        className="h-7"
+      >
+        <Eraser className="mr-1 h-3.5 w-3.5" />
+        Clear
+      </Button>
+    </div>
+  );
+
+  useEffect(() => {
+    const editor = mainMessageRef.current;
+    if (!editor) return;
+    const desiredHtml = emailTemplateForm.mainMessage || "";
+    if (editor.innerHTML !== desiredHtml) {
+      editor.innerHTML = desiredHtml;
+    }
+  }, [emailTemplateForm.mainMessage, showTemplateModal]);
+
+  useEffect(() => {
+    const editor = closingMessageRef.current;
+    if (!editor) return;
+    const desiredHtml = emailTemplateForm.closingMessage || "";
+    if (editor.innerHTML !== desiredHtml) {
+      editor.innerHTML = desiredHtml;
+    }
+  }, [emailTemplateForm.closingMessage, showTemplateModal]);
+  
   const [emailTemplateForm, setEmailTemplateForm] = useState({
     name: "",
     subject: "",
@@ -669,8 +868,7 @@ export default function Communications() {
         html: "", 
         designType: "postmark-invoice" 
       });
-      toast({
-        title: "Success",
+      toast({        title: "Success",
         description: "Email template updated successfully",
       });
     },
@@ -683,7 +881,7 @@ export default function Communications() {
     },
   });
 
-  const deleteEmailTemplateMutation = useMutation({
+ const deleteEmailTemplateMutation = useMutation({
     mutationFn: (id: string) => apiRequest("DELETE", `/api/email-templates/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/email-templates"] });
@@ -695,7 +893,7 @@ export default function Communications() {
   });
 
   // SMS Mutations
-  const createSmsTemplateMutation = useMutation({
+ const createSmsTemplateMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/sms-templates", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sms-templates"] });
@@ -715,7 +913,7 @@ export default function Communications() {
     },
   });
 
-  const deleteSmsTemplateMutation = useMutation({
+ const deleteSmsTemplateMutation = useMutation({
     mutationFn: (id: string) => apiRequest("DELETE", `/api/sms-templates/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sms-templates"] });
@@ -727,7 +925,7 @@ export default function Communications() {
   });
 
   // Campaign Mutations
-  const createEmailCampaignMutation = useMutation({
+ const createEmailCampaignMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/email-campaigns", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/email-campaigns"] });
