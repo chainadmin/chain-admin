@@ -5,6 +5,7 @@ export const POSTMARK_TEMPLATES = {
     description: 'Professional invoice layout with payment button',
     thumbnail: '📄',
     html: `
+{{COMPANY_LOGO}}
 <h1>{{CUSTOM_GREETING}}</h1>
 <p>{{CUSTOM_MESSAGE}}</p>
 <table class="attribute-list" width="100%" cellpadding="0" cellspacing="0">
@@ -225,6 +226,7 @@ export const POSTMARK_TEMPLATES = {
     description: 'Clean welcome message with call-to-action',
     thumbnail: '👋',
     html: `
+{{COMPANY_LOGO}}
 <h1>{{CUSTOM_GREETING}}</h1>
 <p>{{CUSTOM_MESSAGE}}</p>
 <p>Your account details:</p>
@@ -330,6 +332,7 @@ export const POSTMARK_TEMPLATES = {
     description: 'Account portal access notification with action button',
     thumbnail: '🔑',
     html: `
+{{COMPANY_LOGO}}
 <h1>{{CUSTOM_GREETING}}</h1>
 <p>{{CUSTOM_MESSAGE}}</p>
 <!-- Action -->
@@ -454,6 +457,7 @@ export const POSTMARK_TEMPLATES = {
     description: 'Friendly payment reminder with action button',
     thumbnail: '⏰',
     html: `
+{{COMPANY_LOGO}}
 <h1>{{CUSTOM_GREETING}}</h1>
 <p>{{CUSTOM_MESSAGE}}</p>
 <table class="attribute-list" width="100%" cellpadding="0" cellspacing="0">

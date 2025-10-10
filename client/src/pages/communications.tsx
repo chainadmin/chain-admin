@@ -311,6 +311,15 @@ export default function Communications() {
       previewHtml = previewHtml.replace(/<table class="attribute-list"[\s\S]*?<\/table>/g, '');
     }
     
+    // Replace company logo
+    const logoUrl = (tenantSettings as any)?.customBranding?.logoUrl;
+    if (logoUrl) {
+      const logoHtml = `<div style="text-align: center; margin-bottom: 30px;"><img src="${logoUrl}" alt="Company Logo" style="max-width: 200px; height: auto;" /></div>`;
+      previewHtml = previewHtml.replace(/\{\{COMPANY_LOGO\}\}/g, logoHtml);
+    } else {
+      previewHtml = previewHtml.replace(/\{\{COMPANY_LOGO\}\}/g, '');
+    }
+    
     // Replace variables with sample data for preview
     previewHtml = previewHtml.replace(/\{\{firstName\}\}/g, "John");
     previewHtml = previewHtml.replace(/\{\{lastName\}\}/g, "Doe");
@@ -736,6 +745,9 @@ export default function Communications() {
       if (!emailTemplateForm.showAccountDetails) {
         customizedHtml = customizedHtml.replace(/<table class="attribute-list"[\s\S]*?<\/table>/g, '');
       }
+      
+      // Note: Logo will be replaced at send time with tenant's actual logo in server/routes.ts
+      // For now, keep the placeholder {{COMPANY_LOGO}} in saved template
       
       const fullHtml = (template.styles || '') + '\n' + customizedHtml;
       

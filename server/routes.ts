@@ -164,6 +164,15 @@ function replaceTemplateVariables(
     processedTemplate = applyTemplateReplacement(processedTemplate, key, value || '');
   });
 
+  // Replace company logo
+  const logoUrl = (tenant as any)?.customBranding?.logoUrl;
+  if (logoUrl) {
+    const logoHtml = `<div style="text-align: center; margin-bottom: 30px;"><img src="${logoUrl}" alt="Company Logo" style="max-width: 200px; height: auto;" /></div>`;
+    processedTemplate = processedTemplate.replace(/\{\{COMPANY_LOGO\}\}/g, logoHtml);
+  } else {
+    processedTemplate = processedTemplate.replace(/\{\{COMPANY_LOGO\}\}/g, '');
+  }
+
   const additionalSources = [consumer?.additionalData, account?.additionalData];
   additionalSources.forEach(source => {
     if (source && typeof source === 'object') {
