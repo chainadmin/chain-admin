@@ -3620,18 +3620,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/settings/test-smax', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
-      
+
       if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
       }
 
       const { smaxService } = await import('./smaxService');
-      const result = await smaxService.testConnection(tenantId);
-      
+      const {
+        smaxEnabled,
+        smaxApiKey,
+        smaxPin,
+        smaxBaseUrl,
+      } = req.body || {};
+
+      const sanitizedApiKey = typeof smaxApiKey === 'string' && smaxApiKey !== '••••••••'
+        ? smaxApiKey
+        : undefined;
+      const sanitizedPin = typeof smaxPin === 'string' && smaxPin !== '••••••••'
+        ? smaxPin
+        : undefined;
+
+      const result = await smaxService.testConnection(tenantId, {
+        enabled: typeof smaxEnabled === 'boolean' ? smaxEnabled : undefined,
+        apiKey: sanitizedApiKey,
+        pin: sanitizedPin,
+        baseUrl: typeof smaxBaseUrl === 'string' ? smaxBaseUrl : undefined,
+      });
+
       res.json(result);
     } catch (error: any) {
       console.error("Error testing SMAX connection:", error);
-      res.status(500).json({ 
+      res.status(500).json({
         success: false,
         error: error.message || "Failed to test SMAX connection" 
       });
