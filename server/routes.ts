@@ -283,7 +283,7 @@ async function getTenantId(req: any, storage: IStorage): Promise<string | null> 
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // CORS middleware - Allow Vercel frontend to connect
-  app.use((req, res, next) => {
+  app.use(async (req, res, next) => {
     const allowedOrigins = [
       'https://chainsoftwaregroup.com',
       'https://www.chainsoftwaregroup.com',
@@ -298,7 +298,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const origin = req.headers.origin as string;
     
     // Check if origin is allowed
-    const isAllowed = !origin || 
+    let isAllowed = !origin || 
         allowedOrigins.includes(origin) || 
         origin.includes('vercel.app') || 
         origin.includes('vercel.sh') ||
@@ -307,6 +307,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         origin.includes('repl.co') ||
         // Allow all subdomains of chainsoftwaregroup.com (for agency subdomains)
         origin.endsWith('.chainsoftwaregroup.com');
+    
+    // Check if origin is a custom domain for any tenant
+    if (!isAllowed && origin) {
+      try {
+        const originHostname = new URL(origin).hostname;
+        const tenant = await storage.getTenantByCustomDomain(originHostname);
+        if (tenant) {
+          isAllowed = true;
+        }
+      } catch (error) {
+        // Invalid origin URL or database error, keep isAllowed as false
+      }
+    }
     
     if (isAllowed) {
       res.header('Access-Control-Allow-Origin', origin || '*');
