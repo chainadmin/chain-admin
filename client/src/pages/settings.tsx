@@ -192,6 +192,7 @@ export default function Settings() {
       await apiRequest("PUT", "/api/settings", data);
     },
     onSuccess: () => {
+      setHasUnsavedChanges(false);
       toast({
         title: "Settings Updated",
         description: "Your settings have been saved successfully.",
@@ -332,15 +333,7 @@ export default function Settings() {
   };
 
   const handleSaveSettings = () => {
-    updateSettingsMutation.mutate(localSettings, {
-      onSuccess: () => {
-        setHasUnsavedChanges(false);
-        toast({
-          title: "Settings Saved",
-          description: "Your changes have been saved successfully.",
-        });
-      },
-    });
+    updateSettingsMutation.mutate(localSettings);
   };
 
   const handleDocumentUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
