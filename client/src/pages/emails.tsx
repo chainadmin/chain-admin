@@ -200,7 +200,7 @@ export default function Emails() {
     preview = preview.replace(/\{\{creditor\}\}/g, "Sample Creditor");
     preview = preview.replace(/\{\{balance\}\}/g, "$1,234.56");
     preview = preview.replace(/\{\{dueDate\}\}/g, "12/31/2024");
-    preview = preview.replace(/\{\{consumerPortalLink\}\}/g, "#");
+    preview = preview.replace(/\{\{consumerPortalLink\}\}/g, "https://your-agency.chainsoftwaregroup.com");
     preview = preview.replace(/\{\{appDownloadLink\}\}/g, "#");
     preview = preview.replace(/\{\{agencyName\}\}/g, (settings as any)?.agencyName || "Your Agency");
     preview = preview.replace(/\{\{agencyEmail\}\}/g, (settings as any)?.agencyEmail || "info@agency.com");

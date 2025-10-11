@@ -5,7 +5,9 @@ import jwt from 'jsonwebtoken';
 
 import { getDb } from '../_lib/db';
 import { withAuth, AuthenticatedRequest, JWT_SECRET } from '../_lib/auth';
-import { accounts, consumers, emailTemplates, tenants } from '../_lib/schema';
+import { accounts, consumers, emailTemplates, tenants, tenantSettings } from '../_lib/schema';
+import { resolveConsumerPortalUrl } from '@shared/utils/consumerPortal';
+import { finalizeEmailHtml } from '@shared/utils/emailTemplate';
 
 const DEFAULT_FROM_EMAIL = 'support@chainsoftwaregroup.com';
 
@@ -96,17 +98,24 @@ function replaceTemplateVariables(
     return template;
   }
 
-  const sanitizedBaseUrl = (baseUrl || 'localhost:5000').replace(/^https?:\/\//, '').replace(/\/$/, '');
+  const normalizedBaseUrl = baseUrl || process.env.REPLIT_DOMAINS || 'http://localhost:5000';
+  const sanitizedBaseUrl = normalizedBaseUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+  const baseProtocol = normalizedBaseUrl.startsWith('http://') ? 'http://' : 'https://';
   const consumerEmail = consumer?.email || '';
   const consumerSlug = tenant?.slug;
 
-  let consumerPortalUrl = '';
-  if (sanitizedBaseUrl && consumerSlug) {
-    const emailPath = consumerEmail ? `/${encodeURIComponent(consumerEmail)}` : '';
-    consumerPortalUrl = `https://${sanitizedBaseUrl}/consumer/${consumerSlug}${emailPath}`;
-  }
+  const consumerPortalSettings =
+    (tenant as any)?.consumerPortalSettings ||
+    (tenant as any)?.settings?.consumerPortalSettings ||
+    (tenant as any)?.tenantSettings?.consumerPortalSettings;
 
-  const appDownloadUrl = sanitizedBaseUrl ? `https://${sanitizedBaseUrl}/download` : '';
+  const consumerPortalUrl = resolveConsumerPortalUrl({
+    tenantSlug: consumerSlug,
+    consumerPortalSettings,
+    baseUrl: normalizedBaseUrl,
+  });
+
+  const appDownloadUrl = sanitizedBaseUrl ? `${baseProtocol}${sanitizedBaseUrl}/download` : '';
 
   const firstName = consumer?.firstName || '';
   const lastName = consumer?.lastName || '';
@@ -284,6 +293,30 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       .where(eq(tenants.id, tenantId))
       .limit(1);
 
+    if (!tenantRecord) {
+      res.status(404).json({ error: 'Tenant not found' });
+      return;
+    }
+
+    const [tenantSettingsRecord] = await db
+      .select()
+      .from(tenantSettings)
+      .where(eq(tenantSettings.tenantId, tenantId))
+      .limit(1);
+
+    const tenantBranding = {
+      ...(((tenantRecord?.brand as any) || {})),
+      ...(((tenantSettingsRecord?.customBranding as any) || {})),
+    };
+
+    const tenantWithSettings = {
+      ...tenantRecord,
+      contactEmail: tenantSettingsRecord?.contactEmail,
+      contactPhone: tenantSettingsRecord?.contactPhone,
+      consumerPortalSettings: tenantSettingsRecord?.consumerPortalSettings,
+      customBranding: tenantBranding,
+    };
+
     const activePostmarkClient = tenantRecord?.postmarkServerToken
       ? new Client(tenantRecord.postmarkServerToken)
       : postmarkClient;
@@ -314,21 +347,37 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
 
     const baseUrl = req.headers.origin || process.env.PUBLIC_BASE_URL || process.env.REPLIT_DOMAINS || '';
 
-    const processedSubject = replaceTemplateVariables(emailSubject, consumerRecord, accountRecord, tenantRecord, baseUrl || '');
+    const processedSubject = replaceTemplateVariables(emailSubject, consumerRecord, accountRecord, tenantWithSettings, baseUrl || '');
     const processedHtml = replaceTemplateVariables(
       normalizeHtmlContent(rawBody),
       consumerRecord,
       accountRecord,
-      tenantRecord,
+      tenantWithSettings,
       baseUrl || ''
     );
+
+    const finalizedHtml =
+      finalizeEmailHtml(processedHtml, {
+        logoUrl: tenantBranding?.logoUrl,
+        agencyName: tenantRecord?.name,
+        primaryColor: tenantBranding?.primaryColor || tenantBranding?.buttonColor,
+        accentColor: tenantBranding?.secondaryColor || tenantBranding?.linkColor,
+        backgroundColor:
+          tenantBranding?.emailBackgroundColor || tenantBranding?.backgroundColor,
+        contentBackgroundColor:
+          tenantBranding?.emailContentBackgroundColor ||
+          tenantBranding?.cardBackgroundColor ||
+          tenantBranding?.panelBackgroundColor,
+        textColor: tenantBranding?.emailTextColor || tenantBranding?.textColor,
+        previewText: tenantBranding?.emailPreheader || tenantBranding?.preheaderText,
+      }) || processedHtml;
 
     const result = await activePostmarkClient.sendEmail({
       From: tenantRecord?.email || DEFAULT_FROM_EMAIL,
       To: consumerRecord.email,
       Subject: processedSubject,
-      HtmlBody: processedHtml,
-      TextBody: htmlToText(processedHtml),
+      HtmlBody: finalizedHtml,
+      TextBody: htmlToText(finalizedHtml),
       Tag: 'direct-email',
       Metadata: {
         tenantId,
