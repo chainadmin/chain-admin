@@ -44,6 +44,8 @@ import {
   type MessagingPlanId,
 } from "@shared/billing-plans";
 import { listConsumers, updateConsumer, deleteConsumers, ConsumerNotFoundError } from "@shared/server/consumers";
+import { resolveConsumerPortalUrl } from "@shared/utils/consumerPortal";
+import { finalizeEmailHtml } from "@shared/utils/emailTemplate";
 
 const csvUploadSchema = z.object({
   consumers: z.array(z.object({
@@ -109,21 +111,28 @@ function replaceTemplateVariables(
   consumer: any,
   account: any,
   tenant: any,
-  baseUrl: string = process.env.REPLIT_DOMAINS || 'localhost:5000'
+  baseUrl: string = process.env.REPLIT_DOMAINS || 'http://localhost:5000'
 ): string {
   if (!template) return template;
 
-  const sanitizedBaseUrl = (baseUrl || 'localhost:5000').replace(/^https?:\/\//, '').replace(/\/$/, '');
+  const normalizedBaseUrl = baseUrl || process.env.REPLIT_DOMAINS || 'http://localhost:5000';
+  const sanitizedBaseUrl = normalizedBaseUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+  const baseProtocol = normalizedBaseUrl.startsWith('http://') ? 'http://' : 'https://';
   const consumerEmail = consumer?.email || '';
   const consumerSlug = tenant?.slug;
 
-  let consumerPortalUrl = '';
-  if (sanitizedBaseUrl && consumerSlug) {
-    const emailPath = consumerEmail ? `/${encodeURIComponent(consumerEmail)}` : '';
-    consumerPortalUrl = `https://${sanitizedBaseUrl}/consumer/${consumerSlug}${emailPath}`;
-  }
+  const consumerPortalSettings =
+    (tenant as any)?.consumerPortalSettings ||
+    (tenant as any)?.settings?.consumerPortalSettings ||
+    (tenant as any)?.tenantSettings?.consumerPortalSettings;
 
-  const appDownloadUrl = sanitizedBaseUrl ? `https://${sanitizedBaseUrl}/download` : '';
+  const consumerPortalUrl = resolveConsumerPortalUrl({
+    tenantSlug: consumerSlug,
+    consumerPortalSettings,
+    baseUrl: normalizedBaseUrl,
+  });
+
+  const appDownloadUrl = sanitizedBaseUrl ? `${baseProtocol}${sanitizedBaseUrl}/download` : '';
 
   const firstName = consumer?.firstName || '';
   const lastName = consumer?.lastName || '';
@@ -1220,10 +1229,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get tenant settings for contact info (email/phone)
       const tenantSettings = await storage.getTenantSettings(tenantId);
-      const tenantWithSettings = { 
-        ...tenant, 
+      const tenantBranding = {
+        ...(((tenant as any)?.brand) || {}),
+        ...(((tenantSettings?.customBranding as any) || {})),
+      };
+
+      const tenantWithSettings = {
+        ...tenant,
         contactEmail: tenantSettings?.contactEmail,
-        contactPhone: tenantSettings?.contactPhone
+        contactPhone: tenantSettings?.contactPhone,
+        consumerPortalSettings: tenantSettings?.consumerPortalSettings,
+        customBranding: tenantBranding,
       };
 
       // Process variables for each consumer and prepare email content
@@ -1239,6 +1255,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Replace variables in both subject and HTML content
         const processedSubject = replaceTemplateVariables(template.subject || '', consumer, consumerAccount, tenantWithSettings);
         const processedHtml = replaceTemplateVariables(template.html || '', consumer, consumerAccount, tenantWithSettings);
+
+        const finalizedHtml =
+          finalizeEmailHtml(processedHtml, {
+            logoUrl: tenantBranding?.logoUrl,
+            agencyName: tenant?.name,
+            primaryColor: tenantBranding?.primaryColor || tenantBranding?.buttonColor,
+            accentColor: tenantBranding?.secondaryColor || tenantBranding?.linkColor,
+            backgroundColor:
+              tenantBranding?.emailBackgroundColor || tenantBranding?.backgroundColor,
+            contentBackgroundColor:
+              tenantBranding?.emailContentBackgroundColor ||
+              tenantBranding?.cardBackgroundColor ||
+              tenantBranding?.panelBackgroundColor,
+            textColor: tenantBranding?.emailTextColor || tenantBranding?.textColor,
+            previewText: tenantBranding?.emailPreheader || tenantBranding?.preheaderText,
+          }) || processedHtml;
         
         // Create branded sender email: "Agency Name <slug@chainsoftwaregroup.com>"
         const fromEmail = `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>`;
@@ -1247,7 +1279,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           to: consumer.email!,
           from: fromEmail,
           subject: processedSubject,
-          html: processedHtml,
+          html: finalizedHtml,
           tag: `campaign-${campaign.id}`,
           metadata: {
             campaignId: campaign.id,
@@ -1545,10 +1577,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get tenant settings for contact info (email/phone)
       const tenantSettings = await storage.getTenantSettings(tenantId);
-      const tenantWithSettings = { 
-        ...tenant, 
+      const tenantWithSettings = {
+        ...tenant,
         contactEmail: tenantSettings?.contactEmail,
-        contactPhone: tenantSettings?.contactPhone
+        contactPhone: tenantSettings?.contactPhone,
+        consumerPortalSettings: tenantSettings?.consumerPortalSettings,
       };
 
       const processedMessages = targetedConsumers

@@ -699,7 +699,7 @@ export default function Communications() {
       /\{\{dueDate\}\}/g,
       accountPlaceholder("Due date auto-fills for each recipient")
     );
-    previewHtml = previewHtml.replace(/\{\{consumerPortalLink\}\}/g, "https://yourportal.example.com/account");
+    previewHtml = previewHtml.replace(/\{\{consumerPortalLink\}\}/g, "https://your-agency.chainsoftwaregroup.com");
     previewHtml = previewHtml.replace(/\{\{appDownloadLink\}\}/g, "https://app.example.com/download");
     previewHtml = previewHtml.replace(/\{\{agencyName\}\}/g, (tenantSettings as any)?.agencyName || "Your Agency");
     previewHtml = previewHtml.replace(/\{\{agencyEmail\}\}/g, (tenantSettings as any)?.agencyEmail || "support@example.com");
