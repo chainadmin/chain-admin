@@ -7,6 +7,8 @@ import { eq } from 'drizzle-orm';
 // This allows Docker build to succeed without runtime env vars
 const postmarkClient = new Client(process.env.POSTMARK_SERVER_TOKEN || 'will-be-validated-at-startup');
 
+type MetadataValue = string | number | boolean | null | undefined;
+
 export interface EmailOptions {
   to: string;
   from?: string; // Make optional, will default to verified sender
@@ -14,7 +16,7 @@ export interface EmailOptions {
   html: string;
   text?: string;
   tag?: string;
-  metadata?: Record<string, string>;
+  metadata?: Record<string, MetadataValue>;
   tenantId?: string; // For usage tracking
 }
 
@@ -47,6 +49,8 @@ export class EmailService {
       
       const textBody = options.text || this.htmlToText(options.html);
       
+      const normalizedMetadata = this.normalizeMetadata(options.metadata);
+
       const result = await postmarkClient.sendEmail({
         From: fromEmail,
         To: options.to,
@@ -54,7 +58,7 @@ export class EmailService {
         HtmlBody: options.html,
         TextBody: textBody,
         Tag: options.tag,
-        Metadata: options.metadata,
+        Metadata: normalizedMetadata,
         TrackOpens: true, // Enable open tracking
       });
 
@@ -70,7 +74,7 @@ export class EmailService {
           textBody: textBody,
           status: 'sent',
           tag: options.tag,
-          metadata: options.metadata || {},
+          metadata: normalizedMetadata || {},
         });
       }
 
@@ -143,6 +147,23 @@ export class EmailService {
       .replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>')
       .trim();
+  }
+
+  private normalizeMetadata(metadata?: Record<string, MetadataValue>): Record<string, string> | undefined {
+    if (!metadata) {
+      return undefined;
+    }
+
+    const normalizedEntries = Object.entries(metadata).reduce<Record<string, string>>((acc, [key, value]) => {
+      if (value === null || value === undefined) {
+        return acc;
+      }
+
+      acc[key] = String(value);
+      return acc;
+    }, {});
+
+    return Object.keys(normalizedEntries).length > 0 ? normalizedEntries : undefined;
   }
 
   // Test email connectivity

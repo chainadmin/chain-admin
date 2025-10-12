@@ -1,5 +1,5 @@
 
-import { useState, useRef, useEffect, type RefObject } from "react";
+import { useState, useRef, useEffect, type RefObject, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -75,6 +75,7 @@ import {
 } from "lucide-react";
 
 import { POSTMARK_TEMPLATES, type PostmarkTemplateType } from "@shared/postmarkTemplates";
+import { resolveConsumerPortalUrl } from "@shared/utils/consumerPortal";
 
 export default function Communications() {
   const [activeTab, setActiveTab] = useState("overview");
@@ -272,6 +273,27 @@ export default function Communications() {
   const { data: tenantSettings } = useQuery({
     queryKey: ["/api/settings"],
   });
+
+  const consumerPortalUrl = useMemo(() => {
+    const tenantSlug = (userData as any)?.platformUser?.tenant?.slug;
+    const portalSettings = (tenantSettings as any)?.consumerPortalSettings;
+    const baseUrl = typeof window !== "undefined" ? window.location.origin : undefined;
+
+    return resolveConsumerPortalUrl({
+      tenantSlug,
+      consumerPortalSettings: portalSettings,
+      baseUrl,
+    });
+  }, [tenantSettings, userData]);
+
+  const fallbackAgencyUrl = useMemo(() => {
+    if (typeof window === "undefined") {
+      return "";
+    }
+
+    const slug = (userData as any)?.platformUser?.tenant?.slug || "your-agency";
+    return `${window.location.origin}/agency/${slug}`;
+  }, [userData]);
 
   // Template variables available for insertion
   const templateVariables = [
@@ -850,7 +872,26 @@ export default function Communications() {
       });
       toast({
         title: "Success",
-        description: "Email campaign created and scheduled",
+        description: "Email campaign created and awaiting approval",
+      });
+    },
+  });
+
+  const approveEmailCampaignMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("POST", `/api/email-campaigns/${id}/approve`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/email-campaigns"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/email-metrics"] });
+      toast({
+        title: "Campaign Approved",
+        description: "Email campaign is being sent.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to approve campaign",
+        variant: "destructive",
       });
     },
   });
@@ -1278,12 +1319,21 @@ export default function Communications() {
       case "sending":
         return "border-sky-400/40 bg-sky-500/10 text-sky-100";
       case "pending":
+      case "pending_approval":
         return "border-amber-300/40 bg-amber-500/10 text-amber-100";
       case "failed":
         return "border-rose-400/40 bg-rose-500/10 text-rose-100";
       default:
         return "border-indigo-400/40 bg-indigo-500/10 text-indigo-100";
     }
+  };
+
+  const formatCampaignStatus = (status: string) => {
+    if (!status) return status;
+    if (status === "pending_approval") {
+      return "Pending approval";
+    }
+    return status.replace(/_/g, " ");
   };
 
   const templates = communicationType === "email" ? emailTemplates : smsTemplates;
@@ -1687,7 +1737,7 @@ export default function Communications() {
                               getStatusColor(campaign.status)
                             )}
                           >
-                            {campaign.status}
+                            {formatCampaignStatus(campaign.status)}
                           </Badge>
                           <span className="text-sm font-medium text-blue-100/70">{campaign.totalSent || 0} sent</span>
                         </div>
@@ -2724,18 +2774,51 @@ export default function Communications() {
                         <div className="mb-3 flex items-start justify-between gap-4">
                           <h3 className="text-base font-semibold text-blue-50">{campaign.name}</h3>
                           <div className="flex items-center gap-2">
-                            <Badge
-                              className={cn(
-                                "rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-wide",
-                                getStatusColor(campaign.status)
-                              )}
-                            >
-                              {campaign.status}
-                            </Badge>
-                            {campaign.status === "pending" && (
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button
+                          <Badge
+                            className={cn(
+                              "rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-wide",
+                              getStatusColor(campaign.status)
+                            )}
+                          >
+                            {formatCampaignStatus(campaign.status)}
+                          </Badge>
+                          {communicationType === "email" && campaign.status === "pending_approval" && (
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="border border-emerald-400/60 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/20"
+                                  disabled={approveEmailCampaignMutation.isPending}
+                                >
+                                  {approveEmailCampaignMutation.isPending ? "Approving..." : "Approve & Send"}
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Approve campaign</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Approving this campaign will immediately send {campaign.totalRecipients || 0} emails to the selected recipients.
+                                    This action cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    className="bg-emerald-600 hover:bg-emerald-700"
+                                    onClick={() => approveEmailCampaignMutation.mutate(campaign.id)}
+                                    disabled={approveEmailCampaignMutation.isPending}
+                                  >
+                                    {approveEmailCampaignMutation.isPending ? "Approving..." : "Approve"}
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          )}
+                          {['pending', 'pending_approval'].includes(campaign.status) && (
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
                                     variant="ghost"
                                     size="icon"
                                     className="text-red-600 hover:text-red-700"
@@ -2788,7 +2871,7 @@ export default function Communications() {
                         <div className="mt-4 border-t border-white/15 pt-4">
                           <span className="text-[11px] uppercase tracking-wide text-blue-100/70">Agency URL</span>
                           <span className="mt-1 block font-mono text-xs text-blue-50">
-                            {window.location.origin}/agency/{(userData as any)?.platformUser?.tenant?.slug || 'your-agency'}
+                            {consumerPortalUrl || fallbackAgencyUrl || 'Configure your portal URL in settings'}
                           </span>
                         </div>
                         {campaign.status === "completed" && (
@@ -3409,8 +3492,13 @@ export default function Communications() {
             <AlertDialogHeader>
               <AlertDialogTitle>Confirm Campaign Creation</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to create this {communicationType} campaign? 
-                This will send messages to: {getTargetGroupLabel(campaignForm)}.
+                Are you sure you want to create this {communicationType} campaign?
+                {communicationType === "email" && (
+                  <>
+                    {' '}Email campaigns will remain pending approval until you approve them from the campaign list.
+                  </>
+                )}
+                {' '}This will target: {getTargetGroupLabel(campaignForm)}.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
