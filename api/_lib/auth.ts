@@ -3,6 +3,8 @@ import { getDb } from './db';
 import { platformUsers, users } from '../../shared/schema';
 import { eq } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
+import { getKnownDomainOrigins } from '@shared/utils/baseUrl';
+import { isOriginOnKnownDomain } from '@shared/utils/domains';
 
 export const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
@@ -80,16 +82,16 @@ function appendVaryHeader(res: VercelResponse, value: string) {
 }
 
 function applyCorsHeaders(req: AuthenticatedRequest, res: VercelResponse) {
-  const allowedOrigins = [
-    'https://chainsoftwaregroup.com',
-    'https://www.chainsoftwaregroup.com',
+  const allowedOrigins = new Set([
     'http://localhost:5173',
     'http://localhost:5000',
     'http://localhost:3000',
     'http://127.0.0.1:5173',
     'http://127.0.0.1:5000',
-    'http://127.0.0.1:3000'
-  ];
+    'http://127.0.0.1:3000',
+    ...(process.env.REPLIT_DOMAINS ? [process.env.REPLIT_DOMAINS] : []),
+    ...getKnownDomainOrigins(),
+  ]);
 
   const origin = req.headers.origin as string | undefined;
 
@@ -97,7 +99,7 @@ function applyCorsHeaders(req: AuthenticatedRequest, res: VercelResponse) {
 
   if (origin) {
     isAllowed =
-      allowedOrigins.includes(origin) ||
+      allowedOrigins.has(origin) ||
       origin.includes('vercel.app') ||
       origin.includes('vercel.sh') ||
       origin.includes('replit.dev') ||
@@ -105,7 +107,7 @@ function applyCorsHeaders(req: AuthenticatedRequest, res: VercelResponse) {
       origin.includes('repl.co') ||
       origin.includes('railway.app') ||
       origin.includes('railway.internal') ||
-      origin.endsWith('.chainsoftwaregroup.com');
+      isOriginOnKnownDomain(origin);
   }
 
   appendVaryHeader(res, 'Origin');

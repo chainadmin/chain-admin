@@ -1,8 +1,12 @@
+import { getKnownDomains, matchKnownDomain } from './domains';
+
 export function extractSubdomain(hostname: string): string | null {
+  const normalizedHost = hostname.toLowerCase();
+
   // For development environments
-  if (hostname.includes('localhost') || hostname.includes('127.0.0.1')) {
+  if (normalizedHost.includes('localhost') || normalizedHost.includes('127.0.0.1')) {
     // Check for subdomain in development (e.g., abc-company.localhost:5000)
-    const parts = hostname.split('.');
+    const parts = normalizedHost.split('.');
     if (parts.length > 1 && parts[0] !== 'www') {
       return parts[0].split(':')[0]; // Remove port if present
     }
@@ -11,36 +15,29 @@ export function extractSubdomain(hostname: string): string | null {
   }
 
   // For local development preview URLs
-  if (hostname.includes('.repl.co') || hostname.includes('.replit.dev') || 
-      hostname.includes('.worf.replit.dev') || hostname.includes('replit')) {
+  if (normalizedHost.includes('.repl.co') || normalizedHost.includes('.replit.dev') ||
+      normalizedHost.includes('.worf.replit.dev') || normalizedHost.includes('replit')) {
     // Ignore all Replit URLs - not used for deployment
     return null;
   }
 
   // For Vercel preview/deployment URLs - DO NOT treat as agency subdomains
-  if (hostname.includes('.vercel.app') || hostname.includes('.vercel.sh')) {
+  if (normalizedHost.includes('.vercel.app') || normalizedHost.includes('.vercel.sh')) {
     // Vercel URLs should not be treated as agency subdomains
     return null;
   }
 
-  // For production (ONLY on custom domain)
-  // Example: abc-company.yourdomain.com
-  // Replace 'yourdomain.com' with your actual domain
-  const productionDomain = 'chainsoftwaregroup.com'; // TODO: Update this to your domain (e.g., 'chain.com')
-  
-  if (hostname.includes(productionDomain)) {
-    const parts = hostname.split('.');
-    
-    // Must have at least 3 parts for subdomain.domain.tld
-    if (parts.length >= 3) {
-      const subdomain = parts[0];
-      
-      // Ignore www
-      if (subdomain === 'www') {
-        return null;
+  const matchedDomain = matchKnownDomain(normalizedHost);
+
+  if (matchedDomain) {
+    const domainParts = matchedDomain.split('.');
+    const hostParts = normalizedHost.split('.');
+
+    if (hostParts.length > domainParts.length) {
+      const subdomain = hostParts[hostParts.length - domainParts.length - 1];
+      if (subdomain && subdomain !== 'www') {
+        return subdomain;
       }
-      
-      return subdomain;
     }
   }
 
@@ -61,13 +58,15 @@ export function getAgencySlugFromRequest(
 
   // Allow path-based routing for development environments (localhost, Replit, and Railway)
   // TEMPORARILY allow path-based routing on production domain for testing
-  const isDevEnvironment = hostname.includes('localhost') || 
-                          hostname.includes('127.0.0.1') ||
-                          hostname.includes('.repl.co') || 
-                          hostname.includes('.replit.dev') || 
-                          hostname.includes('.worf.replit.dev') ||
-                          hostname.includes('.up.railway.app') ||
-                          hostname.includes('chainsoftwaregroup.com'); // TEMPORARY: Enable path-based routing on production
+  const normalizedHost = hostname.toLowerCase();
+
+  const isDevEnvironment = normalizedHost.includes('localhost') ||
+                          normalizedHost.includes('127.0.0.1') ||
+                          normalizedHost.includes('.repl.co') ||
+                          normalizedHost.includes('.replit.dev') ||
+                          normalizedHost.includes('.worf.replit.dev') ||
+                          normalizedHost.includes('.up.railway.app') ||
+                          matchKnownDomain(normalizedHost) !== null; // TEMPORARY: Enable path-based routing on production
   
   if (!isDevEnvironment) {
     return null;
@@ -137,14 +136,14 @@ export function isSubdomainSupported(): boolean {
     return false;
   }
 
-  const hostname = globalWindow.location.hostname;
-  const productionDomain = 'chainsoftwaregroup.com'; // TODO: Update this to your domain
-  
-  // Subdomain support is ONLY available on the actual production domain
+  const hostname = globalWindow.location.hostname.toLowerCase();
+  const productionDomains = getKnownDomains();
+
+  // Subdomain support is ONLY available on the actual production domains
   // Not on localhost, Replit, Railway, or any other hosting platform
   if (hostname.includes('.up.railway.app')) {
     return false; // Railway uses path-based routing for testing
   }
-  
-  return hostname.includes(productionDomain);
+
+  return productionDomains.some(domain => hostname === domain || hostname.endsWith(`.${domain}`));
 }

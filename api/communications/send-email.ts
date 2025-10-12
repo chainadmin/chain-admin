@@ -5,9 +5,10 @@ import jwt from 'jsonwebtoken';
 
 import { getDb } from '../_lib/db';
 import { withAuth, AuthenticatedRequest, JWT_SECRET } from '../_lib/auth';
-import { accounts, consumers, emailTemplates, tenants, tenantSettings } from '../_lib/schema';
+import { accounts, consumers, emailLogs, emailTemplates, tenants, tenantSettings } from '../_lib/schema';
 import { resolveConsumerPortalUrl } from '@shared/utils/consumerPortal';
 import { finalizeEmailHtml } from '@shared/utils/emailTemplate';
+import { ensureBaseUrl, resolveBaseUrl } from '@shared/utils/baseUrl';
 
 const DEFAULT_FROM_EMAIL = 'support@chainsoftwaregroup.com';
 
@@ -98,7 +99,7 @@ function replaceTemplateVariables(
     return template;
   }
 
-  const normalizedBaseUrl = baseUrl || process.env.REPLIT_DOMAINS || 'http://localhost:5000';
+  const normalizedBaseUrl = ensureBaseUrl(baseUrl, tenant?.slug);
   const sanitizedBaseUrl = normalizedBaseUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
   const baseProtocol = normalizedBaseUrl.startsWith('http://') ? 'http://' : 'https://';
   const consumerEmail = consumer?.email || '';
@@ -345,15 +346,23 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       return;
     }
 
-    const baseUrl = req.headers.origin || process.env.PUBLIC_BASE_URL || process.env.REPLIT_DOMAINS || '';
+    const baseUrl = resolveBaseUrl({
+      origin: req.headers.origin as string | undefined,
+      forwardedHost: req.headers['x-forwarded-host'],
+      host: req.headers.host,
+      forwardedProto: req.headers['x-forwarded-proto'],
+      protocol: (req as any).protocol,
+      publicBaseUrl: process.env.PUBLIC_BASE_URL || process.env.REPLIT_DOMAINS,
+      tenantSlug: tenantRecord?.slug,
+    });
 
-    const processedSubject = replaceTemplateVariables(emailSubject, consumerRecord, accountRecord, tenantWithSettings, baseUrl || '');
+    const processedSubject = replaceTemplateVariables(emailSubject, consumerRecord, accountRecord, tenantWithSettings, baseUrl);
     const processedHtml = replaceTemplateVariables(
       normalizeHtmlContent(rawBody),
       consumerRecord,
       accountRecord,
       tenantWithSettings,
-      baseUrl || ''
+      baseUrl
     );
 
     const finalizedHtml =
@@ -372,20 +381,41 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         previewText: tenantBranding?.emailPreheader || tenantBranding?.preheaderText,
       }) || processedHtml;
 
+    const metadata = {
+      tenantId,
+      consumerId: consumerRecord.id,
+      ...(accountRecord ? { accountId: accountRecord.id } : {}),
+      ...(templateRecord ? { templateId: templateRecord.id } : {}),
+    };
+
+    const textBody = htmlToText(finalizedHtml);
+
     const result = await activePostmarkClient.sendEmail({
       From: tenantRecord?.email || DEFAULT_FROM_EMAIL,
       To: consumerRecord.email,
       Subject: processedSubject,
       HtmlBody: finalizedHtml,
-      TextBody: htmlToText(finalizedHtml),
+      TextBody: textBody,
       Tag: 'direct-email',
-      Metadata: {
-        tenantId,
-        consumerId: consumerRecord.id,
-        ...(accountRecord ? { accountId: accountRecord.id } : {}),
-        ...(templateRecord ? { templateId: templateRecord.id } : {}),
-      },
+      Metadata: metadata,
     });
+
+    try {
+      await db.insert(emailLogs).values({
+        tenantId,
+        messageId: result.MessageID,
+        fromEmail: tenantRecord?.email || DEFAULT_FROM_EMAIL,
+        toEmail: consumerRecord.email,
+        subject: processedSubject,
+        htmlBody: finalizedHtml,
+        textBody,
+        status: 'sent',
+        tag: 'direct-email',
+        metadata,
+      });
+    } catch (logError) {
+      console.error('Error recording email log:', logError);
+    }
 
     res.status(200).json({
       success: true,

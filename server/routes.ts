@@ -46,6 +46,8 @@ import {
 import { listConsumers, updateConsumer, deleteConsumers, ConsumerNotFoundError } from "@shared/server/consumers";
 import { resolveConsumerPortalUrl } from "@shared/utils/consumerPortal";
 import { finalizeEmailHtml } from "@shared/utils/emailTemplate";
+import { ensureBaseUrl, getKnownDomainOrigins } from "@shared/utils/baseUrl";
+import { isOriginOnKnownDomain } from "@shared/utils/domains";
 
 const csvUploadSchema = z.object({
   consumers: z.array(z.object({
@@ -111,11 +113,11 @@ function replaceTemplateVariables(
   consumer: any,
   account: any,
   tenant: any,
-  baseUrl: string = process.env.REPLIT_DOMAINS || 'http://localhost:5000'
+  baseUrl?: string
 ): string {
   if (!template) return template;
 
-  const normalizedBaseUrl = baseUrl || process.env.REPLIT_DOMAINS || 'http://localhost:5000';
+  const normalizedBaseUrl = ensureBaseUrl(baseUrl || process.env.REPLIT_DOMAINS, tenant?.slug);
   const sanitizedBaseUrl = normalizedBaseUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
   const baseProtocol = normalizedBaseUrl.startsWith('http://') ? 'http://' : 'https://';
   const consumerEmail = consumer?.email || '';
@@ -302,29 +304,28 @@ async function getTenantId(req: any, storage: IStorage): Promise<string | null> 
 export async function registerRoutes(app: Express): Promise<Server> {
   // CORS middleware - Allow Vercel frontend to connect
   app.use((req, res, next) => {
-    const allowedOrigins = [
-      'https://chainsoftwaregroup.com',
-      'https://www.chainsoftwaregroup.com',
+    const allowedOrigins = new Set([
       'http://localhost:5173',
       'http://localhost:5000',
       'http://localhost:3000',
       'http://127.0.0.1:5173',
       'http://127.0.0.1:5000',
-      'http://127.0.0.1:3000'
-    ];
-    
-    const origin = req.headers.origin as string;
-    
+      'http://127.0.0.1:3000',
+      ...(process.env.REPLIT_DOMAINS ? [process.env.REPLIT_DOMAINS] : []),
+      ...getKnownDomainOrigins(),
+    ]);
+
+    const origin = req.headers.origin as string | undefined;
+
     // Check if origin is allowed
-    const isAllowed = !origin || 
-        allowedOrigins.includes(origin) || 
-        origin.includes('vercel.app') || 
+    const isAllowed = !origin ||
+        allowedOrigins.has(origin) ||
+        origin.includes('vercel.app') ||
         origin.includes('vercel.sh') ||
         origin.includes('replit.dev') ||
         origin.includes('replit.app') ||
         origin.includes('repl.co') ||
-        // Allow all subdomains of chainsoftwaregroup.com (for agency subdomains)
-        origin.endsWith('.chainsoftwaregroup.com');
+        isOriginOnKnownDomain(origin);
     
     if (isAllowed) {
       res.header('Access-Control-Allow-Origin', origin || '*');
