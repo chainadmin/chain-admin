@@ -1,4 +1,5 @@
-const FALLBACK_DOMAIN = process.env.CONSUMER_PORTAL_BASE_DOMAIN || 'chainsoftwaregroup.com';
+import { buildTenantUrl } from './domains';
+import { ensureBaseUrl } from './baseUrl';
 
 function normalizeCandidate(value: unknown): string {
   if (typeof value !== 'string') return '';
@@ -64,8 +65,9 @@ export function resolveConsumerPortalUrl(options: {
     return '';
   }
 
-  const protocol = determineProtocol(baseUrl);
-  const sanitizedHost = sanitizeHost(baseUrl);
+  const ensuredBaseUrl = ensureBaseUrl(baseUrl, tenantSlug ?? undefined);
+  const protocol = determineProtocol(ensuredBaseUrl);
+  const sanitizedHost = sanitizeHost(ensuredBaseUrl);
   const isLocalhost = sanitizedHost.includes('localhost') || sanitizedHost.includes('127.0.0.1');
 
   if (isLocalhost && sanitizedHost) {
@@ -82,5 +84,5 @@ export function resolveConsumerPortalUrl(options: {
     return `${protocol}${sanitizedHost}/agency/${tenantSlug}`;
   }
 
-  return `https://${tenantSlug}.${FALLBACK_DOMAIN}`;
+  return buildTenantUrl(tenantSlug);
 }
