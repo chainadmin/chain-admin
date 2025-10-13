@@ -658,11 +658,17 @@ export default function Communications() {
   // Function to render preview with actual data
   const renderPreview = () => {
     const template = POSTMARK_TEMPLATES[emailTemplateForm.designType] as any;
-    
+
     const greeting = formatTemplateContent(emailTemplateForm.greeting, "Hi {{firstName}},");
     const mainMessage = formatTemplateContent(emailTemplateForm.mainMessage);
     const buttonText = emailTemplateForm.buttonText || "View Account";
-    const buttonUrl = emailTemplateForm.buttonUrl || "{{consumerPortalLink}}";
+    const buttonUrlTemplate = emailTemplateForm.buttonUrl || "{{consumerPortalLink}}";
+    const resolvedConsumerPortalUrl =
+      consumerPortalUrl || fallbackAgencyUrl || "https://your-agency.chainsoftwaregroup.com";
+    const resolvedButtonUrl = buttonUrlTemplate.replace(
+      /\{\{\s*consumerPortalLink\s*\}\}/gi,
+      resolvedConsumerPortalUrl
+    );
     const closingMessage = formatTemplateContent(
       emailTemplateForm.closingMessage,
       "If you have any questions, please don't hesitate to contact us."
@@ -674,7 +680,7 @@ export default function Communications() {
     previewHtml = previewHtml.replace('{{CUSTOM_GREETING}}', greeting);
     previewHtml = previewHtml.replace('{{CUSTOM_MESSAGE}}', mainMessage);
     previewHtml = previewHtml.replace('{{CUSTOM_BUTTON_TEXT}}', buttonText);
-    previewHtml = previewHtml.replace('{{CUSTOM_BUTTON_URL}}', buttonUrl);
+    previewHtml = previewHtml.replace('{{CUSTOM_BUTTON_URL}}', resolvedButtonUrl);
     previewHtml = previewHtml.replace('{{CUSTOM_CLOSING_MESSAGE}}', closingMessage);
     previewHtml = previewHtml.replace('{{CUSTOM_SIGNOFF}}', signOff);
     // Replace account detail labels (may contain variables themselves)
@@ -721,7 +727,7 @@ export default function Communications() {
       /\{\{dueDate\}\}/g,
       accountPlaceholder("Due date auto-fills for each recipient")
     );
-    previewHtml = previewHtml.replace(/\{\{consumerPortalLink\}\}/g, "https://your-agency.chainsoftwaregroup.com");
+    previewHtml = previewHtml.replace(/\{\{consumerPortalLink\}\}/g, resolvedConsumerPortalUrl);
     previewHtml = previewHtml.replace(/\{\{appDownloadLink\}\}/g, "https://app.example.com/download");
     previewHtml = previewHtml.replace(/\{\{agencyName\}\}/g, (tenantSettings as any)?.agencyName || "Your Agency");
     previewHtml = previewHtml.replace(/\{\{agencyEmail\}\}/g, (tenantSettings as any)?.agencyEmail || "support@example.com");
