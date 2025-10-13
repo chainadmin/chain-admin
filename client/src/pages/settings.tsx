@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Trash2, Upload, Plus, Save, CreditCard, Shield, Settings as SettingsIcon, ImageIcon, Copy, ExternalLink } from "lucide-react";
 import { isSubdomainSupported } from "@shared/utils/subdomain";
+import { resolveConsumerPortalUrl } from "@shared/utils/consumerPortal";
 import { getArrangementSummary, getPlanTypeLabel, formatCurrencyFromCents } from "@/lib/arrangements";
 import { cn } from "@/lib/utils";
 
