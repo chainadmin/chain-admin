@@ -780,130 +780,24 @@ export default function Settings() {
                             </div>
                           );
                         }
-                        
+
                         // Use authUser first, then userData as fallback
                         const user = userData || authUser;
-                        
-                        // Check if there was an error loading user data
-                        if (!user) {
-                          // Try to get agency slug from the current URL as fallback
-                          const pathSegments = window.location.pathname.split('/');
-                          let fallbackSlug = null;
-                          
-                          // Check if we're in an agency context path
-                          if (pathSegments[1] && pathSegments[1] !== 'admin' && pathSegments[1] !== 'settings') {
-                            fallbackSlug = pathSegments[1];
-                          }
-                          
-                          // Or try to get from sessionStorage (if stored from agency login)
-                          const storedContext = sessionStorage.getItem('agencyContext');
-                          if (storedContext) {
-                            try {
-                              const parsed = JSON.parse(storedContext);
-                              fallbackSlug = parsed.slug;
-                            } catch (e) {}
-                          }
-                          
-                          if (fallbackSlug) {
-                            const agencyUrl = `${window.location.origin}/agency/${fallbackSlug}`;
-                            
-                            return (
-                              <>
-                                <Input
-                                  readOnly
-                                  value={agencyUrl}
-                                  className={`${inputClasses} flex-1 font-mono text-sm`}
-                                />
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="border-white/20 bg-white/5 text-blue-50 hover:bg-white/10"
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(agencyUrl);
-                                    toast({
-                                      title: "URL Copied",
-                                      description: "The custom URL has been copied to your clipboard.",
-                                    });
-                                  }}
-                                  data-testid="button-copy-url"
-                                >
-                                  <Copy className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="border-white/20 bg-white/5 text-blue-50 hover:bg-white/10"
-                                  onClick={() => {
-                                    window.open(agencyUrl, '_blank');
-                                  }}
-                                  data-testid="button-preview-url"
-                                >
-                                  <ExternalLink className="h-4 w-4" />
-                                </Button>
-                              </>
-                            );
-                          }
-                          
-                          return (
-                            <div className="text-sm text-blue-100/70">
-                              Unable to load agency information. Please try refreshing the page.
-                            </div>
-                          );
-                        }
-                        
-                        // Handle both JWT and Replit auth structures
-                        let agencySlug = null;
-                        
-                        if ((user as any)?.isJwtAuth) {
-                          // JWT auth - tenant info is directly on user
-                          // Check both tenantSlug and tenant.slug
-                          agencySlug = (user as any)?.tenantSlug || (user as any)?.tenant?.slug;
-                        } else if ((user as any)?.platformUser) {
-                          // Replit auth - tenant info is under platformUser
-                          agencySlug = (user as any)?.platformUser?.tenant?.slug;
-                        }
-                        
-                        let agencyUrl = '';
-                        
-                        if (agencySlug) {
-                          // Use subdomain-based routing for agency URLs
-                          agencyUrl = `https://${agencySlug}.chainsoftwaregroup.com`;
-                        }
-                        
-                        if (!agencySlug) {
-                          // Try fallback approach if no slug found
-                          const storedContext = sessionStorage.getItem('agencyContext');
-                          if (storedContext) {
-                            try {
-                              const parsed = JSON.parse(storedContext);
-                              agencySlug = parsed.slug;
-                              agencyUrl = `${window.location.origin}/agency/${agencySlug}`;
-                            } catch (e) {}
-                          }
-                          
-                          if (!agencySlug) {
-                            return (
-                              <div className="text-sm text-blue-100/70">
-                                Agency information not available. Please ensure you're logged in to an agency account.
-                              </div>
-                            );
-                          }
-                        }
-                        
-                        return (
+
+                        const renderUrl = (agencyUrl: string) => (
                           <>
                             <Input
                               readOnly
                               value={agencyUrl}
                               className={`${inputClasses} flex-1 font-mono text-sm`}
                             />
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="border-white/20 bg-white/5 text-blue-50 hover:bg-white/10"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(agencyUrl);
-                                  toast({
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="border-white/20 bg-white/5 text-blue-50 hover:bg-white/10"
+                              onClick={() => {
+                                navigator.clipboard.writeText(agencyUrl);
+                                toast({
                                   title: "URL Copied",
                                   description: "The custom URL has been copied to your clipboard.",
                                 });
@@ -912,19 +806,106 @@ export default function Settings() {
                             >
                               <Copy className="h-4 w-4" />
                             </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="border-white/20 bg-white/5 text-blue-50 hover:bg-white/10"
-                                onClick={() => {
-                                  window.open(agencyUrl, '_blank');
-                                }}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="border-white/20 bg-white/5 text-blue-50 hover:bg-white/10"
+                              onClick={() => {
+                                window.open(agencyUrl, '_blank');
+                              }}
                               data-testid="button-preview-url"
                             >
                               <ExternalLink className="h-4 w-4" />
                             </Button>
                           </>
                         );
+
+                        // Check if there was an error loading user data
+                        if (!user) {
+                          // Try to get agency slug from the current URL as fallback
+                          const pathSegments = window.location.pathname.split('/');
+                          let fallbackSlug: string | null = null;
+
+                          // Check if we're in an agency context path
+                          if (pathSegments[1] && pathSegments[1] !== 'admin' && pathSegments[1] !== 'settings') {
+                            fallbackSlug = pathSegments[1];
+                          }
+
+                          // Or try to get from sessionStorage (if stored from agency login)
+                          const storedContext = sessionStorage.getItem('agencyContext');
+                          if (storedContext) {
+                            try {
+                              const parsed = JSON.parse(storedContext);
+                              fallbackSlug = parsed.slug;
+                            } catch (e) {}
+                          }
+
+                          if (fallbackSlug) {
+                            const agencyUrl = `${window.location.origin}/agency/${fallbackSlug}`;
+
+                            return renderUrl(agencyUrl);
+                          }
+
+                          return (
+                            <div className="text-sm text-blue-100/70">
+                              Unable to load agency information. Please try refreshing the page.
+                            </div>
+                          );
+                        }
+
+                        // Handle both JWT and Replit auth structures
+                        let agencySlug: string | null = null;
+
+                        if ((user as any)?.isJwtAuth) {
+                          // JWT auth - tenant info is directly on user
+                          // Check both tenantSlug and tenant.slug
+                          agencySlug = (user as any)?.tenantSlug || (user as any)?.tenant?.slug || null;
+                        } else if ((user as any)?.platformUser) {
+                          // Replit auth - tenant info is under platformUser
+                          agencySlug = (user as any)?.platformUser?.tenant?.slug || null;
+                        }
+
+                        if (!agencySlug) {
+                          // Try fallback approach if no slug found
+                          const storedContext = sessionStorage.getItem('agencyContext');
+                          if (storedContext) {
+                            try {
+                              const parsed = JSON.parse(storedContext);
+                              agencySlug = parsed.slug || null;
+                            } catch (e) {}
+                          }
+                        }
+
+                        let agencyUrl = "";
+
+                        if (agencySlug) {
+                          // Use subdomain-based routing for agency URLs
+                          agencyUrl = `https://${agencySlug}.chainsoftwaregroup.com`;
+                        }
+
+                        if (!agencySlug) {
+                          // Try fallback approach if no slug found
+                          const storedContext = sessionStorage.getItem("agencyContext");
+                          if (storedContext) {
+                            try {
+                              const parsed = JSON.parse(storedContext);
+                              agencySlug = parsed.slug || null;
+                              if (agencySlug) {
+                                agencyUrl = `${window.location.origin}/agency/${agencySlug}`;
+                              }
+                            } catch (e) {}
+                          }
+
+                          if (!agencySlug) {
+                            return (
+                              <div className="text-sm text-blue-100/70">
+                                Agency information not available. Please ensure you're logged in to an agency account.
+                              </div>
+                            );
+                          }
+                        }
+
+                        return renderUrl(agencyUrl);
                       })()}
                     </div>
                     <p className="text-xs text-blue-100/70">
