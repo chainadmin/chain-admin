@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -58,6 +58,8 @@ import {
   Palette,
 } from "lucide-react";
 
+import { resolveConsumerPortalUrl } from "@shared/utils/consumerPortal";
+
 export default function Emails() {
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showCampaignModal, setShowCampaignModal] = useState(false);
@@ -78,6 +80,10 @@ export default function Emails() {
   const queryClient = useQueryClient();
 
   // Queries
+  const { data: userData } = useQuery({
+    queryKey: ["/api/auth/user"],
+  });
+
   const { data: emailTemplates, isLoading: templatesLoading } = useQuery({
     queryKey: ["/api/email-templates"],
   });
@@ -97,6 +103,39 @@ export default function Emails() {
   const { data: settings } = useQuery({
     queryKey: ["/api/settings"],
   });
+
+  const consumerPortalUrl = useMemo(() => {
+    const tenantSlug = (userData as any)?.platformUser?.tenant?.slug;
+    const portalSettings = (settings as any)?.consumerPortalSettings;
+    const baseUrl = typeof window !== "undefined" ? window.location.origin : undefined;
+
+    return resolveConsumerPortalUrl({
+      tenantSlug,
+      consumerPortalSettings: portalSettings,
+      baseUrl,
+    });
+  }, [settings, userData]);
+
+  const fallbackAgencyUrl = useMemo(() => {
+    if (typeof window === "undefined") {
+      return "";
+    }
+
+    const slug = (userData as any)?.platformUser?.tenant?.slug || "your-agency";
+    return `${window.location.origin}/agency/${slug}`;
+  }, [userData]);
+
+  const resolvedConsumerPortalLink = useMemo(() => {
+    if (consumerPortalUrl) {
+      return consumerPortalUrl;
+    }
+
+    if (fallbackAgencyUrl) {
+      return fallbackAgencyUrl;
+    }
+
+    return "";
+  }, [consumerPortalUrl, fallbackAgencyUrl]);
 
   useEffect(() => {
     if (typeof document !== "undefined") {
@@ -200,7 +239,10 @@ export default function Emails() {
     preview = preview.replace(/\{\{creditor\}\}/g, "Sample Creditor");
     preview = preview.replace(/\{\{balance\}\}/g, "$1,234.56");
     preview = preview.replace(/\{\{dueDate\}\}/g, "12/31/2024");
-    preview = preview.replace(/\{\{consumerPortalLink\}\}/g, "https://your-agency.chainsoftwaregroup.com");
+    const sampleConsumerPortalLink =
+      resolvedConsumerPortalLink || "https://your-agency.chainsoftwaregroup.com";
+
+    preview = preview.replace(/\{\{consumerPortalLink\}\}/g, sampleConsumerPortalLink);
     preview = preview.replace(/\{\{appDownloadLink\}\}/g, "#");
     preview = preview.replace(/\{\{agencyName\}\}/g, (settings as any)?.agencyName || "Your Agency");
     preview = preview.replace(/\{\{agencyEmail\}\}/g, (settings as any)?.agencyEmail || "info@agency.com");

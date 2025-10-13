@@ -17,6 +17,7 @@ import {
   subscriptionPlans,
   subscriptions,
   emailLogs,
+  type Account,
   type Consumer,
   type Tenant,
   type InsertArrangementOption,
@@ -201,6 +202,148 @@ function replaceTemplateVariables(
 
   return processedTemplate;
 }
+
+  async function resolveEmailCampaignAudience(tenantId: string, targetGroup: string) {
+    const consumersList = await storage.getConsumersByTenant(tenantId);
+    const accountsData = await storage.getAccountsByTenant(tenantId);
+
+    let targetedConsumers = consumersList;
+
+    if (targetGroup === 'with-balance') {
+      const consumerIds = new Set(
+        accountsData
+          .filter(acc => (acc.balanceCents || 0) > 0)
+          .map(acc => acc.consumerId)
+      );
+      targetedConsumers = consumersList.filter(c => consumerIds.has(c.id));
+    } else if (targetGroup === 'decline') {
+      targetedConsumers = consumersList.filter(c =>
+        (c.additionalData && (c.additionalData as any).status === 'decline') ||
+        (c.additionalData && (c.additionalData as any).folder === 'decline')
+      );
+    } else if (targetGroup === 'recent-upload') {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      targetedConsumers = consumersList.filter(c =>
+        c.createdAt && new Date(c.createdAt) > yesterday
+      );
+    }
+
+    return { targetedConsumers, accountsData };
+  }
+
+  async function buildTenantEmailContext(tenantId: string) {
+    const tenant = await storage.getTenant(tenantId);
+    if (!tenant) {
+      throw new Error('Tenant not found');
+    }
+
+    const tenantSettings = await storage.getTenantSettings(tenantId);
+    const tenantBranding = {
+      ...(((tenant as any)?.brand) || {}),
+      ...(((tenantSettings?.customBranding as any) || {})),
+    };
+
+    const tenantWithSettings = {
+      ...tenant,
+      contactEmail: tenantSettings?.contactEmail,
+      contactPhone: tenantSettings?.contactPhone,
+      consumerPortalSettings: tenantSettings?.consumerPortalSettings,
+      customBranding: tenantBranding,
+    };
+
+    return { tenant, tenantSettings, tenantBranding, tenantWithSettings };
+  }
+
+  async function getEmailTemplateOrThrow(tenantId: string, templateId: string) {
+    const templates = await storage.getEmailTemplatesByTenant(tenantId);
+    const template = templates.find(t => t.id === templateId);
+
+    if (!template) {
+      throw new Error('Email template not found');
+    }
+
+    return template;
+  }
+
+  function buildCampaignEmails(options: {
+    campaignId: string;
+    tenantId: string;
+    template: any;
+    targetedConsumers: Consumer[];
+    accountsData: Account[];
+    tenantWithSettings: any;
+    tenantBranding: any;
+    tenant: Tenant;
+  }) {
+    const {
+      campaignId,
+      tenantId,
+      template,
+      targetedConsumers,
+      accountsData,
+      tenantWithSettings,
+      tenantBranding,
+      tenant,
+    } = options;
+
+    return targetedConsumers
+      .filter(consumer => consumer.email)
+      .map(consumer => {
+        const consumerAccount = accountsData.find(acc => acc.consumerId === consumer.id);
+
+        const processedSubject = replaceTemplateVariables(
+          template.subject || '',
+          consumer,
+          consumerAccount,
+          tenantWithSettings
+        );
+        const processedHtml = replaceTemplateVariables(
+          template.html || '',
+          consumer,
+          consumerAccount,
+          tenantWithSettings
+        );
+
+        const finalizedHtml =
+          finalizeEmailHtml(processedHtml, {
+            logoUrl: tenantBranding?.logoUrl,
+            agencyName: tenant?.name,
+            primaryColor: tenantBranding?.primaryColor || tenantBranding?.buttonColor,
+            accentColor: tenantBranding?.secondaryColor || tenantBranding?.linkColor,
+            backgroundColor:
+              tenantBranding?.emailBackgroundColor || tenantBranding?.backgroundColor,
+            contentBackgroundColor:
+              tenantBranding?.emailContentBackgroundColor ||
+              tenantBranding?.cardBackgroundColor ||
+              tenantBranding?.panelBackgroundColor,
+            textColor: tenantBranding?.emailTextColor || tenantBranding?.textColor,
+            previewText: tenantBranding?.emailPreheader || tenantBranding?.preheaderText,
+          }) || processedHtml;
+
+        const metadata: Record<string, string> = {
+          campaignId,
+          tenantId,
+          consumerId: consumer.id,
+          templateId: template.id,
+        };
+
+        if (consumerAccount?.accountNumber) {
+          metadata.accountNumber = consumerAccount.accountNumber;
+          metadata.filenumber = consumerAccount.accountNumber;
+        }
+
+        return {
+          to: consumer.email!,
+          from: `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>`,
+          subject: processedSubject,
+          html: finalizedHtml,
+          tag: `campaign-${campaignId}`,
+          metadata,
+          tenantId,
+        };
+      });
+  }
 
 function normalizeDateString(value?: string | null): string | null {
   if (!value) return null;
@@ -1181,29 +1324,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Name, template ID, and target group are required" });
       }
 
-      // Get target consumers count
-      const consumers = await storage.getConsumersByTenant(tenantId);
-      let targetedConsumers = consumers;
-      
-      if (targetGroup === "with-balance") {
-        const accounts = await storage.getAccountsByTenant(tenantId);
-        const consumerIds = accounts.filter(acc => (acc.balanceCents || 0) > 0).map(acc => acc.consumerId);
-        targetedConsumers = consumers.filter(c => consumerIds.includes(c.id));
-      } else if (targetGroup === "decline") {
-        // For decline status, we'll filter consumers based on a decline status field
-        // This could be stored in consumer additionalData or a separate status field
-        targetedConsumers = consumers.filter(c => 
-          (c.additionalData && (c.additionalData as any).status === 'decline') ||
-          (c.additionalData && (c.additionalData as any).folder === 'decline')
-        );
-      } else if (targetGroup === "recent-upload") {
-        // For most recent upload, we'll need to track upload batches
-        // For now, we'll use consumers created in the last 24 hours as a proxy
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        targetedConsumers = consumers.filter(c => 
-          c.createdAt && new Date(c.createdAt) > yesterday
-        );
+      const { targetedConsumers } = await resolveEmailCampaignAudience(tenantId, targetGroup);
+
+      let template;
+      try {
+        template = await getEmailTemplateOrThrow(tenantId, templateId);
+      } catch (error) {
+        return res.status(404).json({ message: "Email template not found" });
+      }
+
+      const tenant = await storage.getTenant(tenantId);
+      if (!tenant) {
+        return res.status(404).json({ message: "Tenant not found" });
       }
 
       const campaign = await storage.createEmailCampaign({
@@ -1212,93 +1344,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
         templateId,
         targetGroup,
         totalRecipients: targetedConsumers.length,
-        status: 'sending',
+        status: 'pending_approval',
       });
 
-      // Get email template for variable replacement
-      const templates = await storage.getEmailTemplatesByTenant(tenantId);
-      const template = templates.find(t => t.id === templateId);
-      if (!template) {
+      console.log(`📧 Email campaign "${campaign.name}" created with ${targetedConsumers.length} targeted recipients. Awaiting approval to send.`);
+
+      res.json({
+        ...campaign,
+        totalRecipients: targetedConsumers.length,
+        templateName: template.name,
+        message: 'Campaign created and awaiting approval',
+      });
+    } catch (error) {
+      console.error("Error creating email campaign:", error);
+      res.status(500).json({ message: "Failed to create email campaign" });
+    }
+  });
+
+  app.post('/api/email-campaigns/:id/approve', authenticateUser, requireEmailService, async (req: any, res) => {
+    let campaign: any;
+    let targetedConsumers: Consumer[] = [];
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { id } = req.params;
+      campaign = await storage.getEmailCampaignById(id, tenantId);
+
+      if (!campaign) {
+        return res.status(404).json({ message: "Campaign not found" });
+      }
+
+      const normalizedStatus = (campaign.status || '').toLowerCase();
+      if (!['pending', 'pending_approval'].includes(normalizedStatus)) {
+        return res.status(400).json({ message: "Campaign is not awaiting approval" });
+      }
+
+      let template;
+      try {
+        template = await getEmailTemplateOrThrow(tenantId, campaign.templateId);
+      } catch (error) {
         return res.status(404).json({ message: "Email template not found" });
       }
 
-      // Get tenant details for URL generation
-      const tenant = await storage.getTenant(tenantId);
-      if (!tenant) {
+      let tenantContext;
+      try {
+        tenantContext = await buildTenantEmailContext(tenantId);
+      } catch (contextError) {
         return res.status(404).json({ message: "Tenant not found" });
       }
 
-      // Get tenant settings for contact info (email/phone)
-      const tenantSettings = await storage.getTenantSettings(tenantId);
-      const tenantBranding = {
-        ...(((tenant as any)?.brand) || {}),
-        ...(((tenantSettings?.customBranding as any) || {})),
-      };
+      const audience = await resolveEmailCampaignAudience(tenantId, campaign.targetGroup);
+      targetedConsumers = audience.targetedConsumers;
+      const { accountsData } = audience;
 
-      const tenantWithSettings = {
-        ...tenant,
-        contactEmail: tenantSettings?.contactEmail,
-        contactPhone: tenantSettings?.contactPhone,
-        consumerPortalSettings: tenantSettings?.consumerPortalSettings,
-        customBranding: tenantBranding,
-      };
-
-      // Process variables for each consumer and prepare email content
-      const accountsData = await storage.getAccountsByTenant(tenantId);
-      
-      // Prepare emails with variable replacement (filter out consumers without emails)
-      const processedEmails = targetedConsumers
-        .filter(consumer => consumer.email) // Only include consumers with valid emails
-        .map(consumer => {
-        // Find the primary account for this consumer (could be multiple accounts)
-        const consumerAccount = accountsData.find(acc => acc.consumerId === consumer.id);
-        
-        // Replace variables in both subject and HTML content
-        const processedSubject = replaceTemplateVariables(template.subject || '', consumer, consumerAccount, tenantWithSettings);
-        const processedHtml = replaceTemplateVariables(template.html || '', consumer, consumerAccount, tenantWithSettings);
-
-        const finalizedHtml =
-          finalizeEmailHtml(processedHtml, {
-            logoUrl: tenantBranding?.logoUrl,
-            agencyName: tenant?.name,
-            primaryColor: tenantBranding?.primaryColor || tenantBranding?.buttonColor,
-            accentColor: tenantBranding?.secondaryColor || tenantBranding?.linkColor,
-            backgroundColor:
-              tenantBranding?.emailBackgroundColor || tenantBranding?.backgroundColor,
-            contentBackgroundColor:
-              tenantBranding?.emailContentBackgroundColor ||
-              tenantBranding?.cardBackgroundColor ||
-              tenantBranding?.panelBackgroundColor,
-            textColor: tenantBranding?.emailTextColor || tenantBranding?.textColor,
-            previewText: tenantBranding?.emailPreheader || tenantBranding?.preheaderText,
-          }) || processedHtml;
-        
-        // Create branded sender email: "Agency Name <slug@chainsoftwaregroup.com>"
-        const fromEmail = `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>`;
-        
-        return {
-          to: consumer.email!,
-          from: fromEmail,
-          subject: processedSubject,
-          html: finalizedHtml,
-          tag: `campaign-${campaign.id}`,
-          metadata: {
-            campaignId: campaign.id,
-            tenantId: tenantId || '',
-            consumerId: consumer.id,
-            templateId: templateId,
-            accountNumber: consumerAccount?.accountNumber || '',
-            filenumber: consumerAccount?.accountNumber || '',
-          }
-        };
+      const processedEmails = buildCampaignEmails({
+        campaignId: campaign.id,
+        tenantId,
+        template,
+        targetedConsumers,
+        accountsData,
+        tenantWithSettings: tenantContext.tenantWithSettings,
+        tenantBranding: tenantContext.tenantBranding,
+        tenant: tenantContext.tenant,
       });
 
-      // Send emails via Postmark
-      console.log(`📧 Sending ${processedEmails.length} emails via Postmark...`);
-      const emailResults = await emailService.sendBulkEmails(processedEmails);
-      
-      // Update campaign status
       await storage.updateEmailCampaign(campaign.id, {
+        status: 'sending',
+        totalRecipients: targetedConsumers.length,
+        totalSent: 0,
+        totalErrors: 0,
+        completedAt: null,
+      });
+
+      console.log(`✅ Email campaign "${campaign.name}" approved. Sending ${processedEmails.length} emails via Postmark...`);
+
+      let emailResults = { successful: 0, failed: 0, results: [] as any[] };
+      if (processedEmails.length > 0) {
+        emailResults = await emailService.sendBulkEmails(processedEmails);
+      }
+
+      const updatedCampaign = await storage.updateEmailCampaign(campaign.id, {
         status: 'completed',
         totalSent: emailResults.successful,
         totalErrors: emailResults.failed,
@@ -1306,19 +1434,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         completedAt: new Date(),
       });
 
-      console.log(`✅ Email campaign completed: ${emailResults.successful} sent, ${emailResults.failed} failed`);
-      
       res.json({
-        ...campaign,
-        emailResults: {
-          successful: emailResults.successful,
-          failed: emailResults.failed,
-          totalProcessed: processedEmails.length
-        }
+        ...updatedCampaign,
+        emailResults,
       });
     } catch (error) {
-      console.error("Error creating email campaign:", error);
-      res.status(500).json({ message: "Failed to create email campaign" });
+      console.error("Error approving email campaign:", error);
+
+      if (campaign?.id) {
+        try {
+          await storage.updateEmailCampaign(campaign.id, {
+            status: 'failed',
+            totalRecipients: targetedConsumers.length || campaign.totalRecipients || 0,
+            completedAt: new Date(),
+          });
+        } catch (updateError) {
+          console.error('Error updating campaign status after failure:', updateError);
+        }
+      }
+
+      res.status(500).json({ message: "Failed to approve email campaign" });
     }
   });
 
@@ -1336,7 +1471,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Campaign not found" });
       }
 
-      if ((campaign.status || '').toLowerCase() !== 'pending') {
+      if (!['pending', 'pending_approval'].includes((campaign.status || '').toLowerCase())) {
         return res.status(400).json({ message: "Only pending campaigns can be deleted" });
       }
 
