@@ -782,17 +782,6 @@ export default function Settings() {
                           );
                         }
 
-                        const consumerPortalSettings =
-                          (localSettings as any)?.consumerPortalSettings ?? (settings as any)?.consumerPortalSettings;
-
-                        const buildAgencyUrl = (slug: string | null) => {
-                          return resolveConsumerPortalUrl({
-                            tenantSlug: slug ?? undefined,
-                            consumerPortalSettings,
-                            baseUrl: window.location.origin,
-                          });
-                        };
-
                         // Use authUser first, then userData as fallback
                         const user = userData || authUser;
 
@@ -852,8 +841,9 @@ export default function Settings() {
                             } catch (e) {}
                           }
 
-                          const agencyUrl = buildAgencyUrl(fallbackSlug);
-                          if (agencyUrl) {
+                          if (fallbackSlug) {
+                            const agencyUrl = `${window.location.origin}/agency/${fallbackSlug}`;
+
                             return renderUrl(agencyUrl);
                           }
 
@@ -887,13 +877,33 @@ export default function Settings() {
                           }
                         }
 
-                        const agencyUrl = buildAgencyUrl(agencySlug);
-                        if (!agencyUrl) {
-                          return (
-                            <div className="text-sm text-blue-100/70">
-                              Agency information not available. Please ensure you're logged in to an agency account.
-                            </div>
-                          );
+                        let agencyUrl = "";
+
+                        if (agencySlug) {
+                          // Use subdomain-based routing for agency URLs
+                          agencyUrl = `https://${agencySlug}.chainsoftwaregroup.com`;
+                        }
+
+                        if (!agencySlug) {
+                          // Try fallback approach if no slug found
+                          const storedContext = sessionStorage.getItem("agencyContext");
+                          if (storedContext) {
+                            try {
+                              const parsed = JSON.parse(storedContext);
+                              agencySlug = parsed.slug || null;
+                              if (agencySlug) {
+                                agencyUrl = `${window.location.origin}/agency/${agencySlug}`;
+                              }
+                            } catch (e) {}
+                          }
+
+                          if (!agencySlug) {
+                            return (
+                              <div className="text-sm text-blue-100/70">
+                                Agency information not available. Please ensure you're logged in to an agency account.
+                              </div>
+                            );
+                          }
                         }
 
                         return renderUrl(agencyUrl);
