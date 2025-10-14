@@ -57,7 +57,10 @@ import {
   Eraser,
   Palette,
 } from "lucide-react";
-import { resolveConsumerPortalUrl } from "@shared/utils/consumerPortal";
+import {
+  resolveConsumerPortalUrl,
+  normalizeConsumerPortalLinkPlaceholders,
+} from "@shared/utils/consumerPortal";
 
 export default function Emails() {
   const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -157,7 +160,8 @@ export default function Emails() {
   const syncEditorHtml = () => {
     const editor = editorRef.current;
     if (!editor) return;
-    const html = editor.innerHTML;
+    const adminOrigin = typeof window !== "undefined" ? window.location.origin : "";
+    const html = normalizeConsumerPortalLinkPlaceholders(editor.innerHTML, { adminOrigin });
     const textContent = editor.textContent?.trim() ?? "";
     setTemplateForm((prev) => ({
       ...prev,
@@ -214,8 +218,9 @@ export default function Emails() {
 
   // Function to render preview with actual data
   const renderPreview = () => {
-    let preview = templateForm.html;
-    
+    const adminOrigin = typeof window !== "undefined" ? window.location.origin : "";
+    let preview = normalizeConsumerPortalLinkPlaceholders(templateForm.html, { adminOrigin });
+
     // Replace variables with sample data
     preview = preview.replace(/\{\{firstName\}\}/g, "John");
     preview = preview.replace(/\{\{lastName\}\}/g, "Doe");
@@ -228,11 +233,15 @@ export default function Emails() {
     preview = preview.replace(/\{\{dueDate\}\}/g, "12/31/2024");
     const resolvedConsumerPortalUrl =
       consumerPortalUrl || fallbackAgencyUrl || "https://your-agency.chainsoftwaregroup.com";
-    preview = preview.replace(/\{\{consumerPortalLink\}\}/g, resolvedConsumerPortalUrl);
+    preview = preview.replace(/\{\{\s*consumerPortalLink\s*\}\}/gi, resolvedConsumerPortalUrl);
     preview = preview.replace(/\{\{appDownloadLink\}\}/g, "#");
     preview = preview.replace(/\{\{agencyName\}\}/g, (settings as any)?.agencyName || "Your Agency");
     preview = preview.replace(/\{\{agencyEmail\}\}/g, (settings as any)?.agencyEmail || "info@agency.com");
     preview = preview.replace(/\{\{agencyPhone\}\}/g, (settings as any)?.agencyPhone || "(555) 000-0000");
+
+    if (adminOrigin) {
+      preview = normalizeConsumerPortalLinkPlaceholders(preview, { adminOrigin });
+    }
 
     return preview;
   };
@@ -327,9 +336,12 @@ export default function Emails() {
       });
       return;
     }
+    const adminOrigin = typeof window !== "undefined" ? window.location.origin : "";
+    const rawHtml = templateForm.html || editorRef.current?.innerHTML || "";
+    const normalizedHtml = normalizeConsumerPortalLinkPlaceholders(rawHtml, { adminOrigin });
     createTemplateMutation.mutate({
       ...templateForm,
-      html: templateForm.html || editorRef.current?.innerHTML || "",
+      html: normalizedHtml,
     });
   };
 

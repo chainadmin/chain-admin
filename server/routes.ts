@@ -45,7 +45,10 @@ import {
   type MessagingPlanId,
 } from "@shared/billing-plans";
 import { listConsumers, updateConsumer, deleteConsumers, ConsumerNotFoundError } from "@shared/server/consumers";
-import { resolveConsumerPortalUrl } from "@shared/utils/consumerPortal";
+import {
+  resolveConsumerPortalUrl,
+  normalizeConsumerPortalLinkPlaceholders,
+} from "@shared/utils/consumerPortal";
 import { finalizeEmailHtml } from "@shared/utils/emailTemplate";
 import { ensureBaseUrl, getKnownDomainOrigins } from "@shared/utils/baseUrl";
 import { isOriginOnKnownDomain } from "@shared/utils/domains";
@@ -170,7 +173,10 @@ function replaceTemplateVariables(
     agencyPhone: (tenant as any)?.contactPhone || tenant?.phoneNumber || tenant?.twilioPhoneNumber || '',
   };
 
-  let processedTemplate = template;
+  const normalizedTemplate = normalizeConsumerPortalLinkPlaceholders(template, {
+    adminOrigin: normalizedBaseUrl,
+  });
+  let processedTemplate = normalizedTemplate;
 
   Object.entries(replacements).forEach(([key, value]) => {
     processedTemplate = applyTemplateReplacement(processedTemplate, key, value || '');
