@@ -75,7 +75,10 @@ import {
 } from "lucide-react";
 
 import { POSTMARK_TEMPLATES, type PostmarkTemplateType } from "@shared/postmarkTemplates";
-import { resolveConsumerPortalUrl } from "@shared/utils/consumerPortal";
+import {
+  resolveConsumerPortalUrl,
+  normalizeConsumerPortalLinkPlaceholders,
+} from "@shared/utils/consumerPortal";
 
 export default function Communications() {
   const [activeTab, setActiveTab] = useState("overview");
@@ -658,23 +661,41 @@ export default function Communications() {
   // Function to render preview with actual data
   const renderPreview = () => {
     const template = POSTMARK_TEMPLATES[emailTemplateForm.designType] as any;
-    
+    const adminOrigin = typeof window !== "undefined" ? window.location.origin : "";
+    const canonicalTemplateHtml = normalizeConsumerPortalLinkPlaceholders(template.html, {
+      adminOrigin,
+    });
+
     const greeting = formatTemplateContent(emailTemplateForm.greeting, "Hi {{firstName}},");
     const mainMessage = formatTemplateContent(emailTemplateForm.mainMessage);
     const buttonText = emailTemplateForm.buttonText || "View Account";
-    const buttonUrl = emailTemplateForm.buttonUrl || "{{consumerPortalLink}}";
+    const rawButtonUrlTemplate = emailTemplateForm.buttonUrl || "{{consumerPortalLink}}";
+    const resolvedConsumerPortalUrl =
+      consumerPortalUrl || fallbackAgencyUrl || "https://your-agency.chainsoftwaregroup.com";
+    const buttonUrlTemplate = normalizeConsumerPortalLinkPlaceholders(rawButtonUrlTemplate, {
+      adminOrigin,
+    });
+    let resolvedButtonUrl = buttonUrlTemplate.replace(
+      /\{\{\s*consumerPortalLink\s*\}\}/gi,
+      resolvedConsumerPortalUrl
+    );
+    if (adminOrigin) {
+      resolvedButtonUrl = normalizeConsumerPortalLinkPlaceholders(resolvedButtonUrl, {
+        adminOrigin,
+      });
+    }
     const closingMessage = formatTemplateContent(
       emailTemplateForm.closingMessage,
       "If you have any questions, please don't hesitate to contact us."
     );
     const signOff = formatTemplateContent(emailTemplateForm.signOff, "Thanks,<br>The {{agencyName}} Team");
-    
+
     // Replace custom placeholders with user's content
-    let previewHtml = template.html;
+    let previewHtml = canonicalTemplateHtml;
     previewHtml = previewHtml.replace('{{CUSTOM_GREETING}}', greeting);
     previewHtml = previewHtml.replace('{{CUSTOM_MESSAGE}}', mainMessage);
     previewHtml = previewHtml.replace('{{CUSTOM_BUTTON_TEXT}}', buttonText);
-    previewHtml = previewHtml.replace('{{CUSTOM_BUTTON_URL}}', buttonUrl);
+    previewHtml = previewHtml.replace('{{CUSTOM_BUTTON_URL}}', resolvedButtonUrl);
     previewHtml = previewHtml.replace('{{CUSTOM_CLOSING_MESSAGE}}', closingMessage);
     previewHtml = previewHtml.replace('{{CUSTOM_SIGNOFF}}', signOff);
     // Replace account detail labels (may contain variables themselves)
@@ -721,7 +742,15 @@ export default function Communications() {
       /\{\{dueDate\}\}/g,
       accountPlaceholder("Due date auto-fills for each recipient")
     );
-    previewHtml = previewHtml.replace(/\{\{consumerPortalLink\}\}/g, "https://your-agency.chainsoftwaregroup.com");
+    previewHtml = previewHtml.replace(
+      /\{\{\s*consumerPortalLink\s*\}\}/gi,
+      resolvedConsumerPortalUrl
+    );
+    if (adminOrigin) {
+      previewHtml = normalizeConsumerPortalLinkPlaceholders(previewHtml, {
+        adminOrigin,
+      });
+    }
     previewHtml = previewHtml.replace(/\{\{appDownloadLink\}\}/g, "https://app.example.com/download");
     previewHtml = previewHtml.replace(/\{\{agencyName\}\}/g, (tenantSettings as any)?.agencyName || "Your Agency");
     previewHtml = previewHtml.replace(/\{\{agencyEmail\}\}/g, (tenantSettings as any)?.agencyEmail || "support@example.com");
@@ -1087,6 +1116,7 @@ export default function Communications() {
   };
 
   const handleEditTemplate = (template: any) => {
+    const adminOrigin = typeof window !== "undefined" ? window.location.origin : "";
     setEditingTemplate(template);
     if (communicationType === "email") {
       setEmailTemplateForm({
@@ -1095,7 +1125,10 @@ export default function Communications() {
         greeting: template.greeting || "Hi {{firstName}},",
         mainMessage: ensureEditorHtml(template.mainMessage || ""),
         buttonText: template.buttonText || "",
-        buttonUrl: template.buttonUrl || "{{consumerPortalLink}}",
+        buttonUrl: normalizeConsumerPortalLinkPlaceholders(
+          template.buttonUrl || "{{consumerPortalLink}}",
+          { adminOrigin }
+        ),
         closingMessage: template.closingMessage || "",
         signOff: template.signOff || "<p>Thanks,<br>The {{agencyName}} Team</p>",
         showAccountDetails: template.showAccountDetails !== undefined ? template.showAccountDetails : true,
@@ -1127,22 +1160,26 @@ export default function Communications() {
         });
         return;
       }
-      
+
       // Get the base Postmark template and inject user's custom content
       const template = POSTMARK_TEMPLATES[emailTemplateForm.designType] as any;
-      
+      const adminOrigin = typeof window !== "undefined" ? window.location.origin : "";
+
       // Replace custom placeholders with user's actual content
       const greeting = formatTemplateContent(emailTemplateForm.greeting, "Hi {{firstName}},");
       const mainMessage = formatTemplateContent(emailTemplateForm.mainMessage);
       const buttonText = emailTemplateForm.buttonText || "View Account";
-      const buttonUrl = emailTemplateForm.buttonUrl || "{{consumerPortalLink}}";
+      const buttonUrl = normalizeConsumerPortalLinkPlaceholders(
+        emailTemplateForm.buttonUrl || "{{consumerPortalLink}}",
+        { adminOrigin }
+      );
       const closingMessage = formatTemplateContent(
         emailTemplateForm.closingMessage,
         "If you have any questions, please don't hesitate to contact us."
       );
       const signOff = formatTemplateContent(emailTemplateForm.signOff, "Thanks,<br>The {{agencyName}} Team");
-      
-      let customizedHtml = template.html;
+
+      let customizedHtml = normalizeConsumerPortalLinkPlaceholders(template.html, { adminOrigin });
       customizedHtml = customizedHtml.replace('{{CUSTOM_GREETING}}', greeting);
       customizedHtml = customizedHtml.replace('{{CUSTOM_MESSAGE}}', mainMessage);
       customizedHtml = customizedHtml.replace('{{CUSTOM_BUTTON_TEXT}}', buttonText);
@@ -1162,9 +1199,10 @@ export default function Communications() {
       
       // Note: Logo will be replaced at send time with tenant's actual logo in server/routes.ts
       // For now, keep the placeholder {{COMPANY_LOGO}} in saved template
-      
+
+      customizedHtml = normalizeConsumerPortalLinkPlaceholders(customizedHtml, { adminOrigin });
       const fullHtml = (template.styles || '') + '\n' + customizedHtml;
-      
+
       const dataToSend = {
         name: emailTemplateForm.name,
         subject: emailTemplateForm.subject,
@@ -1172,7 +1210,7 @@ export default function Communications() {
         greeting: emailTemplateForm.greeting,
         mainMessage: emailTemplateForm.mainMessage,
         buttonText: emailTemplateForm.buttonText,
-        buttonUrl: emailTemplateForm.buttonUrl,
+        buttonUrl,
         closingMessage: emailTemplateForm.closingMessage,
         signOff: emailTemplateForm.signOff,
         showAccountDetails: emailTemplateForm.showAccountDetails,

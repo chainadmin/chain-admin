@@ -1,6 +1,10 @@
 import { buildTenantUrl } from './domains';
 import { ensureBaseUrl } from './baseUrl';
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function normalizeCandidate(value: unknown): string {
   if (typeof value !== 'string') return '';
   const trimmed = value.trim();
@@ -85,4 +89,34 @@ export function resolveConsumerPortalUrl(options: {
   }
 
   return buildTenantUrl(tenantSlug);
+}
+
+export function normalizeConsumerPortalLinkPlaceholders(
+  content: string,
+  options: { adminOrigin?: string | null }
+): string {
+  if (!content) {
+    return content;
+  }
+
+  const { adminOrigin } = options;
+  if (!adminOrigin) {
+    return content;
+  }
+
+  const normalizedOrigin = adminOrigin.replace(/\/$/, '');
+  if (!normalizedOrigin) {
+    return content;
+  }
+
+  const escapedOrigin = escapeRegExp(normalizedOrigin);
+  const patterns = [
+    new RegExp(`${escapedOrigin}/%7B%7B\\s*consumerPortalLink\\s*%7D%7D`, 'gi'),
+    new RegExp(`${escapedOrigin}/\\{\\{\\s*consumerPortalLink\\s*\\}\\}`, 'gi'),
+  ];
+
+  return patterns.reduce(
+    (result, pattern) => result.replace(pattern, '{{consumerPortalLink}}'),
+    content
+  );
 }

@@ -6,7 +6,10 @@ import jwt from 'jsonwebtoken';
 import { getDb } from '../_lib/db';
 import { withAuth, AuthenticatedRequest, JWT_SECRET } from '../_lib/auth';
 import { accounts, consumers, emailLogs, emailTemplates, tenants, tenantSettings } from '../_lib/schema';
-import { resolveConsumerPortalUrl } from '@shared/utils/consumerPortal';
+import {
+  resolveConsumerPortalUrl,
+  normalizeConsumerPortalLinkPlaceholders,
+} from '@shared/utils/consumerPortal';
 import { finalizeEmailHtml } from '@shared/utils/emailTemplate';
 import { ensureBaseUrl, resolveBaseUrl } from '@shared/utils/baseUrl';
 
@@ -151,7 +154,10 @@ function replaceTemplateVariables(
     agencyPhone: tenant?.phoneNumber || tenant?.twilioPhoneNumber || '',
   };
 
-  let processedTemplate = template;
+  const normalizedTemplate = normalizeConsumerPortalLinkPlaceholders(template, {
+    adminOrigin: normalizedBaseUrl,
+  });
+  let processedTemplate = normalizedTemplate;
 
   Object.entries(replacements).forEach(([key, value]) => {
     processedTemplate = applyTemplateReplacement(processedTemplate, key, value || '');
