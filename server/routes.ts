@@ -6519,9 +6519,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   async function processPostmarkWebhook(event: any) {
     const { RecordType, MessageID, Recipient, Tag, Metadata } = event;
 
-    // Only process events that have our tracking metadata
-    if (!Metadata?.campaignId && !Tag) return;
-
     const campaignId = Metadata?.campaignId;
     const tenantId = Metadata?.tenantId as string | undefined;
     const trackingData = {
