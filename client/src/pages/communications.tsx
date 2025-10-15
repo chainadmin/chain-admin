@@ -2238,7 +2238,13 @@ export default function Communications() {
                                 <div className="mb-4 pb-4 border-b">
                                   <div className="text-xs text-gray-500 mb-1">Subject:</div>
                                   <div className="font-semibold text-gray-900">
-                                    {emailTemplateForm.subject.replace(/\{\{accountNumber\}\}/g, "ACC-12345").replace(/\{\{firstName\}\}/g, "John") || "No subject"}
+                                    {emailTemplateForm.subject
+                                      .replace(/\{\{accountNumber\}\}/g, "[Account #]")
+                                      .replace(/\{\{firstName\}\}/g, "John")
+                                      .replace(/\{\{fullName\}\}/g, "John Doe")
+                                      .replace(/\{\{creditor\}\}/g, "[Creditor]")
+                                      .replace(/\{\{balance\}\}/g, "[Balance]")
+                                      .replace(/\{\{dueDate\}\}/g, "[Due Date]") || "No subject"}
                                   </div>
                                 </div>
                                 {/* Rendered HTML */}

@@ -14,6 +14,11 @@ The frontend uses React with TypeScript, built with shadcn/ui components on Radi
 ## Technical Implementations
 - **Frontend**: React, TypeScript, Vite, TanStack Query (server state management), Wouter (routing), custom hooks for authentication and mobile detection.
 - **Backend**: Express.js with TypeScript, RESTful API, layered architecture (Route, Storage, Database), Drizzle ORM for type-safe database interactions, middleware for logging, error handling, and authentication.
+- **Mobile App Branding**: Logo file located at `attached_assets/chainlogo_1760556774097.jpg`. To set as app icon:
+  - Android: Replace icons in `android/app/src/main/res/mipmap-*/` folders (sizes: 48px, 72px, 96px, 144px, 192px)
+  - iOS: Replace icons in `ios/App/App/Assets.xcassets/AppIcon.appiconset/` (various sizes up to 1024px)
+  - Play Store: Use 512×512px version for store listing
+  - Recommended: Use online icon generator (appicon.co, makeappicon.com) to create all required sizes from source logo
 - **Authentication**: Replit's OpenID Connect (OIDC) integration with Passport.js, supporting OIDC flows, session-based state management via PostgreSQL session store, multi-tenant user isolation, and secure HTTP-only cookies.
 - **Mobile Authentication**: Mobile-specific consumer authentication flow using email and date of birth verification. Consumers authenticate without knowing their agency URL. System searches across all agencies, auto-logs in for single-agency consumers, or presents agency selection for multi-agency consumers. Uses flexible date format matching and JWT token generation. API endpoints: `/api/mobile/auth/verify` and `/api/mobile/auth/select-agency`.
 - **Multi-Tenant Architecture**: Application-level tenant isolation with slug-based routing, platform users associated with specific tenants, tenant-level filtering on all database queries, and scoped consumer portal access.
