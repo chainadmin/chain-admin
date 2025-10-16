@@ -128,6 +128,14 @@ function replaceTemplateVariables(
   const formattedDueDate = account?.dueDate ? new Date(account.dueDate).toLocaleDateString() : '';
   const dueDateIso = account?.dueDate ? new Date(account.dueDate).toISOString().split('T')[0] : '';
 
+  // Calculate balance percentages for settlement offers
+  const balance50 = balanceCents ? formatCurrency(Math.round(balanceCents * 0.5)) : '';
+  const balance60 = balanceCents ? formatCurrency(Math.round(balanceCents * 0.6)) : '';
+  const balance70 = balanceCents ? formatCurrency(Math.round(balanceCents * 0.7)) : '';
+  const balance80 = balanceCents ? formatCurrency(Math.round(balanceCents * 0.8)) : '';
+  const balance90 = balanceCents ? formatCurrency(Math.round(balanceCents * 0.9)) : '';
+  const balance100 = formattedBalance; // Same as full balance
+
   const replacements: Record<string, string> = {
     firstName,
     lastName,
@@ -149,6 +157,13 @@ function replaceTemplateVariables(
     agencyName: tenant?.name || '',
     agencyEmail: tenant?.email || '',
     agencyPhone: tenant?.phoneNumber || tenant?.twilioPhoneNumber || '',
+    // Balance percentage variables for settlement offers
+    'balance50%': balance50,
+    'balance60%': balance60,
+    'balance70%': balance70,
+    'balance80%': balance80,
+    'balance90%': balance90,
+    'balance100%': balance100,
   };
 
   let processedTemplate = template;
