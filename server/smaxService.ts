@@ -99,22 +99,38 @@ class SmaxService {
       }
 
       const data: SmaxAuthResponse = await response.json();
+      
+      console.log('🔍 SMAX auth response:', JSON.stringify(data, null, 2));
 
-      // Support both response formats:
-      // Nested format (Railway): {state: "SUCCESS", result: {access_token: "..."}}
-      // Flat format (Test env): {access_token: "..."}
+      // Support multiple response formats for the bearer token
       let token: string | null = null;
       
+      // Format 1: Nested with access_token in result object
       if (data.state === 'SUCCESS' && data.result?.access_token) {
-        // Nested format (Railway production)
         token = data.result.access_token;
-      } else if (data.access_token) {
-        // Flat format (Test environment)
+        console.log('✅ Token found in result.access_token');
+      } 
+      // Format 2: Flat with access_token at root
+      else if (data.access_token) {
         token = data.access_token;
+        console.log('✅ Token found at root.access_token');
+      }
+      // Format 3: Token might be the result itself (direct string/array)
+      else if (data.state === 'SUCCESS' && typeof data.result === 'string') {
+        token = data.result;
+        console.log('✅ Token found as direct string in result');
+      }
+      // Format 4: Token in array format
+      else if (data.state === 'SUCCESS' && Array.isArray(data.result) && data.result.length > 0) {
+        // Check if first element is a string (the token)
+        if (typeof data.result[0] === 'string') {
+          token = data.result[0];
+          console.log('✅ Token found in result array[0]');
+        }
       }
 
       if (!token) {
-        console.error('SMAX authentication unsuccessful:', data);
+        console.error('❌ SMAX authentication unsuccessful - no token found:', data);
         return null;
       }
 
