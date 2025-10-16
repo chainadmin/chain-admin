@@ -129,11 +129,11 @@ function replaceTemplateVariables(
   const dueDateIso = account?.dueDate ? new Date(account.dueDate).toISOString().split('T')[0] : '';
 
   // Calculate balance percentages for settlement offers
-  const balance50 = balanceCents ? formatCurrency(Math.round(balanceCents * 0.5)) : '';
-  const balance60 = balanceCents ? formatCurrency(Math.round(balanceCents * 0.6)) : '';
-  const balance70 = balanceCents ? formatCurrency(Math.round(balanceCents * 0.7)) : '';
-  const balance80 = balanceCents ? formatCurrency(Math.round(balanceCents * 0.8)) : '';
-  const balance90 = balanceCents ? formatCurrency(Math.round(balanceCents * 0.9)) : '';
+  const balance50 = (balanceCents !== null && balanceCents !== undefined) ? formatCurrency(Math.round(balanceCents * 0.5)) : '';
+  const balance60 = (balanceCents !== null && balanceCents !== undefined) ? formatCurrency(Math.round(balanceCents * 0.6)) : '';
+  const balance70 = (balanceCents !== null && balanceCents !== undefined) ? formatCurrency(Math.round(balanceCents * 0.7)) : '';
+  const balance80 = (balanceCents !== null && balanceCents !== undefined) ? formatCurrency(Math.round(balanceCents * 0.8)) : '';
+  const balance90 = (balanceCents !== null && balanceCents !== undefined) ? formatCurrency(Math.round(balanceCents * 0.9)) : '';
   const balance100 = formattedBalance; // Same as full balance
 
   const replacements: Record<string, string> = {

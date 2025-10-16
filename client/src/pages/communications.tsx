@@ -770,6 +770,30 @@ export default function Communications() {
       accountPlaceholder("Balance auto-fills for each recipient")
     );
     previewHtml = previewHtml.replace(
+      /\{\{balance50%\}\}/g,
+      accountPlaceholder("50% of balance (settlement offer)")
+    );
+    previewHtml = previewHtml.replace(
+      /\{\{balance60%\}\}/g,
+      accountPlaceholder("60% of balance")
+    );
+    previewHtml = previewHtml.replace(
+      /\{\{balance70%\}\}/g,
+      accountPlaceholder("70% of balance")
+    );
+    previewHtml = previewHtml.replace(
+      /\{\{balance80%\}\}/g,
+      accountPlaceholder("80% of balance")
+    );
+    previewHtml = previewHtml.replace(
+      /\{\{balance90%\}\}/g,
+      accountPlaceholder("90% of balance")
+    );
+    previewHtml = previewHtml.replace(
+      /\{\{balance100%\}\}/g,
+      accountPlaceholder("100% of balance (full amount)")
+    );
+    previewHtml = previewHtml.replace(
       /\{\{dueDate\}\}/g,
       accountPlaceholder("Due date auto-fills for each recipient")
     );
