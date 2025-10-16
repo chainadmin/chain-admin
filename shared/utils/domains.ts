@@ -15,7 +15,7 @@ function sanitizeDomainInput(value?: string | null): string | null {
   }
 }
 
-const DEFAULT_DOMAINS = ['chainsoftware.com', 'chainsoftwaregroup.com'];
+const DEFAULT_DOMAINS = ['chainsoftwaregroup.com'];
 
 const primaryConfiguredDomains = [
   process.env.CONSUMER_PORTAL_BASE_DOMAIN,
