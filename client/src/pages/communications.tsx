@@ -688,11 +688,17 @@ export default function Communications() {
     previewHtml = previewHtml.replace('{{CUSTOM_BUTTON_URL}}', resolvedButtonUrl);
     previewHtml = previewHtml.replace('{{CUSTOM_CLOSING_MESSAGE}}', closingMessage);
     previewHtml = previewHtml.replace('{{CUSTOM_SIGNOFF}}', signOff);
-    // Replace account detail labels (may contain variables themselves)
-    previewHtml = previewHtml.replace(/\{\{ACCOUNT_LABEL\}\}/g, emailTemplateForm.accountLabel || "Account:");
-    previewHtml = previewHtml.replace(/\{\{CREDITOR_LABEL\}\}/g, emailTemplateForm.creditorLabel || "Creditor:");
-    previewHtml = previewHtml.replace(/\{\{BALANCE_LABEL\}\}/g, emailTemplateForm.balanceLabel || "Balance:");
-    previewHtml = previewHtml.replace(/\{\{DUE_DATE_LABEL\}\}/g, emailTemplateForm.dueDateLabel || "Due Date:");
+    // Replace account detail labels from accountDetails array
+    const accountDetails = emailTemplateForm.accountDetails || [
+      { label: "Account:", value: "{{accountNumber}}" },
+      { label: "Creditor:", value: "{{creditor}}" },
+      { label: "Balance:", value: "{{balance}}" },
+      { label: "Due Date:", value: "{{dueDate}}" }
+    ];
+    previewHtml = previewHtml.replace(/\{\{ACCOUNT_LABEL\}\}/g, accountDetails[0]?.label || "Account:");
+    previewHtml = previewHtml.replace(/\{\{CREDITOR_LABEL\}\}/g, accountDetails[1]?.label || "Creditor:");
+    previewHtml = previewHtml.replace(/\{\{BALANCE_LABEL\}\}/g, accountDetails[2]?.label || "Balance:");
+    previewHtml = previewHtml.replace(/\{\{DUE_DATE_LABEL\}\}/g, accountDetails[3]?.label || "Due Date:");
     
     // Remove account details box if showAccountDetails is false
     if (!emailTemplateForm.showAccountDetails) {
@@ -759,10 +765,12 @@ export default function Communications() {
         closingMessage: "",
         signOff: "",
         showAccountDetails: true,
-        accountLabel: "Account:",
-        creditorLabel: "Creditor:",
-        balanceLabel: "Balance:",
-        dueDateLabel: "Due Date:",
+        accountDetails: [
+          { label: "Account:", value: "{{accountNumber}}" },
+          { label: "Creditor:", value: "{{creditor}}" },
+          { label: "Balance:", value: "{{balance}}" },
+          { label: "Due Date:", value: "{{dueDate}}" }
+        ] as { label: string; value: string }[],
         html: "", 
         designType: "postmark-invoice" 
       });
@@ -797,10 +805,12 @@ export default function Communications() {
         closingMessage: "",
         signOff: "",
         showAccountDetails: true,
-        accountLabel: "Account:",
-        creditorLabel: "Creditor:",
-        balanceLabel: "Balance:",
-        dueDateLabel: "Due Date:",
+        accountDetails: [
+          { label: "Account:", value: "{{accountNumber}}" },
+          { label: "Creditor:", value: "{{creditor}}" },
+          { label: "Balance:", value: "{{balance}}" },
+          { label: "Due Date:", value: "{{dueDate}}" }
+        ] as { label: string; value: string }[],
         html: "", 
         designType: "postmark-invoice" 
       });
@@ -1100,6 +1110,27 @@ export default function Communications() {
   const handleEditTemplate = (template: any) => {
     setEditingTemplate(template);
     if (communicationType === "email") {
+      // Backward compatibility: Convert old fields to accountDetails array if needed
+      let accountDetails = template.accountDetails;
+      if (!accountDetails && (template.accountLabel || template.creditorLabel || template.balanceLabel || template.dueDateLabel)) {
+        // Old format - convert to array
+        accountDetails = [
+          { label: template.accountLabel || "Account:", value: "{{accountNumber}}" },
+          { label: template.creditorLabel || "Creditor:", value: "{{creditor}}" },
+          { label: template.balanceLabel || "Balance:", value: "{{balance}}" },
+          { label: template.dueDateLabel || "Due Date:", value: "{{dueDate}}" }
+        ];
+      }
+      if (!accountDetails) {
+        // No data at all - use defaults
+        accountDetails = [
+          { label: "Account:", value: "{{accountNumber}}" },
+          { label: "Creditor:", value: "{{creditor}}" },
+          { label: "Balance:", value: "{{balance}}" },
+          { label: "Due Date:", value: "{{dueDate}}" }
+        ];
+      }
+      
       setEmailTemplateForm({
         name: template.name || "",
         subject: template.subject || "",
@@ -1110,10 +1141,7 @@ export default function Communications() {
         closingMessage: template.closingMessage || "",
         signOff: template.signOff || "<p>Thanks,<br>The {{agencyName}} Team</p>",
         showAccountDetails: template.showAccountDetails !== undefined ? template.showAccountDetails : true,
-        accountLabel: template.accountLabel || "Account:",
-        creditorLabel: template.creditorLabel || "Creditor:",
-        balanceLabel: template.balanceLabel || "Balance:",
-        dueDateLabel: template.dueDateLabel || "Due Date:",
+        accountDetails: accountDetails,
         html: template.html || "",
         designType: (template.designType === "custom" || !template.designType) ? "postmark-invoice" : template.designType,
       });
@@ -1160,11 +1188,17 @@ export default function Communications() {
       customizedHtml = customizedHtml.replace('{{CUSTOM_BUTTON_URL}}', buttonUrl);
       customizedHtml = customizedHtml.replace('{{CUSTOM_CLOSING_MESSAGE}}', closingMessage);
       customizedHtml = customizedHtml.replace('{{CUSTOM_SIGNOFF}}', signOff);
-      // Replace account detail labels
-      customizedHtml = customizedHtml.replace(/\{\{ACCOUNT_LABEL\}\}/g, emailTemplateForm.accountLabel || "Account:");
-      customizedHtml = customizedHtml.replace(/\{\{CREDITOR_LABEL\}\}/g, emailTemplateForm.creditorLabel || "Creditor:");
-      customizedHtml = customizedHtml.replace(/\{\{BALANCE_LABEL\}\}/g, emailTemplateForm.balanceLabel || "Balance:");
-      customizedHtml = customizedHtml.replace(/\{\{DUE_DATE_LABEL\}\}/g, emailTemplateForm.dueDateLabel || "Due Date:");
+      // Replace account detail labels from accountDetails array
+      const accountDetails = emailTemplateForm.accountDetails || [
+        { label: "Account:", value: "{{accountNumber}}" },
+        { label: "Creditor:", value: "{{creditor}}" },
+        { label: "Balance:", value: "{{balance}}" },
+        { label: "Due Date:", value: "{{dueDate}}" }
+      ];
+      customizedHtml = customizedHtml.replace(/\{\{ACCOUNT_LABEL\}\}/g, accountDetails[0]?.label || "Account:");
+      customizedHtml = customizedHtml.replace(/\{\{CREDITOR_LABEL\}\}/g, accountDetails[1]?.label || "Creditor:");
+      customizedHtml = customizedHtml.replace(/\{\{BALANCE_LABEL\}\}/g, accountDetails[2]?.label || "Balance:");
+      customizedHtml = customizedHtml.replace(/\{\{DUE_DATE_LABEL\}\}/g, accountDetails[3]?.label || "Due Date:");
       
       // Remove account details box if showAccountDetails is false
       if (!emailTemplateForm.showAccountDetails) {
@@ -1187,10 +1221,7 @@ export default function Communications() {
         closingMessage: emailTemplateForm.closingMessage,
         signOff: emailTemplateForm.signOff,
         showAccountDetails: emailTemplateForm.showAccountDetails,
-        accountLabel: emailTemplateForm.accountLabel,
-        creditorLabel: emailTemplateForm.creditorLabel,
-        balanceLabel: emailTemplateForm.balanceLabel,
-        dueDateLabel: emailTemplateForm.dueDateLabel,
+        accountDetails: emailTemplateForm.accountDetails,
         designType: emailTemplateForm.designType,
       };
       
@@ -1968,10 +1999,12 @@ export default function Communications() {
                     closingMessage: "",
                     signOff: "",
                     showAccountDetails: true,
-                    accountLabel: "Account:",
-                    creditorLabel: "Creditor:",
-                    balanceLabel: "Balance:",
-                    dueDateLabel: "Due Date:",
+                    accountDetails: [
+                      { label: "Account:", value: "{{accountNumber}}" },
+                      { label: "Creditor:", value: "{{creditor}}" },
+                      { label: "Balance:", value: "{{balance}}" },
+                      { label: "Due Date:", value: "{{dueDate}}" }
+                    ] as { label: string; value: string }[],
                     html: "", 
                     designType: "postmark-invoice" 
                   });
@@ -2195,49 +2228,65 @@ export default function Communications() {
                                 <div>
                                   <Label className="text-xs font-medium">Account Label</Label>
                                   <Input
-                                    value={emailTemplateForm.accountLabel}
-                                    onChange={(e) => setEmailTemplateForm({...emailTemplateForm, accountLabel: e.target.value})}
-                                    placeholder="e.g. Account: {accountNumber}"
+                                    value={emailTemplateForm.accountDetails[0]?.label || ""}
+                                    onChange={(e) => {
+                                      const newDetails = [...emailTemplateForm.accountDetails];
+                                      newDetails[0] = { ...newDetails[0], label: e.target.value };
+                                      setEmailTemplateForm({...emailTemplateForm, accountDetails: newDetails});
+                                    }}
+                                    placeholder="e.g. Account:"
                                     className="mt-1"
                                     data-testid="input-account-label"
                                   />
-                                  <p className="text-xs text-gray-500 mt-1">Use variables like {'{'}{'{'}{'}'}accountNumber{'}'}{'}'}</p>
+                                  <p className="text-xs text-gray-500 mt-1">Label for account number field</p>
                                 </div>
                                 
                                 <div>
                                   <Label className="text-xs font-medium">Creditor Label</Label>
                                   <Input
-                                    value={emailTemplateForm.creditorLabel}
-                                    onChange={(e) => setEmailTemplateForm({...emailTemplateForm, creditorLabel: e.target.value})}
-                                    placeholder="e.g. Creditor: {creditor}"
+                                    value={emailTemplateForm.accountDetails[1]?.label || ""}
+                                    onChange={(e) => {
+                                      const newDetails = [...emailTemplateForm.accountDetails];
+                                      newDetails[1] = { ...newDetails[1], label: e.target.value };
+                                      setEmailTemplateForm({...emailTemplateForm, accountDetails: newDetails});
+                                    }}
+                                    placeholder="e.g. Creditor:"
                                     className="mt-1"
                                     data-testid="input-creditor-label"
                                   />
-                                  <p className="text-xs text-gray-500 mt-1">Use variables like {'{'}{'{'}{'}'}creditor{'}'}{'}'}</p>
+                                  <p className="text-xs text-gray-500 mt-1">Label for creditor field</p>
                                 </div>
                                 
                                 <div>
                                   <Label className="text-xs font-medium">Balance Label</Label>
                                   <Input
-                                    value={emailTemplateForm.balanceLabel}
-                                    onChange={(e) => setEmailTemplateForm({...emailTemplateForm, balanceLabel: e.target.value})}
-                                    placeholder="e.g. Balance: {balance}"
+                                    value={emailTemplateForm.accountDetails[2]?.label || ""}
+                                    onChange={(e) => {
+                                      const newDetails = [...emailTemplateForm.accountDetails];
+                                      newDetails[2] = { ...newDetails[2], label: e.target.value };
+                                      setEmailTemplateForm({...emailTemplateForm, accountDetails: newDetails});
+                                    }}
+                                    placeholder="e.g. Balance:"
                                     className="mt-1"
                                     data-testid="input-balance-label"
                                   />
-                                  <p className="text-xs text-gray-500 mt-1">Use variables like {'{'}{'{'}{'}'}balance{'}'}{'}'}</p>
+                                  <p className="text-xs text-gray-500 mt-1">Label for balance field</p>
                                 </div>
                                 
                                 <div>
                                   <Label className="text-xs font-medium">Due Date Label</Label>
                                   <Input
-                                    value={emailTemplateForm.dueDateLabel}
-                                    onChange={(e) => setEmailTemplateForm({...emailTemplateForm, dueDateLabel: e.target.value})}
-                                    placeholder="e.g. Due: {dueDate}"
+                                    value={emailTemplateForm.accountDetails[3]?.label || ""}
+                                    onChange={(e) => {
+                                      const newDetails = [...emailTemplateForm.accountDetails];
+                                      newDetails[3] = { ...newDetails[3], label: e.target.value };
+                                      setEmailTemplateForm({...emailTemplateForm, accountDetails: newDetails});
+                                    }}
+                                    placeholder="e.g. Due Date:"
                                     className="mt-1"
                                     data-testid="input-due-date-label"
                                   />
-                                  <p className="text-xs text-gray-500 mt-1">Use variables like {'{'}{'{'}{'}'}dueDate{'}'}{'}'}</p>
+                                  <p className="text-xs text-gray-500 mt-1">Label for due date field</p>
                                 </div>
                               </div>
                             )}
