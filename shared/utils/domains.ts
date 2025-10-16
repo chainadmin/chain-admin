@@ -17,18 +17,26 @@ function sanitizeDomainInput(value?: string | null): string | null {
 
 const DEFAULT_DOMAINS = ['chainsoftwaregroup.com'];
 
+// Safe environment variable access (works in both Node and browser)
+function getEnv(key: string): string | undefined {
+  if (typeof process !== 'undefined' && process.env) {
+    return process.env[key];
+  }
+  return undefined;
+}
+
 const primaryConfiguredDomains = [
-  process.env.CONSUMER_PORTAL_BASE_DOMAIN,
-  process.env.PRIMARY_CUSTOM_DOMAIN,
+  getEnv('CONSUMER_PORTAL_BASE_DOMAIN'),
+  getEnv('PRIMARY_CUSTOM_DOMAIN'),
 ]
   .map(sanitizeDomainInput)
   .filter((domain): domain is string => Boolean(domain));
 
 const secondaryConfiguredDomains = [
-  process.env.PUBLIC_BASE_DOMAIN,
-  process.env.PUBLIC_APP_BASE_DOMAIN,
-  process.env.PUBLIC_BASE_URL,
-  process.env.LEGACY_CUSTOM_DOMAIN,
+  getEnv('PUBLIC_BASE_DOMAIN'),
+  getEnv('PUBLIC_APP_BASE_DOMAIN'),
+  getEnv('PUBLIC_BASE_URL'),
+  getEnv('LEGACY_CUSTOM_DOMAIN'),
 ]
   .map(sanitizeDomainInput)
   .filter((domain): domain is string => Boolean(domain));
