@@ -2816,6 +2816,14 @@ export default function Communications() {
                                     Approving this campaign will immediately send {campaign.totalRecipients || 0} emails to the selected recipients.
                                     This action cannot be undone.
                                   </AlertDialogDescription>
+                                  {consumerPortalUrl && (
+                                    <div className="mt-4 rounded-lg border border-white/20 bg-white/5 p-3">
+                                      <p className="text-xs font-medium text-blue-100/70 mb-1">Consumer Portal URL:</p>
+                                      <p className="text-xs text-blue-100 font-mono break-all">
+                                        {consumerPortalUrl}
+                                      </p>
+                                    </div>
+                                  )}
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                   <AlertDialogCancel>Cancel</AlertDialogCancel>
