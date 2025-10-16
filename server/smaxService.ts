@@ -1,10 +1,7 @@
 import { storage } from './storage';
 
 interface SmaxAuthResponse {
-  result: {
-    access_token: string;
-  };
-  state: string;
+  access_token: string;
 }
 
 interface SmaxConfig {
@@ -99,12 +96,12 @@ class SmaxService {
 
       const data: SmaxAuthResponse = await response.json();
 
-      if (data.state !== 'SUCCESS' || !data.result?.access_token) {
+      if (!data.access_token) {
         console.error('SMAX authentication unsuccessful:', data);
         return null;
       }
 
-      const token = data.result.access_token;
+      const token = data.access_token;
       const expires = Date.now() + (14 * 60 * 1000);
 
       this.tokenCache.set(cacheKey, { token, expires });
