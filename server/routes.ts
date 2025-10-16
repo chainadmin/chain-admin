@@ -17,6 +17,7 @@ import {
   subscriptionPlans,
   subscriptions,
   emailLogs,
+  emailCampaigns,
   type Account,
   type Consumer,
   type Tenant,
@@ -6627,11 +6628,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update campaign metrics based on event type
   async function updateCampaignMetrics(campaignId: string, eventType: string) {
     try {
-      console.log(`Updating campaign ${campaignId} for event ${eventType}`);
-      // For now, just log the metrics update - we'll implement proper updates later
-      // This avoids crashes while maintaining the webhook functionality
+      console.log(`🔄 Updating campaign ${campaignId} for event ${eventType}`);
+      
+      const normalizedEventType = (eventType || '').toLowerCase();
+      
+      // Map event types to the appropriate increment
+      let incrementField: string | null = null;
+      
+      switch (normalizedEventType) {
+        case 'delivery':
+          incrementField = 'totalDelivered';
+          break;
+        case 'open':
+          incrementField = 'totalOpened';
+          break;
+        case 'click':
+          incrementField = 'totalClicked';
+          break;
+        case 'bounce':
+        case 'spamcomplaint':
+          incrementField = 'totalErrors';
+          break;
+      }
+      
+      if (incrementField) {
+        // Use SQL to increment the counter atomically
+        const result = await db
+          .update(emailCampaigns)
+          .set({
+            [incrementField]: sql`${emailCampaigns[incrementField as keyof typeof emailCampaigns]} + 1`
+          })
+          .where(eq(emailCampaigns.id, campaignId))
+          .returning();
+        
+        console.log(`✅ Campaign ${campaignId} updated: ${incrementField} incremented`);
+        if (result.length > 0) {
+          console.log(`   New ${incrementField}:`, result[0][incrementField as keyof typeof result[0]]);
+        }
+      } else {
+        console.log(`⚠️ No metric update for event type: ${eventType}`);
+      }
     } catch (error) {
-      console.error('Error updating campaign metrics:', error);
+      console.error('❌ Error updating campaign metrics:', error);
     }
   }
 
