@@ -4748,6 +4748,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             remainingPayments,
             status: 'active',
           });
+
+          // Update consumer status to pending_payment since they now have an active schedule
+          await storage.updateConsumer(consumerId, { paymentStatus: 'pending_payment' });
+        } else if (arrangement.planType === 'settlement' || arrangement.planType === 'one_time_payment') {
+          // For one-time or settlement payments, set to current after successful payment
+          if (success) {
+            await storage.updateConsumer(consumerId, { paymentStatus: 'current' });
+          }
         }
       }
 
@@ -5137,6 +5145,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     failedAttempts: 0,
                   });
 
+                  // Update consumer payment status
+                  // Check if consumer has any other active schedules
+                  const allConsumerSchedules = await storage.getPaymentSchedulesByConsumer(consumer.id, tenant.id);
+                  const hasActiveSchedules = allConsumerSchedules.some(s => 
+                    s.id !== schedule.id && s.status === 'active'
+                  );
+                  
+                  // If this schedule is now completed and no other active schedules, mark current
+                  if (scheduleStatus === 'completed' && !hasActiveSchedules) {
+                    await storage.updateConsumer(consumer.id, { paymentStatus: 'current' });
+                  } else if (hasActiveSchedules || scheduleStatus === 'active') {
+                    await storage.updateConsumer(consumer.id, { paymentStatus: 'pending_payment' });
+                  }
+
                   processedPayments.push({ scheduleId: schedule.id, consumerId: consumer.id });
                 } else {
                   // Payment failed - update failed attempts
@@ -5147,6 +5169,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     failedAttempts,
                     status: scheduleStatus,
                   });
+
+                  // Update consumer status to payment_failed
+                  await storage.updateConsumer(consumer.id, { paymentStatus: 'payment_failed' });
 
                   failedPayments.push({ 
                     scheduleId: schedule.id, 
