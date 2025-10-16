@@ -362,7 +362,7 @@ export default function ConsumerLogin() {
 
   return (
     <PublicHeroLayout
-      badgeText="Secure consumer access"
+      badgeText={agencyContext ? `${agencyContext.name} Portal` : "Secure consumer access"}
       title={agencyContext ? `Welcome back to ${agencyContext.name}` : "Access your account"}
       description={
         agencyContext
@@ -371,8 +371,20 @@ export default function ConsumerLogin() {
       }
       supportingContent={(
         <>
+          {agencyContext?.logoUrl && (
+            <div className="mb-6 flex justify-center">
+              <img 
+                src={agencyContext.logoUrl} 
+                alt={`${agencyContext.name} logo`}
+                className="h-16 w-auto object-contain"
+              />
+            </div>
+          )}
           <div className="text-base text-blue-100/80">
-            Enter the email address on file and your date of birth. We'll securely match you with the right agency and guide you to your information.
+            {agencyContext 
+              ? `Enter your email and date of birth to access your ${agencyContext.name} account.`
+              : "Enter the email address on file and your date of birth. We'll securely match you with the right agency and guide you to your information."
+            }
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
