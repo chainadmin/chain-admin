@@ -234,36 +234,106 @@ export default function AdminDashboard() {
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-              <StatsCard
-                title="Total Consumers"
-                value={(stats as any)?.totalConsumers?.toLocaleString() || "0"}
-                change="+12%"
-                changeType="positive"
-                icon="fas fa-users"
-              />
-              <StatsCard
-                title="Active Accounts"
-                value={(stats as any)?.activeAccounts?.toLocaleString() || "0"}
-                change="+8%"
-                changeType="positive"
-                icon="fas fa-file-invoice-dollar"
-              />
-              <StatsCard
-                title="Total Balance"
-                value={`$${(stats as any)?.totalBalance?.toLocaleString() || "0"}`}
-                change="-3%"
-                changeType="negative"
-                icon="fas fa-dollar-sign"
-              />
-              <StatsCard
-                title="Collection Rate"
-                value={`${(stats as any)?.collectionRate || 0}%`}
-                change="+5%"
-                changeType="positive"
-                icon="fas fa-chart-line"
-              />
-            </div>
+            <>
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+                <StatsCard
+                  title="Total Consumers"
+                  value={(stats as any)?.totalConsumers?.toLocaleString() || "0"}
+                  icon="fas fa-users"
+                  data-testid="stat-total-consumers"
+                />
+                <StatsCard
+                  title="Active Accounts"
+                  value={(stats as any)?.activeAccounts?.toLocaleString() || "0"}
+                  icon="fas fa-file-invoice-dollar"
+                  data-testid="stat-active-accounts"
+                />
+                <StatsCard
+                  title="Total Balance"
+                  value={`$${(stats as any)?.totalBalance?.toLocaleString() || "0"}`}
+                  icon="fas fa-dollar-sign"
+                  data-testid="stat-total-balance"
+                />
+                <StatsCard
+                  title="Collection Rate"
+                  value={`${(stats as any)?.collectionRate || 0}%`}
+                  icon="fas fa-chart-line"
+                  data-testid="stat-collection-rate"
+                />
+              </div>
+
+              {/* Payment Metrics */}
+              {(stats as any)?.paymentMetrics && (
+                <div className="mt-8">
+                  <h2 className="text-xl font-semibold text-white mb-4">Payment Metrics</h2>
+                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-5">
+                    <StatsCard
+                      title="Total Payments"
+                      value={(stats as any)?.paymentMetrics?.totalPayments?.toLocaleString() || "0"}
+                      icon="fas fa-credit-card"
+                      data-testid="stat-total-payments"
+                    />
+                    <StatsCard
+                      title="Successful"
+                      value={(stats as any)?.paymentMetrics?.successfulPayments?.toLocaleString() || "0"}
+                      icon="fas fa-check-circle"
+                      data-testid="stat-successful-payments"
+                    />
+                    <StatsCard
+                      title="Declined"
+                      value={(stats as any)?.paymentMetrics?.declinedPayments?.toLocaleString() || "0"}
+                      icon="fas fa-times-circle"
+                      data-testid="stat-declined-payments"
+                    />
+                    <StatsCard
+                      title="Total Collected"
+                      value={`$${(stats as any)?.paymentMetrics?.totalCollected?.toLocaleString() || "0"}`}
+                      icon="fas fa-dollar-sign"
+                      data-testid="stat-total-collected"
+                    />
+                    <StatsCard
+                      title="Monthly Collected"
+                      value={`$${(stats as any)?.paymentMetrics?.monthlyCollected?.toLocaleString() || "0"}`}
+                      icon="fas fa-calendar-check"
+                      data-testid="stat-monthly-collected"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Email Metrics */}
+              {(stats as any)?.emailMetrics && (
+                <div className="mt-8">
+                  <h2 className="text-xl font-semibold text-white mb-4">Email Metrics</h2>
+                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+                    <StatsCard
+                      title="Total Sent"
+                      value={(stats as any)?.emailMetrics?.totalSent?.toLocaleString() || "0"}
+                      icon="fas fa-paper-plane"
+                      data-testid="stat-emails-sent"
+                    />
+                    <StatsCard
+                      title="Opened"
+                      value={(stats as any)?.emailMetrics?.opened?.toLocaleString() || "0"}
+                      icon="fas fa-envelope-open"
+                      data-testid="stat-emails-opened"
+                    />
+                    <StatsCard
+                      title="Open Rate"
+                      value={`${(stats as any)?.emailMetrics?.openRate || 0}%`}
+                      icon="fas fa-chart-bar"
+                      data-testid="stat-email-open-rate"
+                    />
+                    <StatsCard
+                      title="Bounced"
+                      value={(stats as any)?.emailMetrics?.bounced?.toLocaleString() || "0"}
+                      icon="fas fa-exclamation-triangle"
+                      data-testid="stat-emails-bounced"
+                    />
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </section>
 

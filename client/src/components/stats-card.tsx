@@ -1,8 +1,8 @@
 interface StatsCardProps {
   title: string;
   value: string;
-  change: string;
-  changeType: "positive" | "negative";
+  change?: string;
+  changeType?: "positive" | "negative";
   icon: string;
 }
 
@@ -21,10 +21,12 @@ export default function StatsCard({ title, value, change, changeType, icon }: St
           <i className={`${icon} text-lg`}></i>
         </div>
       </div>
-      <p className="relative z-10 mt-6 text-xs font-medium text-blue-100/70">
-        <span className={`${changeColor} mr-1 font-semibold`}>{change}</span>
-        vs last month
-      </p>
+      {change && changeType && (
+        <p className="relative z-10 mt-6 text-xs font-medium text-blue-100/70">
+          <span className={`${changeColor} mr-1 font-semibold`}>{change}</span>
+          vs last month
+        </p>
+      )}
     </div>
   );
 }

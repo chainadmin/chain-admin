@@ -402,6 +402,19 @@ export interface IStorage {
     activeAccounts: number;
     totalBalance: number;
     collectionRate: number;
+    paymentMetrics?: {
+      totalPayments: number;
+      successfulPayments: number;
+      declinedPayments: number;
+      totalCollected: number;
+      monthlyCollected: number;
+    };
+    emailMetrics?: {
+      totalSent: number;
+      opened: number;
+      openRate: number;
+      bounced: number;
+    };
   }>;
 }
 
@@ -2032,10 +2045,10 @@ export class DatabaseStorage implements IStorage {
     const activeConsumers = activeConsumersResult.length;
 
     const subscription = await this.getSubscriptionByTenant(tenantId);
-    const planId = subscription?.plan as MessagingPlanId | undefined;
+    const planId = subscription?.planId as MessagingPlanId | undefined;
     const plan = planId ? messagingPlans[planId] : undefined;
 
-    const monthlyBase = plan?.price ?? (subscription ? subscription.monthlyBaseCents / 100 : 0);
+    const monthlyBase = plan?.price ?? 0;
 
     let emailUsage = { used: 0, included: plan?.includedEmails ?? 0, overage: 0, overageCharge: 0 };
     let smsUsage = { used: 0, included: plan?.includedSmsSegments ?? 0, overage: 0, overageCharge: 0 };
@@ -2114,6 +2127,19 @@ export class DatabaseStorage implements IStorage {
     activeAccounts: number;
     totalBalance: number;
     collectionRate: number;
+    paymentMetrics?: {
+      totalPayments: number;
+      successfulPayments: number;
+      declinedPayments: number;
+      totalCollected: number;
+      monthlyCollected: number;
+    };
+    emailMetrics?: {
+      totalSent: number;
+      opened: number;
+      openRate: number;
+      bounced: number;
+    };
   }> {
     const tenantConsumers = await db.select().from(consumers).where(eq(consumers.tenantId, tenantId));
     const tenantAccounts = await db.select().from(accounts).where(eq(accounts.tenantId, tenantId));
@@ -2121,13 +2147,62 @@ export class DatabaseStorage implements IStorage {
     const totalConsumers = tenantConsumers.length;
     const activeAccounts = tenantAccounts.filter(account => account.status === 'active').length;
     const totalBalance = tenantAccounts.reduce((sum, account) => sum + (account.balanceCents || 0), 0) / 100;
-    const collectionRate = 68; // This would be calculated based on actual payment data
+    
+    // Calculate payment metrics
+    const tenantPayments = await db
+      .select()
+      .from(payments)
+      .innerJoin(accounts, eq(payments.accountId, accounts.id))
+      .where(eq(accounts.tenantId, tenantId));
+    
+    const successfulPayments = tenantPayments.filter(p => p.payments.status === 'completed');
+    const totalCollected = successfulPayments.reduce((sum, p) => sum + (p.payments.amountCents || 0), 0) / 100;
+    
+    // Monthly payments (last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const monthlyPayments = successfulPayments.filter(p => {
+      const createdAt = p.payments.createdAt;
+      return createdAt && new Date(createdAt) >= thirtyDaysAgo;
+    });
+    const monthlyCollected = monthlyPayments.reduce((sum, p) => sum + (p.payments.amountCents || 0), 0) / 100;
+    
+    const declinedPayments = tenantPayments.filter(p => p.payments.status === 'failed' || p.payments.status === 'declined').length;
+    
+    // Calculate collection rate: (Total Collected / (Total Balance + Total Collected)) * 100
+    // This represents the percentage of original debt that has been collected
+    const originalDebt = totalBalance + totalCollected;
+    const collectionRate = originalDebt > 0 ? Math.round((totalCollected / originalDebt) * 100) : 0;
+    
+    // Email metrics from Postmark webhooks
+    const emailLogsData = await db
+      .select()
+      .from(emailLogs)
+      .where(eq(emailLogs.tenantId, tenantId));
+    
+    const totalSent = emailLogsData.length;
+    const opened = emailLogsData.filter(e => e.openedAt !== null).length;
+    const bounced = emailLogsData.filter(e => e.bouncedAt !== null).length;
+    const openRate = totalSent > 0 ? Math.round((opened / totalSent) * 100) : 0;
     
     return {
       totalConsumers,
       activeAccounts,
       totalBalance,
       collectionRate,
+      paymentMetrics: {
+        totalPayments: tenantPayments.length,
+        successfulPayments: successfulPayments.length,
+        declinedPayments,
+        totalCollected,
+        monthlyCollected,
+      },
+      emailMetrics: {
+        totalSent,
+        opened,
+        openRate,
+        bounced,
+      },
     };
   }
 
