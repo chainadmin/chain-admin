@@ -1,46 +1,75 @@
 # SMAX Integration Setup for Railway Production
 
-## Database Setup
+## Multi-Tenant Credentials
 
-Your Railway production database needs the SMAX credentials added. Run this SQL in your Railway database console:
+**IMPORTANT:** Each agency has their own SMAX credentials stored in the database. The system automatically uses the correct credentials for each tenant.
 
+### How It Works
+- Each tenant's SMAX credentials are stored in `tenant_settings` table
+- Settings include: `smax_api_key`, `smax_pin`, `smax_base_url`, `smax_enabled`
+- When syncing, the system pulls the tenant's credentials from their settings
+- Complete tenant isolation - each agency's credentials are used only for their accounts
+
+### Configuring SMAX Credentials
+
+**Option 1: Through Admin UI (Recommended)**
+1. Log in as agency admin
+2. Go to Settings → SMAX Integration
+3. Enter your agency's SMAX credentials:
+   - API Key (provided by SMAX)
+   - PIN (provided by SMAX)
+   - Base URL (usually `https://apiv2.smaxcollectionsoftware.com`)
+4. Click "Test Connection" to verify
+5. Save settings
+
+**Option 2: Direct Database Update (For Initial Setup)**
 ```sql
 UPDATE tenant_settings 
 SET smax_enabled = true,
-    smax_api_key = 'W4teqfYX7fbEnRMAduCO',
-    smax_pin = 'WayPoint',
+    smax_api_key = 'YOUR_AGENCY_API_KEY',
+    smax_pin = 'YOUR_AGENCY_PIN',
     smax_base_url = 'https://apiv2.smaxcollectionsoftware.com'
-WHERE tenant_id = '3b9dd70a-e629-4552-9e68-94bb7818c84e';
+WHERE tenant_id = 'YOUR_TENANT_ID';
 ```
 
-**Note:** This updates the Waypoint Solutions tenant. For other agencies, use their specific tenant_id and SMAX credentials.
+**Note:** Replace `YOUR_AGENCY_API_KEY`, `YOUR_AGENCY_PIN`, and `YOUR_TENANT_ID` with actual values for each agency.
 
-## How It Works
+## How Authentication Works
 
-### Authentication (Dual-Format Support)
-The system now supports both SMAX response formats:
+### Dual-Format Support
+The system supports both SMAX response formats automatically:
 - **Railway Production**: `{state: "SUCCESS", result: {access_token: "..."}}`
 - **Test Environment**: `{access_token: "..."}`
 
-The code checks for the nested format first, then falls back to flat format automatically.
+The code detects the format and extracts the token correctly in both environments.
 
-### Account Matching
-- **Chain** uses `accountNumber` field
-- **SMAX** uses `filenumber` field
-- These must match for sync to work
+### Token Caching
+- Tokens are cached per tenant using composite key: `{apiKey}:{pin}:{baseUrl}`
+- Each agency's tokens are isolated
+- Tokens refresh automatically when expired
 
-### Sync Process (Every 8 Hours)
+## Account Matching
 
-Call this endpoint every 8 hours to sync SMAX → Chain:
+For sync to work, accounts must match between systems:
+- **Chain Database**: Uses `accountNumber` field
+- **SMAX System**: Uses `filenumber` field
+- **Matching Rule**: `Chain.accountNumber = SMAX.filenumber`
+
+Make sure account numbers are consistent across both systems.
+
+## Sync Process (Every 8 Hours)
+
+The sync endpoint pulls data from SMAX into Chain for each tenant.
 
 **Endpoint:** `POST /api/smax/sync-accounts`
 
 **What It Does:**
-1. Pulls account balances from SMAX
-2. Updates Chain database with latest balances
-3. Imports new payments from SMAX
-4. Avoids duplicates using transaction IDs
-5. Returns detailed sync results
+1. Authenticates using tenant's SMAX credentials
+2. Pulls account balances from SMAX
+3. Updates Chain database with latest balances
+4. Imports new payments from SMAX
+5. Deduplicates using transaction IDs
+6. Returns detailed sync results
 
 **Response Example:**
 ```json
@@ -86,61 +115,87 @@ Use a service like [cron-job.org](https://cron-job.org):
 ### Option 3: Node Cron (Internal)
 Add node-cron package and schedule internally (requires always-on dyno).
 
-## Testing the Sync
+## Testing the Integration
 
-### Test Authentication
+### Test SMAX Connection
+Use the admin UI test button, or manually:
+
 ```bash
 curl -X POST https://your-app.railway.app/api/settings/test-smax \
   -H "Content-Type: application/json" \
   -d '{
     "smaxEnabled": true,
-    "smaxApiKey": "W4teqfYX7fbEnRMAduCO",
-    "smaxPin": "WayPoint",
+    "smaxApiKey": "YOUR_API_KEY",
+    "smaxPin": "YOUR_PIN",
     "smaxBaseUrl": "https://apiv2.smaxcollectionsoftware.com"
   }'
 ```
 
 Expected: `{"success": true}`
 
-### Test Sync
+### Test Sync Manually
 ```bash
 curl -X POST https://your-app.railway.app/api/smax/sync-accounts \
   -H "Content-Type: application/json" \
   -H "Cookie: connect.sid=YOUR_SESSION_COOKIE"
 ```
 
-## Multi-Tenant Support
+## Consumer Portal Sync Flow
 
-Each agency maintains separate SMAX credentials:
-- **Tenant A**: Has their own API key, PIN, base URL
-- **Tenant B**: Has their own API key, PIN, base URL
-- Token caching uses composite key: `{apiKey}:{pin}:{baseUrl}`
-- Complete isolation - no credential mixing
+**How consumers see synced data:**
 
-## Consumer Portal Sync
+1. **Payment Made in SMAX Call Center:**
+   - Payment recorded in SMAX system
+   - Consumer account updated in SMAX
 
-When consumers log in:
-1. They see balance from Chain database
-2. Chain database is synced from SMAX every 8 hours
-3. If they made a payment in SMAX call center → It appears in Chain after next sync
-4. If they make a payment in Chain portal → It's immediately sent to SMAX
+2. **After 8-Hour Sync:**
+   - Chain pulls latest balance from SMAX
+   - Chain imports the payment record
+   - Payment appears in Chain database
+
+3. **Consumer Logs Into Portal:**
+   - Sees updated balance matching SMAX ✅
+   - Sees payment in transaction history ✅
+
+**Payment Made in Chain Portal:**
+- Immediately saved to Chain database
+- Immediately sent to SMAX via API
+- Appears in both systems right away ✅
 
 ## Troubleshooting
 
 ### "Invalid API Key and Password"
-- Check credentials in Railway database
-- Verify SMAX base URL is correct
-- Test authentication endpoint first
+- Verify credentials in tenant settings
+- Check SMAX base URL is correct
+- Test connection through admin UI first
+- Ensure credentials are for the correct agency
 
 ### Sync Not Working
-- Check logs for specific errors
+- Check server logs for specific errors
 - Verify accounts have `accountNumber` set
 - Ensure SMAX filenumbers match Chain accountNumbers
+- Confirm SMAX is enabled in tenant settings
 
 ### Duplicate Payments
 - System deduplicates using `transactionId`
 - SMAX payments without transaction IDs may import multiple times
+- Check for matching transaction IDs in both systems
+
+### No Accounts Synced
+- Verify tenant has accounts with `accountNumber` populated
+- Check that SMAX has matching filenumbers
+- Ensure SMAX authentication is working
+- Review sync results for specific error messages
 
 ### Railway vs Replit Response Format
-- Code handles both automatically
-- No need to change anything when deploying to Railway
+- Code handles both formats automatically
+- No configuration changes needed when deploying to Railway
+- Authentication works in both environments
+
+## Security Notes
+
+- Each tenant's credentials are stored securely in the database
+- Credentials are never shared between tenants
+- API keys and PINs should be kept confidential
+- Use environment variables for any shared configuration
+- Regular credential rotation is recommended
