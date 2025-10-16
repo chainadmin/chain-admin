@@ -10,8 +10,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { CreditCard, DollarSign, TrendingUp, Clock, CheckCircle, RefreshCw, Calendar, User, Building2, Lock } from "lucide-react";
+import { PaymentSchedulingCalendar } from "@/components/payment-scheduling-calendar";
 
 export default function Payments() {
   const { toast } = useToast();
@@ -212,9 +214,9 @@ export default function Payments() {
                   Payments control center
                 </span>
                 <div className="space-y-2">
-                  <h1 className="text-3xl font-semibold text-white sm:text-4xl">Realtime payment operations</h1>
+                  <h1 className="text-3xl font-semibold text-white sm:text-4xl">Payment operations & scheduling</h1>
                   <p className="text-sm text-blue-100/70 sm:text-base">
-                    Monitor USAePay performance, identify stalled transactions, and process secure consumer payments without leaving the workspace.
+                    Monitor USAePay performance, identify stalled transactions, track payment schedules, and process secure consumer payments.
                   </p>
                 </div>
               </div>
@@ -277,8 +279,21 @@ export default function Payments() {
           </div>
         </section>
 
-        <section className="grid gap-8 lg:grid-cols-12">
-          <div className="space-y-6 lg:col-span-8">
+        <Tabs defaultValue="transactions" className="w-full">
+          <TabsList className="mb-6 bg-white/10 border border-white/15">
+            <TabsTrigger value="transactions" data-testid="tab-transactions">
+              <CreditCard className="w-4 h-4 mr-2" />
+              Transactions
+            </TabsTrigger>
+            <TabsTrigger value="calendar" data-testid="tab-calendar">
+              <Calendar className="w-4 h-4 mr-2" />
+              Payment Schedule
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="transactions" className="mt-0">
+            <section className="grid gap-8 lg:grid-cols-12">
+              <div className="space-y-6 lg:col-span-8">
             <Card className={glassPanelClass}>
               <CardHeader className="border-b border-white/20 pb-4">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -598,8 +613,14 @@ export default function Payments() {
                 </div>
               </CardContent>
             </Card>
-          </div>
-        </section>
+              </div>
+            </section>
+          </TabsContent>
+
+          <TabsContent value="calendar" className="mt-0">
+            <PaymentSchedulingCalendar />
+          </TabsContent>
+        </Tabs>
       </div>
     </AdminLayout>
   );
