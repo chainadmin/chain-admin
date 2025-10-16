@@ -778,6 +778,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Consumer lookup by email
+  app.get('/api/consumers/lookup', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = await getTenantId(req, storage);
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { email } = req.query;
+      
+      if (!email || typeof email !== 'string') {
+        return res.status(400).json({ message: "Email parameter is required" });
+      }
+
+      // Look up consumer by email within this tenant
+      const consumer = await storage.getConsumerByEmailAndTenant(email, tenantId);
+      
+      if (!consumer) {
+        return res.status(404).json({ message: "Consumer not found", found: false });
+      }
+
+      // Get consumer's accounts
+      const accounts = await storage.getAccountsByConsumer(consumer.id);
+
+      res.json({
+        found: true,
+        consumer: {
+          id: consumer.id,
+          firstName: consumer.firstName,
+          lastName: consumer.lastName,
+          email: consumer.email,
+          phone: consumer.phone,
+        },
+        accounts: accounts.map(account => ({
+          id: account.id,
+          accountNumber: account.accountNumber,
+          creditor: account.creditor,
+          balanceCents: account.balanceCents,
+          dueDate: account.dueDate,
+          status: account.status,
+        })),
+      });
+    } catch (error) {
+      console.error("Error looking up consumer:", error);
+      res.status(500).json({ message: "Failed to lookup consumer" });
+    }
+  });
+
   app.patch('/api/consumers/:id', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = await getTenantId(req, storage);
