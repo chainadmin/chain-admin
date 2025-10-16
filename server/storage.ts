@@ -304,6 +304,7 @@ export interface IStorage {
   createCallbackRequest(request: InsertCallbackRequest): Promise<CallbackRequest>;
   getCallbackRequestsByTenant(tenantId: string): Promise<(CallbackRequest & { consumerName: string })[]>;
   updateCallbackRequest(id: string, updates: Partial<CallbackRequest>): Promise<CallbackRequest>;
+  deleteCallbackRequest(id: string, tenantId: string): Promise<void>;
   
   // Document operations
   getDocumentsByTenant(tenantId: string): Promise<DocumentWithAccount[]>;
@@ -1659,6 +1660,11 @@ export class DatabaseStorage implements IStorage {
       .where(eq(callbackRequests.id, id))
       .returning();
     return updatedRequest;
+  }
+
+  async deleteCallbackRequest(id: string, tenantId: string): Promise<void> {
+    await db.delete(callbackRequests)
+      .where(and(eq(callbackRequests.id, id), eq(callbackRequests.tenantId, tenantId)));
   }
 
   // Document operations

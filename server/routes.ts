@@ -3346,6 +3346,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Delete callback request (admin)
+  app.delete('/api/callback-requests/:id', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { id } = req.params;
+
+      await storage.deleteCallbackRequest(id, tenantId);
+      res.json({ message: "Request deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting callback request:", error);
+      res.status(500).json({ message: "Failed to delete callback request" });
+    }
+  });
+
   // Tenant setup route (for fixing access issues)
   app.post('/api/setup-tenant', authenticateUser, async (req: any, res) => {
     try {

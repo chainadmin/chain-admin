@@ -47,12 +47,45 @@ export default function Requests() {
     },
   });
 
+  const deleteRequestMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/callback-requests/${id}`);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Request Deleted",
+        description: "The callback request has been deleted successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/callback-requests"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Delete Failed",
+        description: error.message || "Failed to delete request.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleUpdateRequest = (updates: any) => {
     if (selectedRequest) {
       updateRequestMutation.mutate({
         id: selectedRequest.id,
         updates,
       });
+    }
+  };
+
+  const handleConfirmRequest = (id: string) => {
+    updateRequestMutation.mutate({
+      id,
+      updates: { status: "completed" },
+    });
+  };
+
+  const handleDeleteRequest = (id: string) => {
+    if (confirm("Are you sure you want to delete this request?")) {
+      deleteRequestMutation.mutate(id);
     }
   };
 
@@ -333,6 +366,18 @@ export default function Requests() {
                       </div>
                       
                       <div className="ml-6 flex flex-col space-y-2">
+                        {request.status !== "completed" && (
+                          <Button 
+                            variant="default" 
+                            size="sm"
+                            onClick={() => handleConfirmRequest(request.id)}
+                            className="bg-green-600 hover:bg-green-700"
+                            data-testid={`button-confirm-${request.id}`}
+                          >
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            Confirm
+                          </Button>
+                        )}
                         <Dialog>
                           <DialogTrigger asChild>
                             <Button 
@@ -439,6 +484,15 @@ export default function Requests() {
                             Email
                           </Button>
                         )}
+                        <Button 
+                          size="sm" 
+                          variant="destructive"
+                          onClick={() => handleDeleteRequest(request.id)}
+                          data-testid={`button-delete-${request.id}`}
+                        >
+                          <XCircle className="h-4 w-4 mr-2" />
+                          Delete
+                        </Button>
                       </div>
                     </div>
                   </div>
