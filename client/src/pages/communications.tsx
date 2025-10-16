@@ -52,6 +52,7 @@ import {
   AlertCircle,
   MousePointer,
   UserMinus,
+  UserCheck,
   Phone,
   Clock,
   Calendar,
@@ -176,6 +177,13 @@ export default function Communications() {
     templateId: "",
     subject: "",
     message: "",
+  });
+
+  // Consumer lookup for send email form
+  const { data: consumerLookup, isLoading: isLookingUpConsumer } = useQuery({
+    queryKey: ["/api/consumers/lookup", sendEmailForm.to],
+    enabled: !!sendEmailForm.to && sendEmailForm.to.includes("@"),
+    retry: false,
   });
 
   const [automationForm, setAutomationForm] = useState({
@@ -1780,6 +1788,64 @@ export default function Communications() {
                       className="mt-1 bg-white/10 border-white/20 text-white placeholder:text-blue-100/50"
                       data-testid="input-send-to"
                     />
+                    {isLookingUpConsumer && sendEmailForm.to.includes("@") && (
+                      <p className="mt-2 text-xs text-blue-100/60 flex items-center gap-2">
+                        <div className="h-3 w-3 animate-spin rounded-full border-2 border-blue-400 border-t-transparent"></div>
+                        Looking up consumer...
+                      </p>
+                    )}
+                    {consumerLookup && (consumerLookup as any).found && (
+                      <div className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+                            <UserCheck className="h-4 w-4" />
+                            Consumer Found
+                          </p>
+                          <a
+                            href={`/consumers?id=${(consumerLookup as any).consumer.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-emerald-300 hover:text-emerald-200 underline"
+                          >
+                            View Profile →
+                          </a>
+                        </div>
+                        <div className="space-y-1 text-xs text-blue-100">
+                          <p>
+                            <span className="font-medium">Name:</span> {(consumerLookup as any).consumer.firstName} {(consumerLookup as any).consumer.lastName}
+                          </p>
+                          {(consumerLookup as any).consumer.phone && (
+                            <p>
+                              <span className="font-medium">Phone:</span> {(consumerLookup as any).consumer.phone}
+                            </p>
+                          )}
+                          {(consumerLookup as any).accounts && (consumerLookup as any).accounts.length > 0 && (
+                            <div className="pt-2 border-t border-emerald-500/20">
+                              <p className="font-medium mb-1">Accounts ({(consumerLookup as any).accounts.length}):</p>
+                              <div className="space-y-1">
+                                {(consumerLookup as any).accounts.slice(0, 2).map((account: any) => (
+                                  <div key={account.id} className="text-xs">
+                                    <span className="font-mono">{account.accountNumber || 'N/A'}</span>
+                                    {' - '}
+                                    <span>{account.creditor}</span>
+                                    {' - '}
+                                    <span className="text-emerald-300">${(account.balanceCents / 100).toFixed(2)}</span>
+                                  </div>
+                                ))}
+                                {(consumerLookup as any).accounts.length > 2 && (
+                                  <p className="text-emerald-300">+{(consumerLookup as any).accounts.length - 2} more</p>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {consumerLookup && !(consumerLookup as any).found && (
+                      <p className="mt-2 text-xs text-amber-400/80">
+                        No consumer found with this email in your system
+                      </p>
+                    )}
                   </div>
                   <div>
                     <Label className="text-blue-100">Template (Optional)</Label>
