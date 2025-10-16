@@ -102,31 +102,29 @@ class SmaxService {
       
       console.log('🔍 SMAX auth response:', JSON.stringify(data, null, 2));
 
+      // Railway format check: result can be error array [{error: '...'}, 401]
+      if (Array.isArray(data.result) && data.result.length > 0 && data.result[0]?.error) {
+        console.error('❌ SMAX authentication failed (Railway format):', data.result[0].error);
+        return null;
+      }
+
       // Support multiple response formats for the bearer token
       let token: string | null = null;
       
-      // Format 1: Nested with access_token in result object
-      if (data.state === 'SUCCESS' && data.result?.access_token) {
+      // Format 1: Railway success - token is directly in result as string
+      if (data.state === 'SUCCESS' && typeof data.result === 'string') {
+        token = data.result;
+        console.log('✅ Token found in result (Railway format)');
+      }
+      // Format 2: Nested with access_token in result object
+      else if (data.result?.access_token) {
         token = data.result.access_token;
         console.log('✅ Token found in result.access_token');
       } 
-      // Format 2: Flat with access_token at root
+      // Format 3: Flat with access_token at root (Replit dev format)
       else if (data.access_token) {
         token = data.access_token;
-        console.log('✅ Token found at root.access_token');
-      }
-      // Format 3: Token might be the result itself (direct string/array)
-      else if (data.state === 'SUCCESS' && typeof data.result === 'string') {
-        token = data.result;
-        console.log('✅ Token found as direct string in result');
-      }
-      // Format 4: Token in array format
-      else if (data.state === 'SUCCESS' && Array.isArray(data.result) && data.result.length > 0) {
-        // Check if first element is a string (the token)
-        if (typeof data.result[0] === 'string') {
-          token = data.result[0];
-          console.log('✅ Token found in result array[0]');
-        }
+        console.log('✅ Token found at root.access_token (Replit format)');
       }
 
       if (!token) {
