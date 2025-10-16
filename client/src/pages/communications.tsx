@@ -182,6 +182,10 @@ export default function Communications() {
   // Consumer lookup for send email form
   const { data: consumerLookup, isLoading: isLookingUpConsumer } = useQuery({
     queryKey: ["/api/consumers/lookup", sendEmailForm.to],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/consumers/lookup?email=${encodeURIComponent(sendEmailForm.to)}`);
+      return res.json();
+    },
     enabled: !!sendEmailForm.to && sendEmailForm.to.includes("@"),
     retry: false,
   });
