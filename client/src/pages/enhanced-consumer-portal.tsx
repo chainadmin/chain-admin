@@ -32,6 +32,7 @@ export default function EnhancedConsumerPortal() {
 
   const [callbackForm, setCallbackForm] = useState({
     requestType: "callback",
+    preferredDate: "",
     preferredTime: "",
     phoneNumber: "",
     emailAddress: email || "",
@@ -87,6 +88,7 @@ export default function EnhancedConsumerPortal() {
       setShowCallbackModal(false);
       setCallbackForm({
         requestType: "callback",
+        preferredDate: "",
         preferredTime: "",
         phoneNumber: "",
         emailAddress: email || "",
@@ -284,22 +286,45 @@ export default function EnhancedConsumerPortal() {
                       </div>
                       
                       {callbackForm.requestType === "callback" && (
-                        <div>
-                          <Label>Preferred Time</Label>
-                          <Select value={callbackForm.preferredTime} onValueChange={(value) => handleInputChange("preferredTime", value)}>
-                            <SelectTrigger data-testid="select-preferred-time">
-                              <SelectValue placeholder="Select time" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="morning">Morning (9 AM - 12 PM)</SelectItem>
-                              <SelectItem value="afternoon">Afternoon (12 PM - 5 PM)</SelectItem>
-                              <SelectItem value="evening">Evening (5 PM - 8 PM)</SelectItem>
-                              <SelectItem value="anytime">Anytime</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
+                        <>
+                          <div>
+                            <Label>Preferred Date</Label>
+                            <Input
+                              type="date"
+                              data-testid="input-preferred-date"
+                              value={callbackForm.preferredDate}
+                              onChange={(e) => handleInputChange("preferredDate", e.target.value)}
+                              min={new Date().toISOString().split('T')[0]}
+                            />
+                          </div>
+                        </>
                       )}
                     </div>
+
+                    {callbackForm.requestType === "callback" && (
+                      <div>
+                        <Label>Preferred Time</Label>
+                        <Select value={callbackForm.preferredTime} onValueChange={(value) => handleInputChange("preferredTime", value)}>
+                          <SelectTrigger data-testid="select-preferred-time">
+                            <SelectValue placeholder="Select time" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="9:00 AM">9:00 AM</SelectItem>
+                            <SelectItem value="10:00 AM">10:00 AM</SelectItem>
+                            <SelectItem value="11:00 AM">11:00 AM</SelectItem>
+                            <SelectItem value="12:00 PM">12:00 PM</SelectItem>
+                            <SelectItem value="1:00 PM">1:00 PM</SelectItem>
+                            <SelectItem value="2:00 PM">2:00 PM</SelectItem>
+                            <SelectItem value="3:00 PM">3:00 PM</SelectItem>
+                            <SelectItem value="4:00 PM">4:00 PM</SelectItem>
+                            <SelectItem value="5:00 PM">5:00 PM</SelectItem>
+                            <SelectItem value="6:00 PM">6:00 PM</SelectItem>
+                            <SelectItem value="7:00 PM">7:00 PM</SelectItem>
+                            <SelectItem value="anytime">Anytime Today</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
