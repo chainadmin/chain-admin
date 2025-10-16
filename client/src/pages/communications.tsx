@@ -145,10 +145,12 @@ export default function Communications() {
     signOff: "", // e.g., "Thanks, The {{agencyName}} Team"
     // Account details box customization
     showAccountDetails: true,
-    accountLabel: "Account:",
-    creditorLabel: "Creditor:",
-    balanceLabel: "Balance:",
-    dueDateLabel: "Due Date:",
+    accountDetails: [
+      { label: "Account:", value: "{{accountNumber}}" },
+      { label: "Creditor:", value: "{{creditor}}" },
+      { label: "Balance:", value: "{{balance}}" },
+      { label: "Due Date:", value: "{{dueDate}}" }
+    ] as { label: string; value: string }[],
     html: "", // Full template HTML (for storage/sending)
     designType: "postmark-invoice" as PostmarkTemplateType,
   });
@@ -380,115 +382,107 @@ export default function Communications() {
       .trim();
 
   const renderToolbar = (field: RichTextField) => (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2 p-2 bg-gray-100 rounded-lg border border-gray-200">
       <Button
         type="button"
-        variant="outline"
         size="sm"
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => {
           setActiveField(field);
           applyRichTextCommand(field, "bold");
         }}
-        className="h-8"
+        className="h-8 bg-white hover:bg-gray-200 text-gray-900 border border-gray-300 font-semibold"
       >
         <BoldIcon className="mr-1 h-3.5 w-3.5" />
         Bold
       </Button>
       <Button
         type="button"
-        variant="outline"
         size="sm"
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => {
           setActiveField(field);
           applyRichTextCommand(field, "italic");
         }}
-        className="h-8"
+        className="h-8 bg-white hover:bg-gray-200 text-gray-900 border border-gray-300 font-semibold"
       >
         <ItalicIcon className="mr-1 h-3.5 w-3.5" />
         Italic
       </Button>
       <Button
         type="button"
-        variant="outline"
         size="sm"
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => {
           setActiveField(field);
           applyRichTextCommand(field, "underline");
         }}
-        className="h-8"
+        className="h-8 bg-white hover:bg-gray-200 text-gray-900 border border-gray-300 font-semibold"
       >
         <UnderlineIcon className="mr-1 h-3.5 w-3.5" />
         Underline
       </Button>
       <Button
         type="button"
-        variant="outline"
         size="sm"
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => {
           setActiveField(field);
           applyRichTextCommand(field, "strikeThrough");
         }}
-        className="h-8"
+        className="h-8 bg-white hover:bg-gray-200 text-gray-900 border border-gray-300 font-semibold"
       >
         <Strikethrough className="mr-1 h-3.5 w-3.5" />
         Strike
       </Button>
       <Button
         type="button"
-        variant="outline"
         size="sm"
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => {
           setActiveField(field);
           applyRichTextCommand(field, "insertUnorderedList");
         }}
-        className="h-8"
+        className="h-8 bg-white hover:bg-gray-200 text-gray-900 border border-gray-300 font-semibold"
       >
         <ListIcon className="mr-1 h-3.5 w-3.5" />
         Bullets
       </Button>
       <Button
         type="button"
-        variant="outline"
         size="sm"
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => {
           setActiveField(field);
           applyRichTextCommand(field, "insertOrderedList");
         }}
-        className="h-8"
+        className="h-8 bg-white hover:bg-gray-200 text-gray-900 border border-gray-300 font-semibold"
       >
         <ListOrdered className="mr-1 h-3.5 w-3.5" />
         Numbered
       </Button>
       <Button
         type="button"
-        variant="outline"
         size="sm"
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => handleCreateLink(field)}
-        className="h-8"
+        className="h-8 bg-white hover:bg-gray-200 text-gray-900 border border-gray-300 font-semibold"
       >
         <Link2 className="mr-1 h-3.5 w-3.5" />
         Link
       </Button>
       <Button
         type="button"
-        variant="outline"
         size="sm"
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => handleRemoveLink(field)}
-        className="h-8"
+        className="h-8 bg-white hover:bg-gray-200 text-gray-900 border border-gray-300 font-semibold"
       >
         <Link2Off className="mr-1 h-3.5 w-3.5" />
         Remove Link
       </Button>
-      <div className="flex items-center gap-1">
-        <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+      <div className="flex items-center gap-1 px-2 py-1 bg-white rounded border border-gray-300">
+        <span className="inline-flex items-center gap-1 text-xs text-gray-700 font-semibold">
           <Palette className="h-3.5 w-3.5" />
           Color
         </span>
@@ -504,14 +498,13 @@ export default function Communications() {
       </div>
       <Button
         type="button"
-        variant="outline"
         size="sm"
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => {
           setActiveField(field);
           applyRichTextCommand(field, "removeFormat");
         }}
-        className="h-8"
+        className="h-8 bg-white hover:bg-gray-200 text-gray-900 border border-gray-300 font-semibold"
       >
         <Eraser className="mr-1 h-3.5 w-3.5" />
         Clear
@@ -1994,7 +1987,7 @@ export default function Communications() {
                     Create {communicationType === "email" ? "email" : "SMS"} template
                   </Button>
                 </DialogTrigger>
-                <DialogContent className={communicationType === "email" ? "max-w-[95vw] w-full h-[90vh] max-h-[900px]" : "max-w-2xl"}>
+                <DialogContent className={communicationType === "email" ? "max-w-[98vw] w-full h-[95vh]" : "max-w-2xl"}>
                   {communicationType === "email" ? (
                     <>
                       <DialogHeader className="pb-4 border-b">
