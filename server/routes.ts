@@ -6521,6 +6521,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     const campaignId = Metadata?.campaignId;
     const tenantId = Metadata?.tenantId as string | undefined;
+    
+    console.log('📧 Postmark Event Details:');
+    console.log('  - RecordType:', RecordType);
+    console.log('  - MessageID:', MessageID);
+    console.log('  - Tag:', Tag);
+    console.log('  - Metadata received:', JSON.stringify(Metadata, null, 2));
+    console.log('  - Extracted campaignId:', campaignId);
+    console.log('  - Extracted tenantId:', tenantId);
+    
     const trackingData = {
       messageId: MessageID,
       recipient: Recipient,
