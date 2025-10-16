@@ -5179,6 +5179,114 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Scheduled payments calendar endpoint
+  app.get('/api/scheduled-payments/calendar', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { startDate, endDate } = req.query;
+      
+      // Get all consumers for this tenant
+      const consumers = await storage.getConsumersByTenant(tenantId);
+      const dailySchedules: Record<string, any[]> = {};
+      const dailyTotals: Record<string, number> = {};
+
+      for (const consumer of consumers) {
+        const schedules = await storage.getPaymentSchedulesByConsumer(consumer.id, tenantId);
+        
+        for (const schedule of schedules) {
+          if (schedule.status === 'active' && schedule.nextPaymentDate) {
+            const date = schedule.nextPaymentDate;
+            
+            // Filter by date range if provided
+            if (startDate && date < startDate) continue;
+            if (endDate && date > endDate) continue;
+
+            if (!dailySchedules[date]) {
+              dailySchedules[date] = [];
+              dailyTotals[date] = 0;
+            }
+
+            dailySchedules[date].push({
+              scheduleId: schedule.id,
+              consumerId: consumer.id,
+              consumerName: `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim() || 'Unknown',
+              amountCents: schedule.amountCents,
+              arrangementType: schedule.arrangementType,
+              accountId: schedule.accountId,
+            });
+
+            dailyTotals[date] += schedule.amountCents || 0;
+          }
+        }
+      }
+
+      res.json({
+        dailySchedules,
+        dailyTotals,
+      });
+
+    } catch (error) {
+      console.error("Error fetching calendar data:", error);
+      res.status(500).json({ message: "Failed to fetch calendar data" });
+    }
+  });
+
+  // Failed payments endpoint
+  app.get('/api/scheduled-payments/failed', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const consumers = await storage.getConsumersByTenant(tenantId);
+      const failedPayments: any[] = [];
+
+      for (const consumer of consumers) {
+        const schedules = await storage.getPaymentSchedulesByConsumer(consumer.id, tenantId);
+        
+        for (const schedule of schedules) {
+          if (schedule.status === 'failed' || (schedule.failedAttempts && schedule.failedAttempts > 0)) {
+            const account = schedule.accountId ? await storage.getAccount(schedule.accountId) : null;
+            
+            failedPayments.push({
+              scheduleId: schedule.id,
+              consumerId: consumer.id,
+              consumerName: `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim() || 'Unknown',
+              consumerEmail: consumer.email,
+              consumerPhone: consumer.phone,
+              amountCents: schedule.amountCents,
+              nextPaymentDate: schedule.nextPaymentDate,
+              failedAttempts: schedule.failedAttempts || 0,
+              status: schedule.status,
+              arrangementType: schedule.arrangementType,
+              accountNumber: account?.accountNumber,
+              creditor: account?.creditor,
+            });
+          }
+        }
+      }
+
+      // Sort by failed attempts (highest first) then by date
+      failedPayments.sort((a, b) => {
+        if (b.failedAttempts !== a.failedAttempts) {
+          return b.failedAttempts - a.failedAttempts;
+        }
+        return (a.nextPaymentDate || '').localeCompare(b.nextPaymentDate || '');
+      });
+
+      res.json(failedPayments);
+
+    } catch (error) {
+      console.error("Error fetching failed payments:", error);
+      res.status(500).json({ message: "Failed to fetch failed payments" });
+    }
+  });
+
   // Company management routes
   app.get('/api/company/consumers', authenticateUser, async (req: any, res) => {
     try {
