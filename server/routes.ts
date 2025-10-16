@@ -288,62 +288,102 @@ function replaceTemplateVariables(
       tenant,
     } = options;
 
-    return targetedConsumers
-      .filter(consumer => consumer.email)
-      .map(consumer => {
-        const consumerAccount = accountsData.find(acc => acc.consumerId === consumer.id);
+    // Deduplicate by email address, keeping the most recent consumer record for each email
+    const emailToConsumerMap = new Map<string, Consumer>();
+    
+    for (const consumer of targetedConsumers) {
+      if (!consumer.email) continue;
+      
+      const normalizedEmail = consumer.email.toLowerCase().trim();
+      const existing = emailToConsumerMap.get(normalizedEmail);
+      
+      if (!existing) {
+        emailToConsumerMap.set(normalizedEmail, consumer);
+        continue;
+      }
+      
+      // Determine which consumer to keep based on available timestamps or ID
+      let shouldReplace = false;
+      
+      if (consumer.createdAt && existing.createdAt) {
+        // Both have createdAt - use the most recent
+        shouldReplace = new Date(consumer.createdAt) > new Date(existing.createdAt);
+      } else if (consumer.createdAt && !existing.createdAt) {
+        // Consumer has timestamp, existing doesn't - prefer consumer
+        shouldReplace = true;
+      } else if (!consumer.createdAt && existing.createdAt) {
+        // Existing has timestamp, consumer doesn't - keep existing
+        shouldReplace = false;
+      } else {
+        // Neither has createdAt - use consumer ID as tiebreaker (higher ID = more recent)
+        // This handles legacy records without timestamps
+        shouldReplace = consumer.id > existing.id;
+      }
+      
+      if (shouldReplace) {
+        emailToConsumerMap.set(normalizedEmail, consumer);
+      }
+    }
 
-        const processedSubject = replaceTemplateVariables(
-          template.subject || '',
-          consumer,
-          consumerAccount,
-          tenantWithSettings
-        );
-        const processedHtml = replaceTemplateVariables(
-          template.html || '',
-          consumer,
-          consumerAccount,
-          tenantWithSettings
-        );
+    const emails: any[] = [];
+    const uniqueConsumers = Array.from(emailToConsumerMap.values());
+    
+    for (const consumer of uniqueConsumers) {
+      const consumerAccount = accountsData.find(acc => acc.consumerId === consumer.id);
 
-        const finalizedHtml =
-          finalizeEmailHtml(processedHtml, {
-            logoUrl: tenantBranding?.logoUrl,
-            agencyName: tenant?.name,
-            primaryColor: tenantBranding?.primaryColor || tenantBranding?.buttonColor,
-            accentColor: tenantBranding?.secondaryColor || tenantBranding?.linkColor,
-            backgroundColor:
-              tenantBranding?.emailBackgroundColor || tenantBranding?.backgroundColor,
-            contentBackgroundColor:
-              tenantBranding?.emailContentBackgroundColor ||
-              tenantBranding?.cardBackgroundColor ||
-              tenantBranding?.panelBackgroundColor,
-            textColor: tenantBranding?.emailTextColor || tenantBranding?.textColor,
-            previewText: tenantBranding?.emailPreheader || tenantBranding?.preheaderText,
-          }) || processedHtml;
+      const processedSubject = replaceTemplateVariables(
+        template.subject || '',
+        consumer,
+        consumerAccount,
+        tenantWithSettings
+      );
+      const processedHtml = replaceTemplateVariables(
+        template.html || '',
+        consumer,
+        consumerAccount,
+        tenantWithSettings
+      );
 
-        const metadata: Record<string, string> = {
-          campaignId,
-          tenantId,
-          consumerId: consumer.id,
-          templateId: template.id,
-        };
+      const finalizedHtml =
+        finalizeEmailHtml(processedHtml, {
+          logoUrl: tenantBranding?.logoUrl,
+          agencyName: tenant?.name,
+          primaryColor: tenantBranding?.primaryColor || tenantBranding?.buttonColor,
+          accentColor: tenantBranding?.secondaryColor || tenantBranding?.linkColor,
+          backgroundColor:
+            tenantBranding?.emailBackgroundColor || tenantBranding?.backgroundColor,
+          contentBackgroundColor:
+            tenantBranding?.emailContentBackgroundColor ||
+            tenantBranding?.cardBackgroundColor ||
+            tenantBranding?.panelBackgroundColor,
+          textColor: tenantBranding?.emailTextColor || tenantBranding?.textColor,
+          previewText: tenantBranding?.emailPreheader || tenantBranding?.preheaderText,
+        }) || processedHtml;
 
-        if (consumerAccount?.accountNumber) {
-          metadata.accountNumber = consumerAccount.accountNumber;
-          metadata.filenumber = consumerAccount.accountNumber;
-        }
+      const metadata: Record<string, string> = {
+        campaignId,
+        tenantId,
+        consumerId: consumer.id,
+        templateId: template.id,
+      };
 
-        return {
-          to: consumer.email!,
-          from: `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>`,
-          subject: processedSubject,
-          html: finalizedHtml,
-          tag: `campaign-${campaignId}`,
-          metadata,
-          tenantId,
-        };
+      if (consumerAccount?.accountNumber) {
+        metadata.accountNumber = consumerAccount.accountNumber;
+        metadata.filenumber = consumerAccount.accountNumber;
+      }
+
+      emails.push({
+        to: consumer.email,
+        from: `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>`,
+        subject: processedSubject,
+        html: finalizedHtml,
+        tag: `campaign-${campaignId}`,
+        metadata,
+        tenantId,
       });
+    }
+
+    return emails;
   }
 
 function normalizeDateString(value?: string | null): string | null {
@@ -1035,8 +1075,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Create accounts
-      const accountsToCreate = accountsData.map((accountData: any, index: number) => {
+      // Create or update accounts (with deduplication)
+      const createdAccounts = [];
+      for (let index = 0; index < accountsData.length; index++) {
+        const accountData = accountsData[index];
+        
         if (!accountData.consumerEmail) {
           throw new Error(`Row ${index + 2}: Missing consumer email for account`);
         }
@@ -1047,7 +1090,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           throw new Error(`Row ${index + 2}: Consumer not found for email: ${accountData.consumerEmail}`);
         }
 
-        return {
+        const accountToCreate = {
           tenantId: tenantId,
           consumerId: consumer.id,
           folderId: targetFolderId,
@@ -1058,9 +1101,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: 'active',
           additionalData: accountData.additionalData || {},
         };
-      });
-
-      const createdAccounts = await storage.bulkCreateAccounts(accountsToCreate);
+        
+        // Use findOrCreateAccount to prevent duplicates
+        const account = await storage.findOrCreateAccount(accountToCreate);
+        createdAccounts.push(account);
+      }
       
       res.json({
         message: "Import successful",

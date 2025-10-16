@@ -695,8 +695,26 @@ export class DatabaseStorage implements IStorage {
       );
     
     if (existingConsumerWithTenant) {
-      // Consumer already exists with this tenant - update missing fields if provided
+      // Consumer already exists with this tenant - update fields
       const updates: any = {};
+      
+      // Always update folder assignment if provided (allows moving consumers between folders)
+      if (consumerData.folderId !== undefined && consumerData.folderId !== existingConsumerWithTenant.folderId) {
+        updates.folderId = consumerData.folderId;
+      }
+      
+      // Always update additionalData if provided (includes folder/status info)
+      if (consumerData.additionalData !== undefined) {
+        updates.additionalData = consumerData.additionalData;
+      }
+      
+      // Update name fields if provided (even if existing has values - allows corrections)
+      if (consumerData.firstName !== undefined && consumerData.firstName !== existingConsumerWithTenant.firstName) {
+        updates.firstName = consumerData.firstName;
+      }
+      if (consumerData.lastName !== undefined && consumerData.lastName !== existingConsumerWithTenant.lastName) {
+        updates.lastName = consumerData.lastName;
+      }
       
       // Update fields only if they're missing in the existing record but provided in new data
       if (!existingConsumerWithTenant.dateOfBirth && consumerData.dateOfBirth) {
@@ -723,7 +741,7 @@ export class DatabaseStorage implements IStorage {
           .set(updates)
           .where(eq(consumers.id, existingConsumerWithTenant.id))
           .returning();
-        console.log(`Updated consumer ${existingConsumerWithTenant.id} with missing fields`);
+        console.log(`Updated consumer ${existingConsumerWithTenant.id} - moved to new folder or updated data`);
         return updatedConsumer;
       }
       
@@ -914,6 +932,65 @@ export class DatabaseStorage implements IStorage {
     await this.notifyConsumerAccountAdded(newAccount);
 
     return newAccount;
+  }
+
+  async findOrCreateAccount(accountData: InsertAccount): Promise<Account> {
+    // Check if account already exists by account number and consumer (or creditor if no account number)
+    if (accountData.accountNumber && accountData.consumerId) {
+      const [existingAccount] = await db.select()
+        .from(accounts)
+        .where(
+          and(
+            eq(accounts.consumerId, accountData.consumerId),
+            eq(accounts.accountNumber, accountData.accountNumber)
+          )
+        );
+      
+      if (existingAccount) {
+        // Account exists - update it with new data
+        const updates: any = {};
+        
+        // Always update balance, folder, and status (allows moving accounts and updating balances)
+        if (accountData.balanceCents !== undefined && accountData.balanceCents !== existingAccount.balanceCents) {
+          updates.balanceCents = accountData.balanceCents;
+        }
+        if (accountData.folderId !== undefined && accountData.folderId !== existingAccount.folderId) {
+          updates.folderId = accountData.folderId;
+        }
+        if (accountData.status !== undefined && accountData.status !== existingAccount.status) {
+          updates.status = accountData.status;
+        }
+        
+        // Update creditor if provided
+        if (accountData.creditor && accountData.creditor !== existingAccount.creditor) {
+          updates.creditor = accountData.creditor;
+        }
+        
+        // Update due date if provided
+        if (accountData.dueDate !== undefined && accountData.dueDate !== existingAccount.dueDate) {
+          updates.dueDate = accountData.dueDate;
+        }
+        
+        // Update additional data if provided
+        if (accountData.additionalData !== undefined) {
+          updates.additionalData = accountData.additionalData;
+        }
+        
+        if (Object.keys(updates).length > 0) {
+          const [updatedAccount] = await db.update(accounts)
+            .set(updates)
+            .where(eq(accounts.id, existingAccount.id))
+            .returning();
+          console.log(`Updated existing account ${existingAccount.accountNumber} for consumer ${accountData.consumerId}`);
+          return updatedAccount;
+        }
+        
+        return existingAccount;
+      }
+    }
+    
+    // No existing account found - create new one
+    return await this.createAccount(accountData);
   }
 
   async updateAccount(id: string, updates: Partial<Account>): Promise<Account> {
