@@ -135,7 +135,7 @@ export const consumers = pgTable("consumers", {
   registrationDate: timestamp("registration_date"),
   contactPrefs: jsonb("contact_prefs").default(sql`'{}'::jsonb`),
   additionalData: jsonb("additional_data").default(sql`'{}'::jsonb`), // Store custom CSV columns
-  paymentStatus: text("payment_status", { enum: ['current', 'pending_payment', 'payment_failed', 'no_payment_plan'] }).default('current'), // Track payment plan status
+  paymentStatus: text("payment_status", { enum: ['current', 'pending_payment', 'payment_failed', 'no_payment_plan'] }).default('no_payment_plan'), // Track payment plan status
   createdAt: timestamp("created_at").defaultNow(),
 });
 

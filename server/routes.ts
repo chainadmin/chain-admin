@@ -5152,11 +5152,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     s.id !== schedule.id && s.status === 'active'
                   );
                   
-                  // If this schedule is now completed and no other active schedules, mark current
-                  if (scheduleStatus === 'completed' && !hasActiveSchedules) {
-                    await storage.updateConsumer(consumer.id, { paymentStatus: 'current' });
-                  } else if (hasActiveSchedules || scheduleStatus === 'active') {
+                  // Update status based on schedule state
+                  if (hasActiveSchedules || scheduleStatus === 'active') {
+                    // Still has active payment schedules
                     await storage.updateConsumer(consumer.id, { paymentStatus: 'pending_payment' });
+                  } else if (!hasActiveSchedules) {
+                    // No active schedules - check if account is fully paid
+                    const account = await storage.getAccount(schedule.accountId);
+                    const accountPaidOff = !account || account.balanceCents === 0;
+                    
+                    if (accountPaidOff) {
+                      // Account paid off, consumer is current
+                      await storage.updateConsumer(consumer.id, { paymentStatus: 'current' });
+                    } else {
+                      // Account still has balance but no payment plan
+                      await storage.updateConsumer(consumer.id, { paymentStatus: 'no_payment_plan' });
+                    }
                   }
 
                   processedPayments.push({ scheduleId: schedule.id, consumerId: consumer.id });
