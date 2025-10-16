@@ -82,15 +82,29 @@ class SmaxService {
     }
 
     try {
+      const payload = {
+        apikey: config.apiKey,
+        pin: config.pin,
+      };
+      
+      console.log('🔐 SMAX login attempt:', {
+        baseUrl: config.baseUrl,
+        apiKeyLength: config.apiKey.length,
+        pinLength: config.pin.length,
+        apiKeyFirst3: config.apiKey.substring(0, 3),
+        pinFirst3: config.pin.substring(0, 3),
+        hasWhitespace: {
+          apiKey: config.apiKey !== config.apiKey.trim(),
+          pin: config.pin !== config.pin.trim(),
+        }
+      });
+      
       const response = await fetch(`${config.baseUrl}/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          apikey: config.apiKey,
-          pin: config.pin,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
