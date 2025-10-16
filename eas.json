@@ -21,8 +21,7 @@
         "buildConfiguration": "Release"
       },
       "android": {
-        "buildType": "apk",
-        "prebuildCommand": "npx cap sync android"
+        "buildType": "apk"
       }
     },
     "production": {
@@ -33,15 +32,13 @@
       "ios": {
         "buildConfiguration": "Release",
         "resourceClass": "medium",
-        "scheme": "App",
-        "prebuildCommand": "npx cap sync ios"
+        "scheme": "App"
       },
       "android": {
         "buildType": "app-bundle",
         "gradleCommand": ":app:bundleRelease",
         "resourceClass": "medium",
-        "image": "latest",
-        "prebuildCommand": "npx cap sync android"
+        "image": "latest"
       }
     }
   },

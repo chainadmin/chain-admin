@@ -1,14 +1,46 @@
 #!/usr/bin/env node
 
 /**
- * EAS Build Hook - Runs after install and Capacitor sync
- * Ensures iOS shared scheme exists after cap sync overwrites it
+ * EAS Build Hook - Runs after npm install
+ * 
+ * This hook ensures proper mobile build setup:
+ * 1. Builds web assets (Vite) for the mobile app
+ * 2. Runs Capacitor sync to generate platform files including:
+ *    - android/capacitor-cordova-android-plugins/ (gitignored, must be generated)
+ *    - cordova.variables.gradle (required by Gradle build)
+ * 3. Restores iOS shared scheme if cap sync overwrites it
+ * 
+ * Why this hook exists:
+ * - The capacitor-cordova-android-plugins directory is gitignored
+ * - EAS prebuildCommand doesn't generate it reliably
+ * - Running in post-install ensures it happens after all dependencies are installed
  */
 
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
+// Step 1: Build web assets for mobile app
+console.log('🏗️  Building web assets...');
+try {
+  execSync('npm run build', { stdio: 'inherit' });
+  console.log('✅ Web assets built');
+} catch (error) {
+  console.error('❌ Web build failed:', error.message);
+  process.exit(1);
+}
+
+// Step 2: Run Capacitor sync
+console.log('🔄 Running Capacitor sync...');
+try {
+  execSync('npx cap sync', { stdio: 'inherit' });
+  console.log('✅ Capacitor sync completed');
+} catch (error) {
+  console.error('❌ Capacitor sync failed:', error.message);
+  process.exit(1);
+}
+
+// Step 3: Handle iOS shared scheme
 const SCHEME_DIR = 'ios/App/App.xcworkspace/xcshareddata/xcschemes';
 const SCHEME_FILE = path.join(SCHEME_DIR, 'App.xcscheme');
 
