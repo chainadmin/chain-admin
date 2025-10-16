@@ -1,7 +1,11 @@
 import { storage } from './storage';
 
 interface SmaxAuthResponse {
-  access_token: string;
+  access_token?: string;  // Flat format (test env)
+  state?: string;          // Nested format (Railway)
+  result?: {
+    access_token: string;
+  };
 }
 
 interface SmaxConfig {
@@ -96,12 +100,24 @@ class SmaxService {
 
       const data: SmaxAuthResponse = await response.json();
 
-      if (!data.access_token) {
+      // Support both response formats:
+      // Nested format (Railway): {state: "SUCCESS", result: {access_token: "..."}}
+      // Flat format (Test env): {access_token: "..."}
+      let token: string | null = null;
+      
+      if (data.state === 'SUCCESS' && data.result?.access_token) {
+        // Nested format (Railway production)
+        token = data.result.access_token;
+      } else if (data.access_token) {
+        // Flat format (Test environment)
+        token = data.access_token;
+      }
+
+      if (!token) {
         console.error('SMAX authentication unsuccessful:', data);
         return null;
       }
 
-      const token = data.access_token;
       const expires = Date.now() + (14 * 60 * 1000);
 
       this.tokenCache.set(cacheKey, { token, expires });
@@ -226,7 +242,7 @@ class SmaxService {
 
       const result = await this.makeSmaxRequest(
         config,
-        `/getaccount/${fileNumber}`,
+        `/getaccountdetails/${fileNumber}`,
         'GET'
       );
 
@@ -237,6 +253,31 @@ class SmaxService {
       return null;
     } catch (error) {
       console.error('Error getting account from SMAX:', error);
+      return null;
+    }
+  }
+
+  async getPayments(tenantId: string, fileNumber: string): Promise<any[] | null> {
+    try {
+      const config = await this.getSmaxConfig(tenantId);
+
+      if (!config) {
+        return null;
+      }
+
+      const result = await this.makeSmaxRequest(
+        config,
+        `/getpayments/${fileNumber}`,
+        'GET'
+      );
+
+      if (result.state === 'SUCCESS') {
+        return result.result || [];
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error getting payments from SMAX:', error);
       return null;
     }
   }

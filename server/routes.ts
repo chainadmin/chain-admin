@@ -3997,6 +3997,127 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Sync accounts from SMAX - Call this endpoint every 8 hours
+  app.post('/api/smax/sync-accounts', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { smaxService } = await import('./smaxService');
+      
+      // Check if SMAX is enabled for this tenant
+      const settings = await storage.getTenantSettings(tenantId);
+      if (!settings?.smaxEnabled) {
+        return res.status(400).json({ 
+          success: false,
+          error: "SMAX integration is not enabled for this tenant" 
+        });
+      }
+
+      // Get all accounts for this tenant
+      const accounts = await storage.getAccountsByTenant(tenantId);
+      
+      const syncResults = {
+        total: accounts.length,
+        synced: 0,
+        failed: 0,
+        skipped: 0,
+        paymentsImported: 0,
+        errors: [] as string[],
+      };
+
+      for (const account of accounts) {
+        // Skip accounts without account numbers
+        if (!account.accountNumber) {
+          syncResults.skipped++;
+          continue;
+        }
+
+        try {
+          // Pull account data from SMAX
+          const smaxAccountData = await smaxService.getAccount(tenantId, account.accountNumber);
+          
+          if (smaxAccountData && smaxAccountData.balance !== undefined) {
+            // Convert SMAX balance to cents (assuming SMAX returns dollars)
+            const newBalanceCents = Math.round(parseFloat(smaxAccountData.balance) * 100);
+            
+            // Update account balance in Chain
+            await storage.updateAccount(account.id, {
+              balanceCents: newBalanceCents,
+            });
+            
+            syncResults.synced++;
+            console.log(`✅ Synced account ${account.accountNumber}: Balance updated to $${smaxAccountData.balance}`);
+          } else {
+            syncResults.failed++;
+            syncResults.errors.push(`Account ${account.accountNumber}: No balance data from SMAX`);
+          }
+
+          // Pull and import payments from SMAX
+          const smaxPayments = await smaxService.getPayments(tenantId, account.accountNumber);
+          
+          if (smaxPayments && smaxPayments.length > 0) {
+            // Get existing payments for this account to avoid duplicates
+            const allPayments = await storage.getPaymentsByTenant(tenantId);
+            const existingPayments = allPayments.filter(p => p.accountId === account.id);
+            const existingTransactionIds = new Set(
+              existingPayments
+                .filter(p => p.transactionId)
+                .map(p => p.transactionId)
+            );
+
+            for (const smaxPayment of smaxPayments) {
+              // Skip if we already have this payment (match by transaction ID)
+              if (smaxPayment.transactionid && existingTransactionIds.has(smaxPayment.transactionid)) {
+                continue;
+              }
+
+              // Import payment from SMAX to Chain
+              try {
+                const paymentAmountCents = Math.round(parseFloat(smaxPayment.paymentamount || 0) * 100);
+                
+                await storage.createPayment({
+                  tenantId,
+                  consumerId: account.consumerId,
+                  accountId: account.id,
+                  amountCents: paymentAmountCents,
+                  status: smaxPayment.status === 'completed' ? 'completed' : 'failed',
+                  paymentMethod: smaxPayment.paymentmethod || 'unknown',
+                  transactionId: smaxPayment.transactionid || null,
+                  processedAt: smaxPayment.paymentdate ? new Date(smaxPayment.paymentdate) : new Date(),
+                  notes: smaxPayment.notes || 'Imported from SMAX',
+                });
+
+                syncResults.paymentsImported++;
+              } catch (paymentError: any) {
+                console.error(`Failed to import payment for account ${account.accountNumber}:`, paymentError);
+              }
+            }
+          }
+        } catch (error: any) {
+          syncResults.failed++;
+          syncResults.errors.push(`Account ${account.accountNumber}: ${error.message}`);
+          console.error(`❌ Failed to sync account ${account.accountNumber}:`, error);
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Sync completed: ${syncResults.synced} accounts updated, ${syncResults.paymentsImported} payments imported`,
+        results: syncResults,
+      });
+    } catch (error: any) {
+      console.error("Error syncing SMAX accounts:", error);
+      res.status(500).json({
+        success: false,
+        error: error.message || "Failed to sync SMAX accounts" 
+      });
+    }
+  });
+
   // Logo upload route (handles JSON with base64)
   app.post('/api/upload/logo', authenticateUser, async (req: any, res) => {
     try {
