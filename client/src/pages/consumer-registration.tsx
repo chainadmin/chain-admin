@@ -18,6 +18,7 @@ export default function ConsumerRegistration() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
 
+  // Parse query parameters for email and tenant
   const getQueryParams = () => {
     const params = new URLSearchParams(window.location.search);
     return {
@@ -26,12 +27,16 @@ export default function ConsumerRegistration() {
     };
   };
 
+  // Get agency context from multiple sources
   const getAgencyContext = () => {
+    // 1. First check URL path parameter
     if (tenantSlug) return tenantSlug;
     
+    // 2. Check query parameter
     const queryParams = getQueryParams();
     if (queryParams.tenant) return queryParams.tenant;
     
+    // 3. Check sessionStorage for agency context
     try {
       const context = sessionStorage.getItem('agencyContext');
       if (context) {
@@ -145,6 +150,7 @@ export default function ConsumerRegistration() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Check if agency is selected
     if (!effectiveTenantSlug) {
       toast({
         title: "Agency Required",
@@ -181,6 +187,7 @@ export default function ConsumerRegistration() {
       return;
     }
 
+    // Include the tenant slug in the registration data
     registrationMutation.mutate({
       ...formData,
       tenantSlug: effectiveTenantSlug
@@ -198,7 +205,7 @@ export default function ConsumerRegistration() {
     <PublicHeroLayout
       badgeText="Complete your profile"
       title="Create your secure consumer account"
-      description="We'll automatically match you with the right agency and unlock your full account experience."
+      description="We’ll automatically match you with the right agency and unlock your full account experience."
       supportingContent={(
         <div className="grid gap-4">
           <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -239,8 +246,6 @@ export default function ConsumerRegistration() {
         </>
       )}
       showDefaultHeaderActions={false}
-      contentClassName="p-8 sm:p-10"
-    >
       contentClassName="p-8 sm:p-10"
     >
       <div className="space-y-8 text-left text-white">
@@ -484,26 +489,87 @@ export default function ConsumerRegistration() {
                   </p>
                 </div>
                 <Button
-                  type="submit"
-                  className="h-12 w-full rounded-full bg-blue-500 text-base font-medium text-white transition hover:bg-blue-400"
-                  disabled={registrationMutation.isPending}
-                  data-testid="button-submit-registration"
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleInputChange("agreeToSms", !formData.agreeToSms)}
+                  className={`flex w-full items-center justify-center gap-2 rounded-xl border-white/20 bg-white/5 py-3 text-sm font-semibold transition ${
+                    formData.agreeToSms
+                      ? "bg-emerald-500/90 text-slate-900 hover:bg-emerald-500"
+                      : "text-blue-100 hover:bg-white/10"
+                  }`}
+                  aria-pressed={formData.agreeToSms}
+                  data-testid="button-agreeToSms"
                 >
-                  {registrationMutation.isPending ? (
+                  {formData.agreeToSms ? (
                     <>
-                      <div className="mr-2 h-4 w-4 animate-spin rounded-full border-b-2 border-white"></div>
-                      Creating account...
+                      <Check className="h-4 w-4" />
+                      Consent confirmed
                     </>
                   ) : (
-                    <>
-                      Complete registration
-                      <ArrowRight className="ml-2 h-4 w-4" />
-                    </>
+                    <>I acknowledge I may receive messages from Chain Software Group</>
                   )}
                 </Button>
               </div>
             </div>
-          </form>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id="agreeToTerms"
+                data-testid="checkbox-agreeToTerms"
+                checked={formData.agreeToTerms}
+                onCheckedChange={(checked) => handleInputChange("agreeToTerms", checked)}
+                className="mt-1 h-5 w-5 rounded-md border-white/40"
+              />
+              <div className="space-y-2 text-sm text-blue-100/80">
+                <Label htmlFor="agreeToTerms" className="font-semibold text-white">
+                  I agree to the {" "}
+                  <a href="/terms-of-service" target="_blank" className="text-blue-200 underline-offset-4 hover:underline">
+                    Terms of Service
+                  </a>{" "}
+                  and {" "}
+                  <a href="/privacy-policy" target="_blank" className="text-blue-200 underline-offset-4 hover:underline">
+                    Privacy Policy
+                  </a>{" "}
+                  *
+                </Label>
+                <p>By registering, you consent to account alerts and communication from your agency.</p>
+              </div>
+            </div>
+          </div>
+
+          <Button
+            type="submit"
+            data-testid="button-register"
+            className="h-12 w-full rounded-full bg-blue-500 text-base font-medium text-white transition hover:bg-blue-400"
+            disabled={registrationMutation.isPending}
+          >
+            {registrationMutation.isPending ? (
+              <>
+                <div className="mr-2 h-4 w-4 animate-spin rounded-full border-b-2 border-white"></div>
+                Registering
+              </>
+            ) : (
+              <>
+                Complete registration
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </>
+            )}
+          </Button>
+        </form>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-blue-100/60">
+          <div className="flex items-center gap-3">
+            <a href="/terms-of-service" className="transition hover:text-white hover:underline">
+              Terms of Service
+            </a>
+            <span>•</span>
+            <a href="/privacy-policy" className="transition hover:text-white hover:underline">
+              Privacy Policy
+            </a>
+          </div>
+          <p>Need help? Contact your agency’s support team anytime.</p>
         </div>
       </div>
     </PublicHeroLayout>
