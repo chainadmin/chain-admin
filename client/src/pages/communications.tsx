@@ -688,20 +688,49 @@ export default function Communications() {
     previewHtml = previewHtml.replace('{{CUSTOM_BUTTON_URL}}', resolvedButtonUrl);
     previewHtml = previewHtml.replace('{{CUSTOM_CLOSING_MESSAGE}}', closingMessage);
     previewHtml = previewHtml.replace('{{CUSTOM_SIGNOFF}}', signOff);
-    // Replace account detail labels from accountDetails array
+    
+    // Generate dynamic account details table from accountDetails array
     const accountDetails = emailTemplateForm.accountDetails || [
       { label: "Account:", value: "{{accountNumber}}" },
       { label: "Creditor:", value: "{{creditor}}" },
       { label: "Balance:", value: "{{balance}}" },
       { label: "Due Date:", value: "{{dueDate}}" }
     ];
-    previewHtml = previewHtml.replace(/\{\{ACCOUNT_LABEL\}\}/g, accountDetails[0]?.label || "Account:");
-    previewHtml = previewHtml.replace(/\{\{CREDITOR_LABEL\}\}/g, accountDetails[1]?.label || "Creditor:");
-    previewHtml = previewHtml.replace(/\{\{BALANCE_LABEL\}\}/g, accountDetails[2]?.label || "Balance:");
-    previewHtml = previewHtml.replace(/\{\{DUE_DATE_LABEL\}\}/g, accountDetails[3]?.label || "Due Date:");
     
-    // Remove account details box if showAccountDetails is false
-    if (!emailTemplateForm.showAccountDetails) {
+    // Build dynamic table rows
+    const dynamicRows = accountDetails.map(detail => 
+      `<tr><td class="attribute-list-item"><strong>${detail.label}</strong> ${detail.value}</td></tr>`
+    ).join('\n        ');
+    
+    // Create the complete dynamic table
+    const dynamicAccountTable = `<table class="attribute-list" width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td class="attribute-list-container">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        ${dynamicRows}
+      </table>
+    </td>
+  </tr>
+</table>`;
+    
+    // Replace the static account details table with dynamic one using DOM parsing
+    if (emailTemplateForm.showAccountDetails) {
+      if (typeof window !== "undefined" && typeof DOMParser !== "undefined") {
+        try {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(previewHtml, "text/html");
+          const accountTable = doc.querySelector("table.attribute-list");
+          if (accountTable) {
+            const tempDiv = doc.createElement('div');
+            tempDiv.innerHTML = dynamicAccountTable;
+            accountTable.replaceWith(tempDiv.firstElementChild!);
+          }
+          previewHtml = doc.body.innerHTML;
+        } catch (e) {
+          console.error("Error replacing account details table:", e);
+        }
+      }
+    } else {
       previewHtml = removeAccountDetailsTables(previewHtml);
     }
     
@@ -1188,20 +1217,49 @@ export default function Communications() {
       customizedHtml = customizedHtml.replace('{{CUSTOM_BUTTON_URL}}', buttonUrl);
       customizedHtml = customizedHtml.replace('{{CUSTOM_CLOSING_MESSAGE}}', closingMessage);
       customizedHtml = customizedHtml.replace('{{CUSTOM_SIGNOFF}}', signOff);
-      // Replace account detail labels from accountDetails array
+      
+      // Generate dynamic account details table from accountDetails array
       const accountDetails = emailTemplateForm.accountDetails || [
         { label: "Account:", value: "{{accountNumber}}" },
         { label: "Creditor:", value: "{{creditor}}" },
         { label: "Balance:", value: "{{balance}}" },
         { label: "Due Date:", value: "{{dueDate}}" }
       ];
-      customizedHtml = customizedHtml.replace(/\{\{ACCOUNT_LABEL\}\}/g, accountDetails[0]?.label || "Account:");
-      customizedHtml = customizedHtml.replace(/\{\{CREDITOR_LABEL\}\}/g, accountDetails[1]?.label || "Creditor:");
-      customizedHtml = customizedHtml.replace(/\{\{BALANCE_LABEL\}\}/g, accountDetails[2]?.label || "Balance:");
-      customizedHtml = customizedHtml.replace(/\{\{DUE_DATE_LABEL\}\}/g, accountDetails[3]?.label || "Due Date:");
       
-      // Remove account details box if showAccountDetails is false
-      if (!emailTemplateForm.showAccountDetails) {
+      // Build dynamic table rows
+      const dynamicRows = accountDetails.map(detail => 
+        `<tr><td class="attribute-list-item"><strong>${detail.label}</strong> ${detail.value}</td></tr>`
+      ).join('\n        ');
+      
+      // Create the complete dynamic table
+      const dynamicAccountTable = `<table class="attribute-list" width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td class="attribute-list-container">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        ${dynamicRows}
+      </table>
+    </td>
+  </tr>
+</table>`;
+      
+      // Replace the static account details table with dynamic one using DOM parsing
+      if (emailTemplateForm.showAccountDetails) {
+        if (typeof window !== "undefined" && typeof DOMParser !== "undefined") {
+          try {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(customizedHtml, "text/html");
+            const accountTable = doc.querySelector("table.attribute-list");
+            if (accountTable) {
+              const tempDiv = doc.createElement('div');
+              tempDiv.innerHTML = dynamicAccountTable;
+              accountTable.replaceWith(tempDiv.firstElementChild!);
+            }
+            customizedHtml = doc.body.innerHTML;
+          } catch (e) {
+            console.error("Error replacing account details table:", e);
+          }
+        }
+      } else {
         customizedHtml = removeAccountDetailsTables(customizedHtml);
       }
       
@@ -2030,9 +2088,9 @@ export default function Communications() {
                         </DialogTitle>
                       </DialogHeader>
 
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-[calc(100%-140px)] overflow-hidden">
-                        {/* Left Panel - Template Editor */}
-                        <div className="flex flex-col space-y-3 overflow-y-auto pr-2">
+                      <div className="flex gap-4 h-[calc(100%-140px)] overflow-hidden">
+                        {/* Main Content - Template Editor */}
+                        <div className="flex-1 overflow-y-auto pr-4 space-y-4">
                           <div>
                             <Label className="text-sm font-medium mb-2 block">Choose Template Design</Label>
                             <div className="grid grid-cols-2 gap-2">
@@ -2208,172 +2266,171 @@ export default function Communications() {
                           <Separator className="my-4" />
                           
                           <div>
-                            <Label className="text-sm font-medium mb-3 block">Account Details Box</Label>
-                            <p className="text-xs text-gray-500 mb-3">Customize the account information box shown in payment reminder and invoice templates</p>
-                            
-                            <div className="flex items-center space-x-2 mb-4">
-                              <input
-                                type="checkbox"
-                                id="show-account-details"
-                                checked={emailTemplateForm.showAccountDetails}
-                                onChange={(e) => setEmailTemplateForm({...emailTemplateForm, showAccountDetails: e.target.checked})}
-                                className="h-4 w-4"
-                                data-testid="checkbox-show-account-details"
-                              />
-                              <Label htmlFor="show-account-details" className="text-xs cursor-pointer">Show account details box</Label>
+                            <div className="flex items-center justify-between mb-3">
+                              <div>
+                                <Label className="text-sm font-medium block">Account Details Box</Label>
+                                <p className="text-xs text-gray-500 mt-1">Customize the account information table</p>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <input
+                                  type="checkbox"
+                                  id="show-account-details"
+                                  checked={emailTemplateForm.showAccountDetails}
+                                  onChange={(e) => setEmailTemplateForm({...emailTemplateForm, showAccountDetails: e.target.checked})}
+                                  className="h-4 w-4"
+                                  data-testid="checkbox-show-account-details"
+                                />
+                                <Label htmlFor="show-account-details" className="text-xs cursor-pointer font-medium">Show Box</Label>
+                              </div>
                             </div>
 
                             {emailTemplateForm.showAccountDetails && (
-                              <div className="space-y-3 pl-6 border-l-2 border-gray-200">
-                                <div>
-                                  <Label className="text-xs font-medium">Account Label</Label>
-                                  <Input
-                                    value={emailTemplateForm.accountDetails[0]?.label || ""}
-                                    onChange={(e) => {
-                                      const newDetails = [...emailTemplateForm.accountDetails];
-                                      newDetails[0] = { ...newDetails[0], label: e.target.value };
-                                      setEmailTemplateForm({...emailTemplateForm, accountDetails: newDetails});
+                              <div className="space-y-3 border rounded-lg p-4 bg-gray-50">
+                                <div className="flex items-center justify-between mb-2">
+                                  <p className="text-xs font-medium text-gray-700">Table Rows (Label : Value)</p>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={() => {
+                                      setEmailTemplateForm({
+                                        ...emailTemplateForm,
+                                        accountDetails: [
+                                          ...emailTemplateForm.accountDetails,
+                                          { label: "New Field:", value: "{{variable}}" }
+                                        ]
+                                      });
                                     }}
-                                    placeholder="e.g. Account:"
-                                    className="mt-1"
-                                    data-testid="input-account-label"
-                                  />
-                                  <p className="text-xs text-gray-500 mt-1">Label for account number field</p>
+                                    className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white"
+                                    data-testid="button-add-account-detail"
+                                  >
+                                    <Plus className="h-3 w-3 mr-1" />
+                                    Add Row
+                                  </Button>
                                 </div>
                                 
-                                <div>
-                                  <Label className="text-xs font-medium">Creditor Label</Label>
-                                  <Input
-                                    value={emailTemplateForm.accountDetails[1]?.label || ""}
-                                    onChange={(e) => {
-                                      const newDetails = [...emailTemplateForm.accountDetails];
-                                      newDetails[1] = { ...newDetails[1], label: e.target.value };
-                                      setEmailTemplateForm({...emailTemplateForm, accountDetails: newDetails});
-                                    }}
-                                    placeholder="e.g. Creditor:"
-                                    className="mt-1"
-                                    data-testid="input-creditor-label"
-                                  />
-                                  <p className="text-xs text-gray-500 mt-1">Label for creditor field</p>
-                                </div>
-                                
-                                <div>
-                                  <Label className="text-xs font-medium">Balance Label</Label>
-                                  <Input
-                                    value={emailTemplateForm.accountDetails[2]?.label || ""}
-                                    onChange={(e) => {
-                                      const newDetails = [...emailTemplateForm.accountDetails];
-                                      newDetails[2] = { ...newDetails[2], label: e.target.value };
-                                      setEmailTemplateForm({...emailTemplateForm, accountDetails: newDetails});
-                                    }}
-                                    placeholder="e.g. Balance:"
-                                    className="mt-1"
-                                    data-testid="input-balance-label"
-                                  />
-                                  <p className="text-xs text-gray-500 mt-1">Label for balance field</p>
-                                </div>
-                                
-                                <div>
-                                  <Label className="text-xs font-medium">Due Date Label</Label>
-                                  <Input
-                                    value={emailTemplateForm.accountDetails[3]?.label || ""}
-                                    onChange={(e) => {
-                                      const newDetails = [...emailTemplateForm.accountDetails];
-                                      newDetails[3] = { ...newDetails[3], label: e.target.value };
-                                      setEmailTemplateForm({...emailTemplateForm, accountDetails: newDetails});
-                                    }}
-                                    placeholder="e.g. Due Date:"
-                                    className="mt-1"
-                                    data-testid="input-due-date-label"
-                                  />
-                                  <p className="text-xs text-gray-500 mt-1">Label for due date field</p>
-                                </div>
+                                {emailTemplateForm.accountDetails.map((detail, index) => (
+                                  <div key={index} className="flex gap-2 items-start">
+                                    <div className="flex-1">
+                                      <Input
+                                        value={detail.label}
+                                        onChange={(e) => {
+                                          const newDetails = [...emailTemplateForm.accountDetails];
+                                          newDetails[index] = { ...newDetails[index], label: e.target.value };
+                                          setEmailTemplateForm({...emailTemplateForm, accountDetails: newDetails});
+                                        }}
+                                        placeholder="Label (e.g. Account:)"
+                                        className="text-sm"
+                                        data-testid={`input-detail-label-${index}`}
+                                      />
+                                    </div>
+                                    <div className="flex-1">
+                                      <Input
+                                        value={detail.value}
+                                        onChange={(e) => {
+                                          const newDetails = [...emailTemplateForm.accountDetails];
+                                          newDetails[index] = { ...newDetails[index], value: e.target.value };
+                                          setEmailTemplateForm({...emailTemplateForm, accountDetails: newDetails});
+                                        }}
+                                        placeholder="Value (e.g. {{accountNumber}})"
+                                        className="text-sm"
+                                        data-testid={`input-detail-value-${index}`}
+                                      />
+                                    </div>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        const newDetails = emailTemplateForm.accountDetails.filter((_, i) => i !== index);
+                                        setEmailTemplateForm({...emailTemplateForm, accountDetails: newDetails});
+                                      }}
+                                      className="h-10 px-2 text-red-600 hover:bg-red-50 border-red-300"
+                                      data-testid={`button-remove-detail-${index}`}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                ))}
+                                <p className="text-xs text-gray-500 mt-2">
+                                  💡 Use variables like {'{{accountNumber}}'}, {'{{balance}}'}, {'{{creditor}}'} in values
+                                </p>
                               </div>
                             )}
                           </div>
 
-                          <Separator className="my-4" />
-
-                          <div>
-                            <Label className="text-sm font-medium mb-2 block">Insert Variables</Label>
-                            <p className="text-xs text-gray-500 mb-2">
-                              Click a variable to insert it into the focused field (click any field above first)
-                            </p>
-                            <div className="flex flex-wrap gap-1.5 p-3 bg-gray-50 rounded-lg border">
-                              {templateVariables.map((variable) => (
-                                <button
-                                  key={variable.value}
-                                  type="button"
-                                  onClick={() => insertVariable(variable.value)}
-                                  className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded border border-blue-200 hover:bg-blue-200 transition cursor-pointer"
-                                  data-testid={`var-${variable.value.replace(/[{}]/g, '')}`}
-                                >
-                                  {variable.label}
-                                </button>
-                              ))}
+                          <div className="border rounded-lg p-4 bg-gray-50">
+                            <Label className="text-sm font-medium flex items-center gap-2 mb-3">
+                              <Eye className="h-4 w-4" />
+                              Preview
+                            </Label>
+                            <div className="border rounded-lg overflow-auto bg-white p-4 max-h-96">
+                              {emailTemplateForm.mainMessage ? (
+                                <div className="bg-white">
+                                  {(tenantSettings as any)?.logoUrl && (
+                                    <div className="text-center mb-6 pb-6 border-b">
+                                      <img 
+                                        src={(tenantSettings as any).logoUrl} 
+                                        alt="Agency Logo" 
+                                        className="h-12 mx-auto"
+                                      />
+                                    </div>
+                                  )}
+                                  <div className="mb-4 pb-4 border-b">
+                                    <div className="text-xs text-gray-500 mb-1">Subject:</div>
+                                    <div className="font-semibold text-gray-900">
+                                      {emailTemplateForm.subject
+                                        .replace(/\{\{accountNumber\}\}/g, "[Account #]")
+                                        .replace(/\{\{firstName\}\}/g, "John")
+                                        .replace(/\{\{fullName\}\}/g, "John Doe")
+                                        .replace(/\{\{creditor\}\}/g, "[Creditor]")
+                                        .replace(/\{\{balance\}\}/g, "[Balance]")
+                                        .replace(/\{\{dueDate\}\}/g, "[Due Date]") || "No subject"}
+                                    </div>
+                                  </div>
+                                  <div 
+                                    className="prose prose-sm max-w-none"
+                                    dangerouslySetInnerHTML={{ __html: renderPreview() }}
+                                  />
+                                </div>
+                              ) : (
+                                <div className="h-full flex items-center justify-center text-gray-400 py-8">
+                                  <div className="text-center">
+                                    <Eye className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                                    <p className="text-sm">Select a template design to see preview</p>
+                                  </div>
+                                </div>
+                              )}
                             </div>
-                            <p className="text-xs text-gray-500 mt-2">
-                              💡 Tip: Variables work in ALL fields - Subject, Greeting, Message, Button URL, etc.
-                            </p>
                           </div>
                         </div>
 
-                        {/* Right Panel - Live Preview */}
-                        <div className="flex flex-col border-l pl-4 overflow-hidden">
-                          <div className="mb-3">
+                        {/* Fixed Sidebar - Variables */}
+                        <div className="w-80 border-l pl-4 overflow-y-auto">
+                          <div className="sticky top-0 bg-white pb-3">
                             <Label className="text-sm font-medium flex items-center gap-2">
-                              <Eye className="h-4 w-4" />
-                              Live Preview
+                              <Code className="h-4 w-4" />
+                              Variables
                             </Label>
                             <p className="text-xs text-gray-500 mt-1">
-                              See how your email will look with sample data
-                            </p>
-                            <p className="text-xs text-gray-400 mt-1">
-                              Sample values are for preview only — real consumer and account details will populate automatically.
+                              Click to insert into any field
                             </p>
                           </div>
-                          
-                          <div className="flex-1 border rounded-lg overflow-auto bg-gray-50 p-4">
-                            {emailTemplateForm.mainMessage ? (
-                              <div className="bg-white rounded shadow-sm p-6 mx-auto max-w-2xl">
-                                {/* Logo if available */}
-                                {(tenantSettings as any)?.logoUrl && (
-                                  <div className="text-center mb-6 pb-6 border-b">
-                                    <img 
-                                      src={(tenantSettings as any).logoUrl} 
-                                      alt="Agency Logo" 
-                                      className="h-12 mx-auto"
-                                    />
-                                  </div>
-                                )}
-                                {/* Subject */}
-                                <div className="mb-4 pb-4 border-b">
-                                  <div className="text-xs text-gray-500 mb-1">Subject:</div>
-                                  <div className="font-semibold text-gray-900">
-                                    {emailTemplateForm.subject
-                                      .replace(/\{\{accountNumber\}\}/g, "[Account #]")
-                                      .replace(/\{\{firstName\}\}/g, "John")
-                                      .replace(/\{\{fullName\}\}/g, "John Doe")
-                                      .replace(/\{\{creditor\}\}/g, "[Creditor]")
-                                      .replace(/\{\{balance\}\}/g, "[Balance]")
-                                      .replace(/\{\{dueDate\}\}/g, "[Due Date]") || "No subject"}
-                                  </div>
-                                </div>
-                                {/* Rendered HTML */}
-                                <div 
-                                  className="prose prose-sm max-w-none"
-                                  dangerouslySetInnerHTML={{ __html: renderPreview() }}
-                                />
-                              </div>
-                            ) : (
-                              <div className="h-full flex items-center justify-center text-gray-400">
-                                <div className="text-center">
-                                  <Eye className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                                  <p className="text-sm">Select a template design to see preview</p>
-                                </div>
-                              </div>
-                            )}
+                          <div className="flex flex-wrap gap-1.5">
+                            {templateVariables.map((variable) => (
+                              <button
+                                key={variable.value}
+                                type="button"
+                                onClick={() => insertVariable(variable.value)}
+                                className="text-xs px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition cursor-pointer font-medium shadow-sm"
+                                data-testid={`var-${variable.value.replace(/[{}]/g, '')}`}
+                              >
+                                {variable.label}
+                              </button>
+                            ))}
                           </div>
+                          <p className="text-xs text-gray-500 mt-2">
+                            💡 Tip: Variables work in ALL fields - Subject, Greeting, Message, Button URL, etc.
+                          </p>
                         </div>
                       </div>
                       
