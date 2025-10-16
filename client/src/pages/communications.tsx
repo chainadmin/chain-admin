@@ -664,7 +664,7 @@ export default function Communications() {
     const buttonText = emailTemplateForm.buttonText || "View Account";
     const buttonUrlTemplate = emailTemplateForm.buttonUrl || "{{consumerPortalLink}}";
     const resolvedConsumerPortalUrl =
-      consumerPortalUrl || fallbackAgencyUrl || "https://your-agency.chainsoftwaregroup.com";
+      consumerPortalUrl || "https://portal.chainsoftwaregroup.com/consumer-login";
     const resolvedButtonUrl = buttonUrlTemplate.replace(
       /\{\{\s*consumerPortalLink\s*\}\}/gi,
       resolvedConsumerPortalUrl
@@ -2399,9 +2399,9 @@ export default function Communications() {
                       <div className="rounded-xl border border-white/15 bg-white/10 p-3">
                         <div className="flex items-center justify-between">
                           <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium text-gray-600 mb-1">Agency URL:</p>
+                            <p className="text-xs font-medium text-gray-600 mb-1">Consumer Portal URL:</p>
                             <p className="text-xs text-gray-800 font-mono truncate">
-                              {window.location.origin}/agency/{(userData as any)?.platformUser?.tenant?.slug || 'your-agency'}
+                              {consumerPortalUrl || 'Configure portal URL in settings'}
                             </p>
                           </div>
                           <Button
@@ -2409,13 +2409,16 @@ export default function Communications() {
                             size="sm"
                             className="ml-2 h-7 w-7 rounded-full bg-white/10 p-0 text-blue-100/70 hover:bg-slate-900/10"
                             onClick={() => {
-                              const url = `${window.location.origin}/agency/${(userData as any)?.platformUser?.tenant?.slug || 'your-agency'}`;
-                              navigator.clipboard.writeText(url);
-                              toast({
-                                title: "URL Copied",
-                                description: "Agency URL has been copied to clipboard.",
-                              });
+                              const url = consumerPortalUrl || '';
+                              if (url) {
+                                navigator.clipboard.writeText(url);
+                                toast({
+                                  title: "URL Copied",
+                                  description: "Consumer portal URL has been copied to clipboard.",
+                                });
+                              }
                             }}
+                            disabled={!consumerPortalUrl}
                             data-testid={`button-copy-url-${template.id}`}
                           >
                             <Copy className="h-3 w-3" />
@@ -2879,11 +2882,11 @@ export default function Communications() {
                             <div className="mt-1 font-semibold text-blue-50">{campaign.totalSent || 0}</div>
                           </div>
                         </div>
-                        {/* Agency URL for reference */}
+                        {/* Consumer Portal URL for reference */}
                         <div className="mt-4 border-t border-white/15 pt-4">
-                          <span className="text-[11px] uppercase tracking-wide text-blue-100/70">Agency URL</span>
+                          <span className="text-[11px] uppercase tracking-wide text-blue-100/70">Consumer Portal URL</span>
                           <span className="mt-1 block font-mono text-xs text-blue-50">
-                            {consumerPortalUrl || fallbackAgencyUrl || 'Configure your portal URL in settings'}
+                            {consumerPortalUrl || 'Configure your portal URL in settings'}
                           </span>
                         </div>
                         {campaign.status === "completed" && (
