@@ -3922,7 +3922,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Update tenant settings table with other settings
-      const tenantSettingsPayload: Record<string, any> = {
+      const tenantSettingsPayload: any = {
         ...otherSettings,
         smaxApiKey: finalSmaxApiKey,
         smaxPin: finalSmaxPin,
@@ -3937,7 +3937,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tenantSettingsPayload.merchantApiPin = finalMerchantApiPin || null;
       }
 
-      const updatedSettings = await storage.upsertTenantSettings(tenantSettingsPayload);
+      const updatedSettings = await storage.upsertTenantSettings(tenantSettingsPayload as any);
 
       const maskedUpdatedSettings = { ...updatedSettings } as typeof updatedSettings;
 
@@ -4364,9 +4364,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           // Send email to all admin users
           for (const admin of adminUsers) {
-            if (admin.email) {
+            if (admin.userDetails?.email) {
               await emailService.sendEmail({
-                to: admin.email,
+                to: admin.userDetails.email,
                 subject: emailSubject,
                 html: emailBody,
                 from: `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>`,
