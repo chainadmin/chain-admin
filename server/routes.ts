@@ -4764,28 +4764,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Step 2: Process payment (use token if available, otherwise use card directly)
+      // USAePay API v2 format
       let usaepayPayload: any = {
-        command: "sale",
         amount: (amountCents / 100).toFixed(2),
         invoice: accountId || `consumer_${consumerId}`,
         description: arrangement 
           ? `${arrangement.name} - Payment for account`
-          : `Payment for account`
+          : `Payment for account`,
+        // For v2 API, we need a source object
+        source: {}
       };
 
       if (paymentToken) {
-        // Use saved token for payment
-        usaepayPayload.paymentkey = paymentToken;
-        usaepayPayload.cvv = cvv; // CVV still required for token payments
+        // Use saved token for payment (v2 format)
+        usaepayPayload.source = {
+          key: paymentToken,
+          cvv: cvv
+        };
       } else {
-        // Use card directly
-        usaepayPayload.creditcard = {
-          number: cardNumber.replace(/\s/g, ''),
-          expiration: `${expiryMonth}${expiryYear.slice(-2)}`,
-          cvv: cvv,
-          cardholder: cardName,
-          avs_street: "",
-          avs_zip: zipCode || ""
+        // Use card directly (v2 format)
+        usaepayPayload.source = {
+          card: {
+            number: cardNumber.replace(/\s/g, ''),
+            expiration: `${expiryMonth}${expiryYear.slice(-2)}`,
+            cvv: cvv,
+            cardholder: cardName,
+            avs_street: "",
+            avs_zip: zipCode || ""
+          }
         };
       }
 
