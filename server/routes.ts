@@ -239,13 +239,15 @@ function replaceTemplateVariables(
         const uniqueFolderCount = new Set(accountsData.map(a => a.folderId).filter(Boolean)).size;
         console.warn(`⚠️ WARNING: No accounts found with this folder ID`);
         console.log(`   Total accounts with folders: ${totalAccountsWithFolder}, Unique folders: ${uniqueFolderCount}`);
+        console.log(`   Sample folder IDs from accounts:`, Array.from(new Set(accountsData.slice(0, 5).map(a => a.folderId).filter(Boolean))));
       }
       
       const consumerIds = new Set(
         accountsInFolder.map(acc => acc.consumerId)
       );
       targetedConsumers = consumersList.filter(c => consumerIds.has(c.id));
-      console.log(`✅ Filtered to ${targetedConsumers.length} consumers`);
+      console.log(`✅ FOLDER FILTER RESULT: Started with ${consumersList.length} total consumers, filtered to ${targetedConsumers.length} consumers in folder "${folderId}"`);
+      console.log(`   Targeted consumer emails (first 3):`, targetedConsumers.slice(0, 3).map(c => c.email));
     } else if (targetGroup === 'with-balance') {
       const consumerIds = new Set(
         accountsData
