@@ -219,6 +219,96 @@ function replaceTemplateVariables(
   return processedTemplate;
 }
 
+  async function notifyTenantAdmins(options: {
+    tenantId: string;
+    subject: string;
+    eventType: 'consumer_registered' | 'payment_made' | 'arrangement_setup';
+    consumer?: { firstName: string; lastName: string; email: string };
+    amount?: number;
+    arrangementType?: string;
+  }) {
+    try {
+      // Get tenant information
+      const tenant = await storage.getTenant(options.tenantId);
+      if (!tenant) {
+        console.error(`[Notification] Tenant ${options.tenantId} not found`);
+        return;
+      }
+
+      // Get all admin users for this tenant
+      const platformUsers = await storage.getPlatformUsersByTenant(options.tenantId);
+      
+      if (platformUsers.length === 0) {
+        console.log(`[Notification] No admin users found for tenant ${tenant.name}`);
+        return;
+      }
+
+      // Build email body based on event type
+      let emailBody = '';
+      const consumerName = options.consumer ? `${options.consumer.firstName} ${options.consumer.lastName}` : 'A consumer';
+      
+      if (options.eventType === 'consumer_registered') {
+        emailBody = `
+          <h2>New Consumer Registration</h2>
+          <p>${consumerName} has successfully registered for the consumer portal.</p>
+          <p><strong>Email:</strong> ${options.consumer?.email || 'N/A'}</p>
+          <p>They can now view their accounts and make payments through the portal.</p>
+        `;
+      } else if (options.eventType === 'payment_made') {
+        const amountFormatted = options.amount ? `$${(options.amount / 100).toFixed(2)}` : 'N/A';
+        emailBody = `
+          <h2>New Payment Received</h2>
+          <p>${consumerName} has made a payment.</p>
+          <p><strong>Amount:</strong> ${amountFormatted}</p>
+          <p><strong>Consumer Email:</strong> ${options.consumer?.email || 'N/A'}</p>
+        `;
+      } else if (options.eventType === 'arrangement_setup') {
+        emailBody = `
+          <h2>New Payment Arrangement</h2>
+          <p>${consumerName} has set up a payment arrangement.</p>
+          <p><strong>Arrangement Type:</strong> ${options.arrangementType || 'N/A'}</p>
+          <p><strong>Consumer Email:</strong> ${options.consumer?.email || 'N/A'}</p>
+        `;
+      }
+
+      // Add footer
+      emailBody += `
+        <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;">
+        <p style="color: #666; font-size: 12px;">
+          This is an automated notification from ${tenant.name}.<br>
+          To manage your notification preferences, please log in to your admin dashboard.
+        </p>
+      `;
+
+      // Send email to all admins
+      const emailPromises = platformUsers.map(async (platformUser) => {
+        const userEmail = platformUser.userDetails?.email;
+        if (!userEmail) {
+          console.warn(`[Notification] Platform user has no email address`);
+          return;
+        }
+
+        try {
+          await emailService.sendEmail({
+            to: userEmail,
+            from: `notifications@chainsoftwaregroup.com`,
+            subject: `[${tenant.name}] ${options.subject}`,
+            html: emailBody,
+            tenantId: options.tenantId,
+          });
+        } catch (error) {
+          console.error(`[Notification] Failed to send ${options.eventType} notification to admin`, error);
+        }
+      });
+
+      const results = await Promise.allSettled(emailPromises);
+      const successCount = results.filter(r => r.status === 'fulfilled').length;
+      console.log(`[Notification] Sent ${options.eventType} notifications to ${successCount}/${platformUsers.length} admins`);
+    } catch (error) {
+      console.error('[Notification] Error sending tenant admin notifications:', error);
+    }
+  }
+
   async function resolveEmailCampaignAudience(tenantId: string, targetGroup: string, folderId?: string) {
     const consumersList = await storage.getConsumersByTenant(tenantId);
     const accountsData = await storage.getAccountsByTenant(tenantId);
@@ -2362,6 +2452,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           const updatedConsumer = await storage.updateConsumer(existingConsumer.id, updateData);
 
+          // Send notification to admins if this is a new registration (not re-registration)
+          if (!existingConsumer.isRegistered && updatedConsumer.isRegistered && existingConsumer.tenantId) {
+            await notifyTenantAdmins({
+              tenantId: existingConsumer.tenantId,
+              subject: 'New Consumer Registration',
+              eventType: 'consumer_registered',
+              consumer: {
+                firstName: updatedConsumer.firstName || firstName,
+                lastName: updatedConsumer.lastName || lastName,
+                email: updatedConsumer.email || email,
+              },
+            }).catch(err => console.error('Failed to send registration notification:', err));
+          }
+
           // Only get tenant info if consumer has a tenantId
           let tenantInfo = null;
           if (existingConsumer.tenantId) {
@@ -2449,6 +2553,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("Creating new consumer with data:", JSON.stringify(consumerData));
       const newConsumer = await storage.createConsumer(consumerData);
       console.log("New consumer created successfully:", newConsumer.id);
+
+      // Send notification to admins about new registration
+      if (tenantId) {
+        await notifyTenantAdmins({
+          tenantId,
+          subject: 'New Consumer Registration',
+          eventType: 'consumer_registered',
+          consumer: {
+            firstName: newConsumer.firstName || firstName,
+            lastName: newConsumer.lastName || lastName,
+            email: newConsumer.email || email,
+          },
+        }).catch(err => console.error('Failed to send registration notification:', err));
+      }
 
       return res.json({ 
         message: tenantInfo 
@@ -4921,6 +5039,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
           : `Online payment - ${cardName} ending in ${cardLast4}`,
       });
 
+      // Send notification to admins about successful payment
+      if (success) {
+        const consumer = await storage.getConsumer(consumerId);
+        if (consumer) {
+          await notifyTenantAdmins({
+            tenantId,
+            subject: 'New Payment Received',
+            eventType: 'payment_made',
+            consumer: {
+              firstName: consumer.firstName || '',
+              lastName: consumer.lastName || '',
+              email: consumer.email || '',
+            },
+            amount: amountCents,
+          }).catch(err => console.error('Failed to send payment notification:', err));
+        }
+      }
+
       // Step 3: Save payment method if requested and payment successful
       let savedPaymentMethod = null;
       if (success && paymentToken && (saveCard || setupRecurring)) {
@@ -4984,6 +5120,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
             remainingPayments,
             status: 'active',
           });
+
+          // Send notification to admins about new arrangement
+          const consumer = await storage.getConsumer(consumerId);
+          if (consumer) {
+            await notifyTenantAdmins({
+              tenantId,
+              subject: 'New Payment Arrangement Setup',
+              eventType: 'arrangement_setup',
+              consumer: {
+                firstName: consumer.firstName || '',
+                lastName: consumer.lastName || '',
+                email: consumer.email || '',
+              },
+              arrangementType: arrangement.name || arrangement.planType,
+            }).catch(err => console.error('Failed to send arrangement notification:', err));
+          }
 
           // Update consumer status to pending_payment since they now have an active schedule
           await storage.updateConsumer(consumerId, { paymentStatus: 'pending_payment' });
@@ -7238,14 +7390,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('✅ Matched tenant:', matchedTenant.name);
 
       // Try to find the consumer by email
-      const consumer = await storage.getConsumerByEmail(matchedTenant.id, fromEmail);
+      const consumer = await storage.getConsumerByEmailAndTenant(fromEmail, matchedTenant.slug);
       
       // Store the reply
       await storage.createEmailReply({
         tenantId: matchedTenant.id,
         consumerId: consumer?.id || null,
         fromEmail,
-        fromName,
+        toEmail,
         subject: Subject || '(No Subject)',
         textBody: TextBody || '',
         htmlBody: HtmlBody || '',

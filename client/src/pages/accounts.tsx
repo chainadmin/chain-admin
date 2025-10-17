@@ -46,6 +46,7 @@ export default function Accounts() {
   const [showComposeEmailDialog, setShowComposeEmailDialog] = useState(false);
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<any>(null);
+  const [displayLimit, setDisplayLimit] = useState(50);
   const [deleteFolderDialog, setDeleteFolderDialog] = useState<{ open: boolean; folder: any }>({
     open: false,
     folder: null,
@@ -437,6 +438,11 @@ export default function Accounts() {
     selectedFolderId === "all"
       ? accountsList
       : accountsList.filter((account: any) => account.consumer?.folderId === selectedFolderId);
+  
+  // Apply pagination
+  const paginatedAccounts = folderFilteredAccounts.slice(0, displayLimit);
+  const hasMoreAccounts = folderFilteredAccounts.length > displayLimit;
+  
   const selectedFolder =
     selectedFolderId === "all"
       ? null
@@ -538,7 +544,10 @@ export default function Accounts() {
                         ? "border-sky-400/60 bg-sky-500/20 text-white shadow-lg shadow-sky-900/30"
                         : "border-white/10 bg-white/5 text-blue-100 hover:bg-white/10"
                     }`}
-                    onClick={() => setSelectedFolderId("all")}
+                    onClick={() => {
+                      setSelectedFolderId("all");
+                      setDisplayLimit(50);
+                    }}
                     data-testid="folder-all"
                   >
                     <FolderOpen className="h-4 w-4" />
@@ -556,7 +565,10 @@ export default function Accounts() {
                             ? "border-sky-400/60 bg-sky-500/20 text-white shadow-lg shadow-sky-900/30"
                             : "border-white/10 bg-white/5 text-blue-100 hover:bg-white/10"
                         }`}
-                        onClick={() => setSelectedFolderId(folder.id)}
+                        onClick={() => {
+                          setSelectedFolderId(folder.id);
+                          setDisplayLimit(50);
+                        }}
                         data-testid={`folder-${folder.id}`}
                       >
                         <span
@@ -599,7 +611,7 @@ export default function Accounts() {
 
         <section>
           <AccountsTable
-            accounts={folderFilteredAccounts}
+            accounts={paginatedAccounts}
             isLoading={accountsLoading}
             onView={handleView}
             onContact={handleContact}
@@ -607,6 +619,25 @@ export default function Accounts() {
             showFolderColumn
             showDeleteButton
           />
+          
+          {!accountsLoading && hasMoreAccounts && (
+            <div className="mt-6 flex justify-center">
+              <Button
+                variant="outline"
+                onClick={() => setDisplayLimit(prev => prev + 50)}
+                className="rounded-xl border-white/10 bg-white/5 px-6 py-2 text-blue-100 hover:bg-white/10"
+                data-testid="button-load-more"
+              >
+                Load More ({folderFilteredAccounts.length - displayLimit} remaining)
+              </Button>
+            </div>
+          )}
+          
+          {!accountsLoading && folderFilteredAccounts.length > 0 && (
+            <div className="mt-4 text-center text-sm text-blue-100/60">
+              Showing {paginatedAccounts.length} of {folderFilteredAccounts.length} accounts
+            </div>
+          )}
         </section>
       </div>
 
