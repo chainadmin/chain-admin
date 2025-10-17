@@ -44,6 +44,7 @@ export const tenants = pgTable("tenants", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   slug: text("slug").unique().notNull(),
+  businessType: text("business_type").default('call_center'), // Type of business using the platform
   brand: jsonb("brand").default(sql`'{}'::jsonb`),
   isActive: boolean("is_active").default(true), // Can be suspended by platform owner
   suspendedAt: timestamp("suspended_at"),

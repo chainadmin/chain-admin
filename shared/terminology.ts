@@ -1,0 +1,199 @@
+// Terminology mapping system for multi-industry platform
+// Maps business-specific terms based on tenant business type
+
+export type BusinessType = 
+  | 'call_center' 
+  | 'billing_service' 
+  | 'subscription_provider' 
+  | 'freelancer_consultant' 
+  | 'property_management';
+
+export interface TerminologyMap {
+  // Person/Entity terms
+  consumer: string;           // The person using the service
+  consumerPlural: string;
+  creditor: string;           // The entity providing the service
+  creditorPlural: string;
+  
+  // Transaction/Work terms
+  account: string;            // A record of work or debt
+  accountPlural: string;
+  placement: string;          // Initial assignment or work item
+  placementPlural: string;
+  
+  // Financial terms
+  balance: string;            // Amount owed or due
+  payment: string;            // Money received
+  paymentPlural: string;
+  settlement: string;         // Reduced payment or completion
+  settlementPlural: string;
+  
+  // Action terms
+  collect: string;            // Primary action verb
+  collecting: string;
+  collection: string;
+  
+  // Status terms
+  delinquent: string;         // Behind on payments/obligations
+  current: string;            // Up to date
+  paidOff: string;           // Fully completed
+}
+
+const terminologyMaps: Record<BusinessType, TerminologyMap> = {
+  // Debt Collection / Call Center - Original terminology
+  call_center: {
+    consumer: 'Debtor',
+    consumerPlural: 'Debtors',
+    creditor: 'Creditor',
+    creditorPlural: 'Creditors',
+    account: 'Account',
+    accountPlural: 'Accounts',
+    placement: 'Placement',
+    placementPlural: 'Placements',
+    balance: 'Balance',
+    payment: 'Payment',
+    paymentPlural: 'Payments',
+    settlement: 'Settlement',
+    settlementPlural: 'Settlements',
+    collect: 'Collect',
+    collecting: 'Collecting',
+    collection: 'Collection',
+    delinquent: 'Delinquent',
+    current: 'Current',
+    paidOff: 'Paid Off',
+  },
+  
+  // Billing / Service Company
+  billing_service: {
+    consumer: 'Customer',
+    consumerPlural: 'Customers',
+    creditor: 'Service Provider',
+    creditorPlural: 'Service Providers',
+    account: 'Invoice',
+    accountPlural: 'Invoices',
+    placement: 'Service Order',
+    placementPlural: 'Service Orders',
+    balance: 'Amount Due',
+    payment: 'Payment',
+    paymentPlural: 'Payments',
+    settlement: 'Discount Offer',
+    settlementPlural: 'Discount Offers',
+    collect: 'Bill',
+    collecting: 'Billing',
+    collection: 'Billing',
+    delinquent: 'Overdue',
+    current: 'Current',
+    paidOff: 'Paid',
+  },
+  
+  // Subscription Provider
+  subscription_provider: {
+    consumer: 'Subscriber',
+    consumerPlural: 'Subscribers',
+    creditor: 'Provider',
+    creditorPlural: 'Providers',
+    account: 'Subscription',
+    accountPlural: 'Subscriptions',
+    placement: 'Plan',
+    placementPlural: 'Plans',
+    balance: 'Amount Due',
+    payment: 'Payment',
+    paymentPlural: 'Payments',
+    settlement: 'Discount',
+    settlementPlural: 'Discounts',
+    collect: 'Charge',
+    collecting: 'Charging',
+    collection: 'Billing',
+    delinquent: 'Past Due',
+    current: 'Active',
+    paidOff: 'Paid',
+  },
+  
+  // Freelancer / Consultant
+  freelancer_consultant: {
+    consumer: 'Client',
+    consumerPlural: 'Clients',
+    creditor: 'Consultant',
+    creditorPlural: 'Consultants',
+    account: 'Project',
+    accountPlural: 'Projects',
+    placement: 'Engagement',
+    placementPlural: 'Engagements',
+    balance: 'Amount Due',
+    payment: 'Payment',
+    paymentPlural: 'Payments',
+    settlement: 'Adjusted Amount',
+    settlementPlural: 'Adjusted Amounts',
+    collect: 'Invoice',
+    collecting: 'Invoicing',
+    collection: 'Invoicing',
+    delinquent: 'Overdue',
+    current: 'Current',
+    paidOff: 'Completed',
+  },
+  
+  // Property Management
+  property_management: {
+    consumer: 'Tenant',
+    consumerPlural: 'Tenants',
+    creditor: 'Property Owner',
+    creditorPlural: 'Property Owners',
+    account: 'Lease',
+    accountPlural: 'Leases',
+    placement: 'Unit',
+    placementPlural: 'Units',
+    balance: 'Amount Due',
+    payment: 'Rent Payment',
+    paymentPlural: 'Rent Payments',
+    settlement: 'Payment Plan',
+    settlementPlural: 'Payment Plans',
+    collect: 'Collect Rent',
+    collecting: 'Collecting Rent',
+    collection: 'Rent Collection',
+    delinquent: 'Late',
+    current: 'Current',
+    paidOff: 'Paid',
+  },
+};
+
+/**
+ * Get terminology mapping for a specific business type
+ */
+export function getTerminology(businessType: BusinessType = 'call_center'): TerminologyMap {
+  return terminologyMaps[businessType] || terminologyMaps.call_center;
+}
+
+/**
+ * Get a specific term for a business type
+ */
+export function getTerm(businessType: BusinessType = 'call_center', key: keyof TerminologyMap): string {
+  const map = getTerminology(businessType);
+  return map[key];
+}
+
+/**
+ * Get business type display name
+ */
+export function getBusinessTypeName(businessType: BusinessType): string {
+  const names: Record<BusinessType, string> = {
+    call_center: 'Debt Collection / Call Center',
+    billing_service: 'Billing / Service Company',
+    subscription_provider: 'Subscription Provider',
+    freelancer_consultant: 'Freelancer / Consultant',
+    property_management: 'Property Management',
+  };
+  return names[businessType] || 'Debt Collection / Call Center';
+}
+
+/**
+ * Get all available business types
+ */
+export function getBusinessTypes(): { value: BusinessType; label: string }[] {
+  return [
+    { value: 'call_center', label: 'Debt Collection / Call Center' },
+    { value: 'billing_service', label: 'Billing / Service Company' },
+    { value: 'subscription_provider', label: 'Subscription Provider' },
+    { value: 'freelancer_consultant', label: 'Freelancer / Consultant' },
+    { value: 'property_management', label: 'Property Management' },
+  ];
+}

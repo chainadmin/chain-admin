@@ -148,6 +148,7 @@ export interface IStorage {
   createTrialTenant(data: {
     name: string;
     slug: string;
+    businessType?: string;
     ownerFirstName: string;
     ownerLastName: string;
     ownerDateOfBirth: string;
@@ -474,6 +475,7 @@ export class DatabaseStorage implements IStorage {
   async createTrialTenant(data: {
     name: string;
     slug: string;
+    businessType?: string;
     ownerFirstName: string;
     ownerLastName: string;
     ownerDateOfBirth: string;
@@ -485,6 +487,7 @@ export class DatabaseStorage implements IStorage {
     const [newTenant] = await db.insert(tenants).values({
       name: data.name,
       slug: data.slug,
+      businessType: data.businessType || 'call_center',
       isTrialAccount: true,
       isPaidAccount: false,
       ownerFirstName: data.ownerFirstName,

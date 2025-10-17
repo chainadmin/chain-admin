@@ -2625,10 +2625,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
     
     try {
-      // Extend validation to include username and password
+      // Extend validation to include username, password, and businessType
       const registrationWithCredentialsSchema = agencyTrialRegistrationSchema.extend({
         username: z.string().min(3).max(50),
         password: z.string().min(8).max(100),
+        businessType: z.enum(['call_center', 'billing_service', 'subscription_provider', 'freelancer_consultant', 'property_management']).optional().default('call_center'),
       });
       
       // Validate the request body
@@ -2678,6 +2679,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tenant = await storage.createTrialTenant({
         name: data.businessName,
         slug,
+        businessType: data.businessType || 'call_center',
         ownerFirstName: data.ownerFirstName,
         ownerLastName: data.ownerLastName,
         ownerDateOfBirth: data.ownerDateOfBirth,

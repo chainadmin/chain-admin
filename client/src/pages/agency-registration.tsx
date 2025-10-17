@@ -3,20 +3,22 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, ApiError } from "@/lib/queryClient";
 import { agencyTrialRegistrationSchema } from "@shared/schema";
-import { CheckCircle, Building, User, Phone, Mail, Calendar, CreditCard, Lock, UserCheck } from "lucide-react";
+import { CheckCircle, Building, User, Phone, Mail, Calendar, CreditCard, Lock, UserCheck, Briefcase } from "lucide-react";
 import { z } from "zod";
 
-// Extend the schema to include username and password
+// Extend the schema to include username, password, and businessType
 const registrationWithCredentialsSchema = agencyTrialRegistrationSchema.extend({
   username: z.string().min(3, "Username must be at least 3 characters").max(50),
   password: z.string().min(8, "Password must be at least 8 characters").max(100),
   confirmPassword: z.string(),
+  businessType: z.enum(['call_center', 'billing_service', 'subscription_provider', 'freelancer_consultant', 'property_management']).default('call_center'),
 }).refine(data => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
@@ -52,6 +54,7 @@ export default function AgencyRegistration() {
       ownerDateOfBirth: "",
       ownerSSN: "",
       businessName: "",
+      businessType: "call_center",
       phoneNumber: "",
       email: "",
       username: "",
@@ -346,6 +349,47 @@ export default function AgencyRegistration() {
                             data-testid="input-business-name"
                           />
                         </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="businessType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center">
+                          <Briefcase className="mr-2 h-4 w-4" />
+                          Business Type
+                        </FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-business-type">
+                              <SelectValue placeholder="Select your business type" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="call_center" data-testid="option-call-center">
+                              Debt Collection / Call Center
+                            </SelectItem>
+                            <SelectItem value="billing_service" data-testid="option-billing-service">
+                              Billing / Service Company
+                            </SelectItem>
+                            <SelectItem value="subscription_provider" data-testid="option-subscription-provider">
+                              Subscription Provider
+                            </SelectItem>
+                            <SelectItem value="freelancer_consultant" data-testid="option-freelancer-consultant">
+                              Freelancer / Consultant
+                            </SelectItem>
+                            <SelectItem value="property_management" data-testid="option-property-management">
+                              Property Management
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>
+                          Choose the type that best describes your business. This customizes the platform terminology for your needs.
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
