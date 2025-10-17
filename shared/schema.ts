@@ -195,6 +195,9 @@ export const emailTemplates = pgTable("email_templates", {
   balanceLabel: text("balance_label").default("Balance:"), // Custom label for balance
   dueDateLabel: text("due_date_label").default("Due Date:"), // Custom label for due date
   designType: text("design_type").default("custom"), // "custom", "postmark-invoice", "postmark-welcome", etc.
+  // New block-based editor structure
+  blocks: jsonb("blocks"), // Array of draggable email blocks [{type, content, style, position}]
+  editorMode: text("editor_mode").default("legacy"), // "legacy" (old HTML editor) or "builder" (new drag-and-drop)
   status: text("status").default("draft"),
   createdAt: timestamp("created_at").defaultNow(),
 });
