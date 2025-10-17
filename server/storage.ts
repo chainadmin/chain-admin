@@ -988,6 +988,11 @@ export class DatabaseStorage implements IStorage {
           updates.status = accountData.status;
         }
         
+        // Update filenumber if provided (critical for SMAX integration)
+        if (accountData.filenumber !== undefined && accountData.filenumber !== existingAccount.filenumber) {
+          updates.filenumber = accountData.filenumber;
+        }
+        
         // Update creditor if provided
         if (accountData.creditor && accountData.creditor !== existingAccount.creditor) {
           updates.creditor = accountData.creditor;

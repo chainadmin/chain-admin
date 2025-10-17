@@ -26,13 +26,15 @@ export default function ImportData() {
                 <li><strong>consumer_first_name</strong> - Consumer's first name</li>
                 <li><strong>consumer_last_name</strong> - Consumer's last name</li>
                 <li><strong>consumer_email</strong> - Consumer's email address</li>
-                <li><strong>account_number</strong> - Account identifier</li>
+                <li><strong>date_of_birth</strong> - Consumer's date of birth (YYYY-MM-DD format)</li>
+                <li><strong>filenumber</strong> - File number (required for SMAX integration)</li>
                 <li><strong>creditor</strong> - Name of the creditor</li>
                 <li><strong>balance</strong> - Outstanding balance amount</li>
               </ul>
 
               <h4 className="text-md font-semibold text-gray-800 mt-4 mb-2">Optional Standard Columns:</h4>
               <ul>
+                <li><strong>account_number</strong> - Account identifier</li>
                 <li><strong>consumer_phone</strong> - Consumer's phone number</li>
                 <li><strong>due_date</strong> - Due date (YYYY-MM-DD format)</li>
               </ul>

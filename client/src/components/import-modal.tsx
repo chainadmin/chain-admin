@@ -101,7 +101,7 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
           'state', 'consumer_state',
           'zip_code', 'zipcode', 'zip', 'consumer_zip', 'consumer_zip_code'
         ];
-        const standardAccountFields = ['account_number', 'account', 'creditor', 'balance', 'due_date'];
+        const standardAccountFields = ['account_number', 'account', 'filenumber', 'file_number', 'creditor', 'balance', 'due_date'];
         
         for (let i = 1; i < lines.length; i++) {
           const values = lines[i].split(',').map(v => v.trim());
@@ -149,8 +149,8 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
             });
           }
 
-          // Extract account data - only if we have a valid consumer email
-          if (consumerKey && row.creditor && row.balance) {
+          // Extract account data - only if we have a valid consumer email, creditor, balance, and filenumber
+          if (consumerKey && row.creditor && row.balance && (row.filenumber || row.file_number)) {
             // Extract additional account data (any non-standard columns)
             const additionalAccountData: any = {};
             headers.forEach(header => {
@@ -163,6 +163,7 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
 
             accounts.push({
               accountNumber: row.account_number || row.account || '',
+              filenumber: row.filenumber || row.file_number || '',
               creditor: row.creditor,
               balanceCents: Math.round(parseFloat(row.balance.replace(/[^0-9.-]/g, '')) * 100),
               dueDate: row.due_date || '',
@@ -187,6 +188,7 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
         // Validate that all consumers have required fields including dateOfBirth
         const missingDOBConsumers = data.consumers.filter((c: any) => !c.dateOfBirth);
         const missingNameConsumers = data.consumers.filter((c: any) => !c.firstName || !c.lastName);
+        const missingFilenumberAccounts = data.accounts.filter((a: any) => !a.filenumber);
         
         const validationErrors = [];
         if (missingDOBConsumers.length > 0) {
@@ -195,6 +197,9 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
         if (missingNameConsumers.length > 0) {
           validationErrors.push(`${missingNameConsumers.length} consumer(s) missing first or last name`);
         }
+        if (missingFilenumberAccounts.length > 0) {
+          validationErrors.push(`${missingFilenumberAccounts.length} account(s) missing filenumber (required for SMAX integration)`);
+        }
         
         setValidationResults({
           consumersCount: data.consumers.length,
@@ -202,6 +207,7 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
           additionalColumns: additionalColumns,
           missingDOBCount: missingDOBConsumers.length,
           missingNameCount: missingNameConsumers.length,
+          missingFilenumberCount: missingFilenumberAccounts.length,
           validationErrors: validationErrors,
           isValid: data.consumers.length > 0 && data.accounts.length > 0 && validationErrors.length === 0,
         });
@@ -260,6 +266,7 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
               <div>
                 <h5 className="font-medium text-blue-800 mb-1">Account Information</h5>
                 <ul className="text-blue-700 space-y-1">
+                  <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">filenumber</code> or <code className="bg-blue-100 px-1 rounded text-xs">file_number</code> (required for SMAX)</li>
                   <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">creditor</code> (required)</li>
                   <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">balance</code> (required, in dollars)</li>
                   <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">account_number</code> or <code className="bg-blue-100 px-1 rounded text-xs">account</code> (optional)</li>
@@ -278,9 +285,9 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
             <h5 className="font-medium text-gray-800 mb-2">Example CSV Format</h5>
             <pre className="text-xs text-gray-600 bg-white p-2 rounded border overflow-x-auto">
-consumer_first_name,consumer_last_name,consumer_email,creditor,balance,account_number
-John,Doe,john.doe@email.com,Credit Card Co,1250.50,ACC123456
-Jane,Smith,jane.smith@email.com,Medical Services,875.25,MED789012
+consumer_first_name,consumer_last_name,consumer_email,date_of_birth,filenumber,creditor,balance,account_number
+John,Doe,john.doe@email.com,1985-05-15,FILE123456,Credit Card Co,1250.50,ACC123456
+Jane,Smith,jane.smith@email.com,1990-08-22,FILE789012,Medical Services,875.25,MED789012
             </pre>
           </div>
 
@@ -405,7 +412,7 @@ Jane,Smith,jane.smith@email.com,Medical Services,875.25,MED789012
                           ))}
                         </ul>
                         <p className="mt-2 text-xs">
-                          Please ensure your CSV includes: first_name, last_name, email, date_of_birth (YYYY-MM-DD format)
+                          Please ensure your CSV includes: first_name, last_name, email, date_of_birth (YYYY-MM-DD format), filenumber
                         </p>
                       </>
                     )}

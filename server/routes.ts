@@ -1071,6 +1071,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Validate account data has required fields
       for (let i = 0; i < accountsData.length; i++) {
         const account = accountsData[i];
+        if (!account.filenumber || !account.filenumber.trim()) {
+          return res.status(400).json({ 
+            message: `Row ${i + 2}: Filenumber is required (needed for SMAX integration)` 
+          });
+        }
         if (!account.creditor || !account.creditor.trim()) {
           return res.status(400).json({ 
             message: `Row ${i + 2}: Creditor is required` 
@@ -1131,6 +1136,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           consumerId: consumer.id,
           folderId: targetFolderId,
           accountNumber: accountData.accountNumber || null,
+          filenumber: accountData.filenumber,
           creditor: accountData.creditor,
           balanceCents: accountData.balanceCents,
           dueDate: accountData.dueDate || null,
@@ -1170,6 +1176,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         email,
         phone,
         dateOfBirth,
+        filenumber,
         accountNumber,
         creditor,
         balanceCents,
@@ -1181,8 +1188,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dueDate,
       } = req.body;
 
-      if (!firstName || !lastName || !email || !creditor || balanceCents === undefined) {
-        return res.status(400).json({ message: "Missing required fields" });
+      if (!firstName || !lastName || !email || !filenumber || !creditor || balanceCents === undefined) {
+        return res.status(400).json({ message: "Missing required fields (filenumber is required for SMAX integration)" });
       }
 
       // Find or create consumer with date of birth for better matching
@@ -1208,6 +1215,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         consumerId: consumer.id,
         folderId: folderId || null,
         accountNumber: accountNumber || null,
+        filenumber: filenumber,
         creditor,
         balanceCents,
         status: 'active',
