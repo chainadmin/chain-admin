@@ -1715,6 +1715,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Email reply routes
+  app.get('/api/email-replies', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const replies = await storage.getEmailRepliesByTenant(tenantId);
+      res.json(replies);
+    } catch (error) {
+      console.error("Error fetching email replies:", error);
+      res.status(500).json({ message: "Failed to fetch email replies" });
+    }
+  });
+
+  app.get('/api/email-replies/:id', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const reply = await storage.getEmailReplyById(req.params.id, tenantId);
+      if (!reply) {
+        return res.status(404).json({ message: "Email reply not found" });
+      }
+      
+      res.json(reply);
+    } catch (error) {
+      console.error("Error fetching email reply:", error);
+      res.status(500).json({ message: "Failed to fetch email reply" });
+    }
+  });
+
+  app.patch('/api/email-replies/:id/read', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const reply = await storage.markEmailReplyAsRead(req.params.id, tenantId);
+      res.json(reply);
+    } catch (error) {
+      console.error("Error marking email reply as read:", error);
+      res.status(500).json({ message: "Failed to mark email reply as read" });
+    }
+  });
+
   // SMS template routes
   app.get('/api/sms-templates', authenticateUser, async (req: any, res) => {
     try {
@@ -7116,6 +7166,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error('❌ Error updating campaign metrics:', error);
     }
   }
+
+  // Postmark inbound email webhook for handling replies from consumers
+  app.post('/api/webhooks/postmark-inbound', async (req, res) => {
+    try {
+      console.log('📨 Received inbound email from Postmark');
+      
+      const {
+        From,
+        FromFull,
+        To,
+        Subject,
+        HtmlBody,
+        TextBody,
+        MessageID,
+        Date: receivedDate,
+        Headers,
+      } = req.body;
+
+      // Extract sender email and name
+      const fromEmail = (From || '').toLowerCase().trim();
+      const fromName = FromFull?.Name || fromEmail.split('@')[0];
+      
+      // Extract the To address to determine which tenant this belongs to
+      const toEmail = (To || '').toLowerCase().trim();
+      
+      console.log('📧 Email details:', {
+        from: fromEmail,
+        to: toEmail,
+        subject: Subject,
+      });
+
+      // Find the tenant by matching the To address with tenant slug or custom sender email
+      const allTenants = await storage.getAllTenants();
+      let matchedTenant = null;
+      
+      for (const tenant of allTenants) {
+        const tenantEmail = `${tenant.slug}@chainsoftwaregroup.com`;
+        if (toEmail.includes(tenantEmail) || (tenant.customSenderEmail && toEmail.includes(tenant.customSenderEmail))) {
+          matchedTenant = tenant;
+          break;
+        }
+      }
+
+      if (!matchedTenant) {
+        console.warn('⚠️ Could not match inbound email to any tenant:', toEmail);
+        return res.status(200).json({ message: 'Email received but no tenant matched' });
+      }
+
+      console.log('✅ Matched tenant:', matchedTenant.name);
+
+      // Try to find the consumer by email
+      const consumer = await storage.getConsumerByEmail(matchedTenant.id, fromEmail);
+      
+      // Store the reply
+      await storage.createEmailReply({
+        tenantId: matchedTenant.id,
+        consumerId: consumer?.id || null,
+        fromEmail,
+        fromName,
+        subject: Subject || '(No Subject)',
+        textBody: TextBody || '',
+        htmlBody: HtmlBody || '',
+        messageId: MessageID,
+        isRead: false,
+      });
+
+      console.log('✅ Email reply stored successfully');
+      res.status(200).json({ message: 'Reply stored successfully' });
+    } catch (error) {
+      console.error('❌ Inbound email webhook error:', error);
+      res.status(500).json({ message: 'Failed to process inbound email' });
+    }
+  });
 
   // Mobile app version check endpoint
   app.get('/api/app-version', (req, res) => {
