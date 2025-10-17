@@ -223,16 +223,21 @@ function replaceTemplateVariables(
     const consumersList = await storage.getConsumersByTenant(tenantId);
     const accountsData = await storage.getAccountsByTenant(tenantId);
 
+    console.log(`🎯 Resolving campaign audience - targetGroup: "${targetGroup}", folderId: "${folderId || 'none'}"`);
+    console.log(`📊 Total consumers in tenant: ${consumersList.length}, Total accounts: ${accountsData.length}`);
+
     let targetedConsumers = consumersList;
 
     if (targetGroup === 'folder' && folderId) {
       // Filter consumers who have accounts in the specified folder
+      const accountsInFolder = accountsData.filter(acc => acc.folderId === folderId);
+      console.log(`📁 Found ${accountsInFolder.length} accounts in folder "${folderId}"`);
+      
       const consumerIds = new Set(
-        accountsData
-          .filter(acc => acc.folderId === folderId)
-          .map(acc => acc.consumerId)
+        accountsInFolder.map(acc => acc.consumerId)
       );
       targetedConsumers = consumersList.filter(c => consumerIds.has(c.id));
+      console.log(`✅ Filtered to ${targetedConsumers.length} consumers with accounts in this folder`);
     } else if (targetGroup === 'with-balance') {
       const consumerIds = new Set(
         accountsData
@@ -1438,6 +1443,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { name, templateId, targetGroup, folderId } = req.body;
       
+      console.log(`📧 Creating campaign - name: "${name}", targetGroup: "${targetGroup}", folderId: "${folderId || 'none'}"`);
+      
       if (!name || !templateId || !targetGroup) {
         return res.status(400).json({ message: "Name, template ID, and target group are required" });
       }
@@ -1495,6 +1502,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!campaign) {
         return res.status(404).json({ message: "Campaign not found" });
       }
+
+      console.log(`🚀 Approving campaign "${campaign.name}" - targetGroup: "${campaign.targetGroup}", folderId: "${campaign.folderId || 'none'}"`);
 
       const normalizedStatus = (campaign.status || '').toLowerCase();
       if (!['pending', 'pending_approval'].includes(normalizedStatus)) {
