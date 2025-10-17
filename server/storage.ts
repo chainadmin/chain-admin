@@ -962,19 +962,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   async findOrCreateAccount(accountData: InsertAccount): Promise<Account> {
-    // Check if account already exists by account number and consumer (or creditor if no account number)
-    if (accountData.accountNumber && accountData.consumerId) {
+    // Check if account already exists by filenumber and consumer (filenumber is mandatory and unique per consumer)
+    if (accountData.filenumber && accountData.consumerId) {
       const [existingAccount] = await db.select()
         .from(accounts)
         .where(
           and(
             eq(accounts.consumerId, accountData.consumerId),
-            eq(accounts.accountNumber, accountData.accountNumber)
+            eq(accounts.filenumber, accountData.filenumber)
           )
         );
       
       if (existingAccount) {
-        // Account exists - update it with new data
+        // Account exists - update it with new data from CSV
         const updates: any = {};
         
         // Always update balance, folder, and status (allows moving accounts and updating balances)
@@ -988,9 +988,9 @@ export class DatabaseStorage implements IStorage {
           updates.status = accountData.status;
         }
         
-        // Update filenumber if provided (critical for SMAX integration)
-        if (accountData.filenumber !== undefined && accountData.filenumber !== existingAccount.filenumber) {
-          updates.filenumber = accountData.filenumber;
+        // Update accountNumber if provided
+        if (accountData.accountNumber !== undefined && accountData.accountNumber !== existingAccount.accountNumber) {
+          updates.accountNumber = accountData.accountNumber;
         }
         
         // Update creditor if provided
@@ -1013,7 +1013,7 @@ export class DatabaseStorage implements IStorage {
             .set(updates)
             .where(eq(accounts.id, existingAccount.id))
             .returning();
-          console.log(`Updated existing account ${existingAccount.accountNumber} for consumer ${accountData.consumerId}`);
+          console.log(`Updated existing account with filenumber ${existingAccount.filenumber} for consumer ${accountData.consumerId}`);
           return updatedAccount;
         }
         
