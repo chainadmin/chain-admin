@@ -185,7 +185,22 @@ class SmaxService {
     const response = await fetch(url, options);
 
     if (!response.ok) {
-      throw new Error(`SMAX API error: ${response.status}`);
+      // Get the error response body for better debugging
+      let errorBody = '';
+      try {
+        errorBody = await response.text();
+        console.error('❌ SMAX API Error Details:', {
+          status: response.status,
+          statusText: response.statusText,
+          endpoint,
+          method,
+          body: body ? JSON.stringify(body) : 'none',
+          errorResponse: errorBody
+        });
+      } catch (e) {
+        console.error('❌ SMAX API Error (no body):', response.status);
+      }
+      throw new Error(`SMAX API error: ${response.status} - ${errorBody || response.statusText}`);
     }
 
     return response.json();

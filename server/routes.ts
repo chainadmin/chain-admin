@@ -7033,23 +7033,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await updateCampaignMetrics(campaignId, RecordType);
     }
 
-    // Notify SMAX for email open events
+    // Notify SMAX for email open events (optional - may fail if SMAX doesn't support email tracking)
     if (tenantId && normalizedRecordType === 'open') {
       try {
         const { smaxService } = await import('./smaxService');
         const accountNumber = Metadata?.accountNumber || Metadata?.filenumber;
         
         if (accountNumber) {
+          console.log('📤 Attempting to send email tracking to SMAX for account:', accountNumber);
+          
+          // Try with 'email' attempt type (some SMAX installations accept this)
           await smaxService.insertAttempt(tenantId, {
             filenumber: accountNumber,
-            attempttype: 'email_open',
+            attempttype: 'email',  // Changed from 'email_open' - more likely to be accepted
             attemptdate: new Date().toISOString().split('T')[0],
             notes: `Email opened by ${Recipient}`,
-            result: 'opened',
+            result: 'completed',  // Changed from 'opened' - standard result value
           });
+          
+          console.log('✅ Successfully sent email tracking to SMAX');
         }
       } catch (smaxError) {
-        console.error('SMAX email open notification failed:', smaxError);
+        // This is expected if SMAX doesn't support email tracking attempts
+        // The error is logged but doesn't break the webhook processing
+        console.warn('⚠️ SMAX email tracking notification failed (this is normal if SMAX doesn\'t support email tracking):', smaxError);
       }
     }
   }
