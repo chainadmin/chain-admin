@@ -984,7 +984,20 @@ export default function Emails() {
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      {(campaigns as any[]).map((campaign: any) => (
+                      {(campaigns as any[]).map((campaign: any) => {
+                        const getTargetGroupLabel = (targetGroup: string, folderId: string) => {
+                          if (targetGroup === 'folder' && folderId) {
+                            const folder = (folders as any[])?.find(f => f.id === folderId);
+                            return `Folder: ${folder?.name || 'Unknown'}`;
+                          }
+                          if (targetGroup === 'all') return 'All Consumers';
+                          if (targetGroup === 'with-balance') return 'Consumers with Balance';
+                          if (targetGroup === 'decline') return 'Decline Status';
+                          if (targetGroup === 'recent-upload') return 'Recent Upload';
+                          return targetGroup;
+                        };
+                        
+                        return (
                         <div key={campaign.id} className="border rounded-lg p-4" data-testid={`campaign-${campaign.id}`}>
                           <div className="flex justify-between items-start gap-4">
                             <div className="flex-1">
@@ -993,6 +1006,9 @@ export default function Emails() {
                               </div>
                               <p className="text-sm text-gray-600 mb-2">
                                 <strong>Template:</strong> {campaign.templateName}
+                              </p>
+                              <p className="text-sm text-gray-600 mb-2">
+                                <strong>Target:</strong> {getTargetGroupLabel(campaign.targetGroup, campaign.folderId)} ({campaign.totalRecipients || 0} recipients)
                               </p>
                               <div className="grid grid-cols-2 gap-4 text-xs text-gray-500">
                                 <div>Sent: {campaign.totalSent || 0}</div>
@@ -1043,7 +1059,8 @@ export default function Emails() {
                             </div>
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </CardContent>
