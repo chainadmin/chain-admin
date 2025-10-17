@@ -219,13 +219,21 @@ function replaceTemplateVariables(
   return processedTemplate;
 }
 
-  async function resolveEmailCampaignAudience(tenantId: string, targetGroup: string) {
+  async function resolveEmailCampaignAudience(tenantId: string, targetGroup: string, folderId?: string) {
     const consumersList = await storage.getConsumersByTenant(tenantId);
     const accountsData = await storage.getAccountsByTenant(tenantId);
 
     let targetedConsumers = consumersList;
 
-    if (targetGroup === 'with-balance') {
+    if (targetGroup === 'folder' && folderId) {
+      // Filter consumers who have accounts in the specified folder
+      const consumerIds = new Set(
+        accountsData
+          .filter(acc => acc.folderId === folderId)
+          .map(acc => acc.consumerId)
+      );
+      targetedConsumers = consumersList.filter(c => consumerIds.has(c.id));
+    } else if (targetGroup === 'with-balance') {
       const consumerIds = new Set(
         accountsData
           .filter(acc => (acc.balanceCents || 0) > 0)
@@ -1428,13 +1436,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const { name, templateId, targetGroup } = req.body;
+      const { name, templateId, targetGroup, folderId } = req.body;
       
       if (!name || !templateId || !targetGroup) {
         return res.status(400).json({ message: "Name, template ID, and target group are required" });
       }
 
-      const { targetedConsumers } = await resolveEmailCampaignAudience(tenantId, targetGroup);
+      const { targetedConsumers } = await resolveEmailCampaignAudience(tenantId, targetGroup, folderId);
 
       let template;
       try {
@@ -1453,6 +1461,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         name,
         templateId,
         targetGroup,
+        folderId: folderId || null,
         totalRecipients: targetedConsumers.length,
         status: 'pending_approval',
       });
@@ -1506,7 +1515,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Tenant not found" });
       }
 
-      const audience = await resolveEmailCampaignAudience(tenantId, campaign.targetGroup);
+      const audience = await resolveEmailCampaignAudience(tenantId, campaign.targetGroup, campaign.folderId);
       targetedConsumers = audience.targetedConsumers;
       const { accountsData } = audience;
 

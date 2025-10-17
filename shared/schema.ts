@@ -208,7 +208,8 @@ export const emailCampaigns = pgTable("email_campaigns", {
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
   templateId: uuid("template_id").references(() => emailTemplates.id, { onDelete: "cascade" }).notNull(),
   name: text("name").notNull(),
-  targetGroup: text("target_group").notNull(), // "all", "with-balance", "overdue"
+  targetGroup: text("target_group").notNull(), // "all", "with-balance", "overdue", "folder"
+  folderId: uuid("folder_id").references(() => folders.id, { onDelete: "set null" }), // For folder-specific campaigns
   status: text("status").default("pending"), // "pending", "sending", "completed", "failed"
   totalRecipients: bigint("total_recipients", { mode: "number" }).default(0),
   totalSent: bigint("total_sent", { mode: "number" }).default(0),
