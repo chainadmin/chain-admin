@@ -4939,16 +4939,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const { smaxService } = await import('./smaxService');
           if (accountId) {
             const account = await storage.getAccount(accountId);
-            if (account) {
-              await smaxService.insertPayment(tenantId, {
+            const consumer = await storage.getConsumer(consumerId);
+            if (account && consumer) {
+              const paymentData = smaxService.createSmaxPaymentData({
                 filenumber: account.accountNumber || account.id,
                 paymentamount: amountCents / 100,
                 paymentdate: new Date().toISOString().split('T')[0],
-                paymentmethod: 'credit_card',
+                payorname: `${consumer.firstName} ${consumer.lastName}`,
+                paymentmethod: 'CREDIT CARD',
+                cardtype: cardBrand || 'Unknown',
+                cardLast4: cardNumber.slice(-4),
                 transactionid: transactionId,
-                status: 'completed',
-                notes: `Online consumer payment - ${cardName} ending in ${cardNumber.slice(-4)}`,
               });
+              await smaxService.insertPayment(tenantId, paymentData);
             }
           }
         } catch (smaxError) {
@@ -5766,15 +5769,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const accounts = await storage.getAccountsByConsumer(consumer.id);
         if (accounts && accounts.length > 0) {
           const account = accounts[0];
-          await smaxService.insertPayment(tenantId, {
+          const paymentData = smaxService.createSmaxPaymentData({
             filenumber: account.accountNumber || account.id,
             paymentamount: amountCents / 100,
             paymentdate: new Date().toISOString().split('T')[0],
-            paymentmethod: 'credit_card',
+            payorname: `${consumer.firstName} ${consumer.lastName}`,
+            paymentmethod: 'CREDIT CARD',
+            cardLast4: cardNumber.slice(-4),
             transactionid: processorResponse.transactionId,
-            status: processorResponse.success ? 'completed' : 'failed',
-            notes: `Online payment - ${cardName} ending in ${cardNumber.slice(-4)}`,
           });
+          await smaxService.insertPayment(tenantId, paymentData);
         }
       } catch (smaxError) {
         console.error('SMAX notification failed:', smaxError);
@@ -5844,15 +5848,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         
         if (accountNumber) {
-          await smaxService.insertPayment(tenantId, {
+          const paymentData = smaxService.createSmaxPaymentData({
             filenumber: accountNumber,
             paymentamount: amountCents / 100,
             paymentdate: new Date().toISOString().split('T')[0],
-            paymentmethod: paymentMethod || 'manual',
+            payorname: `${consumer.firstName} ${consumer.lastName}`,
+            paymentmethod: paymentMethod || 'MANUAL',
             transactionid: transactionId || `manual_${Date.now()}`,
-            status: 'completed',
-            notes: notes || 'Manual payment entry',
           });
+          await smaxService.insertPayment(tenantId, paymentData);
         }
       } catch (smaxError) {
         console.error('SMAX notification failed:', smaxError);
@@ -7033,30 +7037,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await updateCampaignMetrics(campaignId, RecordType);
     }
 
-    // Notify SMAX for email open events (optional - may fail if SMAX doesn't support email tracking)
+    // Notify SMAX for email open events using InsertNoteline
     if (tenantId && normalizedRecordType === 'open') {
       try {
         const { smaxService } = await import('./smaxService');
         const accountNumber = Metadata?.accountNumber || Metadata?.filenumber;
         
         if (accountNumber) {
-          console.log('📤 Attempting to send email tracking to SMAX for account:', accountNumber);
+          console.log('📤 Sending email tracking to SMAX for account:', accountNumber);
           
-          // Try with 'email' attempt type (some SMAX installations accept this)
-          await smaxService.insertAttempt(tenantId, {
+          // Use InsertNoteline per SMAX API spec - email tracking should be logged as notes
+          await smaxService.insertNote(tenantId, {
             filenumber: accountNumber,
-            attempttype: 'email',  // Changed from 'email_open' - more likely to be accepted
-            attemptdate: new Date().toISOString().split('T')[0],
-            notes: `Email opened by ${Recipient}`,
-            result: 'completed',  // Changed from 'opened' - standard result value
+            collectorname: 'System',
+            logmessage: `Email opened by ${Recipient}`,
           });
           
           console.log('✅ Successfully sent email tracking to SMAX');
         }
       } catch (smaxError) {
-        // This is expected if SMAX doesn't support email tracking attempts
-        // The error is logged but doesn't break the webhook processing
-        console.warn('⚠️ SMAX email tracking notification failed (this is normal if SMAX doesn\'t support email tracking):', smaxError);
+        console.warn('⚠️ SMAX email tracking notification failed:', smaxError);
       }
     }
   }

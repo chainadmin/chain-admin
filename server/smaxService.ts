@@ -17,12 +17,24 @@ interface SmaxConfig {
 
 interface SmaxPaymentData {
   filenumber: string;
-  paymentamount: number;
   paymentdate: string;
+  payorname: string;
   paymentmethod: string;
-  transactionid?: string;
-  status: string;
-  notes?: string;
+  paymentstatus: string;
+  typeofpayment: string;
+  checkaccountnumber: string;
+  checkroutingnumber: string;
+  cardtype: string;
+  cardnumber: string;
+  threedigitnumber: string;
+  cardexpirationmonth: string;
+  cardexpirationyear: string;
+  cardexpirationdate: string;
+  paymentamount: string;
+  checkaccounttype: string;
+  acceptedfees: string;
+  printed: string;
+  invoice: string;
 }
 
 interface SmaxAttemptData {
@@ -35,9 +47,8 @@ interface SmaxAttemptData {
 
 interface SmaxNoteData {
   filenumber: string;
-  note: string;
-  notedate: string;
-  notetype?: string;
+  collectorname: string;
+  logmessage: string;
 }
 
 class SmaxService {
@@ -206,6 +217,43 @@ class SmaxService {
     return response.json();
   }
 
+  // Helper to convert simplified payment data to SMAX format
+  createSmaxPaymentData(params: {
+    filenumber: string;
+    paymentamount: number;
+    paymentdate?: string;
+    payorname?: string;
+    paymentmethod?: string;
+    cardtype?: string;
+    cardLast4?: string;
+    transactionid?: string;
+  }): SmaxPaymentData {
+    const today = new Date().toISOString().split('T')[0];
+    
+    return {
+      filenumber: params.filenumber,
+      paymentdate: params.paymentdate || today,
+      payorname: params.payorname || 'Consumer',
+      paymentmethod: (params.paymentmethod || 'CREDIT CARD').toUpperCase(),
+      paymentstatus: 'COMPLETED',
+      typeofpayment: 'Online',
+      // For security, we don't send actual card/bank data - use placeholders
+      checkaccountnumber: '',
+      checkroutingnumber: '',
+      cardtype: params.cardtype || 'Unknown',
+      cardnumber: params.cardLast4 ? `XXXX-XXXX-XXXX-${params.cardLast4}` : 'XXXX-XXXX-XXXX-XXXX',
+      threedigitnumber: 'XXX',
+      cardexpirationmonth: '',
+      cardexpirationyear: '',
+      cardexpirationdate: '',
+      paymentamount: params.paymentamount.toFixed(2),
+      checkaccounttype: '',
+      acceptedfees: '0',
+      printed: 'false',
+      invoice: params.transactionid || `INV${Date.now()}`,
+    };
+  }
+
   async insertPayment(tenantId: string, paymentData: SmaxPaymentData): Promise<boolean> {
     try {
       const config = await this.getSmaxConfig(tenantId);
@@ -214,6 +262,12 @@ class SmaxService {
         return false;
       }
 
+      console.log('📤 Sending payment to SMAX:', {
+        filenumber: paymentData.filenumber,
+        amount: paymentData.paymentamount,
+        method: paymentData.paymentmethod,
+      });
+
       const result = await this.makeSmaxRequest(
         config,
         '/insert_payments_external',
@@ -221,10 +275,10 @@ class SmaxService {
         paymentData
       );
 
-      console.log('SMAX payment inserted:', result);
+      console.log('✅ SMAX payment inserted:', result);
       return result.state === 'SUCCESS';
     } catch (error) {
-      console.error('Error inserting payment to SMAX:', error);
+      console.error('❌ Error inserting payment to SMAX:', error);
       return false;
     }
   }
