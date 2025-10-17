@@ -10,6 +10,7 @@ import {
   emailCampaigns,
   emailTracking,
   emailLogs,
+  emailReplies,
   smsTemplates,
   smsCampaigns,
   smsTracking,
@@ -50,6 +51,8 @@ import {
   type InsertEmailCampaign,
   type EmailTracking,
   type InsertEmailTracking,
+  type EmailReply,
+  type InsertEmailReply,
   type SmsTemplate,
   type InsertSmsTemplate,
   type SmsCampaign,
@@ -235,6 +238,12 @@ export interface IStorage {
   
   // Email metrics operations
   getEmailMetricsByTenant(tenantId: string): Promise<any>;
+  
+  // Email reply operations
+  createEmailReply(reply: InsertEmailReply): Promise<EmailReply>;
+  getEmailRepliesByTenant(tenantId: string): Promise<(EmailReply & { consumerName: string; consumerEmail: string })[]>;
+  getEmailReplyById(id: string, tenantId: string): Promise<EmailReply | undefined>;
+  markEmailReplyAsRead(id: string, tenantId: string): Promise<EmailReply>;
   
   // SMS template operations
   getSmsTemplatesByTenant(tenantId: string): Promise<SmsTemplate[]>;
@@ -1166,6 +1175,44 @@ export class DatabaseStorage implements IStorage {
       sentThisMonth: recent30,
       bestTemplate: campaigns.length > 0 ? campaigns.sort((a, b) => (b.totalOpened || 0) - (a.totalOpened || 0))[0]?.name || "None yet" : "None yet",
     };
+  }
+
+  // Email reply operations
+  async createEmailReply(reply: InsertEmailReply): Promise<EmailReply> {
+    const [newReply] = await db.insert(emailReplies).values(reply).returning();
+    return newReply;
+  }
+
+  async getEmailRepliesByTenant(tenantId: string): Promise<(EmailReply & { consumerName: string; consumerEmail: string })[]> {
+    const result = await db
+      .select()
+      .from(emailReplies)
+      .leftJoin(consumers, eq(emailReplies.consumerId, consumers.id))
+      .where(eq(emailReplies.tenantId, tenantId))
+      .orderBy(desc(emailReplies.receivedAt));
+
+    return result.map(row => ({
+      ...row.email_replies,
+      consumerName: row.consumers ? `${row.consumers.firstName} ${row.consumers.lastName}` : 'Unknown',
+      consumerEmail: row.consumers?.email || row.email_replies.fromEmail,
+    }));
+  }
+
+  async getEmailReplyById(id: string, tenantId: string): Promise<EmailReply | undefined> {
+    const [reply] = await db
+      .select()
+      .from(emailReplies)
+      .where(and(eq(emailReplies.id, id), eq(emailReplies.tenantId, tenantId)));
+    return reply;
+  }
+
+  async markEmailReplyAsRead(id: string, tenantId: string): Promise<EmailReply> {
+    const [updatedReply] = await db
+      .update(emailReplies)
+      .set({ isRead: true, readAt: new Date() })
+      .where(and(eq(emailReplies.id, id), eq(emailReplies.tenantId, tenantId)))
+      .returning();
+    return updatedReply;
   }
 
   // SMS template operations
