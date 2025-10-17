@@ -28,6 +28,7 @@ import {
   paymentMethods,
   paymentSchedules,
   subscriptions,
+  subscriptionPlans,
   invoices,
   type User,
   type UpsertUser,
@@ -2045,13 +2046,21 @@ export class DatabaseStorage implements IStorage {
     const activeConsumers = activeConsumersResult.length;
 
     const subscription = await this.getSubscriptionByTenant(tenantId);
-    const planId = subscription?.planId as MessagingPlanId | undefined;
-    const plan = planId ? messagingPlans[planId] : undefined;
+    
+    // Fetch the actual plan from database using the subscription's planId
+    let dbPlan = null;
+    if (subscription?.planId) {
+      const [planResult] = await db
+        .select()
+        .from(subscriptionPlans)
+        .where(eq(subscriptionPlans.id, subscription.planId));
+      dbPlan = planResult;
+    }
 
-    const monthlyBase = plan?.price ?? 0;
+    const monthlyBase = dbPlan ? Number(dbPlan.monthlyPriceCents) / 100 : 0;
 
-    let emailUsage = { used: 0, included: plan?.includedEmails ?? 0, overage: 0, overageCharge: 0 };
-    let smsUsage = { used: 0, included: plan?.includedSmsSegments ?? 0, overage: 0, overageCharge: 0 };
+    let emailUsage = { used: 0, included: dbPlan?.includedEmails ?? 0, overage: 0, overageCharge: 0 };
+    let smsUsage = { used: 0, included: dbPlan?.includedSms ?? 0, overage: 0, overageCharge: 0 };
     let usageCharges = 0;
     let totalBill = monthlyBase;
     let nextBillDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString();
@@ -2065,8 +2074,8 @@ export class DatabaseStorage implements IStorage {
 
       const usageTotals = await this.getMessagingUsageTotals(tenantId, periodStart, periodEnd);
 
-      const includedEmails = plan?.includedEmails ?? 0;
-      const includedSms = plan?.includedSmsSegments ?? 0;
+      const includedEmails = dbPlan?.includedEmails ?? 0;
+      const includedSms = dbPlan?.includedSms ?? 0;
 
       const emailOverage = Math.max(0, usageTotals.emailCount - includedEmails);
       const smsOverage = Math.max(0, usageTotals.smsSegments - includedSms);
@@ -2098,8 +2107,8 @@ export class DatabaseStorage implements IStorage {
       usageCharges,
       totalBill,
       nextBillDate,
-      planId: plan?.id ?? planId ?? null,
-      planName: plan?.name ?? planId ?? null,
+      planId: (dbPlan?.slug as MessagingPlanId) ?? null,
+      planName: dbPlan?.name ?? null,
       emailUsage,
       smsUsage,
       billingPeriod,
