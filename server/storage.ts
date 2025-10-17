@@ -740,10 +740,13 @@ export class DatabaseStorage implements IStorage {
         updates.lastName = consumerData.lastName;
       }
       
-      // Update fields only if they're missing in the existing record but provided in new data
-      if (!existingConsumerWithTenant.dateOfBirth && consumerData.dateOfBirth) {
+      // Update fields when provided in new data (CSV is source of truth)
+      // Always update dateOfBirth if provided - this is critical for consumer matching
+      if (consumerData.dateOfBirth !== undefined && consumerData.dateOfBirth !== existingConsumerWithTenant.dateOfBirth) {
         updates.dateOfBirth = consumerData.dateOfBirth;
       }
+      
+      // For other fields, only update if they're missing in the existing record but provided in new data
       if (!existingConsumerWithTenant.address && consumerData.address) {
         updates.address = consumerData.address;
       }
