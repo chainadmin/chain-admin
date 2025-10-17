@@ -962,9 +962,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async findOrCreateAccount(accountData: InsertAccount): Promise<Account> {
-    // Check if account already exists by filenumber and consumer (filenumber is mandatory and unique per consumer)
+    let existingAccount = null;
+    
+    // Strategy 1: Try to find by filenumber and consumer (most reliable if both exist)
     if (accountData.filenumber && accountData.consumerId) {
-      const [existingAccount] = await db.select()
+      const [found] = await db.select()
         .from(accounts)
         .where(
           and(
@@ -972,53 +974,85 @@ export class DatabaseStorage implements IStorage {
             eq(accounts.filenumber, accountData.filenumber)
           )
         );
+      if (found) existingAccount = found;
+    }
+    
+    // Strategy 2: If not found by filenumber, try accountNumber (for existing accounts without filenumber)
+    if (!existingAccount && accountData.accountNumber && accountData.consumerId) {
+      const [found] = await db.select()
+        .from(accounts)
+        .where(
+          and(
+            eq(accounts.consumerId, accountData.consumerId),
+            eq(accounts.accountNumber, accountData.accountNumber)
+          )
+        );
+      if (found) existingAccount = found;
+    }
+    
+    // Strategy 3: If still not found, try by consumer + creditor (fallback for accounts with no accountNumber or filenumber)
+    if (!existingAccount && accountData.consumerId && accountData.creditor) {
+      const [found] = await db.select()
+        .from(accounts)
+        .where(
+          and(
+            eq(accounts.consumerId, accountData.consumerId),
+            eq(accounts.creditor, accountData.creditor)
+          )
+        );
+      if (found) existingAccount = found;
+    }
+    
+    if (existingAccount) {
+      // Account exists - update it with new data from CSV
+      const updates: any = {};
       
-      if (existingAccount) {
-        // Account exists - update it with new data from CSV
-        const updates: any = {};
-        
-        // Always update balance, folder, and status (allows moving accounts and updating balances)
-        if (accountData.balanceCents !== undefined && accountData.balanceCents !== existingAccount.balanceCents) {
-          updates.balanceCents = accountData.balanceCents;
-        }
-        if (accountData.folderId !== undefined && accountData.folderId !== existingAccount.folderId) {
-          updates.folderId = accountData.folderId;
-        }
-        if (accountData.status !== undefined && accountData.status !== existingAccount.status) {
-          updates.status = accountData.status;
-        }
-        
-        // Update accountNumber if provided
-        if (accountData.accountNumber !== undefined && accountData.accountNumber !== existingAccount.accountNumber) {
-          updates.accountNumber = accountData.accountNumber;
-        }
-        
-        // Update creditor if provided
-        if (accountData.creditor && accountData.creditor !== existingAccount.creditor) {
-          updates.creditor = accountData.creditor;
-        }
-        
-        // Update due date if provided
-        if (accountData.dueDate !== undefined && accountData.dueDate !== existingAccount.dueDate) {
-          updates.dueDate = accountData.dueDate;
-        }
-        
-        // Update additional data if provided
-        if (accountData.additionalData !== undefined) {
-          updates.additionalData = accountData.additionalData;
-        }
-        
-        if (Object.keys(updates).length > 0) {
-          const [updatedAccount] = await db.update(accounts)
-            .set(updates)
-            .where(eq(accounts.id, existingAccount.id))
-            .returning();
-          console.log(`Updated existing account with filenumber ${existingAccount.filenumber} for consumer ${accountData.consumerId}`);
-          return updatedAccount;
-        }
-        
-        return existingAccount;
+      // Always update filenumber if provided (critical for transition to mandatory filenumber)
+      if (accountData.filenumber !== undefined && accountData.filenumber !== existingAccount.filenumber) {
+        updates.filenumber = accountData.filenumber;
       }
+      
+      // Always update balance, folder, and status (allows moving accounts and updating balances)
+      if (accountData.balanceCents !== undefined && accountData.balanceCents !== existingAccount.balanceCents) {
+        updates.balanceCents = accountData.balanceCents;
+      }
+      if (accountData.folderId !== undefined && accountData.folderId !== existingAccount.folderId) {
+        updates.folderId = accountData.folderId;
+      }
+      if (accountData.status !== undefined && accountData.status !== existingAccount.status) {
+        updates.status = accountData.status;
+      }
+      
+      // Update accountNumber if provided
+      if (accountData.accountNumber !== undefined && accountData.accountNumber !== existingAccount.accountNumber) {
+        updates.accountNumber = accountData.accountNumber;
+      }
+      
+      // Update creditor if provided
+      if (accountData.creditor && accountData.creditor !== existingAccount.creditor) {
+        updates.creditor = accountData.creditor;
+      }
+      
+      // Update due date if provided
+      if (accountData.dueDate !== undefined && accountData.dueDate !== existingAccount.dueDate) {
+        updates.dueDate = accountData.dueDate;
+      }
+      
+      // Update additional data if provided
+      if (accountData.additionalData !== undefined) {
+        updates.additionalData = accountData.additionalData;
+      }
+      
+      if (Object.keys(updates).length > 0) {
+        const [updatedAccount] = await db.update(accounts)
+          .set(updates)
+          .where(eq(accounts.id, existingAccount.id))
+          .returning();
+        console.log(`Updated existing account for consumer ${accountData.consumerId} - added filenumber: ${accountData.filenumber}`);
+        return updatedAccount;
+      }
+      
+      return existingAccount;
     }
     
     // No existing account found - create new one
