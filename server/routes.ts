@@ -230,14 +230,22 @@ function replaceTemplateVariables(
 
     if (targetGroup === 'folder' && folderId) {
       // Filter consumers who have accounts in the specified folder
+      console.log(`🔍 Filtering for folder - folderId: "${folderId}"`);
       const accountsInFolder = accountsData.filter(acc => acc.folderId === folderId);
-      console.log(`📁 Found ${accountsInFolder.length} accounts in folder "${folderId}"`);
+      console.log(`📁 Found ${accountsInFolder.length} accounts in folder`);
+      
+      if (accountsInFolder.length === 0) {
+        const totalAccountsWithFolder = accountsData.filter(acc => acc.folderId).length;
+        const uniqueFolderCount = new Set(accountsData.map(a => a.folderId).filter(Boolean)).size;
+        console.warn(`⚠️ WARNING: No accounts found with this folder ID`);
+        console.log(`   Total accounts with folders: ${totalAccountsWithFolder}, Unique folders: ${uniqueFolderCount}`);
+      }
       
       const consumerIds = new Set(
         accountsInFolder.map(acc => acc.consumerId)
       );
       targetedConsumers = consumersList.filter(c => consumerIds.has(c.id));
-      console.log(`✅ Filtered to ${targetedConsumers.length} consumers with accounts in this folder`);
+      console.log(`✅ Filtered to ${targetedConsumers.length} consumers`);
     } else if (targetGroup === 'with-balance') {
       const consumerIds = new Set(
         accountsData
