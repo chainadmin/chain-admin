@@ -1100,8 +1100,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const createdConsumers = new Map();
       for (const consumerData of consumersData) {
         try {
+          // Normalize dateOfBirth to YYYY-MM-DD format before saving
+          const normalizedDOB = consumerData.dateOfBirth 
+            ? normalizeDateString(consumerData.dateOfBirth) 
+            : null;
+          
           const consumer = await storage.findOrCreateConsumer({
             ...consumerData,
+            dateOfBirth: normalizedDOB,
             tenantId: tenantId,
             folderId: targetFolderId,
           });
