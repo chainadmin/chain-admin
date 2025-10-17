@@ -81,6 +81,7 @@ export default function Accounts() {
     email: "",
     phone: "",
     accountNumber: "",
+    filenumber: "",
     creditor: "",
     balance: "",
     folderId: "",
@@ -164,6 +165,7 @@ export default function Accounts() {
         email: data.email,
         phone: data.phone || null,
         accountNumber: data.accountNumber || null,
+        filenumber: data.filenumber || null,
         creditor: data.creditor,
         balanceCents,
         folderId: data.folderId || null,
@@ -301,6 +303,7 @@ export default function Accounts() {
       email: account.consumer?.email || "",
       phone: account.consumer?.phone || "",
       accountNumber: account.accountNumber || "",
+      filenumber: account.filenumber || "",
       creditor: account.creditor || "",
       balance: account.balanceCents ? (account.balanceCents / 100).toString() : "",
       folderId: account.folderId || account.consumer?.folderId || "",
@@ -867,6 +870,20 @@ export default function Accounts() {
                 />
               </div>
               <div>
+                <Label htmlFor="edit-filenumber">File Number *</Label>
+                <Input
+                  id="edit-filenumber"
+                  data-testid="input-edit-filenumber"
+                  value={editForm.filenumber}
+                  onChange={(e) => setEditForm({ ...editForm, filenumber: e.target.value })}
+                  placeholder="Enter file number"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
                 <Label htmlFor="edit-creditor">Creditor *</Label>
                 <Input
                   id="edit-creditor"
@@ -877,9 +894,6 @@ export default function Accounts() {
                   required
                 />
               </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="edit-balance">Balance *</Label>
                 <Input
@@ -893,6 +907,9 @@ export default function Accounts() {
                   required
                 />
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4">
               <div>
                 <Label htmlFor="edit-folder">Folder</Label>
                 <Select
