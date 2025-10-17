@@ -1150,8 +1150,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           additionalData: accountData.additionalData || {},
         };
         
+        console.log(`[CSV Import] Row ${index + 2}: Creating/updating account with filenumber: ${accountData.filenumber}, additionalData keys: ${Object.keys(accountData.additionalData || {}).join(', ')}`);
+        
         // Use findOrCreateAccount to prevent duplicates
         const account = await storage.findOrCreateAccount(accountToCreate);
+        
+        console.log(`[CSV Import] Row ${index + 2}: Account saved with ID ${account.id}, filenumber in DB: ${account.filenumber}, additionalData keys: ${Object.keys(account.additionalData || {}).join(', ')}`);
+        
         createdAccounts.push(account);
       }
       
