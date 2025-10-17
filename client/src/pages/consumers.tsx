@@ -24,7 +24,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Eye, Phone, Edit, Trash2, Mail, MapPin, Calendar } from "lucide-react";
+import { Eye, Phone, Edit, Trash2, Mail, MapPin, Calendar, UserCheck, UserX, Users } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function Consumers() {
   const [selectedConsumer, setSelectedConsumer] = useState<any>(null);
@@ -33,6 +41,7 @@ export default function Consumers() {
   const [showContactDialog, setShowContactDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleteConsumerId, setDeleteConsumerId] = useState<string | null>(null);
+  const [registrationFilter, setRegistrationFilter] = useState<string>("all");
   const [editForm, setEditForm] = useState({
     firstName: "",
     lastName: "",
@@ -205,6 +214,18 @@ export default function Consumers() {
     });
   };
 
+  // Filter consumers based on registration status
+  const filteredConsumers = (consumers as any[])?.filter((consumer) => {
+    if (registrationFilter === "registered") return consumer.isRegistered;
+    if (registrationFilter === "not_registered") return !consumer.isRegistered;
+    return true; // "all"
+  }) || [];
+
+  // Calculate stats
+  const totalConsumers = (consumers as any[])?.length || 0;
+  const registeredCount = (consumers as any[])?.filter((c: any) => c.isRegistered).length || 0;
+  const notRegisteredCount = totalConsumers - registeredCount;
+
   return (
     <AdminLayout>
       <div className="py-6">
@@ -215,21 +236,90 @@ export default function Consumers() {
           </p>
         </div>
 
+        {/* Registration Stats */}
+        {!isLoading && totalConsumers > 0 && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 mt-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <Users className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Total Consumers</p>
+                      <p className="text-2xl font-bold text-gray-900">{totalConsumers}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-green-100 rounded-lg">
+                      <UserCheck className="h-5 w-5 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Portal Registered</p>
+                      <p className="text-2xl font-bold text-gray-900">{registeredCount}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-gray-100 rounded-lg">
+                      <UserX className="h-5 w-5 text-gray-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Not Registered</p>
+                      <p className="text-2xl font-bold text-gray-900">{notRegisteredCount}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        )}
+
         <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 mt-8">
           <Card>
             <CardHeader>
-              <CardTitle>Consumer List</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Consumer List</CardTitle>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="registration-filter" className="text-sm text-gray-600">
+                    Filter:
+                  </Label>
+                  <Select
+                    value={registrationFilter}
+                    onValueChange={setRegistrationFilter}
+                  >
+                    <SelectTrigger id="registration-filter" className="w-[180px]" data-testid="select-registration-filter">
+                      <SelectValue placeholder="All Consumers" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" data-testid="option-all">All Consumers</SelectItem>
+                      <SelectItem value="registered" data-testid="option-registered">Registered Only</SelectItem>
+                      <SelectItem value="not_registered" data-testid="option-not-registered">Not Registered</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               {isLoading ? (
                 <div className="text-center py-8">Loading consumers...</div>
-              ) : (consumers as any)?.length === 0 ? (
+              ) : filteredConsumers.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
-                  No consumers found. Import account data to get started.
+                  {totalConsumers === 0 
+                    ? "No consumers found. Import account data to get started."
+                    : "No consumers match the selected filter."}
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {(consumers as any)?.map((consumer: any) => (
+                  {filteredConsumers.map((consumer: any) => (
                     <div key={consumer.id} className="border-b pb-4">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center">
@@ -239,9 +329,22 @@ export default function Consumers() {
                             </span>
                           </div>
                           <div className="ml-4">
-                            <p className="text-sm font-medium text-gray-900">
-                              {consumer.firstName} {consumer.lastName}
-                            </p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium text-gray-900">
+                                {consumer.firstName} {consumer.lastName}
+                              </p>
+                              <Badge 
+                                variant={consumer.isRegistered ? "default" : "secondary"}
+                                className={consumer.isRegistered ? "bg-green-100 text-green-800 hover:bg-green-100" : "bg-gray-100 text-gray-600 hover:bg-gray-100"}
+                                data-testid={`badge-status-${consumer.id}`}
+                              >
+                                {consumer.isRegistered ? (
+                                  <><UserCheck className="h-3 w-3 mr-1" /> Registered</>
+                                ) : (
+                                  <><UserX className="h-3 w-3 mr-1" /> Not Registered</>
+                                )}
+                              </Badge>
+                            </div>
                             <p className="text-sm text-gray-500">{consumer.email}</p>
                             {consumer.phone && (
                               <p className="text-sm text-gray-500">{consumer.phone}</p>
@@ -354,16 +457,31 @@ export default function Consumers() {
                     </p>
                   </div>
                 )}
-                <div>
+                <div className={selectedConsumer.registrationDate ? "" : "col-span-2"}>
                   <Label className="text-sm text-gray-500">Registration Status</Label>
-                  <p className="font-medium">
+                  <p className="font-medium flex items-center gap-1">
                     {selectedConsumer.isRegistered ? (
-                      <span className="text-green-600">Registered</span>
+                      <>
+                        <UserCheck className="h-4 w-4 text-green-600" />
+                        <span className="text-green-600">Registered</span>
+                      </>
                     ) : (
-                      <span className="text-gray-500">Not Registered</span>
+                      <>
+                        <UserX className="h-4 w-4 text-gray-400" />
+                        <span className="text-gray-500">Not Registered</span>
+                      </>
                     )}
                   </p>
                 </div>
+                {selectedConsumer.isRegistered && selectedConsumer.registrationDate && (
+                  <div>
+                    <Label className="text-sm text-gray-500">Registration Date</Label>
+                    <p className="font-medium flex items-center gap-1">
+                      <Calendar className="h-4 w-4" />
+                      {new Date(selectedConsumer.registrationDate).toLocaleDateString()}
+                    </p>
+                  </div>
+                )}
                 {selectedConsumer.folder && (
                   <div>
                     <Label className="text-sm text-gray-500">Folder</Label>
