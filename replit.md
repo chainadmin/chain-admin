@@ -1,6 +1,6 @@
 # Overview
 
-Chain is a multi-tenant platform designed for agencies to manage consumer accounts, streamline collections, and facilitate consumer engagement. It provides administrative dashboards for agencies to import and manage account data, alongside consumer portals for account access. This full-stack web application offers real-time data management, serving as a comprehensive solution for debt collection agencies to organize operations and improve consumer interactions. Key capabilities include subscription plan management, branded email sending, and integration with collection software like SMAX.
+Chain is a multi-tenant platform evolving from a debt collection solution into a universal multi-industry platform. It supports five business types with module-specific terminology and branding: Call Centers (debt collection), Billing/Service Companies, Subscription Providers, Freelancers/Consultants, and Property Management. The platform provides administrative dashboards for managing consumer accounts, streamlined communication tools, and consumer portals for account access. This full-stack web application offers real-time data management, subscription billing, branded email sending, payment processing, and third-party integrations while maintaining the same core structure across all business types.
 
 # User Preferences
 
@@ -62,6 +62,18 @@ The frontend uses React with TypeScript, built with shadcn/ui components on Radi
   - Subscription request approval/rejection workflow
   - Platform-wide statistics and agency monitoring
   - SMS configuration management for Twilio subaccounts
+- **Multi-Module Architecture** (IN PROGRESS): Platform supports multiple business types with module-specific customization:
+  - **Database Schema**: `tenants` table includes `businessType` field (call_center, billing_service, subscription_provider, freelancer_consultant, property_management). Defaults to 'call_center' for backward compatibility.
+  - **Registration Flow**: Agency registration form includes business type selection dropdown. Backend validates and stores business type during tenant creation.
+  - **Terminology System**: Comprehensive terminology mapping system (`shared/terminology.ts`) provides business-specific terms:
+    - Call Centers: debtor, creditor, placement, settlement (original terms preserved)
+    - Billing Service: customer, service provider, invoice, discount offer
+    - Subscription Provider: subscriber, provider, subscription, discount
+    - Freelancer/Consultant: client, consultant, project, adjusted amount
+    - Property Management: tenant, property owner, lease, payment plan
+  - **React Hook**: `useTerminology()` hook provides easy access to business-appropriate terminology in UI components
+  - **Admin Notifications**: Centralized notification system sends branded emails to all tenant admins when consumers register, make payments, or set up arrangements. Sanitized logging prevents PII exposure.
+  - **Next Steps**: Full UI implementation pending - terminology hook ready for use across all pages (accounts, dashboard, consumer portal, etc.)
 
 # External Dependencies
 
