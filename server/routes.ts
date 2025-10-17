@@ -4800,6 +4800,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const usaepayResult = await usaepayResponse.json();
 
+      // Log detailed error information for troubleshooting
+      if (!usaepayResponse.ok || usaepayResult.error || usaepayResult.errorcode) {
+        console.error('❌ USAePay Transaction Error:', {
+          status: usaepayResponse.status,
+          statusText: usaepayResponse.statusText,
+          error: usaepayResult.error,
+          errorcode: usaepayResult.errorcode,
+          result: usaepayResult.result,
+          fullResponse: JSON.stringify(usaepayResult)
+        });
+      }
+
       const success = usaepayResult.result === 'Approved' || usaepayResult.status === 'Approved';
       const transactionId = usaepayResult.refnum || usaepayResult.key || `tx_${Date.now()}`;
       
