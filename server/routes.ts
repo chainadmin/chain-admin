@@ -2154,6 +2154,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Helper function to calculate next execution time for automations
+  function calculateNextExecution(automation: any): Date | null {
+    if (!automation.scheduleType || !automation.scheduledDate) {
+      return null;
+    }
+
+    const now = new Date();
+    let nextDate = new Date(automation.scheduledDate);
+    
+    // If scheduledDate is in the past and schedule type is 'once', don't schedule
+    if (automation.scheduleType === 'once' && nextDate < now) {
+      return null;
+    }
+    
+    // Apply schedule time if provided (format: "HH:MM")
+    if (automation.scheduleTime) {
+      const [hours, minutes] = automation.scheduleTime.split(':').map(Number);
+      nextDate.setHours(hours, minutes, 0, 0);
+    }
+    
+    // For one-time schedules, return the scheduled date/time
+    if (automation.scheduleType === 'once') {
+      return nextDate >= now ? nextDate : null;
+    }
+    
+    // For recurring schedules, calculate the next occurrence
+    while (nextDate < now) {
+      switch (automation.scheduleType) {
+        case 'daily':
+          nextDate.setDate(nextDate.getDate() + 1);
+          break;
+          
+        case 'weekly':
+          // If weekdays are specified, find next matching weekday
+          if (automation.scheduleWeekdays && automation.scheduleWeekdays.length > 0) {
+            const weekdayMap: Record<string, number> = {
+              'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3,
+              'thursday': 4, 'friday': 5, 'saturday': 6
+            };
+            const targetDays = automation.scheduleWeekdays.map((d: string) => weekdayMap[d.toLowerCase()]);
+            
+            // Find next matching day
+            let daysToAdd = 1;
+            while (daysToAdd <= 7) {
+              const testDate = new Date(nextDate);
+              testDate.setDate(testDate.getDate() + daysToAdd);
+              if (targetDays.includes(testDate.getDay())) {
+                nextDate = testDate;
+                break;
+              }
+              daysToAdd++;
+            }
+          } else {
+            // Default to weekly (7 days)
+            nextDate.setDate(nextDate.getDate() + 7);
+          }
+          break;
+          
+        case 'monthly':
+          // If day of month is specified, use it
+          if (automation.scheduleDayOfMonth) {
+            const dayOfMonth = parseInt(automation.scheduleDayOfMonth);
+            nextDate.setMonth(nextDate.getMonth() + 1);
+            nextDate.setDate(Math.min(dayOfMonth, new Date(nextDate.getFullYear(), nextDate.getMonth() + 1, 0).getDate()));
+          } else {
+            // Default to same day next month
+            nextDate.setMonth(nextDate.getMonth() + 1);
+          }
+          break;
+          
+        default:
+          return null;
+      }
+    }
+    
+    return nextDate;
+  }
+
   // Communication Automation Routes
   app.get('/api/automations', authenticateUser, async (req: any, res) => {
     try {
@@ -2217,12 +2295,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const validatedData = insertAutomationSchema.parse(req.body);
       
-      // Calculate next execution if it's a scheduled automation
-      let nextExecution = null;
-      if (validatedData.triggerType === 'schedule' && validatedData.scheduledDate) {
-        nextExecution = new Date(validatedData.scheduledDate);
-      }
-
       const automationData: any = {
         ...validatedData,
         tenantId: tenantId,
@@ -2231,6 +2303,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Convert scheduledDate string to Date if provided
       if (automationData.scheduledDate) {
         automationData.scheduledDate = new Date(automationData.scheduledDate);
+      }
+      
+      // Calculate next execution if it's a scheduled automation
+      if (automationData.triggerType === 'schedule') {
+        const nextExecution = calculateNextExecution(automationData);
+        if (nextExecution) {
+          automationData.nextExecution = nextExecution;
+        }
       }
       
       const newAutomation = await storage.createAutomation(automationData);
@@ -2273,6 +2353,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Convert scheduledDate string to Date if provided
       if (updateData.scheduledDate) {
         updateData.scheduledDate = new Date(updateData.scheduledDate);
+      }
+      
+      // Recalculate next execution if schedule settings changed
+      if (updateData.scheduleType || updateData.scheduledDate || updateData.scheduleTime || 
+          updateData.scheduleWeekdays || updateData.scheduleDayOfMonth) {
+        // Get current automation to merge with updates
+        const currentAutomation = await storage.getAutomationById(req.params.id, tenantId);
+        if (currentAutomation && currentAutomation.triggerType === 'schedule') {
+          const mergedData = { ...currentAutomation, ...updateData };
+          const nextExecution = calculateNextExecution(mergedData);
+          if (nextExecution) {
+            updateData.nextExecution = nextExecution;
+          }
+        }
       }
       
       const updatedAutomation = await storage.updateAutomation(req.params.id, updateData);
