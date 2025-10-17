@@ -73,6 +73,7 @@ export default function Emails() {
     name: "",
     templateId: "",
     targetGroup: "all",
+    folderId: "",
   });
 
   const { toast } = useToast();
@@ -93,6 +94,10 @@ export default function Emails() {
 
   const { data: consumers } = useQuery({
     queryKey: ["/api/consumers"],
+  });
+
+  const { data: folders } = useQuery({
+    queryKey: ["/api/folders"],
   });
 
   const { data: settings } = useQuery({
@@ -272,7 +277,7 @@ export default function Emails() {
       queryClient.invalidateQueries({ queryKey: ["/api/email-campaigns"] });
       queryClient.invalidateQueries({ queryKey: ["/api/email-metrics"] });
       setShowCampaignModal(false);
-      setCampaignForm({ name: "", templateId: "", targetGroup: "all" });
+      setCampaignForm({ name: "", templateId: "", targetGroup: "all", folderId: "" });
     },
     onError: (error) => {
       toast({
@@ -338,6 +343,14 @@ export default function Emails() {
       toast({
         title: "Missing Information",
         description: "Please provide campaign name and select a template.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (campaignForm.targetGroup === "folder" && !campaignForm.folderId) {
+      toast({
+        title: "Missing Folder",
+        description: "Please select a folder for your campaign.",
         variant: "destructive",
       });
       return;
@@ -668,7 +681,7 @@ export default function Emails() {
                       <Label>Target Audience</Label>
                       <Select 
                         value={campaignForm.targetGroup} 
-                        onValueChange={(value) => setCampaignForm({...campaignForm, targetGroup: value})}
+                        onValueChange={(value) => setCampaignForm({...campaignForm, targetGroup: value, folderId: ""})}
                       >
                         <SelectTrigger data-testid="select-target-group">
                           <SelectValue />
@@ -678,9 +691,31 @@ export default function Emails() {
                           <SelectItem value="with-balance">Consumers with Balance</SelectItem>
                           <SelectItem value="decline">Decline Status</SelectItem>
                           <SelectItem value="recent-upload">Most Recent Uploaded File</SelectItem>
+                          <SelectItem value="folder">Specific Folder</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
+                    
+                    {campaignForm.targetGroup === "folder" && (
+                      <div>
+                        <Label>Select Folder *</Label>
+                        <Select 
+                          value={campaignForm.folderId} 
+                          onValueChange={(value) => setCampaignForm({...campaignForm, folderId: value})}
+                        >
+                          <SelectTrigger data-testid="select-folder">
+                            <SelectValue placeholder="Choose a folder" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(folders as any[])?.map((folder: any) => (
+                              <SelectItem key={folder.id} value={folder.id}>
+                                {folder.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                   </div>
                   
                   <div className="flex justify-end space-x-3 pt-4">
