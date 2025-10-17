@@ -492,6 +492,7 @@ export const subscriptionPlans = pgTable("subscription_plans", {
   includedSms: integer("included_sms").notNull(),
   emailOverageRatePer1000: integer("email_overage_rate_per_1000").default(250), // $2.50 per 1000 = 250 cents
   smsOverageRatePerSegment: integer("sms_overage_rate_per_segment").default(3), // $0.03 per segment = 3 cents
+  features: text("features"), // JSON stringified array of feature descriptions
   isActive: boolean("is_active").default(true),
   displayOrder: integer("display_order").default(0),
   createdAt: timestamp("created_at").defaultNow(),

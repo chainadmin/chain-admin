@@ -616,11 +616,50 @@ export default function Billing() {
                                 <Badge className="border border-white/20 bg-white/10 text-blue-100">Current</Badge>
                               )}
                             </div>
-                            <p className="text-3xl font-semibold text-white">{formatCurrency(plan.price ?? plan.monthlyPrice)}</p>
-                            <ul className="space-y-2 text-sm text-blue-100/70">
-                              <li>{plan.includedEmails.toLocaleString()} emails / month</li>
-                              <li>{plan.includedSmsSegments.toLocaleString()} SMS segments / month</li>
-                            </ul>
+                            <div>
+                              <p className="text-3xl font-semibold text-white">{formatCurrency(plan.price ?? plan.monthlyPrice)}</p>
+                              <p className="text-xs text-blue-100/60 mt-1">per month</p>
+                              {plan.setupFee > 0 && (
+                                <p className="text-sm text-amber-200/80 mt-2">
+                                  + {formatCurrency(plan.setupFee)} setup fee
+                                </p>
+                              )}
+                            </div>
+                            <div className="space-y-3">
+                              <div>
+                                <p className="text-xs uppercase tracking-wide text-blue-100/50 mb-2">Base Included</p>
+                                <ul className="space-y-1.5 text-sm text-blue-100/70">
+                                  <li className="flex items-center gap-2">
+                                    <span className="text-emerald-400">✓</span>
+                                    {plan.includedEmails.toLocaleString()} emails/month
+                                  </li>
+                                  <li className="flex items-center gap-2">
+                                    <span className="text-emerald-400">✓</span>
+                                    {plan.includedSmsSegments.toLocaleString()} SMS segments/month
+                                  </li>
+                                </ul>
+                              </div>
+                              {plan.features && plan.features.length > 0 && (
+                                <div>
+                                  <p className="text-xs uppercase tracking-wide text-blue-100/50 mb-2">Features</p>
+                                  <ul className="space-y-1.5 text-xs text-blue-100/70">
+                                    {plan.features.map((feature: string, idx: number) => (
+                                      <li key={idx} className="flex items-start gap-2">
+                                        <span className="text-sky-400 mt-0.5">•</span>
+                                        <span>{feature}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              <div>
+                                <p className="text-xs uppercase tracking-wide text-blue-100/50 mb-2">Overage Rates</p>
+                                <ul className="space-y-1.5 text-xs text-blue-100/60">
+                                  <li>Email: {formatCurrency(plan.emailOverageRatePer1000)}/1,000</li>
+                                  <li>SMS: {formatCurrency(plan.smsOverageRatePerSegment)}/segment</li>
+                                </ul>
+                              </div>
+                            </div>
                           </div>
                           <Button
                             className="w-full rounded-xl border border-white/20 bg-white/10 py-2 text-sm font-semibold text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-70"

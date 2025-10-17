@@ -5905,6 +5905,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         includedSmsSegments: plan.includedSms,
         emailOverageRatePer1000: (plan.emailOverageRatePer1000 ?? 250) / 100,
         smsOverageRatePerSegment: (plan.smsOverageRatePerSegment ?? 3) / 100,
+        features: plan.features ? JSON.parse(plan.features) : [],
       }));
 
       res.json({
