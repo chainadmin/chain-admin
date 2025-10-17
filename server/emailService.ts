@@ -12,6 +12,7 @@ type MetadataValue = string | number | boolean | null | undefined;
 export interface EmailOptions {
   to: string;
   from?: string; // Make optional, will default to verified sender
+  replyTo?: string; // Optional reply-to address
   subject: string;
   html: string;
   text?: string;
@@ -51,9 +52,13 @@ export class EmailService {
       
       const normalizedMetadata = this.normalizeMetadata(options.metadata);
 
+      // Use the tenant's inbound email as reply-to if available, otherwise use from email
+      const replyToEmail = options.replyTo || fromEmail;
+
       const result = await postmarkClient.sendEmail({
         From: fromEmail,
         To: options.to,
+        ReplyTo: replyToEmail,
         Subject: options.subject,
         HtmlBody: options.html,
         TextBody: textBody,
