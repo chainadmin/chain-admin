@@ -158,7 +158,7 @@ export const accounts = pgTable("accounts", {
   consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "cascade" }).notNull(),
   folderId: uuid("folder_id").references(() => folders.id, { onDelete: "set null" }),
   accountNumber: text("account_number"),
-  filenumber: text("filenumber").notNull(), // Required for SMAX integration
+  filenumber: text("filenumber"), // Required for SMAX integration (nullable for migration)
   creditor: text("creditor").notNull(),
   balanceCents: bigint("balance_cents", { mode: "number" }).notNull(),
   status: text("status").default("active"),
