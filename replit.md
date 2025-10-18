@@ -43,6 +43,14 @@ The frontend uses React with TypeScript, built with shadcn/ui components on Radi
 - **Database**: PostgreSQL (hosted on Railway) with Drizzle ORM, multi-tenant schema including `Users`, `Tenants`, `Platform Users`, `Consumers`, `Accounts`, `Email Templates`, and `Sessions`. Uses UUID primary keys and proper indexing.
 - **File Storage**: Logo and document uploads stored in Cloudflare R2 (S3-compatible object storage). Files served via public R2 URLs with automatic CDN caching for optimal performance.
 - **Unified Communications System**: Merges email and SMS functionalities into a single interface, supporting templates, campaigns, and callback request management. Includes automation for scheduled and event-triggered communications.
+  - **Automation Processor**: Backend endpoint (`/api/automations/process`) executes scheduled communications:
+    - Processes automations where `nextExecution <= now` and `isActive = true`
+    - Supports one-time and recurring schedules (daily, weekly, monthly)
+    - Sends emails/SMS to target consumers with variable replacement
+    - Logs execution results to `automation_executions` table
+    - Updates `nextExecution` for recurring automations, deactivates one-time automations
+    - Requires `CRON_API_KEY` for authentication
+    - **Production Setup**: Configure Railway cron job to call `https://chainsoftwaregroup.com/api/automations/process` every 5-15 minutes with header `X-Cron-API-Key: <your-key>`
   - **Future: Voice Calling Integration**: Twilio Voice API capabilities planned for future implementation:
     - Outbound/inbound calling to consumers from admin portal
     - IVR (Interactive Voice Response) menus for automated account information
