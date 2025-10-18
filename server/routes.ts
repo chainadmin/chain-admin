@@ -4904,14 +4904,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log('🔗 Testing connection to:', baseUrl);
 
-      // Create Basic Auth header
-      const authString = Buffer.from(`${merchantApiKey}:${merchantApiPin}`).toString('base64');
+      // Create proper USAePay API v2 authentication header with hash
+      const authHeader = generateUSAePayAuthHeader(merchantApiKey, merchantApiPin);
 
       // Test connection by making a simple API call (get merchant info)
       const testResponse = await fetch(`${baseUrl}/merchant`, {
         method: 'GET',
         headers: {
-          'Authorization': `Basic ${authString}`,
+          'Authorization': authHeader,
           'Content-Type': 'application/json',
         },
       });
@@ -4974,6 +4974,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
+
+  // Helper function to generate USAePay API v2 authentication header
+  function generateUSAePayAuthHeader(apiKey: string, apiPin: string): string {
+    // Generate 16-character random seed
+    const seed = Array.from({ length: 16 }, () => 
+      Math.random().toString(36).charAt(2)
+    ).join('');
+    
+    // Create prehash: apikey + seed + apipin
+    const prehash = apiKey + seed + apiPin;
+    
+    // Create SHA-256 hash
+    const crypto = require('crypto');
+    const hash = crypto.createHash('sha256').update(prehash).digest('hex');
+    
+    // Create apihash: s2/seed/hash
+    const apihash = `s2/${seed}/${hash}`;
+    
+    // Create final auth key: base64(apikey:apihash)
+    const authKey = Buffer.from(`${apiKey}:${apihash}`).toString('base64');
+    
+    return `Basic ${authKey}`;
+  }
 
   // Consumer payment processing endpoint
   app.post('/api/consumer/payments/process', authenticateConsumer, async (req: any, res) => {
@@ -5066,7 +5089,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ? "https://sandbox.usaepay.com/api/v2"
         : "https://secure.usaepay.com/api/v2";
 
-      const authHeader = `Basic ${Buffer.from(`${merchantApiKey}:${merchantApiPin}`).toString('base64')}`;
+      // Generate proper USAePay API v2 authentication header with hash
+      const authHeader = generateUSAePayAuthHeader(merchantApiKey, merchantApiPin);
       
       // Step 1: Tokenize the card if we need to save it
       let paymentToken = null;
@@ -5610,7 +5634,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   ? "https://sandbox.usaepay.com/api/v2"
                   : "https://secure.usaepay.com/api/v2";
 
-                const authHeader = `Basic ${Buffer.from(`${settings.merchantApiKey}:${settings.merchantApiPin}`).toString('base64')}`;
+                // Generate proper USAePay API v2 authentication header with hash
+                const authHeader = generateUSAePayAuthHeader(settings.merchantApiKey, settings.merchantApiPin);
 
                 // Process payment using saved token
                 const paymentPayload = {
