@@ -2520,6 +2520,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           }
 
+          // Prepare folder assignment if tenant exists
+          let portalFolder = null;
+          if (existingConsumer.tenantId) {
+            await storage.ensureDefaultFolders(existingConsumer.tenantId);
+            portalFolder = await storage.getPortalRegistrationsFolder(existingConsumer.tenantId);
+          }
+          
           // Update existing consumer with complete registration info
           const updateData: any = {
             firstName,
@@ -2531,6 +2538,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             isRegistered: true,
             ...(shouldUpdateTenant && { tenantId: existingConsumer.tenantId })
           };
+
+          // Only set folder if tenant exists and folder is available
+          if (portalFolder) {
+            updateData.folderId = portalFolder.id;
+          }
 
           if (!hasStoredDOB && normalizedProvidedDOB) {
             updateData.dateOfBirth = normalizedProvidedDOB;
@@ -2558,6 +2570,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 email: updatedConsumer.email || email,
               },
             }).catch(err => console.error('Failed to send registration notification:', err));
+
+            // Send note to SMAX with folder location
+            try {
+              const { smaxService } = await import('./smaxService');
+              const accounts = await storage.getAccountsByConsumer(updatedConsumer.id);
+              
+              if (accounts && accounts.length > 0) {
+                const folderName = portalFolder?.name || 'Portal Registrations';
+                for (const account of accounts) {
+                  if (account.filenumber || account.accountNumber) {
+                    const noteData = {
+                      filenumber: account.filenumber || account.accountNumber || account.id,
+                      collectorname: 'System',
+                      logmessage: `Consumer registered via portal - Moved to ${folderName}`,
+                      notes: `Consumer ${firstName} ${lastName} has self-registered through the consumer portal.\n\nLocation: ${folderName} folder\nEmail: ${email}\nDate of Birth: ${dateOfBirth}\nAddress: ${address}, ${city}, ${state} ${zipCode}\n\nConsumer can now access their account and make payments online.`
+                    };
+                    
+                    const smaxResult = await smaxService.insertNote(existingConsumer.tenantId, noteData);
+                    if (smaxResult) {
+                      console.log(`✅ SMAX note added for account ${account.accountNumber}`);
+                    } else {
+                      console.log(`ℹ️ SMAX note not sent (SMAX may not be configured)`);
+                    }
+                  }
+                }
+              }
+            } catch (smaxError) {
+              console.error('Failed to send SMAX note:', smaxError);
+            }
           }
 
           // Only get tenant info if consumer has a tenantId
@@ -2620,6 +2661,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
+      // Ensure folders exist and get the Portal Registrations folder
+      await storage.ensureDefaultFolders(tenantId);
+      const portalFolder = await storage.getPortalRegistrationsFolder(tenantId);
+      
       // Build the consumer object with required fields
       const consumerData: any = {
         firstName,
@@ -2631,7 +2676,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         state,
         zipCode,
         isRegistered: true,
-        tenantId // Always include tenantId since it's now required
+        tenantId, // Always include tenantId since it's now required
+        folderId: portalFolder?.id || null // Assign to Portal Registrations folder
       };
       
       // Only add optional fields if they're supported
@@ -2660,6 +2706,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
             email: newConsumer.email || email,
           },
         }).catch(err => console.error('Failed to send registration notification:', err));
+
+        // Send note to SMAX with folder location
+        try {
+          const { smaxService } = await import('./smaxService');
+          const accounts = await storage.getAccountsByConsumer(newConsumer.id);
+          
+          if (accounts && accounts.length > 0) {
+            const folderName = portalFolder?.name || 'Portal Registrations';
+            for (const account of accounts) {
+              if (account.filenumber || account.accountNumber) {
+                const noteData = {
+                  filenumber: account.filenumber || account.accountNumber || account.id,
+                  collectorname: 'System',
+                  logmessage: `Consumer registered via portal - Moved to ${folderName}`,
+                  notes: `Consumer ${firstName} ${lastName} has self-registered through the consumer portal.\n\nLocation: ${folderName} folder\nEmail: ${email}\nDate of Birth: ${dateOfBirth}\nAddress: ${address}, ${city}, ${state} ${zipCode}\n\nConsumer can now access their account and make payments online.`
+                };
+                
+                const smaxResult = await smaxService.insertNote(tenantId, noteData);
+                if (smaxResult) {
+                  console.log(`✅ SMAX note added for account ${account.accountNumber}`);
+                } else {
+                  console.log(`ℹ️ SMAX note not sent (SMAX may not be configured)`);
+                }
+              }
+            }
+          }
+        } catch (smaxError) {
+          console.error('Failed to send SMAX note:', smaxError);
+        }
       }
 
       return res.json({ 
