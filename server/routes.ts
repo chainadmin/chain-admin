@@ -5113,9 +5113,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (paymentToken) {
         // Use saved token for payment (v2 format)
+        // NOTE: CVV should NOT be included when using a saved token per PCI compliance
         usaepayPayload.source = {
-          key: paymentToken,
-          cvv: cvv
+          key: paymentToken
         };
       } else {
         // Use card directly (v2 format)

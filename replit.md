@@ -34,6 +34,7 @@ The frontend uses React with TypeScript, built with shadcn/ui components on Radi
   - Automated scheduled payment processing endpoint (`/api/payments/process-scheduled`)
   - Settlement payments automatically clear account balance
   - Failed payment tracking with retry limits (3 attempts)
+  - **CVV Handling**: CVV is only sent with new card payments, never with saved payment tokens (PCI compliance)
   - **Automatic Email Confirmations**: Sends branded thank you emails after successful payments and arrangement setup
   - **Callback Requests**: Consumers can request callbacks with time preferences; all agency admins notified via email
 
