@@ -176,6 +176,20 @@ export default function AdminDashboard() {
     queryKey: ["/api/accounts"],
   });
 
+  const { data: enabledModulesData } = useQuery<{ enabledModules: string[] }>({
+    queryKey: ["/api/settings/enabled-modules"],
+  });
+
+  const enabledModules = enabledModulesData?.enabledModules || [];
+
+  const moduleLabels: Record<string, string> = {
+    billing: '💳 Billing',
+    subscriptions: '🔁 Subscriptions',
+    work_orders: '🧾 Work Orders',
+    client_crm: '🧍 Client CRM',
+    messaging_center: '💬 Messaging',
+  };
+
   return (
     <AdminLayout>
       <div className="mx-auto flex max-w-7xl flex-col gap-10 px-4 py-10 text-blue-50 sm:px-6 lg:px-8">
@@ -222,6 +236,24 @@ export default function AdminDashboard() {
             </div>
           </div>
         </section>
+
+        {/* Active Business Modules Indicator */}
+        {enabledModules.length > 0 && (
+          <section className="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-lg shadow-blue-900/20 backdrop-blur">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-sm font-medium text-blue-100/70">Active Modules:</span>
+              {enabledModules.map((moduleId: string) => (
+                <span
+                  key={moduleId}
+                  className="inline-flex items-center rounded-full border border-white/20 bg-gradient-to-r from-sky-500/20 to-indigo-500/20 px-3 py-1 text-xs font-semibold text-white shadow-sm"
+                  data-testid={`badge-module-${moduleId}`}
+                >
+                  {moduleLabels[moduleId] || moduleId}
+                </span>
+              ))}
+            </div>
+          </section>
+        )}
 
         <section>
           {statsLoading ? (
