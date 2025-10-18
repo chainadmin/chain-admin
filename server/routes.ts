@@ -2646,9 +2646,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
               if (accounts && accounts.length > 0) {
                 const folderName = portalFolder?.name || 'Portal Registrations';
                 for (const account of accounts) {
-                  if (account.filenumber || account.accountNumber) {
+                  // Only send note if filenumber exists (required by SMAX)
+                  if (account.filenumber && account.filenumber.trim()) {
                     const noteData = {
-                      filenumber: account.filenumber || account.accountNumber || account.id,
+                      filenumber: account.filenumber,
                       collectorname: 'System',
                       logmessage: `Consumer registered via portal - Moved to ${folderName}`,
                       notes: `Consumer ${firstName} ${lastName} has self-registered through the consumer portal.\n\nLocation: ${folderName} folder\nEmail: ${email}\nDate of Birth: ${dateOfBirth}\nAddress: ${address}, ${city}, ${state} ${zipCode}\n\nConsumer can now access their account and make payments online.`
@@ -2656,10 +2657,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     
                     const smaxResult = await smaxService.insertNote(existingConsumer.tenantId, noteData);
                     if (smaxResult) {
-                      console.log(`✅ SMAX note added for account ${account.accountNumber}`);
+                      console.log(`✅ SMAX note added for filenumber ${account.filenumber}`);
                     } else {
                       console.log(`ℹ️ SMAX note not sent (SMAX may not be configured)`);
                     }
+                  } else {
+                    console.log(`ℹ️ Skipping SMAX note for account ${account.accountNumber || account.id} - no filenumber`);
                   }
                 }
               }
