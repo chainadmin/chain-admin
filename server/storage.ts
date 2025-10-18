@@ -1886,6 +1886,28 @@ export class DatabaseStorage implements IStorage {
     return upsertedSettings;
   }
 
+  async updateEnabledModules(tenantId: string, modules: string[]): Promise<TenantSettings> {
+    await ensureTenantSettingsSchema(db);
+
+    const [updatedSettings] = await db
+      .update(tenantSettings)
+      .set({
+        enabledModules: modules,
+        updatedAt: new Date(),
+      })
+      .where(eq(tenantSettings.tenantId, tenantId))
+      .returning();
+
+    return updatedSettings;
+  }
+
+  async getEnabledModules(tenantId: string): Promise<string[]> {
+    await ensureTenantSettingsSchema(db);
+
+    const settings = await this.getTenantSettings(tenantId);
+    return settings?.enabledModules || [];
+  }
+
   // Tenant setup helper
   async setupTenantForUser(authId: string, tenantData: InsertTenant): Promise<{ tenant: Tenant; platformUser: PlatformUser }> {
     // Create tenant
