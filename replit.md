@@ -41,6 +41,16 @@ The frontend uses React with TypeScript, built with shadcn/ui components on Radi
 - **Database**: PostgreSQL (hosted on Railway) with Drizzle ORM, multi-tenant schema including `Users`, `Tenants`, `Platform Users`, `Consumers`, `Accounts`, `Email Templates`, and `Sessions`. Uses UUID primary keys and proper indexing.
 - **File Storage**: Logo and document uploads stored in Cloudflare R2 (S3-compatible object storage). Files served via public R2 URLs with automatic CDN caching for optimal performance.
 - **Unified Communications System**: Merges email and SMS functionalities into a single interface, supporting templates, campaigns, and callback request management. Includes automation for scheduled and event-triggered communications.
+  - **Future: Voice Calling Integration**: Twilio Voice API capabilities planned for future implementation:
+    - Outbound/inbound calling to consumers from admin portal
+    - IVR (Interactive Voice Response) menus for automated account information
+    - Call recording and transcription stored in R2 object storage
+    - Call tracking and history linked to consumer accounts
+    - Click-to-call functionality from consumer profiles
+    - Voice campaigns (similar to SMS campaigns)
+    - AI-powered features: sentiment analysis, speech-to-text, real-time transcription
+    - WebRTC browser-based calling for agents
+    - Leverages existing Twilio credentials and multi-tenant infrastructure
 - **Professional Email Templates (Postmark Integration)**: Campaign creation offers professionally-designed Postmark template layouts:
   - **Template Designs**: Invoice/Statement, Welcome Message, Payment Reminder, or Custom HTML
   - **Design Selection**: Visual cards with thumbnails during template creation auto-populate HTML and styles
