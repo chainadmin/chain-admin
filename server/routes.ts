@@ -1876,6 +1876,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Send response to an email reply
+  app.post('/api/email-replies/:id/respond', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { id } = req.params;
+      const { subject, message } = req.body;
+
+      if (!subject || !message) {
+        return res.status(400).json({ message: "Subject and message are required" });
+      }
+
+      // Get the original email
+      const originalEmail = await storage.getEmailReplyById(id, tenantId);
+      if (!originalEmail) {
+        return res.status(404).json({ message: "Email reply not found" });
+      }
+
+      // Get tenant info for sender email
+      const tenant = await storage.getTenant(tenantId);
+      if (!tenant) {
+        return res.status(404).json({ message: "Tenant not found" });
+      }
+
+      // Build sender email address
+      let fromEmail;
+      if (tenant.customSenderEmail) {
+        fromEmail = `${tenant.name} <${tenant.customSenderEmail}>`;
+      } else {
+        fromEmail = `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>`;
+      }
+
+      // Send the response via Postmark
+      const result = await emailService.sendEmail({
+        to: originalEmail.fromEmail,
+        from: fromEmail,
+        subject,
+        html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="white-space: pre-wrap;">${message.replace(/\n/g, '<br>')}</div>
+          <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
+          <p style="color: #666; font-size: 12px;">
+            This is a response from ${tenant.name}.
+          </p>
+        </div>`,
+        tag: 'email-reply-response',
+        metadata: {
+          type: 'reply-response',
+          tenantId: tenantId,
+          originalEmailId: id,
+          consumerId: originalEmail.consumerId,
+        },
+        tenantId: tenantId,
+      });
+
+      res.json({ 
+        message: 'Response sent successfully',
+        result 
+      });
+    } catch (error) {
+      console.error("Error sending email response:", error);
+      res.status(500).json({ message: "Failed to send email response" });
+    }
+  });
+
   // SMS template routes
   app.get('/api/sms-templates', authenticateUser, async (req: any, res) => {
     try {

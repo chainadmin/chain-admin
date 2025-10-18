@@ -18,6 +18,7 @@ import Consumers from "@/pages/consumers";
 import Accounts from "@/pages/accounts";
 import Settings from "@/pages/settings";
 import Communications from "@/pages/communications";
+import EmailInbox from "@/pages/email-inbox";
 import Requests from "@/pages/requests";
 import Payments from "@/pages/payments";
 import Billing from "@/pages/billing";
@@ -326,6 +327,7 @@ function Router() {
     <Route key="auth-consumers" path="/consumers" component={Consumers} />,
     <Route key="auth-accounts" path="/accounts" component={Accounts} />,
     <Route key="auth-communications" path="/communications" component={Communications} />,
+    <Route key="auth-email-inbox" path="/email-inbox" component={EmailInbox} />,
     <Route key="auth-requests" path="/requests" component={Requests} />,
     <Route key="auth-payments" path="/payments" component={Payments} />,
     <Route key="auth-billing" path="/billing" component={Billing} />,

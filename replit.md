@@ -61,6 +61,13 @@ The frontend uses React with TypeScript, built with shadcn/ui components on Radi
   - **Template Editing**: Full edit capability after creation - modify design, content, or switch between templates
   - **Storage**: Templates stored with designType field to track which Postmark design was used (enables future template library expansion)
   - **Webhook Configuration**: Postmark webhook endpoint at `https://chainsoftwaregroup.com/api/webhooks/postmark` tracks delivery, bounce, open, and spam complaint events. Configure this URL in each tenant's Postmark server settings to enable email tracking and usage monitoring
+  - **Inbound Email Handling**: Postmark inbound webhook endpoint at `https://chainsoftwaregroup.com/api/webhooks/postmark-inbound` receives emails sent to agency addresses (e.g., `slug@chainsoftwaregroup.com`). Emails are stored in the `email_replies` table and linked to consumers. Admins can view and respond to emails through the Email Inbox page (`/email-inbox`).
+  - **Email Inbox UI**: Admin dashboard includes "Email Inbox" navigation link. Features include:
+    - View all inbound emails from consumers
+    - Mark emails as read/unread
+    - Reply to emails directly through the interface
+    - Automatic consumer matching by email address
+    - Real-time unread count badge
 - **Enhanced Folder Organization**: Implemented a folder system for account management with default folders and CSV import integration.
   - **Portal Registrations Folder**: Special folder (cyan color, sort order 1) automatically created for all tenants to track consumer self-registrations
   - **Automatic Assignment**: New consumer registrations via portal are automatically placed in the Portal Registrations folder
