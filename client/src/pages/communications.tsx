@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -3586,6 +3587,49 @@ export default function Communications() {
                         </SelectContent>
                       </Select>
                     </div>
+
+                    {automationForm.targetType === "folder" && (
+                      <div className="space-y-2">
+                        <Label>Select Folders</Label>
+                        <div className="border rounded-md p-3 space-y-2 max-h-48 overflow-y-auto">
+                          {(folders as any[])?.map((folder: any) => (
+                            <div key={folder.id} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`folder-${folder.id}`}
+                                checked={automationForm.targetFolderIds.includes(folder.id)}
+                                onCheckedChange={(checked: boolean) => {
+                                  if (checked) {
+                                    setAutomationForm(prev => ({
+                                      ...prev,
+                                      targetFolderIds: [...prev.targetFolderIds, folder.id]
+                                    }));
+                                  } else {
+                                    setAutomationForm(prev => ({
+                                      ...prev,
+                                      targetFolderIds: prev.targetFolderIds.filter(id => id !== folder.id)
+                                    }));
+                                  }
+                                }}
+                                data-testid={`checkbox-folder-${folder.id}`}
+                              />
+                              <label
+                                htmlFor={`folder-${folder.id}`}
+                                className="flex items-center gap-2 cursor-pointer text-sm"
+                              >
+                                <span 
+                                  className="inline-block h-3 w-3 rounded-full" 
+                                  style={{ backgroundColor: folder.color }}
+                                />
+                                <span>{folder.name}</span>
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-xs text-blue-100/60">
+                          {automationForm.targetFolderIds.length} folder(s) selected
+                        </p>
+                      </div>
+                    )}
 
                     <div className="flex justify-end gap-3">
                       <Button
