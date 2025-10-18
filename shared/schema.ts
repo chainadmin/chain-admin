@@ -441,10 +441,11 @@ export const callbackRequests = pgTable("callback_requests", {
   emailAddress: text("email_address"),
   subject: text("subject"),
   message: text("message"),
-  status: text("status").default("pending"), // "pending", "in_progress", "completed", "cancelled"
+  status: text("status").default("pending"), // "pending", "called", "no_answer", "scheduled", "in_progress", "completed", "cancelled"
   priority: text("priority").default("normal"), // "low", "normal", "high", "urgent"
   assignedTo: text("assigned_to"), // Admin user who took the request
   adminNotes: text("admin_notes"),
+  scheduledFor: timestamp("scheduled_for"), // For scheduled callbacks
   resolvedAt: timestamp("resolved_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });

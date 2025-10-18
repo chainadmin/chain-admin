@@ -46,6 +46,7 @@ import {
   Send,
   FileText,
   Trash2,
+  Pencil,
   Eye,
   TrendingUp,
   Users,
@@ -192,6 +193,9 @@ export default function Communications() {
     retry: false,
   });
 
+  const [editingAutomation, setEditingAutomation] = useState<any>(null);
+  const [showEditAutomationModal, setShowEditAutomationModal] = useState(false);
+  
   const [automationForm, setAutomationForm] = useState({
     name: "",
     description: "",
@@ -1087,6 +1091,46 @@ export default function Communications() {
       toast({
         title: "Success",
         description: "Automation updated successfully",
+      });
+    },
+  });
+
+  const updateAutomationMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) =>
+      apiRequest("PUT", `/api/automations/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/automations"] });
+      setShowEditAutomationModal(false);
+      setEditingAutomation(null);
+      setAutomationForm({
+        name: "",
+        description: "",
+        type: "email",
+        templateId: "",
+        templateIds: [],
+        templateSchedule: [],
+        triggerType: "schedule",
+        scheduleType: "once",
+        scheduledDate: "",
+        scheduleTime: "",
+        scheduleWeekdays: [],
+        scheduleDayOfMonth: "",
+        eventType: "account_created",
+        eventDelay: "immediate",
+        targetType: "all",
+        targetFolderIds: [],
+        targetCustomerIds: [],
+      });
+      toast({
+        title: "Success",
+        description: "Automation updated successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update automation",
+        variant: "destructive",
       });
     },
   });
@@ -3565,6 +3609,121 @@ export default function Communications() {
               </Dialog>
             </div>
 
+            {/* Edit Automation Dialog */}
+            <Dialog open={showEditAutomationModal} onOpenChange={setShowEditAutomationModal}>
+              <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Edit Automation</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={(e) => {
+                  e.preventDefault();
+                  if (editingAutomation) {
+                    updateAutomationMutation.mutate({
+                      id: editingAutomation.id,
+                      data: {
+                        name: automationForm.name,
+                        description: automationForm.description,
+                        scheduleType: automationForm.scheduleType,
+                        scheduledDate: automationForm.scheduledDate,
+                        scheduleTime: automationForm.scheduleTime,
+                        scheduleWeekdays: automationForm.scheduleWeekdays,
+                        scheduleDayOfMonth: automationForm.scheduleDayOfMonth,
+                      }
+                    });
+                  }
+                }} className="space-y-6">
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="edit-automation-name">Automation Name *</Label>
+                      <Input
+                        id="edit-automation-name"
+                        value={automationForm.name}
+                        onChange={(e) => setAutomationForm(prev => ({ ...prev, name: e.target.value }))}
+                        placeholder="e.g., Welcome Email Series"
+                        required
+                        data-testid="input-edit-automation-name"
+                      />
+                    </div>
+                    
+                    <div>
+                      <Label htmlFor="edit-automation-description">Description</Label>
+                      <Textarea
+                        id="edit-automation-description"
+                        value={automationForm.description}
+                        onChange={(e) => setAutomationForm(prev => ({ ...prev, description: e.target.value }))}
+                        placeholder="Describe what this automation does..."
+                        data-testid="textarea-edit-automation-description"
+                      />
+                    </div>
+
+                    {automationForm.triggerType === "schedule" && (
+                      <>
+                        <div>
+                          <Label>Schedule Type</Label>
+                          <Select 
+                            value={automationForm.scheduleType} 
+                            onValueChange={(value: "once" | "daily" | "weekly" | "monthly") => setAutomationForm(prev => ({ ...prev, scheduleType: value }))}
+                          >
+                            <SelectTrigger data-testid="select-edit-schedule-type">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="once">One-time</SelectItem>
+                              <SelectItem value="daily">Daily</SelectItem>
+                              <SelectItem value="weekly">Weekly</SelectItem>
+                              <SelectItem value="monthly">Monthly</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label>Start Date</Label>
+                            <Input
+                              type="date"
+                              value={automationForm.scheduledDate}
+                              onChange={(e) => setAutomationForm(prev => ({ ...prev, scheduledDate: e.target.value }))}
+                              data-testid="input-edit-schedule-date"
+                            />
+                          </div>
+                          <div>
+                            <Label>Time</Label>
+                            <Input
+                              type="time"
+                              value={automationForm.scheduleTime}
+                              onChange={(e) => setAutomationForm(prev => ({ ...prev, scheduleTime: e.target.value }))}
+                              data-testid="input-edit-schedule-time"
+                            />
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="flex justify-end gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setShowEditAutomationModal(false);
+                        setEditingAutomation(null);
+                      }}
+                      data-testid="button-cancel-edit-automation"
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      type="submit" 
+                      disabled={updateAutomationMutation.isPending}
+                      data-testid="button-submit-edit-automation"
+                    >
+                      {updateAutomationMutation.isPending ? "Updating..." : "Update Automation"}
+                    </Button>
+                  </div>
+                </form>
+              </DialogContent>
+            </Dialog>
+
             <Card className={glassPanelClass}>
               <CardHeader className="border-b border-white/20 pb-4">
                 <CardTitle className="flex items-center gap-2 text-lg font-semibold text-blue-50">
@@ -3618,6 +3777,37 @@ export default function Communications() {
                               data-testid={`button-toggle-automation-${automation.id}`}
                             >
                               {automation.isActive ? "Pause" : "Resume"}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="rounded-full border border-blue-200/60 bg-blue-50/60 px-4 py-1 text-xs font-semibold text-blue-600 shadow-sm hover:bg-blue-50"
+                              onClick={() => {
+                                setEditingAutomation(automation);
+                                setAutomationForm({
+                                  name: automation.name || "",
+                                  description: automation.description || "",
+                                  type: automation.type || "email",
+                                  templateId: automation.templateId || "",
+                                  templateIds: automation.templateIds || [],
+                                  templateSchedule: automation.templateSchedule || [],
+                                  triggerType: automation.triggerType || "schedule",
+                                  scheduleType: automation.scheduleType || "once",
+                                  scheduledDate: automation.scheduledDate ? new Date(automation.scheduledDate).toISOString().split('T')[0] : "",
+                                  scheduleTime: automation.scheduleTime || "",
+                                  scheduleWeekdays: automation.scheduleWeekdays || [],
+                                  scheduleDayOfMonth: automation.scheduleDayOfMonth || "",
+                                  eventType: automation.eventType || "account_created",
+                                  eventDelay: automation.eventDelay || "immediate",
+                                  targetType: automation.targetType || "all",
+                                  targetFolderIds: automation.targetFolderIds || [],
+                                  targetCustomerIds: automation.targetCustomerIds || [],
+                                });
+                                setShowEditAutomationModal(true);
+                              }}
+                              data-testid={`button-edit-automation-${automation.id}`}
+                            >
+                              <Pencil className="h-4 w-4" />
                             </Button>
                             <AlertDialog>
                               <AlertDialogTrigger asChild>

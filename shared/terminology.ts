@@ -37,6 +37,15 @@ export interface TerminologyMap {
   delinquent: string;         // Behind on payments/obligations
   current: string;            // Up to date
   paidOff: string;           // Fully completed
+  
+  // Callback request status terms
+  callbackRequest: string;    // Name for the request type
+  callbackRequestPlural: string;
+  statusCalled: string;       // Successfully contacted
+  statusNoAnswer: string;     // No response
+  statusScheduled: string;    // Scheduled for future contact
+  statusInProgress: string;   // Currently working on it
+  statusCompleted: string;    // Request fulfilled
 }
 
 const terminologyMaps: Record<BusinessType, TerminologyMap> = {
@@ -61,6 +70,13 @@ const terminologyMaps: Record<BusinessType, TerminologyMap> = {
     delinquent: 'Delinquent',
     current: 'Current',
     paidOff: 'Paid Off',
+    callbackRequest: 'Callback Request',
+    callbackRequestPlural: 'Callback Requests',
+    statusCalled: 'Called',
+    statusNoAnswer: 'No Answer',
+    statusScheduled: 'Scheduled',
+    statusInProgress: 'In Progress',
+    statusCompleted: 'Completed',
   },
   
   // Billing / Service Company
@@ -84,6 +100,13 @@ const terminologyMaps: Record<BusinessType, TerminologyMap> = {
     delinquent: 'Overdue',
     current: 'Current',
     paidOff: 'Paid',
+    callbackRequest: 'Service Request',
+    callbackRequestPlural: 'Service Requests',
+    statusCalled: 'Contacted',
+    statusNoAnswer: 'No Response',
+    statusScheduled: 'Scheduled',
+    statusInProgress: 'In Progress',
+    statusCompleted: 'Resolved',
   },
   
   // Subscription Provider
@@ -107,6 +130,13 @@ const terminologyMaps: Record<BusinessType, TerminologyMap> = {
     delinquent: 'Past Due',
     current: 'Active',
     paidOff: 'Paid',
+    callbackRequest: 'Support Request',
+    callbackRequestPlural: 'Support Requests',
+    statusCalled: 'Contacted',
+    statusNoAnswer: 'No Response',
+    statusScheduled: 'Scheduled',
+    statusInProgress: 'In Progress',
+    statusCompleted: 'Resolved',
   },
   
   // Freelancer / Consultant
@@ -130,6 +160,13 @@ const terminologyMaps: Record<BusinessType, TerminologyMap> = {
     delinquent: 'Overdue',
     current: 'Current',
     paidOff: 'Completed',
+    callbackRequest: 'Follow-up Request',
+    callbackRequestPlural: 'Follow-up Requests',
+    statusCalled: 'Contacted',
+    statusNoAnswer: 'No Response',
+    statusScheduled: 'Scheduled',
+    statusInProgress: 'In Progress',
+    statusCompleted: 'Resolved',
   },
   
   // Property Management
@@ -153,6 +190,13 @@ const terminologyMaps: Record<BusinessType, TerminologyMap> = {
     delinquent: 'Late',
     current: 'Current',
     paidOff: 'Paid',
+    callbackRequest: 'Maintenance Request',
+    callbackRequestPlural: 'Maintenance Requests',
+    statusCalled: 'Contacted',
+    statusNoAnswer: 'No Response',
+    statusScheduled: 'Scheduled',
+    statusInProgress: 'In Progress',
+    statusCompleted: 'Resolved',
   },
 };
 

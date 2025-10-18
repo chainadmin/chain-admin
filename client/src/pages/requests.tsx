@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useTerminology } from "@/hooks/use-terminology";
 import AdminLayout from "@/components/admin-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,9 +18,20 @@ import { Phone, Mail, MessageSquare, Clock, CheckCircle, XCircle, AlertCircle, U
 export default function Requests() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const terminology = useTerminology();
   const [selectedRequest, setSelectedRequest] = useState<any>(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [filterStatus, setFilterStatus] = useState("all");
+  const [updateFormStatus, setUpdateFormStatus] = useState<string>("");
+
+  // Sync updateFormStatus when selectedRequest changes or modal opens
+  useEffect(() => {
+    if (selectedRequest && showUpdateModal) {
+      setUpdateFormStatus(selectedRequest.status || "");
+    } else if (!showUpdateModal) {
+      setUpdateFormStatus("");
+    }
+  }, [selectedRequest, showUpdateModal]);
 
   const { data: requests, isLoading } = useQuery({
     queryKey: ["/api/callback-requests"],
@@ -37,6 +49,7 @@ export default function Requests() {
       queryClient.invalidateQueries({ queryKey: ["/api/callback-requests"] });
       setShowUpdateModal(false);
       setSelectedRequest(null);
+      setUpdateFormStatus("");
     },
     onError: (error: any) => {
       toast({
@@ -93,14 +106,41 @@ export default function Requests() {
     switch (status?.toLowerCase()) {
       case "pending":
         return "bg-yellow-100 text-yellow-800";
-      case "in_progress":
+      case "called":
         return "bg-blue-100 text-blue-800";
+      case "no_answer":
+        return "bg-orange-100 text-orange-800";
+      case "scheduled":
+        return "bg-purple-100 text-purple-800";
+      case "in_progress":
+        return "bg-cyan-100 text-cyan-800";
       case "completed":
         return "bg-green-100 text-green-800";
       case "cancelled":
         return "bg-gray-100 text-gray-800";
       default:
         return "bg-gray-100 text-gray-800";
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case "pending":
+        return "Pending";
+      case "called":
+        return terminology.statusCalled;
+      case "no_answer":
+        return terminology.statusNoAnswer;
+      case "scheduled":
+        return terminology.statusScheduled;
+      case "in_progress":
+        return terminology.statusInProgress;
+      case "completed":
+        return terminology.statusCompleted;
+      case "cancelled":
+        return "Cancelled";
+      default:
+        return status;
     }
   };
 
@@ -251,8 +291,11 @@ export default function Requests() {
                   <SelectContent>
                     <SelectItem value="all">All Statuses</SelectItem>
                     <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="in_progress">In Progress</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="called">{terminology.statusCalled}</SelectItem>
+                    <SelectItem value="no_answer">{terminology.statusNoAnswer}</SelectItem>
+                    <SelectItem value="scheduled">{terminology.statusScheduled}</SelectItem>
+                    <SelectItem value="in_progress">{terminology.statusInProgress}</SelectItem>
+                    <SelectItem value="completed">{terminology.statusCompleted}</SelectItem>
                     <SelectItem value="cancelled">Cancelled</SelectItem>
                   </SelectContent>
                 </Select>
@@ -290,7 +333,7 @@ export default function Requests() {
                             {request.consumerName}
                           </h3>
                           <Badge className={getStatusColor(request.status)}>
-                            {request.status?.replace("_", " ") || "Unknown"}
+                            {getStatusLabel(request.status)}
                           </Badge>
                           <Badge className={getPriorityColor(request.priority)}>
                             {request.priority || "normal"}
@@ -378,17 +421,25 @@ export default function Requests() {
                             Confirm
                           </Button>
                         )}
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => setSelectedRequest(request)}
-                              data-testid={`button-update-${request.id}`}
-                            >
-                              Update
-                            </Button>
-                          </DialogTrigger>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => {
+                            setSelectedRequest(request);
+                            setShowUpdateModal(true);
+                          }}
+                          data-testid={`button-update-${request.id}`}
+                        >
+                          Update
+                        </Button>
+                        
+                        <Dialog open={showUpdateModal && selectedRequest?.id === request.id} onOpenChange={(open) => {
+                          if (!open) {
+                            setShowUpdateModal(false);
+                            setSelectedRequest(null);
+                            setUpdateFormStatus("");
+                          }
+                        }}>
                           <DialogContent className="max-w-2xl">
                             <DialogHeader>
                               <DialogTitle>Update Request - {request.consumerName}</DialogTitle>
@@ -396,25 +447,41 @@ export default function Requests() {
                             <form onSubmit={(e) => {
                               e.preventDefault();
                               const formData = new FormData(e.currentTarget);
-                              const updates = {
+                              const updates: any = {
                                 status: formData.get('status'),
                                 priority: formData.get('priority'),
                                 assignedTo: formData.get('assignedTo'),
                                 adminNotes: formData.get('adminNotes'),
                               };
+                              
+                              // Include scheduledFor if status is "scheduled"
+                              if (updates.status === 'scheduled') {
+                                const scheduledFor = formData.get('scheduledFor');
+                                if (scheduledFor) {
+                                  updates.scheduledFor = new Date(scheduledFor as string).toISOString();
+                                }
+                              }
+                              
                               handleUpdateRequest(updates);
                             }} className="space-y-4">
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                   <Label>Status</Label>
-                                  <Select name="status" defaultValue={request.status}>
+                                  <Select 
+                                    name="status" 
+                                    defaultValue={request.status}
+                                    onValueChange={(value) => setUpdateFormStatus(value)}
+                                  >
                                     <SelectTrigger data-testid="select-update-status">
                                       <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
                                       <SelectItem value="pending">Pending</SelectItem>
-                                      <SelectItem value="in_progress">In Progress</SelectItem>
-                                      <SelectItem value="completed">Completed</SelectItem>
+                                      <SelectItem value="called">{terminology.statusCalled}</SelectItem>
+                                      <SelectItem value="no_answer">{terminology.statusNoAnswer}</SelectItem>
+                                      <SelectItem value="scheduled">{terminology.statusScheduled}</SelectItem>
+                                      <SelectItem value="in_progress">{terminology.statusInProgress}</SelectItem>
+                                      <SelectItem value="completed">{terminology.statusCompleted}</SelectItem>
                                       <SelectItem value="cancelled">Cancelled</SelectItem>
                                     </SelectContent>
                                   </Select>
@@ -453,8 +520,27 @@ export default function Requests() {
                                   data-testid="textarea-admin-notes"
                                 />
                               </div>
+                              
+                              {updateFormStatus === "scheduled" && (
+                                <div>
+                                  <Label>Scheduled For</Label>
+                                  <Input 
+                                    type="datetime-local"
+                                    name="scheduledFor" 
+                                    defaultValue={request.scheduledFor ? new Date(request.scheduledFor).toISOString().slice(0, 16) : ""}
+                                    placeholder="Select date and time"
+                                    data-testid="input-scheduled-for"
+                                  />
+                                  <p className="text-sm text-gray-500 mt-1">Set the date and time for this callback</p>
+                                </div>
+                              )}
+                              
                               <div className="flex justify-end space-x-3">
-                                <Button type="button" variant="outline" onClick={() => setShowUpdateModal(false)}>
+                                <Button 
+                                  type="button" 
+                                  variant="outline" 
+                                  onClick={() => setShowUpdateModal(false)}
+                                >
                                   Cancel
                                 </Button>
                                 <Button type="submit" disabled={updateRequestMutation.isPending}>
