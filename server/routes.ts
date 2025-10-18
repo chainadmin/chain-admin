@@ -5976,16 +5976,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const targetFolderIds = metadata.targetFolderIds || [];
           let targetConsumers: any[] = [];
           
-          // Get all consumers for the tenant
-          const allConsumers = await storage.getConsumersByTenant(automation.tenantId);
-          
           if (targetType === 'all') {
-            targetConsumers = allConsumers;
+            // Get all consumers for the tenant
+            targetConsumers = await storage.getConsumersByTenant(automation.tenantId);
           } else if (targetType === 'folder' && targetFolderIds.length > 0) {
-            targetConsumers = allConsumers.filter(c => 
-              c.folderId && targetFolderIds.includes(c.folderId)
-            );
+            // Get accounts from the target folders, then extract unique consumers
+            const uniqueConsumerIds = new Set<string>();
+            for (const folderId of targetFolderIds) {
+              const accountsInFolder = await storage.getAccountsByFolder(folderId);
+              accountsInFolder.forEach(account => {
+                if (account.consumerId) {
+                  uniqueConsumerIds.add(account.consumerId);
+                }
+              });
+            }
+            
+            // Get all consumers for the tenant and filter by those with accounts in target folders
+            const allConsumers = await storage.getConsumersByTenant(automation.tenantId);
+            targetConsumers = allConsumers.filter(c => uniqueConsumerIds.has(c.id));
           } else if (targetType === 'custom' && metadata.targetCustomerIds) {
+            // Get specific consumers by ID
+            const allConsumers = await storage.getConsumersByTenant(automation.tenantId);
             const targetIds = metadata.targetCustomerIds;
             targetConsumers = allConsumers.filter(c => targetIds.includes(c.id));
           }

@@ -62,6 +62,7 @@ export default function Accounts() {
     email: "",
     phone: "",
     accountNumber: "",
+    filenumber: "",
     creditor: "",
     balance: "",
     folderId: "",
@@ -126,6 +127,7 @@ export default function Accounts() {
         email: "",
         phone: "",
         accountNumber: "",
+        filenumber: "",
         creditor: "",
         balance: "",
         folderId: "",
@@ -285,6 +287,7 @@ export default function Accounts() {
       email: createForm.email,
       phone: createForm.phone || null,
       accountNumber: createForm.accountNumber || "",
+      filenumber: createForm.filenumber || "",
       creditor: createForm.creditor,
       balanceCents,
       folderId: createForm.folderId || null,
@@ -711,6 +714,20 @@ export default function Accounts() {
                 />
               </div>
               <div>
+                <Label htmlFor="filenumber">File Number *</Label>
+                <Input
+                  id="filenumber"
+                  data-testid="input-filenumber"
+                  value={createForm.filenumber}
+                  onChange={(e) => setCreateForm({ ...createForm, filenumber: e.target.value })}
+                  placeholder="Enter file number"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
                 <Label htmlFor="creditor">Creditor *</Label>
                 <Input
                   id="creditor"
@@ -721,9 +738,6 @@ export default function Accounts() {
                   required
                 />
               </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="balance">Balance *</Label>
                 <Input
@@ -737,6 +751,9 @@ export default function Accounts() {
                   required
                 />
               </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="folder">Folder</Label>
                 <Select
@@ -755,9 +772,6 @@ export default function Accounts() {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="dateOfBirth">Date of Birth *</Label>
                 <Input
@@ -770,6 +784,9 @@ export default function Accounts() {
                   required
                 />
               </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="address">Address</Label>
                 <Input
