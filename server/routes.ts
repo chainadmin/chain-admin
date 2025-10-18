@@ -4267,6 +4267,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Business Services Module Management
+  app.get('/api/settings/enabled-modules', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const enabledModules = await storage.getEnabledModules(tenantId);
+      res.json({ enabledModules });
+    } catch (error) {
+      console.error("Error fetching enabled modules:", error);
+      res.status(500).json({ message: "Failed to fetch enabled modules" });
+    }
+  });
+
+  app.put('/api/settings/enabled-modules', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const moduleSchema = z.object({
+        enabledModules: z.array(z.enum(['billing', 'subscriptions', 'work_orders', 'client_crm', 'messaging_center'])),
+      });
+
+      const { enabledModules } = moduleSchema.parse(req.body);
+      const updatedSettings = await storage.updateEnabledModules(tenantId, enabledModules);
+
+      res.json({ enabledModules: updatedSettings.enabledModules });
+    } catch (error) {
+      console.error("Error updating enabled modules:", error);
+      res.status(500).json({ 
+        message: error instanceof z.ZodError 
+          ? "Invalid module names provided" 
+          : "Failed to update enabled modules" 
+      });
+    }
+  });
+
   // Test SMAX connection
   app.post('/api/settings/test-smax', authenticateUser, async (req: any, res) => {
     try {
