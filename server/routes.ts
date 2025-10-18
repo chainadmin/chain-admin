@@ -5929,6 +5929,274 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Process due automations (called by cron/scheduler)
+  app.post('/api/automations/process', async (req: any, res) => {
+    try {
+      const { apiKey } = req.body;
+      
+      // Simple API key check
+      if (apiKey !== process.env.CRON_API_KEY) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const now = new Date();
+      console.log(`🤖 Processing automations at ${now.toISOString()}`);
+      
+      const processedAutomations = [];
+      const failedAutomations = [];
+      
+      // Get all active automations
+      const automations = await storage.getActiveAutomations();
+      console.log(`📋 Found ${automations.length} active automations to check`);
+      
+      for (const automation of automations) {
+        try {
+          // Parse metadata safely
+          const metadata = (automation as any).metadata && typeof (automation as any).metadata === 'object' 
+            ? (automation as any).metadata as any
+            : {};
+          
+          const triggerType = metadata.triggerType || (automation as any).trigger || 'schedule';
+          // Read nextExecution from the database column (not metadata)
+          const nextExecution = (automation as any).nextExecution ? new Date((automation as any).nextExecution) : null;
+          
+          // Skip if not scheduled or not due yet
+          if (triggerType !== 'schedule') {
+            continue; // Event-based and manual automations handled separately
+          }
+          
+          if (!nextExecution || nextExecution > now) {
+            continue; // Not due yet
+          }
+          
+          console.log(`⚡ Processing automation: ${automation.name} (${automation.type})`);
+          
+          // Get target consumers
+          const targetType = metadata.targetType || (automation as any).targetGroup || 'all';
+          const targetFolderIds = metadata.targetFolderIds || [];
+          let targetConsumers: any[] = [];
+          
+          // Get all consumers for the tenant
+          const allConsumers = await storage.getConsumersByTenant(automation.tenantId);
+          
+          if (targetType === 'all') {
+            targetConsumers = allConsumers;
+          } else if (targetType === 'folder' && targetFolderIds.length > 0) {
+            targetConsumers = allConsumers.filter(c => 
+              c.folderId && targetFolderIds.includes(c.folderId)
+            );
+          } else if (targetType === 'custom' && metadata.targetCustomerIds) {
+            const targetIds = metadata.targetCustomerIds;
+            targetConsumers = allConsumers.filter(c => targetIds.includes(c.id));
+          }
+          
+          console.log(`👥 Found ${targetConsumers.length} target consumers`);
+          
+          if (targetConsumers.length === 0) {
+            console.log(`⚠️ No targets for automation ${automation.name}`);
+            continue;
+          }
+          
+          // Get templates
+          const templateIds = metadata.templateIds || (automation.templateId ? [automation.templateId] : []);
+          let sentCount = 0;
+          let failedCount = 0;
+          
+          // Send to each consumer
+          for (const consumer of targetConsumers) {
+            for (const templateId of templateIds) {
+              try {
+                if (automation.type === 'email') {
+                  // Get email template
+                  const templates = await storage.getEmailTemplatesByTenant(automation.tenantId);
+                  const template = templates.find(t => t.id === templateId);
+                  if (!template) {
+                    console.error(`Template ${templateId} not found`);
+                    failedCount++;
+                    continue;
+                  }
+                  
+                  // Get tenant for branding
+                  const tenant = await storage.getTenant(automation.tenantId);
+                  if (!tenant) {
+                    failedCount++;
+                    continue;
+                  }
+                  
+                  // Replace variables in subject and body
+                  const variables = {
+                    fullName: `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim(),
+                    firstName: consumer.firstName || '',
+                    lastName: consumer.lastName || '',
+                    email: consumer.email || '',
+                    agencyName: tenant.name,
+                  };
+                  
+                  let subject = template.subject;
+                  let html = template.html;
+                  
+                  Object.entries(variables).forEach(([key, value]) => {
+                    const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
+                    subject = subject.replace(regex, value);
+                    html = html.replace(regex, value);
+                  });
+                  
+                  // Send email
+                  const { emailService } = await import('./emailService');
+                  await emailService.sendEmail({
+                    to: consumer.email || '',
+                    subject,
+                    html,
+                    tenantId: automation.tenantId,
+                    tag: 'automation',
+                    metadata: {
+                      automationId: automation.id,
+                      automationName: automation.name,
+                      consumerId: consumer.id,
+                    },
+                  });
+                  
+                  sentCount++;
+                  console.log(`✉️ Sent email to ${consumer.email}`);
+                  
+                } else if (automation.type === 'sms') {
+                  // Get SMS template
+                  const templates = await storage.getSmsTemplatesByTenant(automation.tenantId);
+                  const template = templates.find(t => t.id === templateId);
+                  if (!template) {
+                    console.error(`SMS template ${templateId} not found`);
+                    failedCount++;
+                    continue;
+                  }
+                  
+                  // Get tenant for branding
+                  const tenant = await storage.getTenant(automation.tenantId);
+                  if (!tenant) {
+                    failedCount++;
+                    continue;
+                  }
+                  
+                  // Replace variables in message
+                  const variables = {
+                    fullName: `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim(),
+                    firstName: consumer.firstName || '',
+                    agencyName: tenant.name,
+                  };
+                  
+                  let message = template.message;
+                  Object.entries(variables).forEach(([key, value]) => {
+                    const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
+                    message = message.replace(regex, value);
+                  });
+                  
+                  // Send SMS
+                  const { smsService } = await import('./smsService');
+                  const phone = consumer.phoneNumber || (consumer.additionalData as any)?.phone;
+                  
+                  if (!phone) {
+                    console.error(`No phone number for consumer ${consumer.id}`);
+                    failedCount++;
+                    continue;
+                  }
+                  
+                  await smsService.sendSms(
+                    phone,
+                    message,
+                    automation.tenantId
+                  );
+                  
+                  sentCount++;
+                  console.log(`📱 Sent SMS to ${phone}`);
+                }
+              } catch (sendError) {
+                console.error(`Error sending to consumer ${consumer.id}:`, sendError);
+                failedCount++;
+              }
+            }
+          }
+          
+          // Log execution
+          await storage.createAutomationExecution({
+            automationId: automation.id,
+            status: failedCount > 0 ? 'partial' : 'success',
+            totalSent: sentCount,
+            totalFailed: failedCount,
+            errorMessage: failedCount > 0 ? `${failedCount} sends failed` : null,
+            executionDetails: { sentCount, failedCount, timestamp: now.toISOString() },
+          });
+          
+          // Update automation for next run
+          const scheduleType = metadata.scheduleType || 'once';
+          
+          if (scheduleType === 'once') {
+            // Mark as inactive after one-time execution
+            await storage.updateAutomation(automation.id, {
+              isActive: false,
+              lastExecuted: now,
+              nextExecution: null,
+              metadata: {
+                ...metadata,
+                lastExecution: now.toISOString(),
+              } as any
+            } as any);
+            console.log(`✅ One-time automation ${automation.name} completed and deactivated`);
+          } else {
+            // Calculate next execution for recurring
+            const newNextExecution = calculateNextExecution({
+              ...automation,
+              scheduleType,
+              scheduledDate: metadata.scheduledDate,
+              scheduleTime: metadata.scheduleTime,
+              scheduleWeekdays: metadata.scheduleWeekdays,
+              scheduleDayOfMonth: metadata.scheduleDayOfMonth,
+            });
+            
+            // Update both database column and metadata for backward compatibility
+            await storage.updateAutomation(automation.id, {
+              lastExecuted: now,
+              nextExecution: newNextExecution,
+              metadata: {
+                ...metadata,
+                nextExecution: newNextExecution ? newNextExecution.toISOString() : null,
+                lastExecution: now.toISOString(),
+              } as any
+            } as any);
+            
+            console.log(`🔄 Recurring automation ${automation.name} next run: ${newNextExecution?.toISOString()}`);
+          }
+          
+          processedAutomations.push({
+            id: automation.id,
+            name: automation.name,
+            sent: sentCount,
+            failed: failedCount,
+          });
+          
+        } catch (error) {
+          console.error(`Error processing automation ${automation.id}:`, error);
+          failedAutomations.push({
+            id: automation.id,
+            name: automation.name,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      }
+      
+      console.log(`✅ Processed ${processedAutomations.length} automations, ${failedAutomations.length} failed`);
+      
+      res.json({
+        success: true,
+        processed: processedAutomations.length,
+        failed: failedAutomations.length,
+        details: { processedAutomations, failedAutomations }
+      });
+      
+    } catch (error) {
+      console.error("Error processing automations:", error);
+      res.status(500).json({ message: "Failed to process automations" });
+    }
+  });
+
   // Scheduled payments calendar endpoint
   app.get('/api/scheduled-payments/calendar', authenticateUser, async (req: any, res) => {
     try {
