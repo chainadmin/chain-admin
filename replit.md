@@ -72,9 +72,15 @@ The frontend uses React with TypeScript, built with shadcn/ui components on Radi
   - Subscription request approval/rejection workflow
   - Platform-wide statistics and agency monitoring
   - SMS configuration management for Twilio subaccounts
-- **Multi-Module Architecture** (IN PROGRESS): Platform supports multiple business types with module-specific customization:
-  - **Database Schema**: `tenants` table includes `businessType` field (call_center, billing_service, subscription_provider, freelancer_consultant, property_management). Defaults to 'call_center' for backward compatibility.
-  - **Registration Flow**: Agency registration form includes business type selection dropdown. Backend validates and stores business type during tenant creation.
+- **Multi-Module Architecture**: Platform supports multiple business types with module-specific customization:
+  - **Database Schema**: `tenants` table includes `businessType` field (call_center, billing_service, subscription_provider, freelancer_consultant, property_management). Defaults to 'call_center' for backward compatibility. `tenant_settings` table includes `enabledModules` array field to control which business service modules are active.
+  - **Registration Flow**: Agency registration form includes business type selection dropdown. Backend validates and stores business type during tenant creation. New trial accounts default to all modules disabled (empty array).
+  - **Business Services Module System**: Allows agencies to enable/disable specific modules based on their business needs:
+    - **Available Modules**: Billing, Subscriptions, Work Orders, Client CRM, Messaging Center
+    - **Module Management UI**: Admin settings page includes "Business Services" tab with visual toggle cards for each module
+    - **Dashboard Indicator**: Active modules displayed as badges on admin dashboard for quick visibility
+    - **API Endpoints**: GET/PUT `/api/settings/enabled-modules` with proper authentication and validation
+    - **Default State**: New trial registrations start with all modules disabled; agencies enable only what they need
   - **Terminology System**: Comprehensive terminology mapping system (`shared/terminology.ts`) provides business-specific terms:
     - Call Centers: debtor, creditor, placement, settlement (original terms preserved)
     - Billing Service: customer, service provider, invoice, discount offer
@@ -83,7 +89,7 @@ The frontend uses React with TypeScript, built with shadcn/ui components on Radi
     - Property Management: tenant, property owner, lease, payment plan
   - **React Hook**: `useTerminology()` hook provides easy access to business-appropriate terminology in UI components
   - **Admin Notifications**: Centralized notification system sends branded emails to all tenant admins when consumers register, make payments, or set up arrangements. Sanitized logging prevents PII exposure.
-  - **Next Steps**: Full UI implementation pending - terminology hook ready for use across all pages (accounts, dashboard, consumer portal, etc.)
+  - **Next Steps**: Full UI terminology implementation pending - hook ready for use across all pages (accounts, dashboard, consumer portal, etc.)
 
 # External Dependencies
 
