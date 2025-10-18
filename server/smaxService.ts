@@ -259,6 +259,7 @@ class SmaxService {
       const config = await this.getSmaxConfig(tenantId);
 
       if (!config) {
+        console.log('ℹ️ SMAX not configured or not enabled for this tenant - skipping payment sync');
         return false;
       }
 
@@ -266,6 +267,7 @@ class SmaxService {
         filenumber: paymentData.filenumber,
         amount: paymentData.paymentamount,
         method: paymentData.paymentmethod,
+        baseUrl: config.baseUrl
       });
 
       const result = await this.makeSmaxRequest(
@@ -275,7 +277,7 @@ class SmaxService {
         paymentData
       );
 
-      console.log('✅ SMAX payment inserted:', result);
+      console.log('✅ SMAX payment inserted successfully:', result);
       return result.state === 'SUCCESS';
     } catch (error) {
       console.error('❌ Error inserting payment to SMAX:', error);

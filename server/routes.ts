@@ -5342,10 +5342,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 payorname: `${consumer.firstName} ${consumer.lastName}`,
                 paymentmethod: 'CREDIT CARD',
                 cardtype: cardBrand || 'Unknown',
-                cardLast4: cardNumber.slice(-4),
+                cardLast4: cardLast4,
                 transactionid: transactionId,
               });
-              await smaxService.insertPayment(tenantId, paymentData);
+              
+              console.log('💳 Sending payment to SMAX:', {
+                filenumber: account.accountNumber,
+                amount: amountCents / 100,
+                cardLast4: cardLast4
+              });
+              
+              const smaxResult = await smaxService.insertPayment(tenantId, paymentData);
+              
+              if (smaxResult) {
+                console.log('✅ Payment successfully sent to SMAX');
+              } else {
+                console.error('❌ Failed to send payment to SMAX');
+              }
             }
           }
         } catch (smaxError) {
