@@ -309,21 +309,38 @@ function replaceTemplateVariables(
     }
   }
 
-  async function resolveEmailCampaignAudience(tenantId: string, targetGroup: string, folderId?: string) {
+  async function resolveEmailCampaignAudience(
+    tenantId: string,
+    targetGroup: string,
+    folderSelection?: string | string[] | null,
+  ) {
     const consumersList = await storage.getConsumersByTenant(tenantId);
     const accountsData = await storage.getAccountsByTenant(tenantId);
 
-    console.log(`🎯 Resolving campaign audience - targetGroup: "${targetGroup}", folderId: "${folderId || 'none'}"`);
+    const folderIds = Array.isArray(folderSelection)
+      ? folderSelection.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+      : typeof folderSelection === 'string' && folderSelection.trim().length > 0
+        ? [folderSelection]
+        : [];
+
+    console.log(
+      `🎯 Resolving campaign audience - targetGroup: "${targetGroup}", folders: ${folderIds.length > 0 ? folderIds.join(', ') : 'none'}`,
+    );
     console.log(`📊 Total consumers in tenant: ${consumersList.length}, Total accounts: ${accountsData.length}`);
 
     let targetedConsumers = consumersList;
 
-    if (targetGroup === 'folder' && folderId) {
-      // Filter consumers who have accounts in the specified folder
-      console.log(`🔍 Filtering for folder - folderId: "${folderId}"`);
-      const accountsInFolder = accountsData.filter(acc => acc.folderId === folderId);
-      console.log(`📁 Found ${accountsInFolder.length} accounts in folder`);
-      
+    if (targetGroup === 'folder' && folderIds.length > 0) {
+      const folderSet = new Set(folderIds);
+
+      console.log(`🔍 Filtering for folders: ${folderIds.join(', ')}`);
+      const accountsInFolder = accountsData.filter(acc => {
+        const accountFolderMatch = acc.folderId && folderSet.has(acc.folderId);
+        const consumerFolderMatch = acc.consumer?.folderId && folderSet.has(acc.consumer.folderId);
+        return accountFolderMatch || consumerFolderMatch;
+      });
+      console.log(`📁 Found ${accountsInFolder.length} accounts matching selected folders`);
+
       if (accountsInFolder.length === 0) {
         const totalAccountsWithFolder = accountsData.filter(acc => acc.folderId).length;
         const uniqueFolderCount = new Set(accountsData.map(a => a.folderId).filter(Boolean)).size;
@@ -331,12 +348,14 @@ function replaceTemplateVariables(
         console.log(`   Total accounts with folders: ${totalAccountsWithFolder}, Unique folders: ${uniqueFolderCount}`);
         console.log(`   Sample folder IDs from accounts:`, Array.from(new Set(accountsData.slice(0, 5).map(a => a.folderId).filter(Boolean))));
       }
-      
+
       const consumerIds = new Set(
         accountsInFolder.map(acc => acc.consumerId)
       );
-      targetedConsumers = consumersList.filter(c => consumerIds.has(c.id));
-      console.log(`✅ FOLDER FILTER RESULT: Started with ${consumersList.length} total consumers, filtered to ${targetedConsumers.length} consumers in folder "${folderId}"`);
+      targetedConsumers = consumersList.filter(c => consumerIds.has(c.id) || (c.folderId && folderSet.has(c.folderId)));
+      console.log(
+        `✅ FOLDER FILTER RESULT: Started with ${consumersList.length} total consumers, filtered to ${targetedConsumers.length} consumers in folders [${folderIds.join(', ')}]`,
+      );
       console.log(`   Targeted consumer emails (first 3):`, targetedConsumers.slice(0, 3).map(c => c.email));
     } else if (targetGroup === 'with-balance') {
       const consumerIds = new Set(
@@ -1560,15 +1579,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const { name, templateId, targetGroup, folderId } = req.body;
-      
-      console.log(`📧 Creating campaign - name: "${name}", targetGroup: "${targetGroup}", folderId: "${folderId || 'none'}"`);
-      
+      const { name, templateId, targetGroup, folderId, targetFolderIds } = req.body;
+
+      const folderIds = Array.isArray(targetFolderIds) && targetFolderIds.length > 0
+        ? targetFolderIds
+        : folderId
+          ? [folderId]
+          : [];
+
+      console.log(
+        `📧 Creating campaign - name: "${name}", targetGroup: "${targetGroup}", folders: ${folderIds.length > 0 ? folderIds.join(', ') : 'none'}`,
+      );
+
       if (!name || !templateId || !targetGroup) {
         return res.status(400).json({ message: "Name, template ID, and target group are required" });
       }
 
-      const { targetedConsumers } = await resolveEmailCampaignAudience(tenantId, targetGroup, folderId);
+      const { targetedConsumers } = await resolveEmailCampaignAudience(tenantId, targetGroup, folderIds);
 
       let template;
       try {
@@ -1587,7 +1614,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         name,
         templateId,
         targetGroup,
-        folderId: folderId || null,
+        folderId: folderIds[0] || null,
         totalRecipients: targetedConsumers.length,
         status: 'pending_approval',
       });
@@ -1622,7 +1649,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Campaign not found" });
       }
 
-      console.log(`🚀 Approving campaign "${campaign.name}" - targetGroup: "${campaign.targetGroup}", folderId: "${campaign.folderId || 'none'}"`);
+      console.log(
+        `🚀 Approving campaign "${campaign.name}" - targetGroup: "${campaign.targetGroup}", folderId: "${campaign.folderId || 'none'}"`,
+      );
 
       const normalizedStatus = (campaign.status || '').toLowerCase();
       if (!['pending', 'pending_approval'].includes(normalizedStatus)) {
@@ -1643,7 +1672,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Tenant not found" });
       }
 
-      const audience = await resolveEmailCampaignAudience(tenantId, campaign.targetGroup, campaign.folderId);
+      const audience = await resolveEmailCampaignAudience(
+        tenantId,
+        campaign.targetGroup,
+        campaign.folderId ? [campaign.folderId] : [],
+      );
       targetedConsumers = audience.targetedConsumers;
       const { accountsData } = audience;
 
@@ -2223,80 +2256,147 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Helper function to calculate next execution time for automations
   function calculateNextExecution(automation: any): Date | null {
-    if (!automation.scheduleType || !automation.scheduledDate) {
+    const triggerType = automation.triggerType || automation.trigger || 'schedule';
+    if (triggerType !== 'schedule') {
       return null;
     }
 
-    const now = new Date();
-    let nextDate = new Date(automation.scheduledDate);
-    
-    // If scheduledDate is in the past and schedule type is 'once', don't schedule
-    if (automation.scheduleType === 'once' && nextDate < now) {
+    const scheduleType = automation.scheduleType || 'once';
+
+    const parseTimeString = (value?: string | null) => {
+      if (!value) {
+        return null;
+      }
+      const [hoursStr, minutesStr] = value.split(':');
+      const hours = Number(hoursStr);
+      const minutes = Number(minutesStr);
+      if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+        return null;
+      }
+      return { hours, minutes };
+    };
+
+    const timeParts = parseTimeString(automation.scheduleTime || automation.scheduledTimeOfDay) || { hours: 9, minutes: 0 };
+
+    const rawBaseDate = automation.scheduledDate || automation.scheduledTime || null;
+    const baseDate = rawBaseDate ? new Date(rawBaseDate) : new Date();
+    if (Number.isNaN(baseDate.getTime())) {
       return null;
     }
-    
-    // Apply schedule time if provided (format: "HH:MM")
-    if (automation.scheduleTime) {
-      const [hours, minutes] = automation.scheduleTime.split(':').map(Number);
-      nextDate.setHours(hours, minutes, 0, 0);
+
+    baseDate.setSeconds(0, 0);
+    baseDate.setMilliseconds(0);
+    baseDate.setHours(timeParts.hours, timeParts.minutes, 0, 0);
+
+    const now = new Date();
+
+    if (scheduleType === 'once') {
+      return baseDate >= now ? new Date(baseDate) : null;
     }
-    
-    // For one-time schedules, return the scheduled date/time
-    if (automation.scheduleType === 'once') {
-      return nextDate >= now ? nextDate : null;
-    }
-    
-    // For recurring schedules, calculate the next occurrence
-    while (nextDate < now) {
-      switch (automation.scheduleType) {
-        case 'daily':
-          nextDate.setDate(nextDate.getDate() + 1);
-          break;
-          
-        case 'weekly':
-          // If weekdays are specified, find next matching weekday
-          if (automation.scheduleWeekdays && automation.scheduleWeekdays.length > 0) {
-            const weekdayMap: Record<string, number> = {
-              'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3,
-              'thursday': 4, 'friday': 5, 'saturday': 6
-            };
-            const targetDays = automation.scheduleWeekdays.map((d: string) => weekdayMap[d.toLowerCase()]);
-            
-            // Find next matching day
-            let daysToAdd = 1;
-            while (daysToAdd <= 7) {
-              const testDate = new Date(nextDate);
-              testDate.setDate(testDate.getDate() + daysToAdd);
-              if (targetDays.includes(testDate.getDay())) {
-                nextDate = testDate;
-                break;
-              }
-              daysToAdd++;
-            }
-          } else {
-            // Default to weekly (7 days)
-            nextDate.setDate(nextDate.getDate() + 7);
-          }
-          break;
-          
-        case 'monthly':
-          // If day of month is specified, use it
-          if (automation.scheduleDayOfMonth) {
-            const dayOfMonth = parseInt(automation.scheduleDayOfMonth);
-            nextDate.setMonth(nextDate.getMonth() + 1);
-            nextDate.setDate(Math.min(dayOfMonth, new Date(nextDate.getFullYear(), nextDate.getMonth() + 1, 0).getDate()));
-          } else {
-            // Default to same day next month
-            nextDate.setMonth(nextDate.getMonth() + 1);
-          }
-          break;
-          
-        default:
-          return null;
+
+    if (scheduleType === 'daily') {
+      const candidate = new Date(baseDate);
+      while (candidate <= now) {
+        candidate.setDate(candidate.getDate() + 1);
       }
+      return candidate;
     }
-    
-    return nextDate;
+
+    if (scheduleType === 'weekly') {
+      const weekdayMap: Record<string, number> = {
+        sunday: 0,
+        monday: 1,
+        tuesday: 2,
+        wednesday: 3,
+        thursday: 4,
+        friday: 5,
+        saturday: 6,
+      };
+
+      const scheduleWeekdays = Array.isArray(automation.scheduleWeekdays)
+        ? automation.scheduleWeekdays
+        : [];
+
+      const targetDays = scheduleWeekdays
+        .map((day: unknown) => (typeof day === 'string' ? weekdayMap[day.toLowerCase()] : undefined))
+        .filter((value): value is number => value !== undefined);
+
+      const daysToEvaluate = targetDays.length > 0 ? targetDays : [baseDate.getDay()];
+
+      let bestCandidate: Date | null = null;
+
+      for (const dayIndex of daysToEvaluate) {
+        const candidate = new Date(baseDate);
+        const diff = (dayIndex - candidate.getDay() + 7) % 7;
+        if (diff === 0 && candidate <= now) {
+          candidate.setDate(candidate.getDate() + 7);
+        } else {
+          candidate.setDate(candidate.getDate() + diff);
+        }
+
+        if (!bestCandidate || candidate < bestCandidate) {
+          bestCandidate = candidate;
+        }
+      }
+
+      return bestCandidate;
+    }
+
+    if (scheduleType === 'monthly') {
+      const desiredDayRaw = automation.scheduleDayOfMonth;
+      const desiredDay = desiredDayRaw ? Number(desiredDayRaw) : baseDate.getDate();
+      if (!Number.isFinite(desiredDay) || desiredDay < 1) {
+        return null;
+      }
+
+      const candidate = new Date(baseDate);
+      const applyDay = (date: Date) => {
+        const maxDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+        date.setDate(Math.min(desiredDay, maxDay));
+        date.setHours(timeParts.hours, timeParts.minutes, 0, 0);
+      };
+
+      applyDay(candidate);
+      while (candidate <= now) {
+        candidate.setMonth(candidate.getMonth() + 1);
+        applyDay(candidate);
+      }
+
+      return candidate;
+    }
+
+    if (scheduleType === 'sequence') {
+      const templateSchedule = Array.isArray(automation.templateSchedule)
+        ? automation.templateSchedule
+        : [];
+
+      const sortedSchedule = templateSchedule
+        .filter(
+          (item: any) =>
+            item && typeof item === 'object' && typeof item.templateId === 'string' && item.templateId.trim().length > 0,
+        )
+        .map((item: any) => ({
+          templateId: item.templateId,
+          dayOffset: Number(item.dayOffset) || 0,
+        }))
+        .sort((a, b) => a.dayOffset - b.dayOffset);
+
+      if (sortedSchedule.length === 0) {
+        return baseDate >= now ? new Date(baseDate) : null;
+      }
+
+      for (const scheduleItem of sortedSchedule) {
+        const candidate = new Date(baseDate);
+        candidate.setDate(candidate.getDate() + scheduleItem.dayOffset);
+        if (candidate >= now) {
+          return candidate;
+        }
+      }
+
+      return null;
+    }
+
+    return baseDate >= now ? new Date(baseDate) : null;
   }
 
   // Communication Automation Routes
@@ -2361,17 +2461,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       const validatedData = insertAutomationSchema.parse(req.body);
-      
+
       const automationData: any = {
         ...validatedData,
         tenantId: tenantId,
       };
-      
+
+      automationData.templateIds = Array.isArray(validatedData.templateIds)
+        ? validatedData.templateIds
+        : [];
+
+      automationData.templateSchedule = Array.isArray(validatedData.templateSchedule)
+        ? validatedData.templateSchedule.map((item) => ({
+            templateId: item.templateId,
+            dayOffset: Number(item.dayOffset) || 0,
+          }))
+        : [];
+
+      automationData.scheduleWeekdays = Array.isArray(validatedData.scheduleWeekdays)
+        ? validatedData.scheduleWeekdays.filter((day): day is string => typeof day === 'string' && day.trim().length > 0)
+        : [];
+
+      automationData.targetFolderIds = Array.isArray(validatedData.targetFolderIds)
+        ? validatedData.targetFolderIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+        : [];
+
+      automationData.targetCustomerIds = Array.isArray(validatedData.targetCustomerIds)
+        ? validatedData.targetCustomerIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+        : [];
+
+      if (!automationData.scheduleType && automationData.triggerType === 'schedule') {
+        automationData.scheduleType = 'once';
+      }
+
       // Convert scheduledDate string to Date if provided
       if (automationData.scheduledDate) {
         automationData.scheduledDate = new Date(automationData.scheduledDate);
       }
-      
+
       // Calculate next execution if it's a scheduled automation
       if (automationData.triggerType === 'schedule') {
         const nextExecution = calculateNextExecution(automationData);
@@ -2428,7 +2555,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Get current automation to merge with updates
         const currentAutomation = await storage.getAutomationById(req.params.id, tenantId);
         if (currentAutomation && currentAutomation.triggerType === 'schedule') {
-          const mergedData = { ...currentAutomation, ...updateData };
+          const mergedData: any = { ...currentAutomation, ...updateData };
+
+          if (Array.isArray(mergedData.scheduleWeekdays)) {
+            mergedData.scheduleWeekdays = mergedData.scheduleWeekdays.filter(
+              (day: unknown): day is string => typeof day === 'string' && day.trim().length > 0,
+            );
+          }
+
           const nextExecution = calculateNextExecution(mergedData);
           if (nextExecution) {
             updateData.nextExecution = nextExecution;
@@ -5952,14 +6086,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (const automation of automations) {
         try {
           // Parse metadata safely
-          const metadata = (automation as any).metadata && typeof (automation as any).metadata === 'object' 
+          const metadata = (automation as any).metadata && typeof (automation as any).metadata === 'object'
             ? (automation as any).metadata as any
             : {};
-          
-          const triggerType = metadata.triggerType || (automation as any).trigger || 'schedule';
+
+          const triggerType = metadata.triggerType
+            || (automation as any).triggerType
+            || (automation as any).trigger
+            || 'schedule';
           // Read nextExecution from the database column (not metadata)
           const nextExecution = (automation as any).nextExecution ? new Date((automation as any).nextExecution) : null;
-          
+
           // Skip if not scheduled or not due yet
           if (triggerType !== 'schedule') {
             continue; // Event-based and manual automations handled separately
@@ -5972,33 +6109,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log(`⚡ Processing automation: ${automation.name} (${automation.type})`);
           
           // Get target consumers
-          const targetType = metadata.targetType || (automation as any).targetGroup || 'all';
-          const targetFolderIds = metadata.targetFolderIds || [];
+          const targetType = metadata.targetType
+            || (automation as any).targetType
+            || (automation as any).targetGroup
+            || 'all';
+          const targetFolderIds = Array.isArray(metadata.targetFolderIds) && metadata.targetFolderIds.length > 0
+            ? metadata.targetFolderIds
+            : Array.isArray((automation as any).targetFolderIds)
+              ? (automation as any).targetFolderIds.filter(
+                  (id: unknown): id is string => typeof id === 'string' && id.trim().length > 0,
+                )
+              : [];
+          const targetCustomerIds = Array.isArray(metadata.targetCustomerIds) && metadata.targetCustomerIds.length > 0
+            ? metadata.targetCustomerIds
+            : Array.isArray((automation as any).targetCustomerIds)
+              ? (automation as any).targetCustomerIds.filter(
+                  (id: unknown): id is string => typeof id === 'string' && id.trim().length > 0,
+                )
+              : [];
           let targetConsumers: any[] = [];
-          
+
           if (targetType === 'all') {
             // Get all consumers for the tenant
             targetConsumers = await storage.getConsumersByTenant(automation.tenantId);
           } else if (targetType === 'folder' && targetFolderIds.length > 0) {
-            // Get accounts from the target folders, then extract unique consumers
-            const uniqueConsumerIds = new Set<string>();
-            for (const folderId of targetFolderIds) {
-              const accountsInFolder = await storage.getAccountsByFolder(folderId);
-              accountsInFolder.forEach(account => {
-                if (account.consumerId) {
-                  uniqueConsumerIds.add(account.consumerId);
-                }
-              });
-            }
-            
-            // Get all consumers for the tenant and filter by those with accounts in target folders
+            const accountsData = await storage.getAccountsByTenant(automation.tenantId);
+            const folderSet = new Set(targetFolderIds);
+
+            const consumersList = await storage.getConsumersByTenant(automation.tenantId);
+            const consumerIds = new Set(
+              accountsData
+                .filter(acc => (acc.folderId && folderSet.has(acc.folderId)) || (acc.consumer?.folderId && folderSet.has(acc.consumer.folderId)))
+                .map(acc => acc.consumerId),
+            );
+
+            targetConsumers = consumersList.filter(
+              consumer => consumerIds.has(consumer.id) || (consumer.folderId && folderSet.has(consumer.folderId)),
+            );
+          } else if (targetType === 'custom' && targetCustomerIds.length > 0) {
             const allConsumers = await storage.getConsumersByTenant(automation.tenantId);
-            targetConsumers = allConsumers.filter(c => uniqueConsumerIds.has(c.id));
-          } else if (targetType === 'custom' && metadata.targetCustomerIds) {
-            // Get specific consumers by ID
-            const allConsumers = await storage.getConsumersByTenant(automation.tenantId);
-            const targetIds = metadata.targetCustomerIds;
-            targetConsumers = allConsumers.filter(c => targetIds.includes(c.id));
+            const targetIds = new Set(targetCustomerIds);
+            targetConsumers = allConsumers.filter(c => targetIds.has(c.id));
           }
           
           console.log(`👥 Found ${targetConsumers.length} target consumers`);
@@ -6009,7 +6160,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
           
           // Get templates
-          const templateIds = metadata.templateIds || (automation.templateId ? [automation.templateId] : []);
+          const templateIds = Array.isArray(metadata.templateIds) && metadata.templateIds.length > 0
+            ? metadata.templateIds
+            : Array.isArray((automation as any).templateIds) && (automation as any).templateIds.length > 0
+              ? (automation as any).templateIds
+              : (automation as any).templateId
+                ? [(automation as any).templateId]
+                : [];
           let sentCount = 0;
           let failedCount = 0;
           
@@ -6137,8 +6294,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
           
           // Update automation for next run
-          const scheduleType = metadata.scheduleType || 'once';
-          
+          const scheduleType = metadata.scheduleType
+            || (automation as any).scheduleType
+            || 'once';
+
           if (scheduleType === 'once') {
             // Mark as inactive after one-time execution
             await storage.updateAutomation(automation.id, {
@@ -6153,26 +6312,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.log(`✅ One-time automation ${automation.name} completed and deactivated`);
           } else {
             // Calculate next execution for recurring
+            const scheduledDateSource = metadata.scheduledDate
+              || (automation as any).scheduledDate
+              || (automation as any).scheduledTime
+              || null;
+            const scheduledDateValue = scheduledDateSource ? new Date(scheduledDateSource) : null;
+
+            const scheduleTimeValue = metadata.scheduleTime
+              || (automation as any).scheduleTime
+              || (automation as any).scheduledTimeOfDay
+              || null;
+
+            const scheduleWeekdaysValue = Array.isArray(metadata.scheduleWeekdays) && metadata.scheduleWeekdays.length > 0
+              ? metadata.scheduleWeekdays
+              : Array.isArray((automation as any).scheduleWeekdays)
+                ? (automation as any).scheduleWeekdays
+                : [];
+
+            const scheduleDayOfMonthValue = metadata.scheduleDayOfMonth
+              || (automation as any).scheduleDayOfMonth
+              || null;
+
+            const templateScheduleValue = Array.isArray(metadata.templateSchedule) && metadata.templateSchedule.length > 0
+              ? metadata.templateSchedule
+              : (automation as any).templateSchedule;
+
             const newNextExecution = calculateNextExecution({
               ...automation,
               scheduleType,
-              scheduledDate: metadata.scheduledDate,
-              scheduleTime: metadata.scheduleTime,
-              scheduleWeekdays: metadata.scheduleWeekdays,
-              scheduleDayOfMonth: metadata.scheduleDayOfMonth,
+              scheduledDate: scheduledDateValue,
+              scheduleTime: scheduleTimeValue,
+              scheduleWeekdays: scheduleWeekdaysValue,
+              scheduleDayOfMonth: scheduleDayOfMonthValue,
+              templateSchedule: templateScheduleValue,
             });
-            
+
             // Update both database column and metadata for backward compatibility
             await storage.updateAutomation(automation.id, {
               lastExecuted: now,
               nextExecution: newNextExecution,
               metadata: {
                 ...metadata,
+                scheduleType,
+                scheduledDate: scheduledDateValue
+                  ? scheduledDateValue.toISOString()
+                  : scheduledDateSource,
+                scheduleTime: scheduleTimeValue,
+                scheduleWeekdays: scheduleWeekdaysValue,
+                scheduleDayOfMonth: scheduleDayOfMonthValue,
+                templateIds,
+                targetFolderIds,
+                targetCustomerIds,
+                templateSchedule: templateScheduleValue,
                 nextExecution: newNextExecution ? newNextExecution.toISOString() : null,
                 lastExecution: now.toISOString(),
               } as any
             } as any);
-            
+
             console.log(`🔄 Recurring automation ${automation.name} next run: ${newNextExecution?.toISOString()}`);
           }
           

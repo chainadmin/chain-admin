@@ -95,9 +95,12 @@ export default function AccountsTable({
     return account.status?.toLowerCase() === statusFilter.toLowerCase();
   });
 
+  const MAX_RECENT_ACCOUNTS = 10;
+  const visibleAccounts = filteredAccounts.slice(0, MAX_RECENT_ACCOUNTS);
+
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedAccounts(new Set(filteredAccounts.map(a => a.id)));
+      setSelectedAccounts(new Set(visibleAccounts.map(a => a.id)));
     } else {
       setSelectedAccounts(new Set());
     }
@@ -177,7 +180,9 @@ export default function AccountsTable({
           <p className="mt-1 text-sm text-blue-100/70">
             {selectedAccounts.size > 0
               ? `${selectedAccounts.size} account${selectedAccounts.size > 1 ? 's' : ''} selected`
-              : 'Latest imported and updated accounts from your team'}
+              : filteredAccounts.length > MAX_RECENT_ACCOUNTS
+                ? `Showing ${visibleAccounts.length} of ${filteredAccounts.length} recent accounts`
+                : 'Latest imported and updated accounts from your team'}
           </p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -230,7 +235,7 @@ export default function AccountsTable({
                   {showDeleteButton && (
                     <th className="px-6 py-3">
                       <Checkbox
-                        checked={selectedAccounts.size === filteredAccounts.length && filteredAccounts.length > 0}
+                        checked={selectedAccounts.size === visibleAccounts.length && visibleAccounts.length > 0}
                         onCheckedChange={handleSelectAll}
                         data-testid="checkbox-select-all"
                       />
@@ -247,7 +252,7 @@ export default function AccountsTable({
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/10 text-sm text-blue-100/80">
-                {filteredAccounts.map((account) => (
+                {visibleAccounts.map((account) => (
                   <tr key={account.id} className="transition hover:bg-white/10">
                     {showDeleteButton && (
                       <td className="px-6 py-4 align-middle">
@@ -368,7 +373,9 @@ export default function AccountsTable({
           <div className="border-t border-white/10 px-6 py-4">
             <div className="flex flex-col gap-4 text-sm text-blue-100/70 sm:flex-row sm:items-center sm:justify-between">
               <p>
-                Showing <span className="font-semibold text-white">1</span> to <span className="font-semibold text-white">{Math.min(10, filteredAccounts.length)}</span> of <span className="font-semibold text-white">{filteredAccounts.length}</span> results
+                Showing <span className="font-semibold text-white">{visibleAccounts.length}</span>
+                {` of `}
+                <span className="font-semibold text-white">{filteredAccounts.length}</span> results
               </p>
               <div className="flex items-center gap-2">
                 <Button variant="ghost" size="sm" className="rounded-full border border-white/10 bg-white/10 px-3 text-blue-100 hover:bg-white/20" data-testid="button-prev-desktop">
