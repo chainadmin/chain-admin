@@ -942,9 +942,9 @@ export default function Communications() {
       queryClient.invalidateQueries({ queryKey: ["/api/email-campaigns"] });
       setShowCampaignModal(false);
       setShowCampaignConfirmation(false);
-      setCampaignForm({ 
-        name: "", 
-        templateId: "", 
+      setCampaignForm({
+        name: "",
+        templateId: "",
         targetGroup: "all",
         targetType: "all",
         targetFolderIds: [],
@@ -1389,16 +1389,49 @@ export default function Communications() {
       });
       return;
     }
-    
+
+    if (campaignForm.targetType === "folder" && campaignForm.targetFolderIds.length === 0) {
+      toast({
+        title: "Select a folder",
+        description: "Please choose a folder to target for this campaign",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Show confirmation dialog instead of immediately creating campaign
     setShowCampaignConfirmation(true);
   };
 
   const handleCampaignConfirm = () => {
     if (communicationType === "email") {
-      createEmailCampaignMutation.mutate(campaignForm);
+      const payload = {
+        ...campaignForm,
+        targetGroup:
+          campaignForm.targetType === "folder"
+            ? "folder"
+            : campaignForm.targetGroup,
+        folderId:
+          campaignForm.targetType === "folder"
+            ? campaignForm.targetFolderIds[0] || null
+            : null,
+        targetFolderIds:
+          campaignForm.targetType === "folder"
+            ? campaignForm.targetFolderIds
+            : [],
+      };
+
+      createEmailCampaignMutation.mutate(payload);
     } else {
-      createSmsCampaignMutation.mutate(campaignForm);
+      const payload = {
+        ...campaignForm,
+        targetGroup:
+          campaignForm.targetGroup === "folder"
+            ? "all"
+            : campaignForm.targetGroup,
+      };
+
+      createSmsCampaignMutation.mutate(payload);
     }
     setShowCampaignConfirmation(false);
   };
@@ -2859,10 +2892,17 @@ export default function Communications() {
                       <Select
                         value={campaignForm.targetType}
                         onValueChange={(value: "all" | "folder" | "custom") => {
-                          setCampaignForm({ 
-                            ...campaignForm, 
+                          const resolvedTargetGroup =
+                            value === "all"
+                              ? "all"
+                              : value === "folder"
+                                ? "folder"
+                                : "custom";
+
+                          setCampaignForm({
+                            ...campaignForm,
                             targetType: value,
-                            targetGroup: value === "all" ? "all" : campaignForm.targetGroup,
+                            targetGroup: resolvedTargetGroup,
                             targetFolderIds: value === "folder" ? campaignForm.targetFolderIds : [],
                           });
                         }}
@@ -2905,16 +2945,17 @@ export default function Communications() {
                           {(folders as any)?.map((folder: any) => (
                             <div key={folder.id} className="flex items-center space-x-2">
                               <input
-                                type="checkbox"
+                                type="radio"
+                                name="campaign-folder"
                                 id={`folder-${folder.id}`}
-                                checked={campaignForm.targetFolderIds.includes(folder.id)}
-                                onChange={(e) => {
-                                  const newFolderIds = e.target.checked
-                                    ? [...campaignForm.targetFolderIds, folder.id]
-                                    : campaignForm.targetFolderIds.filter(id => id !== folder.id);
-                                  setCampaignForm({ ...campaignForm, targetFolderIds: newFolderIds });
+                                checked={campaignForm.targetFolderIds[0] === folder.id}
+                                onChange={() => {
+                                  setCampaignForm({
+                                    ...campaignForm,
+                                    targetFolderIds: [folder.id],
+                                  });
                                 }}
-                                className="rounded"
+                                className="rounded-full"
                               />
                               <label htmlFor={`folder-${folder.id}`} className="text-sm font-medium">
                                 {folder.name}
