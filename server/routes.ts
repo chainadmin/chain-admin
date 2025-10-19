@@ -5406,7 +5406,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Step 2: Process payment (use token if available, otherwise use card directly)
       // USAePay API v2 format
       let usaepayPayload: any = {
-        command: "sale",
         amount: (amountCents / 100).toFixed(2),
         invoice: accountId || `consumer_${consumerId}`,
         description: arrangement
@@ -5415,6 +5414,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // For v2 API, we need a source object
         source: {}
       };
+
+      if (!setupRecurring) {
+        usaepayPayload.command = "sale";
+      }
 
       if (paymentToken) {
         // Use saved token for payment (v2 format)
@@ -5933,7 +5936,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
                 // Process payment using saved token
                 const paymentPayload = {
-                  command: "sale",
                   amount: (schedule.amountCents / 100).toFixed(2),
                   paymentkey: paymentMethod.paymentToken,
                   invoice: schedule.accountId,
