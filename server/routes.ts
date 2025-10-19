@@ -8070,14 +8070,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (tenantId && normalizedRecordType === 'open') {
       try {
         const { smaxService } = await import('./smaxService');
-        const accountNumber = Metadata?.accountNumber || Metadata?.filenumber;
-        
-        if (accountNumber) {
-          console.log('📤 Sending email tracking to SMAX for account:', accountNumber);
-          
+        const fileNumber = Metadata?.filenumber || Metadata?.accountNumber;
+
+        if (fileNumber) {
+          console.log('📤 Sending email tracking to SMAX for account:', fileNumber);
+
           // Use InsertNoteline per SMAX API spec - email tracking should be logged as notes
           await smaxService.insertNote(tenantId, {
-            filenumber: accountNumber,
+            filenumber: fileNumber,
             collectorname: 'System',
             logmessage: `Email opened by ${Recipient}`,
           });
