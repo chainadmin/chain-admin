@@ -5406,9 +5406,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Step 2: Process payment (use token if available, otherwise use card directly)
       // USAePay API v2 format
       let usaepayPayload: any = {
+        command: "sale",
         amount: (amountCents / 100).toFixed(2),
         invoice: accountId || `consumer_${consumerId}`,
-        description: arrangement 
+        description: arrangement
           ? `${arrangement.name} - Payment for account`
           : `Payment for account`,
         // For v2 API, we need a source object
