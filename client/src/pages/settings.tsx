@@ -36,11 +36,19 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Trash2, Upload, Plus, Save, CreditCard, Shield, Settings as SettingsIcon, ImageIcon, Copy, ExternalLink, Repeat, FileText, Users, MessagesSquare, DollarSign } from "lucide-react";
+import { Trash2, Upload, Plus, Save, CreditCard, Shield, Settings as SettingsIcon, ImageIcon, Copy, ExternalLink, Repeat, FileText, Users, MessagesSquare, DollarSign, Loader2 } from "lucide-react";
 import { isSubdomainSupported } from "@shared/utils/subdomain";
 import { resolveConsumerPortalUrl } from "@shared/utils/consumerPortal";
 import { getArrangementSummary, getPlanTypeLabel, formatCurrencyFromCents } from "@/lib/arrangements";
 import { cn } from "@/lib/utils";
+import {
+  BUSINESS_MODULE_DEFAULT_CONFIG,
+  BUSINESS_MODULE_IDS,
+  mergeBusinessModuleConfigs,
+  sanitizeBusinessModuleConfigs,
+  type BusinessModuleConfig,
+  type BusinessModuleId,
+} from "@shared/business-modules";
 
 export default function Settings() {
   const [showDocumentModal, setShowDocumentModal] = useState(false);
@@ -105,6 +113,10 @@ export default function Settings() {
   const [arrangementForm, setArrangementForm] = useState<ArrangementFormState>({ ...emptyArrangementForm });
   const [localSettings, setLocalSettings] = useState<any>({});
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [moduleDrafts, setModuleDrafts] = useState<Record<BusinessModuleId, BusinessModuleConfig>>(() =>
+    mergeBusinessModuleConfigs(),
+  );
+  const [moduleEditorOpen, setModuleEditorOpen] = useState<BusinessModuleId | null>(null);
 
   const cardBaseClasses =
     "border border-white/10 bg-white/5 text-blue-50 shadow-lg shadow-blue-900/20 backdrop-blur";
@@ -114,6 +126,28 @@ export default function Settings() {
     "border-white/20 bg-white/10 text-white placeholder:text-blue-100/60 focus:border-sky-400/60 focus:ring-0 focus-visible:ring-0";
   const textareaClasses =
     "border-white/20 bg-white/10 text-white placeholder:text-blue-100/60 focus:border-sky-400/60 focus-visible:ring-sky-400/40";
+
+  const moduleVisualMeta = {
+    billing: { icon: DollarSign, iconBg: "bg-green-500/20", iconColor: "text-green-300" },
+    subscriptions: { icon: Repeat, iconBg: "bg-blue-500/20", iconColor: "text-blue-300" },
+    work_orders: { icon: FileText, iconBg: "bg-purple-500/20", iconColor: "text-purple-300" },
+    client_crm: { icon: Users, iconBg: "bg-orange-500/20", iconColor: "text-orange-300" },
+    messaging_center: { icon: MessagesSquare, iconBg: "bg-pink-500/20", iconColor: "text-pink-300" },
+  } satisfies Record<BusinessModuleId, { icon: typeof DollarSign; iconBg: string; iconColor: string }>;
+
+  const moduleDefinitions = BUSINESS_MODULE_IDS.map((moduleId) => ({
+    id: moduleId,
+    icon: moduleVisualMeta[moduleId].icon,
+    iconBg: moduleVisualMeta[moduleId].iconBg,
+    iconColor: moduleVisualMeta[moduleId].iconColor,
+    defaultDescription: BUSINESS_MODULE_DEFAULT_CONFIG[moduleId].description || "",
+  }));
+
+  const activeModuleId = moduleEditorOpen;
+  const activeModuleDefinition = activeModuleId
+    ? moduleDefinitions.find((definition) => definition.id === activeModuleId)
+    : null;
+  const activeModuleConfig = activeModuleId ? moduleDrafts[activeModuleId] : null;
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -144,6 +178,18 @@ export default function Settings() {
   });
 
   const enabledModules = enabledModulesData?.enabledModules || [];
+
+  const { data: moduleConfigsData, isLoading: moduleConfigsLoading } = useQuery<{
+    moduleConfigs: Record<BusinessModuleId, BusinessModuleConfig>;
+  }>({
+    queryKey: ["/api/settings/module-configs"],
+  });
+
+  useEffect(() => {
+    if (moduleConfigsData?.moduleConfigs) {
+      setModuleDrafts(mergeBusinessModuleConfigs(moduleConfigsData.moduleConfigs));
+    }
+  }, [moduleConfigsData]);
 
   const quickStatusItems = [
     {
@@ -351,13 +397,59 @@ export default function Settings() {
     },
   });
 
+  const updateModuleConfigsMutation = useMutation({
+    mutationFn: async (moduleConfigs: Record<BusinessModuleId, BusinessModuleConfig>) => {
+      return await apiRequest("PUT", "/api/settings/module-configs", { moduleConfigs });
+    },
+    onSuccess: (data, variables) => {
+      const responseData = (data as { moduleConfigs?: Record<BusinessModuleId, BusinessModuleConfig> })?.moduleConfigs;
+      const nextConfigs = mergeBusinessModuleConfigs(responseData || variables);
+
+      setModuleDrafts(nextConfigs);
+      setModuleEditorOpen(null);
+
+      toast({
+        title: "Module details saved",
+        description: "Your module configuration has been updated.",
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/module-configs"] });
+    },
+    onError: () => {
+      toast({
+        title: "Unable to save module details",
+        description: "Please try again in a few moments.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleToggleModule = (moduleId: string) => {
     const isCurrentlyEnabled = enabledModules.includes(moduleId);
     const newModules = isCurrentlyEnabled
       ? enabledModules.filter((m: string) => m !== moduleId)
       : [...enabledModules, moduleId];
-    
+
     updateEnabledModulesMutation.mutate(newModules);
+  };
+
+  const handleModuleDraftChange = (moduleId: BusinessModuleId, field: keyof BusinessModuleConfig, value: string) => {
+    setModuleDrafts((previous) => ({
+      ...previous,
+      [moduleId]: {
+        ...previous[moduleId],
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleSaveModuleConfig = () => {
+    if (!moduleEditorOpen) {
+      return;
+    }
+
+    const sanitized = sanitizeBusinessModuleConfigs(moduleDrafts);
+    updateModuleConfigsMutation.mutate(sanitized);
   };
 
   const handleSettingsUpdate = (field: string, value: any) => {
@@ -800,116 +892,185 @@ export default function Settings() {
                   </p>
                 </CardHeader>
                 <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {/* Billing Module */}
-                  <div className="rounded-xl border border-white/20 bg-white/5 p-5 transition hover:bg-white/10">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className="rounded-lg bg-green-500/20 p-2">
-                          <DollarSign className="h-5 w-5 text-green-300" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-white">💳 Billing</h3>
-                          <p className="text-xs text-blue-100/70">Send invoices and track payments</p>
-                        </div>
-                      </div>
-                      <Switch
-                        checked={enabledModules.includes('billing')}
-                        onCheckedChange={() => handleToggleModule('billing')}
-                        disabled={updateEnabledModulesMutation.isPending}
-                        data-testid="switch-module-billing"
-                      />
-                    </div>
-                  </div>
+                  {moduleDefinitions.map((module) => {
+                    const moduleConfig = moduleDrafts[module.id];
+                    const description = moduleConfig?.description || module.defaultDescription;
 
-                  {/* Subscriptions Module */}
-                  <div className="rounded-xl border border-white/20 bg-white/5 p-5 transition hover:bg-white/10">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className="rounded-lg bg-blue-500/20 p-2">
-                          <Repeat className="h-5 w-5 text-blue-300" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-white">🔁 Subscriptions</h3>
-                          <p className="text-xs text-blue-100/70">Automate recurring billing</p>
-                        </div>
-                      </div>
-                      <Switch
-                        checked={enabledModules.includes('subscriptions')}
-                        onCheckedChange={() => handleToggleModule('subscriptions')}
-                        disabled={updateEnabledModulesMutation.isPending}
-                        data-testid="switch-module-subscriptions"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Work Orders Module */}
-                  <div className="rounded-xl border border-white/20 bg-white/5 p-5 transition hover:bg-white/10">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className="rounded-lg bg-purple-500/20 p-2">
-                          <FileText className="h-5 w-5 text-purple-300" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-white">🧾 Work Orders</h3>
-                          <p className="text-xs text-blue-100/70">Create and manage service jobs</p>
-                        </div>
-                      </div>
-                      <Switch
-                        checked={enabledModules.includes('work_orders')}
-                        onCheckedChange={() => handleToggleModule('work_orders')}
-                        disabled={updateEnabledModulesMutation.isPending}
-                        data-testid="switch-module-work-orders"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Client CRM Module */}
-                  <div className="rounded-xl border border-white/20 bg-white/5 p-5 transition hover:bg-white/10">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className="rounded-lg bg-orange-500/20 p-2">
-                          <Users className="h-5 w-5 text-orange-300" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-white">🧍 Client CRM</h3>
-                          <p className="text-xs text-blue-100/70">Track leads and customers</p>
-                        </div>
-                      </div>
-                      <Switch
-                        checked={enabledModules.includes('client_crm')}
-                        onCheckedChange={() => handleToggleModule('client_crm')}
-                        disabled={updateEnabledModulesMutation.isPending}
-                        data-testid="switch-module-client-crm"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Messaging Center Module */}
-                  <div className="rounded-xl border border-white/20 bg-white/5 p-5 transition hover:bg-white/10">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className="rounded-lg bg-pink-500/20 p-2">
-                          <MessagesSquare className="h-5 w-5 text-pink-300" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-white">💬 Messaging Center</h3>
-                          <p className="text-xs text-blue-100/70">Centralize SMS, email, and notes</p>
+                    return (
+                      <div
+                        key={module.id}
+                        className="rounded-xl border border-white/20 bg-white/5 p-5 transition hover:bg-white/10"
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-3">
+                              <div className={cn("rounded-lg p-2", module.iconBg)}>
+                                <module.icon className={cn("h-5 w-5", module.iconColor)} />
+                              </div>
+                              <div>
+                                <h3 className="font-semibold text-white">{moduleConfig?.displayName}</h3>
+                                {description && <p className="text-xs text-blue-100/70">{description}</p>}
+                              </div>
+                            </div>
+                            {(moduleConfig?.contactEmail || moduleConfig?.contactPhone) && (
+                              <div className="pl-11 text-[11px] text-blue-100/60">
+                                {moduleConfig?.contactEmail && (
+                                  <span className="block sm:inline">📧 {moduleConfig.contactEmail}</span>
+                                )}
+                                {moduleConfig?.contactPhone && (
+                                  <span
+                                    className={cn(
+                                      "block sm:inline",
+                                      moduleConfig?.contactEmail ? "sm:ml-2" : "",
+                                    )}
+                                  >
+                                    ☎️ {moduleConfig.contactPhone}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            {moduleConfig?.notes && (
+                              <p className="pl-11 text-[11px] text-blue-100/50">{moduleConfig.notes}</p>
+                            )}
+                          </div>
+                          <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center">
+                            <Switch
+                              checked={enabledModules.includes(module.id)}
+                              onCheckedChange={() => handleToggleModule(module.id)}
+                              disabled={updateEnabledModulesMutation.isPending || moduleConfigsLoading}
+                              data-testid={`switch-module-${module.id}`}
+                            />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="border-white/20 bg-white/5 text-xs font-semibold text-blue-100/80 hover:bg-white/10"
+                              onClick={() => setModuleEditorOpen(module.id)}
+                              disabled={moduleConfigsLoading || updateModuleConfigsMutation.isPending}
+                              data-testid={`button-edit-module-${module.id}`}
+                            >
+                              Edit details
+                            </Button>
+                          </div>
                         </div>
                       </div>
-                      <Switch
-                        checked={enabledModules.includes('messaging_center')}
-                        onCheckedChange={() => handleToggleModule('messaging_center')}
-                        disabled={updateEnabledModulesMutation.isPending}
-                        data-testid="switch-module-messaging-center"
-                      />
-                    </div>
-                  </div>
+                    );
+                  })}
                 </CardContent>
-                {modulesLoading && (
+                {(modulesLoading || moduleConfigsLoading) && (
                   <CardFooter>
                     <p className="text-sm text-blue-100/60">Loading modules...</p>
                   </CardFooter>
                 )}
+                <Dialog
+                  open={Boolean(activeModuleId)}
+                  onOpenChange={(open) => {
+                    if (!open) {
+                      setModuleEditorOpen(null);
+                    }
+                  }}
+                >
+                  <DialogContent className="max-w-xl border border-white/20 bg-slate-950/90 text-blue-100">
+                    <DialogHeader>
+                      <DialogTitle className="text-lg font-semibold text-white">
+                        {activeModuleConfig?.displayName ||
+                          (activeModuleDefinition
+                            ? BUSINESS_MODULE_DEFAULT_CONFIG[activeModuleDefinition.id].displayName
+                            : "Module settings")}
+                      </DialogTitle>
+                      <p className="text-sm text-blue-100/70">
+                        Customize how this module appears inside your admin workspace and consumer portal.
+                      </p>
+                    </DialogHeader>
+                    {activeModuleDefinition && activeModuleConfig && (
+                      <div className="space-y-4 pt-2">
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium text-blue-50">Display name</Label>
+                          <Input
+                            value={activeModuleConfig.displayName}
+                            onChange={(event) =>
+                              handleModuleDraftChange(activeModuleDefinition.id, "displayName", event.target.value)
+                            }
+                            className={inputClasses}
+                            disabled={updateModuleConfigsMutation.isPending}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium text-blue-50">Short description</Label>
+                          <Textarea
+                            value={activeModuleConfig.description ?? ""}
+                            onChange={(event) =>
+                              handleModuleDraftChange(activeModuleDefinition.id, "description", event.target.value)
+                            }
+                            rows={3}
+                            className={textareaClasses}
+                            disabled={updateModuleConfigsMutation.isPending}
+                          />
+                        </div>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium text-blue-50">Primary contact email</Label>
+                            <Input
+                              type="email"
+                              value={activeModuleConfig.contactEmail ?? ""}
+                              onChange={(event) =>
+                                handleModuleDraftChange(activeModuleDefinition.id, "contactEmail", event.target.value)
+                              }
+                              className={inputClasses}
+                              disabled={updateModuleConfigsMutation.isPending}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium text-blue-50">Primary contact phone</Label>
+                            <Input
+                              value={activeModuleConfig.contactPhone ?? ""}
+                              onChange={(event) =>
+                                handleModuleDraftChange(activeModuleDefinition.id, "contactPhone", event.target.value)
+                              }
+                              className={inputClasses}
+                              disabled={updateModuleConfigsMutation.isPending}
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium text-blue-50">Internal notes</Label>
+                          <Textarea
+                            value={activeModuleConfig.notes ?? ""}
+                            onChange={(event) =>
+                              handleModuleDraftChange(activeModuleDefinition.id, "notes", event.target.value)
+                            }
+                            rows={3}
+                            className={textareaClasses}
+                            disabled={updateModuleConfigsMutation.isPending}
+                            placeholder="Highlight operational workflows, SLAs, or handoff expectations."
+                          />
+                        </div>
+                        <div className="flex justify-end gap-3 pt-2">
+                          <Button
+                            variant="outline"
+                            onClick={() => setModuleEditorOpen(null)}
+                            className="border-white/20 bg-white/5 text-blue-100 hover:bg-white/10"
+                            disabled={updateModuleConfigsMutation.isPending}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            onClick={handleSaveModuleConfig}
+                            className="bg-sky-500/80 text-white hover:bg-sky-400/80"
+                            disabled={updateModuleConfigsMutation.isPending}
+                          >
+                            {updateModuleConfigsMutation.isPending ? (
+                              <span className="flex items-center gap-2">
+                                <Loader2 className="h-4 w-4 animate-spin" /> Saving...
+                              </span>
+                            ) : (
+                              "Save changes"
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </DialogContent>
+                </Dialog>
               </Card>
             </TabsContent>
 

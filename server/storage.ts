@@ -91,6 +91,7 @@ import {
   type Invoice,
   type InsertInvoice,
 } from "@shared/schema";
+import { sanitizeBusinessModuleConfigs, type BusinessModuleConfig, type BusinessModuleConfigMap } from "@shared/business-modules";
 import { messagingPlans, EMAIL_OVERAGE_RATE_PER_EMAIL, SMS_OVERAGE_RATE_PER_SEGMENT, type MessagingPlanId } from "@shared/billing-plans";
 import { db } from "./db";
 import { eq, and, desc, sql, inArray, gte, lte } from "drizzle-orm";
@@ -332,11 +333,18 @@ export interface IStorage {
     option: Partial<InsertArrangementOption>,
   ): Promise<ArrangementOption | undefined>;
   deleteArrangementOption(id: string, tenantId: string): Promise<boolean>;
-  
+
   // Tenant settings operations
   getTenantSettings(tenantId: string): Promise<TenantSettings | undefined>;
   upsertTenantSettings(settings: InsertTenantSettings): Promise<TenantSettings>;
-  
+  updateEnabledModules(tenantId: string, modules: string[]): Promise<TenantSettings>;
+  getEnabledModules(tenantId: string): Promise<string[]>;
+  getModuleConfigurations(tenantId: string): Promise<BusinessModuleConfigMap>;
+  updateModuleConfigurations(
+    tenantId: string,
+    moduleConfigs: BusinessModuleConfigMap,
+  ): Promise<TenantSettings>;
+
   // Tenant setup (for fixing access issues)
   setupTenantForUser(authId: string, tenantData: InsertTenant): Promise<{ tenant: Tenant; platformUser: PlatformUser }>;
   
@@ -1915,6 +1923,64 @@ export class DatabaseStorage implements IStorage {
 
     const settings = await this.getTenantSettings(tenantId);
     return settings?.enabledModules || [];
+  }
+
+  async getModuleConfigurations(tenantId: string): Promise<BusinessModuleConfigMap> {
+    await ensureTenantSettingsSchema(db);
+
+    const settings = await this.getTenantSettings(tenantId);
+    const storedConfigs = ((settings?.consumerPortalSettings as any)?.moduleConfigurations || {}) as Partial<
+      Record<string, BusinessModuleConfig>
+    >;
+
+    return sanitizeBusinessModuleConfigs(storedConfigs);
+  }
+
+  async updateModuleConfigurations(
+    tenantId: string,
+    moduleConfigs: BusinessModuleConfigMap,
+  ): Promise<TenantSettings> {
+    await ensureTenantSettingsSchema(db);
+
+    const sanitizedConfigs = sanitizeBusinessModuleConfigs(moduleConfigs);
+    const currentSettings = await this.getTenantSettings(tenantId);
+    const existingPortalSettings =
+      ((currentSettings?.consumerPortalSettings as Record<string, unknown>) || {}) as Record<string, unknown>;
+
+    const consumerPortalSettings = {
+      ...existingPortalSettings,
+      moduleConfigurations: sanitizedConfigs,
+    };
+
+    if (currentSettings) {
+      const [updatedSettings] = await db
+        .update(tenantSettings)
+        .set({
+          consumerPortalSettings,
+          updatedAt: new Date(),
+        })
+        .where(eq(tenantSettings.tenantId, tenantId))
+        .returning();
+
+      return updatedSettings;
+    }
+
+    const [upsertedSettings] = await db
+      .insert(tenantSettings)
+      .values({
+        tenantId,
+        consumerPortalSettings,
+      })
+      .onConflictDoUpdate({
+        target: tenantSettings.tenantId,
+        set: {
+          consumerPortalSettings,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+
+    return upsertedSettings;
   }
 
   // Tenant setup helper
