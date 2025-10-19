@@ -37,6 +37,7 @@ import { smsService } from "./smsService";
 import { uploadLogo } from "./r2Storage";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { createHash, randomBytes } from "node:crypto";
 import { subdomainMiddleware } from "./middleware/subdomain";
 import {
   messagingPlanList,
@@ -5257,24 +5258,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Helper function to generate USAePay API v2 authentication header
   function generateUSAePayAuthHeader(apiKey: string, apiPin: string): string {
-    // Generate 16-character random seed
-    const seed = Array.from({ length: 16 }, () => 
-      Math.random().toString(36).charAt(2)
-    ).join('');
-    
+    // Generate 16-character random seed using cryptographically secure random bytes
+    const seed = randomBytes(12)
+      .toString("base64")
+      .replace(/[^a-zA-Z0-9]/g, "")
+      .slice(0, 16)
+      .padEnd(16, "0");
+
     // Create prehash: apikey + seed + apipin
     const prehash = apiKey + seed + apiPin;
-    
+
     // Create SHA-256 hash
-    const crypto = require('crypto');
-    const hash = crypto.createHash('sha256').update(prehash).digest('hex');
-    
+    const hash = createHash("sha256").update(prehash).digest("hex");
+
     // Create apihash: s2/seed/hash
     const apihash = `s2/${seed}/${hash}`;
-    
+
     // Create final auth key: base64(apikey:apihash)
-    const authKey = Buffer.from(`${apiKey}:${apihash}`).toString('base64');
-    
+    const authKey = Buffer.from(`${apiKey}:${apihash}`).toString("base64");
+
     return `Basic ${authKey}`;
   }
 
@@ -5408,12 +5410,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let usaepayPayload: any = {
         amount: (amountCents / 100).toFixed(2),
         invoice: accountId || `consumer_${consumerId}`,
-        description: arrangement 
+        description: arrangement
           ? `${arrangement.name} - Payment for account`
           : `Payment for account`,
         // For v2 API, we need a source object
         source: {}
       };
+
+      if (!setupRecurring) {
+        usaepayPayload.command = "sale";
+      }
 
       if (paymentToken) {
         // Use saved token for payment (v2 format)
@@ -5932,7 +5938,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
                 // Process payment using saved token
                 const paymentPayload = {
-                  command: "sale",
                   amount: (schedule.amountCents / 100).toFixed(2),
                   paymentkey: paymentMethod.paymentToken,
                   invoice: schedule.accountId,
