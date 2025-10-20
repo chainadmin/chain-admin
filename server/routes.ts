@@ -5257,24 +5257,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Helper function to generate USAePay API v2 authentication header
   function generateUSAePayAuthHeader(apiKey: string, apiPin: string): string {
-    // Generate 16-character random seed
-    const seed = Array.from({ length: 16 }, () => 
-      Math.random().toString(36).charAt(2)
-    ).join('');
-    
-    // Create prehash: apikey + seed + apipin
-    const prehash = apiKey + seed + apiPin;
-    
-    // Create SHA-256 hash
     const crypto = require('crypto');
-    const hash = crypto.createHash('sha256').update(prehash).digest('hex');
-    
-    // Create apihash: s2/seed/hash
-    const apihash = `s2/${seed}/${hash}`;
-    
-    // Create final auth key: base64(apikey:apihash)
+
+    // Generate 16-character random seed comprised of URL-safe characters
+    const seed = crypto.randomBytes(12).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 16);
+
+    // Per USAePay docs the signature is SHA-256 of seed + apiPin (API key is not part of the hash)
+    const signature = crypto.createHash('sha256').update(seed + apiPin).digest('hex');
+
+    // Compose the apihash in s2/{seed}/{signature} format
+    const apihash = `s2/${seed}/${signature}`;
+
+    // Final auth header is HTTP Basic with apiKey:apihash encoded in base64
     const authKey = Buffer.from(`${apiKey}:${apihash}`).toString('base64');
-    
+
     return `Basic ${authKey}`;
   }
 
