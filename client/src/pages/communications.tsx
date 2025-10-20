@@ -78,6 +78,15 @@ import {
 
 import { POSTMARK_TEMPLATES, type PostmarkTemplateType } from "@shared/postmarkTemplates";
 import { resolveConsumerPortalUrl } from "@shared/utils/consumerPortal";
+import {
+  createDefaultAccountDetails,
+  DEFAULT_SUMMARY_ORDER,
+  extractSectionOrder,
+  getAccountHeading,
+  normalizeSummaryOrder,
+  stripSectionOrderComment,
+  type SummaryBlock,
+} from "./communicationsHelpers";
 
 const DEFAULT_ACCOUNT_HEADING_HTML = "<p>Your account details:</p>";
 const DEFAULT_ACCOUNT_TABLE_HTML = `<table class="attribute-list" width="100%" cellpadding="0" cellspacing="0">
