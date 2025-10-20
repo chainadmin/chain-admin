@@ -422,5 +422,6 @@ export const TEMPLATE_VARIABLES = [
   { label: "Due Date", value: "{{dueDate}}", category: "account" },
   { label: "Consumer Portal Link", value: "{{consumerPortalLink}}", category: "links" },
   { label: "App Download Link", value: "{{appDownloadLink}}", category: "links" },
+  { label: "Today's Date", value: "{{todays date}}", category: "general" },
   { label: "Agency Name", value: "{{agencyName}}", category: "agency" },
 ] as const;

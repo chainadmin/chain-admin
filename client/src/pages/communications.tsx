@@ -338,6 +338,7 @@ export default function Communications() {
     { label: "Agency Phone", value: "{{agencyPhone}}", category: "agency" },
     { label: "Unsubscribe Link", value: "{{unsubscribeLink}}", category: "compliance" },
     { label: "Unsubscribe Button", value: "{{unsubscribeButton}}", category: "compliance" },
+    { label: "Today's Date", value: "{{todays date}}", category: "general" },
   ];
 
   const quickInsertSnippets = [
