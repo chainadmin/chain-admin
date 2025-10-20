@@ -8,47 +8,7 @@ export const POSTMARK_TEMPLATES = {
 {{COMPANY_LOGO}}
 <h1>{{CUSTOM_GREETING}}</h1>
 <p>{{CUSTOM_MESSAGE}}</p>
-<table class="attribute-list" width="100%" cellpadding="0" cellspacing="0">
-  <tr>
-    <td class="attribute-list-container">
-      <table width="100%" cellpadding="0" cellspacing="0">
-        <tr>
-          <td class="attribute-list-item"><strong>{{ACCOUNT_LABEL}}</strong> {{accountNumber}}</td>
-        </tr>
-        <tr>
-          <td class="attribute-list-item"><strong>{{CREDITOR_LABEL}}</strong> {{creditor}}</td>
-        </tr>
-        <tr>
-          <td class="attribute-list-item"><strong>{{BALANCE_LABEL}}</strong> {{balance}}</td>
-        </tr>
-        <tr>
-          <td class="attribute-list-item"><strong>{{DUE_DATE_LABEL}}</strong> {{dueDate}}</td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-</table>
-<!-- Action -->
-<table class="body-action" align="center" width="100%" cellpadding="0" cellspacing="0">
-  <tr>
-    <td align="center">
-      <!-- Border based button https://litmus.com/blog/a-guide-to-bulletproof-buttons-in-email-design -->
-      <table width="100%" border="0" cellspacing="0" cellpadding="0">
-        <tr>
-          <td align="center">
-            <table border="0" cellspacing="0" cellpadding="0">
-              <tr>
-                <td>
-                  <a href="{{CUSTOM_BUTTON_URL}}" class="button button--green" target="_blank">{{CUSTOM_BUTTON_TEXT}}</a>
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-</table>
+{{ACCOUNT_SUMMARY_BLOCK}}
 <p>{{CUSTOM_CLOSING_MESSAGE}}</p>
 <p>{{CUSTOM_SIGNOFF}}</p>
 <!-- Sub copy -->
@@ -199,43 +159,7 @@ export const POSTMARK_TEMPLATES = {
 {{COMPANY_LOGO}}
 <h1>{{CUSTOM_GREETING}}</h1>
 <p>{{CUSTOM_MESSAGE}}</p>
-<p>Your account details:</p>
-<table class="attribute-list" width="100%" cellpadding="0" cellspacing="0">
-  <tr>
-    <td class="attribute-list-container">
-      <table width="100%" cellpadding="0" cellspacing="0">
-        <tr>
-          <td class="attribute-list-item"><strong>{{ACCOUNT_LABEL}}</strong> {{accountNumber}}</td>
-        </tr>
-        <tr>
-          <td class="attribute-list-item"><strong>{{BALANCE_LABEL}}</strong> {{balance}}</td>
-        </tr>
-        <tr>
-          <td class="attribute-list-item"><strong>{{CREDITOR_LABEL}}</strong> {{creditor}}</td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-</table>
-<table class="body-action" align="center" width="100%" cellpadding="0" cellspacing="0">
-  <tr>
-    <td align="center">
-      <table width="100%" border="0" cellspacing="0" cellpadding="0">
-        <tr>
-          <td align="center">
-            <table border="0" cellspacing="0" cellpadding="0">
-              <tr>
-                <td>
-                  <a href="{{CUSTOM_BUTTON_URL}}" class="button button--green" target="_blank">{{CUSTOM_BUTTON_TEXT}}</a>
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-</table>
+{{ACCOUNT_SUMMARY_BLOCK}}
 <p>{{CUSTOM_CLOSING_MESSAGE}}</p>
 <p>{{CUSTOM_SIGNOFF}}</p>`,
     styles: `
@@ -305,42 +229,7 @@ export const POSTMARK_TEMPLATES = {
 {{COMPANY_LOGO}}
 <h1>{{CUSTOM_GREETING}}</h1>
 <p>{{CUSTOM_MESSAGE}}</p>
-<!-- Action -->
-<table class="body-action" align="center" width="100%" cellpadding="0" cellspacing="0">
-  <tr>
-    <td align="center">
-      <!-- Border based button https://litmus.com/blog/a-guide-to-bulletproof-buttons-in-email-design -->
-      <table width="100%" border="0" cellspacing="0" cellpadding="0">
-        <tr>
-          <td align="center">
-            <table border="0" cellspacing="0" cellpadding="0">
-              <tr>
-                <td>
-                  <a href="{{CUSTOM_BUTTON_URL}}" class="button button--green" target="_blank">{{CUSTOM_BUTTON_TEXT}}</a>
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-</table>
-<p>Your account information:</p>
-<table class="attribute-list" width="100%" cellpadding="0" cellspacing="0">
-  <tr>
-    <td class="attribute-list-container">
-      <table width="100%" cellpadding="0" cellspacing="0">
-        <tr>
-          <td class="attribute-list-item"><strong>{{ACCOUNT_LABEL}}</strong> {{accountNumber}}</td>
-        </tr>
-        <tr>
-          <td class="attribute-list-item"><strong>{{BALANCE_LABEL}}</strong> {{balance}}</td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-</table>
+{{ACCOUNT_SUMMARY_BLOCK}}
 <p>{{CUSTOM_CLOSING_MESSAGE}}</p>
 <p>{{CUSTOM_SIGNOFF}}</p>
 <!-- Sub copy -->
@@ -430,45 +319,7 @@ export const POSTMARK_TEMPLATES = {
 {{COMPANY_LOGO}}
 <h1>{{CUSTOM_GREETING}}</h1>
 <p>{{CUSTOM_MESSAGE}}</p>
-<table class="attribute-list" width="100%" cellpadding="0" cellspacing="0">
-  <tr>
-    <td class="attribute-list-container">
-      <table width="100%" cellpadding="0" cellspacing="0">
-        <tr>
-          <td class="attribute-list-item"><strong>{{ACCOUNT_LABEL}}</strong> {{accountNumber}}</td>
-        </tr>
-        <tr>
-          <td class="attribute-list-item"><strong>{{CREDITOR_LABEL}}</strong> {{creditor}}</td>
-        </tr>
-        <tr>
-          <td class="attribute-list-item"><strong>{{BALANCE_LABEL}}</strong> {{balance}}</td>
-        </tr>
-        <tr>
-          <td class="attribute-list-item"><strong>{{DUE_DATE_LABEL}}</strong> {{dueDate}}</td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-</table>
-<table class="body-action" align="center" width="100%" cellpadding="0" cellspacing="0">
-  <tr>
-    <td align="center">
-      <table width="100%" border="0" cellspacing="0" cellpadding="0">
-        <tr>
-          <td align="center">
-            <table border="0" cellspacing="0" cellpadding="0">
-              <tr>
-                <td>
-                  <a href="{{CUSTOM_BUTTON_URL}}" class="button button--green" target="_blank">{{CUSTOM_BUTTON_TEXT}}</a>
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-</table>
+{{ACCOUNT_SUMMARY_BLOCK}}
 <p>{{CUSTOM_CLOSING_MESSAGE}}</p>
 <p>{{CUSTOM_SIGNOFF}}</p>
 <table class="body-sub">

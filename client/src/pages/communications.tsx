@@ -11,7 +11,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import {
@@ -80,6 +79,46 @@ import {
 import { POSTMARK_TEMPLATES, type PostmarkTemplateType } from "@shared/postmarkTemplates";
 import { resolveConsumerPortalUrl } from "@shared/utils/consumerPortal";
 
+const DEFAULT_ACCOUNT_HEADING_HTML = "<p>Your account details:</p>";
+const DEFAULT_ACCOUNT_TABLE_HTML = `<table class="attribute-list" width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td class="attribute-list-container">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr><td class="attribute-list-item"><strong>Account #:</strong> {{accountNumber}}</td></tr>
+        <tr><td class="attribute-list-item"><strong>File #:</strong> {{filenumber}}</td></tr>
+        <tr><td class="attribute-list-item"><strong>Creditor:</strong> {{creditor}}</td></tr>
+        <tr><td class="attribute-list-item"><strong>Balance:</strong> {{balance}}</td></tr>
+        <tr><td class="attribute-list-item"><strong>Due Date:</strong> {{dueDate}}</td></tr>
+      </table>
+    </td>
+  </tr>
+</table>`;
+const DEFAULT_PAYMENT_BUTTON_HTML = `<table class="body-action" align="center" width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td align="center">
+      <table border="0" cellspacing="0" cellpadding="0">
+        <tr>
+          <td>
+            <a href="{{consumerPortalLink}}" class="button button--green" target="_blank">Make a Payment</a>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>`;
+const DEFAULT_ACCOUNT_SUMMARY_HTML = `${DEFAULT_ACCOUNT_HEADING_HTML}\n${DEFAULT_ACCOUNT_TABLE_HTML}\n${DEFAULT_PAYMENT_BUTTON_HTML}`;
+const DEFAULT_GREETING_HTML = "<p>Hi {{firstName}},</p>";
+const DEFAULT_MESSAGE_HTML = "<p>This is a friendly reminder about your account. Your current balance is {{balance}} for account {{accountNumber}}.</p>";
+const DEFAULT_CLOSING_HTML = "<p>If you have any questions, please don't hesitate to contact us.</p>";
+const DEFAULT_SIGNOFF_HTML = "<p>Thanks,<br>The {{agencyName}} Team</p>";
+
+const createEmptyEmailTemplateForm = () => ({
+  name: "",
+  subject: "",
+  html: "",
+  designType: "postmark-invoice" as PostmarkTemplateType,
+});
+
 export default function Communications() {
   const [activeTab, setActiveTab] = useState("overview");
   const [communicationType, setCommunicationType] = useState<"email" | "sms">("email");
@@ -93,69 +132,12 @@ export default function Communications() {
   
   // Refs for all email template fields to enable variable insertion
   const subjectRef = useRef<HTMLInputElement>(null);
-  const greetingRef = useRef<HTMLInputElement>(null);
-  const mainMessageRef = useRef<HTMLDivElement>(null);
-  const buttonTextRef = useRef<HTMLInputElement>(null);
-  const buttonUrlRef = useRef<HTMLInputElement>(null);
-  const closingMessageRef = useRef<HTMLDivElement>(null);
-  const signOffRef = useRef<HTMLDivElement>(null);
-  
-  // Track which field is currently focused for variable insertion
-  const [activeField, setActiveField] = useState<string>("mainMessage");
+  const editorRef = useRef<HTMLDivElement>(null);
 
-  type RichTextField = "mainMessage" | "closingMessage" | "signOff";
+  // Track which field is currently focused for variable/snippet insertion
+  const [activeField, setActiveField] = useState<"subject" | "html">("html");
 
-  const escapeHtml = (value: string) =>
-    value
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
-
-  const looksLikeHtml = (value: string) => {
-    const trimmed = value.trim();
-    if (!trimmed) return false;
-    return /<[^>]+>/.test(trimmed) || trimmed.includes("<br") || trimmed.includes("&lt;");
-  };
-
-  const ensureEditorHtml = (value: string) => {
-    if (!value) return "";
-    if (looksLikeHtml(value)) {
-      return value;
-    }
-    return escapeHtml(value).replace(/\r?\n/g, "<br>");
-  };
-
-  const formatTemplateContent = (value: string, fallback = "") => {
-    const source = value && value.trim() ? value : fallback;
-    if (!source) return "";
-    if (looksLikeHtml(source)) {
-      return source;
-    }
-    return escapeHtml(source).replace(/\r?\n/g, "<br>");
-  };
-  
-  const [emailTemplateForm, setEmailTemplateForm] = useState({
-    name: "",
-    subject: "",
-    greeting: "", // e.g., "Hi {{firstName}},"
-    mainMessage: "", // Main body text
-    buttonText: "", // Call to action button text (optional)
-    buttonUrl: "", // Custom button URL (e.g., {{consumerPortalLink}}, {{appDownloadLink}}, or custom URL)
-    closingMessage: "", // Additional message before sign-off
-    signOff: "", // e.g., "Thanks, The {{agencyName}} Team"
-    // Account details box customization
-    showAccountDetails: true,
-    accountDetails: [
-      { label: "Account:", value: "{{accountNumber}}" },
-      { label: "Creditor:", value: "{{creditor}}" },
-      { label: "Balance:", value: "{{balance}}" },
-      { label: "Due Date:", value: "{{dueDate}}" }
-    ] as { label: string; value: string }[],
-    html: "", // Full template HTML (for storage/sending)
-    designType: "postmark-invoice" as PostmarkTemplateType,
-  });
+  const [emailTemplateForm, setEmailTemplateForm] = useState(createEmptyEmailTemplateForm());
   
   const [smsTemplateForm, setSmsTemplateForm] = useState({
     name: "",
@@ -321,7 +303,15 @@ export default function Communications() {
     { label: "Full Name", value: "{{fullName}}", category: "consumer" },
     { label: "Email", value: "{{email}}", category: "consumer" },
     { label: "Phone", value: "{{phone}}", category: "consumer" },
+    { label: "Consumer ID", value: "{{consumerId}}", category: "consumer" },
+    { label: "Address", value: "{{address}}", category: "consumer" },
+    { label: "City", value: "{{city}}", category: "consumer" },
+    { label: "State", value: "{{state}}", category: "consumer" },
+    { label: "Zip Code", value: "{{zipCode}}", category: "consumer" },
+    { label: "Full Address", value: "{{fullAddress}}", category: "consumer" },
     { label: "Account Number", value: "{{accountNumber}}", category: "account" },
+    { label: "File Number", value: "{{filenumber}}", category: "account" },
+    { label: "Account ID", value: "{{accountId}}", category: "account" },
     { label: "Creditor", value: "{{creditor}}", category: "account" },
     { label: "Balance", value: "{{balance}}", category: "account" },
     { label: "Balance 50%", value: "{{balance50%}}", category: "account" },
@@ -331,57 +321,156 @@ export default function Communications() {
     { label: "Balance 90%", value: "{{balance90%}}", category: "account" },
     { label: "Balance 100%", value: "{{balance100%}}", category: "account" },
     { label: "Due Date", value: "{{dueDate}}", category: "account" },
+    { label: "Due Date (ISO)", value: "{{dueDateIso}}", category: "account" },
     { label: "Consumer Portal Link", value: "{{consumerPortalLink}}", category: "links" },
     { label: "App Download Link", value: "{{appDownloadLink}}", category: "links" },
     { label: "Agency Name", value: "{{agencyName}}", category: "agency" },
     { label: "Agency Email", value: "{{agencyEmail}}", category: "agency" },
     { label: "Agency Phone", value: "{{agencyPhone}}", category: "agency" },
+    { label: "Unsubscribe Link", value: "{{unsubscribeLink}}", category: "compliance" },
+    { label: "Unsubscribe Button", value: "{{unsubscribeButton}}", category: "compliance" },
   ];
 
-  const richTextEditors: Record<RichTextField, RefObject<HTMLDivElement>> = {
-    mainMessage: mainMessageRef,
-    closingMessage: closingMessageRef,
-    signOff: signOffRef,
-  };
+  const quickInsertSnippets = [
+    {
+      label: "Account Summary Table",
+      description: "Adds a styled table with key account merge fields",
+      html: `${DEFAULT_ACCOUNT_HEADING_HTML}\n${DEFAULT_ACCOUNT_TABLE_HTML}`,
+    },
+    {
+      label: "Payment Button",
+      description: "Adds a primary button that links to the consumer portal",
+      html: DEFAULT_PAYMENT_BUTTON_HTML,
+    },
+  ];
 
-  const syncRichTextField = (field: RichTextField) => {
-    const editor = richTextEditors[field].current;
+  const formattingButtons = useMemo(
+    () => [
+      { Icon: BoldIcon, command: "bold", label: "Bold" },
+      { Icon: ItalicIcon, command: "italic", label: "Italic" },
+      { Icon: UnderlineIcon, command: "underline", label: "Underline" },
+      { Icon: Strikethrough, command: "strikeThrough", label: "Strikethrough" },
+      { Icon: ListIcon, command: "insertUnorderedList", label: "Bullet list" },
+      { Icon: ListOrdered, command: "insertOrderedList", label: "Numbered list" },
+    ],
+    []
+  );
+
+  const blockOptions = useMemo(
+    () => [
+      { label: "Paragraph", value: "<p>" },
+      { label: "Heading 1", value: "<h1>" },
+      { label: "Heading 2", value: "<h2>" },
+      { label: "Heading 3", value: "<h3>" },
+    ],
+    []
+  );
+
+  const colorOptions = useMemo(
+    () => [
+      { label: "Slate", value: "#1f2937" },
+      { label: "Blue", value: "#2563eb" },
+      { label: "Emerald", value: "#059669" },
+      { label: "Rose", value: "#be123c" },
+      { label: "Amber", value: "#d97706" },
+    ],
+    []
+  );
+
+  const syncEditorHtml = () => {
+    const editor = editorRef.current;
     if (!editor) return;
     const html = editor.innerHTML;
     const textContent = editor.textContent?.replace(/\u00a0/g, " ").trim() ?? "";
     setEmailTemplateForm((prev) => ({
       ...prev,
-      [field]: textContent ? html : "",
+      html: textContent ? html : "",
     }));
   };
 
-  const focusRichTextField = (field: RichTextField) => {
-    const editor = richTextEditors[field].current;
-    if (editor) {
-      editor.focus();
+  const insertTextAtCursor = (text: string) => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.focus();
+    const selection = window.getSelection();
+    if (!selection) return;
+
+    if (selection.rangeCount === 0 || !editor.contains(selection.anchorNode)) {
+      const range = document.createRange();
+      range.selectNodeContents(editor);
+      range.collapse(false);
+      selection.removeAllRanges();
+      selection.addRange(range);
     }
+
+    const range = selection.getRangeAt(0);
+    range.deleteContents();
+    const textNode = document.createTextNode(text);
+    range.insertNode(textNode);
+    range.setStartAfter(textNode);
+    range.setEndAfter(textNode);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    syncEditorHtml();
   };
 
-  const applyRichTextCommand = (field: RichTextField, command: string, value?: string) => {
-    focusRichTextField(field);
+  const insertHtmlSnippet = (html: string) => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.focus();
+    const selection = window.getSelection();
+    if (!selection) return;
+
+    if (selection.rangeCount === 0 || !editor.contains(selection.anchorNode)) {
+      const range = document.createRange();
+      range.selectNodeContents(editor);
+      range.collapse(false);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+
+    const range = selection.getRangeAt(0);
+    range.deleteContents();
+
+    const tempDiv = document.createElement("div");
+    tempDiv.innerHTML = html;
+    const fragment = document.createDocumentFragment();
+    let node: ChildNode | null;
+    while ((node = tempDiv.firstChild)) {
+      fragment.appendChild(node);
+    }
+    range.insertNode(fragment);
+    if (fragment.lastChild) {
+      range.setStartAfter(fragment.lastChild);
+      range.setEndAfter(fragment.lastChild);
+    }
+    selection.removeAllRanges();
+    selection.addRange(range);
+    syncEditorHtml();
+  };
+
+  const applyEditorCommand = (command: string, value?: string) => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.focus();
     if (command === "foreColor") {
       document.execCommand("styleWithCSS", false, "true");
     }
     document.execCommand(command, false, value);
-    setTimeout(() => syncRichTextField(field), 0);
+    setTimeout(syncEditorHtml, 0);
   };
 
-  const handleCreateLink = (field: RichTextField) => {
+  const handleCreateLink = () => {
     if (typeof window === "undefined") return;
     const url = window.prompt("Enter the URL", "https://");
     if (!url) return;
-    setActiveField(field);
-    applyRichTextCommand(field, "createLink", url);
+    setActiveField("html");
+    applyEditorCommand("createLink", url);
   };
 
-  const handleRemoveLink = (field: RichTextField) => {
-    setActiveField(field);
-    applyRichTextCommand(field, "unlink");
+  const handleRemoveLink = () => {
+    setActiveField("html");
+    applyEditorCommand("unlink");
   };
 
   const getPlainText = (html: string) =>
@@ -392,148 +481,14 @@ export default function Communications() {
       .replace(/\s+/g, " ")
       .trim();
 
-  const renderToolbar = (field: RichTextField) => (
-    <div className="flex flex-wrap items-center gap-2 p-2 bg-gray-100 rounded-lg border border-gray-200">
-      <Button
-        type="button"
-        size="sm"
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={() => {
-          setActiveField(field);
-          applyRichTextCommand(field, "bold");
-        }}
-        className="h-8 bg-white hover:bg-gray-200 text-gray-900 border border-gray-300 font-semibold"
-      >
-        <BoldIcon className="mr-1 h-3.5 w-3.5" />
-        Bold
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={() => {
-          setActiveField(field);
-          applyRichTextCommand(field, "italic");
-        }}
-        className="h-8 bg-white hover:bg-gray-200 text-gray-900 border border-gray-300 font-semibold"
-      >
-        <ItalicIcon className="mr-1 h-3.5 w-3.5" />
-        Italic
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={() => {
-          setActiveField(field);
-          applyRichTextCommand(field, "underline");
-        }}
-        className="h-8 bg-white hover:bg-gray-200 text-gray-900 border border-gray-300 font-semibold"
-      >
-        <UnderlineIcon className="mr-1 h-3.5 w-3.5" />
-        Underline
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={() => {
-          setActiveField(field);
-          applyRichTextCommand(field, "strikeThrough");
-        }}
-        className="h-8 bg-white hover:bg-gray-200 text-gray-900 border border-gray-300 font-semibold"
-      >
-        <Strikethrough className="mr-1 h-3.5 w-3.5" />
-        Strike
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={() => {
-          setActiveField(field);
-          applyRichTextCommand(field, "insertUnorderedList");
-        }}
-        className="h-8 bg-white hover:bg-gray-200 text-gray-900 border border-gray-300 font-semibold"
-      >
-        <ListIcon className="mr-1 h-3.5 w-3.5" />
-        Bullets
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={() => {
-          setActiveField(field);
-          applyRichTextCommand(field, "insertOrderedList");
-        }}
-        className="h-8 bg-white hover:bg-gray-200 text-gray-900 border border-gray-300 font-semibold"
-      >
-        <ListOrdered className="mr-1 h-3.5 w-3.5" />
-        Numbered
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={() => handleCreateLink(field)}
-        className="h-8 bg-white hover:bg-gray-200 text-gray-900 border border-gray-300 font-semibold"
-      >
-        <Link2 className="mr-1 h-3.5 w-3.5" />
-        Link
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={() => handleRemoveLink(field)}
-        className="h-8 bg-white hover:bg-gray-200 text-gray-900 border border-gray-300 font-semibold"
-      >
-        <Link2Off className="mr-1 h-3.5 w-3.5" />
-        Remove Link
-      </Button>
-      <div className="flex items-center gap-1 px-2 py-1 bg-white rounded border border-gray-300">
-        <span className="inline-flex items-center gap-1 text-xs text-gray-700 font-semibold">
-          <Palette className="h-3.5 w-3.5" />
-          Color
-        </span>
-        <input
-          type="color"
-          className="h-8 w-8 cursor-pointer rounded border"
-          onChange={(event) => {
-            setActiveField(field);
-            applyRichTextCommand(field, "foreColor", event.target.value);
-          }}
-          aria-label="Text color"
-        />
-      </div>
-      <Button
-        type="button"
-        size="sm"
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={() => {
-          setActiveField(field);
-          applyRichTextCommand(field, "removeFormat");
-        }}
-        className="h-8 bg-white hover:bg-gray-200 text-gray-900 border border-gray-300 font-semibold"
-      >
-        <Eraser className="mr-1 h-3.5 w-3.5" />
-        Clear
-      </Button>
-    </div>
-  );
-
   useEffect(() => {
-    const fields: RichTextField[] = ["mainMessage", "closingMessage", "signOff"];
-    fields.forEach((field) => {
-      const editor = richTextEditors[field].current;
-      if (!editor) return;
-      const value = emailTemplateForm[field] || "";
-      if (editor.innerHTML !== value) {
-        editor.innerHTML = value;
-      }
-    });
-  }, [emailTemplateForm.mainMessage, emailTemplateForm.closingMessage, emailTemplateForm.signOff, showTemplateModal]);
+    const editor = editorRef.current;
+    if (!editor) return;
+    const nextHtml = emailTemplateForm.html || "";
+    if (editor.innerHTML !== nextHtml) {
+      editor.innerHTML = nextHtml;
+    }
+  }, [emailTemplateForm.html, showTemplateModal]);
 
   // Function to insert variable at cursor position (works with any field)
   const insertVariable = (variable: string) => {
@@ -553,291 +508,187 @@ export default function Communications() {
       }, 0);
       return;
     }
-    
-    // Email template - insert into active field
-    const fieldMap: Record<
-      string,
-      {
-        ref:
-          | RefObject<HTMLInputElement>
-          | RefObject<HTMLTextAreaElement>
-          | RefObject<HTMLDivElement>;
-        field: keyof typeof emailTemplateForm;
-        type: "input" | "textarea" | "editor";
-      }
-    > = {
-      subject: { ref: subjectRef, field: "subject", type: "input" },
-      greeting: { ref: greetingRef, field: "greeting", type: "input" },
-      mainMessage: { ref: mainMessageRef, field: "mainMessage", type: "editor" },
-      buttonText: { ref: buttonTextRef, field: "buttonText", type: "input" },
-      buttonUrl: { ref: buttonUrlRef, field: "buttonUrl", type: "input" },
-      closingMessage: { ref: closingMessageRef, field: "closingMessage", type: "editor" },
-      signOff: { ref: signOffRef, field: "signOff", type: "editor" },
-    };
 
-    const currentField = fieldMap[activeField];
-    if (!currentField || !currentField.ref.current) return;
-
-    if (currentField.type === "editor") {
-      const editorField = currentField.field as RichTextField;
-      const editor = richTextEditors[editorField].current;
-      if (!editor) return;
-      focusRichTextField(editorField);
-      if (typeof window === "undefined") return;
-      const selection = window.getSelection();
-      if (!selection) return;
-
-      if (
-        selection.rangeCount === 0 ||
-        (selection.anchorNode && !editor.contains(selection.anchorNode))
-      ) {
-        const range = document.createRange();
-        range.selectNodeContents(editor);
-        range.collapse(false);
-        selection.removeAllRanges();
-        selection.addRange(range);
-      }
-
-      const range = selection.getRangeAt(0);
-      range.deleteContents();
-      const textNode = document.createTextNode(variable);
-      range.insertNode(textNode);
-      range.setStartAfter(textNode);
-      range.setEndAfter(textNode);
-      selection.removeAllRanges();
-      selection.addRange(range);
-      setTimeout(() => syncRichTextField(editorField), 0);
+    if (activeField === "subject" && subjectRef.current) {
+      const input = subjectRef.current;
+      const start = input.selectionStart ?? input.value.length;
+      const end = input.selectionEnd ?? start;
+      const newValue =
+        input.value.substring(0, start) + variable + input.value.substring(end);
+      setEmailTemplateForm((prev) => ({
+        ...prev,
+        subject: newValue,
+      }));
+      setTimeout(() => {
+        input.focus();
+        const cursor = start + variable.length;
+        input.setSelectionRange(cursor, cursor);
+      }, 0);
       return;
     }
 
-    const element = currentField.ref.current as HTMLInputElement | HTMLTextAreaElement;
-    const start = element.selectionStart ?? 0;
-    const end = element.selectionEnd ?? 0;
-    const text = String(emailTemplateForm[currentField.field] || "");
-    const before = text.substring(0, start);
-    const after = text.substring(end);
-    const newText = before + variable + after;
+    insertTextAtCursor(variable);
+  };
 
-    setEmailTemplateForm({ ...emailTemplateForm, [currentField.field]: newText });
-
-    setTimeout(() => {
-      element.focus();
-      const newPosition = start + variable.length;
-      element.setSelectionRange(newPosition, newPosition);
-    }, 0);
+  const insertSnippet = (html: string) => {
+    if (communicationType !== "email") {
+      return;
+    }
+    setActiveField("html");
+    insertHtmlSnippet(html);
   };
 
   // Function to handle design selection
   const handleDesignSelect = (designType: PostmarkTemplateType) => {
     const template = POSTMARK_TEMPLATES[designType] as any;
-    const fullHtml = template.styles ? template.styles + '\n' + template.html : template.html;
-    
-    // Only set defaults if fields are empty
-    setEmailTemplateForm({
-      ...emailTemplateForm,
+    let contentHtml = template.html || "";
+    contentHtml = contentHtml.replace("{{CUSTOM_GREETING}}", DEFAULT_GREETING_HTML);
+    contentHtml = contentHtml.replace("{{CUSTOM_MESSAGE}}", DEFAULT_MESSAGE_HTML);
+    contentHtml = contentHtml.replace(/\{\{ACCOUNT_SUMMARY_BLOCK\}\}/g, DEFAULT_ACCOUNT_SUMMARY_HTML);
+    contentHtml = contentHtml.replace("{{CUSTOM_CLOSING_MESSAGE}}", DEFAULT_CLOSING_HTML);
+    contentHtml = contentHtml.replace("{{CUSTOM_SIGNOFF}}", DEFAULT_SIGNOFF_HTML);
+    const fullHtml = template.styles ? `${template.styles}\n${contentHtml}` : contentHtml;
+
+    setEmailTemplateForm((prev) => ({
+      ...prev,
       designType,
-      greeting: emailTemplateForm.greeting || "Hi {{firstName}},",
-      mainMessage:
-        emailTemplateForm.mainMessage ||
-        "<p>This is a friendly reminder about your account. Your current balance is {{balance}} for account {{accountNumber}}.</p>",
-      buttonText: emailTemplateForm.buttonText || "View Account",
-      buttonUrl: emailTemplateForm.buttonUrl || "{{consumerPortalLink}}",
-      closingMessage:
-        emailTemplateForm.closingMessage ||
-        "<p>If you have any questions, please don't hesitate to contact us.</p>",
-      signOff:
-        emailTemplateForm.signOff ||
-        "<p>Thanks,<br>The {{agencyName}} Team</p>",
       html: fullHtml,
-    });
+    }));
+
+    setTimeout(() => {
+      const editor = editorRef.current;
+      if (editor) {
+        editor.innerHTML = fullHtml;
+      }
+    }, 0);
   };
 
-  const removeAccountDetailsTables = (html: string) => {
-    if (!html) return html;
+  // Rich preview helpers
+  const replacePreviewVariables = (
+    template: string,
+    mode: "html" | "text",
+    context: {
+      resolvedConsumerPortalUrl: string;
+      sampleUnsubscribeUrl: string;
+      agencyName: string;
+      agencyEmail: string;
+      agencyPhone: string;
+    }
+  ) => {
+    if (!template) return "";
+    const italic = (message: string) =>
+      mode === "html"
+        ? `<span style="color:#6B7280; font-style: italic;">${message}</span>`
+        : `[${message}]`;
 
-    if (typeof window !== "undefined" && typeof DOMParser !== "undefined") {
-      try {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, "text/html");
-        doc.querySelectorAll("table.attribute-list").forEach((table) => {
-          table.remove();
-        });
-        return doc.body.innerHTML;
-      } catch (error) {
-        console.error("Failed to strip account details table from template preview", error);
-      }
+    let output = template;
+    output = output.replace(/\{\{\s*firstName\s*\}\}/gi, "John");
+    output = output.replace(/\{\{\s*lastName\s*\}\}/gi, "Doe");
+    output = output.replace(/\{\{\s*fullName\s*\}\}/gi, "John Doe");
+    output = output.replace(/\{\{\s*email\s*\}\}/gi, "john.doe@example.com");
+    output = output.replace(/\{\{\s*phone\s*\}\}/gi, "(555) 123-4567");
+    output = output.replace(/\{\{\s*consumerId\s*\}\}/gi, "CON-12345");
+    output = output.replace(/\{\{\s*accountId\s*\}\}/gi, "ACC-67890");
+    output = output.replace(/\{\{\s*accountNumber\s*\}\}/gi, italic("Account number auto-fills for each recipient"));
+    output = output.replace(/\{\{\s*filenumber\s*\}\}/gi, italic("File number auto-fills for each recipient"));
+    output = output.replace(/\{\{\s*creditor\s*\}\}/gi, italic("Creditor auto-fills for each recipient"));
+    output = output.replace(/\{\{\s*balance\s*\}\}/gi, italic("Balance auto-fills for each recipient"));
+    output = output.replace(/\{\{\s*balance50%\s*\}\}/gi, italic("50% of balance (settlement offer)"));
+    output = output.replace(/\{\{\s*balance60%\s*\}\}/gi, italic("60% of balance"));
+    output = output.replace(/\{\{\s*balance70%\s*\}\}/gi, italic("70% of balance"));
+    output = output.replace(/\{\{\s*balance80%\s*\}\}/gi, italic("80% of balance"));
+    output = output.replace(/\{\{\s*balance90%\s*\}\}/gi, italic("90% of balance"));
+    output = output.replace(/\{\{\s*balance100%\s*\}\}/gi, italic("100% of balance (full amount)"));
+    output = output.replace(/\{\{\s*dueDate\s*\}\}/gi, italic("Due date auto-fills for each recipient"));
+    output = output.replace(/\{\{\s*dueDateIso\s*\}\}/gi, italic("Due date (ISO) auto-fills for each recipient"));
+    output = output.replace(/\{\{\s*consumerPortalLink\s*\}\}/gi, context.resolvedConsumerPortalUrl);
+    output = output.replace(/\{\{\s*appDownloadLink\s*\}\}/gi, "https://app.example.com/download");
+    output = output.replace(/\{\{\s*agencyName\s*\}\}/gi, context.agencyName);
+    output = output.replace(/\{\{\s*agencyEmail\s*\}\}/gi, context.agencyEmail);
+    output = output.replace(/\{\{\s*agencyPhone\s*\}\}/gi, context.agencyPhone);
+    output = output.replace(/\{\{\s*address\s*\}\}/gi, italic("Mailing address auto-fills for each recipient"));
+    output = output.replace(/\{\{\s*consumerAddress\s*\}\}/gi, italic("Mailing address auto-fills for each recipient"));
+    output = output.replace(/\{\{\s*city\s*\}\}/gi, italic("City auto-fills for each recipient"));
+    output = output.replace(/\{\{\s*consumerCity\s*\}\}/gi, italic("City auto-fills for each recipient"));
+    output = output.replace(/\{\{\s*state\s*\}\}/gi, italic("State auto-fills for each recipient"));
+    output = output.replace(/\{\{\s*consumerState\s*\}\}/gi, italic("State auto-fills for each recipient"));
+    output = output.replace(/\{\{\s*zip\s*\}\}/gi, italic("ZIP auto-fills for each recipient"));
+    output = output.replace(/\{\{\s*zipCode\s*\}\}/gi, italic("ZIP auto-fills for each recipient"));
+    output = output.replace(/\{\{\s*fullAddress\s*\}\}/gi, italic("Full address auto-fills for each recipient"));
+    output = output.replace(/\{\{\s*consumerFullAddress\s*\}\}/gi, italic("Full address auto-fills for each recipient"));
+    output = output.replace(/\{\{\s*unsubscribeLink\s*\}\}/gi, context.sampleUnsubscribeUrl);
+    output = output.replace(/\{\{\s*unsubscribeUrl\s*\}\}/gi, context.sampleUnsubscribeUrl);
+    return output;
+  };
+
+  const renderPreview = () => {
+    if (!emailTemplateForm.html) {
+      return "";
     }
 
-    return html.replace(/<table class="attribute-list"[\s\S]*?<\/table>\s*<\/td>\s*<\/tr>\s*<\/table>/gi, "");
-  };
-
-  // Function to render preview with actual data
-  const renderPreview = () => {
-    const template = POSTMARK_TEMPLATES[emailTemplateForm.designType] as any;
-
-    const greeting = formatTemplateContent(emailTemplateForm.greeting, "Hi {{firstName}},");
-    const mainMessage = formatTemplateContent(emailTemplateForm.mainMessage);
-    const buttonText = emailTemplateForm.buttonText || "View Account";
-    const buttonUrlTemplate = emailTemplateForm.buttonUrl || "{{consumerPortalLink}}";
     const resolvedConsumerPortalUrl =
-      consumerPortalUrl || "https://portal.chainsoftwaregroup.com/consumer-login";
-    const resolvedButtonUrl = buttonUrlTemplate.replace(
-      /\{\{\s*consumerPortalLink\s*\}\}/gi,
-      resolvedConsumerPortalUrl
-    );
-    const closingMessage = formatTemplateContent(
-      emailTemplateForm.closingMessage,
-      "If you have any questions, please don't hesitate to contact us."
-    );
-    const signOff = formatTemplateContent(emailTemplateForm.signOff, "Thanks,<br>The {{agencyName}} Team");
-    
-    // Replace custom placeholders with user's content
-    let previewHtml = template.html;
-    previewHtml = previewHtml.replace('{{CUSTOM_GREETING}}', greeting);
-    previewHtml = previewHtml.replace('{{CUSTOM_MESSAGE}}', mainMessage);
-    previewHtml = previewHtml.replace('{{CUSTOM_BUTTON_TEXT}}', buttonText);
-    previewHtml = previewHtml.replace('{{CUSTOM_BUTTON_URL}}', resolvedButtonUrl);
-    previewHtml = previewHtml.replace('{{CUSTOM_CLOSING_MESSAGE}}', closingMessage);
-    previewHtml = previewHtml.replace('{{CUSTOM_SIGNOFF}}', signOff);
-    
-    // Generate dynamic account details table from accountDetails array
-    const accountDetails = emailTemplateForm.accountDetails || [
-      { label: "Account:", value: "{{accountNumber}}" },
-      { label: "Creditor:", value: "{{creditor}}" },
-      { label: "Balance:", value: "{{balance}}" },
-      { label: "Due Date:", value: "{{dueDate}}" }
-    ];
-    
-    // Build dynamic table rows
-    const dynamicRows = accountDetails.map(detail => 
-      `<tr><td class="attribute-list-item"><strong>${detail.label}</strong> ${detail.value}</td></tr>`
-    ).join('\n        ');
-    
-    // Create the complete dynamic table
-    const dynamicAccountTable = `<table class="attribute-list" width="100%" cellpadding="0" cellspacing="0">
+      consumerPortalUrl || fallbackAgencyUrl || "https://your-agency.chainsoftwaregroup.com";
+    const sampleUnsubscribeUrl = `${resolvedConsumerPortalUrl}/unsubscribe`;
+    const agencyName = (tenantSettings as any)?.agencyName || "Your Agency";
+    const agencyEmail = (tenantSettings as any)?.agencyEmail || "support@example.com";
+    const agencyPhone = (tenantSettings as any)?.agencyPhone || "(555) 123-4567";
+
+    let previewHtml = emailTemplateForm.html.replace(/<!--SECTION_ORDER:[^>]+-->/gi, "");
+    previewHtml = previewHtml.replace(/\{\{ACCOUNT_SUMMARY_BLOCK\}\}/gi, DEFAULT_ACCOUNT_SUMMARY_HTML);
+    previewHtml = replacePreviewVariables(previewHtml, "html", {
+      resolvedConsumerPortalUrl,
+      sampleUnsubscribeUrl,
+      agencyName,
+      agencyEmail,
+      agencyPhone,
+    });
+
+    const unsubscribeButtonHtml = `<table align="center" cellpadding="0" cellspacing="0" style="margin:16px auto 0;">
   <tr>
-    <td class="attribute-list-container">
-      <table width="100%" cellpadding="0" cellspacing="0">
-        ${dynamicRows}
-      </table>
+    <td style="background-color:#6B7280;border-radius:4px;">
+      <a href="${sampleUnsubscribeUrl}" style="display:inline-block;padding:10px 18px;color:#ffffff;text-decoration:none;font-weight:600;">Unsubscribe</a>
     </td>
   </tr>
 </table>`;
-    
-    // Replace the static account details table with dynamic one using DOM parsing
-    if (emailTemplateForm.showAccountDetails) {
-      if (typeof window !== "undefined" && typeof DOMParser !== "undefined") {
-        try {
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(previewHtml, "text/html");
-          const accountTable = doc.querySelector("table.attribute-list");
-          if (accountTable) {
-            const tempDiv = doc.createElement('div');
-            tempDiv.innerHTML = dynamicAccountTable;
-            accountTable.replaceWith(tempDiv.firstElementChild!);
-          }
-          previewHtml = doc.body.innerHTML;
-        } catch (e) {
-          console.error("Error replacing account details table:", e);
-        }
-      }
-    } else {
-      previewHtml = removeAccountDetailsTables(previewHtml);
-    }
-    
-    // Replace company logo
-    const logoUrl = (tenantSettings as any)?.customBranding?.logoUrl;
+    previewHtml = previewHtml.replace(/\{\{\s*unsubscribeButton\s*\}\}/gi, unsubscribeButtonHtml);
+
+    const logoUrl =
+      (tenantSettings as any)?.customBranding?.logoUrl || (tenantSettings as any)?.logoUrl;
     if (logoUrl) {
       const logoHtml = `<div style="text-align: center; margin-bottom: 30px;"><img src="${logoUrl}" alt="Company Logo" style="max-width: 200px; height: auto;" /></div>`;
-      previewHtml = previewHtml.replace(/\{\{COMPANY_LOGO\}\}/g, logoHtml);
+      previewHtml = previewHtml.replace(/\{\{\s*COMPANY_LOGO\s*\}\}/gi, logoHtml);
     } else {
-      previewHtml = previewHtml.replace(/\{\{COMPANY_LOGO\}\}/g, '');
+      previewHtml = previewHtml.replace(/\{\{\s*COMPANY_LOGO\s*\}\}/gi, "");
     }
-    
-    // Replace ALL variables with sample data for preview (including those in labels)
-    previewHtml = previewHtml.replace(/\{\{firstName\}\}/g, "John");
-    previewHtml = previewHtml.replace(/\{\{lastName\}\}/g, "Doe");
-    previewHtml = previewHtml.replace(/\{\{fullName\}\}/g, "John Doe");
-    previewHtml = previewHtml.replace(/\{\{email\}\}/g, "john.doe@example.com");
-    previewHtml = previewHtml.replace(/\{\{phone\}\}/g, "(555) 123-4567");
-    const accountPlaceholder = (message: string) =>
-      `<span style="color:#6B7280; font-style: italic;">${message}</span>`;
-    previewHtml = previewHtml.replace(
-      /\{\{accountNumber\}\}/g,
-      accountPlaceholder("Account number auto-fills for each recipient")
-    );
-    previewHtml = previewHtml.replace(
-      /\{\{creditor\}\}/g,
-      accountPlaceholder("Creditor auto-fills for each recipient")
-    );
-    previewHtml = previewHtml.replace(
-      /\{\{balance\}\}/g,
-      accountPlaceholder("Balance auto-fills for each recipient")
-    );
-    previewHtml = previewHtml.replace(
-      /\{\{balance50%\}\}/g,
-      accountPlaceholder("50% of balance (settlement offer)")
-    );
-    previewHtml = previewHtml.replace(
-      /\{\{balance60%\}\}/g,
-      accountPlaceholder("60% of balance")
-    );
-    previewHtml = previewHtml.replace(
-      /\{\{balance70%\}\}/g,
-      accountPlaceholder("70% of balance")
-    );
-    previewHtml = previewHtml.replace(
-      /\{\{balance80%\}\}/g,
-      accountPlaceholder("80% of balance")
-    );
-    previewHtml = previewHtml.replace(
-      /\{\{balance90%\}\}/g,
-      accountPlaceholder("90% of balance")
-    );
-    previewHtml = previewHtml.replace(
-      /\{\{balance100%\}\}/g,
-      accountPlaceholder("100% of balance (full amount)")
-    );
-    previewHtml = previewHtml.replace(
-      /\{\{dueDate\}\}/g,
-      accountPlaceholder("Due date auto-fills for each recipient")
-    );
-    previewHtml = previewHtml.replace(/\{\{consumerPortalLink\}\}/g, resolvedConsumerPortalUrl);
-    previewHtml = previewHtml.replace(/\{\{appDownloadLink\}\}/g, "https://app.example.com/download");
-    previewHtml = previewHtml.replace(/\{\{agencyName\}\}/g, (tenantSettings as any)?.agencyName || "Your Agency");
-    previewHtml = previewHtml.replace(/\{\{agencyEmail\}\}/g, (tenantSettings as any)?.agencyEmail || "support@example.com");
-    previewHtml = previewHtml.replace(/\{\{agencyPhone\}\}/g, (tenantSettings as any)?.agencyPhone || "(555) 123-4567");
-    
-    // Include styles for proper rendering
-    const stylesHtml = template.styles || '';
-    return stylesHtml + previewHtml;
+
+    return previewHtml;
   };
 
+  const renderSubjectPreview = () => {
+    const resolvedConsumerPortalUrl =
+      consumerPortalUrl || fallbackAgencyUrl || "https://your-agency.chainsoftwaregroup.com";
+    const sampleUnsubscribeUrl = `${resolvedConsumerPortalUrl}/unsubscribe`;
+    const agencyName = (tenantSettings as any)?.agencyName || "Your Agency";
+    const agencyEmail = (tenantSettings as any)?.agencyEmail || "support@example.com";
+    const agencyPhone = (tenantSettings as any)?.agencyPhone || "(555) 123-4567";
+
+    const subjectPreview = replacePreviewVariables(emailTemplateForm.subject || "", "text", {
+      resolvedConsumerPortalUrl,
+      sampleUnsubscribeUrl,
+      agencyName,
+      agencyEmail,
+      agencyPhone,
+    });
+
+    return subjectPreview || "No subject";
+  };
   // Email Mutations
   const createEmailTemplateMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/email-templates", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/email-templates"] });
       setShowTemplateModal(false);
-      setEmailTemplateForm({ 
-        name: "", 
-        subject: "", 
-        greeting: "",
-        mainMessage: "",
-        buttonText: "",
-        buttonUrl: "",
-        closingMessage: "",
-        signOff: "",
-        showAccountDetails: true,
-        accountDetails: [
-          { label: "Account:", value: "{{accountNumber}}" },
-          { label: "Creditor:", value: "{{creditor}}" },
-          { label: "Balance:", value: "{{balance}}" },
-          { label: "Due Date:", value: "{{dueDate}}" }
-        ] as { label: string; value: string }[],
-        html: "", 
-        designType: "postmark-invoice" 
-      });
+      setEmailTemplateForm(createEmptyEmailTemplateForm());
       toast({
         title: "Success",
         description: "Email template created successfully",
@@ -853,31 +704,13 @@ export default function Communications() {
   });
 
   const updateEmailTemplateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => 
+    mutationFn: ({ id, data }: { id: string; data: any }) =>
       apiRequest("PUT", `/api/email-templates/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/email-templates"] });
       setShowTemplateModal(false);
       setEditingTemplate(null);
-      setEmailTemplateForm({ 
-        name: "", 
-        subject: "", 
-        greeting: "",
-        mainMessage: "",
-        buttonText: "",
-        buttonUrl: "",
-        closingMessage: "",
-        signOff: "",
-        showAccountDetails: true,
-        accountDetails: [
-          { label: "Account:", value: "{{accountNumber}}" },
-          { label: "Creditor:", value: "{{creditor}}" },
-          { label: "Balance:", value: "{{balance}}" },
-          { label: "Due Date:", value: "{{dueDate}}" }
-        ] as { label: string; value: string }[],
-        html: "", 
-        designType: "postmark-invoice" 
-      });
+      setEmailTemplateForm(createEmptyEmailTemplateForm());
       toast({
         title: "Success",
         description: "Email template updated successfully",
@@ -1214,40 +1047,11 @@ export default function Communications() {
   const handleEditTemplate = (template: any) => {
     setEditingTemplate(template);
     if (communicationType === "email") {
-      // Backward compatibility: Convert old fields to accountDetails array if needed
-      let accountDetails = template.accountDetails;
-      if (!accountDetails && (template.accountLabel || template.creditorLabel || template.balanceLabel || template.dueDateLabel)) {
-        // Old format - convert to array
-        accountDetails = [
-          { label: template.accountLabel || "Account:", value: "{{accountNumber}}" },
-          { label: template.creditorLabel || "Creditor:", value: "{{creditor}}" },
-          { label: template.balanceLabel || "Balance:", value: "{{balance}}" },
-          { label: template.dueDateLabel || "Due Date:", value: "{{dueDate}}" }
-        ];
-      }
-      if (!accountDetails) {
-        // No data at all - use defaults
-        accountDetails = [
-          { label: "Account:", value: "{{accountNumber}}" },
-          { label: "Creditor:", value: "{{creditor}}" },
-          { label: "Balance:", value: "{{balance}}" },
-          { label: "Due Date:", value: "{{dueDate}}" }
-        ];
-      }
-      
       setEmailTemplateForm({
         name: template.name || "",
         subject: template.subject || "",
-        greeting: template.greeting || "Hi {{firstName}},",
-        mainMessage: ensureEditorHtml(template.mainMessage || ""),
-        buttonText: template.buttonText || "",
-        buttonUrl: template.buttonUrl || "{{consumerPortalLink}}",
-        closingMessage: template.closingMessage || "",
-        signOff: template.signOff || "<p>Thanks,<br>The {{agencyName}} Team</p>",
-        showAccountDetails: template.showAccountDetails !== undefined ? template.showAccountDetails : true,
-        accountDetails: accountDetails,
         html: template.html || "",
-        designType: (template.designType === "custom" || !template.designType) ? "postmark-invoice" : template.designType,
+        designType: template.designType || "postmark-invoice",
       });
     } else {
       setSmsTemplateForm({
@@ -1261,107 +1065,27 @@ export default function Communications() {
   const handleTemplateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (communicationType === "email") {
-      const mainMessageText = getPlainText(emailTemplateForm.mainMessage || "");
-      if (!emailTemplateForm.name.trim() || !emailTemplateForm.subject.trim() || !mainMessageText) {
+      const htmlContent = emailTemplateForm.html || "";
+      const plainText = getPlainText(htmlContent);
+      if (!emailTemplateForm.name.trim() || !emailTemplateForm.subject.trim() || !plainText) {
         toast({
           title: "Error",
-          description: "Please fill in all required fields (Name, Subject, Main Message)",
+          description: "Please fill in all required fields (Name, Subject, Content)",
           variant: "destructive",
         });
         return;
       }
-      
-      // Get the base Postmark template and inject user's custom content
-      const template = POSTMARK_TEMPLATES[emailTemplateForm.designType] as any;
-      
-      // Replace custom placeholders with user's actual content
-      const greeting = formatTemplateContent(emailTemplateForm.greeting, "Hi {{firstName}},");
-      const mainMessage = formatTemplateContent(emailTemplateForm.mainMessage);
-      const buttonText = emailTemplateForm.buttonText || "View Account";
-      const buttonUrl = emailTemplateForm.buttonUrl || "{{consumerPortalLink}}";
-      const closingMessage = formatTemplateContent(
-        emailTemplateForm.closingMessage,
-        "If you have any questions, please don't hesitate to contact us."
-      );
-      const signOff = formatTemplateContent(emailTemplateForm.signOff, "Thanks,<br>The {{agencyName}} Team");
-      
-      let customizedHtml = template.html;
-      customizedHtml = customizedHtml.replace('{{CUSTOM_GREETING}}', greeting);
-      customizedHtml = customizedHtml.replace('{{CUSTOM_MESSAGE}}', mainMessage);
-      customizedHtml = customizedHtml.replace('{{CUSTOM_BUTTON_TEXT}}', buttonText);
-      customizedHtml = customizedHtml.replace('{{CUSTOM_BUTTON_URL}}', buttonUrl);
-      customizedHtml = customizedHtml.replace('{{CUSTOM_CLOSING_MESSAGE}}', closingMessage);
-      customizedHtml = customizedHtml.replace('{{CUSTOM_SIGNOFF}}', signOff);
-      
-      // Generate dynamic account details table from accountDetails array
-      const accountDetails = emailTemplateForm.accountDetails || [
-        { label: "Account:", value: "{{accountNumber}}" },
-        { label: "Creditor:", value: "{{creditor}}" },
-        { label: "Balance:", value: "{{balance}}" },
-        { label: "Due Date:", value: "{{dueDate}}" }
-      ];
-      
-      // Build dynamic table rows
-      const dynamicRows = accountDetails.map(detail => 
-        `<tr><td class="attribute-list-item"><strong>${detail.label}</strong> ${detail.value}</td></tr>`
-      ).join('\n        ');
-      
-      // Create the complete dynamic table
-      const dynamicAccountTable = `<table class="attribute-list" width="100%" cellpadding="0" cellspacing="0">
-  <tr>
-    <td class="attribute-list-container">
-      <table width="100%" cellpadding="0" cellspacing="0">
-        ${dynamicRows}
-      </table>
-    </td>
-  </tr>
-</table>`;
-      
-      // Replace the static account details table with dynamic one using DOM parsing
-      if (emailTemplateForm.showAccountDetails) {
-        if (typeof window !== "undefined" && typeof DOMParser !== "undefined") {
-          try {
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(customizedHtml, "text/html");
-            const accountTable = doc.querySelector("table.attribute-list");
-            if (accountTable) {
-              const tempDiv = doc.createElement('div');
-              tempDiv.innerHTML = dynamicAccountTable;
-              accountTable.replaceWith(tempDiv.firstElementChild!);
-            }
-            customizedHtml = doc.body.innerHTML;
-          } catch (e) {
-            console.error("Error replacing account details table:", e);
-          }
-        }
-      } else {
-        customizedHtml = removeAccountDetailsTables(customizedHtml);
-      }
-      
-      // Note: Logo will be replaced at send time with tenant's actual logo in server/routes.ts
-      // For now, keep the placeholder {{COMPANY_LOGO}} in saved template
-      
-      const fullHtml = (template.styles || '') + '\n' + customizedHtml;
-      
       const dataToSend = {
-        name: emailTemplateForm.name,
+        name: emailTemplateForm.name.trim(),
         subject: emailTemplateForm.subject,
-        html: fullHtml,
-        greeting: emailTemplateForm.greeting,
-        mainMessage: emailTemplateForm.mainMessage,
-        buttonText: emailTemplateForm.buttonText,
-        buttonUrl: emailTemplateForm.buttonUrl,
-        closingMessage: emailTemplateForm.closingMessage,
-        signOff: emailTemplateForm.signOff,
-        showAccountDetails: emailTemplateForm.showAccountDetails,
-        accountDetails: emailTemplateForm.accountDetails,
+        html: htmlContent,
         designType: emailTemplateForm.designType,
       };
-      
+
       if (editingTemplate) {
-        updateEmailTemplateMutation.mutate({ 
-          id: editingTemplate.id, 
-          data: dataToSend 
+        updateEmailTemplateMutation.mutate({
+          id: editingTemplate.id,
+          data: dataToSend
         });
       } else {
         createEmailTemplateMutation.mutate(dataToSend);
@@ -2151,32 +1875,23 @@ export default function Communications() {
                   </Button>
                 </div>
               </div>
-              <Dialog open={showTemplateModal} onOpenChange={(open) => {
-                setShowTemplateModal(open);
-                if (!open) {
-                  setEditingTemplate(null);
-                  setEmailTemplateForm({ 
-                    name: "", 
-                    subject: "", 
-                    greeting: "",
-                    mainMessage: "",
-                    buttonText: "",
-                    buttonUrl: "",
-                    closingMessage: "",
-                    signOff: "",
-                    showAccountDetails: true,
-                    accountDetails: [
-                      { label: "Account:", value: "{{accountNumber}}" },
-                      { label: "Creditor:", value: "{{creditor}}" },
-                      { label: "Balance:", value: "{{balance}}" },
-                      { label: "Due Date:", value: "{{dueDate}}" }
-                    ] as { label: string; value: string }[],
-                    html: "", 
-                    designType: "postmark-invoice" 
-                  });
-                  setSmsTemplateForm({ name: "", message: "" });
-                }
-              }}>
+              <Dialog
+                open={showTemplateModal}
+                onOpenChange={(open) => {
+                  setShowTemplateModal(open);
+                  if (!open) {
+                    setEditingTemplate(null);
+                    setEmailTemplateForm(createEmptyEmailTemplateForm());
+                    setSmsTemplateForm({ name: "", message: "" });
+                    setActiveField("html");
+                    setTimeout(() => {
+                      if (editorRef.current) {
+                        editorRef.current.innerHTML = "";
+                      }
+                    }, 0);
+                  }
+                }}
+              >
                 <DialogTrigger asChild>
                   <Button
                     data-testid="button-create-template"
@@ -2250,220 +1965,133 @@ export default function Communications() {
                             />
                           </div>
 
-                          <div className="space-y-4 border rounded-lg p-4 bg-gray-50">
-                            <h4 className="font-medium text-sm">✏️ Customize Your Message</h4>
-                            
-                            <div>
-                              <Label className="text-xs font-medium">Greeting</Label>
-                              <Input
-                                ref={greetingRef}
-                                value={emailTemplateForm.greeting}
-                                onChange={(e) => setEmailTemplateForm({...emailTemplateForm, greeting: e.target.value})}
-                                onFocus={() => setActiveField('greeting')}
-                                placeholder="e.g., Hi {{firstName}},"
-                                className="mt-1"
-                                data-testid="input-greeting"
-                              />
-                            </div>
-                            
-                            <div>
-                              <Label className="text-xs font-medium">Main Message *</Label>
-                              <div className="mt-2 space-y-2">
-                                {renderToolbar("mainMessage")}
-                                <div className="relative">
-                                  {!emailTemplateForm.mainMessage && (
-                                    <div className="pointer-events-none absolute left-3 top-3 text-sm text-gray-400">
-                                      {"This is a friendly reminder about your account. Your current balance is {{balance}} on account {{accountNumber}}."}
-                                    </div>
-                                  )}
-                                  <div
-                                    ref={mainMessageRef}
-                                    className="min-h-[160px] rounded-md border border-gray-200 bg-white p-3 text-sm text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    contentEditable
-                                    suppressContentEditableWarning
-                                    onInput={() => syncRichTextField("mainMessage")}
-                                    onBlur={() => syncRichTextField("mainMessage")}
-                                    onFocus={() => setActiveField("mainMessage")}
-                                    spellCheck={true}
-                                    data-testid="textarea-main-message"
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                            
-                            <div>
-                              <Label className="text-xs font-medium">Button Text (Optional)</Label>
-                              <Input
-                                ref={buttonTextRef}
-                                value={emailTemplateForm.buttonText}
-                                onChange={(e) => setEmailTemplateForm({...emailTemplateForm, buttonText: e.target.value})}
-                                onFocus={() => setActiveField('buttonText')}
-                                placeholder="e.g., Make a Payment, View Account"
-                                className="mt-1"
-                                data-testid="input-button-text"
-                              />
-                            </div>
-                            
-                            <div>
-                              <Label className="text-xs font-medium">Button URL (Optional)</Label>
-                              <Input
-                                ref={buttonUrlRef}
-                                value={emailTemplateForm.buttonUrl}
-                                onChange={(e) => setEmailTemplateForm({...emailTemplateForm, buttonUrl: e.target.value})}
-                                onFocus={() => setActiveField('buttonUrl')}
-                                placeholder="e.g., {{consumerPortalLink}}, {{appDownloadLink}}, or custom URL"
-                                className="mt-1"
-                                data-testid="input-button-url"
-                              />
-                              <p className="text-xs text-gray-500 mt-1">
-                                Use variables like {'{'}{'{'} consumerPortalLink {'}'}{'}'}  or {'{'}{'{'} appDownloadLink {'}'}{'}'},  or enter a custom URL
-                              </p>
-                            </div>
-                            
-                            <div>
-                              <Label className="text-xs font-medium">Additional Message</Label>
-                              <div className="mt-2 space-y-2">
-                                {renderToolbar("closingMessage")}
-                                <div className="relative">
-                                  {!emailTemplateForm.closingMessage && (
-                                    <div className="pointer-events-none absolute left-3 top-3 text-sm text-gray-400">
-                                      If you have any questions, please contact us.
-                                    </div>
-                                  )}
-                                  <div
-                                    ref={closingMessageRef}
-                                    className="min-h-[120px] rounded-md border border-gray-200 bg-white p-3 text-sm text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    contentEditable
-                                    suppressContentEditableWarning
-                                    onInput={() => syncRichTextField("closingMessage")}
-                                    onBlur={() => syncRichTextField("closingMessage")}
-                                    onFocus={() => setActiveField("closingMessage")}
-                                    spellCheck={true}
-                                    data-testid="textarea-closing-message"
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                            
-                            <div>
-                              <Label className="text-xs font-medium">Sign-off</Label>
-                              <div className="mt-2 space-y-2">
-                                {renderToolbar("signOff")}
-                                <div className="relative">
-                                  {!emailTemplateForm.signOff && (
-                                    <div className="pointer-events-none absolute left-3 top-3 text-sm text-gray-400">
-                                      {"e.g., Thanks, The {{agencyName}} Team"}
-                                    </div>
-                                  )}
-                                  <div
-                                    ref={signOffRef}
-                                    className="min-h-[100px] rounded-md border border-gray-200 bg-white p-3 text-sm text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    contentEditable
-                                    suppressContentEditableWarning
-                                    onInput={() => syncRichTextField("signOff")}
-                                    onBlur={() => syncRichTextField("signOff")}
-                                    onFocus={() => setActiveField("signOff")}
-                                    spellCheck={true}
-                                    data-testid="input-signoff"
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          <Separator className="my-4" />
-                          
-                          <div>
-                            <div className="flex items-center justify-between mb-3">
+                          <div className="space-y-3 rounded-xl border border-blue-100 bg-blue-50/40 p-4">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
                               <div>
-                                <Label className="text-sm font-medium block">Account Details Box</Label>
-                                <p className="text-xs text-gray-500 mt-1">Customize the account information table</p>
+                                <h4 className="font-medium text-sm flex items-center gap-2">
+                                  ✏️ Build Your Email
+                                </h4>
+                                <p className="text-xs text-blue-900/70">Draft the full Outlook-style message in one editor.</p>
                               </div>
-                              <div className="flex items-center space-x-2">
-                                <input
-                                  type="checkbox"
-                                  id="show-account-details"
-                                  checked={emailTemplateForm.showAccountDetails}
-                                  onChange={(e) => setEmailTemplateForm({...emailTemplateForm, showAccountDetails: e.target.checked})}
-                                  className="h-4 w-4"
-                                  data-testid="checkbox-show-account-details"
-                                />
-                                <Label htmlFor="show-account-details" className="text-xs cursor-pointer font-medium">Show Box</Label>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {formattingButtons.map(({ Icon, command, label }) => (
+                                  <Button
+                                    key={label}
+                                    type="button"
+                                    size="icon"
+                                    variant="outline"
+                                    className="h-8 w-8 border-blue-200 bg-white text-blue-600 hover:bg-blue-100"
+                                    onClick={() => {
+                                      setActiveField("html");
+                                      applyEditorCommand(command);
+                                    }}
+                                    title={label}
+                                  >
+                                    <Icon className="h-4 w-4" />
+                                  </Button>
+                                ))}
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="outline"
+                                  className="h-8 w-8 border-blue-200 bg-white text-blue-600 hover:bg-blue-100"
+                                  onClick={() => {
+                                    setActiveField("html");
+                                    applyEditorCommand("removeFormat");
+                                  }}
+                                  title="Clear formatting"
+                                >
+                                  <Eraser className="h-4 w-4" />
+                                </Button>
+                                <Select
+                                  onValueChange={(value) => {
+                                    setActiveField("html");
+                                    applyEditorCommand("formatBlock", value);
+                                  }}
+                                >
+                                  <SelectTrigger className="flex h-8 w-[130px] items-center gap-2 border-blue-200 bg-white text-xs">
+                                    <SelectValue placeholder="Text style" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {blockOptions.map((option) => (
+                                      <SelectItem key={option.value} value={option.value} className="text-sm">
+                                        {option.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <Select
+                                  onValueChange={(value) => {
+                                    setActiveField("html");
+                                    applyEditorCommand("foreColor", value);
+                                  }}
+                                >
+                                  <SelectTrigger className="flex h-8 w-[140px] items-center gap-2 border-blue-200 bg-white text-xs">
+                                    <Palette className="h-3.5 w-3.5" />
+                                    <SelectValue placeholder="Text color" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {colorOptions.map((option) => (
+                                      <SelectItem key={option.value} value={option.value} className="flex items-center gap-2">
+                                        <span
+                                          className="h-4 w-4 rounded-full border"
+                                          style={{ backgroundColor: option.value }}
+                                        ></span>
+                                        {option.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="outline"
+                                  className="h-8 w-8 border-blue-200 bg-white text-blue-600 hover:bg-blue-100"
+                                  onClick={handleCreateLink}
+                                  title="Insert link"
+                                >
+                                  <Link2 className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="outline"
+                                  className="h-8 w-8 border-blue-200 bg-white text-blue-600 hover:bg-blue-100"
+                                  onClick={handleRemoveLink}
+                                  title="Remove link"
+                                >
+                                  <Link2Off className="h-4 w-4" />
+                                </Button>
                               </div>
                             </div>
 
-                            {emailTemplateForm.showAccountDetails && (
-                              <div className="space-y-3 border rounded-lg p-4 bg-gray-50">
-                                <div className="flex items-center justify-between mb-2">
-                                  <p className="text-xs font-medium text-gray-700">Table Rows (Label : Value)</p>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    onClick={() => {
-                                      setEmailTemplateForm({
-                                        ...emailTemplateForm,
-                                        accountDetails: [
-                                          ...emailTemplateForm.accountDetails,
-                                          { label: "New Field:", value: "{{variable}}" }
-                                        ]
-                                      });
-                                    }}
-                                    className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white"
-                                    data-testid="button-add-account-detail"
-                                  >
-                                    <Plus className="h-3 w-3 mr-1" />
-                                    Add Row
-                                  </Button>
-                                </div>
-                                
-                                {emailTemplateForm.accountDetails.map((detail, index) => (
-                                  <div key={index} className="flex gap-2 items-start">
-                                    <div className="flex-1">
-                                      <Input
-                                        value={detail.label}
-                                        onChange={(e) => {
-                                          const newDetails = [...emailTemplateForm.accountDetails];
-                                          newDetails[index] = { ...newDetails[index], label: e.target.value };
-                                          setEmailTemplateForm({...emailTemplateForm, accountDetails: newDetails});
-                                        }}
-                                        placeholder="Label (e.g. Account:)"
-                                        className="text-sm"
-                                        data-testid={`input-detail-label-${index}`}
-                                      />
-                                    </div>
-                                    <div className="flex-1">
-                                      <Input
-                                        value={detail.value}
-                                        onChange={(e) => {
-                                          const newDetails = [...emailTemplateForm.accountDetails];
-                                          newDetails[index] = { ...newDetails[index], value: e.target.value };
-                                          setEmailTemplateForm({...emailTemplateForm, accountDetails: newDetails});
-                                        }}
-                                        placeholder="Value (e.g. {{accountNumber}})"
-                                        className="text-sm"
-                                        data-testid={`input-detail-value-${index}`}
-                                      />
-                                    </div>
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => {
-                                        const newDetails = emailTemplateForm.accountDetails.filter((_, i) => i !== index);
-                                        setEmailTemplateForm({...emailTemplateForm, accountDetails: newDetails});
-                                      }}
-                                      className="h-10 px-2 text-red-600 hover:bg-red-50 border-red-300"
-                                      data-testid={`button-remove-detail-${index}`}
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
+                            <div className="rounded-lg border border-blue-200 bg-white shadow-sm">
+                              <div className="relative">
+                                {!getPlainText(emailTemplateForm.html) && (
+                                  <div className="pointer-events-none absolute inset-0 flex h-full w-full items-start justify-start p-5 text-sm text-blue-400">
+                                    <p>
+                                      Start typing your full email here. Use variables from the right to personalize content, or drop in
+                                      quick layout blocks like the account table and payment button.
+                                    </p>
                                   </div>
-                                ))}
-                                <p className="text-xs text-gray-500 mt-2">
-                                  💡 Use variables like {'{{accountNumber}}'}, {'{{balance}}'}, {'{{creditor}}'} in values
-                                </p>
+                                )}
+                                <div
+                                  ref={editorRef}
+                                  className="min-h-[420px] w-full resize-y overflow-auto rounded-lg bg-white p-5 text-sm leading-relaxed text-slate-900 focus:outline-none"
+                                  contentEditable
+                                  suppressContentEditableWarning
+                                  onInput={syncEditorHtml}
+                                  onBlur={syncEditorHtml}
+                                  onFocus={() => setActiveField("html")}
+                                  spellCheck
+                                  data-testid="email-html-editor"
+                                />
                               </div>
-                            )}
+                            </div>
+                            <p className="text-xs text-blue-900/70">
+                              Tip: Use {"{{ACCOUNT_SUMMARY_BLOCK}}"} in any design to auto-replace with your account table and payment
+                              button quick inserts.
+                            </p>
                           </div>
 
                           <div className="border rounded-lg p-4 bg-gray-50">
@@ -2472,12 +2100,12 @@ export default function Communications() {
                               Preview
                             </Label>
                             <div className="border rounded-lg overflow-auto bg-white p-4 max-h-96">
-                              {emailTemplateForm.mainMessage ? (
+                              {emailTemplateForm.html ? (
                                 <div className="bg-white">
                                   {(tenantSettings as any)?.logoUrl && (
                                     <div className="text-center mb-6 pb-6 border-b">
-                                      <img 
-                                        src={(tenantSettings as any).logoUrl} 
+                                      <img
+                                        src={(tenantSettings as any).logoUrl}
                                         alt="Agency Logo" 
                                         className="h-12 mx-auto"
                                       />
@@ -2485,17 +2113,9 @@ export default function Communications() {
                                   )}
                                   <div className="mb-4 pb-4 border-b">
                                     <div className="text-xs text-gray-500 mb-1">Subject:</div>
-                                    <div className="font-semibold text-gray-900">
-                                      {emailTemplateForm.subject
-                                        .replace(/\{\{accountNumber\}\}/g, "[Account #]")
-                                        .replace(/\{\{firstName\}\}/g, "John")
-                                        .replace(/\{\{fullName\}\}/g, "John Doe")
-                                        .replace(/\{\{creditor\}\}/g, "[Creditor]")
-                                        .replace(/\{\{balance\}\}/g, "[Balance]")
-                                        .replace(/\{\{dueDate\}\}/g, "[Due Date]") || "No subject"}
-                                    </div>
+                                    <div className="font-semibold text-gray-900">{renderSubjectPreview()}</div>
                                   </div>
-                                  <div 
+                                  <div
                                     className="prose prose-sm max-w-none"
                                     dangerouslySetInnerHTML={{ __html: renderPreview() }}
                                   />
@@ -2537,8 +2157,37 @@ export default function Communications() {
                             ))}
                           </div>
                           <p className="text-xs text-gray-500 mt-2">
-                            💡 Tip: Variables work in ALL fields - Subject, Greeting, Message, Button URL, etc.
+                            💡 Tip: Variables work in ALL fields - subject lines, buttons, and more.
                           </p>
+
+                          <div className="mt-6">
+                            <Label className="text-sm font-medium flex items-center gap-2">
+                              <Sparkles className="h-4 w-4" />
+                              Quick Inserts
+                            </Label>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Drop in ready-made layout blocks and adjust them in the editor.
+                            </p>
+                            <div className="mt-3 space-y-2">
+                              {quickInsertSnippets.map((snippet) => (
+                                <div key={snippet.label} className="rounded-lg border border-dashed border-blue-200 bg-blue-50/60 p-3">
+                                  <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="sm"
+                                    className="w-full justify-start gap-2 bg-blue-600 text-white hover:bg-blue-700"
+                                    onClick={() => insertSnippet(snippet.html)}
+                                  >
+                                    <Plus className="h-3.5 w-3.5" />
+                                    {snippet.label}
+                                  </Button>
+                                  <p className="mt-2 text-[11px] text-blue-900/80 leading-snug">
+                                    {snippet.description}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         </div>
                       </div>
                       
@@ -2588,7 +2237,7 @@ export default function Communications() {
                         <div>
                           <Label htmlFor="message" className="mb-2 block">Insert Variables</Label>
                           <div className="flex flex-wrap gap-1.5 p-3 bg-gray-50 rounded-lg border mb-2">
-                            {templateVariables.filter(v => v.category !== "account" || v.value === "{{accountNumber}}" || v.value === "{{balance}}" || v.value === "{{dueDate}}").map((variable) => (
+                            {templateVariables.filter(v => v.category !== "account" || v.value === "{{accountNumber}}" || v.value === "{{balance}}" || v.value === "{{dueDate}}" || v.value === "{{dueDateIso}}" || v.value === "{{filenumber}}").map((variable) => (
                               <Button
                                 key={variable.value}
                                 type="button"
