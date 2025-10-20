@@ -147,7 +147,15 @@ export default function Emails() {
     { label: "Full Name", value: "{{fullName}}", category: "consumer" },
     { label: "Email", value: "{{email}}", category: "consumer" },
     { label: "Phone", value: "{{phone}}", category: "consumer" },
+    { label: "Consumer ID", value: "{{consumerId}}", category: "consumer" },
+    { label: "Address", value: "{{address}}", category: "consumer" },
+    { label: "City", value: "{{city}}", category: "consumer" },
+    { label: "State", value: "{{state}}", category: "consumer" },
+    { label: "Zip Code", value: "{{zipCode}}", category: "consumer" },
+    { label: "Full Address", value: "{{fullAddress}}", category: "consumer" },
     { label: "Account Number", value: "{{accountNumber}}", category: "account" },
+    { label: "File Number", value: "{{filenumber}}", category: "account" },
+    { label: "Account ID", value: "{{accountId}}", category: "account" },
     { label: "Creditor", value: "{{creditor}}", category: "account" },
     { label: "Balance", value: "{{balance}}", category: "account" },
     { label: "Due Date", value: "{{dueDate}}", category: "account" },
@@ -156,6 +164,8 @@ export default function Emails() {
     { label: "Agency Name", value: "{{agencyName}}", category: "agency" },
     { label: "Agency Email", value: "{{agencyEmail}}", category: "agency" },
     { label: "Agency Phone", value: "{{agencyPhone}}", category: "agency" },
+    { label: "Unsubscribe Link", value: "{{unsubscribeLink}}", category: "compliance" },
+    { label: "Unsubscribe Button", value: "{{unsubscribeButton}}", category: "compliance" },
   ];
 
   // Function to insert variable at cursor position
@@ -227,10 +237,23 @@ export default function Emails() {
     preview = preview.replace(/\{\{fullName\}\}/g, "John Doe");
     preview = preview.replace(/\{\{email\}\}/g, "john.doe@example.com");
     preview = preview.replace(/\{\{phone\}\}/g, "(555) 123-4567");
+    preview = preview.replace(/\{\{consumerId\}\}/g, "CON-12345");
+    preview = preview.replace(/\{\{accountId\}\}/g, "ACC-67890");
+    preview = preview.replace(/\{\{filenumber\}\}/gi, "FILE-54321");
     preview = preview.replace(/\{\{accountNumber\}\}/g, "ACC-12345");
     preview = preview.replace(/\{\{creditor\}\}/g, "Sample Creditor");
     preview = preview.replace(/\{\{balance\}\}/g, "$1,234.56");
     preview = preview.replace(/\{\{dueDate\}\}/g, "12/31/2024");
+    preview = preview.replace(/\{\{address\}\}/g, "123 Main St");
+    preview = preview.replace(/\{\{consumerAddress\}\}/g, "123 Main St");
+    preview = preview.replace(/\{\{city\}\}/g, "Buffalo");
+    preview = preview.replace(/\{\{consumerCity\}\}/g, "Buffalo");
+    preview = preview.replace(/\{\{state\}\}/g, "NY");
+    preview = preview.replace(/\{\{consumerState\}\}/g, "NY");
+    preview = preview.replace(/\{\{zip\}\}/g, "14201");
+    preview = preview.replace(/\{\{zipCode\}\}/g, "14201");
+    preview = preview.replace(/\{\{fullAddress\}\}/g, "123 Main St, Buffalo, NY 14201");
+    preview = preview.replace(/\{\{consumerFullAddress\}\}/g, "123 Main St, Buffalo, NY 14201");
     const resolvedConsumerPortalUrl =
       consumerPortalUrl || fallbackAgencyUrl || "https://your-agency.chainsoftwaregroup.com";
     preview = preview.replace(/\{\{consumerPortalLink\}\}/g, resolvedConsumerPortalUrl);
@@ -238,6 +261,17 @@ export default function Emails() {
     preview = preview.replace(/\{\{agencyName\}\}/g, (settings as any)?.agencyName || "Your Agency");
     preview = preview.replace(/\{\{agencyEmail\}\}/g, (settings as any)?.agencyEmail || "info@agency.com");
     preview = preview.replace(/\{\{agencyPhone\}\}/g, (settings as any)?.agencyPhone || "(555) 000-0000");
+    const sampleUnsubscribeUrl = `${resolvedConsumerPortalUrl}/unsubscribe`;
+    const sampleUnsubscribeButton = `<table align="center" cellpadding="0" cellspacing="0" style="margin:12px auto 0;">
+  <tr>
+    <td style="background-color:#6B7280;border-radius:4px;">
+      <a href="${sampleUnsubscribeUrl}" style="display:inline-block;padding:10px 18px;color:#ffffff;text-decoration:none;font-weight:600;">Unsubscribe</a>
+    </td>
+  </tr>
+</table>`;
+    preview = preview.replace(/\{\{unsubscribeLink\}\}/g, sampleUnsubscribeUrl);
+    preview = preview.replace(/\{\{unsubscribeUrl\}\}/g, sampleUnsubscribeUrl);
+    preview = preview.replace(/\{\{unsubscribeButton\}\}/g, sampleUnsubscribeButton);
 
     return preview;
   };

@@ -137,11 +137,52 @@ function replaceTemplateVariables(
   });
 
   const appDownloadUrl = sanitizedBaseUrl ? `${baseProtocol}${sanitizedBaseUrl}/download` : '';
+  const unsubscribeBase = sanitizedBaseUrl ? `${baseProtocol}${sanitizedBaseUrl}/unsubscribe` : '';
 
   const firstName = consumer?.firstName || '';
   const lastName = consumer?.lastName || '';
   const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
   const consumerPhone = consumer?.phone || '';
+  const fileNumber = account?.filenumber || account?.accountNumber || '';
+  const consumerAddress = consumer?.address || '';
+  const consumerCity = consumer?.city || '';
+  const consumerState = consumer?.state || '';
+  const consumerZip = consumer?.zipCode || '';
+  const fullAddressParts = [consumerAddress, consumerCity, consumerState, consumerZip].filter(part => part && String(part).trim().length > 0);
+  const fullAddress = fullAddressParts.length > 0
+    ? fullAddressParts
+        .map((part, index) => {
+          if (!part) return '';
+          if (index === fullAddressParts.length - 2 && part === consumerState && consumerZip) {
+            return `${consumerState} ${consumerZip}`.trim();
+          }
+          if (index === fullAddressParts.length - 1 && part === consumerZip && fullAddressParts.includes(consumerState)) {
+            return '';
+          }
+          return String(part);
+        })
+        .filter(Boolean)
+        .join(', ')
+    : '';
+
+  const unsubscribeUrl = unsubscribeBase
+    ? `${unsubscribeBase}${consumerEmail ? `?email=${encodeURIComponent(consumerEmail)}` : ''}${tenant?.id ? `${consumerEmail ? '&' : '?'}tenant=${encodeURIComponent(tenant.id)}` : ''}`
+    : '';
+  const unsubscribeButtonHtml = unsubscribeUrl
+    ? `<table class="body-action" align="center" width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td align="center">
+      <table border="0" cellspacing="0" cellpadding="0">
+        <tr>
+          <td>
+            <a href="${unsubscribeUrl}" class="button" style="background-color:#6B7280;border-radius:4px;color:#ffffff;display:inline-block;padding:10px 18px;text-decoration:none;" target="_blank">Unsubscribe</a>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>`
+    : '';
 
   const balanceCents = account?.balanceCents;
   const formattedBalance = formatCurrency(balanceCents);
@@ -166,17 +207,32 @@ function replaceTemplateVariables(
     consumerId: consumer?.id || '',
     accountId: account?.id || '',
     accountNumber: account?.accountNumber || '',
+    fileNumber,
+    filenumber: fileNumber,
     creditor: account?.creditor || '',
     balance: formattedBalance,
     balence: formattedBalance,
     balanceCents: balanceCents !== undefined && balanceCents !== null ? String(balanceCents) : '',
     dueDate: formattedDueDate,
     dueDateIso,
+    address: consumerAddress,
+    consumerAddress,
+    city: consumerCity,
+    consumerCity,
+    state: consumerState,
+    consumerState,
+    zip: consumerZip,
+    zipCode: consumerZip,
+    fullAddress,
+    consumerFullAddress: fullAddress,
     consumerPortalLink: consumerPortalUrl,
     appDownloadLink: appDownloadUrl,
     agencyName: tenant?.name || '',
     agencyEmail: (tenant as any)?.contactEmail || tenant?.email || '',
     agencyPhone: (tenant as any)?.contactPhone || tenant?.phoneNumber || tenant?.twilioPhoneNumber || '',
+    unsubscribeLink: unsubscribeUrl,
+    unsubscribeUrl,
+    unsubscribeButton: unsubscribeButtonHtml,
     // Balance percentage variables for settlement offers
     'balance50%': balance50,
     'balance60%': balance60,

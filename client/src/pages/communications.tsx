@@ -79,6 +79,15 @@ import {
 
 import { POSTMARK_TEMPLATES, type PostmarkTemplateType } from "@shared/postmarkTemplates";
 import { resolveConsumerPortalUrl } from "@shared/utils/consumerPortal";
+import {
+  createDefaultAccountDetails,
+  DEFAULT_SUMMARY_ORDER,
+  extractSectionOrder,
+  getAccountHeading,
+  normalizeSummaryOrder,
+  stripSectionOrderComment,
+  type SummaryBlock,
+} from "./communicationsHelpers";
 
 export default function Communications() {
   const [activeTab, setActiveTab] = useState("overview");
@@ -147,12 +156,8 @@ export default function Communications() {
     signOff: "", // e.g., "Thanks, The {{agencyName}} Team"
     // Account details box customization
     showAccountDetails: true,
-    accountDetails: [
-      { label: "Account:", value: "{{accountNumber}}" },
-      { label: "Creditor:", value: "{{creditor}}" },
-      { label: "Balance:", value: "{{balance}}" },
-      { label: "Due Date:", value: "{{dueDate}}" }
-    ] as { label: string; value: string }[],
+    accountDetails: createDefaultAccountDetails(),
+    summaryOrder: [...DEFAULT_SUMMARY_ORDER] as SummaryBlock[],
     html: "", // Full template HTML (for storage/sending)
     designType: "postmark-invoice" as PostmarkTemplateType,
   });
@@ -321,7 +326,15 @@ export default function Communications() {
     { label: "Full Name", value: "{{fullName}}", category: "consumer" },
     { label: "Email", value: "{{email}}", category: "consumer" },
     { label: "Phone", value: "{{phone}}", category: "consumer" },
+    { label: "Consumer ID", value: "{{consumerId}}", category: "consumer" },
+    { label: "Address", value: "{{address}}", category: "consumer" },
+    { label: "City", value: "{{city}}", category: "consumer" },
+    { label: "State", value: "{{state}}", category: "consumer" },
+    { label: "Zip Code", value: "{{zipCode}}", category: "consumer" },
+    { label: "Full Address", value: "{{fullAddress}}", category: "consumer" },
     { label: "Account Number", value: "{{accountNumber}}", category: "account" },
+    { label: "File Number", value: "{{filenumber}}", category: "account" },
+    { label: "Account ID", value: "{{accountId}}", category: "account" },
     { label: "Creditor", value: "{{creditor}}", category: "account" },
     { label: "Balance", value: "{{balance}}", category: "account" },
     { label: "Balance 50%", value: "{{balance50%}}", category: "account" },
@@ -331,11 +344,14 @@ export default function Communications() {
     { label: "Balance 90%", value: "{{balance90%}}", category: "account" },
     { label: "Balance 100%", value: "{{balance100%}}", category: "account" },
     { label: "Due Date", value: "{{dueDate}}", category: "account" },
+    { label: "Due Date (ISO)", value: "{{dueDateIso}}", category: "account" },
     { label: "Consumer Portal Link", value: "{{consumerPortalLink}}", category: "links" },
     { label: "App Download Link", value: "{{appDownloadLink}}", category: "links" },
     { label: "Agency Name", value: "{{agencyName}}", category: "agency" },
     { label: "Agency Email", value: "{{agencyEmail}}", category: "agency" },
     { label: "Agency Phone", value: "{{agencyPhone}}", category: "agency" },
+    { label: "Unsubscribe Link", value: "{{unsubscribeLink}}", category: "compliance" },
+    { label: "Unsubscribe Button", value: "{{unsubscribeButton}}", category: "compliance" },
   ];
 
   const richTextEditors: Record<RichTextField, RefObject<HTMLDivElement>> = {
@@ -677,8 +693,10 @@ export default function Communications() {
 
     const greeting = formatTemplateContent(emailTemplateForm.greeting, "Hi {{firstName}},");
     const mainMessage = formatTemplateContent(emailTemplateForm.mainMessage);
-    const buttonText = emailTemplateForm.buttonText || "View Account";
-    const buttonUrlTemplate = emailTemplateForm.buttonUrl || "{{consumerPortalLink}}";
+    const rawButtonText = emailTemplateForm.buttonText ?? "";
+    const trimmedButtonText = rawButtonText.trim();
+    const hasButton = trimmedButtonText.length > 0;
+    const buttonUrlTemplate = emailTemplateForm.buttonUrl?.trim() || "{{consumerPortalLink}}";
     const resolvedConsumerPortalUrl =
       consumerPortalUrl || "https://portal.chainsoftwaregroup.com/consumer-login";
     const resolvedButtonUrl = buttonUrlTemplate.replace(
@@ -695,25 +713,18 @@ export default function Communications() {
     let previewHtml = template.html;
     previewHtml = previewHtml.replace('{{CUSTOM_GREETING}}', greeting);
     previewHtml = previewHtml.replace('{{CUSTOM_MESSAGE}}', mainMessage);
-    previewHtml = previewHtml.replace('{{CUSTOM_BUTTON_TEXT}}', buttonText);
-    previewHtml = previewHtml.replace('{{CUSTOM_BUTTON_URL}}', resolvedButtonUrl);
+    previewHtml = previewHtml.replace('{{CUSTOM_BUTTON_TEXT}}', hasButton ? trimmedButtonText : '');
+    previewHtml = previewHtml.replace('{{CUSTOM_BUTTON_URL}}', hasButton ? resolvedButtonUrl : '');
     previewHtml = previewHtml.replace('{{CUSTOM_CLOSING_MESSAGE}}', closingMessage);
     previewHtml = previewHtml.replace('{{CUSTOM_SIGNOFF}}', signOff);
     
-    // Generate dynamic account details table from accountDetails array
-    const accountDetails = emailTemplateForm.accountDetails || [
-      { label: "Account:", value: "{{accountNumber}}" },
-      { label: "Creditor:", value: "{{creditor}}" },
-      { label: "Balance:", value: "{{balance}}" },
-      { label: "Due Date:", value: "{{dueDate}}" }
-    ];
-    
-    // Build dynamic table rows
-    const dynamicRows = accountDetails.map(detail => 
+    const accountDetails = (emailTemplateForm.accountDetails && emailTemplateForm.accountDetails.length > 0)
+      ? emailTemplateForm.accountDetails
+      : createDefaultAccountDetails();
+    const hasAccountDetails = emailTemplateForm.showAccountDetails && accountDetails.length > 0;
+    const dynamicRows = accountDetails.map(detail =>
       `<tr><td class="attribute-list-item"><strong>${detail.label}</strong> ${detail.value}</td></tr>`
     ).join('\n        ');
-    
-    // Create the complete dynamic table
     const dynamicAccountTable = `<table class="attribute-list" width="100%" cellpadding="0" cellspacing="0">
   <tr>
     <td class="attribute-list-container">
@@ -723,9 +734,45 @@ export default function Communications() {
     </td>
   </tr>
 </table>`;
-    
-    // Replace the static account details table with dynamic one using DOM parsing
-    if (emailTemplateForm.showAccountDetails) {
+    const accountHeading = hasAccountDetails ? getAccountHeading(emailTemplateForm.designType) : '';
+    const accountBlock = hasAccountDetails
+      ? `${accountHeading ? `${accountHeading}\n` : ''}${dynamicAccountTable}`
+      : '';
+
+    const buttonBlock = hasButton
+      ? `<table class="body-action" align="center" width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td align="center">
+      <table width="100%" border="0" cellspacing="0" cellpadding="0">
+        <tr>
+          <td align="center">
+            <table border="0" cellspacing="0" cellpadding="0">
+              <tr>
+                <td>
+                  <a href="${resolvedButtonUrl}" class="button button--green" target="_blank">${trimmedButtonText}</a>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>`
+      : '';
+
+    const summaryOrder = normalizeSummaryOrder(emailTemplateForm.summaryOrder as SummaryBlock[] | undefined, {
+      includeAccount: !!accountBlock,
+      includeCta: hasButton,
+    });
+    const summaryHtml = summaryOrder
+      .map(block => (block === "account" ? accountBlock : buttonBlock))
+      .filter(Boolean)
+      .join('\n');
+
+    if (previewHtml.includes("{{ACCOUNT_SUMMARY_BLOCK}}")) {
+      previewHtml = previewHtml.replace("{{ACCOUNT_SUMMARY_BLOCK}}", summaryHtml || '');
+    } else if (hasAccountDetails) {
       if (typeof window !== "undefined" && typeof DOMParser !== "undefined") {
         try {
           const parser = new DOMParser();
@@ -802,12 +849,42 @@ export default function Communications() {
       /\{\{dueDate\}\}/g,
       accountPlaceholder("Due date auto-fills for each recipient")
     );
+    previewHtml = previewHtml.replace(
+      /\{\{dueDateIso\}\}/g,
+      accountPlaceholder("Due date (ISO) auto-fills for each recipient")
+    );
+    previewHtml = previewHtml.replace(/\{\{filenumber\}\}/gi, accountPlaceholder("File number auto-fills for each recipient"));
+    previewHtml = previewHtml.replace(/\{\{accountId\}\}/g, "ACC-67890");
+    previewHtml = previewHtml.replace(/\{\{consumerId\}\}/g, "CON-12345");
     previewHtml = previewHtml.replace(/\{\{consumerPortalLink\}\}/g, resolvedConsumerPortalUrl);
     previewHtml = previewHtml.replace(/\{\{appDownloadLink\}\}/g, "https://app.example.com/download");
     previewHtml = previewHtml.replace(/\{\{agencyName\}\}/g, (tenantSettings as any)?.agencyName || "Your Agency");
     previewHtml = previewHtml.replace(/\{\{agencyEmail\}\}/g, (tenantSettings as any)?.agencyEmail || "support@example.com");
     previewHtml = previewHtml.replace(/\{\{agencyPhone\}\}/g, (tenantSettings as any)?.agencyPhone || "(555) 123-4567");
-    
+    const contactPlaceholder = (message: string) =>
+      `<span style="color:#6B7280; font-style: italic;">${message}</span>`;
+    previewHtml = previewHtml.replace(/\{\{address\}\}/g, contactPlaceholder("Mailing address auto-fills for each recipient"));
+    previewHtml = previewHtml.replace(/\{\{consumerAddress\}\}/g, contactPlaceholder("Mailing address auto-fills for each recipient"));
+    previewHtml = previewHtml.replace(/\{\{city\}\}/g, contactPlaceholder("City auto-fills for each recipient"));
+    previewHtml = previewHtml.replace(/\{\{consumerCity\}\}/g, contactPlaceholder("City auto-fills for each recipient"));
+    previewHtml = previewHtml.replace(/\{\{state\}\}/g, contactPlaceholder("State auto-fills for each recipient"));
+    previewHtml = previewHtml.replace(/\{\{consumerState\}\}/g, contactPlaceholder("State auto-fills for each recipient"));
+    previewHtml = previewHtml.replace(/\{\{zip\}\}/g, contactPlaceholder("ZIP auto-fills for each recipient"));
+    previewHtml = previewHtml.replace(/\{\{zipCode\}\}/g, contactPlaceholder("ZIP auto-fills for each recipient"));
+    previewHtml = previewHtml.replace(/\{\{fullAddress\}\}/g, contactPlaceholder("Full address auto-fills for each recipient"));
+    previewHtml = previewHtml.replace(/\{\{consumerFullAddress\}\}/g, contactPlaceholder("Full address auto-fills for each recipient"));
+    const sampleUnsubscribeUrl = `${resolvedConsumerPortalUrl}/unsubscribe`;
+    const unsubscribeButtonHtml = `<table align="center" cellpadding="0" cellspacing="0" style="margin:16px auto 0;">
+  <tr>
+    <td style="background-color:#6B7280;border-radius:4px;">
+      <a href="${sampleUnsubscribeUrl}" style="display:inline-block;padding:10px 18px;color:#ffffff;text-decoration:none;font-weight:600;">Unsubscribe</a>
+    </td>
+  </tr>
+</table>`;
+    previewHtml = previewHtml.replace(/\{\{unsubscribeLink\}\}/g, sampleUnsubscribeUrl);
+    previewHtml = previewHtml.replace(/\{\{unsubscribeUrl\}\}/g, sampleUnsubscribeUrl);
+    previewHtml = previewHtml.replace(/\{\{unsubscribeButton\}\}/g, unsubscribeButtonHtml);
+
     // Include styles for proper rendering
     const stylesHtml = template.styles || '';
     return stylesHtml + previewHtml;
@@ -819,9 +896,9 @@ export default function Communications() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/email-templates"] });
       setShowTemplateModal(false);
-      setEmailTemplateForm({ 
-        name: "", 
-        subject: "", 
+      setEmailTemplateForm({
+        name: "",
+        subject: "",
         greeting: "",
         mainMessage: "",
         buttonText: "",
@@ -829,14 +906,10 @@ export default function Communications() {
         closingMessage: "",
         signOff: "",
         showAccountDetails: true,
-        accountDetails: [
-          { label: "Account:", value: "{{accountNumber}}" },
-          { label: "Creditor:", value: "{{creditor}}" },
-          { label: "Balance:", value: "{{balance}}" },
-          { label: "Due Date:", value: "{{dueDate}}" }
-        ] as { label: string; value: string }[],
-        html: "", 
-        designType: "postmark-invoice" 
+        accountDetails: createDefaultAccountDetails(),
+        summaryOrder: [...DEFAULT_SUMMARY_ORDER],
+        html: "",
+        designType: "postmark-invoice"
       });
       toast({
         title: "Success",
@@ -859,9 +932,9 @@ export default function Communications() {
       queryClient.invalidateQueries({ queryKey: ["/api/email-templates"] });
       setShowTemplateModal(false);
       setEditingTemplate(null);
-      setEmailTemplateForm({ 
-        name: "", 
-        subject: "", 
+      setEmailTemplateForm({
+        name: "",
+        subject: "",
         greeting: "",
         mainMessage: "",
         buttonText: "",
@@ -869,14 +942,10 @@ export default function Communications() {
         closingMessage: "",
         signOff: "",
         showAccountDetails: true,
-        accountDetails: [
-          { label: "Account:", value: "{{accountNumber}}" },
-          { label: "Creditor:", value: "{{creditor}}" },
-          { label: "Balance:", value: "{{balance}}" },
-          { label: "Due Date:", value: "{{dueDate}}" }
-        ] as { label: string; value: string }[],
-        html: "", 
-        designType: "postmark-invoice" 
+        accountDetails: createDefaultAccountDetails(),
+        summaryOrder: [...DEFAULT_SUMMARY_ORDER],
+        html: "",
+        designType: "postmark-invoice"
       });
       toast({
         title: "Success",
@@ -1227,14 +1296,36 @@ export default function Communications() {
       }
       if (!accountDetails) {
         // No data at all - use defaults
-        accountDetails = [
-          { label: "Account:", value: "{{accountNumber}}" },
-          { label: "Creditor:", value: "{{creditor}}" },
-          { label: "Balance:", value: "{{balance}}" },
-          { label: "Due Date:", value: "{{dueDate}}" }
-        ];
+        accountDetails = createDefaultAccountDetails();
       }
-      
+
+      const normalizedAccountDetails = accountDetails.map((detail: { label: string; value: string }) => ({ ...detail }));
+      if (!normalizedAccountDetails.some(detail => /\{\{\s*filenumber\s*\}\}/i.test(detail.value))) {
+        normalizedAccountDetails.splice(1, 0, { label: "File #:", value: "{{filenumber}}" });
+      }
+
+      const rawHtml = template.html || "";
+      const cleanedHtml = stripSectionOrderComment(rawHtml);
+      let summaryOrder = extractSectionOrder(rawHtml);
+      if (!summaryOrder.length) {
+        const accountIndex = cleanedHtml.indexOf('class="attribute-list"');
+        const ctaIndex = cleanedHtml.indexOf('class="body-action"');
+        if (accountIndex !== -1 && ctaIndex !== -1) {
+          summaryOrder = ctaIndex < accountIndex ? ["cta", "account"] : ["account", "cta"];
+        } else if (ctaIndex !== -1) {
+          summaryOrder = ["cta"];
+        } else if (accountIndex !== -1) {
+          summaryOrder = ["account"];
+        }
+      }
+      const htmlHasCta = /body-action/i.test(cleanedHtml);
+      const storedButtonText = (template.buttonText ?? "").trim();
+      const includeCta = htmlHasCta || storedButtonText.length > 0;
+      const normalizedOrder = normalizeSummaryOrder(summaryOrder, {
+        includeAccount: (template.showAccountDetails !== false) && normalizedAccountDetails.length > 0,
+        includeCta,
+      });
+
       setEmailTemplateForm({
         name: template.name || "",
         subject: template.subject || "",
@@ -1245,8 +1336,9 @@ export default function Communications() {
         closingMessage: template.closingMessage || "",
         signOff: template.signOff || "<p>Thanks,<br>The {{agencyName}} Team</p>",
         showAccountDetails: template.showAccountDetails !== undefined ? template.showAccountDetails : true,
-        accountDetails: accountDetails,
-        html: template.html || "",
+        accountDetails: normalizedAccountDetails,
+        summaryOrder: normalizedOrder,
+        html: cleanedHtml,
         designType: (template.designType === "custom" || !template.designType) ? "postmark-invoice" : template.designType,
       });
     } else {
@@ -1277,8 +1369,10 @@ export default function Communications() {
       // Replace custom placeholders with user's actual content
       const greeting = formatTemplateContent(emailTemplateForm.greeting, "Hi {{firstName}},");
       const mainMessage = formatTemplateContent(emailTemplateForm.mainMessage);
-      const buttonText = emailTemplateForm.buttonText || "View Account";
-      const buttonUrl = emailTemplateForm.buttonUrl || "{{consumerPortalLink}}";
+      const rawButtonText = emailTemplateForm.buttonText ?? "";
+      const trimmedButtonText = rawButtonText.trim();
+      const hasButton = trimmedButtonText.length > 0;
+      const buttonUrl = emailTemplateForm.buttonUrl?.trim() || "{{consumerPortalLink}}";
       const closingMessage = formatTemplateContent(
         emailTemplateForm.closingMessage,
         "If you have any questions, please don't hesitate to contact us."
@@ -1288,25 +1382,18 @@ export default function Communications() {
       let customizedHtml = template.html;
       customizedHtml = customizedHtml.replace('{{CUSTOM_GREETING}}', greeting);
       customizedHtml = customizedHtml.replace('{{CUSTOM_MESSAGE}}', mainMessage);
-      customizedHtml = customizedHtml.replace('{{CUSTOM_BUTTON_TEXT}}', buttonText);
-      customizedHtml = customizedHtml.replace('{{CUSTOM_BUTTON_URL}}', buttonUrl);
+      customizedHtml = customizedHtml.replace('{{CUSTOM_BUTTON_TEXT}}', hasButton ? trimmedButtonText : '');
+      customizedHtml = customizedHtml.replace('{{CUSTOM_BUTTON_URL}}', hasButton ? buttonUrl : '');
       customizedHtml = customizedHtml.replace('{{CUSTOM_CLOSING_MESSAGE}}', closingMessage);
       customizedHtml = customizedHtml.replace('{{CUSTOM_SIGNOFF}}', signOff);
       
-      // Generate dynamic account details table from accountDetails array
-      const accountDetails = emailTemplateForm.accountDetails || [
-        { label: "Account:", value: "{{accountNumber}}" },
-        { label: "Creditor:", value: "{{creditor}}" },
-        { label: "Balance:", value: "{{balance}}" },
-        { label: "Due Date:", value: "{{dueDate}}" }
-      ];
-      
-      // Build dynamic table rows
-      const dynamicRows = accountDetails.map(detail => 
+      const accountDetails = (emailTemplateForm.accountDetails && emailTemplateForm.accountDetails.length > 0)
+        ? emailTemplateForm.accountDetails
+        : createDefaultAccountDetails();
+      const hasAccountDetails = emailTemplateForm.showAccountDetails && accountDetails.length > 0;
+      const dynamicRows = accountDetails.map(detail =>
         `<tr><td class="attribute-list-item"><strong>${detail.label}</strong> ${detail.value}</td></tr>`
       ).join('\n        ');
-      
-      // Create the complete dynamic table
       const dynamicAccountTable = `<table class="attribute-list" width="100%" cellpadding="0" cellspacing="0">
   <tr>
     <td class="attribute-list-container">
@@ -1316,9 +1403,43 @@ export default function Communications() {
     </td>
   </tr>
 </table>`;
-      
-      // Replace the static account details table with dynamic one using DOM parsing
-      if (emailTemplateForm.showAccountDetails) {
+      const accountHeading = hasAccountDetails ? getAccountHeading(emailTemplateForm.designType) : '';
+      const accountBlock = hasAccountDetails
+        ? `${accountHeading ? `${accountHeading}\n` : ''}${dynamicAccountTable}`
+        : '';
+
+      const buttonBlock = hasButton ? `<table class="body-action" align="center" width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td align="center">
+      <table width="100%" border="0" cellspacing="0" cellpadding="0">
+        <tr>
+          <td align="center">
+            <table border="0" cellspacing="0" cellpadding="0">
+              <tr>
+                <td>
+                  <a href="${buttonUrl}" class="button button--green" target="_blank">${trimmedButtonText}</a>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>` : '';
+
+      const summaryOrder = normalizeSummaryOrder(emailTemplateForm.summaryOrder as SummaryBlock[] | undefined, {
+        includeAccount: !!accountBlock,
+        includeCta: hasButton,
+      });
+      const summaryHtml = summaryOrder
+        .map(block => (block === "account" ? accountBlock : buttonBlock))
+        .filter(Boolean)
+        .join('\n');
+
+      if (customizedHtml.includes("{{ACCOUNT_SUMMARY_BLOCK}}")) {
+        customizedHtml = customizedHtml.replace("{{ACCOUNT_SUMMARY_BLOCK}}", summaryHtml || '');
+      } else if (hasAccountDetails) {
         if (typeof window !== "undefined" && typeof DOMParser !== "undefined") {
           try {
             const parser = new DOMParser();
@@ -1337,11 +1458,15 @@ export default function Communications() {
       } else {
         customizedHtml = removeAccountDetailsTables(customizedHtml);
       }
-      
+
       // Note: Logo will be replaced at send time with tenant's actual logo in server/routes.ts
       // For now, keep the placeholder {{COMPANY_LOGO}} in saved template
       
-      const fullHtml = (template.styles || '') + '\n' + customizedHtml;
+      const sectionOrderComment = summaryOrder.length > 0
+        ? `<!--SECTION_ORDER:${summaryOrder.join(',')}-->`
+        : '';
+      customizedHtml = stripSectionOrderComment(customizedHtml);
+      const fullHtml = (template.styles || '') + '\n' + customizedHtml + sectionOrderComment;
       
       const dataToSend = {
         name: emailTemplateForm.name,
@@ -2384,7 +2509,22 @@ export default function Communications() {
                                   type="checkbox"
                                   id="show-account-details"
                                   checked={emailTemplateForm.showAccountDetails}
-                                  onChange={(e) => setEmailTemplateForm({...emailTemplateForm, showAccountDetails: e.target.checked})}
+                                  onChange={(e) => {
+                                    const shouldShow = e.target.checked;
+                                    setEmailTemplateForm(prev => {
+                                      const includeAccount = shouldShow && (prev.accountDetails?.length ?? 0) > 0;
+                                      const includeCta = (prev.buttonText ?? "").trim().length > 0;
+                                      const normalizedOrder = normalizeSummaryOrder(prev.summaryOrder as SummaryBlock[] | undefined, {
+                                        includeAccount,
+                                        includeCta,
+                                      });
+                                      return {
+                                        ...prev,
+                                        showAccountDetails: shouldShow,
+                                        summaryOrder: normalizedOrder,
+                                      };
+                                    });
+                                  }}
                                   className="h-4 w-4"
                                   data-testid="checkbox-show-account-details"
                                 />
@@ -2394,26 +2534,75 @@ export default function Communications() {
 
                             {emailTemplateForm.showAccountDetails && (
                               <div className="space-y-3 border rounded-lg p-4 bg-gray-50">
-                                <div className="flex items-center justify-between mb-2">
-                                  <p className="text-xs font-medium text-gray-700">Table Rows (Label : Value)</p>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    onClick={() => {
-                                      setEmailTemplateForm({
-                                        ...emailTemplateForm,
-                                        accountDetails: [
-                                          ...emailTemplateForm.accountDetails,
-                                          { label: "New Field:", value: "{{variable}}" }
-                                        ]
-                                      });
-                                    }}
-                                    className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white"
-                                    data-testid="button-add-account-detail"
-                                  >
-                                    <Plus className="h-3 w-3 mr-1" />
-                                    Add Row
-                                  </Button>
+                                <div className="flex flex-col gap-3 mb-2">
+                                  <div className="flex items-center justify-between">
+                                    <p className="text-xs font-medium text-gray-700">Table Rows (Label : Value)</p>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      onClick={() => {
+                                        setEmailTemplateForm({
+                                          ...emailTemplateForm,
+                                          accountDetails: [
+                                            ...emailTemplateForm.accountDetails,
+                                            { label: "New Field:", value: "{{variable}}" }
+                                          ]
+                                        });
+                                      }}
+                                      className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white"
+                                      data-testid="button-add-account-detail"
+                                    >
+                                      <Plus className="h-3 w-3 mr-1" />
+                                      Add Row
+                                    </Button>
+                                  </div>
+                                  <div>
+                                    <Label className="text-xs font-medium block mb-1">Layout Order</Label>
+                                    <div className="flex flex-wrap gap-2">
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant={(emailTemplateForm.summaryOrder || DEFAULT_SUMMARY_ORDER).join('-') === 'account-cta' ? 'default' : 'outline'}
+                                        onClick={() =>
+                                          setEmailTemplateForm(prev => {
+                                            const proposed: SummaryBlock[] = ['account', 'cta'];
+                                            const normalized = normalizeSummaryOrder(proposed, {
+                                              includeAccount: prev.showAccountDetails && (prev.accountDetails?.length ?? 0) > 0,
+                                              includeCta: (prev.buttonText ?? "").trim().length > 0,
+                                            });
+                                            return {
+                                              ...prev,
+                                              summaryOrder: normalized,
+                                            };
+                                          })
+                                        }
+                                        className="h-7 text-xs"
+                                      >
+                                        Account Info → Button
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant={(emailTemplateForm.summaryOrder || DEFAULT_SUMMARY_ORDER).join('-') === 'cta-account' ? 'default' : 'outline'}
+                                        onClick={() =>
+                                          setEmailTemplateForm(prev => {
+                                            const proposed: SummaryBlock[] = ['cta', 'account'];
+                                            const normalized = normalizeSummaryOrder(proposed, {
+                                              includeAccount: prev.showAccountDetails && (prev.accountDetails?.length ?? 0) > 0,
+                                              includeCta: (prev.buttonText ?? "").trim().length > 0,
+                                            });
+                                            return {
+                                              ...prev,
+                                              summaryOrder: normalized,
+                                            };
+                                          })
+                                        }
+                                        className="h-7 text-xs"
+                                      >
+                                        Button → Account Info
+                                      </Button>
+                                    </div>
+                                  </div>
                                 </div>
                                 
                                 {emailTemplateForm.accountDetails.map((detail, index) => (
@@ -2588,7 +2777,7 @@ export default function Communications() {
                         <div>
                           <Label htmlFor="message" className="mb-2 block">Insert Variables</Label>
                           <div className="flex flex-wrap gap-1.5 p-3 bg-gray-50 rounded-lg border mb-2">
-                            {templateVariables.filter(v => v.category !== "account" || v.value === "{{accountNumber}}" || v.value === "{{balance}}" || v.value === "{{dueDate}}").map((variable) => (
+                            {templateVariables.filter(v => v.category !== "account" || v.value === "{{accountNumber}}" || v.value === "{{balance}}" || v.value === "{{dueDate}}" || v.value === "{{dueDateIso}}" || v.value === "{{filenumber}}").map((variable) => (
                               <Button
                                 key={variable.value}
                                 type="button"
