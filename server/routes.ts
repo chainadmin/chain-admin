@@ -12,6 +12,7 @@ import {
   platformUsers,
   tenants,
   consumers,
+  accounts as accountsTable,
   agencyCredentials,
   users,
   subscriptionPlans,
@@ -576,7 +577,7 @@ function replaceTemplateVariables(
 
       if (consumerAccount?.accountNumber) {
         metadata.accountNumber = consumerAccount.accountNumber;
-        metadata.filenumber = consumerAccount.accountNumber;
+        metadata.filenumber = consumerAccount.filenumber || '';
       }
 
       emails.push({
@@ -8651,34 +8652,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     // Notify SMAX for email open events using InsertNoteline
-    if (tenantId && normalizedRecordType === 'open') {
+    if (normalizedRecordType === 'open') {
       try {
         const { smaxService } = await import('./smaxService');
-        let fileNumber = (Metadata?.filenumber || Metadata?.accountNumber || '').trim();
+        
+        // Ensure we have tenantId - fetch from email log if not in metadata
+        let resolvedTenantId = tenantId;
+        if (!resolvedTenantId && MessageID) {
+          const [emailLog] = await db
+            .select()
+            .from(emailLogs)
+            .where(eq(emailLogs.messageId, MessageID))
+            .limit(1);
+          
+          if (emailLog?.tenantId) {
+            resolvedTenantId = emailLog.tenantId;
+            console.log(`📋 Retrieved tenantId ${resolvedTenantId} from email log for MessageID ${MessageID}`);
+          }
+        }
+        
+        if (!resolvedTenantId) {
+          console.log('ℹ️ Skipping SMAX email tracking - no tenantId available');
+          return;
+        }
+        
+        let fileNumber = (Metadata?.filenumber || '').trim();
 
-        // If no filenumber in metadata, try to get it from the consumer's account
+        // Detect legacy emails where filenumber was incorrectly set to accountNumber
+        if (fileNumber && Metadata?.accountNumber && fileNumber === Metadata.accountNumber) {
+          console.log(`⚠️ Legacy email detected: filenumber equals accountNumber (${fileNumber}), performing lookup for correct filenumber`);
+          fileNumber = ''; // Clear so the lookup will run
+        }
+
+        // If no filenumber in metadata but we have accountNumber, look up the account to get filenumber
+        if (!fileNumber && Metadata?.accountNumber) {
+          const [account] = await db
+            .select()
+            .from(accountsTable)
+            .where(
+              and(
+                eq(accountsTable.accountNumber, Metadata.accountNumber),
+                eq(accountsTable.tenantId, resolvedTenantId)
+              )
+            )
+            .limit(1);
+          
+          if (account?.filenumber) {
+            fileNumber = account.filenumber.trim();
+            console.log(`📋 Found filenumber ${fileNumber} via accountNumber lookup for ${Metadata.accountNumber}`);
+          }
+        }
+
+        // If still no filenumber, try to get it from the consumer's accounts
         if (!fileNumber && Metadata?.consumerId) {
           const accounts = await storage.getAccountsByConsumer(Metadata.consumerId);
           const accountWithFileNumber = accounts.find(acc => acc.filenumber && acc.filenumber.trim());
           if (accountWithFileNumber?.filenumber) {
             fileNumber = accountWithFileNumber.filenumber.trim();
-            console.log(`📋 Found filenumber ${fileNumber} for consumer ${Metadata.consumerId}`);
+            console.log(`📋 Found filenumber ${fileNumber} via consumer lookup for consumer ${Metadata.consumerId}`);
           }
         }
 
         if (fileNumber) {
-          console.log('📤 Sending email open tracking to SMAX for filenumber:', fileNumber);
+          console.log('📤 Sending SMAX note:', {
+            filenumber: fileNumber,
+            collectorname: 'System',
+            logmessage: `Email opened by ${Recipient}`,
+          });
 
           // Use InsertNoteline per SMAX API spec - email tracking should be logged as notes
-          await smaxService.insertNote(tenantId, {
+          const smaxResult = await smaxService.insertNote(resolvedTenantId, {
             filenumber: fileNumber,
             collectorname: 'System',
             logmessage: `Email opened by ${Recipient}`,
           });
           
-          console.log('✅ Successfully sent email tracking to SMAX');
+          if (smaxResult) {
+            console.log('✅ SMAX note inserted:', smaxResult);
+          } else {
+            console.log('⚠️ SMAX note insertion returned no result');
+          }
         } else {
-          console.log('ℹ️ Skipping SMAX email tracking - no filenumber found');
+          console.log('⚠️ Skipping SMAX email tracking - no filenumber found after all lookup attempts');
         }
       } catch (smaxError) {
         console.warn('⚠️ SMAX email tracking notification failed:', smaxError);
