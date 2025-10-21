@@ -5790,12 +5790,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   }) ||
                   (await storage.getConsumer(consumerId));
 
-                const fileNumber =
-                  (account as any)?.filenumber ||
-                  account?.accountNumber ||
-                  account?.id ||
-                  accountId;
+                const fileNumber = (account as any)?.filenumber;
 
+                // Only send to SMAX if filenumber exists
                 if (fileNumber) {
                   const arrangementName = arrangement.name || arrangement.planType;
                   const scheduleRecord = createdSchedule as any;
@@ -5894,29 +5891,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const account = await storage.getAccount(accountId);
             const consumer = await storage.getConsumer(consumerId);
             if (account && consumer) {
-              const paymentData = smaxService.createSmaxPaymentData({
-                filenumber: account.accountNumber || account.id,
-                paymentamount: amountCents / 100,
-                paymentdate: new Date().toISOString().split('T')[0],
-                payorname: `${consumer.firstName} ${consumer.lastName}`,
-                paymentmethod: 'CREDIT CARD',
-                cardtype: cardBrand || 'Unknown',
-                cardLast4: cardLast4,
-                transactionid: transactionId,
-              });
-              
-              console.log('💳 Sending payment to SMAX:', {
-                filenumber: account.accountNumber,
-                amount: amountCents / 100,
-                cardLast4: cardLast4
-              });
-              
-              const smaxResult = await smaxService.insertPayment(tenantId, paymentData);
-              
-              if (smaxResult) {
-                console.log('✅ Payment successfully sent to SMAX');
+              // Only send to SMAX if filenumber exists
+              if (account.filenumber) {
+                const paymentData = smaxService.createSmaxPaymentData({
+                  filenumber: account.filenumber,
+                  paymentamount: amountCents / 100,
+                  paymentdate: new Date().toISOString().split('T')[0],
+                  payorname: `${consumer.firstName} ${consumer.lastName}`,
+                  paymentmethod: 'CREDIT CARD',
+                  cardtype: cardBrand || 'Unknown',
+                  cardLast4: cardLast4,
+                  transactionid: transactionId,
+                });
+                
+                console.log('💳 Sending payment to SMAX:', {
+                  filenumber: account.filenumber,
+                  amount: amountCents / 100,
+                  cardLast4: cardLast4
+                });
+                
+                const smaxResult = await smaxService.insertPayment(tenantId, paymentData);
+                
+                if (smaxResult) {
+                  console.log('✅ Payment successfully sent to SMAX');
+                } else {
+                  console.error('❌ Failed to send payment to SMAX');
+                }
               } else {
-                console.error('❌ Failed to send payment to SMAX');
+                console.warn(`⚠️ No filenumber for account ${account.accountNumber || account.id} - skipping SMAX payment sync`);
               }
             }
           }
@@ -7112,16 +7114,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const accounts = await storage.getAccountsByConsumer(consumer.id);
         if (accounts && accounts.length > 0) {
           const account = accounts[0];
-          const paymentData = smaxService.createSmaxPaymentData({
-            filenumber: account.accountNumber || account.id,
-            paymentamount: amountCents / 100,
-            paymentdate: new Date().toISOString().split('T')[0],
-            payorname: `${consumer.firstName} ${consumer.lastName}`,
-            paymentmethod: 'CREDIT CARD',
-            cardLast4: cardNumber.slice(-4),
-            transactionid: processorResponse.transactionId,
-          });
-          await smaxService.insertPayment(tenantId, paymentData);
+          // Only send to SMAX if filenumber exists
+          if (account.filenumber) {
+            const paymentData = smaxService.createSmaxPaymentData({
+              filenumber: account.filenumber,
+              paymentamount: amountCents / 100,
+              paymentdate: new Date().toISOString().split('T')[0],
+              payorname: `${consumer.firstName} ${consumer.lastName}`,
+              paymentmethod: 'CREDIT CARD',
+              cardLast4: cardNumber.slice(-4),
+              transactionid: processorResponse.transactionId,
+            });
+            await smaxService.insertPayment(tenantId, paymentData);
+            console.log(`✅ Consumer payment sent to SMAX for filenumber: ${account.filenumber}`);
+          } else {
+            console.warn(`⚠️ No filenumber for account ${account.accountNumber || account.id} - skipping SMAX sync`);
+          }
         }
       } catch (smaxError) {
         console.error('SMAX notification failed:', smaxError);
@@ -7179,20 +7187,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Notify SMAX if enabled
       try {
         const { smaxService } = await import('./smaxService');
-        let accountNumber = null;
+        let filenumber = null;
         if (accountId) {
           const account = await storage.getAccount(accountId);
-          accountNumber = account?.accountNumber || accountId;
+          filenumber = account?.filenumber || null;
         } else {
           const accounts = await storage.getAccountsByConsumer(consumer.id);
           if (accounts && accounts.length > 0) {
-            accountNumber = accounts[0].accountNumber || accounts[0].id;
+            filenumber = accounts[0].filenumber || null;
           }
         }
         
-        if (accountNumber) {
+        // Only send to SMAX if filenumber exists
+        if (filenumber) {
           const paymentData = smaxService.createSmaxPaymentData({
-            filenumber: accountNumber,
+            filenumber: filenumber,
             paymentamount: amountCents / 100,
             paymentdate: new Date().toISOString().split('T')[0],
             payorname: `${consumer.firstName} ${consumer.lastName}`,
@@ -7200,6 +7209,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             transactionid: transactionId || `manual_${Date.now()}`,
           });
           await smaxService.insertPayment(tenantId, paymentData);
+          console.log(`✅ Manual payment sent to SMAX for filenumber: ${filenumber}`);
+        } else {
+          console.warn(`⚠️ No filenumber found for manual payment - skipping SMAX sync`);
         }
       } catch (smaxError) {
         console.error('SMAX notification failed:', smaxError);
