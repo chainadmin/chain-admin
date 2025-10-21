@@ -188,6 +188,7 @@ function replaceTemplateVariables(
   const formattedBalance = formatCurrency(balanceCents);
   const formattedDueDate = account?.dueDate ? new Date(account.dueDate).toLocaleDateString() : '';
   const dueDateIso = account?.dueDate ? new Date(account.dueDate).toISOString().split('T')[0] : '';
+  const todaysDate = new Date().toLocaleDateString();
 
   // Calculate balance percentages for settlement offers
   const balance50 = (balanceCents !== null && balanceCents !== undefined) ? formatCurrency(Math.round(balanceCents * 0.5)) : '';
@@ -233,6 +234,7 @@ function replaceTemplateVariables(
     unsubscribeLink: unsubscribeUrl,
     unsubscribeUrl,
     unsubscribeButton: unsubscribeButtonHtml,
+    'todays date': todaysDate,
     // Balance percentage variables for settlement offers
     'balance50%': balance50,
     'balance60%': balance60,
