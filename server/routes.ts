@@ -824,65 +824,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get tenant settings
       const tenantSettings = tenant?.id ? await storage.getTenantSettings(tenant.id) : undefined;
 
-      // Get payment schedules for this consumer (local schedules)
+      // Get payment schedules for this consumer
       const paymentSchedules = tenant?.id ? await storage.getPaymentSchedulesByConsumer(consumer.id, tenant.id) : [];
       const activeSchedules = paymentSchedules.filter(s => s.status === 'active');
-
-      // Fetch SMAX payment arrangements for accounts with filenumbers
-      const smaxArrangements: any[] = [];
-      if (tenant?.id) {
-        try {
-          const { smaxService } = await import('./smaxService');
-          
-          for (const account of accountsList) {
-            if (account.filenumber && account.filenumber.trim()) {
-              const smaxArrangement = await smaxService.getPaymentArrangement(tenant.id, account.filenumber.trim());
-              
-              if (smaxArrangement && (smaxArrangement.paymentAmount || smaxArrangement.monthlyPayment)) {
-                // Parse payment amount to cents (SMAX returns as string like "150.00")
-                const paymentAmountString = smaxArrangement.paymentAmount || smaxArrangement.monthlyPayment;
-                const amountCents = Math.round(parseFloat(paymentAmountString || '0') * 100);
-                
-                // Parse remaining payments if available
-                const remainingPayments = smaxArrangement.remainingPayments 
-                  ? parseInt(smaxArrangement.remainingPayments) 
-                  : null;
-                
-                // Only include if we have a valid payment amount
-                if (amountCents > 0) {
-                  smaxArrangements.push({
-                    id: `smax-${account.id}`, // Unique ID for frontend
-                    source: 'smax',
-                    accountId: account.id,
-                    accountNumber: account.accountNumber,
-                    filenumber: account.filenumber,
-                    creditor: account.creditor,
-                    amountCents: amountCents, // Normalized to cents like local schedules
-                    nextPaymentDate: smaxArrangement.nextPaymentDate || null,
-                    frequency: smaxArrangement.paymentFrequency || 'monthly',
-                    arrangementType: smaxArrangement.arrangementType || 'smax_plan',
-                    status: 'active', // SMAX arrangements are active by default
-                    remainingPayments: remainingPayments,
-                    startDate: smaxArrangement.startDate || null,
-                    endDate: smaxArrangement.endDate || null,
-                    tenantId: tenant.id,
-                    consumerId: consumer.id,
-                  });
-                  console.log(`✅ SMAX arrangement found for account ${account.accountNumber}: $${(amountCents / 100).toFixed(2)}/month`);
-                }
-              }
-            }
-          }
-        } catch (smaxError) {
-          console.error('Error fetching SMAX arrangements:', smaxError);
-        }
-      }
-
-      // Combine local and SMAX arrangements
-      const allArrangements = [
-        ...activeSchedules.map(s => ({ ...s, source: 'local' })),
-        ...smaxArrangements
-      ];
 
       res.json({
         consumer: {
@@ -903,7 +847,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           slug: tenant?.slug
         },
         tenantSettings: tenantSettings,
-        paymentSchedules: allArrangements // Now includes both local and SMAX arrangements
+        paymentSchedules: activeSchedules
       });
     } catch (error) {
       console.error("Error fetching consumer accounts:", error);
