@@ -2839,7 +2839,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   // Only send note if filenumber exists (required by SMAX)
                   if (account.filenumber && account.filenumber.trim()) {
                     const noteData = {
-                      filenumber: account.filenumber,
+                      filenumber: account.filenumber.trim(),
                       collectorname: 'System',
                       logmessage: `Consumer ${firstName} ${lastName} registered via portal - Moved to ${folderName}. Email: ${email}, DOB: ${dateOfBirth}, Address: ${address}, ${city}, ${state} ${zipCode}. Consumer can now access account and make payments online.`
                     };
@@ -2977,7 +2977,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               // Only send note if filenumber exists (required by SMAX)
               if (account.filenumber && account.filenumber.trim()) {
                 const noteData = {
-                  filenumber: account.filenumber,
+                  filenumber: account.filenumber.trim(),
                   collectorname: 'System',
                   logmessage: `Consumer ${firstName} ${lastName} registered via portal - Moved to ${folderName}. Email: ${email}, DOB: ${dateOfBirth}, Address: ${address}, ${city}, ${state} ${zipCode}. Consumer can now access account and make payments online.`
                 };
@@ -8126,7 +8126,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (tenantId && normalizedRecordType === 'open') {
       try {
         const { smaxService } = await import('./smaxService');
-        const fileNumber = Metadata?.filenumber || Metadata?.accountNumber;
+        const fileNumber = (Metadata?.filenumber || Metadata?.accountNumber || '').trim();
 
         if (fileNumber) {
           console.log('📤 Sending email tracking to SMAX for account:', fileNumber);
