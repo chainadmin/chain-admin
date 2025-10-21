@@ -15,7 +15,7 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "VITE_API_URL": "https://chainsoftwaregroup.com"
+        "VITE_API_URL": "https://chain-admin-production.up.railway.app"
       },
       "ios": {
         "buildConfiguration": "Release"
@@ -27,7 +27,7 @@
     "production": {
       "autoIncrement": true,
       "env": {
-        "VITE_API_URL": "https://chainsoftwaregroup.com"
+        "VITE_API_URL": "https://chain-admin-production.up.railway.app"
       },
       "ios": {
         "buildConfiguration": "Release",
