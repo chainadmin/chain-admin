@@ -2109,12 +2109,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Send the response via SMS
       const { smsService } = await import('./smsService');
-      await smsService.sendSms({
-        to: originalSms.fromPhone,
+      await smsService.sendSms(
+        originalSms.fromPhone,
         message,
         tenantId,
-        consumerId: originalSms.consumerId,
-      });
+        undefined, // campaignId
+        originalSms.consumerId || undefined
+      );
 
       res.json({ 
         message: 'Response sent successfully',
@@ -3588,6 +3589,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         process.env.JWT_SECRET || "your-secret-key",
         { expiresIn: "7d" }
       );
+
+      // Send SMAX note for consumer login
+      try {
+        const accounts = await storage.getAccountsByConsumer(consumer.id);
+        const accountWithFileNumber = accounts.find(acc => acc.filenumber && acc.filenumber.trim());
+        
+        if (accountWithFileNumber?.filenumber) {
+          const loginNote = {
+            filenumber: accountWithFileNumber.filenumber.trim(),
+            collectorname: 'System',
+            logmessage: `Consumer ${consumer.firstName || ''} ${consumer.lastName || ''} logged into online portal. Email: ${consumer.email}${consumer.phone ? `, Phone: ${consumer.phone}` : ''}`
+          };
+          
+          const smaxResult = await smaxService.insertNote(consumer.tenantId, loginNote);
+          if (smaxResult) {
+            console.log(`✅ SMAX login note added for consumer ${consumer.id}, filenumber ${accountWithFileNumber.filenumber}`);
+          } else {
+            console.log(`ℹ️ SMAX login note not sent (SMAX may not be configured)`);
+          }
+        } else {
+          console.log(`ℹ️ Skipping SMAX login note for consumer ${consumer.id} - no filenumber found`);
+        }
+      } catch (smaxError) {
+        console.error('Failed to send SMAX login note:', smaxError);
+      }
 
       res.status(200).json({
         token,
@@ -8560,10 +8586,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (tenantId && normalizedRecordType === 'open') {
       try {
         const { smaxService } = await import('./smaxService');
-        const fileNumber = (Metadata?.filenumber || Metadata?.accountNumber || '').trim();
+        let fileNumber = (Metadata?.filenumber || Metadata?.accountNumber || '').trim();
+
+        // If no filenumber in metadata, try to get it from the consumer's account
+        if (!fileNumber && Metadata?.consumerId) {
+          const accounts = await storage.getAccountsByConsumer(Metadata.consumerId);
+          const accountWithFileNumber = accounts.find(acc => acc.filenumber && acc.filenumber.trim());
+          if (accountWithFileNumber?.filenumber) {
+            fileNumber = accountWithFileNumber.filenumber.trim();
+            console.log(`📋 Found filenumber ${fileNumber} for consumer ${Metadata.consumerId}`);
+          }
+        }
 
         if (fileNumber) {
-          console.log('📤 Sending email tracking to SMAX for account:', fileNumber);
+          console.log('📤 Sending email open tracking to SMAX for filenumber:', fileNumber);
 
           // Use InsertNoteline per SMAX API spec - email tracking should be logged as notes
           await smaxService.insertNote(tenantId, {
@@ -8573,6 +8609,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
           
           console.log('✅ Successfully sent email tracking to SMAX');
+        } else {
+          console.log('ℹ️ Skipping SMAX email tracking - no filenumber found');
         }
       } catch (smaxError) {
         console.warn('⚠️ SMAX email tracking notification failed:', smaxError);
