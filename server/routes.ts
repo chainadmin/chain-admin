@@ -5401,23 +5401,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      // Validate: firstPaymentDate is required for arrangements
-      // (settlement and one_time_payment arrangements are excluded from this requirement)
-      if (arrangementId && !normalizedFirstPaymentDate) {
-        // Check the arrangement type
-        const arrangements = await storage.getArrangementOptionsByTenant(tenantId);
-        const tempArrangement = arrangements.find(arr => arr.id === arrangementId);
-        
-        if (tempArrangement && 
-            tempArrangement.planType !== 'settlement' && 
-            tempArrangement.planType !== 'one_time_payment') {
-          return res.status(400).json({
-            success: false,
-            message: "First payment date is required for payment arrangements",
-          });
-        }
-      }
-
       if (!accountId || !cardNumber || !expiryMonth || !expiryYear || !cvv || !cardName) {
         return res.status(400).json({ message: "Missing required payment information" });
       }
@@ -5494,7 +5477,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let cardLast4 = cardNumber.slice(-4);
       let cardBrand = null;
 
-      if (saveCard || setupRecurring) {
+      // Tokenize card if: saving card, setting up recurring, OR has a future payment date
+      const needsTokenization = saveCard || setupRecurring || (normalizedFirstPaymentDate !== null && normalizedFirstPaymentDate.getTime() > today.getTime());
+      
+      if (needsTokenization) {
         // USAePay v2 tokenization uses the transactions endpoint with cc:save command
         const tokenPayload = {
           command: "cc:save",
@@ -5562,21 +5548,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         cardBrand = tokenResult.creditcard?.cardtype || null;
       }
 
-      // Skip immediate charge if a future payment date is set for any arrangement
-      // (except settlement and one-time which should always process immediately)
+      // Skip immediate charge if a future payment date is set
+      // This applies to ALL arrangement types - if they set a future date, honor it
       const shouldSkipImmediateCharge =
-        !!arrangement &&
-        arrangement.planType !== 'settlement' &&
-        arrangement.planType !== 'one_time_payment' &&
         normalizedFirstPaymentDate !== null &&
         normalizedFirstPaymentDate.getTime() > today.getTime();
       
       console.log('💰 Payment charge decision:', {
         setupRecurring,
-        arrangementType: arrangement?.planType,
-        firstPaymentDate: normalizedFirstPaymentDate?.toISOString().split('T')[0],
+        arrangementType: arrangement?.planType || 'full_balance',
+        firstPaymentDate: normalizedFirstPaymentDate?.toISOString().split('T')[0] || 'none',
         today: today.toISOString().split('T')[0],
-        shouldSkipImmediateCharge
+        shouldSkipImmediateCharge,
+        willTokenizeCard: saveCard || setupRecurring
       });
 
       // Step 2: Process payment (use token if available, otherwise use card directly)
@@ -5688,8 +5672,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Step 3: Save payment method if requested and payment successful
+      // Always save if we have a token (which means we tokenized for future payment, saveCard, or setupRecurring)
       let savedPaymentMethod = null;
-      if ((success || shouldSkipImmediateCharge) && paymentToken && (saveCard || setupRecurring)) {
+      if ((success || shouldSkipImmediateCharge) && paymentToken) {
         savedPaymentMethod = await storage.createPaymentMethod({
           tenantId,
           consumerId,
@@ -5704,9 +5689,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Step 4: Create payment schedule if requested
+      // Step 4: Create payment schedule if requested OR if there's a future payment date
       let createdSchedule: any = null;
-      if ((success || shouldSkipImmediateCharge) && setupRecurring && arrangement && savedPaymentMethod) {
+      if ((success || shouldSkipImmediateCharge) && (setupRecurring || shouldSkipImmediateCharge) && arrangement && savedPaymentMethod) {
         // Use firstPaymentDate if provided, otherwise use today
         const paymentStartDate = normalizedFirstPaymentDate ? new Date(normalizedFirstPaymentDate) : new Date();
         const nextMonth = new Date(paymentStartDate);
@@ -5716,9 +5701,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let remainingPayments = null;
         let endDate = null;
 
-        if (arrangement.planType === 'settlement') {
-          // Settlement is one-time, no recurring
-          // Skip creating schedule
+        if (arrangement.planType === 'settlement' || arrangement.planType === 'pay_in_full') {
+          // Settlement/pay-in-full is one-time
+          // If it's a future payment (shouldSkipImmediateCharge), we need a schedule to track it
+          // If it's immediate (not shouldSkipImmediateCharge), we already charged it, no schedule needed
+          if (!shouldSkipImmediateCharge) {
+            // Already charged immediately, don't create schedule
+          } else {
+            // Future one-time payment, create schedule with 1 payment
+            remainingPayments = 1;
+            endDate = new Date(paymentStartDate);
+          }
         } else if (arrangement.planType === 'fixed_monthly' && arrangement.maxTermMonths) {
           const maxPayments = Number(arrangement.maxTermMonths);
           remainingPayments = shouldSkipImmediateCharge ? maxPayments : maxPayments - 1; // Minus the one we just made
@@ -5726,8 +5719,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           endDate.setMonth(endDate.getMonth() + Number(arrangement.maxTermMonths));
         }
 
-        // Only create schedule for non-settlement and non-one-time-payment arrangements
-        if (arrangement.planType !== 'settlement' && arrangement.planType !== 'one_time_payment' && arrangementId) {
+        // Create schedule for:
+        // 1. Recurring arrangements (fixed_monthly, range) 
+        // 2. One-time future payments (settlement/pay_in_full with future date)
+        // Skip for: one_time_payment type, or settlement/pay_in_full that already charged
+        const shouldCreateSchedule = arrangementId && (
+          (arrangement.planType !== 'one_time_payment' && shouldSkipImmediateCharge) || // Future one-time payments
+          (arrangement.planType === 'fixed_monthly' || arrangement.planType === 'range') // Recurring payments
+        );
+        
+        if (shouldCreateSchedule) {
           // Check if consumer already has an active payment schedule for this account
           const existingSchedules = await storage.getActivePaymentSchedulesByConsumerAndAccount(consumerId, accountId, tenantId);
 
