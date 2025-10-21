@@ -5652,14 +5652,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.error('Raw response text:', responseText);
         }
 
-        if (!tokenResponse.ok || !(tokenResult?.creditcard?.cardref)) {
+        // USAePay returns the saved card token in savedcard.key (not creditcard.cardref)
+        const savedCardKey = tokenResult?.savedcard?.key;
+        
+        if (!tokenResponse.ok || !savedCardKey) {
           console.error('❌ Failed to tokenize card with USAePay:', {
             status: tokenResponse.status,
             statusText: tokenResponse.statusText,
             body: tokenResult,
             rawResponse: responseText,
             resultCode: tokenResult?.result_code,
-            error: tokenResult?.error
+            error: tokenResult?.error,
+            hasSavedCard: !!tokenResult?.savedcard
           });
 
           const errorMessage = tokenResult?.error || tokenResult?.result || 'Unable to save your payment method. Please verify your card details or try again.';
@@ -5675,9 +5679,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
-        // USAePay v2 returns the token in creditcard.cardref
-        paymentToken = tokenResult.creditcard.cardref;
-        cardBrand = tokenResult.creditcard?.cardtype || null;
+        // USAePay v2 returns the token in savedcard.key after cc:save
+        paymentToken = savedCardKey;
+        cardBrand = tokenResult.savedcard?.type || tokenResult.creditcard?.type || null;
+        console.log('✅ Card tokenized successfully:', {
+          token: paymentToken,
+          cardBrand,
+          last4: tokenResult.savedcard?.cardnumber?.slice(-4) || cardLast4
+        });
       }
 
       // Skip immediate charge if a future payment date is set
