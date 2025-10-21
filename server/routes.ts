@@ -5343,19 +5343,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const { 
+      const {
         accountId,
         arrangementId,
-        cardNumber, 
+        cardNumber,
         expiryMonth,
         expiryYear,
-        cvv, 
-        cardName, 
+        cvv,
+        cardName,
         zipCode,
         saveCard,
         setupRecurring,
         firstPaymentDate
       } = req.body;
+
+      let normalizedFirstPaymentDate: Date | null = null;
+      if (firstPaymentDate) {
+        const parsedDate = new Date(firstPaymentDate);
+        if (Number.isNaN(parsedDate.getTime())) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid first payment date provided",
+          });
+        }
+        parsedDate.setHours(0, 0, 0, 0);
+        normalizedFirstPaymentDate = parsedDate;
+      }
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
 
       if (!accountId || !cardNumber || !expiryMonth || !expiryYear || !cvv || !cardName) {
         return res.status(400).json({ message: "Missing required payment information" });
@@ -5459,87 +5475,107 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      const shouldSkipImmediateCharge =
+        setupRecurring &&
+        !!arrangement &&
+        arrangement.planType !== 'settlement' &&
+        arrangement.planType !== 'one_time_payment' &&
+        normalizedFirstPaymentDate !== null &&
+        normalizedFirstPaymentDate.getTime() > today.getTime();
+
       // Step 2: Process payment (use token if available, otherwise use card directly)
-      // USAePay API v2 format
-      let usaepayPayload: any = {
-        amount: (amountCents / 100).toFixed(2),
-        invoice: accountId || `consumer_${consumerId}`,
-        description: arrangement 
-          ? `${arrangement.name} - Payment for account`
-          : `Payment for account`,
-        // For v2 API, we need a source object
-        source: {}
-      };
+      let success = false;
+      let paymentProcessed = false;
+      let transactionId: string | null = null;
+      let usaepayResult: any = null;
 
-      if (paymentToken) {
-        // Use saved token for payment (v2 format)
-        // NOTE: CVV should NOT be included when using a saved token per PCI compliance
-        usaepayPayload.source = {
-          key: paymentToken
+      let payment: any = null;
+
+      if (!shouldSkipImmediateCharge) {
+        // USAePay API v2 format
+        let usaepayPayload: any = {
+          amount: (amountCents / 100).toFixed(2),
+          invoice: accountId || `consumer_${consumerId}`,
+          description: arrangement
+            ? `${arrangement.name} - Payment for account`
+            : `Payment for account`,
+          // For v2 API, we need a source object
+          source: {}
         };
-      } else {
-        // Use card directly (v2 format)
-        usaepayPayload.source = {
-          card: {
-            number: cardNumber.replace(/\s/g, ''),
-            expiration: `${expiryMonth}${expiryYear.slice(-2)}`,
-            cvv: cvv,
-            cardholder: cardName,
-            avs_street: "",
-            avs_zip: zipCode || ""
-          }
-        };
-      }
 
-      const usaepayResponse = await fetch(`${usaepayBaseUrl}/transactions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': authHeader
-        },
-        body: JSON.stringify(usaepayPayload)
-      });
+        if (paymentToken) {
+          // Use saved token for payment (v2 format)
+          // NOTE: CVV should NOT be included when using a saved token per PCI compliance
+          usaepayPayload.source = {
+            key: paymentToken
+          };
+        } else {
+          // Use card directly (v2 format)
+          usaepayPayload.source = {
+            card: {
+              number: cardNumber.replace(/\s/g, ''),
+              expiration: `${expiryMonth}${expiryYear.slice(-2)}`,
+              cvv: cvv,
+              cardholder: cardName,
+              avs_street: "",
+              avs_zip: zipCode || ""
+            }
+          };
+        }
 
-      const usaepayResult = await usaepayResponse.json();
-
-      // Log detailed error information for troubleshooting
-      if (!usaepayResponse.ok || usaepayResult.error || usaepayResult.errorcode) {
-        console.error('❌ USAePay Transaction Error:', {
-          status: usaepayResponse.status,
-          statusText: usaepayResponse.statusText,
-          error: usaepayResult.error,
-          errorcode: usaepayResult.errorcode,
-          result: usaepayResult.result,
-          fullResponse: JSON.stringify(usaepayResult)
+        const usaepayResponse = await fetch(`${usaepayBaseUrl}/transactions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': authHeader
+          },
+          body: JSON.stringify(usaepayPayload)
         });
-      }
 
-      const success = usaepayResult.result === 'Approved' || usaepayResult.status === 'Approved';
-      const transactionId = usaepayResult.refnum || usaepayResult.key || `tx_${Date.now()}`;
-      
-      // Extract card brand if not already set
-      if (!cardBrand && usaepayResult.cardtype) {
-        cardBrand = usaepayResult.cardtype;
-      }
+        usaepayResult = await usaepayResponse.json();
 
-      // Create payment record
-      const payment = await storage.createPayment({
-        tenantId: tenantId,
-        consumerId: consumerId,
-        accountId: accountId || null,
-        amountCents,
-        paymentMethod: 'credit_card',
-        status: success ? 'completed' : 'failed',
-        transactionId: transactionId,
-        processorResponse: JSON.stringify(usaepayResult),
-        processedAt: success ? new Date() : null,
-        notes: arrangement 
-          ? `${arrangement.name} - ${cardName} ending in ${cardLast4}`
-          : `Online payment - ${cardName} ending in ${cardLast4}`,
-      });
+        // Log detailed error information for troubleshooting
+        if (!usaepayResponse.ok || usaepayResult.error || usaepayResult.errorcode) {
+          console.error('❌ USAePay Transaction Error:', {
+            status: usaepayResponse.status,
+            statusText: usaepayResponse.statusText,
+            error: usaepayResult.error,
+            errorcode: usaepayResult.errorcode,
+            result: usaepayResult.result,
+            fullResponse: JSON.stringify(usaepayResult)
+          });
+        }
+
+        success = usaepayResult.result === 'Approved' || usaepayResult.status === 'Approved';
+        paymentProcessed = true;
+        transactionId = usaepayResult.refnum || usaepayResult.key || `tx_${Date.now()}`;
+
+        // Extract card brand if not already set
+        if (!cardBrand && usaepayResult.cardtype) {
+          cardBrand = usaepayResult.cardtype;
+        }
+
+        // Create payment record
+        payment = await storage.createPayment({
+          tenantId: tenantId,
+          consumerId: consumerId,
+          accountId: accountId || null,
+          amountCents,
+          paymentMethod: 'credit_card',
+          status: success ? 'completed' : 'failed',
+          transactionId: transactionId,
+          processorResponse: JSON.stringify(usaepayResult),
+          processedAt: success ? new Date() : null,
+          notes: arrangement
+            ? `${arrangement.name} - ${cardName} ending in ${cardLast4}`
+            : `Online payment - ${cardName} ending in ${cardLast4}`,
+        });
+      } else {
+        success = true;
+      }
 
       // Send notification to admins about successful payment
-      if (success) {
+      if (paymentProcessed && success) {
         const consumer = await storage.getConsumer(consumerId);
         if (consumer) {
           await notifyTenantAdmins({
@@ -5558,7 +5594,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Step 3: Save payment method if requested and payment successful
       let savedPaymentMethod = null;
-      if (success && paymentToken && (saveCard || setupRecurring)) {
+      if ((success || shouldSkipImmediateCharge) && paymentToken && (saveCard || setupRecurring)) {
         savedPaymentMethod = await storage.createPaymentMethod({
           tenantId,
           consumerId,
@@ -5574,30 +5610,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Step 4: Create payment schedule if requested
-      if (success && setupRecurring && arrangement && savedPaymentMethod) {
+      let createdSchedule: any = null;
+      if ((success || shouldSkipImmediateCharge) && setupRecurring && arrangement && savedPaymentMethod) {
         // Use firstPaymentDate if provided, otherwise use today
-        const paymentStartDate = firstPaymentDate ? new Date(firstPaymentDate) : new Date();
+        const paymentStartDate = normalizedFirstPaymentDate ? new Date(normalizedFirstPaymentDate) : new Date();
         const nextMonth = new Date(paymentStartDate);
         nextMonth.setMonth(nextMonth.getMonth() + 1);
-        
+
         // Determine number of payments based on arrangement
         let remainingPayments = null;
         let endDate = null;
-        
+
         if (arrangement.planType === 'settlement') {
           // Settlement is one-time, no recurring
           // Skip creating schedule
         } else if (arrangement.planType === 'fixed_monthly' && arrangement.maxTermMonths) {
-          remainingPayments = Number(arrangement.maxTermMonths) - 1; // Minus the one we just made
+          const maxPayments = Number(arrangement.maxTermMonths);
+          remainingPayments = shouldSkipImmediateCharge ? maxPayments : maxPayments - 1; // Minus the one we just made
           endDate = new Date(paymentStartDate);
           endDate.setMonth(endDate.getMonth() + Number(arrangement.maxTermMonths));
         }
-        
+
         // Only create schedule for non-settlement and non-one-time-payment arrangements
         if (arrangement.planType !== 'settlement' && arrangement.planType !== 'one_time_payment' && arrangementId) {
           // Check if consumer already has an active payment schedule for this account
           const existingSchedules = await storage.getActivePaymentSchedulesByConsumerAndAccount(consumerId, accountId, tenantId);
-          
+
           if (existingSchedules && existingSchedules.length > 0) {
             return res.status(400).json({
               success: false,
@@ -5605,7 +5643,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
           }
 
-          await storage.createPaymentSchedule({
+          createdSchedule = await storage.createPaymentSchedule({
             tenantId,
             consumerId,
             accountId,
@@ -5615,7 +5653,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             frequency: 'monthly',
             startDate: paymentStartDate.toISOString().split('T')[0],
             endDate: endDate ? endDate.toISOString().split('T')[0] : null,
-            nextPaymentDate: nextMonth.toISOString().split('T')[0],
+            nextPaymentDate: shouldSkipImmediateCharge
+              ? paymentStartDate.toISOString().split('T')[0]
+              : nextMonth.toISOString().split('T')[0],
             remainingPayments,
             status: 'active',
           });
@@ -5638,6 +5678,135 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           // Update consumer status to pending_payment since they now have an active schedule
           await storage.updateConsumer(consumerId, { paymentStatus: 'pending_payment' });
+
+          // Send confirmation email to consumer when no immediate payment is processed
+          if (shouldSkipImmediateCharge) {
+            try {
+              const consumer = await storage.getConsumer(consumerId);
+              const tenant = await storage.getTenant(tenantId);
+
+              if (consumer && tenant && consumer.email) {
+                const paymentAmountFormatted = `$${(amountCents / 100).toFixed(2)}`;
+                const consumerName = `${consumer.firstName} ${consumer.lastName}`.trim();
+                const startDateLabel = new Date(paymentStartDate).toLocaleDateString('en-US', {
+                  month: 'long',
+                  day: 'numeric',
+                  year: 'numeric'
+                });
+
+                const emailSubject = 'Payment Arrangement Scheduled';
+                const emailBody = `
+                  <h2>Your Payment Arrangement is Confirmed</h2>
+                  <p>Dear ${consumerName || 'Valued Customer'},</p>
+                  <p>Thank you for setting up a payment arrangement. Your first payment is scheduled for ${startDateLabel}.</p>
+                  <h3>Arrangement Details:</h3>
+                  <ul>
+                    <li><strong>Payment Amount:</strong> ${paymentAmountFormatted}</li>
+                    <li><strong>Frequency:</strong> Monthly</li>
+                    <li><strong>Arrangement Type:</strong> ${arrangement.name || arrangement.planType}</li>
+                  </ul>
+                  <p>Your saved payment method will be charged automatically on the scheduled date. You can manage your arrangement at any time through your consumer portal.</p>
+                  <p>If you have any questions, please contact us.</p>
+                  <p>Best regards,<br/>${tenant.name}</p>
+                `;
+
+                await emailService.sendEmail({
+                  to: consumer.email,
+                  subject: emailSubject,
+                  html: emailBody,
+                  from: `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>`,
+                  tenantId,
+                });
+              }
+            } catch (emailError) {
+              console.error('Error sending arrangement confirmation email:', emailError);
+            }
+          }
+
+          if (createdSchedule) {
+            try {
+              const { smaxService } = await import('./smaxService');
+
+              if (accountId) {
+                const account = await storage.getAccount(accountId);
+                const consumerForSmax =
+                  (consumer && {
+                    firstName: consumer.firstName,
+                    lastName: consumer.lastName,
+                  }) ||
+                  (await storage.getConsumer(consumerId));
+
+                const fileNumber =
+                  (account as any)?.filenumber ||
+                  account?.accountNumber ||
+                  account?.id ||
+                  accountId;
+
+                if (fileNumber) {
+                  const arrangementName = arrangement.name || arrangement.planType;
+                  const scheduleRecord = createdSchedule as any;
+                  const firstPaymentDate =
+                    scheduleRecord?.startDate || paymentStartDate.toISOString().split('T')[0];
+                  const nextPaymentDate = scheduleRecord?.nextPaymentDate;
+                  const endDateIso = scheduleRecord?.endDate;
+                  const remainingPayments = scheduleRecord?.remainingPayments;
+                  const amountDollars = (amountCents / 100).toFixed(2);
+
+                  const attemptNotesParts = [
+                    `Arrangement: ${arrangementName}`,
+                    `Amount: $${amountDollars}`,
+                    'Frequency: Monthly',
+                    `First Payment: ${firstPaymentDate}`,
+                    nextPaymentDate && nextPaymentDate !== firstPaymentDate
+                      ? `Next Payment: ${nextPaymentDate}`
+                      : null,
+                    remainingPayments !== null && remainingPayments !== undefined
+                      ? `Remaining Payments: ${remainingPayments}`
+                      : null,
+                  ].filter(Boolean) as string[];
+
+                  const attemptSent = await smaxService.insertAttempt(tenantId, {
+                    filenumber: fileNumber,
+                    attempttype: 'Promise To Pay',
+                    attemptdate: firstPaymentDate,
+                    notes: attemptNotesParts.join(' | ') || undefined,
+                  });
+
+                  if (!attemptSent) {
+                    console.log('ℹ️ SMAX attempt not sent (SMAX may be disabled or misconfigured).');
+                  }
+
+                  const noteSegments = [
+                    `Payment arrangement scheduled (${arrangementName}).`,
+                    `First payment on ${firstPaymentDate} for $${amountDollars}.`,
+                    nextPaymentDate && nextPaymentDate !== firstPaymentDate
+                      ? `Next payment date: ${nextPaymentDate}.`
+                      : null,
+                    endDateIso ? `Ends on ${endDateIso}.` : null,
+                  ].filter(Boolean);
+
+                  const collectorNameRaw = `${
+                    consumerForSmax?.firstName || ''
+                  } ${consumerForSmax?.lastName || ''}`.trim();
+                  const collectorName = collectorNameRaw || 'System';
+
+                  const noteSent = await smaxService.insertNote(tenantId, {
+                    filenumber: fileNumber,
+                    collectorname: collectorName || 'System',
+                    logmessage:
+                      noteSegments.join(' ') ||
+                      `Payment arrangement scheduled starting ${firstPaymentDate} for $${amountDollars}.`,
+                  });
+
+                  if (!noteSent) {
+                    console.log('ℹ️ SMAX note not sent (SMAX may be disabled or misconfigured).');
+                  }
+                }
+              }
+            } catch (smaxError) {
+              console.error('Failed to sync payment arrangement to SMAX:', smaxError);
+            }
+          }
         } else if (arrangement.planType === 'settlement' || arrangement.planType === 'one_time_payment') {
           // For one-time or settlement payments, set to current after successful payment
           if (success) {
@@ -5647,11 +5816,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Step 5: Update account balance
-      if (accountId && success) {
+      if (accountId && paymentProcessed && success) {
         const account = await storage.getAccount(accountId);
         if (account) {
           let newBalance = (account.balanceCents || 0) - amountCents;
-          
+
           // For settlement, pay off the full balance
           if (arrangement && arrangement.planType === 'settlement') {
             newBalance = 0;
@@ -5664,7 +5833,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Notify SMAX if enabled
-      if (success) {
+      if (paymentProcessed && success) {
         try {
           const { smaxService } = await import('./smaxService');
           if (accountId) {
@@ -5702,7 +5871,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      if (!success) {
+      if (paymentProcessed && !success) {
         // Send payment failure notification to consumer
         try {
           const consumer = await storage.getConsumer(consumerId);
@@ -5788,82 +5957,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Send thank you email for payment
-      try {
-        const consumer = await storage.getConsumer(consumerId);
-        const tenant = await storage.getTenant(tenantId);
-        const account = await storage.getAccount(accountId);
-        
-        if (consumer && tenant && consumer.email) {
-          const paymentAmountFormatted = `$${(amountCents / 100).toFixed(2)}`;
-          const consumerName = `${consumer.firstName} ${consumer.lastName}`;
-          
-          let emailSubject = 'Thank You for Your Payment';
-          let emailBody = `
-            <h2>Payment Received</h2>
-            <p>Dear ${consumerName},</p>
-            <p>Thank you for your payment. We have successfully received your payment and it has been applied to your account.</p>
-            <h3>Payment Details:</h3>
-            <ul>
-              <li><strong>Amount Paid:</strong> ${paymentAmountFormatted}</li>
-              <li><strong>Payment Date:</strong> ${new Date().toLocaleDateString('en-US', { 
-                month: 'long', 
-                day: 'numeric', 
-                year: 'numeric' 
-              })}</li>
-              <li><strong>Account:</strong> ${account?.creditor || 'Your Account'}</li>
-              <li><strong>Transaction ID:</strong> ${transactionId}</li>
-            </ul>`;
+      if (paymentProcessed && success) {
+        // Send thank you email for payment
+        try {
+          const consumer = await storage.getConsumer(consumerId);
+          const tenant = await storage.getTenant(tenantId);
+          const account = await storage.getAccount(accountId);
 
-          // Check if payment schedule was created (need to recalculate next payment date)
-          if (setupRecurring && arrangement && arrangement.planType !== 'settlement' && arrangement.planType !== 'one_time_payment' && savedPaymentMethod) {
-            // Calculate next payment date (1 month from first payment or today)
-            const paymentStartDate = firstPaymentDate ? new Date(firstPaymentDate) : new Date();
-            const nextPaymentDate = new Date(paymentStartDate);
-            nextPaymentDate.setMonth(nextPaymentDate.getMonth() + 1);
-            
-            emailSubject = 'Payment Arrangement Confirmed';
+          if (consumer && tenant && consumer.email) {
+            const paymentAmountFormatted = `$${(amountCents / 100).toFixed(2)}`;
+            const consumerName = `${consumer.firstName} ${consumer.lastName}`;
+
+            let emailSubject = 'Thank You for Your Payment';
+            let emailBody = `
+              <h2>Payment Received</h2>
+              <p>Dear ${consumerName},</p>
+              <p>Thank you for your payment. We have successfully received your payment and it has been applied to your account.</p>
+              <h3>Payment Details:</h3>
+              <ul>
+                <li><strong>Amount Paid:</strong> ${paymentAmountFormatted}</li>
+                <li><strong>Payment Date:</strong> ${new Date().toLocaleDateString('en-US', {
+                  month: 'long',
+                  day: 'numeric',
+                  year: 'numeric'
+                })}</li>
+                <li><strong>Account:</strong> ${account?.creditor || 'Your Account'}</li>
+                <li><strong>Transaction ID:</strong> ${transactionId}</li>
+              </ul>`;
+
+            // Check if payment schedule was created (need to recalculate next payment date)
+            if (setupRecurring && arrangement && arrangement.planType !== 'settlement' && arrangement.planType !== 'one_time_payment' && savedPaymentMethod) {
+              // Calculate next payment date (1 month from first payment or today)
+              const paymentStartDate = normalizedFirstPaymentDate ? new Date(normalizedFirstPaymentDate) : new Date();
+              const nextPaymentDate = new Date(paymentStartDate);
+              nextPaymentDate.setMonth(nextPaymentDate.getMonth() + 1);
+
+              emailSubject = 'Payment Arrangement Confirmed';
+              emailBody += `
+              <h3>Payment Arrangement:</h3>
+              <p>You have successfully set up a recurring payment arrangement for this account.</p>
+              <ul>
+                <li><strong>Payment Amount:</strong> ${paymentAmountFormatted}</li>
+                <li><strong>Frequency:</strong> Monthly</li>
+                <li><strong>Next Payment Date:</strong> ${nextPaymentDate.toLocaleDateString('en-US', {
+                  month: 'long',
+                  day: 'numeric',
+                  year: 'numeric'
+                })}</li>
+              </ul>
+              <p>Your payment method will be automatically charged on the scheduled dates. You can manage your payment arrangements anytime through your consumer portal.</p>`;
+            }
+
             emailBody += `
-            <h3>Payment Arrangement:</h3>
-            <p>You have successfully set up a recurring payment arrangement for this account.</p>
-            <ul>
-              <li><strong>Payment Amount:</strong> ${paymentAmountFormatted}</li>
-              <li><strong>Frequency:</strong> Monthly</li>
-              <li><strong>Next Payment Date:</strong> ${nextPaymentDate.toLocaleDateString('en-US', { 
-                month: 'long', 
-                day: 'numeric', 
-                year: 'numeric' 
-              })}</li>
-            </ul>
-            <p>Your payment method will be automatically charged on the scheduled dates. You can manage your payment arrangements anytime through your consumer portal.</p>`;
+              <p>If you have any questions about this payment, please don't hesitate to contact us.</p>
+              <p>Best regards,<br>${tenant.name}</p>`;
+
+            await emailService.sendEmail({
+              to: consumer.email,
+              subject: emailSubject,
+              html: emailBody,
+              from: `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>`,
+            });
           }
-
-          emailBody += `
-            <p>If you have any questions about this payment, please don't hesitate to contact us.</p>
-            <p>Best regards,<br>${tenant.name}</p>`;
-
-          await emailService.sendEmail({
-            to: consumer.email,
-            subject: emailSubject,
-            html: emailBody,
-            from: `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>`,
-          });
+        } catch (emailError) {
+          console.error("Error sending payment confirmation email:", emailError);
+          // Don't fail the payment if email fails
         }
-      } catch (emailError) {
-        console.error("Error sending payment confirmation email:", emailError);
-        // Don't fail the payment if email fails
       }
 
       res.json({
         success: true,
-        payment: {
-          id: payment.id,
-          amount: amountCents,
-          status: payment.status,
-          transactionId: payment.transactionId,
-          processedAt: payment.processedAt,
-        },
-        message: "Payment processed successfully"
+        payment: payment
+          ? {
+              id: payment.id,
+              amount: amountCents,
+              status: payment.status,
+              transactionId: payment.transactionId,
+              processedAt: payment.processedAt,
+            }
+          : null,
+        schedule: createdSchedule
+          ? {
+              id: createdSchedule.id,
+              startDate: createdSchedule.startDate,
+              nextPaymentDate: createdSchedule.nextPaymentDate,
+              amountCents: createdSchedule.amountCents,
+            }
+          : null,
+        message: shouldSkipImmediateCharge
+          ? "Payment arrangement saved. Your first payment will run on the scheduled date."
+          : "Payment processed successfully"
       });
 
     } catch (error) {
