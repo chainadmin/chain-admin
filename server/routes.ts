@@ -2379,7 +2379,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const targetDays = scheduleWeekdays
         .map((day: unknown) => (typeof day === 'string' ? weekdayMap[day.toLowerCase()] : undefined))
-        .filter((value): value is number => value !== undefined);
+        .filter((value: number | undefined): value is number => value !== undefined);
 
       const daysToEvaluate = targetDays.length > 0 ? targetDays : [baseDate.getDay()];
 
@@ -2439,7 +2439,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           templateId: item.templateId,
           dayOffset: Number(item.dayOffset) || 0,
         }))
-        .sort((a, b) => a.dayOffset - b.dayOffset);
+        .sort((a: any, b: any) => a.dayOffset - b.dayOffset);
 
       if (sortedSchedule.length === 0) {
         return baseDate >= now ? new Date(baseDate) : null;
@@ -5401,12 +5401,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      // Validate: if setupRecurring is true, firstPaymentDate is required
-      if (setupRecurring && arrangementId && !normalizedFirstPaymentDate) {
-        return res.status(400).json({
-          success: false,
-          message: "First payment date is required when setting up recurring payments",
-        });
+      // Validate: firstPaymentDate is required for arrangements
+      // (settlement and one_time_payment arrangements are excluded from this requirement)
+      if (arrangementId && !normalizedFirstPaymentDate) {
+        // Check the arrangement type
+        const arrangements = await storage.getArrangementOptionsByTenant(tenantId);
+        const tempArrangement = arrangements.find(arr => arr.id === arrangementId);
+        
+        if (tempArrangement && 
+            tempArrangement.planType !== 'settlement' && 
+            tempArrangement.planType !== 'one_time_payment') {
+          return res.status(400).json({
+            success: false,
+            message: "First payment date is required for payment arrangements",
+          });
+        }
       }
 
       if (!accountId || !cardNumber || !expiryMonth || !expiryYear || !cvv || !cardName) {
@@ -5496,6 +5505,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         };
 
+        console.log('🔐 Tokenizing card with USAePay...');
         const tokenResponse = await fetch(`${usaepayBaseUrl}/paymentmethods`, {
           method: 'POST',
           headers: {
@@ -5506,22 +5516,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         let tokenResult: any = null;
+        const responseText = await tokenResponse.text();
+        console.log('📥 USAePay tokenization response:', {
+          status: tokenResponse.status,
+          statusText: tokenResponse.statusText,
+          bodyLength: responseText.length,
+          bodyPreview: responseText.substring(0, 200)
+        });
+
         try {
-          tokenResult = await tokenResponse.json();
+          tokenResult = responseText ? JSON.parse(responseText) : null;
         } catch (err) {
-          console.error('Failed to parse USAePay tokenization response:', err);
+          console.error('❌ Failed to parse USAePay tokenization response:', err);
+          console.error('Raw response text:', responseText);
         }
 
         if (!tokenResponse.ok || !(tokenResult?.key || tokenResult?.token)) {
-          console.error('Failed to tokenize card with USAePay:', {
+          console.error('❌ Failed to tokenize card with USAePay:', {
             status: tokenResponse.status,
             statusText: tokenResponse.statusText,
             body: tokenResult,
+            rawResponse: responseText
           });
 
           return res.status(400).json({
             success: false,
             message: 'Unable to save your payment method. Please verify your card details or try again.',
+            debug: process.env.NODE_ENV === 'development' ? { 
+              status: tokenResponse.status, 
+              error: tokenResult?.error || 'No response body'
+            } : undefined
           });
         }
 
@@ -5529,13 +5553,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         cardBrand = tokenResult.cardtype || tokenResult.card_type || tokenResult?.cardType || null;
       }
 
+      // Skip immediate charge if a future payment date is set for any arrangement
+      // (except settlement and one-time which should always process immediately)
       const shouldSkipImmediateCharge =
-        setupRecurring &&
         !!arrangement &&
         arrangement.planType !== 'settlement' &&
         arrangement.planType !== 'one_time_payment' &&
         normalizedFirstPaymentDate !== null &&
         normalizedFirstPaymentDate.getTime() > today.getTime();
+      
+      console.log('💰 Payment charge decision:', {
+        setupRecurring,
+        arrangementType: arrangement?.planType,
+        firstPaymentDate: normalizedFirstPaymentDate?.toISOString().split('T')[0],
+        today: today.toISOString().split('T')[0],
+        shouldSkipImmediateCharge
+      });
 
       // Step 2: Process payment (use token if available, otherwise use card directly)
       let success = false;
@@ -5901,7 +5934,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   paymentmethod: 'CREDIT CARD',
                   cardtype: cardBrand || 'Unknown',
                   cardLast4: cardLast4,
-                  transactionid: transactionId,
+                  transactionid: transactionId || undefined,
                 });
                 
                 console.log('💳 Sending payment to SMAX:', {
