@@ -4631,15 +4631,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Preserve SMAX credentials if they're submitted as masked values
       const currentSettings = await storage.getTenantSettings(tenantId);
-      const finalSmaxApiKey = (smaxApiKey && smaxApiKey !== '••••••••') ? smaxApiKey : currentSettings?.smaxApiKey;
-      const finalSmaxPin = (smaxPin && smaxPin !== '••••••••') ? smaxPin : currentSettings?.smaxPin;
+      const finalSmaxApiKey = (smaxApiKey && smaxApiKey !== '••••••••') ? smaxApiKey?.trim() : currentSettings?.smaxApiKey;
+      const finalSmaxPin = (smaxPin && smaxPin !== '••••••••') ? smaxPin?.trim() : currentSettings?.smaxPin;
 
-      let finalMerchantApiKey = merchantApiKey;
+      let finalMerchantApiKey = merchantApiKey?.trim();
       if (typeof merchantApiKey === 'string' && merchantApiKey.startsWith('****') && currentSettings?.merchantApiKey) {
         finalMerchantApiKey = currentSettings.merchantApiKey;
       }
 
-      let finalMerchantApiPin = merchantApiPin;
+      let finalMerchantApiPin = merchantApiPin?.trim();
       if (typeof merchantApiPin === 'string' && merchantApiPin === '****' && currentSettings?.merchantApiPin) {
         finalMerchantApiPin = currentSettings.merchantApiPin;
       }
