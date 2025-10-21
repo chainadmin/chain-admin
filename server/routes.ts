@@ -5455,6 +5455,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             number: cardNumber.replace(/\s/g, ''),
             expiration: `${expiryMonth}${expiryYear.slice(-2)}`,
             cardholder: cardName,
+            cvv: cvv,
             avs_zip: zipCode || ""
           }
         };
@@ -5468,11 +5469,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
           body: JSON.stringify(tokenPayload)
         });
 
-        if (tokenResponse.ok) {
-          const tokenResult = await tokenResponse.json();
-          paymentToken = tokenResult.key || tokenResult.token;
-          cardBrand = tokenResult.cardtype || tokenResult.card_type;
+        let tokenResult: any = null;
+        try {
+          tokenResult = await tokenResponse.json();
+        } catch (err) {
+          console.error('Failed to parse USAePay tokenization response:', err);
         }
+
+        if (!tokenResponse.ok || !(tokenResult?.key || tokenResult?.token)) {
+          console.error('Failed to tokenize card with USAePay:', {
+            status: tokenResponse.status,
+            statusText: tokenResponse.statusText,
+            body: tokenResult,
+          });
+
+          return res.status(400).json({
+            success: false,
+            message: 'Unable to save your payment method. Please verify your card details or try again.',
+          });
+        }
+
+        paymentToken = tokenResult.key || tokenResult.token;
+        cardBrand = tokenResult.cardtype || tokenResult.card_type || tokenResult?.cardType || null;
       }
 
       const shouldSkipImmediateCharge =
