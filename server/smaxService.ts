@@ -230,8 +230,10 @@ class SmaxService {
   }): SmaxPaymentData {
     const today = new Date().toISOString().split('T')[0];
     
+    const trimmedFileNumber = params.filenumber.trim();
+
     return {
-      filenumber: params.filenumber,
+      filenumber: trimmedFileNumber,
       paymentdate: params.paymentdate || today,
       payorname: params.payorname || 'Consumer',
       paymentmethod: (params.paymentmethod || 'CREDIT CARD').toUpperCase(),
@@ -316,11 +318,18 @@ class SmaxService {
         return false;
       }
 
+      const payload = {
+        ...noteData,
+        filenumber: noteData.filenumber.trim(),
+      };
+
+      console.log('📤 Sending SMAX note:', payload);
+
       const result = await this.makeSmaxRequest(
         config,
         '/InsertNoteline',
         'POST',
-        noteData
+        payload
       );
 
       console.log('SMAX note inserted:', result);
