@@ -5495,18 +5495,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let cardBrand = null;
 
       if (saveCard || setupRecurring) {
+        // USAePay v2 tokenization uses the transactions endpoint with cc:save command
         const tokenPayload = {
+          command: "cc:save",
           creditcard: {
             number: cardNumber.replace(/\s/g, ''),
             expiration: `${expiryMonth}${expiryYear.slice(-2)}`,
             cardholder: cardName,
-            cvv: cvv,
+            cvc: cvv,
+            avs_street: "",
             avs_zip: zipCode || ""
           }
         };
 
-        console.log('🔐 Tokenizing card with USAePay...');
-        const tokenResponse = await fetch(`${usaepayBaseUrl}/paymentmethods`, {
+        console.log('🔐 Tokenizing card with USAePay (cc:save)...');
+        const tokenResponse = await fetch(`${usaepayBaseUrl}/transactions`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -5531,26 +5534,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.error('Raw response text:', responseText);
         }
 
-        if (!tokenResponse.ok || !(tokenResult?.key || tokenResult?.token)) {
+        if (!tokenResponse.ok || !(tokenResult?.creditcard?.cardref)) {
           console.error('❌ Failed to tokenize card with USAePay:', {
             status: tokenResponse.status,
             statusText: tokenResponse.statusText,
             body: tokenResult,
-            rawResponse: responseText
+            rawResponse: responseText,
+            resultCode: tokenResult?.result_code,
+            error: tokenResult?.error
           });
+
+          const errorMessage = tokenResult?.error || tokenResult?.result || 'Unable to save your payment method. Please verify your card details or try again.';
 
           return res.status(400).json({
             success: false,
-            message: 'Unable to save your payment method. Please verify your card details or try again.',
+            message: errorMessage,
             debug: process.env.NODE_ENV === 'development' ? { 
               status: tokenResponse.status, 
+              resultCode: tokenResult?.result_code,
               error: tokenResult?.error || 'No response body'
             } : undefined
           });
         }
 
-        paymentToken = tokenResult.key || tokenResult.token;
-        cardBrand = tokenResult.cardtype || tokenResult.card_type || tokenResult?.cardType || null;
+        // USAePay v2 returns the token in creditcard.cardref
+        paymentToken = tokenResult.creditcard.cardref;
+        cardBrand = tokenResult.creditcard?.cardtype || null;
       }
 
       // Skip immediate charge if a future payment date is set for any arrangement
@@ -5579,34 +5588,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let payment: any = null;
 
       if (!shouldSkipImmediateCharge) {
-        // USAePay API v2 format
+        // USAePay API v2 format for sale transaction
         let usaepayPayload: any = {
+          command: "sale",
           amount: (amountCents / 100).toFixed(2),
           invoice: accountId || `consumer_${consumerId}`,
           description: arrangement
             ? `${arrangement.name} - Payment for account`
             : `Payment for account`,
-          // For v2 API, we need a source object
-          source: {}
+          creditcard: {}
         };
 
         if (paymentToken) {
-          // Use saved token for payment (v2 format)
-          // NOTE: CVV should NOT be included when using a saved token per PCI compliance
-          usaepayPayload.source = {
-            key: paymentToken
+          // Use cardref token for payment
+          // With cardref, the token goes in the number field
+          usaepayPayload.creditcard = {
+            number: paymentToken,
+            cvc: cvv  // CVV can be included for additional verification
           };
         } else {
-          // Use card directly (v2 format)
-          usaepayPayload.source = {
-            card: {
-              number: cardNumber.replace(/\s/g, ''),
-              expiration: `${expiryMonth}${expiryYear.slice(-2)}`,
-              cvv: cvv,
-              cardholder: cardName,
-              avs_street: "",
-              avs_zip: zipCode || ""
-            }
+          // Use card directly
+          usaepayPayload.creditcard = {
+            number: cardNumber.replace(/\s/g, ''),
+            expiration: `${expiryMonth}${expiryYear.slice(-2)}`,
+            cvc: cvv,
+            cardholder: cardName,
+            avs_street: "",
+            avs_zip: zipCode || ""
           };
         }
 
