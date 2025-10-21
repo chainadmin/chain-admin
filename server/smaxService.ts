@@ -390,6 +390,54 @@ class SmaxService {
     }
   }
 
+  // Get payment arrangement/plan from SMAX for a given file number
+  async getPaymentArrangement(tenantId: string, fileNumber: string): Promise<any | null> {
+    try {
+      const config = await this.getSmaxConfig(tenantId);
+
+      if (!config) {
+        console.log('ℹ️ SMAX not configured - skipping payment arrangement fetch');
+        return null;
+      }
+
+      // First get account details which may include payment plan info
+      const accountDetails = await this.getAccount(tenantId, fileNumber);
+      
+      if (!accountDetails) {
+        return null;
+      }
+
+      // SMAX typically stores payment arrangement info in the account details
+      // Extract payment plan/arrangement information if available
+      const arrangement = {
+        source: 'smax',
+        filenumber: fileNumber,
+        accountDetails: accountDetails,
+        // Common SMAX fields for payment arrangements:
+        paymentAmount: accountDetails.paymentamount || accountDetails.PaymentAmount,
+        paymentFrequency: accountDetails.paymentfrequency || accountDetails.PaymentFrequency,
+        nextPaymentDate: accountDetails.nextpaymentdate || accountDetails.NextPaymentDate,
+        arrangementType: accountDetails.arrangementtype || accountDetails.ArrangementType,
+        totalBalance: accountDetails.balance || accountDetails.Balance,
+        monthlyPayment: accountDetails.monthlypayment || accountDetails.MonthlyPayment,
+        remainingPayments: accountDetails.remainingpayments || accountDetails.RemainingPayments,
+        startDate: accountDetails.arrangementstartdate || accountDetails.ArrangementStartDate,
+        endDate: accountDetails.arrangementenddate || accountDetails.ArrangementEndDate,
+      };
+
+      console.log('📋 SMAX payment arrangement fetched:', {
+        filenumber: fileNumber,
+        hasArrangement: !!(arrangement.paymentAmount || arrangement.monthlyPayment),
+        nextPaymentDate: arrangement.nextPaymentDate
+      });
+
+      return arrangement;
+    } catch (error) {
+      console.error('Error getting payment arrangement from SMAX:', error);
+      return null;
+    }
+  }
+
   async testConnection(
     tenantId: string,
     overrides?: Partial<SmaxConfig>
