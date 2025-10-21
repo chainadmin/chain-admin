@@ -2036,6 +2036,95 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // SMS reply routes
+  app.get('/api/sms-replies', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const replies = await storage.getSmsRepliesByTenant(tenantId);
+      res.json(replies);
+    } catch (error) {
+      console.error("Error fetching SMS replies:", error);
+      res.status(500).json({ message: "Failed to fetch SMS replies" });
+    }
+  });
+
+  app.get('/api/sms-replies/:id', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const reply = await storage.getSmsReplyById(req.params.id, tenantId);
+      if (!reply) {
+        return res.status(404).json({ message: "SMS reply not found" });
+      }
+      
+      res.json(reply);
+    } catch (error) {
+      console.error("Error fetching SMS reply:", error);
+      res.status(500).json({ message: "Failed to fetch SMS reply" });
+    }
+  });
+
+  app.patch('/api/sms-replies/:id/read', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const reply = await storage.markSmsReplyAsRead(req.params.id, tenantId);
+      res.json(reply);
+    } catch (error) {
+      console.error("Error marking SMS reply as read:", error);
+      res.status(500).json({ message: "Failed to mark SMS reply as read" });
+    }
+  });
+
+  // Send response to an SMS reply
+  app.post('/api/sms-replies/:id/respond', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { id } = req.params;
+      const { message } = req.body;
+
+      if (!message) {
+        return res.status(400).json({ message: "Message is required" });
+      }
+
+      // Get the original SMS
+      const originalSms = await storage.getSmsReplyById(id, tenantId);
+      if (!originalSms) {
+        return res.status(404).json({ message: "SMS reply not found" });
+      }
+
+      // Send the response via SMS
+      const { smsService } = await import('./smsService');
+      await smsService.sendSms({
+        to: originalSms.fromPhone,
+        message,
+        tenantId,
+        consumerId: originalSms.consumerId,
+      });
+
+      res.json({ 
+        message: 'Response sent successfully',
+      });
+    } catch (error) {
+      console.error("Error sending SMS response:", error);
+      res.status(500).json({ message: "Failed to send SMS response" });
+    }
+  });
+
   // SMS template routes
   app.get('/api/sms-templates', authenticateUser, async (req: any, res) => {
     try {
@@ -8505,6 +8594,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error('❌ Error updating campaign metrics:', error);
     }
   }
+
+  // Twilio inbound SMS webhook for handling replies from consumers
+  app.post('/api/webhooks/twilio-inbound', async (req, res) => {
+    try {
+      console.log('📱 Received inbound SMS from Twilio');
+      
+      const {
+        From,
+        To,
+        Body,
+        MessageSid,
+        NumMedia,
+        MediaUrl0,
+        MediaUrl1,
+        MediaUrl2,
+      } = req.body;
+
+      const fromPhone = (From || '').trim();
+      const toPhone = (To || '').trim();
+      const messageBody = Body || '';
+      
+      console.log('💬 SMS details:', {
+        from: fromPhone,
+        to: toPhone,
+        body: messageBody.substring(0, 50),
+      });
+
+      // Find the tenant by matching the To phone number
+      const allTenants = await storage.getAllTenants();
+      let matchedTenant = null;
+      
+      for (const tenant of allTenants) {
+        if (tenant.twilioPhoneNumber && toPhone.includes(tenant.twilioPhoneNumber)) {
+          matchedTenant = tenant;
+          break;
+        }
+      }
+
+      if (!matchedTenant) {
+        console.warn('⚠️ Could not match inbound SMS to any tenant:', toPhone);
+        return res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
+      }
+
+      console.log('✅ Matched tenant:', matchedTenant.name);
+
+      // Try to find the consumer by phone
+      const consumers = await storage.getConsumersByTenant(matchedTenant.id);
+      const consumer = consumers.find(c => c.phone && fromPhone.includes(c.phone.replace(/\D/g, '')));
+      
+      // Collect media URLs if present
+      const mediaUrls = [];
+      const numMedia = parseInt(NumMedia || '0', 10);
+      if (numMedia > 0) {
+        if (MediaUrl0) mediaUrls.push(MediaUrl0);
+        if (MediaUrl1) mediaUrls.push(MediaUrl1);
+        if (MediaUrl2) mediaUrls.push(MediaUrl2);
+      }
+      
+      // Store the SMS reply
+      await storage.createSmsReply({
+        tenantId: matchedTenant.id,
+        consumerId: consumer?.id || null,
+        fromPhone,
+        toPhone,
+        messageBody,
+        messageSid: MessageSid,
+        numMedia: numMedia,
+        mediaUrls: mediaUrls.length > 0 ? mediaUrls : null,
+        isRead: false,
+      });
+
+      console.log('✅ SMS reply stored successfully');
+      
+      // Respond with TwiML (empty response means no auto-reply)
+      res.set('Content-Type', 'text/xml');
+      res.send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
+    } catch (error) {
+      console.error('❌ Inbound SMS webhook error:', error);
+      res.status(500).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
+    }
+  });
 
   // Postmark inbound email webhook for handling replies from consumers
   app.post('/api/webhooks/postmark-inbound', async (req, res) => {

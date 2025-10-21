@@ -281,6 +281,25 @@ export const emailReplies = pgTable("email_replies", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// SMS replies - inbound SMS from consumers
+export const smsReplies = pgTable("sms_replies", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "set null" }), // Null if consumer not found
+  fromPhone: text("from_phone").notNull(),
+  toPhone: text("to_phone").notNull(), // Tenant's Twilio number
+  messageBody: text("message_body").notNull(),
+  messageSid: text("message_sid"), // Twilio message SID
+  numMedia: bigint("num_media", { mode: "number" }).default(0), // Number of media attachments
+  mediaUrls: text("media_urls").array(), // URLs of media attachments
+  isRead: boolean("is_read").default(false),
+  readAt: timestamp("read_at"),
+  readBy: text("read_by"), // Username of person who read it
+  notes: text("notes"), // Internal notes
+  receivedAt: timestamp("received_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // SMS templates (per tenant)
 export const smsTemplates = pgTable("sms_templates", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1193,6 +1212,7 @@ export const insertEmailCampaignSchema = createInsertSchema(emailCampaigns).omit
 export const insertEmailTrackingSchema = createInsertSchema(emailTracking).omit({ id: true });
 export const insertEmailLogSchema = createInsertSchema(emailLogs).omit({ id: true, sentAt: true, deliveredAt: true, openedAt: true, bouncedAt: true, complainedAt: true });
 export const insertEmailReplySchema = createInsertSchema(emailReplies).omit({ id: true, createdAt: true, receivedAt: true, readAt: true });
+export const insertSmsReplySchema = createInsertSchema(smsReplies).omit({ id: true, createdAt: true, receivedAt: true, readAt: true });
 export const insertConsumerNotificationSchema = createInsertSchema(consumerNotifications).omit({ id: true, createdAt: true });
 export const insertCallbackRequestSchema = createInsertSchema(callbackRequests).omit({ id: true, createdAt: true });
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true });
@@ -1242,6 +1262,8 @@ export type EmailLog = typeof emailLogs.$inferSelect;
 export type InsertEmailLog = z.infer<typeof insertEmailLogSchema>;
 export type EmailReply = typeof emailReplies.$inferSelect;
 export type InsertEmailReply = z.infer<typeof insertEmailReplySchema>;
+export type SmsReply = typeof smsReplies.$inferSelect;
+export type InsertSmsReply = z.infer<typeof insertSmsReplySchema>;
 export type ConsumerNotification = typeof consumerNotifications.$inferSelect;
 export type InsertConsumerNotification = z.infer<typeof insertConsumerNotificationSchema>;
 export type CallbackRequest = typeof callbackRequests.$inferSelect;
