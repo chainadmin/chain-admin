@@ -5545,18 +5545,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Get USAePay credentials from tenant settings
-      const { merchantApiKey, merchantApiPin, useSandbox } = settings;
+      // Get USAePay credentials from tenant settings and trim whitespace
+      const merchantApiKey = settings.merchantApiKey?.trim();
+      const merchantApiPin = settings.merchantApiPin?.trim();
+      const useSandbox = settings.useSandbox;
 
       if (!merchantApiKey || !merchantApiPin) {
         console.error("USAePay credentials not configured for tenant:", tenantId);
         return res.status(500).json({ message: "Payment processing is not configured. Please contact your agency." });
       }
 
+      // Log credential info for debugging (without exposing full values)
+      console.log('🔑 USAePay credentials check:', {
+        apiKeyLength: merchantApiKey.length,
+        pinLength: merchantApiPin.length,
+        apiKeyFirst3: merchantApiKey.substring(0, 3),
+        pinFirst3: merchantApiPin.substring(0, 3),
+        useSandbox,
+        hasWhitespace: {
+          apiKey: settings.merchantApiKey !== merchantApiKey,
+          pin: settings.merchantApiPin !== merchantApiPin,
+        }
+      });
+
       // Determine API endpoint based on sandbox mode
       const usaepayBaseUrl = useSandbox 
         ? "https://sandbox.usaepay.com/api/v2"
         : "https://secure.usaepay.com/api/v2";
+
+      console.log('🌐 USAePay endpoint:', usaepayBaseUrl);
 
       // Generate proper USAePay API v2 authentication header with hash
       const authHeader = generateUSAePayAuthHeader(merchantApiKey, merchantApiPin);
@@ -5691,6 +5708,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
         }
 
+        console.log('💳 Sending payment transaction to USAePay:', {
+          endpoint: `${usaepayBaseUrl}/transactions`,
+          command: usaepayPayload.command,
+          amount: usaepayPayload.amount,
+          usingToken: !!paymentToken,
+          cardLast4: cardLast4
+        });
+
         const usaepayResponse = await fetch(`${usaepayBaseUrl}/transactions`, {
           method: 'POST',
           headers: {
@@ -5701,6 +5726,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         usaepayResult = await usaepayResponse.json();
+
+        console.log('📥 USAePay transaction response:', {
+          status: usaepayResponse.status,
+          ok: usaepayResponse.ok,
+          hasError: !!usaepayResult.error,
+          errorcode: usaepayResult.errorcode,
+          result: usaepayResult.result
+        });
 
         // Log detailed error information for troubleshooting
         if (!usaepayResponse.ok || usaepayResult.error || usaepayResult.errorcode) {
