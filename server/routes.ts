@@ -2879,8 +2879,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Prepare folder assignment if tenant exists
           let portalFolder = null;
           if (existingConsumer.tenantId) {
+            console.log(`📁 Ensuring default folders for tenant ${existingConsumer.tenantId}`);
             await storage.ensureDefaultFolders(existingConsumer.tenantId);
             portalFolder = await storage.getPortalRegistrationsFolder(existingConsumer.tenantId);
+            console.log(`📁 Portal Registrations folder found:`, portalFolder ? `ID: ${portalFolder.id}` : 'NOT FOUND');
           }
           
           // Update existing consumer with complete registration info
@@ -2917,10 +2919,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Move all consumer's accounts to the Portal Registrations folder
           if (portalFolder && existingConsumer.tenantId) {
             const consumerAccounts = await storage.getAccountsByConsumer(existingConsumer.id);
-            console.log(`📁 Moving ${consumerAccounts.length} accounts to Portal Registrations folder`);
+            console.log(`📁 Moving ${consumerAccounts.length} accounts to Portal Registrations folder (ID: ${portalFolder.id})`);
             for (const account of consumerAccounts) {
+              console.log(`  📁 Updating account ${account.accountNumber || account.id} - old folder: ${account.folderId || 'none'}, new folder: ${portalFolder.id}`);
               await storage.updateAccount(account.id, { folderId: portalFolder.id });
             }
+            console.log(`✅ Finished moving all ${consumerAccounts.length} accounts to Portal Registrations`);
+          } else {
+            console.log(`⚠️ Skipping folder move - portalFolder: ${!!portalFolder}, tenantId: ${existingConsumer.tenantId}`);
           }
 
           // Send notification to admins if this is a new registration (not re-registration)
@@ -3029,8 +3035,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Ensure folders exist and get the Portal Registrations folder
+      console.log(`📁 Ensuring default folders for tenant ${tenantId}`);
       await storage.ensureDefaultFolders(tenantId);
       const portalFolder = await storage.getPortalRegistrationsFolder(tenantId);
+      console.log(`📁 Portal Registrations folder found:`, portalFolder ? `ID: ${portalFolder.id}` : 'NOT FOUND');
       
       // Build the consumer object with required fields
       const consumerData: any = {
@@ -3064,10 +3072,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Move all consumer's accounts to the Portal Registrations folder
       if (portalFolder) {
         const consumerAccounts = await storage.getAccountsByConsumer(newConsumer.id);
-        console.log(`📁 Moving ${consumerAccounts.length} accounts to Portal Registrations folder`);
+        console.log(`📁 Moving ${consumerAccounts.length} accounts to Portal Registrations folder (ID: ${portalFolder.id})`);
         for (const account of consumerAccounts) {
+          console.log(`  📁 Updating account ${account.accountNumber || account.id} - old folder: ${account.folderId || 'none'}, new folder: ${portalFolder.id}`);
           await storage.updateAccount(account.id, { folderId: portalFolder.id });
         }
+        console.log(`✅ Finished moving all ${consumerAccounts.length} accounts to Portal Registrations`);
+      } else {
+        console.log(`⚠️ Skipping folder move - no Portal Registrations folder found`);
       }
 
       // Send notification to admins about new registration
