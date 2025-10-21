@@ -824,6 +824,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get tenant settings
       const tenantSettings = tenant?.id ? await storage.getTenantSettings(tenant.id) : undefined;
 
+      // Get payment schedules for this consumer
+      const paymentSchedules = tenant?.id ? await storage.getPaymentSchedulesByConsumer(consumer.id, tenant.id) : [];
+      const activeSchedules = paymentSchedules.filter(s => s.status === 'active');
+
       res.json({
         consumer: {
           id: consumer.id,
@@ -842,7 +846,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           name: tenant?.name,
           slug: tenant?.slug
         },
-        tenantSettings: tenantSettings
+        tenantSettings: tenantSettings,
+        paymentSchedules: activeSchedules
       });
     } catch (error) {
       console.error("Error fetching consumer accounts:", error);
@@ -2909,6 +2914,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           const updatedConsumer = await storage.updateConsumer(existingConsumer.id, updateData);
 
+          // Move all consumer's accounts to the Portal Registrations folder
+          if (portalFolder && existingConsumer.tenantId) {
+            const consumerAccounts = await storage.getAccountsByConsumer(existingConsumer.id);
+            console.log(`📁 Moving ${consumerAccounts.length} accounts to Portal Registrations folder`);
+            for (const account of consumerAccounts) {
+              await storage.updateAccount(account.id, { folderId: portalFolder.id });
+            }
+          }
+
           // Send notification to admins if this is a new registration (not re-registration)
           if (!existingConsumer.isRegistered && updatedConsumer.isRegistered && existingConsumer.tenantId) {
             await notifyTenantAdmins({
@@ -3046,6 +3060,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("Creating new consumer with data:", JSON.stringify(consumerData));
       const newConsumer = await storage.createConsumer(consumerData);
       console.log("New consumer created successfully:", newConsumer.id);
+
+      // Move all consumer's accounts to the Portal Registrations folder
+      if (portalFolder) {
+        const consumerAccounts = await storage.getAccountsByConsumer(newConsumer.id);
+        console.log(`📁 Moving ${consumerAccounts.length} accounts to Portal Registrations folder`);
+        for (const account of consumerAccounts) {
+          await storage.updateAccount(account.id, { folderId: portalFolder.id });
+        }
+      }
 
       // Send notification to admins about new registration
       if (tenantId) {
@@ -3591,28 +3614,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
 
       // Send SMAX note for consumer login
-      try {
-        const accounts = await storage.getAccountsByConsumer(consumer.id);
-        const accountWithFileNumber = accounts.find(acc => acc.filenumber && acc.filenumber.trim());
-        
-        if (accountWithFileNumber?.filenumber) {
-          const loginNote = {
-            filenumber: accountWithFileNumber.filenumber.trim(),
-            collectorname: 'System',
-            logmessage: `Consumer ${consumer.firstName || ''} ${consumer.lastName || ''} logged into online portal. Email: ${consumer.email}${consumer.phone ? `, Phone: ${consumer.phone}` : ''}`
-          };
+      if (consumer.tenantId) {
+        try {
+          const accounts = await storage.getAccountsByConsumer(consumer.id);
+          const accountWithFileNumber = accounts.find(acc => acc.filenumber && acc.filenumber.trim());
           
-          const smaxResult = await smaxService.insertNote(consumer.tenantId, loginNote);
-          if (smaxResult) {
-            console.log(`✅ SMAX login note added for consumer ${consumer.id}, filenumber ${accountWithFileNumber.filenumber}`);
+          if (accountWithFileNumber?.filenumber) {
+            const loginNote = {
+              filenumber: accountWithFileNumber.filenumber.trim(),
+              collectorname: 'System',
+              logmessage: `Consumer ${consumer.firstName || ''} ${consumer.lastName || ''} logged into online portal. Email: ${consumer.email}${consumer.phone ? `, Phone: ${consumer.phone}` : ''}`
+            };
+            
+            const smaxResult = await smaxService.insertNote(consumer.tenantId, loginNote);
+            if (smaxResult) {
+              console.log(`✅ SMAX login note added for consumer ${consumer.id}, filenumber ${accountWithFileNumber.filenumber}`);
+            } else {
+              console.log(`ℹ️ SMAX login note not sent (SMAX may not be configured)`);
+            }
           } else {
-            console.log(`ℹ️ SMAX login note not sent (SMAX may not be configured)`);
+            console.log(`ℹ️ Skipping SMAX login note for consumer ${consumer.id} - no filenumber found`);
           }
-        } else {
-          console.log(`ℹ️ Skipping SMAX login note for consumer ${consumer.id} - no filenumber found`);
+        } catch (smaxError) {
+          console.error('Failed to send SMAX login note:', smaxError);
         }
-      } catch (smaxError) {
-        console.error('Failed to send SMAX login note:', smaxError);
       }
 
       res.status(200).json({
@@ -5874,6 +5899,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           remainingPayments = shouldSkipImmediateCharge ? maxPayments : maxPayments - 1; // Minus the one we just made
           endDate = new Date(paymentStartDate);
           endDate.setMonth(endDate.getMonth() + Number(arrangement.maxTermMonths));
+        } else if (arrangement.planType === 'range') {
+          // Range plans continue until balance is paid (no fixed end date or payment count)
+          // This allows payments to continue automatically until the full balance is collected
+          remainingPayments = null; // null = unlimited/continue until balance paid
+          endDate = null; // No fixed end date
+          console.log('💳 Creating range payment plan - will continue until balance is paid');
         }
 
         // Create schedule for:
