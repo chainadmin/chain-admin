@@ -38,6 +38,7 @@ import { smaxService } from "./smaxService";
 import { uploadLogo } from "./r2Storage";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import { subdomainMiddleware } from "./middleware/subdomain";
 import {
   messagingPlanList,
@@ -5350,7 +5351,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const prehash = apiKey + seed + apiPin;
     
     // Create SHA-256 hash
-    const crypto = require('crypto');
     const hash = crypto.createHash('sha256').update(prehash).digest('hex');
     
     // Create apihash: s2/seed/hash
