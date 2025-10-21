@@ -38,6 +38,7 @@ import { FolderOpen, Plus, Upload, Trash2, Mail, Phone, MapPin, Calendar } from 
 
 export default function Accounts() {
   const [selectedFolderId, setSelectedFolderId] = useState<string>("all");
+  const [registrationFilter, setRegistrationFilter] = useState<string>("all"); // all, registered, not_registered
   const [showImportModal, setShowImportModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -437,14 +438,30 @@ export default function Accounts() {
 
   const accountsList = Array.isArray(accounts) ? (accounts as any[]) : [];
   const folderList = Array.isArray(folders) ? (folders as any[]) : [];
+  
+  // Apply folder filter
   const folderFilteredAccounts =
     selectedFolderId === "all"
       ? accountsList
       : accountsList.filter((account: any) => account.consumer?.folderId === selectedFolderId);
   
+  // Calculate registration stats from the folder-filtered collection
+  const registeredCount = folderFilteredAccounts.filter((account: any) => account.consumer?.isRegistered === true).length;
+  const notRegisteredCount = folderFilteredAccounts.length - registeredCount;
+  
+  // Apply registration status filter
+  const fullyFilteredAccounts = folderFilteredAccounts.filter((account: any) => {
+    if (registrationFilter === "registered") {
+      return account.consumer?.isRegistered === true;
+    } else if (registrationFilter === "not_registered") {
+      return account.consumer?.isRegistered !== true;
+    }
+    return true; // "all"
+  });
+  
   // Apply pagination
-  const paginatedAccounts = folderFilteredAccounts.slice(0, displayLimit);
-  const hasMoreAccounts = folderFilteredAccounts.length > displayLimit;
+  const paginatedAccounts = fullyFilteredAccounts.slice(0, displayLimit);
+  const hasMoreAccounts = fullyFilteredAccounts.length > displayLimit;
   
   const selectedFolder =
     selectedFolderId === "all"
@@ -612,6 +629,75 @@ export default function Accounts() {
           </div>
         </section>
 
+        <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-blue-900/20 backdrop-blur">
+          <div className="flex flex-col gap-6">
+            <div>
+              <h2 className="text-lg font-semibold text-white">Registration status</h2>
+              <p className="text-sm text-blue-100/70">
+                Filter accounts by consumer portal registration status
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="ghost"
+                className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
+                  registrationFilter === "all"
+                    ? "border-sky-400/60 bg-sky-500/20 text-white shadow-lg shadow-sky-900/30"
+                    : "border-white/10 bg-white/5 text-blue-100 hover:bg-white/10"
+                }`}
+                onClick={() => {
+                  setRegistrationFilter("all");
+                  setDisplayLimit(50);
+                }}
+                data-testid="filter-all-registration"
+              >
+                All accounts
+                <span className="rounded-full bg-white/10 px-2 text-xs text-blue-100/80">
+                  {folderFilteredAccounts.length}
+                </span>
+              </Button>
+              <Button
+                variant="ghost"
+                className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
+                  registrationFilter === "registered"
+                    ? "border-green-400/60 bg-green-500/20 text-white shadow-lg shadow-green-900/30"
+                    : "border-white/10 bg-white/5 text-blue-100 hover:bg-white/10"
+                }`}
+                onClick={() => {
+                  setRegistrationFilter("registered");
+                  setDisplayLimit(50);
+                }}
+                data-testid="filter-registered"
+              >
+                <div className="h-2 w-2 rounded-full bg-green-400" />
+                Portal registered
+                <span className="rounded-full bg-white/10 px-2 text-xs text-blue-100/80">
+                  {registeredCount}
+                </span>
+              </Button>
+              <Button
+                variant="ghost"
+                className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
+                  registrationFilter === "not_registered"
+                    ? "border-gray-400/60 bg-gray-500/20 text-white shadow-lg shadow-gray-900/30"
+                    : "border-white/10 bg-white/5 text-blue-100 hover:bg-white/10"
+                }`}
+                onClick={() => {
+                  setRegistrationFilter("not_registered");
+                  setDisplayLimit(50);
+                }}
+                data-testid="filter-not-registered"
+              >
+                <div className="h-2 w-2 rounded-full bg-gray-400" />
+                Not registered
+                <span className="rounded-full bg-white/10 px-2 text-xs text-blue-100/80">
+                  {notRegisteredCount}
+                </span>
+              </Button>
+            </div>
+          </div>
+        </section>
+
         <section>
           <AccountsTable
             accounts={paginatedAccounts}
@@ -631,14 +717,14 @@ export default function Accounts() {
                 className="rounded-xl border-white/10 bg-white/5 px-6 py-2 text-blue-100 hover:bg-white/10"
                 data-testid="button-load-more"
               >
-                Load More ({folderFilteredAccounts.length - displayLimit} remaining)
+                Load More ({fullyFilteredAccounts.length - displayLimit} remaining)
               </Button>
             </div>
           )}
           
-          {!accountsLoading && folderFilteredAccounts.length > 0 && (
+          {!accountsLoading && fullyFilteredAccounts.length > 0 && (
             <div className="mt-4 text-center text-sm text-blue-100/60">
-              Showing {paginatedAccounts.length} of {folderFilteredAccounts.length} accounts
+              Showing {paginatedAccounts.length} of {fullyFilteredAccounts.length} accounts
             </div>
           )}
         </section>
