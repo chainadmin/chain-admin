@@ -5088,6 +5088,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const account = await storage.getAccount(schedule.accountId);
 
+        // Calculate all upcoming payment dates
+        const upcomingPayments: { paymentNumber: number; dueDate: string; amountCents: number }[] = [];
+        if (schedule.nextPaymentDate && schedule.remainingPayments && schedule.remainingPayments > 0) {
+          const startDate = new Date(schedule.nextPaymentDate);
+          const frequency = schedule.frequency || 'monthly';
+          
+          for (let i = 0; i < schedule.remainingPayments; i++) {
+            const paymentDate = new Date(startDate);
+            if (frequency === 'monthly') {
+              paymentDate.setMonth(startDate.getMonth() + i);
+            } else if (frequency === 'weekly') {
+              paymentDate.setDate(startDate.getDate() + (i * 7));
+            } else if (frequency === 'bi-weekly') {
+              paymentDate.setDate(startDate.getDate() + (i * 14));
+            }
+            
+            upcomingPayments.push({
+              paymentNumber: i + 1,
+              dueDate: paymentDate.toISOString().split('T')[0],
+              amountCents: schedule.amountCents
+            });
+          }
+        }
+
         return {
           id: schedule.id,
           arrangementType: schedule.arrangementType,
@@ -5100,6 +5124,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           cardBrand: paymentMethod?.cardBrand,
           accountNumber: account?.accountNumber,
           accountCreditor: account?.creditor,
+          upcomingPayments: upcomingPayments,
         };
       }));
 

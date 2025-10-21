@@ -214,16 +214,7 @@ export default function ConsumerDashboardSimple() {
     preferredTime: "anytime",
     phoneNumber: "",
     message: "",
-  });
-
-  // Set default first payment date when recurring is enabled
-  useEffect(() => {
-    if (setupRecurring && selectedArrangement && !firstPaymentDate) {
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      setFirstPaymentDate(tomorrow.toISOString().split('T')[0]);
-    }
-  }, [setupRecurring, selectedArrangement]);
+    });
 
   // Callback request mutation
   const callbackMutation = useMutation({
@@ -958,6 +949,31 @@ export default function ConsumerDashboardSimple() {
                             )}
                           </div>
                         </div>
+
+                        {/* Show all upcoming payment dates from backend */}
+                        {schedule.upcomingPayments && schedule.upcomingPayments.length > 0 && (
+                          <div className="mt-4 pt-4 border-t border-white/10">
+                            <h5 className="text-sm font-semibold text-white mb-3">
+                              Full Payment Schedule ({schedule.upcomingPayments.length} payment{schedule.upcomingPayments.length !== 1 ? 's' : ''})
+                            </h5>
+                            <div className="space-y-2 max-h-64 overflow-y-auto">
+                              {schedule.upcomingPayments.map((payment: any, index: number) => (
+                                <div 
+                                  key={index} 
+                                  className="flex items-center justify-between rounded-lg bg-white/5 p-2 px-3 hover:bg-white/10 transition-colors"
+                                  data-testid={`payment-date-${index}`}
+                                >
+                                  <span className="text-sm text-blue-100/80">
+                                    Payment {payment.paymentNumber}
+                                  </span>
+                                  <span className="text-sm text-white font-medium">
+                                    {new Date(payment.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
