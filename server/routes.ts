@@ -5534,7 +5534,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         zipCode,
         saveCard,
         setupRecurring,
-        firstPaymentDate
+        firstPaymentDate,
+        customPaymentAmountCents
       } = req.body;
 
       let normalizedFirstPaymentDate: Date | null = null;
@@ -5576,7 +5577,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Calculate payment amount based on arrangement type
-        if (arrangement.planType === 'settlement' && arrangement.payoffPercentageBasisPoints) {
+        if (arrangement.planType === 'one_time_payment') {
+          // One-time payment: use custom amount provided by consumer
+          if (customPaymentAmountCents && customPaymentAmountCents > 0) {
+            amountCents = customPaymentAmountCents;
+            console.log('💳 One-time payment amount:', {
+              customAmount: customPaymentAmountCents,
+              customAmountDollars: (customPaymentAmountCents / 100).toFixed(2),
+              accountBalance: account.balanceCents
+            });
+          } else {
+            return res.status(400).json({ 
+              success: false,
+              message: "Please enter a valid payment amount for one-time payment" 
+            });
+          }
+        } else if (arrangement.planType === 'settlement' && arrangement.payoffPercentageBasisPoints) {
           // Settlement: percentage of balance
           amountCents = Math.round(amountCents * arrangement.payoffPercentageBasisPoints / 10000);
         } else if (arrangement.planType === 'fixed_monthly' && arrangement.fixedMonthlyPayment) {
