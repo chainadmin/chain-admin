@@ -34,6 +34,7 @@ import { nanoid } from "nanoid";
 import express from "express";
 import { emailService } from "./emailService";
 import { smsService } from "./smsService";
+import { smaxService } from "./smaxService";
 import { uploadLogo } from "./r2Storage";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -6175,13 +6176,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Process scheduled payments (called by cron/scheduler)
   app.post('/api/payments/process-scheduled', async (req: any, res) => {
     try {
-      const { apiKey } = req.body;
-      
-      // Simple API key check (you should use a proper auth mechanism)
-      if (apiKey !== process.env.CRON_API_KEY) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
-
       const today = new Date().toISOString().split('T')[0];
       
       // Get all active payment schedules due today
@@ -6266,6 +6260,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     await storage.updateAccount(schedule.accountId, {
                       balanceCents: Math.max(0, newBalance)
                     });
+
+                    // Send payment to SMAX if enabled and filenumber exists
+                    if (account.filenumber) {
+                      try {
+                        const smaxPaymentData = smaxService.createSmaxPaymentData({
+                          filenumber: account.filenumber,
+                          paymentamount: schedule.amountCents / 100,
+                          paymentdate: today,
+                          payorname: `${consumer.firstName} ${consumer.lastName}`.trim() || 'Consumer',
+                          paymentmethod: 'CREDIT CARD',
+                          cardtype: paymentMethod.cardBrand || 'Unknown',
+                          cardLast4: paymentMethod.cardLast4,
+                          transactionid: paymentResult.refnum || paymentResult.key || `tx_${Date.now()}`,
+                        });
+
+                        await smaxService.insertPayment(tenant.id, smaxPaymentData);
+
+                        // Insert payment attempt to SMAX
+                        await smaxService.insertAttempt(tenant.id, {
+                          filenumber: account.filenumber,
+                          attempttype: 'Payment',
+                          attemptdate: today,
+                          notes: `Scheduled payment of $${(schedule.amountCents / 100).toFixed(2)} processed successfully`,
+                          result: 'Success',
+                        });
+
+                        console.log(`✅ Scheduled payment sent to SMAX for filenumber: ${account.filenumber}`);
+                      } catch (smaxError) {
+                        console.error('❌ Error sending scheduled payment to SMAX:', smaxError);
+                        // Don't fail the whole payment if SMAX sync fails
+                      }
+                    } else {
+                      console.warn(`⚠️ No filenumber for account ${account.id} - skipping SMAX sync`);
+                    }
                   }
 
                   // Update schedule for next payment
@@ -6359,13 +6387,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Process due automations (called by cron/scheduler)
   app.post('/api/automations/process', async (req: any, res) => {
     try {
-      const { apiKey } = req.body;
-      
-      // Simple API key check
-      if (apiKey !== process.env.CRON_API_KEY) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
-
       const now = new Date();
       console.log(`🤖 Processing automations at ${now.toISOString()}`);
       
