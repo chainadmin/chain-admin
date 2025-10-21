@@ -216,6 +216,15 @@ export default function ConsumerDashboardSimple() {
     message: "",
   });
 
+  // Set default first payment date when recurring is enabled
+  useEffect(() => {
+    if (setupRecurring && selectedArrangement && !firstPaymentDate) {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      setFirstPaymentDate(tomorrow.toISOString().split('T')[0]);
+    }
+  }, [setupRecurring, selectedArrangement]);
+
   // Callback request mutation
   const callbackMutation = useMutation({
     mutationFn: async (data: { preferredTime: string; phoneNumber: string; message: string }) => {

@@ -5375,6 +5375,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
+      // Validate: if setupRecurring is true, firstPaymentDate is required
+      if (setupRecurring && arrangementId && !normalizedFirstPaymentDate) {
+        return res.status(400).json({
+          success: false,
+          message: "First payment date is required when setting up recurring payments",
+        });
+      }
+
       if (!accountId || !cardNumber || !expiryMonth || !expiryYear || !cvv || !cardName) {
         return res.status(400).json({ message: "Missing required payment information" });
       }
@@ -6189,13 +6197,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 // Generate proper USAePay API v2 authentication header with hash
                 const authHeader = generateUSAePayAuthHeader(settings.merchantApiKey, settings.merchantApiPin);
 
-                // Process payment using saved token
+                // Process payment using saved token (USAePay v2 format)
                 const paymentPayload = {
-                  command: "sale",
                   amount: (schedule.amountCents / 100).toFixed(2),
-                  paymentkey: paymentMethod.paymentToken,
                   invoice: schedule.accountId,
-                  description: `Scheduled ${schedule.arrangementType} payment`
+                  description: `Scheduled ${schedule.arrangementType} payment`,
+                  source: {
+                    key: paymentMethod.paymentToken
+                  }
                 };
 
                 const paymentResponse = await fetch(`${usaepayBaseUrl}/transactions`, {
