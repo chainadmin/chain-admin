@@ -6135,6 +6135,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Step 4: Create payment schedule if requested OR if there's a future payment date
       let createdSchedule: any = null;
+      
+      console.log('🔍 Schedule creation check:', {
+        success,
+        shouldSkipImmediateCharge,
+        setupRecurring,
+        hasArrangement: !!arrangement,
+        hasSavedPaymentMethod: !!savedPaymentMethod,
+        arrangementType: arrangement?.planType,
+        condition1: success || shouldSkipImmediateCharge,
+        condition2: setupRecurring || shouldSkipImmediateCharge,
+        allConditionsMet: (success || shouldSkipImmediateCharge) && (setupRecurring || shouldSkipImmediateCharge) && arrangement && savedPaymentMethod
+      });
+      
       if ((success || shouldSkipImmediateCharge) && (setupRecurring || shouldSkipImmediateCharge) && arrangement && savedPaymentMethod) {
         // Use firstPaymentDate if provided, otherwise use today
         const paymentStartDate = normalizedFirstPaymentDate ? new Date(normalizedFirstPaymentDate) : new Date();
@@ -6178,6 +6191,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           (arrangement.planType === 'fixed_monthly' || arrangement.planType === 'range') // Recurring payments
         );
         
+        console.log('📅 Should create schedule?', {
+          shouldCreateSchedule,
+          arrangementId,
+          arrangementType: arrangement.planType,
+          shouldSkipImmediateCharge,
+          isRecurring: arrangement.planType === 'fixed_monthly' || arrangement.planType === 'range'
+        });
+        
         if (shouldCreateSchedule) {
           // Check if consumer already has an active payment schedule for this account
           const existingSchedules = await storage.getActivePaymentSchedulesByConsumerAndAccount(consumerId, accountId, tenantId);
@@ -6204,6 +6225,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
               : nextMonth.toISOString().split('T')[0],
             remainingPayments,
             status: 'active',
+          });
+          
+          console.log('✅ Payment schedule created successfully:', {
+            scheduleId: createdSchedule.id,
+            arrangementType: createdSchedule.arrangementType,
+            amountCents: createdSchedule.amountCents,
+            startDate: createdSchedule.startDate,
+            nextPaymentDate: createdSchedule.nextPaymentDate,
+            remainingPayments: createdSchedule.remainingPayments,
+            status: createdSchedule.status
           });
 
           // Send notification to admins about new arrangement
