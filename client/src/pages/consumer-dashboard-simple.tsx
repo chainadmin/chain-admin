@@ -467,9 +467,24 @@ export default function ConsumerDashboardSimple() {
         throw new Error(result.message || "Payment failed");
       }
 
+      // Determine if this was an immediate payment or just a schedule setup
+      const isRecurringSetup = setupRecurring && selectedArrangement && 
+        (selectedArrangement.planType === 'fixed_monthly' || selectedArrangement.planType === 'range');
+      
+      const displayDate = firstPaymentDate || new Date().toISOString().split('T')[0];
+      const formattedDate = new Date(displayDate).toLocaleDateString('en-US', { 
+        month: 'long', 
+        day: 'numeric', 
+        year: 'numeric' 
+      });
+      
+      const successMessage = isRecurringSetup
+        ? `Your payment plan has been set up successfully. Your first payment of ${formatCurrency(paymentAmountCents)} will be processed on ${formattedDate}.`
+        : `Your payment of ${formatCurrency(paymentAmountCents)} has been processed.`;
+
       toast({
-        title: "Payment Successful",
-        description: `Your payment of ${formatCurrency(paymentAmountCents)} has been processed.`,
+        title: isRecurringSetup ? "Payment Plan Activated" : "Payment Successful",
+        description: successMessage,
       });
 
       setShowPaymentDialog(false);
@@ -1235,8 +1250,8 @@ export default function ConsumerDashboardSimple() {
                     {selectedArrangement && (
                       <p className="text-xs text-gray-600 mt-1">
                         {selectedArrangement.planType === 'settlement' && 'Settlement payment - full balance will be cleared'}
-                        {selectedArrangement.planType === 'fixed_monthly' && 'First installment payment'}
-                        {selectedArrangement.planType === 'range' && 'Minimum monthly payment'}
+                        {selectedArrangement.planType === 'fixed_monthly' && (setupRecurring ? 'Monthly installment amount (first payment on scheduled date)' : 'First installment payment')}
+                        {selectedArrangement.planType === 'range' && (setupRecurring ? 'Minimum monthly payment (first payment on scheduled date)' : 'Minimum monthly payment')}
                         {selectedArrangement.planType === 'pay_in_full' && (selectedArrangement.payoffPercentageBasisPoints ? 'Discounted payoff amount' : 'One-time payment')}
                         {selectedArrangement.planType === 'one_time_payment' && (customPaymentAmount ? 'Custom one-time payment' : 'Enter payment amount below')}
                       </p>
@@ -1410,7 +1425,7 @@ export default function ConsumerDashboardSimple() {
                   </div>
                 )}
 
-                {selectedArrangement && selectedArrangement.planType !== 'one_time_payment' && (
+                {selectedArrangement && selectedArrangement.planType !== 'one_time_payment' && !setupRecurring && (
                   <div>
                     <Label htmlFor="firstPaymentDate">
                       {selectedArrangement.planType === 'settlement' || selectedArrangement.planType === 'pay_in_full' 
@@ -1422,7 +1437,7 @@ export default function ConsumerDashboardSimple() {
                       id="firstPaymentDate"
                       value={firstPaymentDate}
                       onChange={(e) => setFirstPaymentDate(e.target.value)}
-                      required={!!selectedArrangement}
+                      required={!!selectedArrangement && !setupRecurring}
                       min={new Date().toISOString().split('T')[0]}
                       max={(() => {
                         const maxDate = new Date();

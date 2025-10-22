@@ -5744,6 +5744,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         parsedDate.setHours(0, 0, 0, 0);
         normalizedFirstPaymentDate = parsedDate;
+      } else if (setupRecurring && arrangementId) {
+        // If setting up recurring but no date provided, default to today
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        normalizedFirstPaymentDate = today;
       }
 
       const today = new Date();
@@ -5964,17 +5969,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Skip immediate charge if a future payment date is set
-      // This applies to ALL arrangement types - if they set a future date, honor it
+      // Skip immediate charge if:
+      // 1. A future payment date is set, OR
+      // 2. setupRecurring is true AND it's a recurring arrangement type (fixed_monthly or range)
+      const isRecurringArrangement = arrangement && (
+        arrangement.planType === 'fixed_monthly' || 
+        arrangement.planType === 'range'
+      );
+      
       const shouldSkipImmediateCharge =
-        normalizedFirstPaymentDate !== null &&
-        normalizedFirstPaymentDate.getTime() > today.getTime();
+        (normalizedFirstPaymentDate !== null && normalizedFirstPaymentDate.getTime() > today.getTime()) ||
+        (setupRecurring && isRecurringArrangement);
       
       console.log('💰 Payment charge decision:', {
         setupRecurring,
         arrangementType: arrangement?.planType || 'full_balance',
         firstPaymentDate: normalizedFirstPaymentDate?.toISOString().split('T')[0] || 'none',
         today: today.toISOString().split('T')[0],
+        isRecurringArrangement,
         shouldSkipImmediateCharge,
         willTokenizeCard: saveCard || setupRecurring
       });
