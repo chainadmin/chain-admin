@@ -2287,6 +2287,7 @@ export default function Settings() {
                       onChange={(e) => handleSettingsUpdate('contactEmail', e.target.value)}
                       placeholder="support@youragency.com"
                       className={inputClasses}
+                      data-testid="input-contact-email"
                     />
                   </div>
 
@@ -2297,7 +2298,32 @@ export default function Settings() {
                       onChange={(e) => handleSettingsUpdate('contactPhone', e.target.value)}
                       placeholder="(555) 123-4567"
                       className={inputClasses}
+                      data-testid="input-contact-phone"
                     />
+                  </div>
+
+                  <div>
+                    <Label className="text-white">Custom Portal URL</Label>
+                    <Input
+                      value={localSettings?.consumerPortalSettings?.customUrl || ""}
+                      onChange={(e) => {
+                        const updatedSettings = {
+                          ...localSettings,
+                          consumerPortalSettings: {
+                            ...localSettings?.consumerPortalSettings,
+                            customUrl: e.target.value
+                          }
+                        };
+                        setLocalSettings(updatedSettings);
+                        setHasUnsavedChanges(true);
+                      }}
+                      placeholder="https://portal.yourdomain.com"
+                      className={inputClasses}
+                      data-testid="input-custom-portal-url"
+                    />
+                    <p className="text-xs text-blue-100/60 mt-1">
+                      Your custom domain for the consumer portal. If not set, will use default subdomain.
+                    </p>
                   </div>
 
                   <div className="space-y-2">
