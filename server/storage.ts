@@ -275,6 +275,13 @@ export interface IStorage {
   
   // SMS tracking operations
   createSmsTracking(tracking: InsertSmsTracking): Promise<SmsTracking>;
+  getSmsTrackingByCampaign(campaignId: string): Promise<SmsTracking[]>;
+  getSmsCampaignMetrics(campaignId: string): Promise<{
+    totalSent: number;
+    totalDelivered: number;
+    totalErrors: number;
+    totalOptOuts: number;
+  }>;
   
   // Automation operations
   getAutomationsByTenant(tenantId: string): Promise<CommunicationAutomation[]>;
@@ -1414,6 +1421,65 @@ export class DatabaseStorage implements IStorage {
   async createSmsTracking(tracking: InsertSmsTracking): Promise<SmsTracking> {
     const [newTracking] = await db.insert(smsTracking).values(tracking).returning();
     return newTracking;
+  }
+
+  async getSmsTrackingByCampaign(campaignId: string): Promise<SmsTracking[]> {
+    return await db.select().from(smsTracking).where(eq(smsTracking.campaignId, campaignId));
+  }
+
+  async getSmsCampaignMetrics(campaignId: string): Promise<{
+    totalSent: number;
+    totalDelivered: number;
+    totalErrors: number;
+    totalOptOuts: number;
+  }> {
+    // Efficient SQL aggregation - counts by status in a single query
+    const results = await db
+      .select({
+        status: smsTracking.status,
+        count: sql<number>`COUNT(*)::int`,
+      })
+      .from(smsTracking)
+      .where(eq(smsTracking.campaignId, campaignId))
+      .groupBy(smsTracking.status);
+
+    const metrics = {
+      totalSent: 0,
+      totalDelivered: 0,
+      totalErrors: 0,
+      totalOptOuts: 0,
+    };
+
+    for (const row of results) {
+      const count = row.count || 0;
+      const status = (row.status || '').toLowerCase();
+      
+      // totalSent = successful or in-progress sends (NOT failures)
+      // Twilio success/in-progress states: queued, accepted, scheduled, sending, sent, delivered, receiving, received, read
+      const successStates = ['queued', 'accepted', 'scheduled', 'sending', 'sent', 'delivered', 'receiving', 'received', 'read'];
+      if (successStates.includes(status)) {
+        metrics.totalSent += count;
+      }
+      
+      // Only delivered messages count as delivered
+      if (status === 'delivered') {
+        metrics.totalDelivered = count;
+      }
+      
+      // Count all failure statuses as errors (NOT in totalSent)
+      // Twilio failure statuses: failed, undelivered, canceled, delivery-unknown
+      const errorStates = ['failed', 'undelivered', 'canceled', 'delivery-unknown'];
+      if (errorStates.includes(status)) {
+        metrics.totalErrors += count;
+      }
+      
+      // Opt-outs are tracked separately (not in totalSent or totalErrors)
+      if (status === 'opted_out') {
+        metrics.totalOptOuts = count;
+      }
+    }
+
+    return metrics;
   }
 
   async recordMessagingUsageEvent(event: InsertMessagingUsageEvent): Promise<void> {

@@ -2469,10 +2469,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         smsResults = await smsService.sendBulkSmsCampaign(processedMessages, tenantId, campaign.id);
       }
 
+      // Update campaign metrics from tracking records (more accurate than send results)
+      await updateSmsCampaignMetrics(campaign.id);
+
       const updatedCampaign = await storage.updateSmsCampaign(campaign.id, {
         status: 'completed',
-        totalSent: smsResults.totalSent,
-        totalErrors: smsResults.totalFailed,
         totalRecipients: processedMessages.length,
         completedAt: new Date(),
       });
@@ -8820,6 +8821,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         await storage.updateSmsTracking(trackingInfo.tracking.id, updates);
+
+        // Update campaign metrics when tracking status changes
+        const campaignId = trackingInfo.tracking.campaignId;
+        if (campaignId) {
+          try {
+            await updateSmsCampaignMetrics(campaignId);
+          } catch (error) {
+            console.error('Error updating SMS campaign metrics:', error);
+          }
+        }
       }
 
       if (!tenantId) {
@@ -9086,6 +9097,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     } catch (error) {
       console.error('❌ Error updating campaign metrics:', error);
+    }
+  }
+
+  // Update SMS campaign metrics by counting tracking records with efficient SQL aggregation
+  async function updateSmsCampaignMetrics(campaignId: string) {
+    try {
+      console.log(`🔄 Updating SMS campaign ${campaignId} metrics from tracking records`);
+      
+      // Use SQL aggregation to efficiently count by status
+      const metrics = await storage.getSmsCampaignMetrics(campaignId);
+      
+      // Update the campaign with actual counts
+      await storage.updateSmsCampaign(campaignId, {
+        totalSent: metrics.totalSent,
+        totalDelivered: metrics.totalDelivered,
+        totalErrors: metrics.totalErrors,
+        totalOptOuts: metrics.totalOptOuts,
+      });
+      
+      console.log(`✅ SMS campaign ${campaignId} metrics updated:`, {
+        totalSent: metrics.totalSent,
+        totalDelivered: metrics.totalDelivered,
+        totalErrors: metrics.totalErrors,
+        totalOptOuts: metrics.totalOptOuts
+      });
+    } catch (error) {
+      console.error('❌ Error updating SMS campaign metrics:', error);
     }
   }
 
