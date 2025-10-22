@@ -2280,6 +2280,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`      Template: "${c.templateName}"`);
         console.log(`      Recipients: ${c.totalRecipients}`);
       });
+      
+      // Log the EXACT JSON being sent to frontend
+      console.log('\n🔍 EXACT JSON RESPONSE BEING SENT TO FRONTEND:');
+      console.log(JSON.stringify(campaigns, null, 2));
+      
       res.json(campaigns);
     } catch (error) {
       console.error("Error fetching SMS campaigns:", error);
