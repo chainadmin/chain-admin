@@ -251,7 +251,10 @@ export default function SMS() {
     <AdminLayout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold text-gray-900">SMS Communications</h1>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">SMS Communications</h1>
+            <p className="text-xs text-gray-500 mt-1">Build: Oct-22-2025-v4-FINAL</p>
+          </div>
         </div>
 
         <Tabs defaultValue="overview" className="space-y-6">
