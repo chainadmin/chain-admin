@@ -2263,39 +2263,52 @@ export default function Communications() {
                           />
                         </div>
                         
-                        <div>
-                          <Label htmlFor="message" className="mb-2 block">Insert Variables (30+ Available)</Label>
-                          <div className="flex flex-wrap gap-1.5 p-3 bg-gray-50 rounded-lg border mb-2 max-h-60 overflow-y-auto">
-                            {templateVariables.map((variable) => (
-                              <Button
-                                key={variable.value}
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => insertVariable(variable.value)}
-                                className="text-xs h-7 px-2 bg-white hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300"
-                              >
-                                {variable.label}
-                              </Button>
-                            ))}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                          {/* Variables Section - Scrollable */}
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium flex items-center gap-2">
+                              <Code className="h-4 w-4" />
+                              Variables (30+ Available)
+                            </Label>
+                            <p className="text-xs text-gray-500">
+                              Click any variable to insert it at cursor position
+                            </p>
+                            <div className="h-80 overflow-y-auto border rounded-lg p-3 bg-gray-50">
+                              <div className="flex flex-wrap gap-1.5">
+                                {templateVariables.map((variable) => (
+                                  <Button
+                                    key={variable.value}
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => insertVariable(variable.value)}
+                                    className="text-xs h-7 px-2 bg-white hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 flex-shrink-0"
+                                  >
+                                    {variable.label}
+                                  </Button>
+                                ))}
+                              </div>
+                            </div>
                           </div>
                           
-                          <Label htmlFor="message">Message Content</Label>
-                          <Textarea
-                            id="message"
-                            ref={smsTextareaRef}
-                            data-testid="textarea-message"
-                            value={smsTemplateForm.message}
-                            onChange={(e) => setSmsTemplateForm({ ...smsTemplateForm, message: e.target.value })}
-                            placeholder="Enter your SMS message. Click variables above to insert them."
-                            rows={6}
-                            maxLength={1600}
-                            required
-                            className="font-mono text-sm"
-                          />
-                          <p className="mt-1 text-sm text-gray-500">
-                            {smsTemplateForm.message.length}/1600 characters
-                          </p>
+                          {/* Message Content Section - Fixed */}
+                          <div className="space-y-2">
+                            <Label htmlFor="message">Message Content</Label>
+                            <Textarea
+                              id="message"
+                              ref={smsTextareaRef}
+                              data-testid="textarea-message"
+                              value={smsTemplateForm.message}
+                              onChange={(e) => setSmsTemplateForm({ ...smsTemplateForm, message: e.target.value })}
+                              placeholder="Enter your SMS message. Click variables to insert them."
+                              maxLength={1600}
+                              required
+                              className="font-mono text-sm h-80 resize-none"
+                            />
+                            <p className="text-sm text-gray-500">
+                              {smsTemplateForm.message.length}/1600 characters
+                            </p>
+                          </div>
                         </div>
                         
                         <div className="flex justify-end gap-2">
