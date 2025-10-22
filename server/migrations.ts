@@ -115,6 +115,30 @@ export async function runMigrations() {
     } catch (err) {
       console.log('  ⚠ Could not fix trial status:', err);
     }
+
+    // Update SMS campaigns table for folder filtering and approval workflow
+    console.log('Updating SMS campaigns table...');
+    try {
+      // Add folder_ids array column if it doesn't exist
+      await client.query(`
+        ALTER TABLE sms_campaigns 
+        ADD COLUMN IF NOT EXISTS folder_ids text[] DEFAULT ARRAY[]::text[]
+      `);
+      console.log('  ✓ folder_ids column added');
+    } catch (err) {
+      console.log('  ⚠ folder_ids column (already exists or error)');
+    }
+
+    try {
+      // Update status column default to 'pending_approval'
+      await client.query(`
+        ALTER TABLE sms_campaigns 
+        ALTER COLUMN status SET DEFAULT 'pending_approval'
+      `);
+      console.log('  ✓ status default changed to pending_approval');
+    } catch (err) {
+      console.log('  ⚠ status default (already set or error)');
+    }
     
     // Verify columns exist
     const result = await client.query(`
