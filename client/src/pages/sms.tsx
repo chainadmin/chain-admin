@@ -49,6 +49,7 @@ export default function SMS() {
     name: "",
     templateId: "",
     targetGroup: "all",
+    folderIds: [] as string[],
   });
 
   const { toast } = useToast();
@@ -65,6 +66,10 @@ export default function SMS() {
 
   const { data: smsMetrics, isLoading: metricsLoading } = useQuery({
     queryKey: ["/api/sms-metrics"],
+  });
+
+  const { data: folders } = useQuery({
+    queryKey: ["/api/folders"],
   });
 
   const { data: consumers } = useQuery({
@@ -115,7 +120,7 @@ export default function SMS() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sms-campaigns"] });
       setShowCampaignModal(false);
-      setCampaignForm({ name: "", templateId: "", targetGroup: "all" });
+      setCampaignForm({ name: "", templateId: "", targetGroup: "all", folderIds: [] });
       toast({
         title: "Success",
         description: "SMS campaign created and scheduled",
@@ -198,7 +203,7 @@ export default function SMS() {
     setPreviewTemplate(template);
   };
 
-  const getTargetGroupLabel = (targetGroup: string) => {
+  const getTargetGroupLabel = (targetGroup: string, campaign?: any) => {
     switch (targetGroup) {
       case "all":
         return "All Consumers";
@@ -208,6 +213,15 @@ export default function SMS() {
         return "Decline Status";
       case "recent-upload":
         return "Most Recent Upload";
+      case "folder":
+        if (campaign?.folderIds && campaign.folderIds.length > 0) {
+          const folderNames = campaign.folderIds
+            .map((id: string) => (folders as any)?.find((f: any) => f.id === id)?.name)
+            .filter(Boolean)
+            .join(", ");
+          return folderNames || "Specific Folders";
+        }
+        return "Specific Folders";
       default:
         return targetGroup;
     }
@@ -314,7 +328,7 @@ export default function SMS() {
                         <div>
                           <h3 className="font-medium">{campaign.name}</h3>
                           <p className="text-sm text-gray-600">
-                            Target: {getTargetGroupLabel(campaign.targetGroup)} • 
+                            Target: {getTargetGroupLabel(campaign.targetGroup, campaign)} • 
                             Template: {campaign.templateName}
                           </p>
                         </div>
@@ -557,9 +571,45 @@ export default function SMS() {
                 </DialogHeader>
                 <div className="space-y-4">
                   <div className="border rounded-lg p-4 bg-gray-50">
-                    <div className="text-sm font-medium text-gray-600 mb-2">SMS Message:</div>
-                    <div className="whitespace-pre-wrap text-sm">
+                    <div className="text-sm font-medium text-gray-600 mb-2">Raw Template:</div>
+                    <div className="whitespace-pre-wrap text-sm text-gray-500">
                       {previewTemplate?.message}
+                    </div>
+                  </div>
+                  <div className="border rounded-lg p-4 bg-blue-50">
+                    <div className="text-sm font-medium text-blue-900 mb-2">Sample Output (with variables replaced):</div>
+                    <div className="whitespace-pre-wrap text-sm text-blue-900">
+                      {previewTemplate?.message
+                        ?.replace(/\{\{firstName\}\}|\{firstName\}/gi, "John")
+                        ?.replace(/\{\{lastName\}\}|\{lastName\}/gi, "Smith")
+                        ?.replace(/\{\{fullName\}\}|\{fullName\}|\{\{consumerName\}\}|\{consumerName\}/gi, "John Smith")
+                        ?.replace(/\{\{email\}\}|\{email\}/gi, "john.smith@example.com")
+                        ?.replace(/\{\{phone\}\}|\{phone\}/gi, "(555) 123-4567")
+                        ?.replace(/\{\{address\}\}|\{address\}/gi, "123 Main St")
+                        ?.replace(/\{\{city\}\}|\{city\}/gi, "Springfield")
+                        ?.replace(/\{\{state\}\}|\{state\}/gi, "IL")
+                        ?.replace(/\{\{zipCode\}\}|\{zipCode\}|\{\{zip\}\}|\{zip\}/gi, "62701")
+                        ?.replace(/\{\{fullAddress\}\}|\{fullAddress\}/gi, "123 Main St, Springfield, IL 62701")
+                        ?.replace(/\{\{accountNumber\}\}|\{accountNumber\}/gi, "ACC-12345")
+                        ?.replace(/\{\{filenumber\}\}|\{filenumber\}|\{\{fileNumber\}\}|\{fileNumber\}/gi, "FILE-67890")
+                        ?.replace(/\{\{creditor\}\}|\{creditor\}/gi, "ABC Company")
+                        ?.replace(/\{\{balance\}\}|\{balance\}/gi, "$1,234.56")
+                        ?.replace(/\{\{balanceCents\}\}|\{balanceCents\}/gi, "123456")
+                        ?.replace(/\{\{dueDate\}\}|\{dueDate\}/gi, "12/31/2025")
+                        ?.replace(/\{\{balance50%\}\}|\{balance50%\}/gi, "$617.28")
+                        ?.replace(/\{\{balance60%\}\}|\{balance60%\}/gi, "$740.74")
+                        ?.replace(/\{\{balance70%\}\}|\{balance70%\}/gi, "$864.19")
+                        ?.replace(/\{\{balance80%\}\}|\{balance80%\}/gi, "$987.65")
+                        ?.replace(/\{\{balance90%\}\}|\{balance90%\}/gi, "$1,111.10")
+                        ?.replace(/\{\{balance100%\}\}|\{balance100%\}/gi, "$1,234.56")
+                        ?.replace(/\{\{agencyName\}\}|\{agencyName\}/gi, "Your Agency")
+                        ?.replace(/\{\{agencyEmail\}\}|\{agencyEmail\}/gi, "contact@agency.com")
+                        ?.replace(/\{\{agencyPhone\}\}|\{agencyPhone\}/gi, "(555) 987-6543")
+                        ?.replace(/\{\{consumerPortalLink\}\}|\{consumerPortalLink\}/gi, "https://portal.example.com/consumer-login")
+                        ?.replace(/\{\{appDownloadLink\}\}|\{appDownloadLink\}/gi, "https://example.com/download")
+                        ?.replace(/\{\{unsubscribeLink\}\}|\{unsubscribeLink\}|\{\{unsubscribeUrl\}\}|\{unsubscribeUrl\}/gi, "https://example.com/unsubscribe")
+                        ?.replace(/\{\{todays date\}\}|\{todays date\}/gi, new Date().toLocaleDateString())
+                      }
                     </div>
                   </div>
                   <div className="flex items-center justify-between text-sm text-gray-500">
@@ -624,7 +674,7 @@ export default function SMS() {
                       <Label htmlFor="target-group">Target Group</Label>
                       <Select
                         value={campaignForm.targetGroup}
-                        onValueChange={(value) => setCampaignForm({ ...campaignForm, targetGroup: value })}
+                        onValueChange={(value) => setCampaignForm({ ...campaignForm, targetGroup: value, folderIds: [] })}
                       >
                         <SelectTrigger data-testid="select-target-group">
                           <SelectValue />
@@ -634,9 +684,44 @@ export default function SMS() {
                           <SelectItem value="with-balance">With Outstanding Balance</SelectItem>
                           <SelectItem value="decline">Decline Status</SelectItem>
                           <SelectItem value="recent-upload">Most Recent Upload</SelectItem>
+                          <SelectItem value="folder">Specific Folder(s)</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
+                    {campaignForm.targetGroup === "folder" && (
+                      <div>
+                        <Label htmlFor="folder-selection">Select Folders</Label>
+                        <div className="space-y-2 max-h-40 overflow-y-auto border rounded-md p-3">
+                          {(folders as any)?.map((folder: any) => (
+                            <div key={folder.id} className="flex items-center space-x-2">
+                              <input
+                                type="checkbox"
+                                id={`folder-${folder.id}`}
+                                checked={campaignForm.folderIds.includes(folder.id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setCampaignForm({
+                                      ...campaignForm,
+                                      folderIds: [...campaignForm.folderIds, folder.id]
+                                    });
+                                  } else {
+                                    setCampaignForm({
+                                      ...campaignForm,
+                                      folderIds: campaignForm.folderIds.filter(id => id !== folder.id)
+                                    });
+                                  }
+                                }}
+                                className="rounded border-gray-300"
+                                data-testid={`checkbox-folder-${folder.id}`}
+                              />
+                              <label htmlFor={`folder-${folder.id}`} className="text-sm cursor-pointer">
+                                {folder.name}
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     <div className="flex justify-end gap-2">
                       <Button
                         type="button"
@@ -749,7 +834,7 @@ export default function SMS() {
                           </div>
                           <div>
                             <span className="text-gray-600">Target:</span>
-                            <div className="font-medium">{getTargetGroupLabel(campaign.targetGroup)}</div>
+                            <div className="font-medium">{getTargetGroupLabel(campaign.targetGroup, campaign)}</div>
                           </div>
                           <div>
                             <span className="text-gray-600">Recipients:</span>

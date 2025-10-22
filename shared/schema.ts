@@ -316,7 +316,8 @@ export const smsCampaigns = pgTable("sms_campaigns", {
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
   templateId: uuid("template_id").references(() => smsTemplates.id, { onDelete: "cascade" }).notNull(),
   name: text("name").notNull(),
-  targetGroup: text("target_group").notNull(), // "all", "with-balance", "decline", "recent-upload"
+  targetGroup: text("target_group").notNull(), // "all", "with-balance", "decline", "recent-upload", "folder"
+  folderIds: text("folder_ids").array().default(sql`ARRAY[]::text[]`), // Array of folder IDs for folder targeting
   status: text("status").default("pending"), // "pending", "sending", "completed", "failed"
   totalRecipients: bigint("total_recipients", { mode: "number" }).default(0),
   totalSent: bigint("total_sent", { mode: "number" }).default(0),

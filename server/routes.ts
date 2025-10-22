@@ -2216,17 +2216,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const insertSmsCampaignSchema = z.object({
         templateId: z.string().uuid(),
         name: z.string().min(1),
-        targetGroup: z.enum(["all", "with-balance", "decline", "recent-upload"]),
+        targetGroup: z.enum(["all", "with-balance", "decline", "recent-upload", "folder"]),
+        folderIds: z.array(z.string()).optional(),
       });
 
-      const { templateId, name, targetGroup } = insertSmsCampaignSchema.parse(req.body);
+      const { templateId, name, targetGroup, folderIds } = insertSmsCampaignSchema.parse(req.body);
 
       const consumers = await storage.getConsumersByTenant(tenantId);
       const accountsData = await storage.getAccountsByTenant(tenantId);
 
       let targetedConsumers = consumers;
 
-      if (targetGroup === "with-balance") {
+      if (targetGroup === "folder" && folderIds && folderIds.length > 0) {
+        const folderSet = new Set(folderIds);
+        console.log(`🔍 SMS Campaign: Filtering for folders: ${folderIds.join(', ')}`);
+        
+        const accountsInFolder = accountsData.filter(acc => {
+          const accountFolderMatch = acc.folderId && folderSet.has(acc.folderId);
+          const consumerFolderMatch = acc.consumer?.folderId && folderSet.has(acc.consumer.folderId);
+          return accountFolderMatch || consumerFolderMatch;
+        });
+        console.log(`📁 Found ${accountsInFolder.length} accounts matching selected folders`);
+
+        const consumerIds = new Set(accountsInFolder.map(acc => acc.consumerId));
+        targetedConsumers = consumers.filter(c => consumerIds.has(c.id) || (c.folderId && folderSet.has(c.folderId)));
+        console.log(`✅ Filtered to ${targetedConsumers.length} consumers in folders [${folderIds.join(', ')}]`);
+      } else if (targetGroup === "with-balance") {
         const consumerIds = accountsData
           .filter(acc => (acc.balanceCents || 0) > 0)
           .map(acc => acc.consumerId);
@@ -2252,6 +2267,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         templateId,
         name,
         targetGroup,
+        folderIds: folderIds || [],
         totalRecipients: consumersWithPhone.length,
         status: 'pending_approval',
       });
@@ -2318,7 +2334,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       targetedConsumers = consumers;
 
-      if (campaign.targetGroup === "with-balance") {
+      if (campaign.targetGroup === "folder" && campaign.folderIds && campaign.folderIds.length > 0) {
+        const folderSet = new Set(campaign.folderIds);
+        console.log(`🔍 SMS Approval: Filtering for folders: ${campaign.folderIds.join(', ')}`);
+        
+        const accountsInFolder = accountsData.filter(acc => {
+          const accountFolderMatch = acc.folderId && folderSet.has(acc.folderId);
+          const consumerFolderMatch = acc.consumer?.folderId && folderSet.has(acc.consumer.folderId);
+          return accountFolderMatch || consumerFolderMatch;
+        });
+        console.log(`📁 Found ${accountsInFolder.length} accounts matching selected folders`);
+
+        const consumerIds = new Set(accountsInFolder.map(acc => acc.consumerId));
+        targetedConsumers = consumers.filter(c => consumerIds.has(c.id) || (c.folderId && folderSet.has(c.folderId)));
+        console.log(`✅ Filtered to ${targetedConsumers.length} consumers in folders [${campaign.folderIds.join(', ')}]`);
+      } else if (campaign.targetGroup === "with-balance") {
         const consumerIds = accountsData
           .filter(acc => (acc.balanceCents || 0) > 0)
           .map(acc => acc.consumerId);
