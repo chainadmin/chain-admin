@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
+import AdminLayout from '@/components/admin-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -10,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Mail, MailOpen, Reply, User, Calendar, MessageSquare, Phone } from 'lucide-react';
+import { Mail, MailOpen, Reply, User, Calendar, MessageSquare, Phone, Inbox } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 interface EmailReply {
@@ -206,19 +207,18 @@ export default function CommunicationsInbox() {
   const totalUnreadCount = unreadEmailCount + unreadSmsCount;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800 p-6">
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <MessageSquare className="w-8 h-8" />
-            Communications Inbox
-          </h1>
-          <p className="text-slate-600 dark:text-slate-300 mt-1">
-            View and respond to messages from your consumers
-          </p>
-        </div>
+    <AdminLayout>
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <Inbox className="w-8 h-8" />
+          Email & SMS Inbox
+        </h1>
+        <p className="text-slate-600 dark:text-slate-300 mt-1">
+          View and respond to inbound messages from your consumers
+        </p>
+      </div>
 
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'email' | 'sms')} className="w-full">
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'email' | 'sms')} className="w-full">
           <TabsList className="mb-6">
             <TabsTrigger value="email" className="gap-2" data-testid="tab-email">
               <Mail className="w-4 h-4" />
@@ -557,7 +557,6 @@ export default function CommunicationsInbox() {
             </div>
           </TabsContent>
         </Tabs>
-      </div>
 
       {/* Email Reply Dialog */}
       <Dialog open={showEmailReplyDialog} onOpenChange={setShowEmailReplyDialog}>
@@ -656,6 +655,6 @@ export default function CommunicationsInbox() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </AdminLayout>
   );
 }
