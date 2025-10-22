@@ -771,9 +771,16 @@ export default function SMS() {
                           <h3 className="font-medium">{campaign.name}</h3>
                           <div className="flex items-center gap-2">
                             <Badge className={getStatusColor(campaign.status)}>
-                              {campaign.status}
+                              {campaign.status || 'no status'}
                             </Badge>
-                            {(campaign.status === "pending" || campaign.status === "pending_approval") && (
+                            <span className="text-xs text-gray-500" title={`Raw status: ${JSON.stringify(campaign.status)}`}>
+                              [{typeof campaign.status}]
+                            </span>
+                            {(() => {
+                              const showApprove = campaign.status === "pending" || campaign.status === "pending_approval";
+                              console.log(`Campaign "${campaign.name}": status="${campaign.status}", type=${typeof campaign.status}, showApprove=${showApprove}`);
+                              return showApprove;
+                            })() && (
                               <>
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>

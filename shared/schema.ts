@@ -318,7 +318,7 @@ export const smsCampaigns = pgTable("sms_campaigns", {
   name: text("name").notNull(),
   targetGroup: text("target_group").notNull(), // "all", "with-balance", "decline", "recent-upload", "folder"
   folderIds: text("folder_ids").array().default(sql`ARRAY[]::text[]`), // Array of folder IDs for folder targeting
-  status: text("status").default("pending"), // "pending", "sending", "completed", "failed"
+  status: text("status").default("pending_approval"), // "pending", "pending_approval", "sending", "completed", "failed"
   totalRecipients: bigint("total_recipients", { mode: "number" }).default(0),
   totalSent: bigint("total_sent", { mode: "number" }).default(0),
   totalDelivered: bigint("total_delivered", { mode: "number" }).default(0),
