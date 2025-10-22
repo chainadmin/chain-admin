@@ -215,14 +215,27 @@ export default function SMS() {
       case "recent-upload":
         return "Most Recent Upload";
       case "folder":
-        if (campaign?.folderIds && campaign.folderIds.length > 0) {
+        console.log('🗂️ Folder targeting:', {
+          folderIds: campaign?.folderIds,
+          folderIdsType: typeof campaign?.folderIds,
+          isArray: Array.isArray(campaign?.folderIds),
+          length: campaign?.folderIds?.length,
+          availableFolders: (folders as any)?.map((f: any) => ({ id: f.id, name: f.name }))
+        });
+        if (campaign?.folderIds && Array.isArray(campaign.folderIds) && campaign.folderIds.length > 0) {
           const folderNames = campaign.folderIds
-            .map((id: string) => (folders as any)?.find((f: any) => f.id === id)?.name)
+            .map((id: string) => {
+              const folder = (folders as any)?.find((f: any) => f.id === id);
+              console.log(`Looking for folder ${id}, found:`, folder?.name);
+              return folder?.name;
+            })
             .filter(Boolean)
             .join(", ");
-          return folderNames || "Specific Folders";
+          const label = folderNames || "Specific Folders (loading...)";
+          console.log('Folder label:', label);
+          return label;
         }
-        return "Specific Folders";
+        return "Specific Folders (none selected)";
       default:
         return targetGroup;
     }
@@ -758,14 +771,29 @@ export default function SMS() {
                 ) : (campaigns as any)?.length > 0 ? (
                   <div className="space-y-4">
                     {(() => {
-                      console.log('📋 Campaigns to display:', (campaigns as any).map((c: any) => ({
-                        id: c.id,
-                        name: c.name,
-                        status: c.status,
-                        targetGroup: c.targetGroup,
-                        folderIds: c.folderIds,
-                        showApprove: c.status === "pending" || c.status === "pending_approval"
-                      })));
+                      console.log('========== SMS CAMPAIGNS DEBUG ==========');
+                      console.log('Raw campaigns data:', JSON.stringify(campaigns, null, 2));
+                      console.log('Campaigns count:', (campaigns as any).length);
+                      (campaigns as any).forEach((c: any, index: number) => {
+                        console.log(`Campaign ${index + 1}:`, {
+                          id: c.id,
+                          name: c.name,
+                          status: c.status,
+                          statusType: typeof c.status,
+                          statusLength: c.status?.length,
+                          statusChars: c.status?.split('').map((ch: string, i: number) => `[${i}]='${ch}'(${ch.charCodeAt(0)})`),
+                          targetGroup: c.targetGroup,
+                          folderIds: c.folderIds,
+                          folderIdsType: typeof c.folderIds,
+                          folderIdsIsArray: Array.isArray(c.folderIds),
+                          totalRecipients: c.totalRecipients,
+                          templateName: c.templateName,
+                          isPending: c.status === "pending",
+                          isPendingApproval: c.status === "pending_approval",
+                          showApprove: c.status === "pending" || c.status === "pending_approval"
+                        });
+                      });
+                      console.log('==========================================');
                       return null;
                     })()}
                     {(campaigns as any).map((campaign: any) => (
