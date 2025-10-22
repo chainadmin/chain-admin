@@ -35,7 +35,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { MessageSquare, Plus, Send, FileText, Trash2, Eye, TrendingUp, Users, AlertCircle, UserMinus } from "lucide-react";
+import { MessageSquare, Plus, Send, FileText, Trash2, Eye, TrendingUp, Users, AlertCircle, UserMinus, Check } from "lucide-react";
 
 export default function SMS() {
   const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -130,6 +130,25 @@ export default function SMS() {
     },
   });
 
+  const approveCampaignMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("POST", `/api/sms-campaigns/${id}/approve`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sms-campaigns"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sms-metrics"] });
+      toast({
+        title: "Success",
+        description: "SMS campaign approved and sending",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to approve SMS campaign",
+        variant: "destructive",
+      });
+    },
+  });
+
   const deleteCampaignMutation = useMutation({
     mutationFn: (id: string) => apiRequest("DELETE", `/api/sms-campaigns/${id}`),
     onSuccess: () => {
@@ -201,6 +220,7 @@ export default function SMS() {
       case "sending":
         return "bg-blue-100 text-blue-800";
       case "pending":
+      case "pending_approval":
         return "bg-yellow-100 text-yellow-800";
       case "failed":
         return "bg-red-100 text-red-800";
@@ -414,10 +434,11 @@ export default function SMS() {
                           </div>
 
                           <div>
-                            <h5 className="font-semibold text-blue-900 text-xs mb-1">Links</h5>
+                            <h5 className="font-semibold text-blue-900 text-xs mb-1">Links & Opt-Out</h5>
                             <div className="text-xs text-blue-800 grid grid-cols-1 gap-y-0.5">
                               <div>• {"{{consumerPortalLink}}"}</div>
                               <div>• {"{{appDownloadLink}}"}</div>
+                              <div>• {"{{unsubscribeLink}}"} (opt-out)</div>
                             </div>
                           </div>
 
@@ -648,37 +669,69 @@ export default function SMS() {
                             <Badge className={getStatusColor(campaign.status)}>
                               {campaign.status}
                             </Badge>
-                            {campaign.status === "pending" && (
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="text-red-600 hover:text-red-700"
-                                    aria-label="Delete campaign"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Delete Campaign</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      This will cancel the pending SMS campaign before any messages are sent. This action cannot be undone.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction
-                                      className="bg-red-600 hover:bg-red-700"
-                                      onClick={() => deleteCampaignMutation.mutate(campaign.id)}
-                                      disabled={deleteCampaignMutation.isPending}
+                            {(campaign.status === "pending" || campaign.status === "pending_approval") && (
+                              <>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      variant="default"
+                                      size="sm"
+                                      className="bg-green-600 hover:bg-green-700"
                                     >
-                                      {deleteCampaignMutation.isPending ? "Deleting..." : "Delete"}
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
+                                      <Check className="h-4 w-4 mr-1" />
+                                      Approve
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Approve SMS Campaign</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        This will send {campaign.totalRecipients || 0} SMS messages to targeted consumers. This action cannot be undone.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction
+                                        className="bg-green-600 hover:bg-green-700"
+                                        onClick={() => approveCampaignMutation.mutate(campaign.id)}
+                                        disabled={approveCampaignMutation.isPending}
+                                      >
+                                        {approveCampaignMutation.isPending ? "Approving..." : "Approve & Send"}
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="text-red-600 hover:text-red-700"
+                                      aria-label="Delete campaign"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Delete Campaign</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        This will cancel the pending SMS campaign before any messages are sent. This action cannot be undone.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction
+                                        className="bg-red-600 hover:bg-red-700"
+                                        onClick={() => deleteCampaignMutation.mutate(campaign.id)}
+                                        disabled={deleteCampaignMutation.isPending}
+                                      >
+                                        {deleteCampaignMutation.isPending ? "Deleting..." : "Delete"}
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </>
                             )}
                           </div>
                         </div>

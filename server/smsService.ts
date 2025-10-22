@@ -301,6 +301,54 @@ class SmsService {
     return { totalSent, totalQueued, totalFailed };
   }
 
+  // Synchronous bulk send for campaigns - bypasses queue to ensure accurate metrics
+  async sendBulkSmsCampaign(
+    recipients: Array<{ to: string; message: string; consumerId?: string }>,
+    tenantId: string,
+    campaignId: string
+  ): Promise<{ totalSent: number; totalFailed: number }> {
+    let totalSent = 0;
+    let totalFailed = 0;
+
+    const throttleConfig = await this.getThrottleConfig(tenantId);
+    // Guard against division by zero
+    const maxPerMinute = Math.max(1, throttleConfig.maxPerMinute);
+    const delayBetweenBatches = 60000 / maxPerMinute; // ms delay per message
+
+    for (const recipient of recipients) {
+      try {
+        // Respect rate limits by checking before sending
+        while (!this.canSendSms(tenantId, maxPerMinute)) {
+          // Wait for rate limit window to reset
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+
+        const result = await this.sendImmediately(
+          recipient.to,
+          recipient.message,
+          tenantId,
+          campaignId,
+          recipient.consumerId
+        );
+
+        if (result.success) {
+          totalSent++;
+          this.incrementSentCount(tenantId); // Track sent count for rate limiting
+        } else {
+          totalFailed++;
+        }
+
+        // Delay to respect rate limits
+        await new Promise(resolve => setTimeout(resolve, delayBetweenBatches));
+      } catch (error) {
+        console.error(`Error sending SMS to ${recipient.to}:`, error);
+        totalFailed++;
+      }
+    }
+
+    return { totalSent, totalFailed };
+  }
+
   getQueueStatus(tenantId?: string): { queueLength: number; estimatedWaitTime: number } {
     const relevantQueue = tenantId 
       ? this.sendQueue.filter(item => item.tenantId === tenantId)

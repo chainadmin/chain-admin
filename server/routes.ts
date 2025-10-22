@@ -2244,17 +2244,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
       }
 
+      // Count consumers with phone numbers for accurate recipient count
+      const consumersWithPhone = targetedConsumers.filter(consumer => consumer.phone);
+      
       const campaign = await storage.createSmsCampaign({
         tenantId,
         templateId,
         name,
         targetGroup,
-        totalRecipients: targetedConsumers.length,
-        status: 'sending',
+        totalRecipients: consumersWithPhone.length,
+        status: 'pending_approval',
       });
 
+      console.log(`📱 SMS campaign "${campaign.name}" created with ${consumersWithPhone.length} targeted recipients. Awaiting approval to send.`);
+
+      res.json({
+        ...campaign,
+        totalRecipients: consumersWithPhone.length,
+        message: 'Campaign created and awaiting approval',
+      });
+    } catch (error) {
+      console.error("Error creating SMS campaign:", error);
+      res.status(500).json({ message: "Failed to create SMS campaign" });
+    }
+  });
+
+  app.post('/api/sms-campaigns/:id/approve', authenticateUser, requireSmsService, async (req: any, res) => {
+    let campaign: any;
+    let targetedConsumers: any[] = [];
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { id } = req.params;
+      campaign = await storage.getSmsCampaignById(id, tenantId);
+
+      if (!campaign) {
+        return res.status(404).json({ message: "Campaign not found" });
+      }
+
+      console.log(`🚀 Approving SMS campaign "${campaign.name}" - targetGroup: "${campaign.targetGroup}"`);
+
+      const normalizedStatus = (campaign.status || '').toLowerCase();
+      if (!['pending', 'pending_approval'].includes(normalizedStatus)) {
+        return res.status(400).json({ message: "Campaign is not awaiting approval" });
+      }
+
       const templates = await storage.getSmsTemplatesByTenant(tenantId);
-      const template = templates.find(t => t.id === templateId);
+      const template = templates.find(t => t.id === campaign.templateId);
       if (!template) {
         return res.status(404).json({ message: "SMS template not found" });
       }
@@ -2273,6 +2312,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         consumerPortalSettings: tenantSettings?.consumerPortalSettings,
       };
 
+      // Re-resolve target audience
+      const consumers = await storage.getConsumersByTenant(tenantId);
+      const accountsData = await storage.getAccountsByTenant(tenantId);
+
+      targetedConsumers = consumers;
+
+      if (campaign.targetGroup === "with-balance") {
+        const consumerIds = accountsData
+          .filter(acc => (acc.balanceCents || 0) > 0)
+          .map(acc => acc.consumerId);
+        targetedConsumers = consumers.filter(c => consumerIds.includes(c.id));
+      } else if (campaign.targetGroup === "decline") {
+        targetedConsumers = consumers.filter(c =>
+          (c.additionalData && (c.additionalData as any).status === 'decline') ||
+          (c.additionalData && (c.additionalData as any).folder === 'decline')
+        );
+      } else if (campaign.targetGroup === "recent-upload") {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        targetedConsumers = consumers.filter(c =>
+          c.createdAt && new Date(c.createdAt) > yesterday
+        );
+      }
+
       const processedMessages = targetedConsumers
         .filter(consumer => consumer.phone)
         .map(consumer => {
@@ -2285,33 +2348,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
         });
 
-      console.log(`📱 Sending ${processedMessages.length} SMS messages via Twilio...`);
-      const smsResults = await smsService.sendBulkSms(processedMessages, tenantId, campaign.id);
+      // Update campaign status to sending
+      await storage.updateSmsCampaign(campaign.id, {
+        status: 'sending',
+        totalRecipients: processedMessages.length,
+        totalSent: 0,
+        totalErrors: 0,
+        completedAt: null,
+      });
+
+      console.log(`✅ SMS campaign "${campaign.name}" approved. Sending ${processedMessages.length} SMS messages via Twilio...`);
+
+      let smsResults = { totalSent: 0, totalFailed: 0 };
+      if (processedMessages.length > 0) {
+        smsResults = await smsService.sendBulkSmsCampaign(processedMessages, tenantId, campaign.id);
+      }
 
       const updatedCampaign = await storage.updateSmsCampaign(campaign.id, {
-        status: smsResults.totalQueued > 0 ? 'sending' : 'completed',
+        status: 'completed',
         totalSent: smsResults.totalSent,
         totalErrors: smsResults.totalFailed,
         totalRecipients: processedMessages.length,
-        completedAt: smsResults.totalQueued > 0 ? null : new Date(),
+        completedAt: new Date(),
       });
 
       console.log(
-        `✅ SMS campaign processed: ${smsResults.totalSent} sent immediately, ${smsResults.totalQueued} queued, ${smsResults.totalFailed} failed`
+        `✅ SMS campaign completed: ${smsResults.totalSent} sent, ${smsResults.totalFailed} failed`
       );
 
       res.json({
         ...updatedCampaign,
         smsResults: {
           sent: smsResults.totalSent,
-          queued: smsResults.totalQueued,
           failed: smsResults.totalFailed,
           totalProcessed: processedMessages.length,
         }
       });
     } catch (error) {
-      console.error("Error creating SMS campaign:", error);
-      res.status(500).json({ message: "Failed to create SMS campaign" });
+      console.error("Error approving SMS campaign:", error);
+
+      if (campaign?.id) {
+        try {
+          await storage.updateSmsCampaign(campaign.id, {
+            status: 'failed',
+            totalRecipients: targetedConsumers.length || campaign.totalRecipients || 0,
+            completedAt: new Date(),
+          });
+        } catch (updateError) {
+          console.error('Error updating campaign status after failure:', updateError);
+        }
+      }
+
+      res.status(500).json({ message: "Failed to approve SMS campaign" });
     }
   });
 
@@ -2329,7 +2417,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Campaign not found" });
       }
 
-      if ((campaign.status || '').toLowerCase() !== 'pending') {
+      const normalizedStatus = (campaign.status || '').toLowerCase();
+      if (!['pending', 'pending_approval'].includes(normalizedStatus)) {
         return res.status(400).json({ message: "Only pending campaigns can be deleted" });
       }
 
