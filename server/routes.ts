@@ -2190,6 +2190,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Helper function to resolve SMS campaign audience (mirrors email campaign logic)
+  async function resolveSmsCampaignAudience(
+    tenantId: string,
+    targetGroup: string,
+    folderSelection?: string | string[] | null,
+  ) {
+    const consumersList = await storage.getConsumersByTenant(tenantId);
+    const accountsData = await storage.getAccountsByTenant(tenantId);
+
+    const folderIds = Array.isArray(folderSelection)
+      ? folderSelection.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+      : typeof folderSelection === 'string' && folderSelection.trim().length > 0
+        ? [folderSelection]
+        : [];
+
+    console.log(
+      `📱 Resolving SMS audience - targetGroup: "${targetGroup}", folders: ${folderIds.length > 0 ? folderIds.join(', ') : 'none'}`,
+    );
+    console.log(`📊 Total consumers in tenant: ${consumersList.length}, Total accounts: ${accountsData.length}`);
+
+    let targetedConsumers = consumersList;
+
+    if (targetGroup === 'folder' && folderIds.length > 0) {
+      const folderSet = new Set(folderIds);
+
+      console.log(`🔍 Filtering for folders: ${folderIds.join(', ')}`);
+      const accountsInFolder = accountsData.filter(acc => {
+        const accountFolderMatch = acc.folderId && folderSet.has(acc.folderId);
+        const consumerFolderMatch = acc.consumer?.folderId && folderSet.has(acc.consumer.folderId);
+        return accountFolderMatch || consumerFolderMatch;
+      });
+      console.log(`📁 Found ${accountsInFolder.length} accounts matching selected folders`);
+
+      if (accountsInFolder.length === 0) {
+        const totalAccountsWithFolder = accountsData.filter(acc => acc.folderId).length;
+        const uniqueFolderCount = new Set(accountsData.map(a => a.folderId).filter(Boolean)).size;
+        console.warn(`⚠️ WARNING: No accounts found with this folder ID`);
+        console.log(`   Total accounts with folders: ${totalAccountsWithFolder}, Unique folders: ${uniqueFolderCount}`);
+        console.log(`   Sample folder IDs from accounts:`, Array.from(new Set(accountsData.slice(0, 5).map(a => a.folderId).filter(Boolean))));
+      }
+
+      const consumerIds = new Set(
+        accountsInFolder.map(acc => acc.consumerId)
+      );
+      targetedConsumers = consumersList.filter(c => consumerIds.has(c.id) || (c.folderId && folderSet.has(c.folderId)));
+      console.log(
+        `✅ FOLDER FILTER RESULT: Started with ${consumersList.length} total consumers, filtered to ${targetedConsumers.length} consumers in folders [${folderIds.join(', ')}]`,
+      );
+      console.log(`   Targeted consumer phones (first 3):`, targetedConsumers.slice(0, 3).map(c => c.phone));
+    } else if (targetGroup === 'with-balance') {
+      const consumerIds = new Set(
+        accountsData
+          .filter(acc => (acc.balanceCents || 0) > 0)
+          .map(acc => acc.consumerId)
+      );
+      targetedConsumers = consumersList.filter(c => consumerIds.has(c.id));
+    } else if (targetGroup === 'decline') {
+      targetedConsumers = consumersList.filter(c =>
+        (c.additionalData && (c.additionalData as any).status === 'decline') ||
+        (c.additionalData && (c.additionalData as any).folder === 'decline')
+      );
+    } else if (targetGroup === 'recent-upload') {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      targetedConsumers = consumersList.filter(c =>
+        c.createdAt && new Date(c.createdAt) > yesterday
+      );
+    }
+
+    return { targetedConsumers, accountsData };
+  }
+
   // SMS campaign routes
   app.get('/api/sms-campaigns', authenticateUser, async (req: any, res) => {
     try {
@@ -2222,42 +2294,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { templateId, name, targetGroup, folderIds } = insertSmsCampaignSchema.parse(req.body);
 
-      const consumers = await storage.getConsumersByTenant(tenantId);
-      const accountsData = await storage.getAccountsByTenant(tenantId);
+      console.log(
+        `📱 Creating SMS campaign - name: "${name}", targetGroup: "${targetGroup}", folders: ${folderIds && folderIds.length > 0 ? folderIds.join(', ') : 'none'}`,
+      );
 
-      let targetedConsumers = consumers;
-
-      if (targetGroup === "folder" && folderIds && folderIds.length > 0) {
-        const folderSet = new Set(folderIds);
-        console.log(`🔍 SMS Campaign: Filtering for folders: ${folderIds.join(', ')}`);
-        
-        const accountsInFolder = accountsData.filter(acc => {
-          const accountFolderMatch = acc.folderId && folderSet.has(acc.folderId);
-          const consumerFolderMatch = acc.consumer?.folderId && folderSet.has(acc.consumer.folderId);
-          return accountFolderMatch || consumerFolderMatch;
-        });
-        console.log(`📁 Found ${accountsInFolder.length} accounts matching selected folders`);
-
-        const consumerIds = new Set(accountsInFolder.map(acc => acc.consumerId));
-        targetedConsumers = consumers.filter(c => consumerIds.has(c.id) || (c.folderId && folderSet.has(c.folderId)));
-        console.log(`✅ Filtered to ${targetedConsumers.length} consumers in folders [${folderIds.join(', ')}]`);
-      } else if (targetGroup === "with-balance") {
-        const consumerIds = accountsData
-          .filter(acc => (acc.balanceCents || 0) > 0)
-          .map(acc => acc.consumerId);
-        targetedConsumers = consumers.filter(c => consumerIds.includes(c.id));
-      } else if (targetGroup === "decline") {
-        targetedConsumers = consumers.filter(c =>
-          (c.additionalData && (c.additionalData as any).status === 'decline') ||
-          (c.additionalData && (c.additionalData as any).folder === 'decline')
-        );
-      } else if (targetGroup === "recent-upload") {
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        targetedConsumers = consumers.filter(c =>
-          c.createdAt && new Date(c.createdAt) > yesterday
-        );
-      }
+      // Use the shared audience resolution function
+      const { targetedConsumers } = await resolveSmsCampaignAudience(tenantId, targetGroup, folderIds);
 
       // Count consumers with phone numbers for accurate recipient count
       const consumersWithPhone = targetedConsumers.filter(consumer => consumer.phone);
@@ -2328,43 +2370,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         consumerPortalSettings: tenantSettings?.consumerPortalSettings,
       };
 
-      // Re-resolve target audience
-      const consumers = await storage.getConsumersByTenant(tenantId);
-      const accountsData = await storage.getAccountsByTenant(tenantId);
-
-      targetedConsumers = consumers;
-
-      if (campaign.targetGroup === "folder" && campaign.folderIds && campaign.folderIds.length > 0) {
-        const folderSet = new Set(campaign.folderIds);
-        console.log(`🔍 SMS Approval: Filtering for folders: ${campaign.folderIds.join(', ')}`);
-        
-        const accountsInFolder = accountsData.filter(acc => {
-          const accountFolderMatch = acc.folderId && folderSet.has(acc.folderId);
-          const consumerFolderMatch = acc.consumer?.folderId && folderSet.has(acc.consumer.folderId);
-          return accountFolderMatch || consumerFolderMatch;
-        });
-        console.log(`📁 Found ${accountsInFolder.length} accounts matching selected folders`);
-
-        const consumerIds = new Set(accountsInFolder.map(acc => acc.consumerId));
-        targetedConsumers = consumers.filter(c => consumerIds.has(c.id) || (c.folderId && folderSet.has(c.folderId)));
-        console.log(`✅ Filtered to ${targetedConsumers.length} consumers in folders [${campaign.folderIds.join(', ')}]`);
-      } else if (campaign.targetGroup === "with-balance") {
-        const consumerIds = accountsData
-          .filter(acc => (acc.balanceCents || 0) > 0)
-          .map(acc => acc.consumerId);
-        targetedConsumers = consumers.filter(c => consumerIds.includes(c.id));
-      } else if (campaign.targetGroup === "decline") {
-        targetedConsumers = consumers.filter(c =>
-          (c.additionalData && (c.additionalData as any).status === 'decline') ||
-          (c.additionalData && (c.additionalData as any).folder === 'decline')
-        );
-      } else if (campaign.targetGroup === "recent-upload") {
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        targetedConsumers = consumers.filter(c =>
-          c.createdAt && new Date(c.createdAt) > yesterday
-        );
-      }
+      // Use the shared audience resolution function
+      const audience = await resolveSmsCampaignAudience(
+        tenantId,
+        campaign.targetGroup,
+        campaign.folderIds || [],
+      );
+      targetedConsumers = audience.targetedConsumers;
+      const { accountsData } = audience;
 
       const processedMessages = targetedConsumers
         .filter(consumer => consumer.phone)
