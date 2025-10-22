@@ -1178,9 +1178,13 @@ export default function Communications() {
       const payload = {
         ...campaignForm,
         targetGroup:
-          campaignForm.targetGroup === "folder"
-            ? "all"
+          campaignForm.targetType === "folder"
+            ? "folder"
             : campaignForm.targetGroup,
+        folderIds:
+          campaignForm.targetType === "folder"
+            ? campaignForm.targetFolderIds
+            : [],
       };
 
       createSmsCampaignMutation.mutate(payload);
@@ -1337,7 +1341,7 @@ export default function Communications() {
               <div className="space-y-3">
                 <h1 className="text-3xl font-semibold text-white sm:text-4xl">
                   Communication control center
-                  <span className="ml-3 text-xs font-normal text-blue-200/50">v2025-10-22b</span>
+                  <span className="ml-3 text-xs font-normal text-blue-200/50">v2025-10-22c</span>
                 </h1>
                 <p className="text-sm text-blue-100/70 sm:text-base">
                   Track deliverability, orchestrate outreach, and keep every consumer touchpoint aligned across email and SMS. Switch channels instantly and launch the right workflow without leaving this view.
