@@ -5666,22 +5666,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json({ message: "Invalid arrangement selected" });
         }
 
+        // Validate account balance is within arrangement's min/max range
+        const accountBalance = account.balanceCents || 0;
+        if (accountBalance < arrangement.minBalance || accountBalance > arrangement.maxBalance) {
+          return res.status(400).json({ 
+            success: false,
+            message: "This payment plan is not available for your current balance" 
+          });
+        }
+
         // Calculate payment amount based on arrangement type
         if (arrangement.planType === 'one_time_payment') {
           // One-time payment: use custom amount provided by consumer
-          if (customPaymentAmountCents && customPaymentAmountCents > 0) {
-            amountCents = customPaymentAmountCents;
-            console.log('💳 One-time payment amount:', {
-              customAmount: customPaymentAmountCents,
-              customAmountDollars: (customPaymentAmountCents / 100).toFixed(2),
-              accountBalance: account.balanceCents
-            });
-          } else {
+          if (!customPaymentAmountCents || customPaymentAmountCents <= 0) {
             return res.status(400).json({ 
               success: false,
               message: "Please enter a valid payment amount for one-time payment" 
             });
           }
+
+          // Validate against minimum payment amount
+          const minAmount = arrangement.oneTimePaymentMin || 0;
+          if (customPaymentAmountCents < minAmount) {
+            return res.status(400).json({ 
+              success: false,
+              message: `Minimum payment amount is $${(minAmount / 100).toFixed(2)}` 
+            });
+          }
+
+          // Validate against maximum (account balance)
+          if (customPaymentAmountCents > accountBalance) {
+            return res.status(400).json({ 
+              success: false,
+              message: `Payment amount cannot exceed your balance of $${(accountBalance / 100).toFixed(2)}` 
+            });
+          }
+
+          amountCents = customPaymentAmountCents;
+          console.log('💳 One-time payment amount:', {
+            customAmount: customPaymentAmountCents,
+            customAmountDollars: (customPaymentAmountCents / 100).toFixed(2),
+            minAmount: minAmount,
+            accountBalance: accountBalance
+          });
         } else if (arrangement.planType === 'settlement' && arrangement.payoffPercentageBasisPoints) {
           // Settlement: percentage of balance
           amountCents = Math.round(amountCents * arrangement.payoffPercentageBasisPoints / 10000);
