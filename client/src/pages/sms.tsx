@@ -392,13 +392,15 @@ export default function SMS() {
                               <div>• {"{{firstName}}"}</div>
                               <div>• {"{{lastName}}"}</div>
                               <div>• {"{{fullName}}"}</div>
+                              <div>• {"{{consumerName}}"}</div>
                               <div>• {"{{email}}"}</div>
                               <div>• {"{{phone}}"}</div>
                               <div>• {"{{address}}"}</div>
                               <div>• {"{{city}}"}</div>
                               <div>• {"{{state}}"}</div>
-                              <div>• {"{{zipCode}}"}</div>
+                              <div>• {"{{zipCode}}"} or {"{{zip}}"}</div>
                               <div>• {"{{fullAddress}}"}</div>
+                              <div>• {"{{consumerId}}"}</div>
                             </div>
                           </div>
 
@@ -406,10 +408,13 @@ export default function SMS() {
                             <h5 className="font-semibold text-blue-900 text-xs mb-1">Account Info</h5>
                             <div className="text-xs text-blue-800 grid grid-cols-2 gap-x-4 gap-y-0.5">
                               <div>• {"{{accountNumber}}"}</div>
-                              <div>• {"{{filenumber}}"}</div>
+                              <div>• {"{{accountId}}"}</div>
+                              <div>• {"{{filenumber}}"} or {"{{fileNumber}}"}</div>
                               <div>• {"{{creditor}}"}</div>
-                              <div>• {"{{balance}}"}</div>
-                              <div>• {"{{dueDate}}"}</div>
+                              <div>• {"{{balance}}"} (formatted)</div>
+                              <div>• {"{{balanceCents}}"} (raw cents)</div>
+                              <div>• {"{{dueDate}}"} (formatted)</div>
+                              <div>• {"{{dueDateIso}}"} (ISO format)</div>
                             </div>
                           </div>
 
@@ -417,10 +422,11 @@ export default function SMS() {
                             <h5 className="font-semibold text-blue-900 text-xs mb-1">Settlement Offers</h5>
                             <div className="text-xs text-blue-800 grid grid-cols-2 gap-x-4 gap-y-0.5">
                               <div>• {"{{balance50%}}"} (50% off)</div>
-                              <div>• {"{{balance60%}}"} (60% off)</div>
-                              <div>• {"{{balance70%}}"} (70% off)</div>
-                              <div>• {"{{balance80%}}"} (80% off)</div>
-                              <div>• {"{{balance90%}}"} (90% off)</div>
+                              <div>• {"{{balance60%}}"} (40% off)</div>
+                              <div>• {"{{balance70%}}"} (30% off)</div>
+                              <div>• {"{{balance80%}}"} (20% off)</div>
+                              <div>• {"{{balance90%}}"} (10% off)</div>
+                              <div>• {"{{balance100%}}"} (full balance)</div>
                             </div>
                           </div>
 
@@ -436,16 +442,17 @@ export default function SMS() {
                           <div>
                             <h5 className="font-semibold text-blue-900 text-xs mb-1">Links & Opt-Out</h5>
                             <div className="text-xs text-blue-800 grid grid-cols-1 gap-y-0.5">
-                              <div>• {"{{consumerPortalLink}}"}</div>
-                              <div>• {"{{appDownloadLink}}"}</div>
-                              <div>• {"{{unsubscribeLink}}"} (opt-out)</div>
+                              <div>• {"{{consumerPortalLink}}"} - Portal login URL</div>
+                              <div>• {"{{appDownloadLink}}"} - Mobile app download</div>
+                              <div>• {"{{unsubscribeLink}}"} - SMS/email opt-out</div>
+                              <div>• {"{{unsubscribeUrl}}"} - Same as unsubscribeLink</div>
                             </div>
                           </div>
 
                           <div>
                             <h5 className="font-semibold text-blue-900 text-xs mb-1">Other</h5>
                             <div className="text-xs text-blue-800">
-                              <div>• {"{{todays date}}"}</div>
+                              <div>• {"{{todays date}}"} - Current date</div>
                               <div>• Plus any custom CSV columns</div>
                             </div>
                           </div>
