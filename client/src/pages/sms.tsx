@@ -38,6 +38,9 @@ import {
 import { MessageSquare, Plus, Send, FileText, Trash2, Eye, TrendingUp, Users, AlertCircle, UserMinus, Check } from "lucide-react";
 
 export default function SMS() {
+  // VERSION CHECK - Should see this in console
+  console.log('🔵 SMS PAGE VERSION: 2025-10-22-FINAL - Variables, Approval, Folders ALL FIXED');
+  
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showCampaignModal, setShowCampaignModal] = useState(false);
   const [previewTemplate, setPreviewTemplate] = useState<any>(null);
