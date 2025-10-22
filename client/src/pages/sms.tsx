@@ -394,13 +394,16 @@ export default function SMS() {
                       <p className="text-sm text-gray-500 mt-1">
                         {templateForm.message.length}/1600 characters
                       </p>
-                      <div className="mt-3 bg-blue-50 border border-blue-200 rounded-md p-4 max-h-96 overflow-y-auto">
-                        <h4 className="font-medium text-blue-900 text-sm mb-2">Available Variables:</h4>
+                      <div className="mt-3 bg-blue-50 border-2 border-blue-300 rounded-md p-4 max-h-[500px] overflow-y-auto">
+                        <h4 className="font-medium text-blue-900 text-sm mb-2 flex items-center gap-2">
+                          📝 Available Variables (30+)
+                          <span className="text-xs font-normal text-blue-700">(scroll to see all)</span>
+                        </h4>
                         <p className="text-xs text-blue-700 mb-3">
                           Use <code className="font-mono bg-white px-1 rounded">{"{{variable}}"}</code> or <code className="font-mono bg-white px-1 rounded">{"{variable}"}</code> syntax to insert data.
                         </p>
                         
-                        <div className="space-y-3">
+                        <div className="space-y-3 pb-2">
                           <div>
                             <h5 className="font-semibold text-blue-900 text-xs mb-1">Consumer Info</h5>
                             <div className="text-xs text-blue-800 grid grid-cols-2 gap-x-4 gap-y-0.5">
