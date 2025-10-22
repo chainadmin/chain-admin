@@ -359,25 +359,75 @@ export default function SMS() {
                       <p className="text-sm text-gray-500 mt-1">
                         {templateForm.message.length}/1600 characters
                       </p>
-                      <div className="mt-3 bg-blue-50 border border-blue-200 rounded-md p-3">
-                        <h4 className="font-medium text-blue-900 text-sm mb-1">Available Variables:</h4>
-                        <p className="text-xs text-blue-700 mb-2">
-                          Use <code className="font-mono">{"{{variable}}"}</code> or <code className="font-mono">{"{variable}"}</code> syntax to insert data.
+                      <div className="mt-3 bg-blue-50 border border-blue-200 rounded-md p-4 max-h-96 overflow-y-auto">
+                        <h4 className="font-medium text-blue-900 text-sm mb-2">Available Variables:</h4>
+                        <p className="text-xs text-blue-700 mb-3">
+                          Use <code className="font-mono bg-white px-1 rounded">{"{{variable}}"}</code> or <code className="font-mono bg-white px-1 rounded">{"{variable}"}</code> syntax to insert data.
                         </p>
-                        <div className="text-xs text-blue-800 grid grid-cols-2 gap-1">
-                          <div>• {"{{firstName}}"}</div>
-                          <div>• {"{{lastName}}"}</div>
-                          <div>• {"{{fullName}}"}</div>
-                          <div>• {"{{phone}}"}</div>
-                          <div>• {"{{accountNumber}}"}</div>
-                          <div>• {"{{creditor}}"}</div>
-                          <div>• {"{{balance}}"}</div>
-                          <div>• {"{{dueDate}}"}</div>
-                          <div>• {"{{consumerPortalLink}}"}</div>
-                          <div>• {"{{appDownloadLink}}"}</div>
-                          <div>• {"{{agencyName}}"}</div>
-                          <div>• {"{{agencyPhone}}"}</div>
-                          <div className="col-span-full">• Plus any additional CSV columns</div>
+                        
+                        <div className="space-y-3">
+                          <div>
+                            <h5 className="font-semibold text-blue-900 text-xs mb-1">Consumer Info</h5>
+                            <div className="text-xs text-blue-800 grid grid-cols-2 gap-x-4 gap-y-0.5">
+                              <div>• {"{{firstName}}"}</div>
+                              <div>• {"{{lastName}}"}</div>
+                              <div>• {"{{fullName}}"}</div>
+                              <div>• {"{{email}}"}</div>
+                              <div>• {"{{phone}}"}</div>
+                              <div>• {"{{address}}"}</div>
+                              <div>• {"{{city}}"}</div>
+                              <div>• {"{{state}}"}</div>
+                              <div>• {"{{zipCode}}"}</div>
+                              <div>• {"{{fullAddress}}"}</div>
+                            </div>
+                          </div>
+
+                          <div>
+                            <h5 className="font-semibold text-blue-900 text-xs mb-1">Account Info</h5>
+                            <div className="text-xs text-blue-800 grid grid-cols-2 gap-x-4 gap-y-0.5">
+                              <div>• {"{{accountNumber}}"}</div>
+                              <div>• {"{{filenumber}}"}</div>
+                              <div>• {"{{creditor}}"}</div>
+                              <div>• {"{{balance}}"}</div>
+                              <div>• {"{{dueDate}}"}</div>
+                            </div>
+                          </div>
+
+                          <div>
+                            <h5 className="font-semibold text-blue-900 text-xs mb-1">Settlement Offers</h5>
+                            <div className="text-xs text-blue-800 grid grid-cols-2 gap-x-4 gap-y-0.5">
+                              <div>• {"{{balance50%}}"} (50% off)</div>
+                              <div>• {"{{balance60%}}"} (60% off)</div>
+                              <div>• {"{{balance70%}}"} (70% off)</div>
+                              <div>• {"{{balance80%}}"} (80% off)</div>
+                              <div>• {"{{balance90%}}"} (90% off)</div>
+                            </div>
+                          </div>
+
+                          <div>
+                            <h5 className="font-semibold text-blue-900 text-xs mb-1">Agency Info</h5>
+                            <div className="text-xs text-blue-800 grid grid-cols-2 gap-x-4 gap-y-0.5">
+                              <div>• {"{{agencyName}}"}</div>
+                              <div>• {"{{agencyEmail}}"}</div>
+                              <div>• {"{{agencyPhone}}"}</div>
+                            </div>
+                          </div>
+
+                          <div>
+                            <h5 className="font-semibold text-blue-900 text-xs mb-1">Links</h5>
+                            <div className="text-xs text-blue-800 grid grid-cols-1 gap-y-0.5">
+                              <div>• {"{{consumerPortalLink}}"}</div>
+                              <div>• {"{{appDownloadLink}}"}</div>
+                            </div>
+                          </div>
+
+                          <div>
+                            <h5 className="font-semibold text-blue-900 text-xs mb-1">Other</h5>
+                            <div className="text-xs text-blue-800">
+                              <div>• {"{{todays date}}"}</div>
+                              <div>• Plus any custom CSV columns</div>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
