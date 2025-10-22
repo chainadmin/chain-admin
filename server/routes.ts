@@ -2271,14 +2271,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const campaigns = await storage.getSmsCampaignsByTenant(tenantId);
-      console.log('📋 SMS Campaigns retrieved:', campaigns.map(c => ({ 
-        id: c.id, 
-        name: c.name, 
-        targetGroup: c.targetGroup,
-        folderIds: c.folderIds,
-        status: c.status,
-        totalRecipients: c.totalRecipients
-      })));
+      console.log(`📋 Retrieved ${campaigns.length} SMS campaigns for tenant ${tenantId}`);
+      campaigns.forEach((c, index) => {
+        console.log(`   Campaign ${index + 1}: "${c.name}"`);
+        console.log(`      Status: "${c.status}" (type: ${typeof c.status})`);
+        console.log(`      Target: "${c.targetGroup}"`);
+        console.log(`      Folders: ${JSON.stringify(c.folderIds)} (isArray: ${Array.isArray(c.folderIds)})`);
+        console.log(`      Template: "${c.templateName}"`);
+        console.log(`      Recipients: ${c.totalRecipients}`);
+      });
       res.json(campaigns);
     } catch (error) {
       console.error("Error fetching SMS campaigns:", error);
@@ -2321,7 +2322,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: 'pending_approval',
       });
 
-      console.log(`📱 SMS campaign "${campaign.name}" created with ${consumersWithPhone.length} targeted recipients. Awaiting approval to send.`);
+      console.log(`📱 SMS campaign "${campaign.name}" created successfully`);
+      console.log(`   Status: "${campaign.status}"`);
+      console.log(`   Target Group: "${campaign.targetGroup}"`);
+      console.log(`   Folder IDs: ${JSON.stringify(campaign.folderIds)}`);
+      console.log(`   Total Recipients: ${consumersWithPhone.length}`);
+      console.log(`   Campaign ID: ${campaign.id}`);
 
       res.json({
         ...campaign,
