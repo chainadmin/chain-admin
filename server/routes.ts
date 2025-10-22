@@ -2852,12 +2852,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Calculate next execution if it's a scheduled automation
       if (automationData.triggerType === 'schedule') {
         const nextExecution = calculateNextExecution(automationData);
+        console.log('📅 Automation schedule calculation:', {
+          name: automationData.name,
+          triggerType: automationData.triggerType,
+          scheduleType: automationData.scheduleType,
+          scheduledDate: automationData.scheduledDate,
+          scheduleTime: automationData.scheduleTime,
+          calculatedNextExecution: nextExecution ? nextExecution.toISOString() : null
+        });
         if (nextExecution) {
           automationData.nextExecution = nextExecution;
+        } else {
+          console.warn('⚠️ No nextExecution calculated for scheduled automation:', automationData.name);
         }
       }
       
+      // Set isActive to true by default if not specified
+      if (automationData.isActive === undefined) {
+        automationData.isActive = true;
+      }
+      
       const newAutomation = await storage.createAutomation(automationData);
+      
+      console.log('✅ Automation created:', {
+        id: newAutomation.id,
+        name: newAutomation.name,
+        isActive: (newAutomation as any).isActive,
+        nextExecution: (newAutomation as any).nextExecution ? new Date((newAutomation as any).nextExecution).toISOString() : null
+      });
       
       res.status(201).json(newAutomation);
     } catch (error) {
@@ -6922,6 +6944,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const automations = await storage.getActiveAutomations();
       console.log(`📋 Found ${automations.length} active automations to check`);
       
+      // Log details for each automation
+      automations.forEach((auto: any) => {
+        console.log(`  - ${auto.name}: isActive=${auto.isActive}, triggerType=${auto.triggerType}, nextExecution=${auto.nextExecution ? new Date(auto.nextExecution).toISOString() : 'null'}`);
+      });
+      
       for (const automation of automations) {
         try {
           // Parse metadata safely
@@ -6936,12 +6963,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Read nextExecution from the database column (not metadata)
           const nextExecution = (automation as any).nextExecution ? new Date((automation as any).nextExecution) : null;
 
+          console.log(`🔍 Checking automation "${automation.name}":`, {
+            triggerType,
+            nextExecution: nextExecution ? nextExecution.toISOString() : 'null',
+            now: now.toISOString(),
+            isDue: nextExecution ? (nextExecution <= now) : false
+          });
+
           // Skip if not scheduled or not due yet
           if (triggerType !== 'schedule') {
+            console.log(`  ⏭️  Skipping (not scheduled, triggerType=${triggerType})`);
             continue; // Event-based and manual automations handled separately
           }
           
           if (!nextExecution || nextExecution > now) {
+            console.log(`  ⏭️  Skipping (not due yet or no nextExecution)`);
             continue; // Not due yet
           }
           
