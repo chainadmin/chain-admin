@@ -2271,6 +2271,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const campaigns = await storage.getSmsCampaignsByTenant(tenantId);
+      console.log('📋 SMS Campaigns retrieved:', campaigns.map(c => ({ 
+        id: c.id, 
+        name: c.name, 
+        targetGroup: c.targetGroup,
+        folderIds: c.folderIds,
+        status: c.status,
+        totalRecipients: c.totalRecipients
+      })));
       res.json(campaigns);
     } catch (error) {
       console.error("Error fetching SMS campaigns:", error);
@@ -2294,9 +2302,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { templateId, name, targetGroup, folderIds } = insertSmsCampaignSchema.parse(req.body);
 
-      console.log(
-        `📱 Creating SMS campaign - name: "${name}", targetGroup: "${targetGroup}", folders: ${folderIds && folderIds.length > 0 ? folderIds.join(', ') : 'none'}`,
-      );
+      console.log(`📱 Creating SMS campaign - name: "${name}", targetGroup: "${targetGroup}", folderIds:`, folderIds);
+      console.log(`📱 Request body received:`, JSON.stringify(req.body, null, 2));
 
       // Use the shared audience resolution function
       const { targetedConsumers } = await resolveSmsCampaignAudience(tenantId, targetGroup, folderIds);

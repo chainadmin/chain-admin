@@ -196,6 +196,7 @@ export default function SMS() {
       });
       return;
     }
+    console.log('🚀 Creating campaign with data:', campaignForm);
     createCampaignMutation.mutate(campaignForm);
   };
 
@@ -753,6 +754,17 @@ export default function SMS() {
                   <div className="text-center py-4">Loading campaigns...</div>
                 ) : (campaigns as any)?.length > 0 ? (
                   <div className="space-y-4">
+                    {(() => {
+                      console.log('📋 Campaigns to display:', (campaigns as any).map((c: any) => ({
+                        id: c.id,
+                        name: c.name,
+                        status: c.status,
+                        targetGroup: c.targetGroup,
+                        folderIds: c.folderIds,
+                        showApprove: c.status === "pending" || c.status === "pending_approval"
+                      })));
+                      return null;
+                    })()}
                     {(campaigns as any).map((campaign: any) => (
                       <div key={campaign.id} className="border rounded-lg p-4">
                         <div className="flex items-start justify-between gap-4 mb-2">
