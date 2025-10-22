@@ -823,6 +823,25 @@ export default function Communications() {
     },
   });
 
+  const approveSmsCampaignMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("POST", `/api/sms-campaigns/${id}/approve`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sms-campaigns"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sms-metrics"] });
+      toast({
+        title: "Campaign Approved",
+        description: "SMS campaign is being sent.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to approve campaign",
+        variant: "destructive",
+      });
+    },
+  });
+
   const createSmsCampaignMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/sms-campaigns", data),
     onSuccess: () => {
@@ -1318,6 +1337,7 @@ export default function Communications() {
               <div className="space-y-3">
                 <h1 className="text-3xl font-semibold text-white sm:text-4xl">
                   Communication control center
+                  <span className="ml-3 text-xs font-normal text-blue-200/50">v2025-10-22</span>
                 </h1>
                 <p className="text-sm text-blue-100/70 sm:text-base">
                   Track deliverability, orchestrate outreach, and keep every consumer touchpoint aligned across email and SMS. Switch channels instantly and launch the right workflow without leaving this view.
@@ -2244,9 +2264,9 @@ export default function Communications() {
                         </div>
                         
                         <div>
-                          <Label htmlFor="message" className="mb-2 block">Insert Variables</Label>
-                          <div className="flex flex-wrap gap-1.5 p-3 bg-gray-50 rounded-lg border mb-2">
-                            {templateVariables.filter(v => v.category !== "account" || v.value === "{{accountNumber}}" || v.value === "{{balance}}" || v.value === "{{dueDate}}" || v.value === "{{dueDateIso}}" || v.value === "{{filenumber}}").map((variable) => (
+                          <Label htmlFor="message" className="mb-2 block">Insert Variables (30+ Available)</Label>
+                          <div className="flex flex-wrap gap-1.5 p-3 bg-gray-50 rounded-lg border mb-2 max-h-60 overflow-y-auto">
+                            {templateVariables.map((variable) => (
                               <Button
                                 key={variable.value}
                                 type="button"
@@ -2740,26 +2760,26 @@ export default function Communications() {
                           >
                             {formatCampaignStatus(campaign.status)}
                           </Badge>
-                          {communicationType === "email" && campaign.status === "pending_approval" && (
+                          {campaign.status === "pending_approval" && (
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button
                                   variant="outline"
                                   size="sm"
                                   className="border border-emerald-400/60 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/20"
-                                  disabled={approveEmailCampaignMutation.isPending}
+                                  disabled={communicationType === "email" ? approveEmailCampaignMutation.isPending : approveSmsCampaignMutation.isPending}
                                 >
-                                  {approveEmailCampaignMutation.isPending ? "Approving..." : "Approve & Send"}
+                                  {(communicationType === "email" ? approveEmailCampaignMutation.isPending : approveSmsCampaignMutation.isPending) ? "Approving..." : "Approve & Send"}
                                 </Button>
                               </AlertDialogTrigger>
                               <AlertDialogContent>
                                 <AlertDialogHeader>
-                                  <AlertDialogTitle>Approve campaign</AlertDialogTitle>
+                                  <AlertDialogTitle>Approve {communicationType === "email" ? "Email" : "SMS"} Campaign</AlertDialogTitle>
                                   <AlertDialogDescription>
-                                    Approving this campaign will immediately send {campaign.totalRecipients || 0} emails to the selected recipients.
+                                    Approving this campaign will immediately send {campaign.totalRecipients || 0} {communicationType === "email" ? "emails" : "SMS messages"} to the selected recipients.
                                     This action cannot be undone.
                                   </AlertDialogDescription>
-                                  {consumerPortalUrl && (
+                                  {communicationType === "email" && consumerPortalUrl && (
                                     <div className="mt-4 rounded-lg border border-white/20 bg-white/5 p-3">
                                       <p className="text-xs font-medium text-blue-100/70 mb-1">Consumer Portal URL:</p>
                                       <p className="text-xs text-blue-100 font-mono break-all">
@@ -2772,10 +2792,10 @@ export default function Communications() {
                                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                                   <AlertDialogAction
                                     className="bg-emerald-600 hover:bg-emerald-700"
-                                    onClick={() => approveEmailCampaignMutation.mutate(campaign.id)}
-                                    disabled={approveEmailCampaignMutation.isPending}
+                                    onClick={() => communicationType === "email" ? approveEmailCampaignMutation.mutate(campaign.id) : approveSmsCampaignMutation.mutate(campaign.id)}
+                                    disabled={communicationType === "email" ? approveEmailCampaignMutation.isPending : approveSmsCampaignMutation.isPending}
                                   >
-                                    {approveEmailCampaignMutation.isPending ? "Approving..." : "Approve"}
+                                    {(communicationType === "email" ? approveEmailCampaignMutation.isPending : approveSmsCampaignMutation.isPending) ? "Approving..." : "Approve"}
                                   </AlertDialogAction>
                                 </AlertDialogFooter>
                               </AlertDialogContent>
