@@ -215,27 +215,14 @@ export default function SMS() {
       case "recent-upload":
         return "Most Recent Upload";
       case "folder":
-        console.log('🗂️ Folder targeting:', {
-          folderIds: campaign?.folderIds,
-          folderIdsType: typeof campaign?.folderIds,
-          isArray: Array.isArray(campaign?.folderIds),
-          length: campaign?.folderIds?.length,
-          availableFolders: (folders as any)?.map((f: any) => ({ id: f.id, name: f.name }))
-        });
         if (campaign?.folderIds && Array.isArray(campaign.folderIds) && campaign.folderIds.length > 0) {
           const folderNames = campaign.folderIds
-            .map((id: string) => {
-              const folder = (folders as any)?.find((f: any) => f.id === id);
-              console.log(`Looking for folder ${id}, found:`, folder?.name);
-              return folder?.name;
-            })
+            .map((id: string) => (folders as any)?.find((f: any) => f.id === id)?.name)
             .filter(Boolean)
             .join(", ");
-          const label = folderNames || "Specific Folders (loading...)";
-          console.log('Folder label:', label);
-          return label;
+          return folderNames || "Specific Folders";
         }
-        return "Specific Folders (none selected)";
+        return "Specific Folders";
       default:
         return targetGroup;
     }
@@ -770,48 +757,15 @@ export default function SMS() {
                   <div className="text-center py-4">Loading campaigns...</div>
                 ) : (campaigns as any)?.length > 0 ? (
                   <div className="space-y-4">
-                    {(() => {
-                      console.log('========== SMS CAMPAIGNS DEBUG ==========');
-                      console.log('Raw campaigns data:', JSON.stringify(campaigns, null, 2));
-                      console.log('Campaigns count:', (campaigns as any).length);
-                      (campaigns as any).forEach((c: any, index: number) => {
-                        console.log(`Campaign ${index + 1}:`, {
-                          id: c.id,
-                          name: c.name,
-                          status: c.status,
-                          statusType: typeof c.status,
-                          statusLength: c.status?.length,
-                          statusChars: c.status?.split('').map((ch: string, i: number) => `[${i}]='${ch}'(${ch.charCodeAt(0)})`),
-                          targetGroup: c.targetGroup,
-                          folderIds: c.folderIds,
-                          folderIdsType: typeof c.folderIds,
-                          folderIdsIsArray: Array.isArray(c.folderIds),
-                          totalRecipients: c.totalRecipients,
-                          templateName: c.templateName,
-                          isPending: c.status === "pending",
-                          isPendingApproval: c.status === "pending_approval",
-                          showApprove: c.status === "pending" || c.status === "pending_approval"
-                        });
-                      });
-                      console.log('==========================================');
-                      return null;
-                    })()}
                     {(campaigns as any).map((campaign: any) => (
                       <div key={campaign.id} className="border rounded-lg p-4">
                         <div className="flex items-start justify-between gap-4 mb-2">
                           <h3 className="font-medium">{campaign.name}</h3>
                           <div className="flex items-center gap-2">
                             <Badge className={getStatusColor(campaign.status)}>
-                              {campaign.status || 'no status'}
+                              {campaign.status}
                             </Badge>
-                            <span className="text-xs text-gray-500" title={`Raw status: ${JSON.stringify(campaign.status)}`}>
-                              [{typeof campaign.status}]
-                            </span>
-                            {(() => {
-                              const showApprove = campaign.status === "pending" || campaign.status === "pending_approval";
-                              console.log(`Campaign "${campaign.name}": status="${campaign.status}", type=${typeof campaign.status}, showApprove=${showApprove}`);
-                              return showApprove;
-                            })() && (
+                            {(campaign.status === "pending" || campaign.status === "pending_approval") && (
                               <>
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
