@@ -212,6 +212,7 @@ export default function CommunicationsInbox() {
         <h1 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
           <Inbox className="w-8 h-8" />
           Email & SMS Inbox
+          <span className="ml-3 text-xs font-normal text-slate-400">v2025-10-22-webhook</span>
         </h1>
         <p className="text-slate-600 dark:text-slate-300 mt-1">
           View and respond to inbound messages from your consumers
