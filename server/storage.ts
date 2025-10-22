@@ -249,12 +249,14 @@ export interface IStorage {
   getEmailRepliesByTenant(tenantId: string): Promise<(EmailReply & { consumerName: string; consumerEmail: string })[]>;
   getEmailReplyById(id: string, tenantId: string): Promise<EmailReply | undefined>;
   markEmailReplyAsRead(id: string, tenantId: string): Promise<EmailReply>;
+  deleteEmailReply(id: string, tenantId: string): Promise<void>;
   
   // SMS reply operations
   createSmsReply(reply: InsertSmsReply): Promise<SmsReply>;
   getSmsRepliesByTenant(tenantId: string): Promise<(SmsReply & { consumerName: string; consumerPhone: string })[]>;
   getSmsReplyById(id: string, tenantId: string): Promise<SmsReply | undefined>;
   markSmsReplyAsRead(id: string, tenantId: string): Promise<SmsReply>;
+  deleteSmsReply(id: string, tenantId: string): Promise<void>;
   
   // SMS template operations
   getSmsTemplatesByTenant(tenantId: string): Promise<SmsTemplate[]>;
@@ -1278,6 +1280,11 @@ export class DatabaseStorage implements IStorage {
     return updatedReply;
   }
 
+  async deleteEmailReply(id: string, tenantId: string): Promise<void> {
+    await db.delete(emailReplies)
+      .where(and(eq(emailReplies.id, id), eq(emailReplies.tenantId, tenantId)));
+  }
+
   // SMS reply operations
   async createSmsReply(reply: InsertSmsReply): Promise<SmsReply> {
     const [newReply] = await db.insert(smsReplies).values(reply).returning();
@@ -1314,6 +1321,11 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(smsReplies.id, id), eq(smsReplies.tenantId, tenantId)))
       .returning();
     return updatedReply;
+  }
+
+  async deleteSmsReply(id: string, tenantId: string): Promise<void> {
+    await db.delete(smsReplies)
+      .where(and(eq(smsReplies.id, id), eq(smsReplies.tenantId, tenantId)));
   }
 
   // SMS template operations

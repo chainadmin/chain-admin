@@ -1975,6 +1975,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Delete email reply
+  app.delete('/api/email-replies/:id', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { id } = req.params;
+      const reply = await storage.getEmailReplyById(id, tenantId);
+      if (!reply) {
+        return res.status(404).json({ message: "Email reply not found" });
+      }
+
+      await storage.deleteEmailReply(id, tenantId);
+      res.json({ message: "Email reply deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting email reply:", error);
+      res.status(500).json({ message: "Failed to delete email reply" });
+    }
+  });
+
   // Send response to an email reply
   app.post('/api/email-replies/:id/respond', authenticateUser, async (req: any, res) => {
     try {
@@ -2089,6 +2111,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error marking SMS reply as read:", error);
       res.status(500).json({ message: "Failed to mark SMS reply as read" });
+    }
+  });
+
+  // Delete SMS reply
+  app.delete('/api/sms-replies/:id', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { id } = req.params;
+      const reply = await storage.getSmsReplyById(id, tenantId);
+      if (!reply) {
+        return res.status(404).json({ message: "SMS reply not found" });
+      }
+
+      await storage.deleteSmsReply(id, tenantId);
+      res.json({ message: "SMS reply deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting SMS reply:", error);
+      res.status(500).json({ message: "Failed to delete SMS reply" });
     }
   });
 

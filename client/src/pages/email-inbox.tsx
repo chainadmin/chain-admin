@@ -11,8 +11,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Mail, MailOpen, Reply, User, Calendar, MessageSquare, Phone, Inbox } from 'lucide-react';
+import { Mail, MailOpen, Reply, User, Calendar, MessageSquare, Phone, Inbox, Trash2, RefreshCw } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 interface EmailReply {
   id: string;
@@ -136,6 +137,50 @@ export default function CommunicationsInbox() {
     },
   });
 
+  // Delete email mutation
+  const deleteEmailMutation = useMutation({
+    mutationFn: async (emailId: string) => {
+      return await apiRequest('DELETE', `/api/email-replies/${emailId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/email-replies'] });
+      setSelectedEmail(null);
+      toast({
+        title: 'Email deleted',
+        description: 'The email has been deleted successfully.',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Failed to delete email',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+
+  // Delete SMS mutation
+  const deleteSmsMutation = useMutation({
+    mutationFn: async (smsId: string) => {
+      return await apiRequest('DELETE', `/api/sms-replies/${smsId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/sms-replies'] });
+      setSelectedSms(null);
+      toast({
+        title: 'SMS deleted',
+        description: 'The SMS has been deleted successfully.',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Failed to delete SMS',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+
   const handleEmailClick = (email: EmailReply) => {
     setSelectedEmail(email);
     setSelectedSms(null);
@@ -212,7 +257,7 @@ export default function CommunicationsInbox() {
         <h1 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
           <Inbox className="w-8 h-8" />
           Email & SMS Inbox
-          <span className="ml-3 text-xs font-normal text-slate-400">v2025-10-22-webhook</span>
+          <span className="ml-3 text-xs font-normal text-slate-400">v2025-10-22-improved</span>
         </h1>
         <p className="text-slate-600 dark:text-slate-300 mt-1">
           View and respond to inbound messages from your consumers
@@ -382,6 +427,16 @@ export default function CommunicationsInbox() {
                           <Reply className="w-4 h-4" />
                           Reply
                         </Button>
+                        <Button 
+                          onClick={() => deleteEmailMutation.mutate(selectedEmail.id)} 
+                          data-testid="button-delete-email"
+                          variant="destructive"
+                          className="gap-2"
+                          disabled={deleteEmailMutation.isPending}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          {deleteEmailMutation.isPending ? 'Deleting...' : 'Delete'}
+                        </Button>
                       </div>
                     </div>
                   ) : (
@@ -544,6 +599,16 @@ export default function CommunicationsInbox() {
                         >
                           <Reply className="w-4 h-4" />
                           Reply
+                        </Button>
+                        <Button 
+                          onClick={() => deleteSmsMutation.mutate(selectedSms.id)} 
+                          data-testid="button-delete-sms"
+                          variant="destructive"
+                          className="gap-2"
+                          disabled={deleteSmsMutation.isPending}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          {deleteSmsMutation.isPending ? 'Deleting...' : 'Delete'}
                         </Button>
                       </div>
                     </div>
