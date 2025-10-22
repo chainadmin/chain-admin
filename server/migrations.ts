@@ -139,6 +139,23 @@ export async function runMigrations() {
     } catch (err) {
       console.log('  ⚠ status default (already set or error)');
     }
+
+    try {
+      // Update existing campaigns with 'pending' status to 'pending_approval'
+      const updateResult = await client.query(`
+        UPDATE sms_campaigns 
+        SET status = 'pending_approval' 
+        WHERE status = 'pending' 
+          AND (total_sent = 0 OR total_sent IS NULL)
+      `);
+      if (updateResult.rowCount && updateResult.rowCount > 0) {
+        console.log(`  ✓ Updated ${updateResult.rowCount} existing campaign(s) to pending_approval status`);
+      } else {
+        console.log('  ✓ No existing campaigns needed status update');
+      }
+    } catch (err) {
+      console.log('  ⚠ Could not update existing campaign statuses');
+    }
     
     // Verify columns exist
     const result = await client.query(`
