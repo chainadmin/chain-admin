@@ -1464,7 +1464,7 @@ export default function ConsumerDashboardSimple() {
                   </div>
                 )}
 
-                {selectedArrangement && selectedArrangement.planType !== 'one_time_payment' && !setupRecurring && (
+                {selectedArrangement && selectedArrangement.planType !== 'one_time_payment' && (
                   <div>
                     <Label htmlFor="firstPaymentDate">
                       {selectedArrangement.planType === 'settlement' || selectedArrangement.planType === 'pay_in_full' 
@@ -1476,7 +1476,7 @@ export default function ConsumerDashboardSimple() {
                       id="firstPaymentDate"
                       value={firstPaymentDate}
                       onChange={(e) => setFirstPaymentDate(e.target.value)}
-                      required={!!selectedArrangement && !setupRecurring}
+                      required={!!selectedArrangement}
                       min={new Date().toISOString().split('T')[0]}
                       max={(() => {
                         const maxDate = new Date();
@@ -1486,7 +1486,9 @@ export default function ConsumerDashboardSimple() {
                       data-testid="input-first-payment-date"
                     />
                     <p className="text-xs text-gray-500 mt-1">
-                      {selectedArrangement.planType === 'settlement' || selectedArrangement.planType === 'pay_in_full'
+                      {setupRecurring 
+                        ? 'Choose when your first automatic payment should be charged'
+                        : selectedArrangement.planType === 'settlement' || selectedArrangement.planType === 'pay_in_full'
                         ? 'Select a date within the next 30 days'
                         : 'Select first payment date (within next 30 days)'}
                     </p>

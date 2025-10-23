@@ -7539,21 +7539,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { startDate, endDate } = req.query;
       
+      console.log('📅 Calendar request - date range:', { 
+        hasStartDate: !!startDate, 
+        hasEndDate: !!endDate 
+      });
+      
       // Get all consumers for this tenant
       const consumers = await storage.getConsumersByTenant(tenantId);
+      console.log(`👥 Found ${consumers.length} consumers`);
+      
       const dailySchedules: Record<string, any[]> = {};
       const dailyTotals: Record<string, number> = {};
+      let totalSchedulesFound = 0;
+      let activeSchedulesFound = 0;
+      let filteredOutByDateRange = 0;
 
       for (const consumer of consumers) {
         const schedules = await storage.getPaymentSchedulesByConsumer(consumer.id, tenantId);
+        totalSchedulesFound += schedules.length;
         
         for (const schedule of schedules) {
           if (schedule.status === 'active' && schedule.nextPaymentDate) {
+            activeSchedulesFound++;
             const date = schedule.nextPaymentDate;
             
             // Filter by date range if provided
-            if (startDate && date < startDate) continue;
-            if (endDate && date > endDate) continue;
+            if (startDate && date < startDate) {
+              filteredOutByDateRange++;
+              continue;
+            }
+            if (endDate && date > endDate) {
+              filteredOutByDateRange++;
+              continue;
+            }
 
             if (!dailySchedules[date]) {
               dailySchedules[date] = [];
@@ -7574,13 +7592,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      console.log(`📊 Calendar summary:`, {
+        totalSchedules: totalSchedulesFound,
+        activeSchedules: activeSchedulesFound,
+        filteredByDateRange: filteredOutByDateRange,
+        schedulesReturned: Object.values(dailySchedules).flat().length,
+        daysWithSchedules: Object.keys(dailySchedules).length
+      });
+
       res.json({
         dailySchedules,
         dailyTotals,
       });
 
     } catch (error) {
-      console.error("Error fetching calendar data:", error);
+      console.error("❌ Error fetching calendar data:", error);
       res.status(500).json({ message: "Failed to fetch calendar data" });
     }
   });
