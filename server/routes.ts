@@ -6190,14 +6190,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       if ((success || shouldSkipImmediateCharge) && (setupRecurring || shouldSkipImmediateCharge) && arrangement && savedPaymentMethod) {
+        console.log('⚡ Entered schedule creation block');
+        
         // Use firstPaymentDate if provided, otherwise use today
         const paymentStartDate = normalizedFirstPaymentDate ? new Date(normalizedFirstPaymentDate) : new Date();
+        console.log('📆 Payment start date:', paymentStartDate.toISOString());
+        
         const nextMonth = new Date(paymentStartDate);
         nextMonth.setMonth(nextMonth.getMonth() + 1);
 
         // Determine number of payments based on arrangement
         let remainingPayments = null;
         let endDate = null;
+        
+        console.log('🔢 Calculating payments for arrangement type:', arrangement.planType);
 
         if (arrangement.planType === 'settlement' || arrangement.planType === 'pay_in_full') {
           // Settlement/pay-in-full is one-time
@@ -6211,10 +6217,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             endDate = new Date(paymentStartDate);
           }
         } else if (arrangement.planType === 'fixed_monthly' && arrangement.maxTermMonths) {
+          console.log('💵 Fixed monthly arrangement detected, maxTermMonths:', arrangement.maxTermMonths);
           const maxPayments = Number(arrangement.maxTermMonths);
           remainingPayments = shouldSkipImmediateCharge ? maxPayments : maxPayments - 1; // Minus the one we just made
           endDate = new Date(paymentStartDate);
           endDate.setMonth(endDate.getMonth() + Number(arrangement.maxTermMonths));
+          console.log('✓ Calculated:', { remainingPayments, endDate: endDate.toISOString() });
         } else if (arrangement.planType === 'range') {
           // Range plans continue until balance is paid (no fixed end date or payment count)
           // This allows payments to continue automatically until the full balance is collected
