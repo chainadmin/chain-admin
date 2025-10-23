@@ -10,9 +10,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import { CreditCard, DollarSign, TrendingUp, Clock, CheckCircle, RefreshCw, Calendar, User, Building2, Lock } from "lucide-react";
+import { CreditCard, DollarSign, TrendingUp, Clock, CheckCircle, RefreshCw, Calendar, User, Building2, Lock, Trash2 } from "lucide-react";
 import { PaymentSchedulingCalendar } from "@/components/payment-scheduling-calendar";
 
 export default function Payments() {
@@ -20,6 +21,7 @@ export default function Payments() {
   const queryClient = useQueryClient();
   const [filterStatus, setFilterStatus] = useState("all");
   const [showPayNowModal, setShowPayNowModal] = useState(false);
+  const [paymentToDelete, setPaymentToDelete] = useState<string | null>(null);
 
 
   const [payNowForm, setPayNowForm] = useState({
@@ -84,6 +86,30 @@ export default function Payments() {
         description: error.message || "Unable to process payment. Please try again.",
         variant: "destructive",
       });
+    },
+  });
+
+  // Delete payment mutation
+  const deletePaymentMutation = useMutation({
+    mutationFn: async (paymentId: string) => {
+      await apiRequest("DELETE", `/api/payments/${paymentId}`);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Payment Deleted",
+        description: "Payment has been removed from the system.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payments/stats"] });
+      setPaymentToDelete(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Delete Failed",
+        description: error.message || "Unable to delete payment. Please try again.",
+        variant: "destructive",
+      });
+      setPaymentToDelete(null);
     },
   });
 
@@ -384,9 +410,20 @@ export default function Payments() {
                             )}
                           </div>
                           <div className="flex items-start gap-4 text-sm text-blue-100/80">
-                            <div className="flex items-center">
-                              <User className="mr-2 h-4 w-4" />
-                              {payment.createdBy || "Agent"}
+                            <div className="flex flex-col gap-3">
+                              <div className="flex items-center">
+                                <User className="mr-2 h-4 w-4" />
+                                {payment.createdBy || "Agent"}
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setPaymentToDelete(payment.id)}
+                                className="h-8 rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 text-rose-100 transition hover:bg-rose-500/20"
+                                data-testid={`button-delete-payment-${payment.id}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
                             </div>
                           </div>
                         </div>
@@ -621,6 +658,44 @@ export default function Payments() {
             <PaymentSchedulingCalendar />
           </TabsContent>
         </Tabs>
+
+        {/* Delete Payment Confirmation Dialog */}
+        <AlertDialog open={!!paymentToDelete} onOpenChange={() => setPaymentToDelete(null)}>
+          <AlertDialogContent className="rounded-3xl border border-white/20 bg-[#0b1733]/95 text-blue-50">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-xl font-semibold text-blue-50">Delete Payment</AlertDialogTitle>
+              <AlertDialogDescription className="text-blue-100/70">
+                Are you sure you want to delete this payment? This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel
+                className="rounded-xl border border-white/20 bg-transparent px-4 py-2 text-blue-100 transition hover:bg-white/10"
+                data-testid="button-cancel-delete"
+              >
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => paymentToDelete && deletePaymentMutation.mutate(paymentToDelete)}
+                disabled={deletePaymentMutation.isPending}
+                className="rounded-xl border border-rose-400/40 bg-rose-500/20 px-4 py-2 text-rose-100 transition hover:bg-rose-500/30"
+                data-testid="button-confirm-delete"
+              >
+                {deletePaymentMutation.isPending ? (
+                  <>
+                    <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete Payment
+                  </>
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </AdminLayout>
   );
