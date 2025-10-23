@@ -21,8 +21,8 @@ COPY . .
 # Build the application
 RUN npm run build
 
-# Run database migration and start app
-CMD npx drizzle-kit push --force && npm run start
+# Start the app (migrations run automatically in server/index.ts)
+CMD ["npm", "run", "start"]
 
 # Expose port
 EXPOSE 5000
