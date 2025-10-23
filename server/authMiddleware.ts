@@ -54,7 +54,14 @@ export const authenticateUser: RequestHandler = async (req: any, res, next) => {
 export const authenticateConsumer: RequestHandler = async (req: any, res, next) => {
   const authHeader = req.headers.authorization;
   
+  console.log('🔐 Consumer auth check:', {
+    hasAuthHeader: !!authHeader,
+    startsWithBearer: authHeader?.startsWith('Bearer '),
+    path: req.path
+  });
+  
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    console.log('❌ Consumer auth failed: No bearer token');
     return res.status(401).json({ message: "No consumer token provided" });
   }
   
@@ -63,8 +70,16 @@ export const authenticateConsumer: RequestHandler = async (req: any, res, next) 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
     
+    console.log('✅ Consumer token decoded:', {
+      type: decoded.type,
+      consumerId: decoded.consumerId,
+      email: decoded.email,
+      tenantSlug: decoded.tenantSlug
+    });
+    
     // Verify this is a consumer token
     if (decoded.type !== 'consumer') {
+      console.log('❌ Consumer auth failed: Invalid token type:', decoded.type);
       return res.status(401).json({ message: "Invalid token type" });
     }
     
@@ -77,7 +92,11 @@ export const authenticateConsumer: RequestHandler = async (req: any, res, next) 
     };
     
     return next();
-  } catch (error) {
+  } catch (error: any) {
+    console.log('❌ Consumer auth failed: Token verification error:', {
+      error: error.message,
+      name: error.name
+    });
     return res.status(401).json({ message: "Invalid consumer token" });
   }
 };
