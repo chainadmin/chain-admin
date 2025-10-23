@@ -5734,12 +5734,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Consumer payment processing endpoint
   app.post('/api/consumer/payments/process', authenticateConsumer, async (req: any, res) => {
+    console.log('🎯 === CONSUMER PAYMENT REQUEST RECEIVED ===');
+    console.log('📥 Request body:', JSON.stringify({
+      ...req.body,
+      cardNumber: req.body.cardNumber ? '****' + req.body.cardNumber.slice(-4) : 'none',
+      cvv: req.body.cvv ? '***' : 'none'
+    }, null, 2));
+    
     try {
       const { id: consumerId, tenantId } = req.consumer || {};
 
       if (!consumerId || !tenantId) {
+        console.log('❌ Unauthorized: No consumer ID or tenant ID');
         return res.status(401).json({ message: "Unauthorized" });
       }
+      
+      console.log('👤 Consumer:', { consumerId, tenantId });
 
       const {
         accountId,
@@ -6116,8 +6126,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ? `${arrangement.name} - ${cardName} ending in ${cardLast4}`
             : `Online payment - ${cardName} ending in ${cardLast4}`,
         });
+        
+        console.log('💾 Payment record created:', {
+          paymentId: payment.id,
+          amountCents: payment.amountCents,
+          status: payment.status,
+          transactionId: payment.transactionId
+        });
       } else {
         success = true;
+        console.log('⏭️ Skipping immediate charge - will create payment schedule instead');
       }
 
       // Send notification to admins about successful payment
@@ -6223,6 +6241,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         
         if (shouldCreateSchedule) {
+          console.log('🔨 Creating payment schedule...');
           // Check if consumer already has an active payment schedule for this account
           const existingSchedules = await storage.getActivePaymentSchedulesByConsumerAndAccount(consumerId, accountId, tenantId);
 
@@ -6233,32 +6252,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
           }
 
-          createdSchedule = await storage.createPaymentSchedule({
-            tenantId,
-            consumerId,
-            accountId,
-            paymentMethodId: savedPaymentMethod.id,
-            arrangementType: arrangement.planType,
-            amountCents,
-            frequency: 'monthly',
-            startDate: paymentStartDate.toISOString().split('T')[0],
-            endDate: endDate ? endDate.toISOString().split('T')[0] : null,
-            nextPaymentDate: shouldSkipImmediateCharge
-              ? paymentStartDate.toISOString().split('T')[0]
-              : nextMonth.toISOString().split('T')[0],
-            remainingPayments,
-            status: 'active',
-          });
-          
-          console.log('✅ Payment schedule created successfully:', {
-            scheduleId: createdSchedule.id,
-            arrangementType: createdSchedule.arrangementType,
-            amountCents: createdSchedule.amountCents,
-            startDate: createdSchedule.startDate,
-            nextPaymentDate: createdSchedule.nextPaymentDate,
-            remainingPayments: createdSchedule.remainingPayments,
-            status: createdSchedule.status
-          });
+          try {
+            createdSchedule = await storage.createPaymentSchedule({
+              tenantId,
+              consumerId,
+              accountId,
+              paymentMethodId: savedPaymentMethod.id,
+              arrangementType: arrangement.planType,
+              amountCents,
+              frequency: 'monthly',
+              startDate: paymentStartDate.toISOString().split('T')[0],
+              endDate: endDate ? endDate.toISOString().split('T')[0] : null,
+              nextPaymentDate: shouldSkipImmediateCharge
+                ? paymentStartDate.toISOString().split('T')[0]
+                : nextMonth.toISOString().split('T')[0],
+              remainingPayments,
+              status: 'active',
+            });
+            
+            console.log('✅ Payment schedule created successfully:', {
+              scheduleId: createdSchedule.id,
+              consumerId: createdSchedule.consumerId,
+              accountId: createdSchedule.accountId,
+              arrangementType: createdSchedule.arrangementType,
+              amountCents: createdSchedule.amountCents,
+              startDate: createdSchedule.startDate,
+              nextPaymentDate: createdSchedule.nextPaymentDate,
+              remainingPayments: createdSchedule.remainingPayments,
+              status: createdSchedule.status
+            });
+          } catch (scheduleError) {
+            console.error('❌ Failed to create payment schedule:', scheduleError);
+            throw scheduleError;
+          }
 
           // Send notification to admins about new arrangement
           const consumer = await storage.getConsumer(consumerId);
@@ -6409,6 +6435,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (success) {
             await storage.updateConsumer(consumerId, { paymentStatus: 'current' });
           }
+        } else if (shouldSkipImmediateCharge && !shouldCreateSchedule) {
+          // Warning: skipped charge but no schedule created
+          console.log('⚠️ WARNING: Skipped immediate charge but no schedule created!', {
+            shouldSkipImmediateCharge,
+            shouldCreateSchedule,
+            arrangementType: arrangement?.planType,
+            hasArrangement: !!arrangement,
+            hasSavedPaymentMethod: !!savedPaymentMethod
+          });
         }
       }
 
@@ -6627,7 +6662,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      res.json({
+      const responseData = {
         success: true,
         payment: payment
           ? {
@@ -6649,7 +6684,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: shouldSkipImmediateCharge
           ? "Payment arrangement saved. Your first payment will run on the scheduled date."
           : "Payment processed successfully"
-      });
+      };
+      
+      console.log('✅ === PAYMENT PROCESSING COMPLETE ===');
+      console.log('📤 Response:', JSON.stringify({
+        hasPayment: !!payment,
+        hasSchedule: !!createdSchedule,
+        message: responseData.message
+      }, null, 2));
+      
+      res.json(responseData);
 
     } catch (error) {
       console.error("Error processing consumer payment:", error);
@@ -7586,11 +7630,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/payments', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
+      console.log('📊 Fetching payments for tenant:', tenantId);
+      
       if (!tenantId) { 
+        console.log('❌ No tenant access for payments query');
         return res.status(403).json({ message: "No tenant access" });
       }
 
       const payments = await storage.getPaymentsByTenant(tenantId);
+      console.log('✅ Payments fetched:', {
+        count: payments.length,
+        paymentIds: payments.slice(0, 5).map(p => p.id),
+        totalShowing: Math.min(5, payments.length),
+        totalCount: payments.length
+      });
+      
       res.json(payments);
     } catch (error) {
       console.error("Error fetching payments:", error);

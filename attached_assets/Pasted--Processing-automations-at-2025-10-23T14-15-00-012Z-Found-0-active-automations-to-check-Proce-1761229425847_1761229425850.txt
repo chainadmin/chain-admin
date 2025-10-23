@@ -1,0 +1,70 @@
+ Processing automations at 2025-10-23T14:15:00.012Z
+📋 Found 0 active automations to check
+✅ Processed 0 automations, 0 failed
+✅ [CRON] Automation processing complete: {
+  success: true,
+  processed: 0,
+  failed: 0,
+  details: { processedAutomations: [], failedAutomations: [] }
+}
+Consumer login attempt: {
+  email: 'baileykerley22@yahoo.com',
+  dateOfBirth: '1993-07-22',
+  tenantSlug: 'waypoint-solutions'
+}
+📤 Sending SMAX note: {
+  filenumber: '147871',
+  collectorname: 'System',
+  logmessage: 'Consumer Bailey Fields logged into online portal. Email: baileykerley22@yahoo.com, Phone: 432-770-7196'
+}
+SMAX note inserted: {
+  result: { success: 'Noteline inserted successfully' },
+  state: 'SUCCESS'
+}
+✅ SMAX login note added for consumer ca69779e-e80e-4db0-b237-fd6acff8a6ff, filenumber 147871
+  pinFirst3: '118',
+💰 Payment charge decision: {
+  useSandbox: false,
+  setupRecurring: true,
+  arrangementType: 'fixed_monthly',
+  hasWhitespace: { apiKey: true, pin: false }
+}
+🌐 USAePay endpoint: https://secure.usaepay.com/api/v2
+🔐 Tokenizing card with USAePay (cc:save)...
+  firstPaymentDate: '2025-10-23',
+📥 USAePay tokenization response: {
+  today: '2025-10-23',
+🔑 USAePay credentials check: {
+  status: 200,
+  isRecurringArrangement: true,
+  statusText: 'OK',
+  apiKeyLength: 32,
+  shouldSkipImmediateCharge: true,
+  bodyLength: 298,
+  willTokenizeCard: true
+  pinLength: 4,
+  bodyPreview: '{"type":"transaction","key":"","refnum":"","is_duplicate":"N","result_code":"A","result":"Approved","authcode":"","creditcard":{"type":"V","number":"4342xxxxxxxx5795","cardholder":"Bailey"},"savedcard'
+}
+  apiKeyFirst3: 'zCV',
+}
+✅ Card tokenized successfully: { token: 'qlsx-tmce-e8qk-j4tc', cardBrand: 'Visa', last4: '5795' }
+🔍 Schedule creation check: {
+  success: true,
+  shouldSkipImmediateCharge: true,
+  setupRecurring: true,
+  hasArrangement: true,
+  hasSavedPaymentMethod: true,
+  arrangementType: 'fixed_monthly',
+  condition1: true,
+  condition2: true,
+  allConditionsMet: {
+    id: '8b4a3c7a-4429-4094-9d96-b37144da2659',
+    tenantId: 'bc63d182-9691-455a-b372-10dfcad9c11e',
+    consumerId: 'ca69779e-e80e-4db0-b237-fd6acff8a6ff',
+    paymentToken: 'qlsx-tmce-e8qk-j4tc',
+    cardLast4: '5795',
+    cardBrand: 'Visa',
+    cardholderName: 'Bailey',
+    expiryMonth: '03',
+    expiryYear: '2029',
+    billingZip: '760787',
