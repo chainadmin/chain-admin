@@ -5801,17 +5801,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let arrangement = null;
       let amountCents = account.balanceCents || 0;
       
+      console.log('📋 Arrangement check:', {
+        hasArrangementId: !!arrangementId,
+        arrangementId,
+        accountBalance: amountCents
+      });
+      
       if (arrangementId) {
         const arrangements = await storage.getArrangementOptionsByTenant(tenantId);
+        console.log('📋 Available arrangements:', {
+          count: arrangements.length,
+          arrangementIds: arrangements.map(a => a.id),
+          requestedId: arrangementId
+        });
+        
         arrangement = arrangements.find(arr => arr.id === arrangementId);
         
         if (!arrangement) {
+          console.log('❌ Arrangement not found:', { arrangementId, availableIds: arrangements.map(a => a.id) });
           return res.status(400).json({ message: "Invalid arrangement selected" });
         }
+
+        console.log('✅ Arrangement found:', {
+          id: arrangement.id,
+          name: arrangement.name,
+          planType: arrangement.planType,
+          minBalance: arrangement.minBalance,
+          maxBalance: arrangement.maxBalance
+        });
 
         // Validate account balance is within arrangement's min/max range
         const accountBalance = account.balanceCents || 0;
         if (accountBalance < arrangement.minBalance || accountBalance > arrangement.maxBalance) {
+          console.log('❌ Account balance outside arrangement range:', {
+            accountBalance,
+            minBalance: arrangement.minBalance,
+            maxBalance: arrangement.maxBalance
+          });
           return res.status(400).json({ 
             success: false,
             message: "This payment plan is not available for your current balance" 
@@ -5819,9 +5845,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Calculate payment amount based on arrangement type
+        console.log('💰 Calculating payment amount for arrangement type:', arrangement.planType);
+        
         if (arrangement.planType === 'one_time_payment') {
           // One-time payment: use custom amount provided by consumer
           if (!customPaymentAmountCents || customPaymentAmountCents <= 0) {
+            console.log('❌ Invalid custom payment amount:', customPaymentAmountCents);
             return res.status(400).json({ 
               success: false,
               message: "Please enter a valid payment amount for one-time payment" 
@@ -5831,6 +5860,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Validate against minimum payment amount
           const minAmount = arrangement.oneTimePaymentMin || 0;
           if (customPaymentAmountCents < minAmount) {
+            console.log('❌ Payment below minimum:', { customPaymentAmountCents, minAmount });
             return res.status(400).json({ 
               success: false,
               message: `Minimum payment amount is $${(minAmount / 100).toFixed(2)}` 
@@ -5839,6 +5869,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           // Validate against maximum (account balance)
           if (customPaymentAmountCents > accountBalance) {
+            console.log('❌ Payment exceeds balance:', { customPaymentAmountCents, accountBalance });
             return res.status(400).json({ 
               success: false,
               message: `Payment amount cannot exceed your balance of $${(accountBalance / 100).toFixed(2)}` 
@@ -5846,7 +5877,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           amountCents = customPaymentAmountCents;
-          console.log('💳 One-time payment amount:', {
+          console.log('✅ One-time payment amount set:', {
             customAmount: customPaymentAmountCents,
             customAmountDollars: (customPaymentAmountCents / 100).toFixed(2),
             minAmount: minAmount,
@@ -5855,23 +5886,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } else if (arrangement.planType === 'settlement' && arrangement.payoffPercentageBasisPoints) {
           // Settlement: percentage of balance
           amountCents = Math.round(amountCents * arrangement.payoffPercentageBasisPoints / 10000);
+          console.log('✅ Settlement amount calculated:', {
+            percentage: arrangement.payoffPercentageBasisPoints / 100,
+            amountCents
+          });
         } else if (arrangement.planType === 'fixed_monthly' && arrangement.fixedMonthlyPayment) {
           // Fixed monthly payment
           amountCents = arrangement.fixedMonthlyPayment;
+          console.log('✅ Fixed monthly amount set:', { amountCents });
         } else if (arrangement.planType === 'range' && arrangement.monthlyPaymentMin) {
           // Range: use minimum payment for recurring
           amountCents = arrangement.monthlyPaymentMin;
+          console.log('✅ Range minimum amount set:', { amountCents });
         } else if (arrangement.planType === 'pay_in_full') {
           // Pay in full: can be percentage discount or fixed amount
           if (arrangement.payoffPercentageBasisPoints) {
             amountCents = Math.round(amountCents * arrangement.payoffPercentageBasisPoints / 10000);
+            console.log('✅ Pay in full (percentage) calculated:', { amountCents });
           } else if (arrangement.payInFullAmount) {
             amountCents = arrangement.payInFullAmount;
+            console.log('✅ Pay in full (fixed) set:', { amountCents });
           }
         }
       }
       
+      console.log('💵 Final payment amount:', {
+        amountCents,
+        amountDollars: (amountCents / 100).toFixed(2)
+      });
+      
       if (amountCents <= 0) {
+        console.log('❌ Invalid final payment amount:', amountCents);
         return res.status(400).json({ message: "Invalid payment amount" });
       }
 
