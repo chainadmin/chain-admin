@@ -6002,17 +6002,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Skip immediate charge if:
-      // 1. A future payment date is set, OR
-      // 2. setupRecurring is true AND it's a recurring arrangement type (fixed_monthly or range)
+      // Skip immediate charge ONLY if there's a future payment date
+      // If first payment date is today (or not set), charge immediately even for recurring arrangements
       const isRecurringArrangement = arrangement && (
         arrangement.planType === 'fixed_monthly' || 
         arrangement.planType === 'range'
       );
       
       const shouldSkipImmediateCharge =
-        (normalizedFirstPaymentDate !== null && normalizedFirstPaymentDate.getTime() > today.getTime()) ||
-        (setupRecurring && isRecurringArrangement);
+        (normalizedFirstPaymentDate !== null && normalizedFirstPaymentDate.getTime() > today.getTime());
       
       console.log('💰 Payment charge decision:', {
         setupRecurring,
