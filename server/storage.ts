@@ -361,6 +361,8 @@ export interface IStorage {
   // Payment operations
   getPaymentsByTenant(tenantId: string): Promise<(Payment & { consumerName?: string; consumerEmail?: string; accountCreditor?: string })[]>;
   createPayment(payment: InsertPayment): Promise<Payment>;
+  deletePayment(id: string, tenantId: string): Promise<void>;
+  bulkDeletePayments(ids: string[], tenantId: string): Promise<number>;
   getPaymentStats(tenantId: string): Promise<{
     totalProcessed: number;
     totalAmountCents: number;
@@ -368,6 +370,7 @@ export interface IStorage {
     failedPayments: number;
     pendingPayments: number;
   }>;
+  getOrCreatePaymentFolder(tenantId: string, paymentDate: Date): Promise<Folder>;
   
   // Payment method operations (saved cards)
   getPaymentMethodsByConsumer(consumerId: string, tenantId: string): Promise<PaymentMethod[]>;
@@ -2085,7 +2088,81 @@ export class DatabaseStorage implements IStorage {
 
   async createPayment(payment: InsertPayment): Promise<Payment> {
     const [newPayment] = await db.insert(payments).values(payment).returning();
+    
+    // Automatically organize account into payment date folder if accountId exists
+    if (payment.accountId && payment.tenantId) {
+      try {
+        // Use processedAt if available, otherwise use current date
+        const paymentDate = payment.processedAt || new Date();
+        const paymentFolder = await this.getOrCreatePaymentFolder(payment.tenantId, paymentDate);
+        
+        // Update the account's folder
+        await db.update(accounts)
+          .set({ folderId: paymentFolder.id })
+          .where(eq(accounts.id, payment.accountId));
+        
+        console.log(`✅ Automatically organized account ${payment.accountId} into folder "${paymentFolder.name}"`);
+      } catch (error) {
+        console.error('❌ Failed to organize account into payment folder:', error);
+        // Non-blocking - payment still succeeds even if folder organization fails
+      }
+    }
+    
     return newPayment;
+  }
+
+  async deletePayment(id: string, tenantId: string): Promise<void> {
+    await db.delete(payments)
+      .where(and(eq(payments.id, id), eq(payments.tenantId, tenantId)));
+  }
+
+  async bulkDeletePayments(ids: string[], tenantId: string): Promise<number> {
+    if (ids.length === 0) return 0;
+    
+    const result = await db.delete(payments)
+      .where(and(inArray(payments.id, ids), eq(payments.tenantId, tenantId)))
+      .returning();
+    
+    return result.length;
+  }
+
+  async getOrCreatePaymentFolder(tenantId: string, paymentDate: Date): Promise<Folder> {
+    // Format folder name like "Payments - March 2025"
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                        'July', 'August', 'September', 'October', 'November', 'December'];
+    const month = monthNames[paymentDate.getMonth()];
+    const year = paymentDate.getFullYear();
+    const folderName = `Payments - ${month} ${year}`;
+    
+    // Check if folder already exists
+    const [existingFolder] = await db
+      .select()
+      .from(folders)
+      .where(and(
+        eq(folders.tenantId, tenantId),
+        eq(folders.name, folderName)
+      ))
+      .limit(1);
+    
+    if (existingFolder) {
+      return existingFolder;
+    }
+    
+    // Create new payment folder
+    const [newFolder] = await db
+      .insert(folders)
+      .values({
+        tenantId,
+        name: folderName,
+        description: `Accounts with payments processed in ${month} ${year}`,
+        color: '#10b981', // Green color for payment folders
+        isDefault: false,
+        sortOrder: 1000 + paymentDate.getTime(), // High sort order to keep at bottom
+      })
+      .returning();
+    
+    console.log(`✅ Created new payment folder: "${folderName}"`);
+    return newFolder;
   }
 
   async getPaymentStats(tenantId: string): Promise<{
