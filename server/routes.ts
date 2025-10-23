@@ -5631,6 +5631,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("Error sending callback notification email:", emailError);
         // Don't fail the request if email fails
       }
+      
+      // Send callback request to SMAX as notes for all consumer accounts with filenumbers
+      // This is especially important for arrangement change requests
+      try {
+        const consumerAccounts = await storage.getAccountsByConsumer(consumer.id);
+        
+        for (const account of consumerAccounts) {
+          if (account.filenumber) {
+            console.log('📤 Sending callback request to SMAX for account:', account.filenumber);
+            
+            const consumerName = `${consumer.firstName} ${consumer.lastName}`;
+            const noteMessage = message 
+              ? `CONSUMER CALLBACK REQUEST: ${consumerName} (${consumer.email}) requested callback. Preferred time: ${preferredTime || 'Anytime'}. Message: ${message}. Phone: ${phoneNumber || consumer.phone || 'Not provided'}`
+              : `CONSUMER CALLBACK REQUEST: ${consumerName} (${consumer.email}) requested callback. Preferred time: ${preferredTime || 'Anytime'}. Phone: ${phoneNumber || consumer.phone || 'Not provided'}`;
+            
+            const smaxNote = {
+              filenumber: account.filenumber,
+              logmessage: noteMessage,
+              collectorname: 'Consumer Portal'
+            };
+            
+            const smaxSuccess = await smaxService.insertNote(tenant.id, smaxNote);
+            if (smaxSuccess) {
+              console.log('✅ Callback request sent to SMAX successfully');
+            } else {
+              console.log('⚠️ Failed to send callback request to SMAX (non-blocking)');
+            }
+          }
+        }
+      } catch (smaxError) {
+        console.error('⚠️ Error sending callback request to SMAX (non-blocking):', smaxError);
+        // Don't fail the request if SMAX sync fails
+      }
 
       res.json({ 
         message: "Callback request submitted successfully", 

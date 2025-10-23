@@ -390,6 +390,11 @@ export default function ConsumerDashboardSimple() {
   // Get existing SMAX arrangements for this consumer
   const existingSMAXArrangements = arrangements?.existingArrangements || [];
   const hasExistingSMAXArrangement = arrangements?.hasExistingSMAXArrangement || false;
+  
+  // Check if selected account has existing SMAX arrangement
+  const selectedAccountSMAXArrangement = selectedAccount && existingSMAXArrangements
+    ? existingSMAXArrangements.find((arr: any) => arr.accountId === selectedAccount.id)
+    : null;
 
   // Calculate payment amount based on selected arrangement
   const paymentAmountCents = selectedAccount
@@ -1261,10 +1266,40 @@ export default function ConsumerDashboardSimple() {
                       </p>
                     )}
                   </div>
+                  
+                  {/* SMAX Arrangement Warning */}
+                  {selectedAccountSMAXArrangement && (
+                    <div className="rounded-lg bg-amber-50 border-2 border-amber-400 p-4">
+                      <div className="flex items-start gap-3">
+                        <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-amber-900">Existing Payment Arrangement</h4>
+                          <p className="text-sm text-amber-800 mt-1">
+                            This account already has a payment arrangement on file in our collection system.
+                          </p>
+                          {selectedAccountSMAXArrangement.monthlyPayment && (
+                            <p className="text-sm text-amber-800 mt-1">
+                              <strong>Current Monthly Payment:</strong> {formatCurrency(selectedAccountSMAXArrangement.monthlyPayment * 100)}
+                              {selectedAccountSMAXArrangement.nextPaymentDate && (
+                                <> | <strong>Next Due:</strong> {new Date(selectedAccountSMAXArrangement.nextPaymentDate).toLocaleDateString()}</>
+                              )}
+                            </p>
+                          )}
+                          <div className="mt-3 space-y-2">
+                            <p className="text-sm font-medium text-amber-900">Your options:</p>
+                            <ul className="text-sm text-amber-800 list-disc list-inside space-y-1">
+                              <li>Make a one-time payment below (does not change your existing arrangement)</li>
+                              <li>Contact us to request a change to your payment arrangement</li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
 
-              {applicableArrangements.length > 0 && (
+              {applicableArrangements.length > 0 && !selectedAccountSMAXArrangement && (
                 <div className="space-y-3">
                   <Label className="text-base font-semibold">Payment Options</Label>
                   <div className="space-y-2">
@@ -1458,7 +1493,7 @@ export default function ConsumerDashboardSimple() {
                   </div>
                 )}
 
-                {selectedArrangement && (selectedArrangement.planType === 'fixed_monthly' || selectedArrangement.planType === 'range') && (
+                {selectedArrangement && (selectedArrangement.planType === 'fixed_monthly' || selectedArrangement.planType === 'range') && !selectedAccountSMAXArrangement && (
                   <div className="flex items-center space-x-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
                     <input
                       type="checkbox"
@@ -1471,6 +1506,14 @@ export default function ConsumerDashboardSimple() {
                     <label htmlFor="setupRecurring" className="text-sm font-medium text-gray-700 cursor-pointer">
                       Set up automatic recurring payments with this card
                     </label>
+                  </div>
+                )}
+                
+                {selectedArrangement && (selectedArrangement.planType === 'fixed_monthly' || selectedArrangement.planType === 'range') && selectedAccountSMAXArrangement && (
+                  <div className="p-3 bg-amber-50 rounded-lg border border-amber-300">
+                    <p className="text-sm text-amber-800">
+                      <strong>Note:</strong> Recurring payments cannot be set up because this account already has an existing arrangement. Please contact us to modify your payment arrangement.
+                    </p>
                   </div>
                 )}
 
