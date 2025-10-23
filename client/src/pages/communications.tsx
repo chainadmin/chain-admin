@@ -174,6 +174,25 @@ export default function Communications() {
     message: "",
   });
 
+  // Parse query params on mount to pre-fill send email form
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const emailParam = params.get('email');
+    const nameParam = params.get('name');
+    const tabParam = params.get('tab');
+    
+    if (emailParam) {
+      setSendEmailForm(prev => ({
+        ...prev,
+        to: emailParam,
+      }));
+    }
+    
+    if (tabParam) {
+      setActiveTab(tabParam);
+    }
+  }, []);
+
   // Consumer lookup for send email form
   const { data: consumerLookup, isLoading: isLookingUpConsumer } = useQuery({
     queryKey: ["/api/consumers/lookup", sendEmailForm.to],
@@ -1428,7 +1447,7 @@ export default function Communications() {
         </section>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-10">
-          <TabsList className="grid w-full grid-cols-6 gap-2 rounded-2xl border border-white/15 bg-white/10 p-2 text-blue-100 backdrop-blur">
+          <TabsList className="grid w-full grid-cols-5 gap-2 rounded-2xl border border-white/15 bg-white/10 p-2 text-blue-100 backdrop-blur">
             <TabsTrigger
               value="overview"
               className="rounded-xl px-4 py-2.5 text-sm font-semibold text-blue-100 transition data-[state=active]:bg-[#0b1733]/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/20"
@@ -1459,12 +1478,6 @@ export default function Communications() {
               className="rounded-xl px-4 py-2.5 text-sm font-semibold text-blue-100 transition data-[state=active]:bg-[#0b1733]/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/20"
             >
               Automation
-            </TabsTrigger>
-            <TabsTrigger
-              value="requests"
-              className="rounded-xl px-4 py-2.5 text-sm font-semibold text-blue-100 transition data-[state=active]:bg-[#0b1733]/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/20"
-            >
-              Callback Requests
             </TabsTrigger>
           </TabsList>
 
@@ -2909,75 +2922,6 @@ export default function Communications() {
                 ) : (
                   <div className="rounded-2xl border border-dashed border-white/15 bg-white/5 py-10 text-center text-blue-100/70">
                     No campaigns yet. Create your first {communicationType} campaign to get started.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="requests" className="space-y-10 text-white">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-blue-50">Callback Requests</h2>
-            </div>
-
-            <Card className={glassPanelClass}>
-              <CardHeader className="border-b border-white/20 pb-4">
-                <CardTitle className="flex items-center gap-2 text-lg font-semibold text-blue-50">
-                  <Phone className="h-5 w-5 text-sky-600" />
-                  Consumer Callback Requests
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-6">
-                {(callbackRequests as any)?.length > 0 ? (
-                  <div className="space-y-4">
-                    {(callbackRequests as any).map((request: any) => (
-                      <div
-                        key={request.id}
-                        className="rounded-2xl border border-white/15 bg-white/10 p-5 shadow-sm shadow-blue-900/10"
-                      >
-                        <div className="mb-3 flex items-center justify-between">
-                          <h3 className="text-base font-semibold text-blue-50">
-                            {request.consumer?.firstName} {request.consumer?.lastName}
-                          </h3>
-                          <Badge
-                            className={cn(
-                              "rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-wide",
-                              request.status === "pending"
-                                ? "border-amber-200/70 bg-amber-100/80 text-amber-700"
-                                : "border-emerald-200/70 bg-emerald-100/80 text-emerald-700"
-                            )}
-                          >
-                            {request.status}
-                          </Badge>
-                        </div>
-                        <div className="grid grid-cols-1 gap-4 text-sm text-blue-100/70 md:grid-cols-3">
-                          <div>
-                            <span className="text-xs uppercase tracking-wide text-blue-100/70">Phone</span>
-                            <div className="mt-1 font-semibold text-blue-50">{request.phoneNumber}</div>
-                          </div>
-                          <div>
-                            <span className="text-xs uppercase tracking-wide text-blue-100/70">Preferred Time</span>
-                            <div className="mt-1 font-semibold text-blue-50">{request.preferredTime || "Any time"}</div>
-                          </div>
-                          <div>
-                            <span className="text-xs uppercase tracking-wide text-blue-100/70">Requested</span>
-                            <div className="mt-1 font-semibold text-blue-50">
-                              {new Date(request.createdAt).toLocaleDateString()}
-                            </div>
-                          </div>
-                        </div>
-                        {request.message && (
-                          <div className="mt-4 rounded-2xl border border-white/15 bg-white/5 p-4 text-sm text-blue-100/70">
-                            <span className="text-xs uppercase tracking-wide text-blue-100/70">Message</span>
-                            <p className="mt-1 text-blue-100/80">{request.message}</p>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-white/15 bg-white/5 py-10 text-center text-blue-100/70">
-                    No callback requests yet.
                   </div>
                 )}
               </CardContent>

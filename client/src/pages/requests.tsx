@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useTerminology } from "@/hooks/use-terminology";
@@ -19,6 +20,7 @@ export default function Requests() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const terminology = useTerminology();
+  const [, navigate] = useLocation();
   const [selectedRequest, setSelectedRequest] = useState<any>(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [filterStatus, setFilterStatus] = useState("all");
@@ -559,13 +561,23 @@ export default function Requests() {
                         </Dialog>
                         
                         {request.phoneNumber && (
-                          <Button size="sm" variant="outline" data-testid={`button-call-${request.id}`}>
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            onClick={() => window.location.href = `tel:${request.phoneNumber}`}
+                            data-testid={`button-call-${request.id}`}
+                          >
                             <Phone className="h-4 w-4 mr-2" />
                             Call
                           </Button>
                         )}
                         {request.emailAddress && (
-                          <Button size="sm" variant="outline" data-testid={`button-email-${request.id}`}>
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            onClick={() => navigate(`/communications?email=${encodeURIComponent(request.emailAddress)}&name=${encodeURIComponent(request.consumerName)}&tab=send`)}
+                            data-testid={`button-email-${request.id}`}
+                          >
                             <Mail className="h-4 w-4 mr-2" />
                             Email
                           </Button>

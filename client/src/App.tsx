@@ -243,6 +243,7 @@ function Router() {
           path="/communications"
           component={Communications}
         />,
+        <Route key="agency-email-inbox" path="/email-inbox" component={EmailInbox} />,
         <Route key="agency-requests" path="/requests" component={Requests} />,
         <Route key="agency-payments" path="/payments" component={Payments} />,
         <Route key="agency-billing" path="/billing" component={Billing} />,
