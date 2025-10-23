@@ -190,13 +190,13 @@ class SmsService {
         to: to,
       });
 
-      // Track the sent SMS
+      // Track the sent SMS with actual Twilio status
       if (campaignId && consumerId) {
         await storage.createSmsTracking({
           campaignId,
           consumerId,
           phoneNumber: to,
-          status: 'sent',
+          status: result.status || 'queued', // Use Twilio's actual status (queued, accepted, etc.)
           sentAt: new Date(),
           trackingData: { twilioSid: result.sid },
         });
