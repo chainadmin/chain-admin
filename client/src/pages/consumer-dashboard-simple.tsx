@@ -1464,19 +1464,19 @@ export default function ConsumerDashboardSimple() {
                   </div>
                 )}
 
-                {selectedArrangement && selectedArrangement.planType !== 'one_time_payment' && (
+                {(saveCard || setupRecurring || (selectedArrangement && selectedArrangement.planType !== 'one_time_payment')) && (
                   <div>
                     <Label htmlFor="firstPaymentDate">
-                      {selectedArrangement.planType === 'settlement' || selectedArrangement.planType === 'pay_in_full' 
+                      {selectedArrangement?.planType === 'settlement' || selectedArrangement?.planType === 'pay_in_full' 
                         ? 'Payment Date' 
-                        : 'First Payment Date'}
+                        : 'Payment Date'}
                     </Label>
                     <Input
                       type="date"
                       id="firstPaymentDate"
                       value={firstPaymentDate}
                       onChange={(e) => setFirstPaymentDate(e.target.value)}
-                      required={!!selectedArrangement}
+                      required={false}
                       min={new Date().toISOString().split('T')[0]}
                       max={(() => {
                         const maxDate = new Date();
@@ -1488,9 +1488,9 @@ export default function ConsumerDashboardSimple() {
                     <p className="text-xs text-gray-500 mt-1">
                       {setupRecurring 
                         ? 'Choose when your first automatic payment should be charged'
-                        : selectedArrangement.planType === 'settlement' || selectedArrangement.planType === 'pay_in_full'
-                        ? 'Select a date within the next 30 days'
-                        : 'Select first payment date (within next 30 days)'}
+                        : saveCard || !selectedArrangement
+                        ? 'Leave blank to charge immediately, or select a future date (within next 30 days)'
+                        : 'Select payment date (within next 30 days)'}
                     </p>
                   </div>
                 )}
