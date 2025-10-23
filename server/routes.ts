@@ -5395,7 +5395,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
         balanceCents >= option.minBalance && balanceCents <= option.maxBalance
       );
       
-      res.json(applicableOptions);
+      // Fetch SMAX arrangements for all consumer accounts with filenumbers
+      // Non-blocking: failures won't prevent returning Chain template options
+      const consumerAccounts = await storage.getAccountsByConsumer(consumerId);
+      const smaxArrangements: any[] = [];
+      
+      for (const account of consumerAccounts) {
+        if (account.filenumber) {
+          try {
+            console.log('📋 Fetching SMAX arrangement for account:', account.filenumber);
+            const smaxArrangement = await smaxService.getPaymentArrangement(tenant.id, account.filenumber);
+            
+            if (smaxArrangement && (smaxArrangement.paymentAmount || smaxArrangement.monthlyPayment)) {
+              // Format SMAX arrangement to match Chain arrangement structure for display
+              smaxArrangements.push({
+                id: `smax_${account.filenumber}`,
+                source: 'smax',
+                name: 'Existing SMAX Payment Arrangement',
+                accountFileNumber: account.filenumber,
+                accountId: account.id,
+                planType: smaxArrangement.arrangementType || 'existing_smax',
+                monthlyPayment: smaxArrangement.monthlyPayment || smaxArrangement.paymentAmount,
+                nextPaymentDate: smaxArrangement.nextPaymentDate,
+                remainingPayments: smaxArrangement.remainingPayments,
+                startDate: smaxArrangement.startDate,
+                endDate: smaxArrangement.endDate,
+                totalBalance: smaxArrangement.totalBalance,
+                isExisting: true,
+                details: smaxArrangement
+              });
+              console.log('✅ SMAX arrangement found and added');
+            }
+          } catch (error) {
+            console.error('⚠️ Failed to fetch SMAX arrangement for account (non-blocking):', account.filenumber, error);
+            // Continue processing other accounts even if one fails
+          }
+        }
+      }
+      
+      // Return both Chain template options AND existing SMAX arrangements
+      res.json({
+        templateOptions: applicableOptions,
+        existingArrangements: smaxArrangements,
+        hasExistingSMAXArrangement: smaxArrangements.length > 0
+      });
     } catch (error) {
       console.error("Error fetching arrangement options:", error);
       res.status(500).json({ message: "Failed to fetch arrangement options" });
@@ -6176,6 +6219,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: payment.status,
           transactionId: payment.transactionId
         });
+        
+        // Send payment to SMAX if account has a filenumber
+        if (success && account.filenumber) {
+          const consumer = await storage.getConsumer(consumerId);
+          console.log('📤 Sending payment to SMAX...');
+          
+          const smaxPaymentData = smaxService.createSmaxPaymentData({
+            filenumber: account.filenumber,
+            paymentamount: amountCents / 100,
+            paymentdate: new Date().toISOString().split('T')[0],
+            payorname: consumer ? `${consumer.firstName} ${consumer.lastName}` : 'Consumer',
+            paymentmethod: 'CREDIT CARD',
+            cardtype: cardBrand || 'Unknown',
+            cardLast4: cardLast4,
+            transactionid: transactionId || undefined
+          });
+          
+          const smaxSuccess = await smaxService.insertPayment(tenantId, smaxPaymentData);
+          if (smaxSuccess) {
+            console.log('✅ Payment synced to SMAX successfully');
+          } else {
+            console.log('⚠️ Failed to sync payment to SMAX (non-blocking)');
+          }
+        } else if (!account.filenumber) {
+          console.log('ℹ️ No filenumber available - skipping SMAX payment sync');
+        }
       } else {
         success = true;
         console.log('⏭️ Skipping immediate charge - will create payment schedule instead');

@@ -381,11 +381,15 @@ export default function ConsumerDashboardSimple() {
 
   // Get arrangements applicable to the selected account
   const applicableArrangements = selectedAccount && arrangements
-    ? (arrangements as any[]).filter(arr => 
+    ? (arrangements as any).templateOptions?.filter((arr: any) => 
         selectedAccount.balanceCents >= arr.minBalance && 
         selectedAccount.balanceCents <= arr.maxBalance
-      )
+      ) || []
     : [];
+  
+  // Get existing SMAX arrangements for this consumer
+  const existingSMAXArrangements = arrangements?.existingArrangements || [];
+  const hasExistingSMAXArrangement = arrangements?.hasExistingSMAXArrangement || false;
 
   // Calculate payment amount based on selected arrangement
   const paymentAmountCents = selectedAccount
