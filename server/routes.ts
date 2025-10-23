@@ -6406,6 +6406,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           try {
+            console.log('🔨 ATTEMPTING TO CREATE PAYMENT SCHEDULE IN DATABASE...');
+            console.log('📋 Schedule data:', {
+              tenantId,
+              consumerId,
+              accountId,
+              paymentMethodId: savedPaymentMethod.id,
+              arrangementType: arrangement.planType,
+              amountCents,
+              frequency: 'monthly',
+              startDate: paymentStartDate.toISOString().split('T')[0],
+              endDate: endDate ? endDate.toISOString().split('T')[0] : null,
+              nextPaymentDate: shouldSkipImmediateCharge
+                ? paymentStartDate.toISOString().split('T')[0]
+                : nextMonth.toISOString().split('T')[0],
+              remainingPayments,
+              status: 'active',
+            });
+
             createdSchedule = await storage.createPaymentSchedule({
               tenantId,
               consumerId,
@@ -6423,7 +6441,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               status: 'active',
             });
             
-            console.log('✅ Payment schedule created successfully:', {
+            console.log('✅✅✅ PAYMENT SCHEDULE CREATED SUCCESSFULLY IN DATABASE! ✅✅✅');
+            console.log('📦 Created schedule:', {
               scheduleId: createdSchedule.id,
               consumerId: createdSchedule.consumerId,
               accountId: createdSchedule.accountId,
@@ -6434,8 +6453,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
               remainingPayments: createdSchedule.remainingPayments,
               status: createdSchedule.status
             });
-          } catch (scheduleError) {
-            console.error('❌ Failed to create payment schedule:', scheduleError);
+
+            // Verify the schedule was actually saved
+            const verifySchedule = await storage.getPaymentSchedulesByConsumer(consumerId, tenantId);
+            console.log('🔍 Verification - Total schedules for consumer:', verifySchedule.length);
+            
+          } catch (scheduleError: any) {
+            console.error('❌❌❌ CRITICAL ERROR: Failed to create payment schedule in database! ❌❌❌');
+            console.error('Error details:', {
+              message: scheduleError.message,
+              stack: scheduleError.stack,
+              name: scheduleError.name,
+              code: scheduleError.code
+            });
             throw scheduleError;
           }
 
@@ -6576,6 +6606,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
                   if (!noteSent) {
                     console.log('ℹ️ SMAX note not sent (SMAX may be disabled or misconfigured).');
+                  }
+
+                  // Create actual payment arrangement in SMAX
+                  console.log('💰 Creating payment arrangement in SMAX...');
+                  const arrangementTypeName = arrangement.name || arrangement.planType;
+                  const accountBalance = (account as any)?.balanceCents || 0;
+                  
+                  const smaxArrangementSent = await smaxService.insertPaymentArrangement(tenantId, {
+                    filenumber: fileNumber,
+                    arrangementtype: arrangementTypeName,
+                    monthlypayment: parseFloat(amountDollars),
+                    startdate: firstPaymentDate,
+                    enddate: endDateIso || undefined,
+                    nextpaymentdate: nextPaymentDate || firstPaymentDate,
+                    remainingpayments: remainingPayments || undefined,
+                    totalbalance: accountBalance / 100
+                  });
+
+                  if (smaxArrangementSent) {
+                    console.log('✅✅✅ PAYMENT ARRANGEMENT CREATED IN SMAX! ✅✅✅');
+                  } else {
+                    console.log('⚠️ SMAX payment arrangement not created (SMAX may be disabled, misconfigured, or endpoint not available)');
                   }
                 }
               }

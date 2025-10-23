@@ -340,6 +340,48 @@ class SmaxService {
     }
   }
 
+  // Insert payment arrangement into SMAX
+  async insertPaymentArrangement(tenantId: string, arrangementData: {
+    filenumber: string;
+    arrangementtype: string; // "Fixed Monthly", "Settlement", "Range", etc.
+    monthlypayment: number; // Dollar amount
+    startdate: string; // YYYY-MM-DD
+    enddate?: string; // YYYY-MM-DD
+    nextpaymentdate: string; // YYYY-MM-DD
+    remainingpayments?: number;
+    totalbalance: number;
+  }): Promise<boolean> {
+    try {
+      const config = await this.getSmaxConfig(tenantId);
+
+      if (!config) {
+        console.log('ℹ️ SMAX not configured - skipping arrangement sync');
+        return false;
+      }
+
+      const payload = {
+        ...arrangementData,
+        filenumber: arrangementData.filenumber.trim(),
+      };
+
+      console.log('📤 Sending payment arrangement to SMAX:', payload);
+
+      const result = await this.makeSmaxRequest(
+        config,
+        '/insertpaymentplan',
+        'POST',
+        payload
+      );
+
+      console.log('✅ SMAX payment arrangement inserted:', result);
+      return result.state === 'SUCCESS' || result.success === true;
+    } catch (error) {
+      console.error('❌ Error inserting payment arrangement to SMAX:', error);
+      // Non-blocking - don't fail if SMAX is unavailable
+      return false;
+    }
+  }
+
   async getAccount(tenantId: string, fileNumber: string): Promise<any | null> {
     try {
       const config = await this.getSmaxConfig(tenantId);
