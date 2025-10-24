@@ -7723,6 +7723,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let activeSchedulesFound = 0;
       let filteredOutByDateRange = 0;
 
+      // Import date-fns for proper month handling
+      const { addMonths, format: formatDate } = await import('date-fns');
+
       for (const consumer of consumers) {
         const schedules = await storage.getPaymentSchedulesByConsumer(consumer.id, tenantId);
         totalSchedulesFound += schedules.length;
@@ -7730,33 +7733,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
         for (const schedule of schedules) {
           if (schedule.status === 'active' && schedule.nextPaymentDate) {
             activeSchedulesFound++;
-            const date = schedule.nextPaymentDate;
             
-            // Filter by date range if provided
-            if (startDate && date < startDate) {
-              filteredOutByDateRange++;
-              continue;
+            // Generate all future payment dates for this schedule
+            const futureDates: string[] = [];
+            let currentDate = new Date(schedule.nextPaymentDate);
+            
+            // Determine how many payments to generate
+            const maxPayments = schedule.remainingPayments || 12; // Default to 12 if indefinite
+            const scheduleEndDate = schedule.endDate ? new Date(schedule.endDate) : null;
+            
+            // Generate future payment dates using date-fns addMonths for proper month handling
+            for (let i = 0; i < maxPayments; i++) {
+              // Stop if we've reached the schedule's end date
+              if (scheduleEndDate && currentDate > scheduleEndDate) {
+                break;
+              }
+              
+              const dateStr = formatDate(currentDate, 'yyyy-MM-dd');
+              futureDates.push(dateStr);
+              
+              // Move to next month using date-fns (handles month boundaries correctly)
+              currentDate = addMonths(currentDate, 1);
             }
-            if (endDate && date > endDate) {
-              filteredOutByDateRange++;
-              continue;
+            
+            // Add each future payment date to the calendar
+            for (const date of futureDates) {
+              // Filter by date range if provided
+              if (startDate && date < startDate) {
+                filteredOutByDateRange++;
+                continue;
+              }
+              if (endDate && date > endDate) {
+                filteredOutByDateRange++;
+                continue;
+              }
+
+              if (!dailySchedules[date]) {
+                dailySchedules[date] = [];
+                dailyTotals[date] = 0;
+              }
+
+              dailySchedules[date].push({
+                scheduleId: schedule.id,
+                consumerId: consumer.id,
+                consumerName: `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim() || 'Unknown',
+                amountCents: schedule.amountCents,
+                arrangementType: schedule.arrangementType,
+                accountId: schedule.accountId,
+              });
+
+              dailyTotals[date] += schedule.amountCents || 0;
             }
-
-            if (!dailySchedules[date]) {
-              dailySchedules[date] = [];
-              dailyTotals[date] = 0;
-            }
-
-            dailySchedules[date].push({
-              scheduleId: schedule.id,
-              consumerId: consumer.id,
-              consumerName: `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim() || 'Unknown',
-              amountCents: schedule.amountCents,
-              arrangementType: schedule.arrangementType,
-              accountId: schedule.accountId,
-            });
-
-            dailyTotals[date] += schedule.amountCents || 0;
           }
         }
       }
