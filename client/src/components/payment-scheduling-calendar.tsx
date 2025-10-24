@@ -46,12 +46,7 @@ export function PaymentSchedulingCalendar() {
   const endDate = format(endOfMonth(currentMonth), 'yyyy-MM-dd');
 
   const { data: calendarData, isLoading } = useQuery<CalendarData>({
-    queryKey: ['/api/scheduled-payments/calendar', startDate, endDate],
-    queryFn: async () => {
-      const response = await fetch(`/api/scheduled-payments/calendar?startDate=${startDate}&endDate=${endDate}`);
-      if (!response.ok) throw new Error('Failed to fetch calendar data');
-      return response.json();
-    },
+    queryKey: [`/api/scheduled-payments/calendar?startDate=${startDate}&endDate=${endDate}`],
   });
 
   const { data: failedPayments = [] } = useQuery<FailedPayment[]>({
