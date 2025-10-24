@@ -134,6 +134,7 @@ export default function Accounts() {
         creditor: "",
         balance: "",
         folderId: "",
+        status: "active",
         dateOfBirth: "",
         address: "",
         city: "",
