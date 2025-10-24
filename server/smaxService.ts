@@ -350,6 +350,14 @@ class SmaxService {
     nextpaymentdate: string; // YYYY-MM-DD
     remainingpayments?: number;
     totalbalance: number;
+    // Payment method details for SMAX to process recurring payments
+    cardtoken?: string; // USAePay cardref token
+    cardlast4?: string;
+    cardbrand?: string;
+    expirymonth?: string;
+    expiryyear?: string;
+    cardholdername?: string;
+    billingzip?: string;
   }): Promise<boolean> {
     try {
       const config = await this.getSmaxConfig(tenantId);
@@ -364,7 +372,12 @@ class SmaxService {
         filenumber: arrangementData.filenumber.trim(),
       };
 
-      console.log('📤 Sending payment arrangement to SMAX:', payload);
+      console.log('📤 Sending payment arrangement to SMAX with payment method:', {
+        ...payload,
+        cardtoken: payload.cardtoken ? '***' : undefined, // Mask token in logs
+        cardlast4: payload.cardlast4,
+        cardbrand: payload.cardbrand
+      });
 
       const result = await this.makeSmaxRequest(
         config,

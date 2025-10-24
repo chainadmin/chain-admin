@@ -6765,11 +6765,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     console.log('ℹ️ SMAX note not sent (SMAX may be disabled or misconfigured).');
                   }
 
-                  // Create actual payment arrangement in SMAX
-                  console.log('💰 Creating payment arrangement in SMAX...');
+                  // Create actual payment arrangement in SMAX with payment method details
+                  console.log('💰 Creating payment arrangement in SMAX with payment method...');
                   const arrangementTypeName = arrangement.name || arrangement.planType;
                   const accountBalance = (account as any)?.balanceCents || 0;
                   
+                  // Include payment method details so SMAX can process recurring payments
                   const smaxArrangementSent = await smaxService.insertPaymentArrangement(tenantId, {
                     filenumber: fileNumber,
                     arrangementtype: arrangementTypeName,
@@ -6778,11 +6779,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     enddate: endDateIso || undefined,
                     nextpaymentdate: nextPaymentDate || firstPaymentDate,
                     remainingpayments: remainingPayments || undefined,
-                    totalbalance: accountBalance / 100
+                    totalbalance: accountBalance / 100,
+                    // Payment method details for SMAX to process recurring payments
+                    cardtoken: savedPaymentMethod?.paymentToken,
+                    cardlast4: savedPaymentMethod?.cardLast4,
+                    cardbrand: savedPaymentMethod?.cardBrand,
+                    expirymonth: savedPaymentMethod?.expiryMonth,
+                    expiryyear: savedPaymentMethod?.expiryYear,
+                    cardholdername: savedPaymentMethod?.cardholderName,
+                    billingzip: savedPaymentMethod?.billingZip || undefined
                   });
 
                   if (smaxArrangementSent) {
-                    console.log('✅✅✅ PAYMENT ARRANGEMENT CREATED IN SMAX! ✅✅✅');
+                    console.log('✅✅✅ PAYMENT ARRANGEMENT CREATED IN SMAX WITH CARD DETAILS! ✅✅✅');
                   } else {
                     console.log('⚠️ SMAX payment arrangement not created (SMAX may be disabled, misconfigured, or endpoint not available)');
                   }
