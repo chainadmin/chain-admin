@@ -1080,6 +1080,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Global search endpoint
+  app.get('/api/search', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = await getTenantId(req, storage);
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { q } = req.query;
+      
+      if (!q || typeof q !== 'string' || q.length < 2) {
+        return res.json({ consumers: [], accounts: [] });
+      }
+
+      const searchPattern = `%${q}%`;
+
+      // Database-level search for consumers (LIMIT 5 for performance)
+      const matchingConsumers = await db
+        .select({
+          id: consumers.id,
+          firstName: consumers.firstName,
+          lastName: consumers.lastName,
+          email: consumers.email,
+        })
+        .from(consumers)
+        .where(
+          and(
+            eq(consumers.tenantId, tenantId),
+            sql`(
+              LOWER(${consumers.firstName}) LIKE LOWER(${searchPattern}) OR
+              LOWER(${consumers.lastName}) LIKE LOWER(${searchPattern}) OR
+              LOWER(${consumers.email}) LIKE LOWER(${searchPattern})
+            )`
+          )
+        )
+        .limit(5);
+
+      // Database-level search for accounts with consumer names (LIMIT 5 for performance)
+      const matchingAccountsRaw = await db
+        .select({
+          id: accountsTable.id,
+          accountNumber: accountsTable.accountNumber,
+          creditor: accountsTable.creditor,
+          balanceCents: accountsTable.balanceCents,
+          firstName: consumers.firstName,
+          lastName: consumers.lastName,
+        })
+        .from(accountsTable)
+        .leftJoin(consumers, eq(accountsTable.consumerId, consumers.id))
+        .where(
+          and(
+            eq(accountsTable.tenantId, tenantId),
+            sql`(
+              LOWER(${accountsTable.accountNumber}) LIKE LOWER(${searchPattern}) OR
+              LOWER(${accountsTable.creditor}) LIKE LOWER(${searchPattern}) OR
+              LOWER(${consumers.firstName}) LIKE LOWER(${searchPattern}) OR
+              LOWER(${consumers.lastName}) LIKE LOWER(${searchPattern})
+            )`
+          )
+        )
+        .limit(5);
+
+      const matchingAccounts = matchingAccountsRaw.map(row => ({
+        id: row.id,
+        accountNumber: row.accountNumber,
+        creditor: row.creditor,
+        balanceCents: row.balanceCents,
+        firstName: row.firstName || '',
+        lastName: row.lastName || '',
+      }));
+
+      res.json({
+        consumers: matchingConsumers,
+        accounts: matchingAccounts,
+      });
+    } catch (error) {
+      console.error("Error performing search:", error);
+      res.status(500).json({ message: "Failed to perform search" });
+    }
+  });
+
   app.patch('/api/consumers/:id', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = await getTenantId(req, storage);

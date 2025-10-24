@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
@@ -11,10 +12,30 @@ interface AdminLayoutProps {
   children: React.ReactNode;
 }
 
+interface SearchResults {
+  consumers: Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  }>;
+  accounts: Array<{
+    id: string;
+    accountNumber: string | null;
+    creditor: string;
+    firstName: string;
+    lastName: string;
+    balanceCents: number;
+  }>;
+}
+
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const { user, isJwtAuth } = useAuth();
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   const { agencySlug, buildAgencyUrl } = useAgencyContext();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
   
   const { data: userData } = useQuery({
     queryKey: ["/api/auth/user"],
@@ -57,6 +78,37 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
   const isActiveRoute = (href: string) => {
     return location === href;
+  };
+
+  // Search functionality
+  const { data: searchResults } = useQuery<SearchResults>({
+    queryKey: [`/api/search?q=${searchQuery}`],
+    enabled: searchQuery.length >= 2,
+  });
+
+  // Close search results when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setShowSearchResults(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchQuery(value);
+    setShowSearchResults(value.length >= 2);
+  };
+
+  const handleResultClick = (type: string, id: string) => {
+    setSearchQuery("");
+    setShowSearchResults(false);
+    if (type === 'consumer' || type === 'account') {
+      navigate(buildNavHref('/accounts'));
+    }
   };
 
   return (
@@ -162,13 +214,89 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
               <span className="sr-only">Open navigation menu</span>
             </button>
             <div className="flex flex-1 items-center justify-between gap-4">
-              <div className="relative hidden w-full max-w-md md:block">
+              <div className="relative hidden w-full max-w-md md:block" ref={searchRef}>
                 <i aria-hidden="true" className="fas fa-search pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-blue-100/60"></i>
                 <input
                   className="w-full rounded-2xl border border-white/15 bg-white/10 py-2.5 pl-11 pr-4 text-sm text-blue-50 placeholder:text-blue-100/60 focus:border-sky-400/60 focus:outline-none focus:ring-2 focus:ring-sky-400/40"
                   placeholder="Search consumers, accounts..."
                   type="search"
+                  value={searchQuery}
+                  onChange={handleSearchChange}
+                  onFocus={() => {
+                    if (searchQuery.length >= 2) setShowSearchResults(true);
+                  }}
+                  data-testid="input-global-search"
                 />
+                
+                {/* Search Results Dropdown */}
+                {showSearchResults && searchResults && (
+                  <div className="absolute top-full mt-2 w-full rounded-2xl border border-white/15 bg-slate-900/95 backdrop-blur shadow-2xl shadow-black/50 max-h-96 overflow-y-auto z-50">
+                    {searchResults.consumers?.length > 0 && (
+                      <div className="p-2">
+                        <div className="px-3 py-2 text-xs font-semibold text-blue-100/70 uppercase tracking-wide">
+                          Consumers
+                        </div>
+                        {searchResults.consumers.map((consumer) => (
+                          <button
+                            key={consumer.id}
+                            onClick={() => handleResultClick('consumer', consumer.id)}
+                            className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-white/10 transition-colors"
+                            data-testid={`search-result-consumer-${consumer.id}`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500/20 border border-blue-400/30">
+                                <i className="fas fa-user text-sm text-blue-300"></i>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-white truncate">
+                                  {consumer.firstName} {consumer.lastName}
+                                </p>
+                                <p className="text-xs text-blue-100/60 truncate">{consumer.email}</p>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {searchResults.accounts?.length > 0 && (
+                      <div className="p-2 border-t border-white/10">
+                        <div className="px-3 py-2 text-xs font-semibold text-blue-100/70 uppercase tracking-wide">
+                          Accounts
+                        </div>
+                        {searchResults.accounts.map((account) => (
+                          <button
+                            key={account.id}
+                            onClick={() => handleResultClick('account', account.id)}
+                            className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-white/10 transition-colors"
+                            data-testid={`search-result-account-${account.id}`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/20 border border-emerald-400/30">
+                                <i className="fas fa-file-invoice-dollar text-sm text-emerald-300"></i>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-white truncate">
+                                  {account.accountNumber || account.creditor}
+                                </p>
+                                <p className="text-xs text-blue-100/60 truncate">
+                                  {account.firstName} {account.lastName} • ${(account.balanceCents / 100).toFixed(2)}
+                                </p>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {searchResults.consumers?.length === 0 && searchResults.accounts?.length === 0 && (
+                      <div className="p-8 text-center">
+                        <i className="fas fa-search text-3xl text-blue-100/30 mb-3"></i>
+                        <p className="text-sm text-blue-100/60">No results found for "{searchQuery}"</p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-3">
                 <button
