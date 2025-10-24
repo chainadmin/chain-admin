@@ -311,7 +311,7 @@ export default function Accounts() {
       filenumber: account.filenumber || "",
       creditor: account.creditor || "",
       balance: account.balanceCents ? (account.balanceCents / 100).toString() : "",
-      folderId: account.folderId || account.consumer?.folderId || "",
+      folderId: account.folderId || "",
       dateOfBirth: account.consumer?.dateOfBirth || "",
       address: account.consumer?.address || "",
       city: account.consumer?.city || "",
@@ -443,7 +443,7 @@ export default function Accounts() {
   const folderFilteredAccounts =
     selectedFolderId === "all"
       ? accountsList
-      : accountsList.filter((account: any) => account.consumer?.folderId === selectedFolderId);
+      : accountsList.filter((account: any) => account.folderId === selectedFolderId);
   
   // Calculate registration stats from the folder-filtered collection
   const registeredCount = folderFilteredAccounts.filter((account: any) => account.consumer?.isRegistered === true).length;
@@ -598,7 +598,7 @@ export default function Accounts() {
                         {folder.name}
                         <span className="rounded-full bg-white/10 px-2 text-xs text-blue-100/80">
                           {accountsList.filter(
-                            (account: any) => account.consumer?.folderId === folder.id
+                            (account: any) => account.folderId === folder.id
                           ).length}
                         </span>
                       </Button>
