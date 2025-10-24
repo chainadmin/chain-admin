@@ -5493,7 +5493,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get active payment schedules
       const schedules = await storage.getPaymentSchedulesByConsumer(consumerId, tenant.id);
+      console.log('📅 Payment schedules found for consumer:', {
+        consumerId,
+        tenantId: tenant.id,
+        totalSchedules: schedules.length,
+        scheduleStatuses: schedules.map(s => ({ id: s.id, status: s.status, arrangementType: s.arrangementType }))
+      });
+      
       const activeSchedules = schedules.filter(s => s.status === 'active');
+      console.log('✅ Active schedules after filter:', {
+        activeCount: activeSchedules.length,
+        activeScheduleIds: activeSchedules.map(s => s.id)
+      });
 
       // Enrich schedules with payment method and account details
       const enrichedSchedules = await Promise.all(activeSchedules.map(async (schedule) => {
@@ -5543,6 +5554,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       }));
 
+      console.log('📤 Returning enriched schedules to frontend:', {
+        count: enrichedSchedules.length,
+        schedules: enrichedSchedules.map(s => ({
+          id: s.id,
+          arrangementType: s.arrangementType,
+          nextPaymentDate: s.nextPaymentDate,
+          status: s.status
+        }))
+      });
+      
       res.json(enrichedSchedules);
     } catch (error) {
       console.error("Error fetching payment schedules:", error);
