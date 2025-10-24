@@ -6781,12 +6781,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     remainingpayments: remainingPayments || undefined,
                     totalbalance: accountBalance / 100,
                     // Payment method details for SMAX to process recurring payments
-                    cardtoken: savedPaymentMethod?.paymentToken,
-                    cardlast4: savedPaymentMethod?.cardLast4,
-                    cardbrand: savedPaymentMethod?.cardBrand,
-                    expirymonth: savedPaymentMethod?.expiryMonth,
-                    expiryyear: savedPaymentMethod?.expiryYear,
-                    cardholdername: savedPaymentMethod?.cardholderName,
+                    cardtoken: savedPaymentMethod?.paymentToken || undefined,
+                    cardlast4: savedPaymentMethod?.cardLast4 || undefined,
+                    cardbrand: savedPaymentMethod?.cardBrand || undefined,
+                    expirymonth: savedPaymentMethod?.expiryMonth || undefined,
+                    expiryyear: savedPaymentMethod?.expiryYear || undefined,
+                    cardholdername: savedPaymentMethod?.cardholderName || undefined,
                     billingzip: savedPaymentMethod?.billingZip || undefined
                   });
 
