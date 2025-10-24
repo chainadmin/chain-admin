@@ -1524,6 +1524,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         creditor,
         balanceCents,
         folderId,
+        status,
         dateOfBirth,
         address,
         city,
@@ -1555,6 +1556,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         accountUpdates.balanceCents = Number(balanceCents);
       }
       if (folderId !== undefined) accountUpdates.folderId = folderId || null;
+      if (status !== undefined) accountUpdates.status = status;
       if (dueDate !== undefined) {
         accountUpdates.dueDate = dueDate || null;
       }
@@ -6018,6 +6020,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!account || account.consumerId !== consumerId || account.tenantId !== tenantId) {
         return res.status(403).json({ message: "Access denied to this account" });
       }
+      
+      // Check if account is inactive
+      if (account.status === 'inactive') {
+        console.log('❌ Payment blocked: Account is inactive');
+        return res.status(403).json({ 
+          success: false,
+          message: "This account is inactive and cannot accept payments. Please contact us for assistance." 
+        });
+      }
 
       // Get arrangement if specified
       let arrangement = null;
@@ -7136,6 +7147,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Check if payment is due today and schedule is active
             if (schedule.status === 'active' && schedule.nextPaymentDate === today) {
               try {
+                // Check if account is inactive before processing payment
+                const scheduleAccount = await storage.getAccount(schedule.accountId);
+                if (scheduleAccount && scheduleAccount.status === 'inactive') {
+                  console.log(`⏭️ Skipping scheduled payment for inactive account: ${schedule.accountId}`);
+                  failedPayments.push({
+                    scheduleId: schedule.id,
+                    accountId: schedule.accountId,
+                    reason: 'Account is inactive'
+                  });
+                  continue;
+                }
+                
                 // Get payment method
                 const paymentMethods = await storage.getPaymentMethodsByConsumer(consumer.id, tenant.id);
                 const paymentMethod = paymentMethods.find(pm => pm.id === schedule.paymentMethodId);
@@ -8070,6 +8093,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const consumer = await storage.getConsumerByEmailAndTenant(consumerEmail, tenantId);
       if (!consumer) {
         return res.status(404).json({ message: "Consumer not found" });
+      }
+      
+      // Check if consumer has any active accounts before processing payment
+      const consumerAccounts = await storage.getAccountsByConsumer(consumer.id);
+      if (consumerAccounts && consumerAccounts.length > 0) {
+        const allInactive = consumerAccounts.every(acc => acc.status === 'inactive');
+        if (allInactive) {
+          console.log('❌ Payment blocked: All consumer accounts are inactive');
+          return res.status(403).json({ 
+            success: false,
+            message: "All accounts for this consumer are inactive and cannot accept payments." 
+          });
+        }
       }
 
       // TODO: Integrate with USAePay or other payment processor

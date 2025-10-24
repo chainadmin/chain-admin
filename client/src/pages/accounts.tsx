@@ -67,6 +67,7 @@ export default function Accounts() {
     creditor: "",
     balance: "",
     folderId: "",
+    status: "active",
     dateOfBirth: "",
     address: "",
     city: "",
@@ -88,6 +89,7 @@ export default function Accounts() {
     creditor: "",
     balance: "",
     folderId: "",
+    status: "active",
     dateOfBirth: "",
     address: "",
     city: "",
@@ -173,6 +175,7 @@ export default function Accounts() {
         creditor: data.creditor,
         balanceCents,
         folderId: data.folderId || null,
+        status: data.status || "active",
         dateOfBirth: data.dateOfBirth || null,
         address: data.address || null,
         city: data.city || null,
@@ -312,6 +315,7 @@ export default function Accounts() {
       creditor: account.creditor || "",
       balance: account.balanceCents ? (account.balanceCents / 100).toString() : "",
       folderId: account.folderId || "",
+      status: account.status || "active",
       dateOfBirth: account.consumer?.dateOfBirth || "",
       address: account.consumer?.address || "",
       city: account.consumer?.city || "",
@@ -391,13 +395,18 @@ export default function Accounts() {
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
       case 'active':
-        return 'bg-green-100 text-green-800';
+        return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
+      case 'inactive':
+        return 'bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-300';
+      case 'paid':
+      case 'closed':
+        return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
       case 'overdue':
-        return 'bg-red-100 text-red-800';
+        return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300';
       case 'settled':
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300';
       default:
-        return 'bg-yellow-100 text-yellow-800';
+        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300';
     }
   };
 
@@ -1043,7 +1052,7 @@ export default function Accounts() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="edit-folder">Folder</Label>
                 <Select
@@ -1059,6 +1068,23 @@ export default function Accounts() {
                         {folder.name}
                       </SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="edit-status">Account Status *</Label>
+                <Select
+                  value={editForm.status}
+                  onValueChange={(value) => setEditForm({ ...editForm, status: value })}
+                >
+                  <SelectTrigger id="edit-status" data-testid="select-edit-status">
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                    <SelectItem value="paid">Paid</SelectItem>
+                    <SelectItem value="closed">Closed</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
