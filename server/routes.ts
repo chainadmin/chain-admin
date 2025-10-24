@@ -694,7 +694,7 @@ async function getTenantId(req: any, storage: IStorage): Promise<string | null> 
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // CORS middleware - Allow Vercel frontend to connect
+  // CORS middleware - Allow web, mobile apps, and Vercel frontend to connect
   app.use((req, res, next) => {
     const allowedOrigins = new Set([
       'http://localhost:5173',
@@ -709,14 +709,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     const origin = req.headers.origin as string | undefined;
 
+    // Helper to check if origin ends with a trusted domain
+    const isTrustedDomain = (origin: string, domain: string): boolean => {
+      try {
+        const url = new URL(origin);
+        return url.hostname === domain || url.hostname.endsWith(`.${domain}`);
+      } catch {
+        return false;
+      }
+    };
+
+    // Helper to check if origin is from localhost or development IP
+    const isLocalhost = (origin: string): boolean => {
+      try {
+        const url = new URL(origin);
+        const hostname = url.hostname;
+        return hostname === 'localhost' || 
+               hostname === '127.0.0.1' ||
+               hostname === '10.0.2.2' ||  // Android emulator
+               hostname === '10.0.3.2' ||  // Android emulator alternative
+               hostname === '[::1]';        // IPv6 localhost
+      } catch {
+        return false;
+      }
+    };
+
     // Check if origin is allowed
     const isAllowed = !origin ||
         allowedOrigins.has(origin) ||
-        origin.includes('vercel.app') ||
-        origin.includes('vercel.sh') ||
-        origin.includes('replit.dev') ||
-        origin.includes('replit.app') ||
-        origin.includes('repl.co') ||
+        isTrustedDomain(origin, 'vercel.app') ||
+        isTrustedDomain(origin, 'vercel.sh') ||
+        isTrustedDomain(origin, 'replit.dev') ||
+        isTrustedDomain(origin, 'replit.app') ||
+        isTrustedDomain(origin, 'repl.co') ||
+        isTrustedDomain(origin, 'railway.app') || // Railway production
+        origin.startsWith('capacitor://') || // Capacitor mobile apps (no domain concept)
+        origin.startsWith('ionic://') || // Ionic mobile apps (no domain concept)
+        isLocalhost(origin) || // Localhost and emulator IPs
         isOriginOnKnownDomain(origin);
     
     if (isAllowed) {
