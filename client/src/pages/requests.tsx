@@ -202,7 +202,7 @@ export default function Requests() {
     return (
       <AdminLayout>
         <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <div className="animate-spin rounded-full h-10 w-10 border-4 border-slate-200 dark:border-slate-700 border-t-slate-900 dark:border-t-slate-100"></div>
         </div>
       </AdminLayout>
     );
@@ -214,8 +214,8 @@ export default function Requests() {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Consumer Requests</h1>
-            <p className="mt-2 text-gray-600">
+            <h1 className="text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">Consumer Requests</h1>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
               Manage callback requests and inquiries from consumers
             </p>
           </div>
@@ -230,8 +230,8 @@ export default function Requests() {
                   <MessageSquare className="h-6 w-6 text-blue-600" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-2xl font-bold text-gray-900">{statusCounts.all}</p>
-                  <p className="text-xs text-gray-500">Total Requests</p>
+                  <p className="text-2xl font-semibold text-slate-900 dark:text-white">{statusCounts.all}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Total Requests</p>
                 </div>
               </div>
             </CardContent>
@@ -243,8 +243,8 @@ export default function Requests() {
                   <Clock className="h-6 w-6 text-yellow-600" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-2xl font-bold text-gray-900">{statusCounts.pending}</p>
-                  <p className="text-xs text-gray-500">Pending</p>
+                  <p className="text-2xl font-semibold text-slate-900 dark:text-white">{statusCounts.pending}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Pending</p>
                 </div>
               </div>
             </CardContent>
@@ -256,8 +256,8 @@ export default function Requests() {
                   <AlertCircle className="h-6 w-6 text-blue-600" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-2xl font-bold text-gray-900">{statusCounts.in_progress}</p>
-                  <p className="text-xs text-gray-500">In Progress</p>
+                  <p className="text-2xl font-semibold text-slate-900 dark:text-white">{statusCounts.in_progress}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">In Progress</p>
                 </div>
               </div>
             </CardContent>
@@ -269,8 +269,8 @@ export default function Requests() {
                   <CheckCircle className="h-6 w-6 text-green-600" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-2xl font-bold text-gray-900">{statusCounts.completed}</p>
-                  <p className="text-xs text-gray-500">Completed</p>
+                  <p className="text-2xl font-semibold text-slate-900 dark:text-white">{statusCounts.completed}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Completed</p>
                 </div>
               </div>
             </CardContent>
@@ -313,10 +313,10 @@ export default function Requests() {
           </CardHeader>
           <CardContent>
             {filteredRequests.length === 0 ? (
-              <div className="text-center py-8">
-                <MessageSquare className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No Requests</h3>
-                <p className="text-gray-600">
+              <div className="text-center py-12">
+                <MessageSquare className="h-12 w-12 text-slate-400 dark:text-slate-500 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-slate-900 dark:text-white mb-2">No Requests</h3>
+                <p className="text-sm text-slate-600 dark:text-slate-300">
                   {filterStatus === "all" 
                     ? "No callback requests have been submitted yet." 
                     : `No ${filterStatus.replace("_", " ")} requests found.`
@@ -324,14 +324,16 @@ export default function Requests() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="divide-y divide-slate-200 dark:divide-slate-700">
                 {filteredRequests.map((request: any) => (
-                  <div key={request.id} className="border rounded-lg p-6 hover:bg-gray-50">
+                  <div key={request.id} className="p-6 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <div className="flex items-center space-x-3 mb-2">
-                          {getRequestTypeIcon(request.requestType)}
-                          <h3 className="font-semibold text-gray-900">
+                        <div className="flex items-center space-x-3 mb-3">
+                          <div className="text-slate-600 dark:text-slate-400">
+                            {getRequestTypeIcon(request.requestType)}
+                          </div>
+                          <h3 className="font-semibold text-slate-900 dark:text-white">
                             {request.consumerName}
                           </h3>
                           <Badge className={getStatusColor(request.status)}>
@@ -344,68 +346,68 @@ export default function Requests() {
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                           <div>
-                            <p className="text-sm text-gray-500">Request Type</p>
-                            <p className="font-medium capitalize">
+                            <p className="text-xs text-slate-500 dark:text-slate-400">Request Type</p>
+                            <p className="text-sm font-medium text-slate-900 dark:text-white capitalize">
                               {request.requestType?.replace("_", " ")}
                             </p>
                           </div>
                           {request.preferredTime && (
                             <div>
-                              <p className="text-sm text-gray-500">Preferred Time</p>
-                              <p className="font-medium capitalize">{request.preferredTime}</p>
+                              <p className="text-xs text-slate-500 dark:text-slate-400">Preferred Time</p>
+                              <p className="text-sm font-medium text-slate-900 dark:text-white capitalize">{request.preferredTime}</p>
                             </div>
                           )}
                           {request.phoneNumber && (
                             <div>
-                              <p className="text-sm text-gray-500">Phone Number</p>
-                              <p className="font-medium">{request.phoneNumber}</p>
+                              <p className="text-xs text-slate-500 dark:text-slate-400">Phone Number</p>
+                              <p className="text-sm font-medium text-slate-900 dark:text-white">{request.phoneNumber}</p>
                             </div>
                           )}
                           {request.emailAddress && (
                             <div>
-                              <p className="text-sm text-gray-500">Email Address</p>
-                              <p className="font-medium">{request.emailAddress}</p>
+                              <p className="text-xs text-slate-500 dark:text-slate-400">Email Address</p>
+                              <p className="text-sm font-medium text-slate-900 dark:text-white">{request.emailAddress}</p>
                             </div>
                           )}
                         </div>
 
                         {request.subject && (
                           <div className="mb-3">
-                            <p className="text-sm text-gray-500">Subject</p>
-                            <p className="font-medium">{request.subject}</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">Subject</p>
+                            <p className="text-sm font-medium text-slate-900 dark:text-white">{request.subject}</p>
                           </div>
                         )}
 
                         {request.message && (
                           <div className="mb-3">
-                            <p className="text-sm text-gray-500">Message</p>
-                            <p className="text-gray-700">{request.message}</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">Message</p>
+                            <p className="text-sm text-slate-700 dark:text-slate-300">{request.message}</p>
                           </div>
                         )}
 
-                        <div className="flex items-center space-x-4 text-sm text-gray-500">
-                          <div className="flex items-center">
-                            <Calendar className="h-4 w-4 mr-1" />
-                            Submitted: {formatDate(request.createdAt)}
+                        <div className="flex items-center flex-wrap gap-4 text-xs text-slate-500 dark:text-slate-400">
+                          <div className="flex items-center gap-1">
+                            <Calendar className="h-3.5 w-3.5" />
+                            <span>Submitted: {formatDate(request.createdAt)}</span>
                           </div>
                           {request.assignedTo && (
-                            <div className="flex items-center">
-                              <User className="h-4 w-4 mr-1" />
-                              Assigned to: {request.assignedTo}
+                            <div className="flex items-center gap-1">
+                              <User className="h-3.5 w-3.5" />
+                              <span>Assigned to: {request.assignedTo}</span>
                             </div>
                           )}
                           {request.resolvedAt && (
-                            <div className="flex items-center">
-                              <CheckCircle className="h-4 w-4 mr-1" />
-                              Resolved: {formatDate(request.resolvedAt)}
+                            <div className="flex items-center gap-1">
+                              <CheckCircle className="h-3.5 w-3.5" />
+                              <span>Resolved: {formatDate(request.resolvedAt)}</span>
                             </div>
                           )}
                         </div>
 
                         {request.adminNotes && (
-                          <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                            <p className="text-sm text-gray-500 mb-1">Admin Notes</p>
-                            <p className="text-gray-700">{request.adminNotes}</p>
+                          <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800/50">
+                            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Admin Notes</p>
+                            <p className="text-sm text-slate-700 dark:text-slate-300">{request.adminNotes}</p>
                           </div>
                         )}
                       </div>

@@ -254,12 +254,11 @@ export default function CommunicationsInbox() {
   return (
     <AdminLayout>
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+        <h1 className="text-3xl font-semibold tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
           <Inbox className="w-8 h-8" />
           Email & SMS Inbox
-          <span className="ml-3 text-xs font-normal text-slate-400">v2025-10-22-improved</span>
         </h1>
-        <p className="text-slate-600 dark:text-slate-300 mt-1">
+        <p className="text-sm text-slate-600 dark:text-slate-300 mt-2">
           View and respond to inbound messages from your consumers
         </p>
       </div>
@@ -301,8 +300,8 @@ export default function CommunicationsInbox() {
                 </CardHeader>
                 <CardContent className="p-0">
                   {isLoadingEmails ? (
-                    <div className="p-4 text-center text-slate-500" data-testid="text-loading-emails">
-                      Loading...
+                    <div className="flex justify-center items-center p-8" data-testid="text-loading-emails">
+                      <div className="animate-spin rounded-full h-8 w-8 border-4 border-slate-200 dark:border-slate-700 border-t-slate-900 dark:border-t-slate-100"></div>
                     </div>
                   ) : isErrorEmails ? (
                     <div className="p-8 text-center" data-testid="error-loading-emails">
@@ -331,8 +330,8 @@ export default function CommunicationsInbox() {
                           key={email.id}
                           onClick={() => handleEmailClick(email)}
                           data-testid={`button-email-${email.id}`}
-                          className={`w-full text-left p-4 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors ${
-                            selectedEmail?.id === email.id ? 'bg-blue-50 dark:bg-slate-700' : ''
+                          className={`w-full text-left p-4 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors ${
+                            selectedEmail?.id === email.id ? 'bg-blue-50 dark:bg-slate-700/50' : ''
                           } ${!email.isRead ? 'font-semibold' : ''}`}
                         >
                           <div className="flex items-start gap-3">
@@ -440,9 +439,9 @@ export default function CommunicationsInbox() {
                       </div>
                     </div>
                   ) : (
-                    <div className="text-center py-12 text-slate-500" data-testid="text-select-email">
-                      <Mail className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                      <p>Select an email to view its contents</p>
+                    <div className="text-center py-12" data-testid="text-select-email">
+                      <Mail className="w-12 h-12 text-slate-400 dark:text-slate-500 mx-auto mb-4" />
+                      <p className="text-sm text-slate-600 dark:text-slate-300">Select an email to view its contents</p>
                     </div>
                   )}
                 </CardContent>
@@ -469,8 +468,8 @@ export default function CommunicationsInbox() {
                 </CardHeader>
                 <CardContent className="p-0">
                   {isLoadingSms ? (
-                    <div className="p-4 text-center text-slate-500" data-testid="text-loading-sms">
-                      Loading...
+                    <div className="flex justify-center items-center p-8" data-testid="text-loading-sms">
+                      <div className="animate-spin rounded-full h-8 w-8 border-4 border-slate-200 dark:border-slate-700 border-t-slate-900 dark:border-t-slate-100"></div>
                     </div>
                   ) : isErrorSms ? (
                     <div className="p-8 text-center" data-testid="error-loading-sms">
@@ -499,8 +498,8 @@ export default function CommunicationsInbox() {
                           key={sms.id}
                           onClick={() => handleSmsClick(sms)}
                           data-testid={`button-sms-${sms.id}`}
-                          className={`w-full text-left p-4 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors ${
-                            selectedSms?.id === sms.id ? 'bg-blue-50 dark:bg-slate-700' : ''
+                          className={`w-full text-left p-4 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors ${
+                            selectedSms?.id === sms.id ? 'bg-blue-50 dark:bg-slate-700/50' : ''
                           } ${!sms.isRead ? 'font-semibold' : ''}`}
                         >
                           <div className="flex items-start gap-3">
@@ -613,9 +612,9 @@ export default function CommunicationsInbox() {
                       </div>
                     </div>
                   ) : (
-                    <div className="text-center py-12 text-slate-500" data-testid="text-select-sms">
-                      <MessageSquare className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                      <p>Select an SMS to view its contents</p>
+                    <div className="text-center py-12" data-testid="text-select-sms">
+                      <MessageSquare className="w-12 h-12 text-slate-400 dark:text-slate-500 mx-auto mb-4" />
+                      <p className="text-sm text-slate-600 dark:text-slate-300">Select an SMS to view its contents</p>
                     </div>
                   )}
                 </CardContent>
