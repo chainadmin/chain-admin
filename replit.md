@@ -26,6 +26,7 @@ The frontend utilizes React with TypeScript, built with shadcn/ui components on 
 - **Customizable Landing Pages**: Agencies can customize their consumer portal landing pages with headlines and subheadlines.
 - **Global Admin Portal**: Provides platform-wide management, consumer search, service cutoff controls, subscription request workflows, and SMS configuration for global administrators.
 - **Multi-Module Architecture**: Supports various business types with module-specific customization via a `businessType` field and `enabledModules` array in tenant settings. A terminology system (`useTerminology()` hook) provides business-specific terms for UI components.
+- **Global Search**: Real-time search functionality in the admin dashboard header searches across consumers (by name/email) and accounts (by account number/creditor/consumer name) with database-level filtering using LIKE queries and LIMIT 5 for performance. Results display in a dropdown with separate sections, click-outside-to-close behavior, and navigation to the accounts page on selection.
 
 ## System Design Choices
 - **Database**: PostgreSQL with Drizzle ORM, multi-tenant schema for users, tenants, consumers, accounts, email templates, and sessions.
