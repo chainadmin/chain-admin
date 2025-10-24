@@ -1546,7 +1546,7 @@ export class DatabaseStorage implements IStorage {
 
     return {
       tracking: result.tracking,
-      tenantId: result.campaign?.tenantId ?? null,
+      tenantId: result.tracking.tenantId ?? result.campaign?.tenantId ?? null,
       campaignId: result.tracking.campaignId ?? null,
     };
   }

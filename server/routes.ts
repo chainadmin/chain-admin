@@ -9360,21 +9360,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Twilio webhook endpoint for SMS delivery tracking and usage
   app.post('/api/webhooks/twilio', async (req, res) => {
     try {
+      console.log('📱 Twilio webhook received:', JSON.stringify(req.body, null, 2));
+      
       const messageSid = req.body.MessageSid || req.body.SmsSid;
       const status = (req.body.MessageStatus || req.body.SmsStatus || '').toLowerCase();
 
       if (!messageSid) {
+        console.error('❌ Twilio webhook missing MessageSid');
         return res.status(400).json({ message: 'Missing MessageSid' });
       }
 
       const relevantStatuses = new Set(['sent', 'delivered', 'undelivered', 'failed']);
       if (!relevantStatuses.has(status)) {
+        console.log(`⏭️  Twilio webhook status "${status}" ignored (not in: sent, delivered, undelivered, failed)`);
         return res.status(200).json({ message: 'Status ignored' });
       }
 
       const segmentsRaw = req.body.NumSegments || req.body.SmsSegments || '1';
       const segmentsParsed = Number.parseInt(Array.isArray(segmentsRaw) ? segmentsRaw[0] : segmentsRaw, 10);
       const quantity = Number.isFinite(segmentsParsed) && segmentsParsed > 0 ? segmentsParsed : 1;
+      
+      console.log(`📊 SMS Segments detected: ${quantity} (raw: ${segmentsRaw})`);
 
       let tenantId = (req.body.TenantId || req.body.tenantId) as string | undefined;
       const trackingInfo = await storage.findSmsTrackingByExternalId(messageSid);
@@ -9414,10 +9420,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (!tenantId) {
-        console.warn('Twilio webhook missing tenant context', { messageSid, status });
+        console.warn('⚠️  Twilio webhook missing tenant context', { messageSid, status });
+        console.warn('   → Webhook body:', JSON.stringify(req.body, null, 2));
+        console.warn('   → Tracking info:', trackingInfo ? 'Found but no tenantId' : 'Not found');
         return res.status(200).json({ message: 'No tenant resolved' });
       }
 
+      console.log(`✅ Recording SMS usage: tenant=${tenantId}, segments=${quantity}, sid=${messageSid}`);
+      
       await storage.recordMessagingUsageEvent({
         tenantId,
         provider: 'twilio',
@@ -9428,6 +9438,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         metadata: req.body,
       });
 
+      console.log(`✅ Twilio webhook processed successfully`);
       res.status(200).json({ message: 'Webhook processed' });
     } catch (error) {
       console.error('Twilio webhook error:', error);

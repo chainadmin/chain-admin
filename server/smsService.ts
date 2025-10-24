@@ -190,34 +190,36 @@ class SmsService {
         to: to,
       });
 
-      // Track the sent SMS with actual Twilio status
-      if (campaignId && consumerId) {
-        await storage.createSmsTracking({
-          campaignId,
-          consumerId,
-          phoneNumber: to,
-          status: result.status || 'queued', // Use Twilio's actual status (queued, accepted, etc.)
-          sentAt: new Date(),
-          trackingData: { twilioSid: result.sid },
-        });
-      }
+      // Track ALL sent SMS for billing purposes (not just campaigns)
+      await storage.createSmsTracking({
+        tenantId,
+        campaignId: campaignId || null,
+        consumerId: consumerId || null,
+        phoneNumber: to,
+        status: result.status || 'queued', // Use Twilio's actual status (queued, accepted, etc.)
+        sentAt: new Date(),
+        trackingData: { twilioSid: result.sid },
+      });
+      
+      console.log(`📱 SMS tracking created: tenant=${tenantId}, sid=${result.sid}, campaign=${campaignId || 'none'}`);
 
       return { success: true, messageId: result.sid };
     } catch (error: any) {
       console.error('Twilio SMS error:', error);
       
-      // Track failed SMS
-      if (campaignId && consumerId) {
-        await storage.createSmsTracking({
-          campaignId,
-          consumerId,
-          phoneNumber: to,
-          status: 'failed',
-          sentAt: new Date(),
-          errorMessage: error.message,
-          trackingData: { error: error.message },
-        });
-      }
+      // Track ALL failed SMS for billing purposes (not just campaigns)
+      await storage.createSmsTracking({
+        tenantId,
+        campaignId: campaignId || null,
+        consumerId: consumerId || null,
+        phoneNumber: to,
+        status: 'failed',
+        sentAt: new Date(),
+        errorMessage: error.message,
+        trackingData: { error: error.message },
+      });
+      
+      console.log(`📱 Failed SMS tracked: tenant=${tenantId}, campaign=${campaignId || 'none'}`);
 
       return { success: false, error: error.message };
     }
