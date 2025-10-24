@@ -1,12 +1,24 @@
 import { Capacitor } from '@capacitor/core';
 
+// Function to get the correct server URL based on platform
+function getServerUrl(): string {
+  // If running on native platform (iOS/Android), use the production server
+  if (Capacitor.isNativePlatform()) {
+    // Use environment variable or default to Railway production server
+    return import.meta.env.VITE_API_BASE_URL || 'https://chain-admin-production.up.railway.app';
+  }
+  
+  // For web, use window.location.origin (same origin)
+  return typeof window !== 'undefined' ? window.location.origin : '';
+}
+
 // Configuration for mobile app dynamic updates
 export const mobileConfig = {
   // Version of the bundled app (update this when releasing new app versions)
   bundledVersion: '1.0.0',
   
   // Base URL for your web server (update this with your production URL)
-  serverUrl: import.meta.env.VITE_API_BASE_URL || window.location.origin,
+  serverUrl: getServerUrl(),
   
   // Check if running in Capacitor (mobile app)
   isNativePlatform: Capacitor.isNativePlatform(),
@@ -115,15 +127,10 @@ export function getCachedContent(key: string): any {
   }
 }
 
-// Function to load server URL dynamically (for WebView mode)
-export function getServerUrl(): string {
-  // In production, this could load from a remote config service
-  // For now, use environment variable or current origin
-  if (mobileConfig.isNativePlatform) {
-    // For mobile app, always use the production server
-    return import.meta.env.VITE_PRODUCTION_URL || 'https://chain.replit.app';
-  }
-  return window.location.origin;
+// Function to reload server URL dynamically (for WebView mode)
+export function reloadServerUrl(): string {
+  // Returns the current configured server URL
+  return mobileConfig.serverUrl;
 }
 
 // Initialize dynamic content on app load

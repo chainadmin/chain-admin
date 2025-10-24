@@ -1,9 +1,15 @@
 // Helper functions for making API calls that work in both local and Vercel environments
+import { Capacitor } from '@capacitor/core';
 
 function getApiBase(): string {
   // First check if VITE_API_URL is set (allows override)
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
+  }
+  
+  // For native mobile platforms (iOS/Android), use the production server
+  if (Capacitor.isNativePlatform()) {
+    return import.meta.env.VITE_API_BASE_URL || 'https://chain-admin-production.up.railway.app';
   }
   
   // Only use localhost:5000 if we're actually on localhost

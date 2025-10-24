@@ -1,4 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { Capacitor } from '@capacitor/core';
 import { getAuthToken } from "./cookies";
 import { getStoredConsumerToken } from "./consumer-auth";
 
@@ -68,6 +69,12 @@ function getApiUrl(path: string): string {
     return import.meta.env.VITE_API_URL + path;
   }
   
+  // For native mobile platforms (iOS/Android), use the production server
+  if (Capacitor.isNativePlatform()) {
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://chain-admin-production.up.railway.app';
+    return baseUrl + path;
+  }
+  
   // Only use localhost:5000 if we're actually on localhost
   const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
   
@@ -105,16 +112,24 @@ export async function apiRequest(
     headers["Authorization"] = `Bearer ${token}`;
   }
   
-  const res = await fetch(fullUrl, {
-    method,
-    headers,
-    // FormData should be sent as-is, JSON data should be stringified
-    body: data instanceof FormData ? data : (data ? JSON.stringify(data) : undefined),
-    credentials: "include", // Important for cookies to be sent
-  });
+  try {
+    const res = await fetch(fullUrl, {
+      method,
+      headers,
+      // FormData should be sent as-is, JSON data should be stringified
+      body: data instanceof FormData ? data : (data ? JSON.stringify(data) : undefined),
+      credentials: "include", // Important for cookies to be sent
+    });
 
-  await throwIfResNotOk(res);
-  return res;
+    await throwIfResNotOk(res);
+    return res;
+  } catch (error) {
+    // Network errors (connection refused, timeout, etc.)
+    if (error instanceof TypeError) {
+      throw new ApiError(0, "Network error: Unable to connect to server. Please check your internet connection.", error);
+    }
+    throw error;
+  }
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";
@@ -148,17 +163,25 @@ export const getQueryFn: <T>(options: {
       headers["Authorization"] = `Bearer ${token}`;
     }
     
-    const res = await fetch(url, {
-      headers,
-      credentials: "include", // Important for cookies to be sent
-    });
+    try {
+      const res = await fetch(url, {
+        headers,
+        credentials: "include", // Important for cookies to be sent
+      });
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
+      if (unauthorizedBehavior === "returnNull" && res.status === 401) {
+        return null;
+      }
+
+      await throwIfResNotOk(res);
+      return await res.json();
+    } catch (error) {
+      // Network errors (connection refused, timeout, etc.)
+      if (error instanceof TypeError) {
+        throw new ApiError(0, "Network error: Unable to connect to server. Please check your internet connection.", error);
+      }
+      throw error;
     }
-
-    await throwIfResNotOk(res);
-    return await res.json();
   };
 
 export const queryClient = new QueryClient({
