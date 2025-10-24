@@ -5550,6 +5550,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Cancel payment schedule (consumer-scoped)
+  app.post('/api/consumer/payment-schedule/:scheduleId/cancel', authenticateConsumer, async (req: any, res) => {
+    try {
+      const { scheduleId } = req.params;
+      const { id: consumerId, tenantId } = req.consumer || {};
+
+      if (!consumerId || !tenantId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Get the schedule to verify ownership
+      const schedules = await storage.getPaymentSchedulesByConsumer(consumerId, tenantId);
+      const schedule = schedules.find(s => s.id === scheduleId);
+
+      if (!schedule) {
+        return res.status(404).json({ message: "Payment schedule not found" });
+      }
+
+      if (schedule.status === 'cancelled') {
+        return res.status(400).json({ message: "This payment schedule is already cancelled" });
+      }
+
+      // Cancel the schedule
+      const success = await storage.cancelPaymentSchedule(scheduleId, tenantId);
+
+      if (success) {
+        console.log(`✅ Payment schedule ${scheduleId} cancelled by consumer ${consumerId}`);
+        res.json({ 
+          success: true, 
+          message: "Payment schedule cancelled successfully" 
+        });
+      } else {
+        res.status(500).json({ 
+          success: false, 
+          message: "Failed to cancel payment schedule" 
+        });
+      }
+    } catch (error) {
+      console.error("Error cancelling payment schedule:", error);
+      res.status(500).json({ message: "Failed to cancel payment schedule" });
+    }
+  });
+
   // Consumer callback request endpoint
   app.post('/api/consumer/callback-request', authenticateConsumer, async (req: any, res) => {
     try {

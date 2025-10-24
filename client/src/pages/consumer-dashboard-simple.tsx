@@ -8,7 +8,7 @@ import {
   getStoredConsumerToken,
 } from "@/lib/consumer-auth";
 import { apiCall } from "@/lib/api";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { getArrangementSummary, calculateArrangementPayment } from "@/lib/arrangements";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -998,6 +998,55 @@ export default function ConsumerDashboardSimple() {
                             </div>
                           </div>
                         )}
+
+                        {/* Cancel button */}
+                        <div className="mt-4 pt-4 border-t border-white/10">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full border-red-400/30 bg-red-500/10 text-red-200 hover:bg-red-500/20 hover:text-red-100"
+                            onClick={async () => {
+                              if (!window.confirm('Are you sure you want to cancel this payment arrangement? This action cannot be undone.')) {
+                                return;
+                              }
+                              
+                              try {
+                                const token = localStorage.getItem('consumerToken');
+                                const response = await apiCall(
+                                  "POST",
+                                  `/api/consumer/payment-schedule/${schedule.id}/cancel`,
+                                  {},
+                                  token
+                                );
+                                
+                                if (!response.ok) {
+                                  const errorData = await response.json();
+                                  throw new Error(errorData.message || 'Failed to cancel payment arrangement');
+                                }
+                                
+                                toast({
+                                  title: "Arrangement Cancelled",
+                                  description: "Your payment arrangement has been cancelled successfully.",
+                                });
+                                
+                                // Refresh the schedules list
+                                queryClient.invalidateQueries({ 
+                                  queryKey: [`/api/consumer/payment-schedules/${session?.email}?tenantSlug=${session?.tenantSlug}`] 
+                                });
+                              } catch (error: any) {
+                                console.error('Error cancelling arrangement:', error);
+                                toast({
+                                  title: "Error",
+                                  description: error.message || "Failed to cancel payment arrangement. Please try again.",
+                                  variant: "destructive",
+                                });
+                              }
+                            }}
+                            data-testid={`button-cancel-schedule-${schedule.id}`}
+                          >
+                            Cancel Arrangement
+                          </Button>
+                        </div>
                       </div>
                     ))}
                   </div>
