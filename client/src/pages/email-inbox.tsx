@@ -253,49 +253,51 @@ export default function CommunicationsInbox() {
 
   return (
     <AdminLayout>
-      <div className="mb-6">
-        <h1 className="text-3xl font-semibold tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
-          <Inbox className="w-8 h-8" />
-          Email & SMS Inbox
-        </h1>
-        <p className="text-sm text-slate-600 dark:text-slate-300 mt-2">
-          View and respond to inbound messages from your consumers
-        </p>
-      </div>
+      <div className="space-y-6">
+        {/* Header */}
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">
+            Communications Inbox
+          </h1>
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+            View and respond to inbound messages from your consumers
+          </p>
+        </div>
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'email' | 'sms')} className="w-full">
-          <TabsList className="mb-6">
+        {/* Tabs */}
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'email' | 'sms')} className="w-full">
+          <TabsList className="grid w-full max-w-md grid-cols-2">
             <TabsTrigger value="email" className="gap-2" data-testid="tab-email">
               <Mail className="w-4 h-4" />
               Email
               {unreadEmailCount > 0 && (
-                <Badge variant="destructive" className="ml-1">{unreadEmailCount}</Badge>
+                <Badge variant="destructive" className="ml-1 h-5 px-1.5 text-xs">{unreadEmailCount}</Badge>
               )}
             </TabsTrigger>
             <TabsTrigger value="sms" className="gap-2" data-testid="tab-sms">
               <MessageSquare className="w-4 h-4" />
               SMS
               {unreadSmsCount > 0 && (
-                <Badge variant="destructive" className="ml-1">{unreadSmsCount}</Badge>
+                <Badge variant="destructive" className="ml-1 h-5 px-1.5 text-xs">{unreadSmsCount}</Badge>
               )}
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="email">
+          <TabsContent value="email" className="mt-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Email List */}
-              <Card className="lg:col-span-1">
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <span>Email Messages</span>
+              <Card className="lg:col-span-1 shadow-sm border">
+                <CardHeader className="border-b">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base">Email Messages</CardTitle>
                     {unreadEmailCount > 0 && (
                       <Badge variant="destructive" data-testid="badge-unread-email-count">
                         {unreadEmailCount} new
                       </Badge>
                     )}
-                  </CardTitle>
-                  <CardDescription>
-                    {emails.length} total emails
+                  </div>
+                  <CardDescription className="text-xs">
+                    {emails.length} total email{emails.length !== 1 ? 's' : ''}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -306,36 +308,44 @@ export default function CommunicationsInbox() {
                   ) : isErrorEmails ? (
                     <div className="p-8 text-center" data-testid="error-loading-emails">
                       <Mail className="w-12 h-12 mx-auto mb-2 text-red-500 opacity-50" />
-                      <p className="text-slate-700 dark:text-slate-300 mb-2">Failed to load emails</p>
-                      <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+                      <p className="text-sm font-medium text-slate-900 dark:text-white mb-1">Failed to load emails</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
                         {emailError instanceof Error ? emailError.message : 'An error occurred'}
                       </p>
                       <Button 
                         onClick={() => refetchEmails()} 
                         variant="outline"
+                        size="sm"
                         data-testid="button-retry-emails"
                       >
+                        <RefreshCw className="w-4 h-4 mr-2" />
                         Try Again
                       </Button>
                     </div>
                   ) : emails.length === 0 ? (
-                    <div className="p-8 text-center text-slate-500" data-testid="text-no-emails">
-                      <Mail className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                      <p>No emails yet</p>
+                    <div className="p-12 text-center" data-testid="text-no-emails">
+                      <Mail className="w-12 h-12 mx-auto mb-3 text-slate-400 dark:text-slate-500" />
+                      <p className="text-sm font-medium text-slate-900 dark:text-white">No emails yet</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Inbound emails will appear here</p>
                     </div>
                   ) : (
-                    <div className="divide-y">
+                    <div className="divide-y divide-slate-200 dark:divide-slate-700">
                       {emails.map((email) => (
                         <button
                           key={email.id}
                           onClick={() => handleEmailClick(email)}
                           data-testid={`button-email-${email.id}`}
-                          className={`w-full text-left p-4 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors ${
-                            selectedEmail?.id === email.id ? 'bg-blue-50 dark:bg-slate-700/50' : ''
-                          } ${!email.isRead ? 'font-semibold' : ''}`}
+                          className={cn(
+                            "w-full text-left p-4 transition-all hover:bg-slate-50 dark:hover:bg-slate-800/50",
+                            selectedEmail?.id === email.id && "bg-slate-100 dark:bg-slate-800 border-l-4 border-blue-600",
+                            !email.isRead && "bg-blue-50/50 dark:bg-blue-950/20"
+                          )}
                         >
                           <div className="flex items-start gap-3">
-                            <div className={`mt-1 ${!email.isRead ? 'text-blue-600' : 'text-slate-400'}`}>
+                            <div className={cn(
+                              "mt-0.5 flex-shrink-0",
+                              !email.isRead ? "text-blue-600" : "text-slate-400 dark:text-slate-500"
+                            )}>
                               {email.isRead ? (
                                 <MailOpen className="w-5 h-5" />
                               ) : (
@@ -343,15 +353,21 @@ export default function CommunicationsInbox() {
                               )}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between gap-2">
-                                <p className="text-sm text-slate-900 dark:text-white truncate">
+                              <div className="flex items-center justify-between gap-2 mb-1">
+                                <p className={cn(
+                                  "text-sm truncate",
+                                  !email.isRead ? "font-semibold text-slate-900 dark:text-white" : "font-medium text-slate-700 dark:text-slate-300"
+                                )}>
                                   {email.consumerName || email.fromEmail}
                                 </p>
                                 {!email.isRead && (
                                   <span className="w-2 h-2 bg-blue-600 rounded-full flex-shrink-0"></span>
                                 )}
                               </div>
-                              <p className="text-sm text-slate-600 dark:text-slate-300 truncate">
+                              <p className={cn(
+                                "text-sm truncate",
+                                !email.isRead ? "font-medium text-slate-600 dark:text-slate-300" : "text-slate-500 dark:text-slate-400"
+                              )}>
                                 {email.subject}
                               </p>
                               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -367,39 +383,43 @@ export default function CommunicationsInbox() {
               </Card>
 
               {/* Email Details */}
-              <Card className="lg:col-span-2">
-                <CardHeader>
-                  <CardTitle>Email Details</CardTitle>
+              <Card className="lg:col-span-2 shadow-sm border">
+                <CardHeader className="border-b">
+                  <CardTitle className="text-base">Email Details</CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-6">
                   {selectedEmail ? (
-                    <div>
-                      <div className="space-y-4 mb-6">
+                    <div className="space-y-6">
+                      <div className="space-y-4">
                         <div>
-                          <Label className="text-xs text-slate-500 dark:text-slate-400">From</Label>
-                          <div className="flex items-center gap-2 mt-1">
-                            <User className="w-4 h-4 text-slate-400" />
-                            <span className="font-medium" data-testid="text-from-email">
-                              {selectedEmail.consumerName || selectedEmail.fromEmail}
-                            </span>
-                            {selectedEmail.consumerName && (
-                              <span className="text-sm text-slate-500">({selectedEmail.fromEmail})</span>
-                            )}
+                          <Label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">From</Label>
+                          <div className="flex items-center gap-2 mt-1.5">
+                            <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg">
+                              <User className="w-4 h-4 text-slate-600 dark:text-slate-400" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900 dark:text-white" data-testid="text-from-email">
+                                {selectedEmail.consumerName || selectedEmail.fromEmail}
+                              </p>
+                              {selectedEmail.consumerName && (
+                                <p className="text-xs text-slate-500 dark:text-slate-400">{selectedEmail.fromEmail}</p>
+                              )}
+                            </div>
                           </div>
                         </div>
 
                         <div>
-                          <Label className="text-xs text-slate-500 dark:text-slate-400">Subject</Label>
-                          <p className="font-medium mt-1" data-testid="text-subject">
+                          <Label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Subject</Label>
+                          <p className="text-sm font-medium text-slate-900 dark:text-white mt-1.5" data-testid="text-subject">
                             {selectedEmail.subject}
                           </p>
                         </div>
 
                         <div>
-                          <Label className="text-xs text-slate-500 dark:text-slate-400">Received</Label>
-                          <div className="flex items-center gap-2 mt-1 text-sm text-slate-600 dark:text-slate-300">
-                            <Calendar className="w-4 h-4" />
-                            <span data-testid="text-received-date">
+                          <Label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Received</Label>
+                          <div className="flex items-center gap-2 mt-1.5">
+                            <Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+                            <span className="text-sm text-slate-700 dark:text-slate-300" data-testid="text-received-date">
                               {new Date(selectedEmail.receivedAt).toLocaleString()}
                             </span>
                           </div>
@@ -407,9 +427,9 @@ export default function CommunicationsInbox() {
                       </div>
 
                       <div className="border-t pt-6">
-                        <Label className="text-xs text-slate-500 dark:text-slate-400">Message</Label>
+                        <Label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Message</Label>
                         <div 
-                          className="mt-2 prose dark:prose-invert max-w-none"
+                          className="mt-3 prose prose-sm dark:prose-invert max-w-none text-slate-700 dark:text-slate-300"
                           data-testid="content-email-body"
                           dangerouslySetInnerHTML={{ 
                             __html: selectedEmail.htmlBody || selectedEmail.textBody.replace(/\n/g, '<br/>') 
@@ -417,7 +437,7 @@ export default function CommunicationsInbox() {
                         />
                       </div>
 
-                      <div className="mt-6 flex gap-2">
+                      <div className="flex gap-2 pt-2">
                         <Button 
                           onClick={handleEmailReply} 
                           data-testid="button-email-reply"
@@ -439,9 +459,12 @@ export default function CommunicationsInbox() {
                       </div>
                     </div>
                   ) : (
-                    <div className="text-center py-12" data-testid="text-select-email">
-                      <Mail className="w-12 h-12 text-slate-400 dark:text-slate-500 mx-auto mb-4" />
-                      <p className="text-sm text-slate-600 dark:text-slate-300">Select an email to view its contents</p>
+                    <div className="text-center py-16" data-testid="text-select-email">
+                      <div className="inline-flex p-4 bg-slate-100 dark:bg-slate-800 rounded-full mb-4">
+                        <Mail className="w-8 h-8 text-slate-400 dark:text-slate-500" />
+                      </div>
+                      <p className="text-sm font-medium text-slate-900 dark:text-white">Select an email</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Choose an email from the list to view its contents</p>
                     </div>
                   )}
                 </CardContent>
@@ -449,21 +472,21 @@ export default function CommunicationsInbox() {
             </div>
           </TabsContent>
 
-          <TabsContent value="sms">
+          <TabsContent value="sms" className="mt-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* SMS List */}
-              <Card className="lg:col-span-1">
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <span>SMS Messages</span>
+              <Card className="lg:col-span-1 shadow-sm border">
+                <CardHeader className="border-b">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base">SMS Messages</CardTitle>
                     {unreadSmsCount > 0 && (
                       <Badge variant="destructive" data-testid="badge-unread-sms-count">
                         {unreadSmsCount} new
                       </Badge>
                     )}
-                  </CardTitle>
-                  <CardDescription>
-                    {smsMessages.length} total messages
+                  </div>
+                  <CardDescription className="text-xs">
+                    {smsMessages.length} total message{smsMessages.length !== 1 ? 's' : ''}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -474,48 +497,62 @@ export default function CommunicationsInbox() {
                   ) : isErrorSms ? (
                     <div className="p-8 text-center" data-testid="error-loading-sms">
                       <MessageSquare className="w-12 h-12 mx-auto mb-2 text-red-500 opacity-50" />
-                      <p className="text-slate-700 dark:text-slate-300 mb-2">Failed to load SMS messages</p>
-                      <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+                      <p className="text-sm font-medium text-slate-900 dark:text-white mb-1">Failed to load SMS messages</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
                         {smsError instanceof Error ? smsError.message : 'An error occurred'}
                       </p>
                       <Button 
                         onClick={() => refetchSms()} 
                         variant="outline"
+                        size="sm"
                         data-testid="button-retry-sms"
                       >
+                        <RefreshCw className="w-4 h-4 mr-2" />
                         Try Again
                       </Button>
                     </div>
                   ) : smsMessages.length === 0 ? (
-                    <div className="p-8 text-center text-slate-500" data-testid="text-no-sms">
-                      <MessageSquare className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                      <p>No SMS messages yet</p>
+                    <div className="p-12 text-center" data-testid="text-no-sms">
+                      <MessageSquare className="w-12 h-12 mx-auto mb-3 text-slate-400 dark:text-slate-500" />
+                      <p className="text-sm font-medium text-slate-900 dark:text-white">No SMS messages yet</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Inbound SMS will appear here</p>
                     </div>
                   ) : (
-                    <div className="divide-y">
+                    <div className="divide-y divide-slate-200 dark:divide-slate-700">
                       {smsMessages.map((sms) => (
                         <button
                           key={sms.id}
                           onClick={() => handleSmsClick(sms)}
                           data-testid={`button-sms-${sms.id}`}
-                          className={`w-full text-left p-4 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors ${
-                            selectedSms?.id === sms.id ? 'bg-blue-50 dark:bg-slate-700/50' : ''
-                          } ${!sms.isRead ? 'font-semibold' : ''}`}
+                          className={cn(
+                            "w-full text-left p-4 transition-all hover:bg-slate-50 dark:hover:bg-slate-800/50",
+                            selectedSms?.id === sms.id && "bg-slate-100 dark:bg-slate-800 border-l-4 border-blue-600",
+                            !sms.isRead && "bg-blue-50/50 dark:bg-blue-950/20"
+                          )}
                         >
                           <div className="flex items-start gap-3">
-                            <div className={`mt-1 ${!sms.isRead ? 'text-blue-600' : 'text-slate-400'}`}>
+                            <div className={cn(
+                              "mt-0.5 flex-shrink-0",
+                              !sms.isRead ? "text-blue-600" : "text-slate-400 dark:text-slate-500"
+                            )}>
                               <MessageSquare className="w-5 h-5" />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between gap-2">
-                                <p className="text-sm text-slate-900 dark:text-white truncate">
+                              <div className="flex items-center justify-between gap-2 mb-1">
+                                <p className={cn(
+                                  "text-sm truncate",
+                                  !sms.isRead ? "font-semibold text-slate-900 dark:text-white" : "font-medium text-slate-700 dark:text-slate-300"
+                                )}>
                                   {sms.consumerName || sms.fromPhone}
                                 </p>
                                 {!sms.isRead && (
                                   <span className="w-2 h-2 bg-blue-600 rounded-full flex-shrink-0"></span>
                                 )}
                               </div>
-                              <p className="text-sm text-slate-600 dark:text-slate-300 truncate">
+                              <p className={cn(
+                                "text-sm truncate",
+                                !sms.isRead ? "font-medium text-slate-600 dark:text-slate-300" : "text-slate-500 dark:text-slate-400"
+                              )}>
                                 {sms.messageBody}
                               </p>
                               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -531,32 +568,36 @@ export default function CommunicationsInbox() {
               </Card>
 
               {/* SMS Details */}
-              <Card className="lg:col-span-2">
-                <CardHeader>
-                  <CardTitle>SMS Details</CardTitle>
+              <Card className="lg:col-span-2 shadow-sm border">
+                <CardHeader className="border-b">
+                  <CardTitle className="text-base">SMS Details</CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-6">
                   {selectedSms ? (
-                    <div>
-                      <div className="space-y-4 mb-6">
+                    <div className="space-y-6">
+                      <div className="space-y-4">
                         <div>
-                          <Label className="text-xs text-slate-500 dark:text-slate-400">From</Label>
-                          <div className="flex items-center gap-2 mt-1">
-                            <Phone className="w-4 h-4 text-slate-400" />
-                            <span className="font-medium" data-testid="text-from-phone">
-                              {selectedSms.consumerName || selectedSms.fromPhone}
-                            </span>
-                            {selectedSms.consumerName && (
-                              <span className="text-sm text-slate-500">({selectedSms.fromPhone})</span>
-                            )}
+                          <Label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">From</Label>
+                          <div className="flex items-center gap-2 mt-1.5">
+                            <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg">
+                              <Phone className="w-4 h-4 text-slate-600 dark:text-slate-400" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900 dark:text-white" data-testid="text-from-phone">
+                                {selectedSms.consumerName || selectedSms.fromPhone}
+                              </p>
+                              {selectedSms.consumerName && (
+                                <p className="text-xs text-slate-500 dark:text-slate-400">{selectedSms.fromPhone}</p>
+                              )}
+                            </div>
                           </div>
                         </div>
 
                         <div>
-                          <Label className="text-xs text-slate-500 dark:text-slate-400">Received</Label>
-                          <div className="flex items-center gap-2 mt-1 text-sm text-slate-600 dark:text-slate-300">
-                            <Calendar className="w-4 h-4" />
-                            <span data-testid="text-sms-received-date">
+                          <Label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Received</Label>
+                          <div className="flex items-center gap-2 mt-1.5">
+                            <Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+                            <span className="text-sm text-slate-700 dark:text-slate-300" data-testid="text-sms-received-date">
                               {new Date(selectedSms.receivedAt).toLocaleString()}
                             </span>
                           </div>
@@ -564,14 +605,16 @@ export default function CommunicationsInbox() {
                       </div>
 
                       <div className="border-t pt-6">
-                        <Label className="text-xs text-slate-500 dark:text-slate-400">Message</Label>
-                        <p className="mt-2 whitespace-pre-wrap" data-testid="content-sms-body">
+                        <Label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Message</Label>
+                        <p className="mt-3 text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap" data-testid="content-sms-body">
                           {selectedSms.messageBody}
                         </p>
                         
                         {selectedSms.numMedia > 0 && selectedSms.mediaUrls && (
-                          <div className="mt-4">
-                            <Label className="text-xs text-slate-500 dark:text-slate-400">Media Attachments ({selectedSms.numMedia})</Label>
+                          <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                            <Label className="text-xs font-medium text-slate-600 dark:text-slate-400 uppercase tracking-wide">
+                              Media Attachments ({selectedSms.numMedia})
+                            </Label>
                             <div className="mt-2 space-y-2">
                               {selectedSms.mediaUrls.map((url, index) => (
                                 <a 
@@ -579,7 +622,7 @@ export default function CommunicationsInbox() {
                                   href={url} 
                                   target="_blank" 
                                   rel="noopener noreferrer"
-                                  className="block text-blue-600 hover:underline"
+                                  className="block text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:underline"
                                   data-testid={`link-media-${index}`}
                                 >
                                   View Media {index + 1}
@@ -590,7 +633,7 @@ export default function CommunicationsInbox() {
                         )}
                       </div>
 
-                      <div className="mt-6 flex gap-2">
+                      <div className="flex gap-2 pt-2">
                         <Button 
                           onClick={handleSmsReply} 
                           data-testid="button-sms-reply"
@@ -612,9 +655,12 @@ export default function CommunicationsInbox() {
                       </div>
                     </div>
                   ) : (
-                    <div className="text-center py-12" data-testid="text-select-sms">
-                      <MessageSquare className="w-12 h-12 text-slate-400 dark:text-slate-500 mx-auto mb-4" />
-                      <p className="text-sm text-slate-600 dark:text-slate-300">Select an SMS to view its contents</p>
+                    <div className="text-center py-16" data-testid="text-select-sms">
+                      <div className="inline-flex p-4 bg-slate-100 dark:bg-slate-800 rounded-full mb-4">
+                        <MessageSquare className="w-8 h-8 text-slate-400 dark:text-slate-500" />
+                      </div>
+                      <p className="text-sm font-medium text-slate-900 dark:text-white">Select an SMS</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Choose an SMS from the list to view its contents</p>
                     </div>
                   )}
                 </CardContent>
@@ -622,6 +668,7 @@ export default function CommunicationsInbox() {
             </div>
           </TabsContent>
         </Tabs>
+      </div>
 
       {/* Email Reply Dialog */}
       <Dialog open={showEmailReplyDialog} onOpenChange={setShowEmailReplyDialog}>
@@ -641,6 +688,7 @@ export default function CommunicationsInbox() {
                 value={emailReplySubject}
                 onChange={(e) => setEmailReplySubject(e.target.value)}
                 placeholder="Subject"
+                className="mt-1.5"
               />
             </div>
             <div>
@@ -652,10 +700,10 @@ export default function CommunicationsInbox() {
                 onChange={(e) => setEmailReplyMessage(e.target.value)}
                 placeholder="Type your message here..."
                 rows={8}
-                className="resize-none"
+                className="resize-none mt-1.5"
               />
             </div>
-            <div className="flex justify-end gap-2">
+            <div className="flex justify-end gap-2 pt-2">
               <Button
                 variant="outline"
                 onClick={() => setShowEmailReplyDialog(false)}
@@ -694,14 +742,14 @@ export default function CommunicationsInbox() {
                 onChange={(e) => setSmsReplyMessage(e.target.value)}
                 placeholder="Type your SMS message here..."
                 rows={6}
-                className="resize-none"
+                className="resize-none mt-1.5"
                 maxLength={1600}
               />
-              <p className="text-xs text-slate-500 mt-1">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5">
                 {smsReplyMessage.length} / 1600 characters
               </p>
             </div>
-            <div className="flex justify-end gap-2">
+            <div className="flex justify-end gap-2 pt-2">
               <Button
                 variant="outline"
                 onClick={() => setShowSmsReplyDialog(false)}
