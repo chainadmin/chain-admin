@@ -269,7 +269,8 @@ class SmaxService {
         filenumber: paymentData.filenumber,
         amount: paymentData.paymentamount,
         method: paymentData.paymentmethod,
-        baseUrl: config.baseUrl
+        baseUrl: config.baseUrl,
+        paymentData: JSON.stringify(paymentData, null, 2)
       });
 
       const result = await this.makeSmaxRequest(
@@ -283,6 +284,7 @@ class SmaxService {
       return result.state === 'SUCCESS';
     } catch (error) {
       console.error('❌ Error inserting payment to SMAX:', error);
+      console.error('Payment data that failed:', JSON.stringify(paymentData, null, 2));
       return false;
     }
   }
