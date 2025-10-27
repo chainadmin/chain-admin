@@ -749,10 +749,10 @@ export default function Billing() {
         </Tabs>
       </div>
       <Dialog open={updateBillingOpen} onOpenChange={setUpdateBillingOpen}>
-        <DialogContent className="border border-white/10 bg-[#101c3c]/80 text-blue-50">
+        <DialogContent className="max-w-2xl bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] border-white/20 text-white">
           <DialogHeader>
-            <DialogTitle className="text-xl font-semibold text-white">Update billing information</DialogTitle>
-            <DialogDescription className="text-sm text-blue-100/70">
+            <DialogTitle className="text-2xl font-bold text-white">Update billing information</DialogTitle>
+            <DialogDescription className="text-blue-100/70">
               Provide the contact details that should appear on your invoices.
             </DialogDescription>
           </DialogHeader>

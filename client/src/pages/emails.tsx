@@ -414,11 +414,11 @@ export default function Emails() {
                     New Template
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-[95vw] w-full h-[90vh] max-h-[900px]">
-                  <DialogHeader className="pb-4 border-b">
+                <DialogContent className="max-w-[95vw] w-full h-[90vh] max-h-[900px] bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] border-white/20 text-white">
+                  <DialogHeader className="pb-4 border-b border-white/20">
                     <div className="flex items-center justify-between">
-                      <DialogTitle className="flex items-center gap-2">
-                        <Sparkles className="h-5 w-5 text-blue-600" />
+                      <DialogTitle className="flex items-center gap-2 text-white">
+                        <Sparkles className="h-5 w-5 text-blue-400" />
                         Create Email Template
                       </DialogTitle>
                       <div className="flex gap-2">
