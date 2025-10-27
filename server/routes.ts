@@ -3142,6 +3142,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         termsOfService: settings?.termsOfService || null,
         landingPageHeadline: customBranding?.landingPageHeadline || null,
         landingPageSubheadline: customBranding?.landingPageSubheadline || null,
+        customLandingPageUrl: customBranding?.customLandingPageUrl || null,
       };
 
       res.status(200).json(branding);
@@ -4982,7 +4983,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         showPaymentPlans: z.boolean().optional(),
         showDocuments: z.boolean().optional(),
         allowSettlementRequests: z.boolean().optional(),
-        customBranding: z.any().optional(),
+        customBranding: z.any().optional().refine((val) => {
+          // If customBranding has customLandingPageUrl, validate it
+          if (val && val.customLandingPageUrl) {
+            const url = val.customLandingPageUrl;
+            // Only allow http:// or https:// URLs
+            return typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'));
+          }
+          return true;
+        }, {
+          message: "Custom landing page URL must start with http:// or https://"
+        }),
         consumerPortalSettings: z.any().optional(),
         smsThrottleLimit: z.number().min(1).max(1000).optional(),
         // Email configuration per tenant

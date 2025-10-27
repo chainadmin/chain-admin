@@ -41,6 +41,7 @@ interface AgencyBranding {
   termsOfService?: string | null;
   landingPageHeadline?: string | null;
   landingPageSubheadline?: string | null;
+  customLandingPageUrl?: string | null;
 }
 
 export default function AgencyLanding() {
@@ -90,6 +91,15 @@ export default function AgencyLanding() {
   });
 
   const resolvedBranding = agencyData ?? fallbackBranding;
+
+  // Redirect to custom landing page if configured
+  useEffect(() => {
+    const customUrl = agencyData?.customLandingPageUrl;
+    // Only redirect if URL is set and starts with http:// or https://
+    if (customUrl && (customUrl.startsWith('http://') || customUrl.startsWith('https://'))) {
+      window.location.href = customUrl;
+    }
+  }, [agencyData]);
 
   useEffect(() => {
     if (agencyData) {

@@ -1013,6 +1013,36 @@ export default function Settings() {
                           Leave blank to use the default message
                         </p>
                       </div>
+                      
+                      <div>
+                        <Label htmlFor="landing-page-url">Custom Landing Page URL (Optional)</Label>
+                        <Input
+                          id="landing-page-url"
+                          type="url"
+                          placeholder="https://yourcompany.com/portal"
+                          value={(localSettings?.customBranding as any)?.customLandingPageUrl || ''}
+                          onChange={(e) => {
+                            const url = e.target.value;
+                            const customBranding = (localSettings?.customBranding as any) || {};
+                            handleSettingsUpdate('customBranding', {
+                              ...customBranding,
+                              customLandingPageUrl: url
+                            });
+                          }}
+                          className={inputClasses}
+                          data-testid="input-custom-landing-page-url"
+                        />
+                        {(localSettings?.customBranding as any)?.customLandingPageUrl && 
+                         !(localSettings?.customBranding as any)?.customLandingPageUrl.startsWith('http://') &&
+                         !(localSettings?.customBranding as any)?.customLandingPageUrl.startsWith('https://') && (
+                          <p className="text-xs text-red-400 mt-1">
+                            ⚠️ URL must start with http:// or https://
+                          </p>
+                        )}
+                        <p className="text-xs text-blue-100/70 mt-1">
+                          If provided, consumers will be redirected to this external URL instead of the built-in portal. Must start with http:// or https://
+                        </p>
+                      </div>
                     </div>
                   </div>
 
