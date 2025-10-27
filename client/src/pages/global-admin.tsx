@@ -581,7 +581,17 @@ export default function GlobalAdmin() {
     
     // Fetch tenant settings to get enabled modules
     try {
-      const data: any = await apiRequest('GET', `/api/admin/tenants/${tenant.id}/settings`, {});
+      const response = await fetch(`/api/admin/tenants/${tenant.id}/settings`, {
+        headers: {
+          'Authorization': `Bearer ${sessionStorage.getItem('admin_token')}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch tenant settings');
+      }
+      
+      const data = await response.json();
       setEnabledModules(data.enabledModules || []);
     } catch (error) {
       console.error('Error fetching tenant settings:', error);
