@@ -9,6 +9,7 @@ export type AgencyContext = {
   slug: string;
   name: string;
   logoUrl: string | null;
+  businessType?: string;
 };
 
 export type LoginMutationPayload = LoginForm & { tenantSlug?: string };

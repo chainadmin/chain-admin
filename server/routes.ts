@@ -3130,6 +3130,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const branding = {
         agencyName: tenant.name,
         agencySlug: tenant.slug,
+        businessType: tenant.businessType || 'call_center',
         logoUrl: customBranding?.logoUrl || (tenant.brand as any)?.logoUrl || null,
         primaryColor: customBranding?.primaryColor || '#3B82F6',
         secondaryColor: customBranding?.secondaryColor || '#1E40AF',

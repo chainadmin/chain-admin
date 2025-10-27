@@ -38,6 +38,7 @@ import {
   clearConsumerAuth,
   persistConsumerAuth,
 } from "@/lib/consumer-auth";
+import { getTerminology, type BusinessType } from "@shared/terminology";
 
 export default function ConsumerLogin() {
   const [, setLocation] = useLocation();
@@ -52,6 +53,10 @@ export default function ConsumerLogin() {
   const [pendingAgencies, setPendingAgencies] = useState<AgencyContext[]>([]);
   const [agencyDialogOpen, setAgencyDialogOpen] = useState(false);
   const [selectedAgencySlug, setSelectedAgencySlug] = useState<string | null>(null);
+  
+  // Get terminology based on business type
+  const businessType: BusinessType = (agencyContext?.businessType as BusinessType) || 'call_center';
+  const terms = getTerminology(businessType);
 
   const currentSlug = useMemo(() => {
     if (typeof window === "undefined") {
@@ -86,6 +91,7 @@ export default function ConsumerLogin() {
         slug: data.agencySlug ?? slug,
         name: data.agencyName ?? slug,
         logoUrl: data.logoUrl ?? null,
+        businessType: data.businessType ?? 'call_center',
       });
     } catch (error) {
       console.error("Failed to load agency branding", error);
@@ -94,6 +100,7 @@ export default function ConsumerLogin() {
         slug,
         name: slug,
         logoUrl: null,
+        businessType: 'call_center',
       });
     }
   }, [persistAgencyContext]);
@@ -201,7 +208,7 @@ export default function ConsumerLogin() {
         // Successful login
         toast({
           title: "Login Successful",
-          description: "Welcome to your account portal!",
+          description: `Welcome to your ${terms.account.toLowerCase()} portal!`,
         });
 
         setPendingAgencies([]);
@@ -241,6 +248,7 @@ export default function ConsumerLogin() {
           slug: data.tenant.slug,
           name: data.tenant.name ?? data.tenant.slug,
           logoUrl: data.tenant.logoUrl ?? null,
+          businessType: agencyContext?.businessType || 'call_center',
         });
 
         // Force a hard redirect to clear any cached state
@@ -362,12 +370,12 @@ export default function ConsumerLogin() {
 
   return (
     <PublicHeroLayout
-      badgeText={agencyContext ? `${agencyContext.name} Portal` : "Secure consumer access"}
-      title={agencyContext ? `Welcome back to ${agencyContext.name}` : "Access your account"}
+      badgeText={agencyContext ? `${agencyContext.name} ${terms.consumer} Portal` : `Secure ${terms.consumer.toLowerCase()} access`}
+      title={agencyContext ? `Welcome back to ${agencyContext.name}` : `Access your ${terms.accountPlural.toLowerCase()}`}
       description={
         agencyContext
-          ? "Verify your information to review balances, download documents, and stay in touch with your agency."
-          : "Log in to review balances, download documents, and stay ahead of every update in one connected hub."
+          ? `Verify your information to review ${terms.balance.toLowerCase()}s, download documents, and stay in touch with your ${terms.creditor.toLowerCase()}.`
+          : `Log in to review ${terms.balance.toLowerCase()}s, download documents, and stay ahead of every update in one connected hub.`
       }
       supportingContent={(
         <>
@@ -382,8 +390,8 @@ export default function ConsumerLogin() {
           )}
           <div className="text-base text-blue-100/80">
             {agencyContext 
-              ? `Enter your email and date of birth to access your ${agencyContext.name} account.`
-              : "Enter the email address on file and your date of birth. We'll securely match you with the right agency and guide you to your information."
+              ? `Enter your email and date of birth to access your ${agencyContext.name} ${terms.account.toLowerCase()}.`
+              : `Enter the email address on file and your date of birth. We'll securely match you with the right ${terms.creditor.toLowerCase()} and guide you to your information.`
             }
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -402,7 +410,7 @@ export default function ConsumerLogin() {
               </div>
               <div className="space-y-1">
                 <p className="text-sm font-semibold text-white">Stay connected</p>
-                <p className="text-sm text-blue-100/70">Get account alerts, request support, and collaborate with your agency.</p>
+                <p className="text-sm text-blue-100/70">Get {terms.account.toLowerCase()} alerts, request support, and collaborate with your {terms.creditor.toLowerCase()}.</p>
               </div>
             </div>
           </div>
@@ -431,10 +439,10 @@ export default function ConsumerLogin() {
       <div className="space-y-8 text-left">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-blue-200">Consumer portal</p>
+            <p className="text-xs uppercase tracking-[0.2em] text-blue-200">{terms.consumer} portal</p>
             <h2 className="mt-2 text-2xl font-semibold text-white">Sign in to continue</h2>
             <p className="mt-3 text-sm text-blue-100/70">
-              Provide your details below to access your dashboard and manage every account in one place.
+              Provide your details below to access your dashboard and manage every {terms.account.toLowerCase()} in one place.
             </p>
           </div>
           <div className="hidden h-12 w-12 items-center justify-center rounded-full bg-blue-500/20 sm:flex">
@@ -492,11 +500,11 @@ export default function ConsumerLogin() {
               />
               <div className="space-y-2 text-xs text-blue-100/80">
                 <Label htmlFor="agreeToSms" className="text-sm font-semibold text-white">
-                  I agree to receive SMS account updates *
+                  I agree to receive SMS {terms.account.toLowerCase()} updates *
                 </Label>
                 <p>
                   By continuing, I confirm that I am the authorized user of this phone number and consent to receive
-                  account-related text messages. Message and data rates may apply. Reply STOP to opt out at any time.
+                  {terms.account.toLowerCase()}-related text messages. Message and data rates may apply. Reply STOP to opt out at any time.
                 </p>
               </div>
             </div>
