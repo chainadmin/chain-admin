@@ -865,43 +865,26 @@ export const smsTrackingRelations = relations(smsTracking, ({ one }) => ({
   }),
 }));
 
-// Communication Automations
+// Communication Automations (Simplified - each automation is a single scheduled send)
 export const communicationAutomations = pgTable("communication_automations", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
   name: text("name").notNull(),
   description: text("description"),
   type: text("type", { enum: ['email', 'sms'] }).notNull(),
-  templateId: uuid("template_id"), // For single template (one-time schedules)
-  templateIds: uuid("template_ids").array(), // For multiple templates (recurring schedules)
-  templateSchedule: jsonb("template_schedule").$type<{ templateId: string; dayOffset: number }[]>(), // For sequence-based schedules
+  templateId: uuid("template_id").notNull(), // Single template for this scheduled send
   isActive: boolean("is_active").default(true),
   
-  // Trigger conditions
-  triggerType: text("trigger_type", { enum: ['schedule', 'event', 'manual'] }).notNull(),
+  // Schedule settings - specific date and time
+  scheduledDate: timestamp("scheduled_date").notNull(), // Exact date to send
+  scheduleTime: text("schedule_time").notNull(), // Format: "HH:MM" (24-hour)
   
-  // Schedule settings (for scheduled automations)
-  scheduleType: text("schedule_type", { enum: ['once', 'daily', 'weekly', 'monthly', 'sequence'] }),
-  scheduledDate: timestamp("scheduled_date"),
-  scheduleTime: text("schedule_time"), // Format: "HH:MM"
-  scheduleWeekdays: text("schedule_weekdays").array(), // ['monday', 'tuesday', etc.]
-  scheduleDayOfMonth: text("schedule_day_of_month"), // For monthly schedules
-  endDate: timestamp("end_date"), // Optional end date for recurring automations
-  
-  // Event-based settings (for event-triggered automations)
-  eventType: text("event_type", { enum: ['account_created', 'payment_overdue', 'custom'] }),
-  eventDelay: text("event_delay"), // Format: "7d", "1h", "30m"
-  
-  // Target audience settings
-  targetType: text("target_type", { enum: ['all', 'folder', 'custom'] }).notNull(),
-  targetFolderIds: uuid("target_folder_ids").array(),
-  targetCustomerIds: uuid("target_customer_ids").array(),
+  // Target audience - which folder(s) to send to
+  targetFolderIds: uuid("target_folder_ids").array(), // Empty array means send to all
   
   // Execution tracking
   lastExecuted: timestamp("last_executed"),
-  nextExecution: timestamp("next_execution"),
   totalSent: bigint("total_sent", { mode: "number" }).default(0),
-  currentTemplateIndex: bigint("current_template_index", { mode: "number" }).default(0), // For template rotation
   
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -1229,7 +1212,7 @@ export const insertFolderSchema = createInsertSchema(folders).omit({ id: true, c
 export const insertSmsTemplateSchema = createInsertSchema(smsTemplates).omit({ id: true, createdAt: true });
 export const insertSmsCampaignSchema = createInsertSchema(smsCampaigns).omit({ id: true, createdAt: true, completedAt: true });
 export const insertSmsTrackingSchema = createInsertSchema(smsTracking).omit({ id: true });
-export const insertCommunicationAutomationSchema = createInsertSchema(communicationAutomations).omit({ id: true, createdAt: true, updatedAt: true, lastExecuted: true, nextExecution: true, totalSent: true, currentTemplateIndex: true });
+export const insertCommunicationAutomationSchema = createInsertSchema(communicationAutomations).omit({ id: true, createdAt: true, updatedAt: true, lastExecuted: true, totalSent: true });
 export const insertAutomationExecutionSchema = createInsertSchema(automationExecutions).omit({ id: true, executedAt: true });
 export const insertEmailSequenceSchema = createInsertSchema(emailSequences).omit({ id: true, createdAt: true, updatedAt: true, totalEnrolled: true, totalCompleted: true });
 export const insertEmailSequenceStepSchema = createInsertSchema(emailSequenceSteps).omit({ id: true, createdAt: true });
