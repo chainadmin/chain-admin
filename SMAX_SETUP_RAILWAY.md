@@ -57,6 +57,75 @@ For sync to work, accounts must match between systems:
 
 Make sure account numbers are consistent across both systems.
 
+## Payment Integration
+
+### Adding Payments to SMAX
+
+Chain automatically syncs all payments to SMAX when they occur. The system uses the SMAX `/insert_payments_external` endpoint.
+
+**What Gets Synced:**
+- Online consumer payments (credit card)
+- Manual admin payments
+- Scheduled payment execution
+- Payment arrangements
+
+**Payment Data Format:**
+```json
+{
+  "filenumber": "ABC123",
+  "paymentamount": "150.00",
+  "paymentmethod": "credit_card",
+  "paymentdate": "2025-01-15",
+  "transactionid": "txn_12345",
+  "notes": "Payment via consumer portal"
+}
+```
+
+**SMAX Endpoint:** `POST /insert_payments_external`
+
+**When Payments Are Sent:**
+- **Immediately** after payment is processed in Chain
+- **Non-blocking** - payment succeeds even if SMAX is unavailable
+- **Automatic** - no manual intervention required
+- **Logged** - all sync attempts are logged for troubleshooting
+
+**Requirements:**
+- Account must have `filenumber` field populated
+- SMAX must be enabled for the tenant
+- Valid SMAX credentials configured
+
+**Note:** If an account doesn't have a `filenumber`, the payment is still saved in Chain but is not sent to SMAX. The system logs a warning in this case.
+
+### Adding Payment Arrangements to SMAX
+
+When consumers set up payment plans, Chain syncs the arrangement to SMAX using the `/insertpaymentplan` endpoint.
+
+**Arrangement Data Format:**
+```json
+{
+  "filenumber": "ABC123",
+  "arrangementtype": "Fixed Monthly",
+  "monthlypayment": 100.00,
+  "startdate": "2025-01-15",
+  "enddate": "2025-06-15",
+  "nextpaymentdate": "2025-02-15",
+  "remainingpayments": 5,
+  "totalbalance": 500.00,
+  "cardtoken": "tok_12345",
+  "cardlast4": "4242",
+  "cardbrand": "Visa"
+}
+```
+
+**SMAX Endpoint:** `POST /insertpaymentplan`
+
+**Supported Arrangement Types:**
+- Fixed Monthly
+- Settlement
+- Range
+- Pay in Full
+- Custom Terms
+
 ## Sync Process (Every 8 Hours)
 
 The sync endpoint pulls data from SMAX into Chain for each tenant.
