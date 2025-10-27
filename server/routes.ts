@@ -8535,6 +8535,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const stats = await storage.getBillingStats(tenantId);
+      
+      // Enhanced logging for SMS usage debugging
+      console.log(`📊 Billing Stats for tenant ${tenantId}:`, JSON.stringify({
+        emailUsage: stats.emailUsage,
+        smsUsage: stats.smsUsage,
+        billingPeriod: stats.billingPeriod,
+        planId: stats.planId,
+        planName: stats.planName
+      }, null, 2));
+      
       res.json(stats);
     } catch (error) {
       console.error("Error fetching billing stats:", error);
@@ -9428,7 +9438,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log(`✅ Recording SMS usage: tenant=${tenantId}, segments=${quantity}, sid=${messageSid}`);
       
-      await storage.recordMessagingUsageEvent({
+      const usageEvent = {
         tenantId,
         provider: 'twilio',
         messageType: 'sms',
@@ -9436,9 +9446,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         externalMessageId: messageSid,
         occurredAt: new Date(),
         metadata: req.body,
-      });
+      };
+      
+      console.log(`📊 SMS Usage Event Details:`, JSON.stringify({
+        tenantId,
+        segments: quantity,
+        messageSid,
+        status,
+        timestamp: new Date().toISOString()
+      }, null, 2));
+      
+      await storage.recordMessagingUsageEvent(usageEvent as any);
 
-      console.log(`✅ Twilio webhook processed successfully`);
+      console.log(`✅ Twilio webhook processed successfully - ${quantity} SMS segments recorded to database for tenant ${tenantId}`);
       res.status(200).json({ message: 'Webhook processed' });
     } catch (error) {
       console.error('Twilio webhook error:', error);

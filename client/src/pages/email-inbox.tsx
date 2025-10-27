@@ -251,18 +251,28 @@ export default function CommunicationsInbox() {
   const unreadSmsCount = smsMessages.filter(sms => !sms.isRead).length;
   const totalUnreadCount = unreadEmailCount + unreadSmsCount;
 
+  const glassPanelClass = "rounded-3xl border border-white/15 bg-[#0b1733]/80 text-blue-50 shadow-xl shadow-blue-900/20 backdrop-blur";
+
   return (
     <AdminLayout>
-      <div className="space-y-6">
+      <div className="mx-auto flex max-w-7xl flex-col gap-10 px-4 py-10 text-blue-50 sm:px-6 lg:px-8">
         {/* Header */}
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">
-            Communications Inbox
-          </h1>
-          <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-            View and respond to inbound messages from your consumers
-          </p>
-        </div>
+        <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-blue-500/20 via-indigo-600/20 to-purple-900/20 p-8 shadow-2xl shadow-blue-900/40 backdrop-blur">
+          <div className="pointer-events-none absolute -right-10 top-10 h-64 w-64 rounded-full bg-blue-500/30 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-20 left-8 h-56 w-56 rounded-full bg-indigo-500/30 blur-3xl" />
+          <div className="relative z-10 space-y-6">
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-blue-100/80">
+              <Inbox className="h-3.5 w-3.5" />
+              Inbound Communications
+            </span>
+            <div className="space-y-2">
+              <h1 className="text-3xl font-semibold text-white sm:text-4xl">Communications Inbox</h1>
+              <p className="text-sm text-blue-100/70 sm:text-base">
+                View and respond to inbound messages from your consumers
+              </p>
+            </div>
+          </div>
+        </section>
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'email' | 'sms')} className="w-full">
@@ -283,13 +293,13 @@ export default function CommunicationsInbox() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="email" className="mt-6">
+          <TabsContent value="email" className="mt-0">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Email List */}
-              <Card className="lg:col-span-1 shadow-sm border">
-                <CardHeader className="border-b">
+              <Card className={cn(glassPanelClass, "lg:col-span-1")}>
+                <CardHeader className="border-b border-white/20 pb-4">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-base">Email Messages</CardTitle>
+                    <CardTitle className="text-lg font-semibold text-white">Email Messages</CardTitle>
                     {unreadEmailCount > 0 && (
                       <Badge variant="destructive" data-testid="badge-unread-email-count">
                         {unreadEmailCount} new
@@ -383,9 +393,9 @@ export default function CommunicationsInbox() {
               </Card>
 
               {/* Email Details */}
-              <Card className="lg:col-span-2 shadow-sm border">
-                <CardHeader className="border-b">
-                  <CardTitle className="text-base">Email Details</CardTitle>
+              <Card className={cn(glassPanelClass, "lg:col-span-2")}>
+                <CardHeader className="border-b border-white/20 pb-4">
+                  <CardTitle className="text-lg font-semibold text-white">Email Details</CardTitle>
                 </CardHeader>
                 <CardContent className="p-6">
                   {selectedEmail ? (
@@ -472,11 +482,11 @@ export default function CommunicationsInbox() {
             </div>
           </TabsContent>
 
-          <TabsContent value="sms" className="mt-6">
+          <TabsContent value="sms" className="mt-0">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* SMS List */}
-              <Card className="lg:col-span-1 shadow-sm border">
-                <CardHeader className="border-b">
+              <Card className={cn(glassPanelClass, "lg:col-span-1")}>
+                <CardHeader className="border-b border-white/20 pb-4">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base">SMS Messages</CardTitle>
                     {unreadSmsCount > 0 && (
@@ -568,9 +578,9 @@ export default function CommunicationsInbox() {
               </Card>
 
               {/* SMS Details */}
-              <Card className="lg:col-span-2 shadow-sm border">
-                <CardHeader className="border-b">
-                  <CardTitle className="text-base">SMS Details</CardTitle>
+              <Card className={cn(glassPanelClass, "lg:col-span-2")}>
+                <CardHeader className="border-b border-white/20 pb-4">
+                  <CardTitle className="text-lg font-semibold text-white">SMS Details</CardTitle>
                 </CardHeader>
                 <CardContent className="p-6">
                   {selectedSms ? (
