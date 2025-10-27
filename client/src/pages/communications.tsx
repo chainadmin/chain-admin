@@ -74,7 +74,9 @@ import {
   Palette,
   Link2,
   Link2Off,
+  Loader2,
 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 
 import { POSTMARK_TEMPLATES, type PostmarkTemplateType } from "@shared/postmarkTemplates";
 import { resolveConsumerPortalUrl } from "@shared/utils/consumerPortal";
@@ -261,6 +263,11 @@ export default function Communications() {
 
   const { data: smsCampaigns, isLoading: smsCampaignsLoading } = useQuery({
     queryKey: ["/api/sms-campaigns"],
+    refetchInterval: (data) => {
+      // Auto-refresh every 3 seconds if any campaign is sending
+      const hasSendingCampaign = (data as any[])?.some((c: any) => c.status === 'sending');
+      return hasSendingCampaign ? 3000 : false;
+    },
   });
 
   const { data: emailMetrics } = useQuery({
@@ -1677,25 +1684,43 @@ export default function Communications() {
                     {(campaigns as any).slice(0, 5).map((campaign: any) => (
                       <div
                         key={campaign.id}
-                        className="flex items-center justify-between rounded-2xl border border-white/20 bg-white/10 p-4 text-blue-50 shadow-sm shadow-blue-900/10"
+                        className="rounded-2xl border border-white/20 bg-white/10 p-4 text-blue-50 shadow-sm shadow-blue-900/10"
                       >
-                        <div>
-                          <h3 className="font-semibold text-blue-50">{campaign.name}</h3>
-                          <p className="text-sm text-blue-100/70">
-                            Target: {getTargetGroupLabel(campaign)} • Template: {campaign.templateName}
-                          </p>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="font-semibold text-blue-50">{campaign.name}</h3>
+                            <p className="text-sm text-blue-100/70">
+                              Target: {getTargetGroupLabel(campaign)} • Template: {campaign.templateName}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Badge
+                              className={cn(
+                                "rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-wide",
+                                getStatusColor(campaign.status)
+                              )}
+                            >
+                              {formatCampaignStatus(campaign.status)}
+                            </Badge>
+                            <span className="text-sm font-medium text-blue-100/70">{campaign.totalSent || 0} sent</span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                          <Badge
-                            className={cn(
-                              "rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-wide",
-                              getStatusColor(campaign.status)
-                            )}
-                          >
-                            {formatCampaignStatus(campaign.status)}
-                          </Badge>
-                          <span className="text-sm font-medium text-blue-100/70">{campaign.totalSent || 0} sent</span>
-                        </div>
+                        {/* Show compact progress for sending campaigns in overview */}
+                        {campaign.status === "sending" && campaign.totalRecipients > 0 && (
+                          <div className="mt-3 space-y-1.5">
+                            <div className="flex items-center justify-between text-xs text-blue-200">
+                              <span className="flex items-center gap-1.5">
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                Sending
+                              </span>
+                              <span className="font-mono">{campaign.totalSent || 0}/{campaign.totalRecipients}</span>
+                            </div>
+                            <Progress 
+                              value={((campaign.totalSent || 0) / campaign.totalRecipients) * 100} 
+                              className="h-1.5 bg-blue-900/30"
+                            />
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -2860,6 +2885,30 @@ export default function Communications() {
                             <div className="mt-1 font-semibold text-blue-50">{campaign.totalSent || 0}</div>
                           </div>
                         </div>
+
+                        {/* Show progress bar when campaign is sending */}
+                        {campaign.status === "sending" && campaign.totalRecipients > 0 && (
+                          <div className="mt-4 space-y-2 rounded-lg border border-blue-400/30 bg-blue-500/10 p-3">
+                            <div className="flex items-center justify-between text-sm">
+                              <div className="flex items-center gap-2 text-blue-200">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <span className="font-semibold">Sending messages...</span>
+                              </div>
+                              <span className="font-mono text-blue-100">
+                                {campaign.totalSent || 0} / {campaign.totalRecipients}
+                              </span>
+                            </div>
+                            <Progress 
+                              value={((campaign.totalSent || 0) / campaign.totalRecipients) * 100} 
+                              className="h-2 bg-blue-900/30"
+                            />
+                            {communicationType === "sms" && (
+                              <p className="text-xs text-blue-200/80">
+                                Sending at {(tenantSettings as any)?.smsThrottleLimit || 10} messages/minute (throttle limit)
+                              </p>
+                            )}
+                          </div>
+                        )}
                         {/* Consumer Portal URL for reference */}
                         <div className="mt-4 border-t border-white/15 pt-4">
                           <span className="text-[11px] uppercase tracking-wide text-blue-100/70">Consumer Portal URL</span>

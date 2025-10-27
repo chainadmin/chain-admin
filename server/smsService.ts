@@ -311,13 +311,18 @@ class SmsService {
   ): Promise<{ totalSent: number; totalFailed: number }> {
     let totalSent = 0;
     let totalFailed = 0;
+    let lastProgressUpdate = Date.now();
+    const progressUpdateInterval = 5000; // Update progress every 5 seconds
 
     const throttleConfig = await this.getThrottleConfig(tenantId);
     // Guard against division by zero
     const maxPerMinute = Math.max(1, throttleConfig.maxPerMinute);
     const delayBetweenBatches = 60000 / maxPerMinute; // ms delay per message
 
-    for (const recipient of recipients) {
+    console.log(`📤 Starting SMS campaign send: ${recipients.length} messages at ${maxPerMinute}/min (${delayBetweenBatches}ms between messages)`);
+
+    for (let i = 0; i < recipients.length; i++) {
+      const recipient = recipients[i];
       try {
         // Respect rate limits by checking before sending
         while (!this.canSendSms(tenantId, maxPerMinute)) {
@@ -340,6 +345,21 @@ class SmsService {
           totalFailed++;
         }
 
+        // Update campaign progress periodically (every 5 seconds or every 10 messages)
+        const now = Date.now();
+        if (now - lastProgressUpdate >= progressUpdateInterval || (i + 1) % 10 === 0 || i === recipients.length - 1) {
+          try {
+            await storage.updateSmsCampaign(campaignId, {
+              totalSent: totalSent,
+              totalErrors: totalFailed,
+            });
+            console.log(`📊 Progress: ${totalSent + totalFailed}/${recipients.length} (${totalSent} sent, ${totalFailed} failed)`);
+            lastProgressUpdate = now;
+          } catch (updateError) {
+            console.error('Error updating campaign progress:', updateError);
+          }
+        }
+
         // Delay to respect rate limits
         await new Promise(resolve => setTimeout(resolve, delayBetweenBatches));
       } catch (error) {
@@ -348,6 +368,7 @@ class SmsService {
       }
     }
 
+    console.log(`✅ SMS campaign send complete: ${totalSent} sent, ${totalFailed} failed`);
     return { totalSent, totalFailed };
   }
 
