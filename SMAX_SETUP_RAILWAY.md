@@ -74,7 +74,7 @@ Chain automatically syncs all payments to SMAX when they occur. The system uses 
 {
   "filenumber": "ABC123",
   "paymentamount": "150.00",
-  "paymentmethod": "credit_card",
+  "paymentmethod": "CREDIT_CARD",
   "paymentdate": "2025-01-15",
   "transactionid": "txn_12345",
   "notes": "Payment via consumer portal"
@@ -82,6 +82,11 @@ Chain automatically syncs all payments to SMAX when they occur. The system uses 
 ```
 
 **SMAX Endpoint:** `POST /insert_payments_external`
+
+**Field Details:**
+- `paymentmethod` is **uppercase** (e.g., CREDIT_CARD, ACH, CHECK, CASH)
+- Sensitive card/bank data (CVV, full card numbers) are **never sent** to SMAX
+- Only masked data (e.g., last 4 digits) is included in notes if needed
 
 **When Payments Are Sent:**
 - **Immediately** after payment is processed in Chain
@@ -93,6 +98,11 @@ Chain automatically syncs all payments to SMAX when they occur. The system uses 
 - Account must have `filenumber` field populated
 - SMAX must be enabled for the tenant
 - Valid SMAX credentials configured
+
+**Troubleshooting:**
+- Check server logs in `server/routes.ts` payment handlers
+- Look for "SMAX payment sync" log messages
+- Verify account has valid `filenumber` field
 
 **Note:** If an account doesn't have a `filenumber`, the payment is still saved in Chain but is not sent to SMAX. The system logs a warning in this case.
 
@@ -120,11 +130,20 @@ When consumers set up payment plans, Chain syncs the arrangement to SMAX using t
 **SMAX Endpoint:** `POST /insertpaymentplan`
 
 **Supported Arrangement Types:**
-- Fixed Monthly
-- Settlement
-- Range
-- Pay in Full
-- Custom Terms
+
+| Chain Plan Type | SMAX `arrangementtype` Value |
+|----------------|------------------------------|
+| `fixed_monthly` | Fixed Monthly |
+| `settlement` | Settlement |
+| `range` | Range |
+| `pay_in_full` | Pay in Full |
+| `custom_terms` | Custom Terms |
+| `one_time_payment` | One-Time Payment |
+
+**Security:**
+- Card tokens are stored securely and never logged
+- CVV is never stored or sent to SMAX
+- Only last 4 digits of card are included in arrangement data
 
 ## Sync Process (Every 8 Hours)
 
