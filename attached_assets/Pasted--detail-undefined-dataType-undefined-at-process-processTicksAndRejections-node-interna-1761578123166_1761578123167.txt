@@ -1,0 +1,224 @@
+  detail: undefined,
+  dataType: undefined,
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+  routine: 'checkInsertTargets'
+Twilio SMS error: error: column "tenant_id" of relation "sms_tracking" does not exist
+  hint: undefined,
+    at async file:///app/node_modules/drizzle-orm/node-postgres/session.js:83:22
+    at async DatabaseStorage.createSmsTracking (file:///app/dist/index.js:2194:31)
+  position: '35',
+    at async SmsService.sendImmediately (file:///app/dist/index.js:3213:11)
+  internalPosition: undefined,
+  internalQuery: undefined,
+    at async SmsService.sendBulkSmsCampaign (file:///app/dist/index.js:3314:28)
+  where: undefined,
+    at async file:///app/dist/index.js:6830:22 {
+  length: 134,
+  severity: 'ERROR',
+  code: '42703',
+}
+Error sending SMS to 256-457-0092: error: column "tenant_id" of relation "sms_tracking" does not exist
+    at /app/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async file:///app/node_modules/drizzle-orm/node-postgres/session.js:83:22
+    at async DatabaseStorage.createSmsTracking (file:///app/dist/index.js:2194:31)
+    at async SmsService.sendImmediately (file:///app/dist/index.js:3227:11)
+    at async SmsService.sendBulkSmsCampaign (file:///app/dist/index.js:3314:28)
+    at async file:///app/dist/index.js:6830:22 {
+  length: 134,
+  severity: 'ERROR',
+  code: '42703',
+  detail: undefined,
+  hint: undefined,
+  position: '35',
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'parse_target.c',
+  line: '1065',
+  routine: 'checkInsertTargets'
+}
+  hint: undefined,
+Twilio SMS error: error: column "tenant_id" of relation "sms_tracking" does not exist
+    at /app/node_modules/pg-pool/index.js:45:11
+  position: '35',
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async file:///app/node_modules/drizzle-orm/node-postgres/session.js:83:22
+  internalPosition: undefined,
+    at async DatabaseStorage.createSmsTracking (file:///app/dist/index.js:2194:31)
+  internalQuery: undefined,
+    at async SmsService.sendImmediately (file:///app/dist/index.js:3213:11)
+  where: undefined,
+    at async SmsService.sendBulkSmsCampaign (file:///app/dist/index.js:3314:28)
+    at async file:///app/dist/index.js:6830:22 {
+  schema: undefined,
+  length: 134,
+  table: undefined,
+  severity: 'ERROR',
+  column: undefined,
+  code: '42703',
+  detail: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'parse_target.c',
+  line: '1065',
+  routine: 'checkInsertTargets'
+}
+    at async SmsService.sendImmediately (file:///app/dist/index.js:3227:11)
+Error sending SMS to 864-745-5322: error: column "tenant_id" of relation "sms_tracking" does not exist
+    at async SmsService.sendBulkSmsCampaign (file:///app/dist/index.js:3314:28)
+    at /app/node_modules/pg-pool/index.js:45:11
+    at async file:///app/dist/index.js:6830:22 {
+  position: '35',
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+  length: 134,
+  file: 'parse_target.c',
+  hint: undefined,
+  severity: 'ERROR',
+    at async file:///app/node_modules/drizzle-orm/node-postgres/session.js:83:22
+  line: '1065',
+    at async DatabaseStorage.createSmsTracking (file:///app/dist/index.js:2194:31)
+  routine: 'checkInsertTargets'
+  where: undefined,
+  internalPosition: undefined,
+  schema: undefined,
+  table: undefined,
+  internalQuery: undefined,
+  code: '42703',
+  constraint: undefined,
+  column: undefined,
+  detail: undefined,
+  dataType: undefined,
+}
+Twilio SMS error: error: column "tenant_id" of relation "sms_tracking" does not exist
+  code: '42703',
+  line: '1065',
+    at /app/node_modules/pg-pool/index.js:45:11
+  detail: undefined,
+  routine: 'checkInsertTargets'
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+  hint: undefined,
+    at async file:///app/node_modules/drizzle-orm/node-postgres/session.js:83:22
+  position: '35',
+  schema: undefined,
+  internalPosition: undefined,
+    at async DatabaseStorage.createSmsTracking (file:///app/dist/index.js:2194:31)
+  internalQuery: undefined,
+  table: undefined,
+    at async SmsService.sendImmediately (file:///app/dist/index.js:3213:11)
+  where: undefined,
+  column: undefined,
+    at async SmsService.sendBulkSmsCampaign (file:///app/dist/index.js:3314:28)
+  dataType: undefined,
+    at async file:///app/dist/index.js:6830:22 {
+  constraint: undefined,
+  length: 134,
+  file: 'parse_target.c',
+  severity: 'ERROR',
+}
+  file: 'parse_target.c',
+  line: '1065',
+  routine: 'checkInsertTargets'
+Error sending SMS to 817-223-2134: error: column "tenant_id" of relation "sms_tracking" does not exist
+    at /app/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async file:///app/node_modules/drizzle-orm/node-postgres/session.js:83:22
+    at async DatabaseStorage.createSmsTracking (file:///app/dist/index.js:2194:31)
+    at async SmsService.sendImmediately (file:///app/dist/index.js:3227:11)
+    at async SmsService.sendBulkSmsCampaign (file:///app/dist/index.js:3314:28)
+    at async file:///app/dist/index.js:6830:22 {
+  length: 134,
+  severity: 'ERROR',
+  code: '42703',
+  detail: undefined,
+  hint: undefined,
+  position: '35',
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+}
+2025-10-27 15:14:07.823 UTC [61866] ERROR:  column "tenant_id" of relation "sms_tracking" does not exist at character 35
+2025-10-27 15:14:07.823 UTC [61866] STATEMENT:  insert into "sms_tracking" ("id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data") values (default, $1, $2, $3, $4, $5, $6, default, default, $7) returning "id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data"
+2025-10-27 15:14:07.908 UTC [61867] ERROR:  column "tenant_id" of relation "sms_tracking" does not exist at character 35
+2025-10-27 15:14:07.908 UTC [61867] STATEMENT:  insert into "sms_tracking" ("id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data") values (default, $1, $2, $3, $4, $5, $6, default, $7, $8) returning "id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data"
+2025-10-27 15:14:08.049 UTC [61868] ERROR:  column "tenant_id" of relation "sms_tracking" does not exist at character 35
+2025-10-27 15:14:08.049 UTC [61868] STATEMENT:  insert into "sms_tracking" ("id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data") values (default, $1, $2, $3, $4, $5, $6, default, default, $7) returning "id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data"
+2025-10-27 15:14:08.079 UTC [61869] ERROR:  column "tenant_id" of relation "sms_tracking" does not exist at character 35
+2025-10-27 15:14:08.079 UTC [61869] STATEMENT:  insert into "sms_tracking" ("id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data") values (default, $1, $2, $3, $4, $5, $6, default, $7, $8) returning "id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data"
+2025-10-27 15:14:08.236 UTC [61870] ERROR:  column "tenant_id" of relation "sms_tracking" does not exist at character 35
+2025-10-27 15:14:08.236 UTC [61870] STATEMENT:  insert into "sms_tracking" ("id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data") values (default, $1, $2, $3, $4, $5, $6, default, default, $7) returning "id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data"
+2025-10-27 15:14:08.263 UTC [61871] ERROR:  column "tenant_id" of relation "sms_tracking" does not exist at character 35
+2025-10-27 15:14:08.263 UTC [61871] STATEMENT:  insert into "sms_tracking" ("id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data") values (default, $1, $2, $3, $4, $5, $6, default, $7, $8) returning "id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data"
+2025-10-27 15:14:08.412 UTC [61872] ERROR:  column "tenant_id" of relation "sms_tracking" does not exist at character 35
+2025-10-27 15:14:08.412 UTC [61872] STATEMENT:  insert into "sms_tracking" ("id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data") values (default, $1, $2, $3, $4, $5, $6, default, default, $7) returning "id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data"
+  code: '42703',
+Twilio SMS error: error: column "tenant_id" of relation "sms_tracking" does not exist
+  line: '1065',
+    at /app/node_modules/pg-pool/index.js:45:11
+  detail: undefined,
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+  routine: 'checkInsertTargets'
+  hint: undefined,
+    at async file:///app/node_modules/drizzle-orm/node-postgres/session.js:83:22
+    at async DatabaseStorage.createSmsTracking (file:///app/dist/index.js:2194:31)
+  position: '35',
+    at async SmsService.sendImmediately (file:///app/dist/index.js:3213:11)
+  internalPosition: undefined,
+    at async SmsService.sendBulkSmsCampaign (file:///app/dist/index.js:3314:28)
+  internalQuery: undefined,
+    at async file:///app/dist/index.js:6830:22 {
+  where: undefined,
+  length: 134,
+  schema: undefined,
+  severity: 'ERROR',
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'parse_target.c',
+}
+2025-10-27 15:14:08.439 UTC [61873] ERROR:  column "tenant_id" of relation "sms_tracking" does not exist at character 35
+2025-10-27 15:14:08.439 UTC [61873] STATEMENT:  insert into "sms_tracking" ("id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data") values (default, $1, $2, $3, $4, $5, $6, default, $7, $8) returning "id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data"
+Error sending SMS to 210-309-6777: error: column "tenant_id" of relation "sms_tracking" does not exist
+    at /app/node_modules/pg-pool/index.js:45:11
+  position: '35',
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+  internalPosition: undefined,
+    at async file:///app/node_modules/drizzle-orm/node-postgres/session.js:83:22
+    at async DatabaseStorage.createSmsTracking (file:///app/dist/index.js:2194:31)
+  internalQuery: undefined,
+    at async SmsService.sendImmediately (file:///app/dist/index.js:3227:11)
+    at async SmsService.sendBulkSmsCampaign (file:///app/dist/index.js:3314:28)
+  where: undefined,
+    at async file:///app/dist/index.js:6830:22 {
+  schema: undefined,
+  length: 134,
+  table: undefined,
+  severity: 'ERROR',
+  code: '42703',
+  column: undefined,
+  detail: undefined,
+  dataType: undefined,
+  hint: undefined,
+  constraint: undefined,
+  file: 'parse_target.c',
+  line: '1065',
+  routine: 'checkInsertTargets'
+}
+2025-10-27 15:14:08.572 UTC [61874] ERROR:  column "tenant_id" of relation "sms_tracking" does not exist at character 35
+2025-10-27 15:14:08.572 UTC [61874] STATEMENT:  insert into "sms_tracking" ("id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data") values (default, $1, $2, $3, $4, $5, $6, default, $7, $8) returning "id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data"
+Twilio SMS error: RestException [Error]: Attempt to send to unsubscribed recipient
+  severity: 'ERROR',
+    at success (/app/node_modules/twilio/lib/base/Version.js:79:23)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async SmsService.sendImmediately (file:///app/dist/index.js:3208:26)
