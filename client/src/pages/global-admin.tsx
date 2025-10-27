@@ -6,7 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Building2, Users, DollarSign, TrendingUp, Eye, Ban, CheckCircle, AlertTriangle, Plus, Mail, MessageSquare, Phone, Trash2, Search, Shield, CreditCard, Send } from "lucide-react";
+import { Building2, Users, DollarSign, TrendingUp, Eye, Ban, CheckCircle, AlertTriangle, Plus, Mail, MessageSquare, Phone, Trash2, Search, Shield, CreditCard, Send, Settings, Repeat, FileText, MessagesSquare } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import AdminAuth from "@/components/admin-auth";
 // Simple currency formatter
@@ -81,6 +83,12 @@ export default function GlobalAdmin() {
   const [selectedTenantForPlan, setSelectedTenantForPlan] = useState<any>(null);
   const [selectedPlanId, setSelectedPlanId] = useState('');
   const [waiveSetupFee, setWaiveSetupFee] = useState(false);
+
+  // Business Services configuration state
+  const [businessServicesDialogOpen, setBusinessServicesDialogOpen] = useState(false);
+  const [selectedTenantForBusinessServices, setSelectedTenantForBusinessServices] = useState<any>(null);
+  const [businessType, setBusinessType] = useState('call_center');
+  const [enabledModules, setEnabledModules] = useState<string[]>([]);
 
   // Check for admin authentication on component mount
   useEffect(() => {
@@ -456,6 +464,29 @@ export default function GlobalAdmin() {
     }
   });
 
+  // Mutation to update business configuration (business type and modules)
+  const updateBusinessConfigMutation = useMutation({
+    mutationFn: async ({ tenantId, businessType, enabledModules }: { tenantId: string; businessType: string; enabledModules: string[] }) => {
+      return apiRequest('PUT', `/api/admin/tenants/${tenantId}/business-config`, { businessType, enabledModules });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants'] });
+      setBusinessServicesDialogOpen(false);
+      setSelectedTenantForBusinessServices(null);
+      toast({
+        title: "Business Configuration Updated",
+        description: "Business type and modules have been updated successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to update business configuration",
+        variant: "destructive",
+      });
+    }
+  });
+
   const handleCreateAgency = () => {
     if (!newAgencyName.trim() || !newAgencyEmail.trim()) {
       toast({
@@ -542,6 +573,47 @@ export default function GlobalAdmin() {
     // 2. Call stripe.createPaymentMethod() to tokenize
     // 3. Send only the Stripe payment method ID to backend
     // 4. Backend stores only: stripePaymentMethodId, last4, brand/type
+  };
+
+  const handleOpenBusinessServices = async (tenant: any) => {
+    setSelectedTenantForBusinessServices(tenant);
+    setBusinessType(tenant.businessType || 'call_center');
+    
+    // Fetch tenant settings to get enabled modules
+    try {
+      const data: any = await apiRequest('GET', `/api/admin/tenants/${tenant.id}/settings`, {});
+      setEnabledModules(data.enabledModules || []);
+    } catch (error) {
+      console.error('Error fetching tenant settings:', error);
+      // Don't clear modules on error - keep current state
+      toast({
+        title: "Warning",
+        description: "Could not load current module settings. Please try again.",
+        variant: "destructive",
+      });
+      return; // Don't open dialog if fetch fails
+    }
+    
+    setBusinessServicesDialogOpen(true);
+  };
+
+  const handleSaveBusinessConfig = () => {
+    if (!selectedTenantForBusinessServices) return;
+    
+    updateBusinessConfigMutation.mutate({
+      tenantId: selectedTenantForBusinessServices.id,
+      businessType,
+      enabledModules
+    });
+  };
+
+  const handleToggleModule = (moduleId: string) => {
+    const isCurrentlyEnabled = enabledModules.includes(moduleId);
+    setEnabledModules(
+      isCurrentlyEnabled
+        ? enabledModules.filter((m: string) => m !== moduleId)
+        : [...enabledModules, moduleId]
+    );
   };
 
   // Show admin authentication form if not authenticated
@@ -1314,6 +1386,17 @@ export default function GlobalAdmin() {
                           variant="outline"
                           size="sm"
                           className="border-purple-300 text-purple-700 hover:bg-purple-50"
+                          onClick={() => handleOpenBusinessServices(tenant)}
+                          data-testid={`button-business-services-${tenant.id}`}
+                        >
+                          <Settings className="h-4 w-4 mr-2" />
+                          Business Services
+                        </Button>
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-gray-300 text-gray-700 hover:bg-gray-50"
                           onClick={() => window.open(`/agency/${tenant.slug}`, '_blank')}
                           data-testid={`button-view-${tenant.id}`}
                         >
@@ -1829,6 +1912,174 @@ export default function GlobalAdmin() {
                     </>
                   ) : (
                     'Assign Plan'
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Business Services Configuration Dialog */}
+      <Dialog open={businessServicesDialogOpen} onOpenChange={setBusinessServicesDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] border-white/20 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center">
+              <Settings className="h-5 w-5 mr-2" />
+              Business Services Configuration
+            </DialogTitle>
+          </DialogHeader>
+          {selectedTenantForBusinessServices && (
+            <div className="space-y-6 pt-4">
+              <div className="space-y-2">
+                <Label htmlFor="business-type" className="text-white">Business Type</Label>
+                <Select value={businessType} onValueChange={setBusinessType}>
+                  <SelectTrigger id="business-type" className="bg-white/10 border-white/20 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="call_center">Call Center / Debt Collection</SelectItem>
+                    <SelectItem value="billing_service">Billing & Service Company</SelectItem>
+                    <SelectItem value="subscription_provider">Subscription Provider</SelectItem>
+                    <SelectItem value="freelancer_consultant">Freelancer / Consultant</SelectItem>
+                    <SelectItem value="property_management">Property Management</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-blue-100/70">
+                  This determines the terminology and features shown to consumers in their portal.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <Label className="text-white">Enabled Business Modules</Label>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {/* Billing Module */}
+                  <div className="rounded-xl border border-white/20 bg-white/5 p-4 transition hover:bg-white/10">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center space-x-3">
+                        <div className="rounded-lg bg-green-500/20 p-2">
+                          <DollarSign className="h-5 w-5 text-green-300" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-white">Billing</h3>
+                          <p className="text-xs text-blue-100/70">Send invoices and track payments</p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={enabledModules.includes('billing')}
+                        onCheckedChange={() => handleToggleModule('billing')}
+                        data-testid="switch-module-billing"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Subscriptions Module */}
+                  <div className="rounded-xl border border-white/20 bg-white/5 p-4 transition hover:bg-white/10">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center space-x-3">
+                        <div className="rounded-lg bg-blue-500/20 p-2">
+                          <Repeat className="h-5 w-5 text-blue-300" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-white">Subscriptions</h3>
+                          <p className="text-xs text-blue-100/70">Automate recurring billing</p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={enabledModules.includes('subscriptions')}
+                        onCheckedChange={() => handleToggleModule('subscriptions')}
+                        data-testid="switch-module-subscriptions"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Work Orders Module */}
+                  <div className="rounded-xl border border-white/20 bg-white/5 p-4 transition hover:bg-white/10">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center space-x-3">
+                        <div className="rounded-lg bg-purple-500/20 p-2">
+                          <FileText className="h-5 w-5 text-purple-300" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-white">Work Orders</h3>
+                          <p className="text-xs text-blue-100/70">Create and manage service jobs</p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={enabledModules.includes('work_orders')}
+                        onCheckedChange={() => handleToggleModule('work_orders')}
+                        data-testid="switch-module-work-orders"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Client CRM Module */}
+                  <div className="rounded-xl border border-white/20 bg-white/5 p-4 transition hover:bg-white/10">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center space-x-3">
+                        <div className="rounded-lg bg-orange-500/20 p-2">
+                          <Users className="h-5 w-5 text-orange-300" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-white">Client CRM</h3>
+                          <p className="text-xs text-blue-100/70">Track leads and customers</p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={enabledModules.includes('client_crm')}
+                        onCheckedChange={() => handleToggleModule('client_crm')}
+                        data-testid="switch-module-client-crm"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Messaging Center Module */}
+                  <div className="rounded-xl border border-white/20 bg-white/5 p-4 transition hover:bg-white/10">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center space-x-3">
+                        <div className="rounded-lg bg-pink-500/20 p-2">
+                          <MessagesSquare className="h-5 w-5 text-pink-300" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-white">Messaging Center</h3>
+                          <p className="text-xs text-blue-100/70">Centralize SMS, email, and notes</p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={enabledModules.includes('messaging_center')}
+                        onCheckedChange={() => handleToggleModule('messaging_center')}
+                        data-testid="switch-module-messaging-center"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-4 border-t border-white/10">
+                <Button
+                  variant="outline"
+                  onClick={() => setBusinessServicesDialogOpen(false)}
+                  className="bg-white/10 text-white border-white/20 hover:bg-white/20"
+                  data-testid="button-cancel-business-services"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSaveBusinessConfig}
+                  disabled={updateBusinessConfigMutation.isPending}
+                  className="bg-blue-600 text-white hover:bg-blue-700"
+                  data-testid="button-save-business-services"
+                >
+                  {updateBusinessConfigMutation.isPending ? (
+                    <>
+                      <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Settings className="h-4 w-4 mr-2" />
+                      Save Configuration
+                    </>
                   )}
                 </Button>
               </div>

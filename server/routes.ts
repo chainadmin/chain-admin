@@ -11,6 +11,7 @@ import {
   agencyTrialRegistrationSchema,
   platformUsers,
   tenants,
+  tenantSettings,
   consumers,
   accounts as accountsTable,
   agencyCredentials,
@@ -9364,6 +9365,82 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating payment method:", error);
       res.status(500).json({ message: "Failed to update payment method" });
+    }
+  });
+
+  // Get tenant settings (platform admin only)
+  app.get('/api/admin/tenants/:id/settings', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const settings = await storage.getTenantSettings(id);
+      
+      // Return empty settings if none exist yet (for new tenants)
+      if (!settings) {
+        return res.json({ enabledModules: [] });
+      }
+      
+      res.json(settings);
+    } catch (error) {
+      console.error("Error fetching tenant settings:", error);
+      res.status(500).json({ message: "Failed to fetch tenant settings" });
+    }
+  });
+
+  // Update tenant business configuration (platform admin only)
+  app.put('/api/admin/tenants/:id/business-config', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Validate input with known module IDs only
+      const businessConfigSchema = z.object({
+        businessType: z.enum(['call_center', 'billing_service', 'subscription_provider', 'freelancer_consultant', 'property_management']),
+        enabledModules: z.array(z.enum(['billing', 'subscriptions', 'work_orders', 'client_crm', 'messaging_center']))
+      });
+      
+      const validation = businessConfigSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: "Invalid business configuration", 
+          errors: validation.error.errors 
+        });
+      }
+      
+      const { businessType, enabledModules } = validation.data;
+      
+      // Update tenant businessType
+      const updatedTenant = await db
+        .update(tenants)
+        .set({ businessType })
+        .where(eq(tenants.id, id))
+        .returning();
+      
+      if (!updatedTenant || updatedTenant.length === 0) {
+        return res.status(404).json({ message: "Tenant not found" });
+      }
+      
+      // Update or insert tenant settings with enabled modules
+      const existingSettings = await storage.getTenantSettings(id);
+      if (existingSettings) {
+        await db
+          .update(tenantSettings)
+          .set({ enabledModules: enabledModules as any, updatedAt: new Date() })
+          .where(eq(tenantSettings.tenantId, id));
+      } else {
+        await db
+          .insert(tenantSettings)
+          .values({
+            tenantId: id,
+            enabledModules: enabledModules as any,
+          });
+      }
+      
+      res.json({ 
+        tenant: updatedTenant[0], 
+        enabledModules 
+      });
+    } catch (error) {
+      console.error("Error updating business configuration:", error);
+      res.status(500).json({ message: "Failed to update business configuration" });
     }
   });
 
