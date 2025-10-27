@@ -1107,6 +1107,13 @@ export default function Communications() {
       });
     }
     setShowTemplateModal(true);
+    
+    // Ensure the editor is populated after the modal opens
+    setTimeout(() => {
+      if (communicationType === "email" && editorRef.current && template.html) {
+        editorRef.current.innerHTML = template.html;
+      }
+    }, 100);
   };
 
   const handleTemplateSubmit = (e: React.FormEvent) => {
