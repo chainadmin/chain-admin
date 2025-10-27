@@ -117,6 +117,12 @@ export default function Accounts() {
     enabled: showComposeEmailDialog,
   });
 
+  // Fetch payment methods for the selected account's consumer
+  const { data: paymentMethods } = useQuery({
+    queryKey: ["/api/payment-methods/consumer", selectedAccount?.consumerId],
+    enabled: !!selectedAccount?.consumerId && showViewModal,
+  });
+
   // Mutations
   const createAccountMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/accounts", data),
@@ -1247,6 +1253,41 @@ export default function Accounts() {
                     <p className="mt-1 text-sm text-blue-100/70">{selectedAccountLocation}</p>
                   )}
                 </div>
+
+                {/* Payment Methods Section */}
+                {Array.isArray(paymentMethods) && paymentMethods.length > 0 && (
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-xs uppercase tracking-wide text-blue-100/60 mb-3">Saved Payment Methods</p>
+                    <div className="space-y-2">
+                      {(paymentMethods as any[]).map((method: any) => (
+                        <div key={method.id} className="flex items-center justify-between rounded-lg border border-white/10 bg-[#0c1630] p-3">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-8 w-12 items-center justify-center rounded bg-gradient-to-r from-blue-500 to-purple-500 text-xs font-bold text-white">
+                              {method.cardBrand?.toUpperCase() || 'CARD'}
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-white">
+                                {method.cardholderName || 'Cardholder'}
+                              </p>
+                              <p className="text-xs text-blue-100/60">
+                                •••• {method.cardLast4} • Expires {method.expiryMonth}/{method.expiryYear}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xs text-blue-100/60">Token</p>
+                            <p className="font-mono text-xs text-blue-100/80">{method.paymentToken}</p>
+                            {method.isDefault && (
+                              <span className="mt-1 inline-flex items-center rounded-full bg-green-500/20 px-2 py-0.5 text-xs font-medium text-green-400">
+                                Default
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">

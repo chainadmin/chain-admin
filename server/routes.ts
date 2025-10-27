@@ -8133,6 +8133,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Payment methods routes (tokenized cards)
+  app.get('/api/payment-methods/consumer/:consumerId', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { consumerId } = req.params;
+      const paymentMethods = await storage.getPaymentMethodsByConsumer(consumerId, tenantId);
+      
+      // Mask the payment token for security
+      const maskedMethods = paymentMethods.map(method => ({
+        ...method,
+        paymentToken: `tok_****${method.paymentToken.slice(-4)}` // Mask token, show last 4 chars
+      }));
+      
+      res.json(maskedMethods);
+    } catch (error) {
+      console.error("Error fetching payment methods:", error);
+      res.status(500).json({ message: "Failed to fetch payment methods" });
+    }
+  });
+
   // Real-time payment processing endpoint
   app.post('/api/payments/process', authenticateUser, requirePaymentProcessing, async (req: any, res) => {
     try {
