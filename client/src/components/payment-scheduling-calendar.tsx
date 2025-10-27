@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChevronLeft, ChevronRight, Calendar, AlertCircle, DollarSign, User } from "lucide-react";
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, parseISO } from "date-fns";
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, parseISO, startOfWeek, endOfWeek } from "date-fns";
 
 interface DailySchedule {
   scheduleId: string;
@@ -55,7 +55,10 @@ export function PaymentSchedulingCalendar() {
 
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
-  const calendarDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  // Get the calendar grid including padding days from prev/next month to complete the weeks
+  const calendarStart = startOfWeek(monthStart);
+  const calendarEnd = endOfWeek(monthEnd);
+  const calendarDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
 
   const getDateColor = (amountCents: number) => {
     if (amountCents === 0) return 'bg-white/5';
@@ -189,6 +192,7 @@ export function PaymentSchedulingCalendar() {
                 const dayTotal = calendarData?.dailyTotals[dateStr] || 0;
                 const hasPayments = dayTotal > 0;
                 const isToday = isSameDay(day, new Date());
+                const isCurrentMonth = isSameMonth(day, currentMonth);
 
                 return (
                   <button
@@ -200,6 +204,7 @@ export function PaymentSchedulingCalendar() {
                       ${hasPayments ? 'hover:brightness-110' : 'hover:bg-white/10'}
                       ${isToday ? 'ring-2 ring-sky-400' : ''}
                       ${selectedDate === dateStr ? 'ring-2 ring-blue-500' : ''}
+                      ${!isCurrentMonth ? 'opacity-40' : ''}
                       hover:shadow-md
                     `}
                     data-testid={`calendar-day-${dateStr}`}
