@@ -886,6 +886,7 @@ export const communicationAutomations = pgTable("communication_automations", {
   scheduleTime: text("schedule_time"), // Format: "HH:MM"
   scheduleWeekdays: text("schedule_weekdays").array(), // ['monday', 'tuesday', etc.]
   scheduleDayOfMonth: text("schedule_day_of_month"), // For monthly schedules
+  endDate: timestamp("end_date"), // Optional end date for recurring automations
   
   // Event-based settings (for event-triggered automations)
   eventType: text("event_type", { enum: ['account_created', 'payment_overdue', 'custom'] }),
