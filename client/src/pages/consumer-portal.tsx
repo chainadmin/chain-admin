@@ -1,18 +1,34 @@
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getArrangementSummary, formatCurrencyFromCents } from "@/lib/arrangements";
 import { useAgencyContext } from "@/hooks/useAgencyContext";
 import { getTerminology, type BusinessType } from "@shared/terminology";
+import { useToast } from "@/hooks/use-toast";
+import { queryClient } from "@/lib/queryClient";
+import { Upload } from "lucide-react";
 
 export default function ConsumerPortal() {
   const { tenantSlug, email } = useParams();
   const { agencySlug } = useAgencyContext();
+  const { toast } = useToast();
   
   // Default terminology for loading and error states
   const defaultTerms = getTerminology('call_center');
+  
+  // Upload state
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadTitle, setUploadTitle] = useState('');
+  const [uploadDescription, setUploadDescription] = useState('');
+  const [uploadAccountId, setUploadAccountId] = useState<string>('');
 
   const { encodedEmail, accountsUrl, documentsUrl, arrangementsUrl } = useMemo(() => {
     const safeEmail = email ? encodeURIComponent(email) : "";
@@ -43,6 +59,61 @@ export default function ConsumerPortal() {
     ] : ['consumer-portal-arrangements'],
     enabled: !!((data as any)?.accounts && arrangementsUrl),
   });
+
+  // Upload mutation
+  const uploadMutation = useMutation({
+    mutationFn: async (formData: FormData) => {
+      const response = await fetch('/api/consumer/documents/upload', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to upload document');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Document uploaded",
+        description: "Your document has been uploaded successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: [documentsUrl] });
+      setUploadDialogOpen(false);
+      setSelectedFile(null);
+      setUploadTitle('');
+      setUploadDescription('');
+      setUploadAccountId('');
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Upload failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleUpload = () => {
+    if (!selectedFile || !uploadTitle) {
+      toast({
+        title: "Missing information",
+        description: "Please select a file and provide a title",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+    formData.append('title', uploadTitle);
+    if (uploadDescription) formData.append('description', uploadDescription);
+    if (uploadAccountId) formData.append('accountId', uploadAccountId);
+    formData.append('isPublic', 'false');
+
+    uploadMutation.mutate(formData);
+  };
 
   if (isLoading) {
     return (
@@ -204,30 +275,118 @@ export default function ConsumerPortal() {
         </div>
 
         {/* Documents Section */}
-        {documents && Array.isArray(documents) && documents.length > 0 && (
+        {(documents && Array.isArray(documents) && documents.length > 0) || accounts?.length > 0 ? (
           <div className="max-w-2xl mx-auto mt-8">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Available Documents</h2>
-            <div className="space-y-3">
-              {documents.map((document: any) => (
-                <div key={document.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <i className="fas fa-file-alt text-blue-500 text-lg"></i>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">Documents</h2>
+              {accounts?.length > 0 && (
+                <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="sm" data-testid="button-upload-document">
+                      <Upload className="h-4 w-4 mr-2" />
+                      Upload Document
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Upload Document</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 mt-4">
                       <div>
-                        <h3 className="font-medium text-gray-900">{document.title}</h3>
-                        <p className="text-sm text-gray-500">{document.description}</p>
+                        <Label htmlFor="file-upload">Select File *</Label>
+                        <Input
+                          id="file-upload"
+                          type="file"
+                          onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                          data-testid="input-document-file"
+                        />
+                        {selectedFile && (
+                          <p className="text-sm text-gray-500 mt-1">{selectedFile.name}</p>
+                        )}
+                      </div>
+                      <div>
+                        <Label htmlFor="upload-title">Document Title *</Label>
+                        <Input
+                          id="upload-title"
+                          value={uploadTitle}
+                          onChange={(e) => setUploadTitle(e.target.value)}
+                          placeholder="e.g., Proof of Payment"
+                          data-testid="input-document-title"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="upload-description">Description (Optional)</Label>
+                        <Textarea
+                          id="upload-description"
+                          value={uploadDescription}
+                          onChange={(e) => setUploadDescription(e.target.value)}
+                          placeholder="Add any relevant notes about this document"
+                          data-testid="input-document-description"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="upload-account">Associated Account (Optional)</Label>
+                        <Select value={uploadAccountId} onValueChange={setUploadAccountId}>
+                          <SelectTrigger id="upload-account" data-testid="select-document-account">
+                            <SelectValue placeholder="Select an account" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">None</SelectItem>
+                            {accounts?.map((account: any) => (
+                              <SelectItem key={account.id} value={account.id}>
+                                {account.creditor} - {account.accountNumber ? `••••${account.accountNumber.slice(-4)}` : 'No account number'}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex justify-end space-x-2 pt-4">
+                        <Button
+                          variant="outline"
+                          onClick={() => setUploadDialogOpen(false)}
+                          disabled={uploadMutation.isPending}
+                          data-testid="button-cancel-upload"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          onClick={handleUpload}
+                          disabled={uploadMutation.isPending || !selectedFile || !uploadTitle}
+                          data-testid="button-confirm-upload"
+                        >
+                          {uploadMutation.isPending ? "Uploading..." : "Upload"}
+                        </Button>
                       </div>
                     </div>
-                    <Button variant="outline" size="sm">
-                      <i className="fas fa-download mr-2"></i>
-                      Download
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                  </DialogContent>
+                </Dialog>
+              )}
             </div>
+            {documents && Array.isArray(documents) && documents.length > 0 ? (
+              <div className="space-y-3">
+                {documents.map((document: any) => (
+                  <div key={document.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <i className="fas fa-file-alt text-blue-500 text-lg"></i>
+                        <div>
+                          <h3 className="font-medium text-gray-900">{document.title}</h3>
+                          <p className="text-sm text-gray-500">{document.description}</p>
+                        </div>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={() => window.open(document.fileUrl, '_blank')}>
+                        <i className="fas fa-download mr-2"></i>
+                        Download
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 text-center py-8">No documents available yet.</p>
+            )}
           </div>
-        )}
+        ) : null}
 
         {/* Payment Arrangements Section */}
         {arrangements && Array.isArray(arrangements) && arrangements.length > 0 && (

@@ -89,6 +89,36 @@ const upload = multer({
   }
 });
 
+// Multer configuration for document uploads - accepts PDFs, images, Word docs, etc.
+const documentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit for documents
+  },
+  fileFilter: (req, file, cb) => {
+    // Allow common document types
+    const allowedMimeTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'image/jpeg',
+      'image/jpg',
+      'image/png',
+      'image/gif',
+      'image/webp',
+      'text/plain',
+    ];
+    
+    if (allowedMimeTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`File type not allowed. Accepted types: PDF, Word, Excel, Images, and Text files`));
+    }
+  }
+});
+
 // Helper utilities for template variable replacement
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -5360,6 +5390,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching consumer documents:", error);
       res.status(500).json({ message: "Failed to fetch documents" });
+    }
+  });
+
+  // Consumer document upload endpoint
+  app.post('/api/consumer/documents/upload', authenticateConsumer, documentUpload.single('file'), async (req: any, res) => {
+    try {
+      const { id: consumerId, email: tokenEmail, tenantId, tenantSlug: tokenTenantSlug } = req.consumer || {};
+
+      if (!consumerId || !tenantId) {
+        return res.status(401).json({ message: "No consumer access" });
+      }
+
+      const { title, description, accountId, isPublic } = req.body;
+      const file = req.file;
+
+      if (!file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+
+      if (!title) {
+        return res.status(400).json({ message: "Document title is required" });
+      }
+
+      // Verify the account belongs to this consumer if accountId is provided
+      if (accountId) {
+        const account = await storage.getAccount(accountId);
+        if (!account || account.consumerId !== consumerId || account.tenantId !== tenantId) {
+          return res.status(403).json({ message: "You can only upload documents to your own accounts" });
+        }
+      }
+
+      // Upload file to R2 storage
+      const uploadResult = await uploadLogo(file.buffer, tenantId, file.mimetype);
+      
+      if (!uploadResult) {
+        return res.status(500).json({ message: "Failed to upload file to storage" });
+      }
+
+      // Create document record in database
+      const document = await storage.createDocument({
+        tenantId,
+        accountId: accountId || null,
+        title: title.trim(),
+        description: description ? description.trim() : undefined,
+        fileName: file.originalname,
+        fileUrl: uploadResult.url,
+        fileSize: file.size,
+        mimeType: file.mimetype,
+        isPublic: isPublic === 'true' || isPublic === true,
+      });
+
+      res.json({
+        message: "Document uploaded successfully",
+        document
+      });
+    } catch (error) {
+      console.error("Error uploading consumer document:", error);
+      res.status(500).json({ message: "Failed to upload document" });
     }
   });
 
