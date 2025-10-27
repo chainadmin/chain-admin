@@ -688,9 +688,9 @@ export default function CompanyManagement() {
           }
         }}
       >
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] border-white/20 text-white">
           <DialogHeader>
-            <DialogTitle>Consumer details</DialogTitle>
+            <DialogTitle className="text-2xl font-bold text-white">Consumer details</DialogTitle>
           </DialogHeader>
           {selectedConsumer && (
             <div className="space-y-6">
@@ -779,9 +779,9 @@ export default function CompanyManagement() {
           }
         }}
       >
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] border-white/20 text-white">
           <DialogHeader>
-            <DialogTitle>Edit consumer information</DialogTitle>
+            <DialogTitle className="text-2xl font-bold text-white">Edit consumer information</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleEditSubmit} className="space-y-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -862,11 +862,11 @@ export default function CompanyManagement() {
                 />
               </div>
             </div>
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={handleCloseDialogs}>
+            <div className="flex justify-end gap-2 pt-4 border-t border-white/20">
+              <Button type="button" onClick={handleCloseDialogs} className="bg-white/10 text-white border-white/20 hover:bg-white/20">
                 Cancel
               </Button>
-              <Button type="submit" disabled={editConsumerMutation.isPending}>
+              <Button type="submit" disabled={editConsumerMutation.isPending} className="bg-blue-600 text-white hover:bg-blue-700">
                 {editConsumerMutation.isPending ? "Saving..." : "Save changes"}
               </Button>
             </div>

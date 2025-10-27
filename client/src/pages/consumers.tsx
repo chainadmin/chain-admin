@@ -403,9 +403,9 @@ export default function Consumers() {
 
       {/* View Consumer Dialog */}
       <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] border-white/20 text-white">
           <DialogHeader>
-            <DialogTitle>Consumer Details</DialogTitle>
+            <DialogTitle className="text-2xl font-bold text-white">Consumer Details</DialogTitle>
           </DialogHeader>
           {selectedConsumer && (
             <div className="space-y-4">
@@ -502,9 +502,9 @@ export default function Consumers() {
 
       {/* Edit Consumer Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] border-white/20 text-white">
           <DialogHeader>
-            <DialogTitle>Edit Consumer Information</DialogTitle>
+            <DialogTitle className="text-2xl font-bold text-white">Edit Consumer Information</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleUpdateSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
@@ -585,15 +585,15 @@ export default function Consumers() {
                 />
               </div>
             </div>
-            <div className="flex justify-end gap-2">
+            <div className="flex justify-end gap-2 pt-4 border-t border-white/20">
               <Button
                 type="button"
-                variant="outline"
                 onClick={() => setShowEditDialog(false)}
+                className="bg-white/10 text-white border-white/20 hover:bg-white/20"
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={updateConsumerMutation.isPending}>
+              <Button type="submit" disabled={updateConsumerMutation.isPending} className="bg-blue-600 text-white hover:bg-blue-700">
                 {updateConsumerMutation.isPending ? "Saving..." : "Save Changes"}
               </Button>
             </div>
@@ -603,9 +603,9 @@ export default function Consumers() {
 
       {/* Contact Consumer Dialog */}
       <Dialog open={showContactDialog} onOpenChange={setShowContactDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] border-white/20 text-white">
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle className="text-2xl font-bold text-white">
               Contact {selectedConsumer?.firstName} {selectedConsumer?.lastName}
             </DialogTitle>
           </DialogHeader>
@@ -633,15 +633,15 @@ export default function Consumers() {
                 required
               />
             </div>
-            <div className="flex justify-end gap-2">
+            <div className="flex justify-end gap-2 pt-4 border-t border-white/20">
               <Button
                 type="button"
-                variant="outline"
                 onClick={() => setShowContactDialog(false)}
+                className="bg-white/10 text-white border-white/20 hover:bg-white/20"
               >
                 Cancel
               </Button>
-              <Button type="submit">
+              <Button type="submit" className="bg-blue-600 text-white hover:bg-blue-700">
                 Send Message
               </Button>
             </div>
