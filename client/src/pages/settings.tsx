@@ -139,12 +139,6 @@ export default function Settings() {
     queryKey: ["/api/email-usage-stats"],
   });
 
-  const { data: enabledModulesData, isLoading: modulesLoading } = useQuery<{ enabledModules: string[] }>({
-    queryKey: ["/api/settings/enabled-modules"],
-  });
-
-  const enabledModules = enabledModulesData?.enabledModules || [];
-
   const quickStatusItems = [
     {
       label: "Portal branding",
@@ -330,35 +324,6 @@ export default function Settings() {
       queryClient.invalidateQueries({ queryKey: ["/api/arrangement-options"] });
     },
   });
-
-  const updateEnabledModulesMutation = useMutation({
-    mutationFn: async (modules: string[]) => {
-      await apiRequest("PUT", "/api/settings/enabled-modules", { enabledModules: modules });
-    },
-    onSuccess: () => {
-      toast({
-        title: "Modules Updated",
-        description: "Your business service modules have been updated.",
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/settings/enabled-modules"] });
-    },
-    onError: () => {
-      toast({
-        title: "Update Failed",
-        description: "Failed to update business service modules.",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const handleToggleModule = (moduleId: string) => {
-    const isCurrentlyEnabled = enabledModules.includes(moduleId);
-    const newModules = isCurrentlyEnabled
-      ? enabledModules.filter((m: string) => m !== moduleId)
-      : [...enabledModules, moduleId];
-    
-    updateEnabledModulesMutation.mutate(newModules);
-  };
 
   const handleSettingsUpdate = (field: string, value: any) => {
     setLocalSettings((prev: any) => ({
@@ -767,12 +732,9 @@ export default function Settings() {
 
         <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-blue-900/20 backdrop-blur">
           <Tabs defaultValue="general" className="space-y-8">
-            <TabsList className="grid w-full grid-cols-1 gap-2 p-2 text-blue-100 sm:grid-cols-7">
+            <TabsList className="grid w-full grid-cols-1 gap-2 p-2 text-blue-100 sm:grid-cols-6">
               <TabsTrigger value="general" className="px-4 py-2">
                 General
-              </TabsTrigger>
-              <TabsTrigger value="modules" className="px-4 py-2">
-                Business Services
               </TabsTrigger>
               <TabsTrigger value="merchant" className="px-4 py-2">
                 Payment Processing
@@ -790,128 +752,6 @@ export default function Settings() {
                 Privacy & Legal
               </TabsTrigger>
             </TabsList>
-
-            <TabsContent value="modules" className="space-y-6">
-              <Card className={cardBaseClasses}>
-                <CardHeader className="space-y-1 text-white">
-                  <CardTitle className="text-xl font-semibold text-white">Business Service Modules</CardTitle>
-                  <p className="text-sm text-blue-100/70">
-                    Enable the features your business needs. Each module unlocks specific functionality tailored to your industry.
-                  </p>
-                </CardHeader>
-                <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {/* Billing Module */}
-                  <div className="rounded-xl border border-white/20 bg-white/5 p-5 transition hover:bg-white/10">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className="rounded-lg bg-green-500/20 p-2">
-                          <DollarSign className="h-5 w-5 text-green-300" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-white">💳 Billing</h3>
-                          <p className="text-xs text-blue-100/70">Send invoices and track payments</p>
-                        </div>
-                      </div>
-                      <Switch
-                        checked={enabledModules.includes('billing')}
-                        onCheckedChange={() => handleToggleModule('billing')}
-                        disabled={updateEnabledModulesMutation.isPending}
-                        data-testid="switch-module-billing"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Subscriptions Module */}
-                  <div className="rounded-xl border border-white/20 bg-white/5 p-5 transition hover:bg-white/10">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className="rounded-lg bg-blue-500/20 p-2">
-                          <Repeat className="h-5 w-5 text-blue-300" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-white">🔁 Subscriptions</h3>
-                          <p className="text-xs text-blue-100/70">Automate recurring billing</p>
-                        </div>
-                      </div>
-                      <Switch
-                        checked={enabledModules.includes('subscriptions')}
-                        onCheckedChange={() => handleToggleModule('subscriptions')}
-                        disabled={updateEnabledModulesMutation.isPending}
-                        data-testid="switch-module-subscriptions"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Work Orders Module */}
-                  <div className="rounded-xl border border-white/20 bg-white/5 p-5 transition hover:bg-white/10">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className="rounded-lg bg-purple-500/20 p-2">
-                          <FileText className="h-5 w-5 text-purple-300" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-white">🧾 Work Orders</h3>
-                          <p className="text-xs text-blue-100/70">Create and manage service jobs</p>
-                        </div>
-                      </div>
-                      <Switch
-                        checked={enabledModules.includes('work_orders')}
-                        onCheckedChange={() => handleToggleModule('work_orders')}
-                        disabled={updateEnabledModulesMutation.isPending}
-                        data-testid="switch-module-work-orders"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Client CRM Module */}
-                  <div className="rounded-xl border border-white/20 bg-white/5 p-5 transition hover:bg-white/10">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className="rounded-lg bg-orange-500/20 p-2">
-                          <Users className="h-5 w-5 text-orange-300" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-white">🧍 Client CRM</h3>
-                          <p className="text-xs text-blue-100/70">Track leads and customers</p>
-                        </div>
-                      </div>
-                      <Switch
-                        checked={enabledModules.includes('client_crm')}
-                        onCheckedChange={() => handleToggleModule('client_crm')}
-                        disabled={updateEnabledModulesMutation.isPending}
-                        data-testid="switch-module-client-crm"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Messaging Center Module */}
-                  <div className="rounded-xl border border-white/20 bg-white/5 p-5 transition hover:bg-white/10">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className="rounded-lg bg-pink-500/20 p-2">
-                          <MessagesSquare className="h-5 w-5 text-pink-300" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-white">💬 Messaging Center</h3>
-                          <p className="text-xs text-blue-100/70">Centralize SMS, email, and notes</p>
-                        </div>
-                      </div>
-                      <Switch
-                        checked={enabledModules.includes('messaging_center')}
-                        onCheckedChange={() => handleToggleModule('messaging_center')}
-                        disabled={updateEnabledModulesMutation.isPending}
-                        data-testid="switch-module-messaging-center"
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-                {modulesLoading && (
-                  <CardFooter>
-                    <p className="text-sm text-blue-100/60">Loading modules...</p>
-                  </CardFooter>
-                )}
-              </Card>
-            </TabsContent>
 
             <TabsContent value="general" className="space-y-6">
               <Card className={cardBaseClasses}>
