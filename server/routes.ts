@@ -2888,113 +2888,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
+      // Simplified schema - each automation is a single scheduled send
       const insertAutomationSchema = z.object({
         name: z.string().min(1),
         description: z.string().optional(),
         type: z.enum(['email', 'sms']),
-        templateId: z.string().uuid().optional(), // For single template (one-time)
-        templateIds: z.array(z.string().uuid()).optional(), // For multiple templates (recurring)
-        templateSchedule: z.array(z.object({
-          templateId: z.string().uuid(),
-          dayOffset: z.number().min(0)
-        })).optional(), // For sequence-based scheduling
-        triggerType: z.enum(['schedule', 'event', 'manual']),
-        scheduleType: z.enum(['once', 'daily', 'weekly', 'monthly', 'sequence']).optional(),
-        scheduledDate: z.string().optional(),
-        scheduleTime: z.string().optional(),
-        scheduleWeekdays: z.array(z.string()).optional(),
-        scheduleDayOfMonth: z.string().optional(),
-        eventType: z.enum(['account_created', 'payment_overdue', 'custom']).optional(),
-        eventDelay: z.string().optional(),
-        targetType: z.enum(['all', 'folder', 'custom']),
-        targetFolderIds: z.array(z.string().uuid()).optional(),
-        targetCustomerIds: z.array(z.string().uuid()).optional(),
-      }).refine(data => {
-        // Either templateId, templateIds, or templateSchedule must be provided
-        return data.templateId || 
-               (data.templateIds && data.templateIds.length > 0) ||
-               (data.templateSchedule && data.templateSchedule.length > 0);
-      }, {
-        message: "Either templateId, templateIds, or templateSchedule must be provided"
-      }).refine(data => {
-        // If scheduleType is 'sequence', templateSchedule must be provided
-        if (data.scheduleType === 'sequence') {
-          return data.templateSchedule && data.templateSchedule.length > 0;
-        }
-        return true;
-      }, {
-        message: "Template sequence is required when scheduleType is 'sequence'"
+        templateId: z.string().uuid(),
+        scheduledDate: z.string(), // ISO timestamp
+        scheduleTime: z.string(), // HH:MM format
+        targetFolderIds: z.array(z.string().uuid()).optional().default([]),
       });
 
       const validatedData = insertAutomationSchema.parse(req.body);
 
+      //  Convert scheduledDate to timestamp
+      const scheduledDateTime = new Date(validatedData.scheduledDate);
+
       const automationData: any = {
         ...validatedData,
         tenantId: tenantId,
+        scheduledDate: scheduledDateTime,
+        isActive: true,
       };
-
-      automationData.templateIds = Array.isArray(validatedData.templateIds)
-        ? validatedData.templateIds
-        : [];
-
-      automationData.templateSchedule = Array.isArray(validatedData.templateSchedule)
-        ? validatedData.templateSchedule.map((item) => ({
-            templateId: item.templateId,
-            dayOffset: Number(item.dayOffset) || 0,
-          }))
-        : [];
-
-      automationData.scheduleWeekdays = Array.isArray(validatedData.scheduleWeekdays)
-        ? validatedData.scheduleWeekdays.filter((day): day is string => typeof day === 'string' && day.trim().length > 0)
-        : [];
-
-      automationData.targetFolderIds = Array.isArray(validatedData.targetFolderIds)
-        ? validatedData.targetFolderIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
-        : [];
-
-      automationData.targetCustomerIds = Array.isArray(validatedData.targetCustomerIds)
-        ? validatedData.targetCustomerIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
-        : [];
-
-      if (!automationData.scheduleType && automationData.triggerType === 'schedule') {
-        automationData.scheduleType = 'once';
-      }
-
-      // Convert scheduledDate string to Date if provided
-      if (automationData.scheduledDate) {
-        automationData.scheduledDate = new Date(automationData.scheduledDate);
-      }
-
-      // Calculate next execution if it's a scheduled automation
-      if (automationData.triggerType === 'schedule') {
-        const nextExecution = calculateNextExecution(automationData);
-        console.log('📅 Automation schedule calculation:', {
-          name: automationData.name,
-          triggerType: automationData.triggerType,
-          scheduleType: automationData.scheduleType,
-          scheduledDate: automationData.scheduledDate,
-          scheduleTime: automationData.scheduleTime,
-          calculatedNextExecution: nextExecution ? nextExecution.toISOString() : null
-        });
-        if (nextExecution) {
-          automationData.nextExecution = nextExecution;
-        } else {
-          console.warn('⚠️ No nextExecution calculated for scheduled automation:', automationData.name);
-        }
-      }
-      
-      // Set isActive to true by default if not specified
-      if (automationData.isActive === undefined) {
-        automationData.isActive = true;
-      }
       
       const newAutomation = await storage.createAutomation(automationData);
       
       console.log('✅ Automation created:', {
         id: newAutomation.id,
         name: newAutomation.name,
-        isActive: (newAutomation as any).isActive,
-        nextExecution: (newAutomation as any).nextExecution ? new Date((newAutomation as any).nextExecution).toISOString() : null
+        scheduledDate: scheduledDateTime.toISOString(),
+        scheduleTime: validatedData.scheduleTime,
       });
       
       res.status(201).json(newAutomation);
@@ -3015,14 +2938,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         name: z.string().min(1).optional(),
         description: z.string().optional(),
         isActive: z.boolean().optional(),
-        scheduleType: z.enum(['once', 'daily', 'weekly', 'monthly']).optional(),
+        type: z.enum(['email', 'sms']).optional(),
+        templateId: z.string().uuid().optional(),
         scheduledDate: z.string().optional(),
         scheduleTime: z.string().optional(),
-        scheduleWeekdays: z.array(z.string()).optional(),
-        scheduleDayOfMonth: z.string().optional(),
-        targetType: z.enum(['all', 'folder', 'custom']).optional(),
         targetFolderIds: z.array(z.string().uuid()).optional(),
-        targetCustomerIds: z.array(z.string().uuid()).optional(),
       });
 
       const validatedData = updateAutomationSchema.parse(req.body);
@@ -3035,27 +2955,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Convert scheduledDate string to Date if provided
       if (updateData.scheduledDate) {
         updateData.scheduledDate = new Date(updateData.scheduledDate);
-      }
-      
-      // Recalculate next execution if schedule settings changed
-      if (updateData.scheduleType || updateData.scheduledDate || updateData.scheduleTime || 
-          updateData.scheduleWeekdays || updateData.scheduleDayOfMonth) {
-        // Get current automation to merge with updates
-        const currentAutomation = await storage.getAutomationById(req.params.id, tenantId);
-        if (currentAutomation && currentAutomation.triggerType === 'schedule') {
-          const mergedData: any = { ...currentAutomation, ...updateData };
-
-          if (Array.isArray(mergedData.scheduleWeekdays)) {
-            mergedData.scheduleWeekdays = mergedData.scheduleWeekdays.filter(
-              (day: unknown): day is string => typeof day === 'string' && day.trim().length > 0,
-            );
-          }
-
-          const nextExecution = calculateNextExecution(mergedData);
-          if (nextExecution) {
-            updateData.nextExecution = nextExecution;
-          }
-        }
       }
       
       const updatedAutomation = await storage.updateAutomation(req.params.id, updateData);
