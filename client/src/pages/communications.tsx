@@ -212,20 +212,9 @@ export default function Communications() {
     description: "",
     type: "email" as "email" | "sms",
     templateId: "",
-    templateIds: [] as string[], // For multiple templates
-    templateSchedule: [] as { templateId: string; dayOffset: number; folderIds?: string[] }[], // For day-based scheduling
-    triggerType: "schedule" as "schedule" | "event" | "manual",
-    scheduleType: "once" as "once" | "daily" | "weekly" | "monthly" | "sequence",
     scheduledDate: "",
     scheduleTime: "",
-    scheduleWeekdays: [] as string[],
-    scheduleDayOfMonth: "",
-    eventType: "account_created" as "account_created" | "payment_overdue" | "custom",
-    eventDelay: "1d",
-    targetType: "all" as "all" | "folder" | "custom",
     targetFolderIds: [] as string[],
-    targetCustomerIds: [] as string[],
-    endDate: "", // End date for automation
   });
 
   const [showAutomationModal, setShowAutomationModal] = useState(false);
@@ -926,20 +915,9 @@ export default function Communications() {
         description: "",
         type: "email",
         templateId: "",
-        templateIds: [],
-        templateSchedule: [],
-        triggerType: "schedule",
-        scheduleType: "once",
         scheduledDate: "",
         scheduleTime: "",
-        scheduleWeekdays: [],
-        scheduleDayOfMonth: "",
-        eventType: "account_created",
-        eventDelay: "1d",
-        targetType: "all",
         targetFolderIds: [],
-        targetCustomerIds: [],
-        endDate: "",
       });
       toast({
         title: "Success",
@@ -990,20 +968,9 @@ export default function Communications() {
         description: "",
         type: "email",
         templateId: "",
-        templateIds: [],
-        templateSchedule: [],
-        triggerType: "schedule",
-        scheduleType: "once",
         scheduledDate: "",
         scheduleTime: "",
-        scheduleWeekdays: [],
-        scheduleDayOfMonth: "",
-        eventType: "account_created",
-        eventDelay: "immediate",
-        targetType: "all",
         targetFolderIds: [],
-        targetCustomerIds: [],
-        endDate: "",
       });
       toast({
         title: "Success",
@@ -1234,37 +1201,37 @@ export default function Communications() {
       return;
     }
 
-    // Check template selection based on schedule type
-    if (automationForm.scheduleType === "once") {
-      if (!automationForm.templateId) {
-        toast({
-          title: "Error",
-          description: "Please select a template",
-          variant: "destructive",
-        });
-        return;
-      }
-    } else {
-      if (automationForm.templateIds.length === 0) {
-        toast({
-          title: "Error",
-          description: "Please select at least one template for recurring schedules",
-          variant: "destructive",
-        });
-        return;
-      }
+    if (!automationForm.templateId) {
+      toast({
+        title: "Error",
+        description: "Please select a template",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!automationForm.scheduledDate) {
+      toast({
+        title: "Error",
+        description: "Please select a date",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!automationForm.scheduleTime) {
+      toast({
+        title: "Error",
+        description: "Please select a time",
+        variant: "destructive",
+      });
+      return;
     }
 
     // Format the data for the API
     const automationData = {
       ...automationForm,
-      // Use single template for one-time, sequence for email sequences, multiple for recurring
-      templateId: automationForm.scheduleType === "once" ? automationForm.templateId : undefined,
-      templateIds: automationForm.scheduleType !== "once" && automationForm.scheduleType !== "sequence" ? automationForm.templateIds : undefined,
-      templateSchedule: automationForm.scheduleType === "sequence" ? automationForm.templateSchedule : undefined,
-      scheduledDate: automationForm.triggerType === "schedule" && automationForm.scheduledDate 
-        ? new Date(automationForm.scheduledDate + "T" + (automationForm.scheduleTime || "09:00")).toISOString()
-        : undefined,
+      scheduledDate: new Date(automationForm.scheduledDate + "T" + automationForm.scheduleTime).toISOString(),
     };
 
     createAutomationMutation.mutate(automationData);
@@ -2961,22 +2928,23 @@ export default function Communications() {
                   <form onSubmit={handleAutomationSubmit} className="space-y-6">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <Label htmlFor="automation-name">Automation Name *</Label>
+                        <Label htmlFor="automation-name">Name *</Label>
                         <Input
                           id="automation-name"
                           value={automationForm.name}
                           onChange={(e) => setAutomationForm(prev => ({ ...prev, name: e.target.value }))}
-                          placeholder="e.g., Welcome Email Series"
+                          placeholder="e.g., Monthly Payment Reminder"
                           data-testid="input-automation-name"
+                          className="bg-white/10 border-white/20 text-white placeholder:text-white/40"
                         />
                       </div>
                       <div>
-                        <Label htmlFor="automation-type">Communication Type *</Label>
+                        <Label htmlFor="automation-type">Type *</Label>
                         <Select 
                           value={automationForm.type} 
                           onValueChange={(value: "email" | "sms") => setAutomationForm(prev => ({ ...prev, type: value }))}
                         >
-                          <SelectTrigger data-testid="select-automation-type">
+                          <SelectTrigger data-testid="select-automation-type" className="bg-white/10 border-white/20 text-white">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -2988,378 +2956,110 @@ export default function Communications() {
                     </div>
 
                     <div>
-                      <Label htmlFor="automation-description">Description</Label>
+                      <Label htmlFor="automation-description">Description (Optional)</Label>
                       <Textarea
                         id="automation-description"
                         value={automationForm.description}
                         onChange={(e) => setAutomationForm(prev => ({ ...prev, description: e.target.value }))}
-                        placeholder="Describe what this automation does..."
+                        placeholder="What is this automation for?"
                         data-testid="textarea-automation-description"
+                        className="bg-white/10 border-white/20 text-white placeholder:text-white/40"
                       />
                     </div>
 
                     <div>
-                      <Label htmlFor="automation-template">
-                        {automationForm.scheduleType === "once" ? "Template *" : 
-                         automationForm.scheduleType === "sequence" ? "Template Sequence *" : 
-                         "Templates * (Select multiple for rotation)"}
-                      </Label>
-                      {automationForm.scheduleType === "once" ? (
-                        <Select 
-                          value={automationForm.templateId} 
-                          onValueChange={(value) => setAutomationForm(prev => ({ ...prev, templateId: value }))}
-                        >
-                          <SelectTrigger data-testid="select-automation-template">
-                            <SelectValue placeholder="Choose a template" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {automationForm.type === "email" 
-                              ? (emailTemplates as any[])?.map((template: any) => (
-                                  <SelectItem key={template.id} value={template.id}>
-                                    {template.name}
-                                  </SelectItem>
-                                )) || []
-                              : (smsTemplates as any[])?.map((template: any) => (
-                                  <SelectItem key={template.id} value={template.id}>
-                                    {template.name}
-                                  </SelectItem>
-                                )) || []
-                            }
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <div className="space-y-2">
-                          <div className="text-sm text-gray-600">
-                            {automationForm.scheduleType === "sequence" 
-                              ? "Create a sequence of emails to send on different days. Day 0 is the trigger day."
-                              : "Select multiple templates to rotate between on each execution"
-                            }
-                          </div>
-                          {automationForm.scheduleType === "sequence" ? (
-                            <div className="space-y-3">
-                              {automationForm.templateSchedule.map((item, index) => (
-                                <div key={index} className="flex items-center space-x-2 p-3 border rounded-lg bg-gray-50">
-                                  <div className="w-24">
-                                    <Label className="text-xs text-gray-500 mb-1">Day</Label>
-                                    <Input
-                                      type="number"
-                                      min="0"
-                                      value={item.dayOffset}
-                                      onChange={(e) => {
-                                        const newSchedule = [...automationForm.templateSchedule];
-                                        newSchedule[index].dayOffset = parseInt(e.target.value) || 0;
-                                        setAutomationForm(prev => ({ ...prev, templateSchedule: newSchedule }));
-                                      }}
-                                      className="h-8 text-sm"
-                                      data-testid={`input-day-offset-${index}`}
-                                    />
-                                  </div>
-                                  <div className="flex-1">
-                                    <Label className="text-xs text-gray-500 mb-1">Template</Label>
-                                    <Select
-                                      value={item.templateId}
-                                      onValueChange={(templateId) => {
-                                        const newSchedule = [...automationForm.templateSchedule];
-                                        newSchedule[index].templateId = templateId;
-                                        setAutomationForm(prev => ({ ...prev, templateSchedule: newSchedule }));
-                                      }}
-                                    >
-                                      <SelectTrigger className="h-8">
-                                        <SelectValue placeholder="Choose template" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {automationForm.type === "email" 
-                                          ? (emailTemplates as any[])?.map((template: any) => (
-                                              <SelectItem key={template.id} value={template.id}>
-                                                {template.name}
-                                              </SelectItem>
-                                            )) || []
-                                          : (smsTemplates as any[])?.map((template: any) => (
-                                              <SelectItem key={template.id} value={template.id}>
-                                                {template.name}
-                                              </SelectItem>
-                                            )) || []
-                                        }
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      const newSchedule = automationForm.templateSchedule.filter((_, i) => i !== index);
-                                      setAutomationForm(prev => ({ ...prev, templateSchedule: newSchedule }));
-                                    }}
-                                    className="mt-5"
-                                    data-testid={`button-remove-template-${index}`}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              ))}
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  onClick={() => {
-                                    const maxDay = automationForm.templateSchedule.length > 0 
-                                      ? Math.max(...automationForm.templateSchedule.map(s => s.dayOffset)) + 1 
-                                      : 0;
-                                    setAutomationForm(prev => ({
-                                      ...prev,
-                                      templateSchedule: [...prev.templateSchedule, { templateId: "", dayOffset: maxDay }]
-                                    }));
-                                  }}
-                                  data-testid="button-add-template-to-sequence"
-                                  className="flex-1"
-                                >
-                                  <Plus className="h-4 w-4 mr-2" />
-                                  Add Step to Sequence
-                                </Button>
-                              </div>
-                              {automationForm.templateSchedule.length > 0 && (
-                                <div className="text-xs text-gray-500 bg-blue-50 border border-blue-200 rounded p-2">
-                                  <strong>Example:</strong> Day 0 = Start date, Day 1 = Next day, Day 7 = One week later
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <>
-                              {automationForm.type === "email" 
-                                ? (emailTemplates as any[])?.map((template: any) => (
-                                    <div key={template.id} className="flex items-center space-x-2">
-                                      <input
-                                        type="checkbox"
-                                        id={`template-${template.id}`}
-                                        checked={automationForm.templateIds.includes(template.id)}
-                                        onChange={(e) => {
-                                          if (e.target.checked) {
-                                            setAutomationForm(prev => ({
-                                              ...prev,
-                                              templateIds: [...prev.templateIds, template.id]
-                                            }));
-                                          } else {
-                                            setAutomationForm(prev => ({
-                                              ...prev,
-                                              templateIds: prev.templateIds.filter(id => id !== template.id)
-                                            }));
-                                          }
-                                        }}
-                                        data-testid={`checkbox-template-${template.id}`}
-                                        className="rounded border-gray-300"
-                                      />
-                                      <Label htmlFor={`template-${template.id}`} className="text-sm">
-                                        {template.name}
-                                      </Label>
-                                    </div>
-                                  )) || []
-                                : (smsTemplates as any[])?.map((template: any) => (
-                                    <div key={template.id} className="flex items-center space-x-2">
-                                      <input
-                                        type="checkbox"
-                                        id={`template-${template.id}`}
-                                        checked={automationForm.templateIds.includes(template.id)}
-                                        onChange={(e) => {
-                                          if (e.target.checked) {
-                                            setAutomationForm(prev => ({
-                                              ...prev,
-                                              templateIds: [...prev.templateIds, template.id]
-                                            }));
-                                          } else {
-                                            setAutomationForm(prev => ({
-                                              ...prev,
-                                              templateIds: prev.templateIds.filter(id => id !== template.id)
-                                            }));
-                                          }
-                                        }}
-                                        data-testid={`checkbox-template-${template.id}`}
-                                        className="rounded border-gray-300"
-                                      />
-                                      <Label htmlFor={`template-${template.id}`} className="text-sm">
-                                        {template.name}
-                                      </Label>
-                                    </div>
-                                  )) || []
-                              }
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    <div>
-                      <Label>Trigger Type *</Label>
+                      <Label htmlFor="automation-template">Template *</Label>
                       <Select 
-                        value={automationForm.triggerType} 
-                        onValueChange={(value: "schedule" | "event" | "manual") => setAutomationForm(prev => ({ ...prev, triggerType: value }))}
+                        value={automationForm.templateId} 
+                        onValueChange={(value) => setAutomationForm(prev => ({ ...prev, templateId: value }))}
                       >
-                        <SelectTrigger data-testid="select-trigger-type">
-                          <SelectValue />
+                        <SelectTrigger data-testid="select-automation-template" className="bg-white/10 border-white/20 text-white">
+                          <SelectValue placeholder="Choose a template" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="schedule">Scheduled</SelectItem>
-                          <SelectItem value="event">Event-based</SelectItem>
-                          <SelectItem value="manual">Manual</SelectItem>
+                          {automationForm.type === "email" 
+                            ? (emailTemplates as any[])?.map((template: any) => (
+                                <SelectItem key={template.id} value={template.id}>
+                                  {template.name}
+                                </SelectItem>
+                              )) || []
+                            : (smsTemplates as any[])?.map((template: any) => (
+                                <SelectItem key={template.id} value={template.id}>
+                                  {template.name}
+                                </SelectItem>
+                              )) || []
+                          }
                         </SelectContent>
                       </Select>
                     </div>
 
-                    {automationForm.triggerType === "schedule" && (
-                      <>
-                        <div className="grid grid-cols-3 gap-4">
-                          <div>
-                            <Label>Schedule Type</Label>
-                            <Select 
-                              value={automationForm.scheduleType} 
-                              onValueChange={(value: "once" | "daily" | "weekly" | "monthly" | "sequence") => setAutomationForm(prev => ({ ...prev, scheduleType: value }))}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="schedule-date">Date *</Label>
+                        <Input
+                          id="schedule-date"
+                          type="date"
+                          value={automationForm.scheduledDate}
+                          onChange={(e) => setAutomationForm(prev => ({ ...prev, scheduledDate: e.target.value }))}
+                          data-testid="input-schedule-date"
+                          className="bg-white/10 border-white/20 text-white"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="schedule-time">Time *</Label>
+                        <Input
+                          id="schedule-time"
+                          type="time"
+                          value={automationForm.scheduleTime}
+                          onChange={(e) => setAutomationForm(prev => ({ ...prev, scheduleTime: e.target.value }))}
+                          data-testid="input-schedule-time"
+                          className="bg-white/10 border-white/20 text-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Target Folders (Optional)</Label>
+                      <div className="border border-white/20 rounded-md p-3 space-y-2 max-h-48 overflow-y-auto bg-white/5">
+                        {(folders as any[])?.map((folder: any) => (
+                          <div key={folder.id} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`folder-${folder.id}`}
+                              checked={automationForm.targetFolderIds.includes(folder.id)}
+                              onCheckedChange={(checked: boolean) => {
+                                if (checked) {
+                                  setAutomationForm(prev => ({
+                                    ...prev,
+                                    targetFolderIds: [...prev.targetFolderIds, folder.id]
+                                  }));
+                                } else {
+                                  setAutomationForm(prev => ({
+                                    ...prev,
+                                    targetFolderIds: prev.targetFolderIds.filter(id => id !== folder.id)
+                                  }));
+                                }
+                              }}
+                              data-testid={`checkbox-folder-${folder.id}`}
+                            />
+                            <label
+                              htmlFor={`folder-${folder.id}`}
+                              className="flex items-center gap-2 cursor-pointer text-sm text-white"
                             >
-                              <SelectTrigger data-testid="select-schedule-type">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="once">One-time</SelectItem>
-                                <SelectItem value="sequence">Sequence (Different templates on different days)</SelectItem>
-                                <SelectItem value="daily">Daily</SelectItem>
-                                <SelectItem value="weekly">Weekly</SelectItem>
-                                <SelectItem value="monthly">Monthly</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div>
-                            <Label>{automationForm.scheduleType === "sequence" ? "Start Date" : "Date"}</Label>
-                            <Input
-                              type="date"
-                              value={automationForm.scheduledDate}
-                              onChange={(e) => setAutomationForm(prev => ({ ...prev, scheduledDate: e.target.value }))}
-                              data-testid="input-schedule-date"
-                            />
-                          </div>
-                          <div>
-                            <Label>Time</Label>
-                            <Input
-                              type="time"
-                              value={automationForm.scheduleTime}
-                              onChange={(e) => setAutomationForm(prev => ({ ...prev, scheduleTime: e.target.value }))}
-                              data-testid="input-schedule-time"
-                            />
-                          </div>
-                        </div>
-                        {(automationForm.scheduleType !== "once" && automationForm.scheduleType !== "sequence") && (
-                          <div>
-                            <Label>End Date (Optional)</Label>
-                            <Input
-                              type="date"
-                              value={automationForm.endDate}
-                              onChange={(e) => setAutomationForm(prev => ({ ...prev, endDate: e.target.value }))}
-                              data-testid="input-end-date"
-                              placeholder="Leave blank for ongoing"
-                            />
-                            <p className="text-xs text-gray-500 mt-1">Automation will stop running after this date</p>
-                          </div>
-                        )}
-                      </>
-                    )}
-
-                    {automationForm.triggerType === "event" && (
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label>Event Type</Label>
-                          <Select 
-                            value={automationForm.eventType} 
-                            onValueChange={(value: "account_created" | "payment_overdue" | "custom") => setAutomationForm(prev => ({ ...prev, eventType: value }))}
-                          >
-                            <SelectTrigger data-testid="select-event-type">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="account_created">Account Created</SelectItem>
-                              <SelectItem value="payment_overdue">Payment Overdue</SelectItem>
-                              <SelectItem value="custom">Custom</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label>Delay</Label>
-                          <Select 
-                            value={automationForm.eventDelay} 
-                            onValueChange={(value) => setAutomationForm(prev => ({ ...prev, eventDelay: value }))}
-                          >
-                            <SelectTrigger data-testid="select-event-delay">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="0">Immediately</SelectItem>
-                              <SelectItem value="1h">1 Hour</SelectItem>
-                              <SelectItem value="1d">1 Day</SelectItem>
-                              <SelectItem value="3d">3 Days</SelectItem>
-                              <SelectItem value="7d">1 Week</SelectItem>
-                              <SelectItem value="30d">1 Month</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    )}
-
-                    <div>
-                      <Label>Target Audience</Label>
-                      <Select 
-                        value={automationForm.targetType} 
-                        onValueChange={(value: "all" | "folder" | "custom") => setAutomationForm(prev => ({ ...prev, targetType: value }))}
-                      >
-                        <SelectTrigger data-testid="select-target-type">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Accounts</SelectItem>
-                          <SelectItem value="folder">Specific Folders</SelectItem>
-                          <SelectItem value="custom">Custom Selection</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {automationForm.targetType === "folder" && (
-                      <div className="space-y-2">
-                        <Label>Select Folders</Label>
-                        <div className="border rounded-md p-3 space-y-2 max-h-48 overflow-y-auto">
-                          {(folders as any[])?.map((folder: any) => (
-                            <div key={folder.id} className="flex items-center space-x-2">
-                              <Checkbox
-                                id={`folder-${folder.id}`}
-                                checked={automationForm.targetFolderIds.includes(folder.id)}
-                                onCheckedChange={(checked: boolean) => {
-                                  if (checked) {
-                                    setAutomationForm(prev => ({
-                                      ...prev,
-                                      targetFolderIds: [...prev.targetFolderIds, folder.id]
-                                    }));
-                                  } else {
-                                    setAutomationForm(prev => ({
-                                      ...prev,
-                                      targetFolderIds: prev.targetFolderIds.filter(id => id !== folder.id)
-                                    }));
-                                  }
-                                }}
-                                data-testid={`checkbox-folder-${folder.id}`}
+                              <span 
+                                className="inline-block h-3 w-3 rounded-full" 
+                                style={{ backgroundColor: folder.color }}
                               />
-                              <label
-                                htmlFor={`folder-${folder.id}`}
-                                className="flex items-center gap-2 cursor-pointer text-sm"
-                              >
-                                <span 
-                                  className="inline-block h-3 w-3 rounded-full" 
-                                  style={{ backgroundColor: folder.color }}
-                                />
-                                <span>{folder.name}</span>
-                              </label>
-                            </div>
-                          ))}
-                        </div>
-                        <p className="text-xs text-blue-100/60">
-                          {automationForm.targetFolderIds.length} folder(s) selected
-                        </p>
+                              <span>{folder.name}</span>
+                            </label>
+                          </div>
+                        ))}
                       </div>
-                    )}
+                      <p className="text-xs text-blue-100/60">
+                        {automationForm.targetFolderIds.length > 0 
+                          ? `${automationForm.targetFolderIds.length} folder(s) selected` 
+                          : "No folders selected - will send to all accounts"}
+                      </p>
+                    </div>
 
                     <div className="flex justify-end gap-3 pt-4 border-t border-white/20">
                       <Button
@@ -3565,20 +3265,9 @@ export default function Communications() {
                                   description: automation.description || "",
                                   type: automation.type || "email",
                                   templateId: automation.templateId || "",
-                                  templateIds: automation.templateIds || [],
-                                  templateSchedule: automation.templateSchedule || [],
-                                  triggerType: automation.triggerType || "schedule",
-                                  scheduleType: automation.scheduleType || "once",
                                   scheduledDate: automation.scheduledDate ? new Date(automation.scheduledDate).toISOString().split('T')[0] : "",
                                   scheduleTime: automation.scheduleTime || "",
-                                  scheduleWeekdays: automation.scheduleWeekdays || [],
-                                  scheduleDayOfMonth: automation.scheduleDayOfMonth || "",
-                                  eventType: automation.eventType || "account_created",
-                                  eventDelay: automation.eventDelay || "immediate",
-                                  targetType: automation.targetType || "all",
                                   targetFolderIds: automation.targetFolderIds || [],
-                                  targetCustomerIds: automation.targetCustomerIds || [],
-                                  endDate: automation.endDate ? new Date(automation.endDate).toISOString().split('T')[0] : "",
                                 });
                                 setShowEditAutomationModal(true);
                               }}
