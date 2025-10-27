@@ -2951,10 +2951,10 @@ export default function Communications() {
                     Create Automation
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] border-white/20 text-white">
                   <DialogHeader>
-                    <DialogTitle>Create Communication Automation</DialogTitle>
-                    <p className="text-sm text-muted-foreground">
+                    <DialogTitle className="text-2xl font-bold text-white">Create Communication Automation</DialogTitle>
+                    <p className="text-sm text-blue-100/70">
                       Set up automated messaging campaigns based on schedules or events.
                     </p>
                   </DialogHeader>
@@ -3361,17 +3361,18 @@ export default function Communications() {
                       </div>
                     )}
 
-                    <div className="flex justify-end gap-3">
+                    <div className="flex justify-end gap-3 pt-4 border-t border-white/20">
                       <Button
                         type="button"
-                        variant="outline"
                         onClick={() => setShowAutomationModal(false)}
                         data-testid="button-cancel-automation"
+                        className="bg-white/10 text-white border-white/20 hover:bg-white/20"
                       >
                         Cancel
                       </Button>
                       <Button 
-                        type="submit" 
+                        type="submit"
+                        className="bg-blue-600 text-white hover:bg-blue-700" 
                         disabled={createAutomationMutation.isPending}
                         data-testid="button-submit-automation"
                       >
@@ -3385,9 +3386,9 @@ export default function Communications() {
 
             {/* Edit Automation Dialog */}
             <Dialog open={showEditAutomationModal} onOpenChange={setShowEditAutomationModal}>
-              <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+              <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] border-white/20 text-white">
                 <DialogHeader>
-                  <DialogTitle>Edit Automation</DialogTitle>
+                  <DialogTitle className="text-2xl font-bold text-white">Edit Automation</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={(e) => {
                   e.preventDefault();
@@ -3474,15 +3475,15 @@ export default function Communications() {
                     )}
                   </div>
 
-                  <div className="flex justify-end gap-3">
+                  <div className="flex justify-end gap-3 pt-4 border-t border-white/20">
                     <Button
                       type="button"
-                      variant="outline"
                       onClick={() => {
                         setShowEditAutomationModal(false);
                         setEditingAutomation(null);
                       }}
                       data-testid="button-cancel-edit-automation"
+                      className="bg-white/10 text-white border-white/20 hover:bg-white/20"
                     >
                       Cancel
                     </Button>
@@ -3490,6 +3491,7 @@ export default function Communications() {
                       type="submit" 
                       disabled={updateAutomationMutation.isPending}
                       data-testid="button-submit-edit-automation"
+                      className="bg-blue-600 text-white hover:bg-blue-700"
                     >
                       {updateAutomationMutation.isPending ? "Updating..." : "Update Automation"}
                     </Button>

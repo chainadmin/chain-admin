@@ -743,9 +743,9 @@ export default function Accounts() {
       <ImportModal isOpen={showImportModal} onClose={() => setShowImportModal(false)} />
 
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] border-white/20 text-white">
           <DialogHeader>
-            <DialogTitle>Create New Account</DialogTitle>
+            <DialogTitle className="text-2xl font-bold text-white">Create New Account</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleCreateSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
@@ -928,11 +928,11 @@ export default function Accounts() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setShowCreateModal(false)}>
+            <div className="flex justify-end gap-2 pt-4 border-t border-white/20">
+              <Button type="button" onClick={() => setShowCreateModal(false)} className="bg-white/10 text-white border-white/20 hover:bg-white/20">
                 Cancel
               </Button>
-              <Button type="submit" disabled={createAccountMutation.isPending} data-testid="button-submit-create">
+              <Button type="submit" disabled={createAccountMutation.isPending} data-testid="button-submit-create" className="bg-blue-600 text-white hover:bg-blue-700">
                 {createAccountMutation.isPending ? "Creating..." : "Create Account"}
               </Button>
             </div>
@@ -941,9 +941,9 @@ export default function Accounts() {
       </Dialog>
 
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] border-white/20 text-white">
           <DialogHeader>
-            <DialogTitle>Edit Account</DialogTitle>
+            <DialogTitle className="text-2xl font-bold text-white">Edit Account</DialogTitle>
           </DialogHeader>
           <form
             onSubmit={(e) => {
@@ -1149,11 +1149,11 @@ export default function Accounts() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setShowEditModal(false)}>
+            <div className="flex justify-end gap-2 pt-4 border-t border-white/20">
+              <Button type="button" onClick={() => setShowEditModal(false)} className="bg-white/10 text-white border-white/20 hover:bg-white/20">
                 Cancel
               </Button>
-              <Button type="submit" disabled={updateAccountMutation.isPending} data-testid="button-submit-edit">
+              <Button type="submit" disabled={updateAccountMutation.isPending} data-testid="button-submit-edit" className="bg-blue-600 text-white hover:bg-blue-700">
                 {updateAccountMutation.isPending ? "Saving..." : "Save Changes"}
               </Button>
             </div>
@@ -1401,10 +1401,10 @@ export default function Accounts() {
           }
         }}
       >
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] border-white/20 text-white">
           <DialogHeader>
-            <DialogTitle>Compose Email</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-2xl font-bold text-white">Compose Email</DialogTitle>
+            <DialogDescription className="text-blue-100/70">
               Send a message to the consumer using the integrated communications system.
             </DialogDescription>
           </DialogHeader>
