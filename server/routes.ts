@@ -53,6 +53,7 @@ import { resolveConsumerPortalUrl } from "@shared/utils/consumerPortal";
 import { finalizeEmailHtml } from "@shared/utils/emailTemplate";
 import { ensureBaseUrl, getKnownDomainOrigins } from "@shared/utils/baseUrl";
 import { isOriginOnKnownDomain } from "@shared/utils/domains";
+import { businessModuleIdSchema, sanitizeBusinessModuleConfigs } from "@shared/business-modules";
 
 const csvUploadSchema = z.object({
   consumers: z.array(z.object({
@@ -5094,7 +5095,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/settings/enabled-modules', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
-      
+
       if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
       }
@@ -5110,13 +5111,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/settings/enabled-modules', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
-      
+
       if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
       }
 
       const moduleSchema = z.object({
-        enabledModules: z.array(z.enum(['billing', 'subscriptions', 'work_orders', 'client_crm', 'messaging_center'])),
+        enabledModules: z.array(businessModuleIdSchema),
       });
 
       const { enabledModules } = moduleSchema.parse(req.body);
@@ -5125,10 +5126,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ enabledModules: updatedSettings.enabledModules });
     } catch (error) {
       console.error("Error updating enabled modules:", error);
-      res.status(500).json({ 
-        message: error instanceof z.ZodError 
-          ? "Invalid module names provided" 
-          : "Failed to update enabled modules" 
+      res.status(500).json({
+        message: error instanceof z.ZodError
+          ? "Invalid module names provided"
+          : "Failed to update enabled modules"
+      });
+    }
+  });
+
+  app.get('/api/settings/module-configs', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const moduleConfigs = await storage.getModuleConfigurations(tenantId);
+      res.json({ moduleConfigs });
+    } catch (error) {
+      console.error("Error fetching module configurations:", error);
+      res.status(500).json({ message: "Failed to fetch module configurations" });
+    }
+  });
+
+  app.put('/api/settings/module-configs', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const moduleConfigSchema = z.object({
+        displayName: z.string().min(1).max(120),
+        description: z.string().max(360).optional(),
+        contactEmail: z.string().email().max(320).optional(),
+        contactPhone: z.string().max(40).optional(),
+        notes: z.string().max(800).optional(),
+      });
+
+      const payloadSchema = z.object({
+        moduleConfigs: z.record(businessModuleIdSchema, moduleConfigSchema).optional(),
+      });
+
+      const { moduleConfigs = {} } = payloadSchema.parse(req.body);
+      const sanitizedConfigs = sanitizeBusinessModuleConfigs(moduleConfigs);
+      const updatedSettings = await storage.updateModuleConfigurations(tenantId, sanitizedConfigs);
+
+      const persistedConfigs =
+        ((updatedSettings?.consumerPortalSettings as any)?.moduleConfigurations as Record<string, unknown>) ||
+        sanitizedConfigs;
+
+      res.json({ moduleConfigs: sanitizeBusinessModuleConfigs(persistedConfigs as any) });
+    } catch (error) {
+      console.error("Error updating module configurations:", error);
+      res.status(500).json({
+        message: error instanceof z.ZodError
+          ? "Invalid module configuration provided"
+          : "Failed to update module configurations",
       });
     }
   });
