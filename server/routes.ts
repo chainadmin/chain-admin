@@ -875,7 +875,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tenant: {
           id: tenant?.id,
           name: tenant?.name,
-          slug: tenant?.slug
+          slug: tenant?.slug,
+          businessType: tenant?.businessType || 'call_center'
         },
         tenantSettings: tenantSettings,
         paymentSchedules: activeSchedules

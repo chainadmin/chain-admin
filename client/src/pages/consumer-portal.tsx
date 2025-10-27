@@ -5,10 +5,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getArrangementSummary, formatCurrencyFromCents } from "@/lib/arrangements";
 import { useAgencyContext } from "@/hooks/useAgencyContext";
+import { getTerminology, type BusinessType } from "@shared/terminology";
 
 export default function ConsumerPortal() {
   const { tenantSlug, email } = useParams();
   const { agencySlug } = useAgencyContext();
+  
+  // Default terminology for loading and error states
+  const defaultTerms = getTerminology('call_center');
 
   const { encodedEmail, accountsUrl, documentsUrl, arrangementsUrl } = useMemo(() => {
     const safeEmail = email ? encodeURIComponent(email) : "";
@@ -45,7 +49,7 @@ export default function ConsumerPortal() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading your accounts...</p>
+          <p className="mt-4 text-gray-600">Loading your {defaultTerms.accountPlural.toLowerCase()}...</p>
         </div>
       </div>
     );
@@ -59,7 +63,7 @@ export default function ConsumerPortal() {
             <i className="fas fa-exclamation-triangle text-red-500 text-4xl mb-4"></i>
             <h1 className="text-xl font-semibold text-gray-900 mb-2">Access Error</h1>
             <p className="text-gray-600">
-              Unable to access your account information. Please contact your agency for assistance.
+              Unable to access your {defaultTerms.account.toLowerCase()} information. Please contact your {defaultTerms.creditor.toLowerCase()} for assistance.
             </p>
           </CardContent>
         </Card>
@@ -67,7 +71,11 @@ export default function ConsumerPortal() {
     );
   }
 
-  const { consumer, accounts, tenantSettings } = (data as any) || {};
+  const { consumer, accounts, tenant, tenantSettings } = (data as any) || {};
+  
+  // Get terminology based on business type
+  const businessType: BusinessType = tenant?.businessType || 'call_center';
+  const terms = getTerminology(businessType);
 
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
@@ -117,7 +125,7 @@ export default function ConsumerPortal() {
                 </span>
               )}
             </div>
-            <h1 className="text-xl font-semibold text-white mt-4">Your Accounts</h1>
+            <h1 className="text-xl font-semibold text-white mt-4">Your {terms.accountPlural}</h1>
             <p className="text-white mt-1">
               {consumer?.firstName} {consumer?.lastName}
             </p>
@@ -134,13 +142,13 @@ export default function ConsumerPortal() {
               <div className="text-2xl font-bold text-gray-900">
                 {formatCurrency(totalBalance)}
               </div>
-              <div className="text-sm text-gray-500">Total Balance</div>
+              <div className="text-sm text-gray-500">Total {terms.balance}</div>
             </div>
             <div className="bg-white rounded-lg p-4 text-center">
               <div className="text-2xl font-bold text-blue-600">
                 {accounts?.length || 0}
               </div>
-              <div className="text-sm text-gray-500">Active Accounts</div>
+              <div className="text-sm text-gray-500">Active {terms.accountPlural}</div>
             </div>
           </div>
         </div>
@@ -149,15 +157,15 @@ export default function ConsumerPortal() {
       {/* Accounts List */}
       <div className="px-4 pb-6">
         <div className="max-w-2xl mx-auto">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Your Accounts</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Your {terms.accountPlural}</h2>
           
           {!accounts || accounts.length === 0 ? (
             <Card>
               <CardContent className="pt-6 text-center">
                 <i className="fas fa-inbox text-gray-400 text-4xl mb-4"></i>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No Accounts Found</h3>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No {terms.accountPlural} Found</h3>
                 <p className="text-gray-600">
-                  No account information is currently available. Please contact your agency for assistance.
+                  No {terms.account.toLowerCase()} information is currently available. Please contact your {terms.creditor.toLowerCase()} for assistance.
                 </p>
               </CardContent>
             </Card>
@@ -186,7 +194,7 @@ export default function ConsumerPortal() {
                       </div>
                     </div>
                     <Button className="bg-blue-600 hover:bg-blue-700">
-                      Contact Agency
+                      Contact {terms.creditor}
                     </Button>
                   </div>
                 </div>
