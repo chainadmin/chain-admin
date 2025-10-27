@@ -265,7 +265,8 @@ export default function Communications() {
     queryKey: ["/api/sms-campaigns"],
     refetchInterval: (data) => {
       // Auto-refresh every 3 seconds if any campaign is sending
-      const hasSendingCampaign = (data as any[])?.some((c: any) => c.status === 'sending');
+      if (!data || !Array.isArray(data)) return false;
+      const hasSendingCampaign = data.some((c: any) => c.status === 'sending');
       return hasSendingCampaign ? 3000 : false;
     },
   });
