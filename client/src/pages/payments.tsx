@@ -77,6 +77,16 @@ export default function Payments() {
     queryKey: ["/api/payment-approvals"],
   });
 
+  // Fetch all payment schedules (pending payments)
+  const { data: paymentSchedules, isLoading: schedulesLoading } = useQuery({
+    queryKey: ["/api/payment-schedules"],
+  });
+
+  // Fetch all payment methods (saved cards)
+  const { data: paymentMethodsData, isLoading: methodsLoading } = useQuery({
+    queryKey: ["/api/payment-methods"],
+  });
+
   const handlePayNowFormChange = (field: string, value: string) => {
     setPayNowForm(prev => ({
       ...prev,
@@ -382,6 +392,15 @@ export default function Payments() {
             <TabsTrigger value="transactions" data-testid="tab-transactions">
               <CreditCard className="w-4 h-4 mr-2" />
               Transactions
+            </TabsTrigger>
+            <TabsTrigger value="pending" data-testid="tab-pending">
+              <Clock className="w-4 h-4 mr-2" />
+              Pending Payments
+              {paymentSchedules && (paymentSchedules as any[]).length > 0 && (
+                <Badge className="ml-2 bg-amber-500 text-white">
+                  {(paymentSchedules as any[]).length}
+                </Badge>
+              )}
             </TabsTrigger>
             <TabsTrigger value="approvals" data-testid="tab-approvals">
               <Shield className="w-4 h-4 mr-2" />
@@ -733,6 +752,184 @@ export default function Payments() {
             </Card>
               </div>
             </section>
+          </TabsContent>
+
+          <TabsContent value="pending" className="mt-0">
+            <div className="space-y-6">
+              {/* Pending Payment Schedules */}
+              <Card className={glassPanelClass}>
+                <CardHeader className="border-b border-white/20 pb-4">
+                  <CardTitle className="text-lg font-semibold text-blue-50">
+                    Scheduled Payments ({(paymentSchedules as any[])?.length || 0})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  {schedulesLoading ? (
+                    <div className="text-center text-blue-100/70 py-8">Loading scheduled payments...</div>
+                  ) : !paymentSchedules || (paymentSchedules as any[]).length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-white/20 bg-white/5 py-16 text-center text-blue-100/70">
+                      <Clock className="mx-auto mb-4 h-12 w-12 text-blue-200/80" />
+                      <h3 className="text-lg font-semibold text-blue-50">No scheduled payments</h3>
+                      <p className="mt-2 text-sm text-blue-100/70">
+                        When consumers set up payment arrangements, they will appear here.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {(paymentSchedules as any[]).map((schedule: any) => (
+                        <div
+                          key={schedule.id}
+                          className="rounded-2xl border border-white/15 bg-white/5 p-5 text-blue-50 shadow-sm shadow-blue-900/10 transition hover:-translate-y-0.5 hover:border-white/25 hover:shadow-lg"
+                          data-testid={`schedule-${schedule.id}`}
+                        >
+                          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                            <div className="space-y-4 flex-1">
+                              <div className="flex flex-wrap items-center gap-3">
+                                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-blue-100">
+                                  <CreditCard className="h-5 w-5" />
+                                </span>
+                                <div>
+                                  <p className="text-xl font-semibold text-white">{formatCurrency(schedule.amountCents)}</p>
+                                  <p className="text-sm text-blue-100/80">{schedule.account?.creditor || "N/A"}</p>
+                                </div>
+                                <Badge
+                                  className={cn(
+                                    "rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-wide",
+                                    schedule.status === 'active' ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-100" : "border-slate-400/30 bg-slate-500/10 text-slate-100"
+                                  )}
+                                >
+                                  {schedule.status}
+                                </Badge>
+                              </div>
+                              <div className="grid gap-4 text-sm text-blue-100/80 sm:grid-cols-2 lg:grid-cols-4">
+                                <div>
+                                  <span className="text-xs uppercase tracking-wide text-blue-200/80">Consumer</span>
+                                  <p className="mt-1 font-semibold text-blue-50">
+                                    {schedule.consumer?.firstName} {schedule.consumer?.lastName}
+                                  </p>
+                                  <p className="text-xs text-blue-100/60">{schedule.consumer?.email}</p>
+                                </div>
+                                <div>
+                                  <span className="text-xs uppercase tracking-wide text-blue-200/80">Account Number</span>
+                                  <p className="mt-1 font-semibold text-blue-50">
+                                    {schedule.account?.accountNumber || "N/A"}
+                                  </p>
+                                </div>
+                                <div>
+                                  <span className="text-xs uppercase tracking-wide text-blue-200/80">Next Payment</span>
+                                  <p className="mt-1 font-semibold text-blue-50">
+                                    {schedule.nextPaymentDate ? formatDate(schedule.nextPaymentDate) : "N/A"}
+                                  </p>
+                                </div>
+                                <div>
+                                  <span className="text-xs uppercase tracking-wide text-blue-200/80">Frequency</span>
+                                  <p className="mt-1 font-semibold capitalize text-blue-50">
+                                    {schedule.frequency?.replace("_", " ") || "N/A"}
+                                  </p>
+                                </div>
+                              </div>
+                              {schedule.paymentMethod && (
+                                <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                                  <div className="flex items-center gap-3">
+                                    <Lock className="h-4 w-4 text-blue-200/80" />
+                                    <div className="text-sm">
+                                      <span className="text-xs uppercase tracking-wide text-blue-200/80">Payment Method</span>
+                                      <p className="mt-1 font-semibold text-blue-50">
+                                        {schedule.paymentMethod.cardBrand || "Card"} •••• {schedule.paymentMethod.lastFour}
+                                      </p>
+                                      <p className="text-xs text-blue-100/60">
+                                        Expires {schedule.paymentMethod.expiryMonth}/{schedule.paymentMethod.expiryYear}
+                                      </p>
+                                      {schedule.paymentMethod.cardholderName && (
+                                        <p className="text-xs text-blue-100/60">
+                                          {schedule.paymentMethod.cardholderName}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* All Saved Payment Methods */}
+              <Card className={glassPanelClass}>
+                <CardHeader className="border-b border-white/20 pb-4">
+                  <CardTitle className="text-lg font-semibold text-blue-50">
+                    Saved Payment Methods ({(paymentMethodsData as any[])?.length || 0})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  {methodsLoading ? (
+                    <div className="text-center text-blue-100/70 py-8">Loading payment methods...</div>
+                  ) : !paymentMethodsData || (paymentMethodsData as any[]).length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-white/20 bg-white/5 py-16 text-center text-blue-100/70">
+                      <CreditCard className="mx-auto mb-4 h-12 w-12 text-blue-200/80" />
+                      <h3 className="text-lg font-semibold text-blue-50">No saved payment methods</h3>
+                      <p className="mt-2 text-sm text-blue-100/70">
+                        When consumers save payment methods, they will appear here.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      {(paymentMethodsData as any[]).map((method: any) => (
+                        <div
+                          key={method.id}
+                          className="rounded-2xl border border-white/15 bg-white/5 p-5 text-blue-50 shadow-sm shadow-blue-900/10 transition hover:-translate-y-0.5 hover:border-white/25 hover:shadow-lg"
+                          data-testid={`payment-method-${method.id}`}
+                        >
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-3">
+                              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-blue-100">
+                                <CreditCard className="h-5 w-5" />
+                              </span>
+                              <div className="flex-1">
+                                <p className="font-semibold text-white">
+                                  {method.cardBrand || "Card"} •••• {method.lastFour}
+                                </p>
+                                <p className="text-xs text-blue-100/60">
+                                  Exp: {method.expiryMonth}/{method.expiryYear}
+                                </p>
+                              </div>
+                              {method.isDefault && (
+                                <Badge className="bg-emerald-500/20 text-emerald-100 border-emerald-400/40">
+                                  Default
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="border-t border-white/10 pt-3 space-y-2">
+                              <div>
+                                <span className="text-xs uppercase tracking-wide text-blue-200/80">Consumer</span>
+                                <p className="mt-1 text-sm font-semibold text-blue-50">
+                                  {method.consumer?.firstName} {method.consumer?.lastName}
+                                </p>
+                                <p className="text-xs text-blue-100/60">{method.consumer?.email}</p>
+                              </div>
+                              {method.cardholderName && (
+                                <div>
+                                  <span className="text-xs uppercase tracking-wide text-blue-200/80">Cardholder Name</span>
+                                  <p className="mt-1 text-sm font-semibold text-blue-50">{method.cardholderName}</p>
+                                </div>
+                              )}
+                              <div className="flex items-center gap-2 text-xs text-blue-100/60">
+                                <Lock className="h-3 w-3" />
+                                <span>Token: {method.token?.slice(0, 20)}...</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
           <TabsContent value="approvals" className="mt-0">
