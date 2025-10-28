@@ -14,7 +14,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { CreditCard, DollarSign, TrendingUp, Clock, CheckCircle, RefreshCw, Calendar, User, Building2, Lock, Trash2, Shield, ThumbsUp, ThumbsDown } from "lucide-react";
+import { CreditCard, DollarSign, TrendingUp, Clock, CheckCircle, RefreshCw, Calendar, User, Building2, Lock, Trash2 } from "lucide-react";
 import { PaymentSchedulingCalendar } from "@/components/payment-scheduling-calendar";
 
 export default function Payments() {
@@ -23,8 +23,6 @@ export default function Payments() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [showPayNowModal, setShowPayNowModal] = useState(false);
   const [paymentToDelete, setPaymentToDelete] = useState<string | null>(null);
-  const [approvalToReject, setApprovalToReject] = useState<string | null>(null);
-  const [rejectionReason, setRejectionReason] = useState("");
 
 
   const [payNowForm, setPayNowForm] = useState({
@@ -50,31 +48,6 @@ export default function Payments() {
   // Fetch consumers for payments
   const { data: consumers } = useQuery({
     queryKey: ["/api/consumers"],
-  });
-
-  // Fetch payment approvals
-  const { data: approvals, isLoading: approvalsLoading } = useQuery<Array<{
-    id: string;
-    tenantId: string;
-    consumerId: string;
-    accountId: string;
-    paymentId: string;
-    paymentData: any;
-    status: string;
-    createdAt: string;
-    consumer?: {
-      id: string;
-      firstName: string;
-      lastName: string;
-      email: string;
-    };
-    account?: {
-      id: string;
-      accountNumber: string;
-      creditor: string;
-    };
-  }>>({
-    queryKey: ["/api/payment-approvals"],
   });
 
   // Fetch all payment schedules (pending payments)
@@ -151,49 +124,6 @@ export default function Payments() {
     },
   });
 
-  // Approve payment mutation
-  const approvePaymentMutation = useMutation({
-    mutationFn: async (approvalId: string) => {
-      await apiRequest("POST", `/api/payment-approvals/${approvalId}/approve`, {});
-    },
-    onSuccess: () => {
-      toast({
-        title: "Payment Approved",
-        description: "Payment update has been synced to SMAX.",
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/payment-approvals"] });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Approval Failed",
-        description: error.message || "Unable to approve payment. Please try again.",
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Reject payment mutation
-  const rejectPaymentMutation = useMutation({
-    mutationFn: async ({ approvalId, reason }: { approvalId: string; reason: string }) => {
-      await apiRequest("POST", `/api/payment-approvals/${approvalId}/reject`, { reason });
-    },
-    onSuccess: () => {
-      toast({
-        title: "Payment Rejected",
-        description: "Payment update has been rejected.",
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/payment-approvals"] });
-      setApprovalToReject(null);
-      setRejectionReason("");
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Rejection Failed",
-        description: error.message || "Unable to reject payment. Please try again.",
-        variant: "destructive",
-      });
-    },
-  });
 
   const handlePayNowSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -399,15 +329,6 @@ export default function Payments() {
               {paymentSchedules && (paymentSchedules as any[]).length > 0 && (
                 <Badge className="ml-2 bg-amber-500 text-white">
                   {(paymentSchedules as any[]).length}
-                </Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="approvals" data-testid="tab-approvals">
-              <Shield className="w-4 h-4 mr-2" />
-              Approvals
-              {approvals && approvals.length > 0 && (
-                <Badge className="ml-2 bg-amber-500 text-white">
-                  {approvals.length}
                 </Badge>
               )}
             </TabsTrigger>
@@ -932,114 +853,6 @@ export default function Payments() {
             </div>
           </TabsContent>
 
-          <TabsContent value="approvals" className="mt-0">
-            <Card className={glassPanelClass}>
-              <CardHeader className="border-b border-white/20 pb-4">
-                <CardTitle className="text-lg font-semibold text-blue-50">
-                  Pending Payment Approvals ({approvals?.length || 0})
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-6">
-                {approvalsLoading ? (
-                  <div className="text-center text-blue-100/70 py-8">Loading approvals...</div>
-                ) : !approvals || approvals.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-white/20 bg-white/5 py-16 text-center text-blue-100/70">
-                    <Shield className="mx-auto mb-4 h-12 w-12 text-blue-200/80" />
-                    <h3 className="text-lg font-semibold text-blue-50">No pending approvals</h3>
-                    <p className="mt-2 text-sm text-blue-100/70">
-                      Payment updates will appear here when they need approval before syncing to SMAX.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {approvals.map((approval) => (
-                      <div
-                        key={approval.id}
-                        className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5 text-blue-50 shadow-sm shadow-amber-900/10"
-                        data-testid={`approval-${approval.id}`}
-                      >
-                        <div className="flex flex-col gap-4">
-                          <div className="flex items-start justify-between">
-                            <div className="space-y-3 flex-1">
-                              <div className="flex items-center gap-3">
-                                <Shield className="h-8 w-8 text-amber-400" />
-                                <div>
-                                  <p className="text-xl font-semibold text-white">
-                                    Payment Update Approval Required
-                                  </p>
-                                  <p className="text-sm text-blue-100/80 mt-1">
-                                    {approval.consumer?.firstName} {approval.consumer?.lastName} - {approval.account?.creditor}
-                                  </p>
-                                </div>
-                              </div>
-                              
-                              <div className="grid gap-4 text-sm text-blue-100/80 sm:grid-cols-2 lg:grid-cols-3">
-                                <div>
-                                  <span className="text-xs uppercase tracking-wide text-blue-200/80">Consumer</span>
-                                  <p className="mt-1 font-semibold text-blue-50">
-                                    {approval.consumer?.firstName} {approval.consumer?.lastName}
-                                  </p>
-                                  <p className="text-xs text-blue-100/60">{approval.consumer?.email}</p>
-                                </div>
-                                <div>
-                                  <span className="text-xs uppercase tracking-wide text-blue-200/80">Account</span>
-                                  <p className="mt-1 font-semibold text-blue-50">
-                                    {approval.account?.creditor}
-                                  </p>
-                                  <p className="text-xs text-blue-100/60">#{approval.account?.accountNumber}</p>
-                                </div>
-                                <div>
-                                  <span className="text-xs uppercase tracking-wide text-blue-200/80">Payment ID</span>
-                                  <p className="mt-1 font-semibold text-blue-50 font-mono text-xs">
-                                    {approval.paymentId}
-                                  </p>
-                                </div>
-                                <div>
-                                  <span className="text-xs uppercase tracking-wide text-blue-200/80">Created</span>
-                                  <p className="mt-1 font-semibold text-blue-50">
-                                    {new Date(approval.createdAt).toLocaleDateString()}
-                                  </p>
-                                </div>
-                              </div>
-
-                              <div className="rounded-lg border border-white/10 bg-white/5 p-3">
-                                <p className="text-xs uppercase tracking-wide text-blue-200/80 mb-2">Payment Data</p>
-                                <pre className="text-xs text-blue-50 font-mono whitespace-pre-wrap">
-                                  {JSON.stringify(approval.paymentData, null, 2)}
-                                </pre>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex gap-3 pt-3 border-t border-white/10">
-                            <Button
-                              onClick={() => approvePaymentMutation.mutate(approval.id)}
-                              disabled={approvePaymentMutation.isPending}
-                              className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-                              data-testid={`button-approve-${approval.id}`}
-                            >
-                              <ThumbsUp className="w-4 h-4 mr-2" />
-                              Approve & Sync to SMAX
-                            </Button>
-                            <Button
-                              onClick={() => setApprovalToReject(approval.id)}
-                              disabled={rejectPaymentMutation.isPending}
-                              variant="destructive"
-                              className="flex-1"
-                              data-testid={`button-reject-${approval.id}`}
-                            >
-                              <ThumbsDown className="w-4 h-4 mr-2" />
-                              Reject
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
 
           <TabsContent value="calendar" className="mt-0">
             <PaymentSchedulingCalendar />
@@ -1084,59 +897,6 @@ export default function Payments() {
           </AlertDialogContent>
         </AlertDialog>
 
-        {/* Reject Payment Approval Dialog */}
-        <AlertDialog open={!!approvalToReject} onOpenChange={() => setApprovalToReject(null)}>
-          <AlertDialogContent className="rounded-3xl border border-white/20 bg-[#0b1733]/95 text-blue-50">
-            <AlertDialogHeader>
-              <AlertDialogTitle className="text-xl font-semibold text-blue-50">Reject Payment Approval</AlertDialogTitle>
-              <AlertDialogDescription className="text-blue-100/70">
-                Please provide a reason for rejecting this payment update.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <div className="py-4">
-              <Label htmlFor="rejection-reason" className="text-blue-100/80">Reason</Label>
-              <Textarea
-                id="rejection-reason"
-                value={rejectionReason}
-                onChange={(e) => setRejectionReason(e.target.value)}
-                placeholder="Enter rejection reason..."
-                className="mt-2 bg-white/5 border-white/20 text-blue-50 placeholder:text-blue-100/40"
-                rows={4}
-                data-testid="input-rejection-reason"
-              />
-            </div>
-            <AlertDialogFooter>
-              <AlertDialogCancel
-                className="rounded-xl border border-white/20 bg-transparent px-4 py-2 text-blue-100 transition hover:bg-white/10"
-                data-testid="button-cancel-reject"
-              >
-                Cancel
-              </AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => {
-                  if (approvalToReject && rejectionReason.trim()) {
-                    rejectPaymentMutation.mutate({ approvalId: approvalToReject, reason: rejectionReason });
-                  }
-                }}
-                disabled={rejectPaymentMutation.isPending || !rejectionReason.trim()}
-                className="rounded-xl border border-rose-400/40 bg-rose-500/20 px-4 py-2 text-rose-100 transition hover:bg-rose-500/30"
-                data-testid="button-confirm-reject"
-              >
-                {rejectPaymentMutation.isPending ? (
-                  <>
-                    <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                    Rejecting...
-                  </>
-                ) : (
-                  <>
-                    <ThumbsDown className="mr-2 h-4 w-4" />
-                    Reject Payment
-                  </>
-                )}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
       </div>
     </AdminLayout>
   );
