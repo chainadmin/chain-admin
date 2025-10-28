@@ -199,27 +199,40 @@ class SmsService {
 
       // Get the webhook URL from environment
       // Priority: APP_URL (Railway/production) > RAILWAY_PUBLIC_DOMAIN > REPLIT_DOMAINS > localhost
-      const baseUrl = process.env.APP_URL 
+      let baseUrl = process.env.APP_URL 
         || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null)
         || (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS}` : null)
         || 'http://localhost:5000';
       
+      // Check if baseUrl contains wildcard (*) - if so, skip webhook to allow SMS to send
+      const hasWildcard = baseUrl.includes('*');
+      
+      if (hasWildcard) {
+        console.warn(`⚠️  APP_URL contains wildcard (*): ${baseUrl}`);
+        console.warn(`⚠️  Skipping webhook to allow SMS to send. Fix APP_URL on Railway to enable tracking.`);
+      }
+      
       // Ensure baseUrl doesn't have trailing slash and has protocol
       const cleanBaseUrl = baseUrl.replace(/\/$/, '');
-      const webhookUrl = `${cleanBaseUrl}/api/webhooks/twilio`;
+      const webhookUrl = hasWildcard ? undefined : `${cleanBaseUrl}/api/webhooks/twilio`;
       
-      console.log(`📡 SMS Status Callback URL: ${webhookUrl}`);
+      console.log(`📡 SMS Status Callback URL: ${webhookUrl || 'SKIPPED (wildcard in APP_URL)'}`);
       console.log(`   APP_URL: ${process.env.APP_URL || 'NOT SET'}`);
       console.log(`   RAILWAY_PUBLIC_DOMAIN: ${process.env.RAILWAY_PUBLIC_DOMAIN || 'NOT SET'}`);
 
-      const result = await client.messages.create({
+      const messageOptions: any = {
         body: message,
         from: fromNumber,
         to: to,
-        statusCallback: webhookUrl,
-        // Include metadata for tracking
         provideFeedback: true,
-      });
+      };
+      
+      // Only add statusCallback if we have a valid URL (no wildcard)
+      if (webhookUrl) {
+        messageOptions.statusCallback = webhookUrl;
+      }
+
+      const result = await client.messages.create(messageOptions);
 
       // Track ALL sent SMS for billing purposes (not just campaigns)
       await storage.createSmsTracking({
