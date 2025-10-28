@@ -176,6 +176,40 @@ When consumers set up payment plans, Chain syncs the arrangement to SMAX using t
 - Only last 4 digits and card brand are included
 - PCI compliance maintained throughout
 
+### Updating Payments in SMAX
+
+When scheduled payments are processed in Chain, the system updates the existing PENDING payment in SMAX to COMPLETED status.
+
+**SMAX Endpoint:** `POST /update_payment_external`
+
+**How It Works:**
+1. Payment arrangement created → All scheduled payments sent to SMAX as **PENDING**
+2. Scheduled payment processes in Chain → **UPDATE** existing PENDING payment to COMPLETED
+3. Uses original scheduled date to match the PENDING record
+4. Fallback: If no matching payment exists, inserts new payment
+
+**Update Payload Example:**
+```json
+{
+  "filenumber": "ABC123",
+  "paymentdate": "2025-01-15",
+  "paymentstatus": "COMPLETED",
+  "invoice": "tx_1234567890"
+}
+```
+
+**When Payments Are Updated:**
+- **Automatically** when scheduled payments are processed by the daily cron job
+- **Non-blocking** - scheduled payment succeeds even if SMAX update fails
+- **Logged** - all update attempts are logged for troubleshooting
+
+**Requirements:**
+- Payment must exist in SMAX with `paymentstatus = 'PENDING'`
+- Payment date must match the original scheduled date
+- Account must have `filenumber` field populated
+
+**Note:** Only PENDING payments can be updated. COMPLETED or other statuses cannot be modified via this endpoint.
+
 ## Sync Process (Every 8 Hours)
 
 The sync endpoint pulls data from SMAX into Chain for each tenant.
