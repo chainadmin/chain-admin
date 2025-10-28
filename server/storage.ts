@@ -6,6 +6,7 @@ import {
   consumers,
   accounts,
   folders,
+  pushDevices,
   emailTemplates,
   emailCampaigns,
   emailTracking,
@@ -459,6 +460,15 @@ export interface IStorage {
       bounced: number;
     };
   }>;
+  
+  // Push notification operations
+  registerPushToken(data: { 
+    tenantId: string; 
+    consumerId: string; 
+    pushToken: string; 
+    platform: string;
+  }): Promise<void>;
+  removePushToken(consumerId: string, pushToken: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2708,6 +2718,52 @@ export class DatabaseStorage implements IStorage {
       .where(eq(tenants.id, id))
       .returning();
     return updatedTenant;
+  }
+
+  // Push notification operations
+  async registerPushToken(data: { 
+    tenantId: string; 
+    consumerId: string; 
+    pushToken: string; 
+    platform: string;
+  }): Promise<void> {
+    // First check if this token already exists for this consumer
+    const [existing] = await db
+      .select()
+      .from(pushDevices)
+      .where(
+        and(
+          eq(pushDevices.consumerId, data.consumerId),
+          eq(pushDevices.pushToken, data.pushToken)
+        )
+      );
+
+    if (existing) {
+      // Update the timestamp
+      await db
+        .update(pushDevices)
+        .set({ updatedAt: new Date() })
+        .where(eq(pushDevices.id, existing.id));
+    } else {
+      // Insert new token
+      await db.insert(pushDevices).values({
+        tenantId: data.tenantId,
+        consumerId: data.consumerId,
+        pushToken: data.pushToken,
+        platform: data.platform,
+      });
+    }
+  }
+
+  async removePushToken(consumerId: string, pushToken: string): Promise<void> {
+    await db
+      .delete(pushDevices)
+      .where(
+        and(
+          eq(pushDevices.consumerId, consumerId),
+          eq(pushDevices.pushToken, pushToken)
+        )
+      );
   }
 }
 
