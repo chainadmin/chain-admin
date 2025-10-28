@@ -5580,6 +5580,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const smaxArrangement = await smaxService.getPaymentArrangement(tenant.id, account.filenumber);
             
             if (smaxArrangement && (smaxArrangement.paymentAmount || smaxArrangement.monthlyPayment)) {
+              // Sync SMAX arrangement to Chain database (non-blocking)
+              try {
+                await storage.syncSmaxArrangementToChain(tenant.id, consumerId, account.id, smaxArrangement);
+              } catch (syncError) {
+                console.error('⚠️ Failed to sync SMAX arrangement to Chain (non-blocking):', syncError);
+              }
+
               // Format SMAX arrangement to match Chain arrangement structure for display
               smaxArrangements.push({
                 id: `smax_${account.filenumber}`,
@@ -5597,7 +5604,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 isExisting: true,
                 details: smaxArrangement
               });
-              console.log('✅ SMAX arrangement found and added');
+              console.log('✅ SMAX arrangement found and synced to Chain');
             }
           } catch (error) {
             console.error('⚠️ Failed to fetch SMAX arrangement for account (non-blocking):', account.filenumber, error);
@@ -7467,6 +7474,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const schedules = await storage.getPaymentSchedulesByConsumer(consumer.id, tenant.id);
           
           for (const schedule of schedules) {
+            // Skip SMAX-sourced arrangements (SMAX handles those payments)
+            if ((schedule as any).source === 'smax') {
+              console.log(`⏭️ Skipping SMAX-managed payment schedule: ${schedule.id}`);
+              continue;
+            }
+
             // Check if payment is due today and schedule is active
             if (schedule.status === 'active' && schedule.nextPaymentDate === today) {
               try {
@@ -7481,6 +7494,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   });
                   continue;
                 }
+
+                // Get tenant settings (used for both SMAX preflight check and USAePay credentials)
+                const settings = await storage.getTenantSettings(tenant.id);
+
+                // CRITICAL: Preflight check - Query SMAX for existing payments on this date
+                // This prevents duplicate charges if SMAX already has a payment scheduled
+                if (settings?.smaxEnabled && scheduleAccount?.filenumber) {
+                  try {
+                    console.log(`🔍 Preflight check: Querying SMAX for existing payments on ${today} for filenumber ${scheduleAccount.filenumber}`);
+                    const smaxArrangement = await smaxService.getPaymentArrangement(tenant.id, scheduleAccount.filenumber);
+                    
+                    if (smaxArrangement) {
+                      // Normalize dates for comparison (handle ISO timestamps, timezone strings, etc.)
+                      const normalizeDate = (dateStr: string | null | undefined): string | null => {
+                        if (!dateStr) return null;
+                        try {
+                          // Parse date and return YYYY-MM-DD format
+                          const date = new Date(dateStr);
+                          if (isNaN(date.getTime())) return null;
+                          return date.toISOString().split('T')[0];
+                        } catch {
+                          return null;
+                        }
+                      };
+
+                      // Check if SMAX has a payment scheduled for today
+                      // Compare nextPaymentDate field
+                      const smaxNextDate = normalizeDate(smaxArrangement.nextPaymentDate);
+                      if (smaxNextDate === today) {
+                        console.log(`⚠️ SMAX nextPaymentDate matches today - skipping Chain payment to prevent duplicate`);
+                        failedPayments.push({
+                          scheduleId: schedule.id,
+                          accountId: schedule.accountId,
+                          reason: 'SMAX payment already scheduled for this date'
+                        });
+                        continue;
+                      }
+
+                      // Also check futurePayments array if present
+                      if (Array.isArray(smaxArrangement.futurePayments)) {
+                        const hasPaymentToday = smaxArrangement.futurePayments.some((payment: any) => {
+                          const paymentDate = normalizeDate(payment.paymentDate || payment.date || payment.scheduledDate);
+                          return paymentDate === today;
+                        });
+
+                        if (hasPaymentToday) {
+                          console.log(`⚠️ SMAX has future payment for today - skipping Chain payment to prevent duplicate`);
+                          failedPayments.push({
+                            scheduleId: schedule.id,
+                            accountId: schedule.accountId,
+                            reason: 'SMAX payment already scheduled for this date (future payments array)'
+                          });
+                          continue;
+                        }
+                      }
+                    }
+                  } catch (smaxError) {
+                    console.warn('⚠️ SMAX preflight check failed (continuing with Chain payment):', smaxError);
+                    // Continue with payment if SMAX check fails (better to process than skip)
+                  }
+                }
                 
                 // Get payment method
                 const paymentMethods = await storage.getPaymentMethodsByConsumer(consumer.id, tenant.id);
@@ -7491,8 +7565,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   continue;
                 }
 
-                // Get tenant settings for USAePay credentials
-                const settings = await storage.getTenantSettings(tenant.id);
+                // Verify USAePay is configured
                 if (!settings?.merchantApiKey || !settings?.merchantApiPin) {
                   console.error(`USAePay not configured for tenant ${tenant.id}`);
                   continue;

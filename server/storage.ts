@@ -2225,11 +2225,14 @@ export class DatabaseStorage implements IStorage {
 
   // Payment method operations (saved cards)
   async getPaymentMethodsByConsumer(consumerId: string, tenantId: string): Promise<PaymentMethod[]> {
-    return await db
+    const methods = await db
       .select()
       .from(paymentMethods)
       .where(and(eq(paymentMethods.consumerId, consumerId), eq(paymentMethods.tenantId, tenantId)))
       .orderBy(desc(paymentMethods.isDefault), desc(paymentMethods.createdAt));
+    
+    // Filter out SMAX placeholder payment methods from UI
+    return methods.filter(method => method.paymentToken !== 'SMAX_MANAGED');
   }
 
   async createPaymentMethod(paymentMethod: InsertPaymentMethod): Promise<PaymentMethod> {
@@ -2344,6 +2347,115 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(paymentSchedules.id, id), eq(paymentSchedules.tenantId, tenantId)))
       .returning();
     return result.length > 0;
+  }
+
+  async syncSmaxArrangementToChain(
+    tenantId: string,
+    consumerId: string,
+    accountId: string,
+    smaxArrangement: any
+  ): Promise<PaymentSchedule | null> {
+    try {
+      // Check if we already have this SMAX arrangement synced
+      const existing = await db
+        .select()
+        .from(paymentSchedules)
+        .where(and(
+          eq(paymentSchedules.tenantId, tenantId),
+          eq(paymentSchedules.consumerId, consumerId),
+          eq(paymentSchedules.accountId, accountId),
+          eq(paymentSchedules.source, 'smax'),
+          eq(paymentSchedules.status, 'active')
+        ));
+
+      if (existing.length > 0) {
+        console.log('✓ SMAX arrangement already synced to Chain');
+        return existing[0];
+      }
+
+      // CRITICAL: Deactivate any active Chain-sourced schedules for this account
+      // This prevents duplicate charges when SMAX is already handling payments
+      const activeChainSchedules = await db
+        .select()
+        .from(paymentSchedules)
+        .where(and(
+          eq(paymentSchedules.tenantId, tenantId),
+          eq(paymentSchedules.consumerId, consumerId),
+          eq(paymentSchedules.accountId, accountId),
+          eq(paymentSchedules.source, 'chain'),
+          eq(paymentSchedules.status, 'active')
+        ));
+
+      if (activeChainSchedules.length > 0) {
+        console.log(`⚠️ Found ${activeChainSchedules.length} active Chain schedule(s) for account - deactivating to prevent duplicates`);
+        
+        for (const schedule of activeChainSchedules) {
+          await db
+            .update(paymentSchedules)
+            .set({ 
+              status: 'cancelled',
+              notes: 'Auto-cancelled: SMAX arrangement detected for this account'
+            })
+            .where(eq(paymentSchedules.id, schedule.id));
+          
+          console.log(`✅ Cancelled Chain schedule ${schedule.id}`);
+        }
+      }
+
+      // Check for existing placeholder payment method to avoid duplicates
+      const existingPlaceholder = await db
+        .select()
+        .from(paymentMethods)
+        .where(and(
+          eq(paymentMethods.tenantId, tenantId),
+          eq(paymentMethods.consumerId, consumerId),
+          eq(paymentMethods.paymentToken, 'SMAX_MANAGED')
+        ));
+
+      let placeholderMethod;
+      if (existingPlaceholder.length > 0) {
+        placeholderMethod = existingPlaceholder[0];
+        console.log('✓ Using existing SMAX placeholder payment method');
+      } else {
+        // Create a placeholder payment method for SMAX arrangements (no actual card stored in Chain)
+        [placeholderMethod] = await db.insert(paymentMethods).values({
+          tenantId,
+          consumerId,
+          paymentToken: 'SMAX_MANAGED',
+          cardLast4: '****',
+          cardBrand: smaxArrangement.paymentMethod || 'Card',
+          cardholderName: 'SMAX Managed Payment',
+          isDefault: false,
+        }).returning();
+        console.log('✅ Created SMAX placeholder payment method');
+      }
+
+      // Sync SMAX arrangement to Chain
+      const amountCents = Math.round((smaxArrangement.monthlyPayment || smaxArrangement.paymentAmount || 0) * 100);
+      
+      const [syncedSchedule] = await db.insert(paymentSchedules).values({
+        tenantId,
+        consumerId,
+        accountId,
+        paymentMethodId: placeholderMethod.id,
+        arrangementType: 'smax_imported',
+        amountCents,
+        frequency: 'monthly',
+        startDate: smaxArrangement.startDate,
+        endDate: smaxArrangement.endDate || null,
+        nextPaymentDate: smaxArrangement.nextPaymentDate,
+        remainingPayments: smaxArrangement.remainingPayments || null,
+        status: 'active',
+        source: 'smax',
+        smaxSynced: true,
+      }).returning();
+
+      console.log('✅ SMAX arrangement synced to Chain:', syncedSchedule.id);
+      return syncedSchedule;
+    } catch (error) {
+      console.error('❌ Error syncing SMAX arrangement to Chain:', error);
+      return null;
+    }
   }
 
   async getAllPaymentSchedulesByTenant(tenantId: string): Promise<(PaymentSchedule & { 
