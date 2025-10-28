@@ -236,55 +236,55 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl border border-white/20 bg-[#0b1733]/95 backdrop-blur-md text-blue-50">
         <DialogHeader>
-          <DialogTitle className="flex items-center">
-            <i className="fas fa-upload text-blue-600 mr-3"></i>
+          <DialogTitle className="flex items-center text-xl font-semibold text-blue-50">
+            <i className="fas fa-upload text-sky-400 mr-3"></i>
             Import Account Data
           </DialogTitle>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-blue-100/70">
             Upload a CSV file containing account information to import multiple accounts at once.
           </p>
         </DialogHeader>
         
         <div className="space-y-4">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <h4 className="font-medium text-blue-900 mb-2">Required CSV Columns</h4>
+          <div className="rounded-xl border border-sky-400/30 bg-sky-500/10 p-4">
+            <h4 className="font-medium text-sky-100 mb-2">Required CSV Columns</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
               <div>
-                <h5 className="font-medium text-blue-800 mb-1">Consumer Information</h5>
-                <ul className="text-blue-700 space-y-1">
-                  <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">consumer_first_name</code> or <code className="bg-blue-100 px-1 rounded text-xs">first_name</code></li>
-                  <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">consumer_last_name</code> or <code className="bg-blue-100 px-1 rounded text-xs">last_name</code></li>
-                  <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">consumer_email</code> or <code className="bg-blue-100 px-1 rounded text-xs">email</code></li>
-                  <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">consumer_phone</code> or <code className="bg-blue-100 px-1 rounded text-xs">phone</code> (optional)</li>
-                  <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">date_of_birth</code> or <code className="bg-blue-100 px-1 rounded text-xs">dob</code> (optional)</li>
-                  <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">address</code> (optional)</li>
-                  <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">city</code>, <code className="bg-blue-100 px-1 rounded text-xs">state</code>, <code className="bg-blue-100 px-1 rounded text-xs">zip_code</code> (optional)</li>
+                <h5 className="font-medium text-sky-100 mb-1">Consumer Information</h5>
+                <ul className="text-sky-50/90 space-y-1">
+                  <li className="break-words">• <code className="bg-white/10 px-1 rounded text-xs text-sky-100">consumer_first_name</code> or <code className="bg-white/10 px-1 rounded text-xs text-sky-100">first_name</code></li>
+                  <li className="break-words">• <code className="bg-white/10 px-1 rounded text-xs text-sky-100">consumer_last_name</code> or <code className="bg-white/10 px-1 rounded text-xs text-sky-100">last_name</code></li>
+                  <li className="break-words">• <code className="bg-white/10 px-1 rounded text-xs text-sky-100">consumer_email</code> or <code className="bg-white/10 px-1 rounded text-xs text-sky-100">email</code></li>
+                  <li className="break-words">• <code className="bg-white/10 px-1 rounded text-xs text-sky-100">consumer_phone</code> or <code className="bg-white/10 px-1 rounded text-xs text-sky-100">phone</code> (optional)</li>
+                  <li className="break-words">• <code className="bg-white/10 px-1 rounded text-xs text-sky-100">date_of_birth</code> or <code className="bg-white/10 px-1 rounded text-xs text-sky-100">dob</code> (optional)</li>
+                  <li className="break-words">• <code className="bg-white/10 px-1 rounded text-xs text-sky-100">address</code> (optional)</li>
+                  <li className="break-words">• <code className="bg-white/10 px-1 rounded text-xs text-sky-100">city</code>, <code className="bg-white/10 px-1 rounded text-xs text-sky-100">state</code>, <code className="bg-white/10 px-1 rounded text-xs text-sky-100">zip_code</code> (optional)</li>
                 </ul>
               </div>
               <div>
-                <h5 className="font-medium text-blue-800 mb-1">Account Information</h5>
-                <ul className="text-blue-700 space-y-1">
-                  <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">filenumber</code> or <code className="bg-blue-100 px-1 rounded text-xs">file_number</code> (required for SMAX)</li>
-                  <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">creditor</code> (required)</li>
-                  <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">balance</code> (required, in dollars)</li>
-                  <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">account_number</code> or <code className="bg-blue-100 px-1 rounded text-xs">account</code> (optional)</li>
-                  <li className="break-words">• <code className="bg-blue-100 px-1 rounded text-xs">due_date</code> (optional)</li>
+                <h5 className="font-medium text-sky-100 mb-1">Account Information</h5>
+                <ul className="text-sky-50/90 space-y-1">
+                  <li className="break-words">• <code className="bg-white/10 px-1 rounded text-xs text-sky-100">filenumber</code> or <code className="bg-white/10 px-1 rounded text-xs text-sky-100">file_number</code> (required for SMAX)</li>
+                  <li className="break-words">• <code className="bg-white/10 px-1 rounded text-xs text-sky-100">creditor</code> (required)</li>
+                  <li className="break-words">• <code className="bg-white/10 px-1 rounded text-xs text-sky-100">balance</code> (required, in dollars)</li>
+                  <li className="break-words">• <code className="bg-white/10 px-1 rounded text-xs text-sky-100">account_number</code> or <code className="bg-white/10 px-1 rounded text-xs text-sky-100">account</code> (optional)</li>
+                  <li className="break-words">• <code className="bg-white/10 px-1 rounded text-xs text-sky-100">due_date</code> (optional)</li>
                 </ul>
               </div>
             </div>
-            <div className="mt-3 pt-3 border-t border-blue-200">
-              <p className="text-xs text-blue-600">
+            <div className="mt-3 pt-3 border-t border-sky-400/20">
+              <p className="text-xs text-sky-100/90">
                 <strong>Note:</strong> Any additional columns in your CSV will be automatically captured as custom data. 
                 The balance should be in dollar format (e.g., 1250.50, not cents).
               </p>
             </div>
           </div>
           
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-            <h5 className="font-medium text-gray-800 mb-2">Example CSV Format</h5>
-            <pre className="text-xs text-gray-600 bg-white p-2 rounded border overflow-x-auto">
+          <div className="rounded-xl border border-white/20 bg-white/5 p-3">
+            <h5 className="font-medium text-blue-100 mb-2">Example CSV Format</h5>
+            <pre className="text-xs text-blue-100/80 bg-white/5 p-2 rounded border border-white/10 overflow-x-auto">
 consumer_first_name,consumer_last_name,consumer_email,date_of_birth,filenumber,creditor,balance,account_number
 John,Doe,john.doe@email.com,1985-05-15,FILE123456,Credit Card Co,1250.50,ACC123456
 Jane,Smith,jane.smith@email.com,1990-08-22,FILE789012,Medical Services,875.25,MED789012

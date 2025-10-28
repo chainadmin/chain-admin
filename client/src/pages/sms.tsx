@@ -369,24 +369,25 @@ export default function SMS() {
                     Create Template
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-2xl">
+                <DialogContent className="max-w-2xl rounded-3xl border border-white/20 bg-[#0b1733]/95 backdrop-blur-md text-blue-50">
                   <DialogHeader>
-                    <DialogTitle>Create SMS Template</DialogTitle>
+                    <DialogTitle className="text-xl font-semibold text-blue-50">Create SMS Template</DialogTitle>
                   </DialogHeader>
                   <form onSubmit={handleTemplateSubmit} className="space-y-4">
                     <div>
-                      <Label htmlFor="template-name">Template Name</Label>
+                      <Label htmlFor="template-name" className="text-blue-100/80">Template Name</Label>
                       <Input
                         id="template-name"
                         data-testid="input-template-name"
                         value={templateForm.name}
                         onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
                         placeholder="Enter template name"
+                        className="bg-white/5 border-white/20 text-blue-50 placeholder:text-blue-100/40"
                         required
                       />
                     </div>
                     <div>
-                      <Label htmlFor="message">Message Content</Label>
+                      <Label htmlFor="message" className="text-blue-100/80">Message Content</Label>
                       <Textarea
                         id="message"
                         data-testid="textarea-message"
@@ -395,24 +396,25 @@ export default function SMS() {
                         placeholder="Enter your SMS message. Use {{firstName}} or {balance} to personalize."
                         rows={6}
                         maxLength={1600}
+                        className="bg-white/5 border-white/20 text-blue-50 placeholder:text-blue-100/40"
                         required
                       />
-                      <p className="text-sm text-gray-500 mt-1">
+                      <p className="text-sm text-blue-100/60 mt-1">
                         {templateForm.message.length}/1600 characters
                       </p>
-                      <div className="mt-3 bg-blue-50 border-2 border-blue-300 rounded-md p-4 max-h-[500px] overflow-y-auto">
-                        <h4 className="font-medium text-blue-900 text-sm mb-2 flex items-center gap-2">
+                      <div className="mt-3 rounded-xl border border-amber-400/30 bg-amber-500/10 p-4 max-h-[500px] overflow-y-auto">
+                        <h4 className="font-medium text-amber-100 text-sm mb-2 flex items-center gap-2">
                           📝 Available Variables (30+)
-                          <span className="text-xs font-normal text-blue-700">(scroll to see all)</span>
+                          <span className="text-xs font-normal text-amber-200/80">(scroll to see all)</span>
                         </h4>
-                        <p className="text-xs text-blue-700 mb-3">
-                          Use <code className="font-mono bg-white px-1 rounded">{"{{variable}}"}</code> or <code className="font-mono bg-white px-1 rounded">{"{variable}"}</code> syntax to insert data.
+                        <p className="text-xs text-amber-100/90 mb-3">
+                          Use <code className="font-mono bg-white/10 px-1 rounded text-amber-100">{"{{variable}}"}</code> or <code className="font-mono bg-white/10 px-1 rounded text-amber-100">{"{variable}"}</code> syntax to insert data.
                         </p>
                         
                         <div className="space-y-3 pb-2">
                           <div>
-                            <h5 className="font-semibold text-blue-900 text-xs mb-1">Consumer Info</h5>
-                            <div className="text-xs text-blue-800 grid grid-cols-2 gap-x-4 gap-y-0.5">
+                            <h5 className="font-semibold text-amber-100 text-xs mb-1">Consumer Info</h5>
+                            <div className="text-xs text-amber-50 grid grid-cols-2 gap-x-4 gap-y-0.5">
                               <div>• {"{{firstName}}"}</div>
                               <div>• {"{{lastName}}"}</div>
                               <div>• {"{{fullName}}"}</div>
@@ -429,8 +431,8 @@ export default function SMS() {
                           </div>
 
                           <div>
-                            <h5 className="font-semibold text-blue-900 text-xs mb-1">Account Info</h5>
-                            <div className="text-xs text-blue-800 grid grid-cols-2 gap-x-4 gap-y-0.5">
+                            <h5 className="font-semibold text-amber-100 text-xs mb-1">Account Info</h5>
+                            <div className="text-xs text-amber-50 grid grid-cols-2 gap-x-4 gap-y-0.5">
                               <div>• {"{{accountNumber}}"}</div>
                               <div>• {"{{accountId}}"}</div>
                               <div>• {"{{filenumber}}"} or {"{{fileNumber}}"}</div>
@@ -443,8 +445,8 @@ export default function SMS() {
                           </div>
 
                           <div>
-                            <h5 className="font-semibold text-blue-900 text-xs mb-1">Settlement Offers</h5>
-                            <div className="text-xs text-blue-800 grid grid-cols-2 gap-x-4 gap-y-0.5">
+                            <h5 className="font-semibold text-amber-100 text-xs mb-1">Settlement Offers</h5>
+                            <div className="text-xs text-amber-50 grid grid-cols-2 gap-x-4 gap-y-0.5">
                               <div>• {"{{balance50%}}"} (50% off)</div>
                               <div>• {"{{balance60%}}"} (40% off)</div>
                               <div>• {"{{balance70%}}"} (30% off)</div>
@@ -455,8 +457,8 @@ export default function SMS() {
                           </div>
 
                           <div>
-                            <h5 className="font-semibold text-blue-900 text-xs mb-1">Agency Info</h5>
-                            <div className="text-xs text-blue-800 grid grid-cols-2 gap-x-4 gap-y-0.5">
+                            <h5 className="font-semibold text-amber-100 text-xs mb-1">Agency Info</h5>
+                            <div className="text-xs text-amber-50 grid grid-cols-2 gap-x-4 gap-y-0.5">
                               <div>• {"{{agencyName}}"}</div>
                               <div>• {"{{agencyEmail}}"}</div>
                               <div>• {"{{agencyPhone}}"}</div>
@@ -464,8 +466,8 @@ export default function SMS() {
                           </div>
 
                           <div>
-                            <h5 className="font-semibold text-blue-900 text-xs mb-1">Links & Opt-Out</h5>
-                            <div className="text-xs text-blue-800 grid grid-cols-1 gap-y-0.5">
+                            <h5 className="font-semibold text-amber-100 text-xs mb-1">Links & Opt-Out</h5>
+                            <div className="text-xs text-amber-50 grid grid-cols-1 gap-y-0.5">
                               <div>• {"{{consumerPortalLink}}"} - Portal login URL</div>
                               <div>• {"{{appDownloadLink}}"} - Mobile app download</div>
                               <div>• {"{{unsubscribeLink}}"} - SMS/email opt-out</div>
@@ -474,8 +476,8 @@ export default function SMS() {
                           </div>
 
                           <div>
-                            <h5 className="font-semibold text-blue-900 text-xs mb-1">Other</h5>
-                            <div className="text-xs text-blue-800">
+                            <h5 className="font-semibold text-amber-100 text-xs mb-1">Other</h5>
+                            <div className="text-xs text-amber-50">
                               <div>• {"{{todays date}}"} - Current date</div>
                               <div>• Plus any custom CSV columns</div>
                             </div>
@@ -489,6 +491,7 @@ export default function SMS() {
                         variant="outline"
                         onClick={() => setShowTemplateModal(false)}
                         data-testid="button-cancel-template"
+                        className="rounded-xl border border-white/20 bg-transparent px-4 py-2 text-blue-100 transition hover:bg-white/10"
                       >
                         Cancel
                       </Button>
@@ -496,6 +499,7 @@ export default function SMS() {
                         type="submit"
                         disabled={createTemplateMutation.isPending}
                         data-testid="button-save-template"
+                        className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white"
                       >
                         {createTemplateMutation.isPending ? "Creating..." : "Create Template"}
                       </Button>
