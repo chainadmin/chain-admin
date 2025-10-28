@@ -7,9 +7,40 @@
 - ✅ Folder filtering (server/routes.ts resolveSmsCampaignAudience)
 - ✅ Database migrations work correctly
 - ✅ Local build process confirmed working
+- ✅ Webhook URLs now support Railway deployment
 
 ## The Problem:
 Railway is serving OLD cached files from a previous deployment. The Dockerfile builds correctly, but Docker layers or Railway's cache is preventing the new build from being deployed.
+
+---
+
+## IMPORTANT: Environment Variables for Railway
+
+### Required Environment Variable for Webhooks
+
+Add this environment variable in Railway to ensure webhooks work correctly:
+
+```
+APP_URL=https://your-railway-domain.railway.app
+```
+
+**Example:**
+```
+APP_URL=https://chain-production.up.railway.app
+```
+
+This variable is used for:
+- Twilio SMS delivery webhooks (`/api/webhooks/twilio`)
+- Twilio inbound SMS webhooks (`/api/webhooks/twilio-inbound`)
+- Postmark email tracking webhooks (`/api/webhooks/postmark`)
+- Postmark inbound email webhooks (`/api/webhooks/postmark-inbound`)
+
+**How to set it:**
+1. Go to your Railway project
+2. Click on your service
+3. Go to **Variables** tab
+4. Add new variable: `APP_URL` = `https://your-actual-railway-domain.railway.app`
+5. Redeploy
 
 ---
 

@@ -40,6 +40,8 @@ The frontend utilizes React with TypeScript, built with shadcn/ui components on 
 
 ## Deployment and Infrastructure
 - **Railway**: Production hosting for PostgreSQL, file storage, and API deployment.
+  - **Webhook Configuration**: Requires `APP_URL` environment variable set to Railway domain for Twilio/Postmark webhooks to function correctly.
+  - **Environment Priority**: APP_URL > RAILWAY_PUBLIC_DOMAIN > REPLIT_DOMAINS > localhost for webhook URL construction.
 
 ## Database Services
 - **PostgreSQL**

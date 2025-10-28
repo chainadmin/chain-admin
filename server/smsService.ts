@@ -185,8 +185,15 @@ class SmsService {
       }
 
       // Get the webhook URL from environment
-      const baseUrl = process.env.REPLIT_DOMAINS || 'localhost:5000';
-      const webhookUrl = `https://${baseUrl}/api/webhooks/twilio`;
+      // Priority: APP_URL (Railway/production) > RAILWAY_PUBLIC_DOMAIN > REPLIT_DOMAINS > localhost
+      const baseUrl = process.env.APP_URL 
+        || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null)
+        || (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS}` : null)
+        || 'http://localhost:5000';
+      
+      // Ensure baseUrl doesn't have trailing slash and has protocol
+      const cleanBaseUrl = baseUrl.replace(/\/$/, '');
+      const webhookUrl = `${cleanBaseUrl}/api/webhooks/twilio`;
 
       const result = await client.messages.create({
         body: message,
