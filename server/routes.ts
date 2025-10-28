@@ -6513,6 +6513,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
             },
             amount: amountCents,
           }).catch(err => console.error('Failed to send payment notification:', err));
+
+          // Also send notification to company contact email
+          await emailService.sendPaymentNotification({
+            tenantId,
+            consumerName: `${consumer.firstName} ${consumer.lastName}`,
+            accountNumber: account.accountNumber || 'N/A',
+            amountCents,
+            paymentMethod: 'Credit Card',
+            transactionId: transactionId || undefined,
+            paymentType: 'one_time',
+          }).catch(err => console.error('Failed to send payment notification to contact email:', err));
         }
       }
 
@@ -6698,6 +6709,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
               },
               arrangementType: arrangement.name || arrangement.planType,
             }).catch(err => console.error('Failed to send arrangement notification:', err));
+
+            // Also send notification to company contact email
+            await emailService.sendArrangementNotification({
+              tenantId,
+              consumerName: `${consumer.firstName} ${consumer.lastName}`,
+              accountNumber: account.accountNumber || 'N/A',
+              arrangementType: arrangement.name || arrangement.planType,
+              monthlyPayment: amountCents,
+              totalBalance: account.balanceCents || 0,
+              startDate: paymentStartDate.toISOString().split('T')[0],
+              endDate: endDate ? endDate.toISOString().split('T')[0] : undefined,
+              remainingPayments: remainingPayments || undefined,
+            }).catch(err => console.error('Failed to send arrangement notification to contact email:', err));
           }
 
           // Update consumer status to pending_payment since they now have an active schedule
@@ -7414,6 +7438,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       // Account still has balance but no payment plan
                       await storage.updateConsumer(consumer.id, { paymentStatus: 'no_payment_plan' });
                     }
+                  }
+
+                  // Send email notification to company contact
+                  try {
+                    const account = await storage.getAccount(schedule.accountId);
+                    await emailService.sendPaymentNotification({
+                      tenantId: tenant.id,
+                      consumerName: `${consumer.firstName} ${consumer.lastName}`,
+                      accountNumber: account?.accountNumber || 'N/A',
+                      amountCents: schedule.amountCents,
+                      paymentMethod: `Card ending in ${paymentMethod.cardLast4}`,
+                      transactionId: paymentResult.refnum || paymentResult.key || undefined,
+                      paymentType: 'scheduled',
+                    }).catch(err => console.error('Failed to send scheduled payment notification:', err));
+                  } catch (notificationError) {
+                    console.error('Error sending scheduled payment notification:', notificationError);
                   }
 
                   processedPayments.push({ scheduleId: schedule.id, consumerId: consumer.id });
@@ -8499,6 +8539,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       } catch (smaxError) {
         console.error('SMAX notification failed:', smaxError);
+      }
+
+      // Send email notification to company contact
+      try {
+        const account = accountId ? await storage.getAccount(accountId) : null;
+        await emailService.sendPaymentNotification({
+          tenantId,
+          consumerName: `${consumer.firstName} ${consumer.lastName}`,
+          accountNumber: account?.accountNumber || 'N/A',
+          amountCents,
+          paymentMethod: paymentMethod || 'Manual',
+          transactionId,
+          paymentType: 'manual',
+        }).catch(err => console.error('Failed to send manual payment notification:', err));
+      } catch (notificationError) {
+        console.error('Error sending manual payment notification:', notificationError);
       }
 
       res.json(payment);
