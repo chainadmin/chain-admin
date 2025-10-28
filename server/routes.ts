@@ -8577,12 +8577,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
               updatedAt: new Date(),
             });
 
-            // Create note in SMAX if enabled
+            // Sync card data to SMAX if enabled
             if (approval.filenumber) {
               try {
                 const oldMethod = await storage.getPaymentMethod(approval.oldPaymentMethodId!);
                 const newMethod = await storage.getPaymentMethod(approval.newPaymentMethodId);
-                const noteText = `Card change approved by admin. New card: ${newMethod?.cardBrand || 'Card'} ending in ${newMethod?.cardLast4}. Previous card: ${oldMethod?.cardBrand || 'Card'} ending in ${oldMethod?.cardLast4 || '****'}. Admin: ${userId}`;
+                
+                // Update card details in SMAX (partial update with PCI-compliant data only)
+                if (newMethod) {
+                  const smaxCardData: any = {
+                    filenumber: approval.filenumber,
+                  };
+
+                  // Map card brand to SMAX card type
+                  if (newMethod.cardBrand) {
+                    const brandMap: Record<string, string> = {
+                      'Visa': 'Visa',
+                      'Mastercard': 'MasterCard',
+                      'MasterCard': 'MasterCard',
+                      'American Express': 'American Express',
+                      'Amex': 'American Express',
+                      'Discover': 'Discover',
+                    };
+                    smaxCardData.cardtype = brandMap[newMethod.cardBrand] || newMethod.cardBrand;
+                  }
+
+                  // Add expiration data
+                  if (newMethod.expiryMonth && newMethod.expiryYear) {
+                    smaxCardData.cardexpirationmonth = newMethod.expiryMonth;
+                    smaxCardData.cardexpirationyear = newMethod.expiryYear.slice(-2); // Use last 2 digits (YY)
+                    smaxCardData.cardexpirationdate = `${newMethod.expiryMonth}/${newMethod.expiryYear.slice(-2)}`;
+                  }
+
+                  // Add cardholder name if available
+                  if (newMethod.cardholderName) {
+                    smaxCardData.payorname = newMethod.cardholderName;
+                  }
+
+                  // Update SMAX payment record (PENDING payments only)
+                  await smaxService.updatePayment(tenantId, smaxCardData);
+                  console.log('✅ SMAX payment record updated with new card details');
+                }
+
+                // Also create a note for additional context
+                const noteText = `Card change approved by admin. New card: ${newMethod?.cardBrand || 'Card'} ending in ${newMethod?.cardLast4}. Previous card: ${oldMethod?.cardBrand || 'Card'} ending in ${oldMethod?.cardLast4 || '****'}. Card expiration and type synced to SMAX. Admin: ${userId}`;
                 
                 await smaxService.insertNote(tenantId, {
                   filenumber: approval.filenumber,
@@ -8592,7 +8630,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
                 console.log('✅ SMAX note created for approved card change');
               } catch (smaxError) {
-                console.warn('⚠️ Failed to create SMAX note after card change approval (non-blocking):', smaxError);
+                console.warn('⚠️ Failed to sync card data to SMAX after approval (non-blocking):', smaxError);
               }
             }
 
