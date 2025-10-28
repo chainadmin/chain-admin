@@ -7555,9 +7555,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     // We need admin approval before updating it to COMPLETED
                     if (account.filenumber) {
                       try {
+                        // Prepare SMAX payment data for approval
+                        const smaxPaymentData = {
+                          paymentdate: today,
+                          paymentamount: (schedule.amountCents / 100).toString(),
+                          payorname: `${consumer.firstName} ${consumer.lastName}`.trim() || 'Consumer',
+                          paymentmethod: 'CREDIT CARD',
+                          cardtype: paymentMethod.cardBrand || 'Unknown',
+                          paymentstatus: 'COMPLETED',
+                          transactionid: paymentResult.refnum || paymentResult.key || `tx_${Date.now()}`,
+                        };
+
                         // Create payment approval request instead of auto-updating SMAX
                         await storage.createPaymentApproval({
                           tenantId: tenant.id,
+                          approvalType: 'payment',
                           scheduleId: schedule.id,
                           accountId: schedule.accountId,
                           consumerId: consumer.id,
@@ -7565,6 +7577,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                           paymentDate: schedule.nextPaymentDate,
                           amountCents: schedule.amountCents,
                           transactionId: paymentResult.refnum || paymentResult.key || `tx_${Date.now()}`,
+                          paymentData: smaxPaymentData,
                           status: 'pending',
                         });
 
