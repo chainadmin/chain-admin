@@ -7273,21 +7273,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       balanceCents: Math.max(0, newBalance)
                     });
 
-                    // Send payment to SMAX if enabled and filenumber exists
+                    // Update payment in SMAX if enabled and filenumber exists
+                    // Note: The payment already exists in SMAX as PENDING (from when arrangement was created)
+                    // We need to update it using the ORIGINAL SCHEDULED DATE (not today) so SMAX can find it
                     if (account.filenumber) {
                       try {
-                        const smaxPaymentData = smaxService.createSmaxPaymentData({
+                        // Update the existing PENDING payment in SMAX to COMPLETED
+                        // CRITICAL: Use the schedule's nextPaymentDate (not today) to match the PENDING record
+                        const updateSuccess = await smaxService.updatePayment(tenant.id, {
                           filenumber: account.filenumber,
-                          paymentamount: schedule.amountCents / 100,
-                          paymentdate: today,
-                          payorname: `${consumer.firstName} ${consumer.lastName}`.trim() || 'Consumer',
-                          paymentmethod: 'CREDIT CARD',
-                          cardtype: paymentMethod.cardBrand || 'Unknown',
-                          cardLast4: paymentMethod.cardLast4,
-                          transactionid: paymentResult.refnum || paymentResult.key || `tx_${Date.now()}`,
+                          paymentdate: schedule.nextPaymentDate, // Use original scheduled date, not today!
+                          paymentstatus: 'COMPLETED',
+                          invoice: paymentResult.refnum || paymentResult.key || `tx_${Date.now()}`,
                         });
 
-                        await smaxService.insertPayment(tenant.id, smaxPaymentData);
+                        if (updateSuccess) {
+                          console.log(`✅ SMAX payment updated to COMPLETED for filenumber: ${account.filenumber}, date: ${schedule.nextPaymentDate}`);
+                        } else {
+                          console.warn(`⚠️ Could not update SMAX payment for date ${schedule.nextPaymentDate} - payment may not exist in SMAX, inserting new record`);
+                          // Fallback: If update fails (payment doesn't exist in SMAX), insert it
+                          const smaxPaymentData = smaxService.createSmaxPaymentData({
+                            filenumber: account.filenumber,
+                            paymentamount: schedule.amountCents / 100,
+                            paymentdate: today,
+                            payorname: `${consumer.firstName} ${consumer.lastName}`.trim() || 'Consumer',
+                            paymentmethod: 'CREDIT CARD',
+                            cardtype: paymentMethod.cardBrand || 'Unknown',
+                            cardLast4: paymentMethod.cardLast4,
+                            transactionid: paymentResult.refnum || paymentResult.key || `tx_${Date.now()}`,
+                          });
+                          await smaxService.insertPayment(tenant.id, smaxPaymentData);
+                          console.log(`✅ SMAX payment inserted (fallback) for filenumber: ${account.filenumber}`);
+                        }
 
                         // Insert payment attempt to SMAX
                         await smaxService.insertAttempt(tenant.id, {
@@ -7298,9 +7315,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                           result: 'Success',
                         });
 
-                        console.log(`✅ Scheduled payment sent to SMAX for filenumber: ${account.filenumber}`);
                       } catch (smaxError) {
-                        console.error('❌ Error sending scheduled payment to SMAX:', smaxError);
+                        console.error('❌ Error updating/sending scheduled payment to SMAX:', smaxError);
                         // Don't fail the whole payment if SMAX sync fails
                       }
                     } else {
