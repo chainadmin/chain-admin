@@ -7271,7 +7271,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Update payment method for a payment schedule
+  // Update payment method for a payment schedule with SMAX sync logic
   app.patch('/api/consumer/payment-schedules/:scheduleId/payment-method', authenticateConsumer, async (req: any, res) => {
     try {
       const { id: consumerId, tenantId } = req.consumer || {};
@@ -7302,16 +7302,144 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Payment method not found" });
       }
 
-      // Update the payment schedule with the new payment method
-      const updatedSchedule = await storage.updatePaymentSchedule(scheduleId, tenantId, {
-        paymentMethodId,
-        updatedAt: new Date(),
-      });
+      // Get the account details
+      const account = await storage.getAccount(schedule.accountId);
+      if (!account) {
+        return res.status(404).json({ message: "Account not found" });
+      }
 
-      res.json({ 
-        message: "Payment method updated successfully",
-        schedule: updatedSchedule 
-      });
+      // Check if SMAX is enabled and account has filenumber
+      const settings = await storage.getTenantSettings(tenantId);
+      const smaxEnabled = settings?.smaxEnabled && account.filenumber;
+
+      let requiresApproval = false;
+      let comparisonResult: any = null;
+
+      if (smaxEnabled) {
+        try {
+          // Fetch SMAX arrangement for this account
+          const smaxArrangement = await smaxService.getPaymentArrangement(tenantId, account.filenumber!);
+          
+          if (smaxArrangement && (smaxArrangement.paymentAmount || smaxArrangement.monthlyPayment)) {
+            // Compare dates and amounts
+            const smaxAmount = parseFloat(smaxArrangement.paymentAmount || smaxArrangement.monthlyPayment) * 100; // Convert to cents
+            const smaxNextDate = smaxArrangement.nextPaymentDate;
+            
+            const amountsMatch = Math.abs(smaxAmount - schedule.amountCents) < 10; // Within 10 cents tolerance
+            const datesMatch = smaxNextDate === schedule.nextPaymentDate;
+
+            comparisonResult = {
+              smaxAmount,
+              chainAmount: schedule.amountCents,
+              amountsMatch,
+              smaxNextDate,
+              chainNextDate: schedule.nextPaymentDate,
+              datesMatch,
+              smaxArrangement: {
+                type: smaxArrangement.arrangementType,
+                frequency: smaxArrangement.paymentFrequency,
+                remainingPayments: smaxArrangement.remainingPayments
+              }
+            };
+
+            // Require approval if dates or amounts don't match
+            requiresApproval = !amountsMatch || !datesMatch;
+
+            console.log('💳 Card change SMAX comparison:', {
+              scheduleId,
+              filenumber: account.filenumber,
+              amountsMatch,
+              datesMatch,
+              requiresApproval,
+              comparisonResult
+            });
+          }
+        } catch (error) {
+          console.error('⚠️ Error fetching SMAX arrangement for card change comparison:', error);
+          // If we can't fetch SMAX, proceed with approval required
+          requiresApproval = true;
+        }
+      }
+
+      if (requiresApproval) {
+        // Create approval request for admin review
+        const approval = await storage.createPaymentApproval({
+          tenantId,
+          approvalType: 'card_change',
+          scheduleId: schedule.id,
+          accountId: schedule.accountId,
+          consumerId,
+          filenumber: account.filenumber || null,
+          paymentDate: null,
+          amountCents: null,
+          transactionId: null,
+          oldPaymentMethodId: schedule.paymentMethodId,
+          newPaymentMethodId: paymentMethodId,
+          paymentData: comparisonResult || {},
+          status: 'pending',
+        });
+
+        console.log('📋 Card change approval created:', approval.id);
+
+        return res.json({
+          requiresApproval: true,
+          approvalId: approval.id,
+          message: "Card change request submitted for approval. Payment dates or amounts differ from SMAX, requiring admin review."
+        });
+      } else {
+        // Auto-approve: dates and amounts match (or SMAX not enabled)
+        // Update the payment schedule immediately
+        const updatedSchedule = await storage.updatePaymentSchedule(scheduleId, tenantId, {
+          paymentMethodId,
+          updatedAt: new Date(),
+        });
+
+        // Create auto-approved approval record for audit trail
+        const approval = await storage.createPaymentApproval({
+          tenantId,
+          approvalType: 'card_change',
+          scheduleId: schedule.id,
+          accountId: schedule.accountId,
+          consumerId,
+          filenumber: account.filenumber || null,
+          paymentDate: null,
+          amountCents: null,
+          transactionId: null,
+          oldPaymentMethodId: schedule.paymentMethodId,
+          newPaymentMethodId: paymentMethodId,
+          paymentData: comparisonResult || {},
+          status: 'auto_approved',
+          approvedBy: 'system',
+          approvedAt: new Date(),
+        });
+
+        // Create note in SMAX if enabled
+        if (smaxEnabled && account.filenumber) {
+          try {
+            const oldMethod = paymentMethods.find(pm => pm.id === schedule.paymentMethodId);
+            const noteText = `Payment method updated by consumer. New card: ${paymentMethod.cardBrand || 'Card'} ending in ${paymentMethod.cardLast4}. Previous card: ${oldMethod?.cardBrand || 'Card'} ending in ${oldMethod?.cardLast4 || '****'}. Dates and amounts match - auto-approved.`;
+            
+            await smaxService.insertNote(tenantId, {
+              filenumber: account.filenumber,
+              collectorname: 'System',
+              logmessage: noteText
+            });
+
+            console.log('✅ SMAX note created for card change');
+          } catch (error) {
+            console.error('⚠️ Error creating SMAX note for card change (non-blocking):', error);
+          }
+        }
+
+        console.log('✅ Card change auto-approved:', approval.id);
+
+        res.json({
+          message: "Payment method updated successfully",
+          schedule: updatedSchedule,
+          requiresApproval: false,
+          approvalId: approval.id
+        });
+      }
     } catch (error) {
       console.error("Error updating payment method for schedule:", error);
       res.status(500).json({ message: "Failed to update payment method" });
@@ -8403,15 +8531,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Approval not found" });
       }
 
-      try {
-        await smaxService.updatePaymentExternal(
-          approval.accountId,
-          approval.paymentId,
-          approval.paymentData
-        );
-        console.log('✅ SMAX payment updated successfully after approval');
-      } catch (smaxError) {
-        console.warn('⚠️ Failed to update SMAX after approval (non-blocking):', smaxError);
+      // Handle different approval types
+      if (approval.approvalType === 'card_change') {
+        // Card change approval: update the payment schedule with new payment method
+        if (approval.newPaymentMethodId && approval.scheduleId) {
+          try {
+            await storage.updatePaymentSchedule(approval.scheduleId, tenantId, {
+              paymentMethodId: approval.newPaymentMethodId,
+              updatedAt: new Date(),
+            });
+
+            // Create note in SMAX if enabled
+            if (approval.filenumber) {
+              try {
+                const oldMethod = await storage.getPaymentMethod(approval.oldPaymentMethodId!);
+                const newMethod = await storage.getPaymentMethod(approval.newPaymentMethodId);
+                const noteText = `Card change approved by admin. New card: ${newMethod?.cardBrand || 'Card'} ending in ${newMethod?.cardLast4}. Previous card: ${oldMethod?.cardBrand || 'Card'} ending in ${oldMethod?.cardLast4 || '****'}. Admin: ${userId}`;
+                
+                await smaxService.insertNote(tenantId, {
+                  filenumber: approval.filenumber,
+                  collectorname: userId,
+                  logmessage: noteText
+                });
+
+                console.log('✅ SMAX note created for approved card change');
+              } catch (smaxError) {
+                console.warn('⚠️ Failed to create SMAX note after card change approval (non-blocking):', smaxError);
+              }
+            }
+
+            console.log('✅ Payment schedule updated after card change approval');
+          } catch (updateError) {
+            console.error('❌ Failed to update payment schedule after approval:', updateError);
+            throw updateError;
+          }
+        }
+      } else {
+        // Payment approval: update SMAX with payment details
+        if (approval.filenumber && approval.paymentData) {
+          try {
+            await smaxService.updatePayment(tenantId, {
+              filenumber: approval.filenumber,
+              ...approval.paymentData
+            });
+            console.log('✅ SMAX payment updated successfully after approval');
+          } catch (smaxError) {
+            console.warn('⚠️ Failed to update SMAX after approval (non-blocking):', smaxError);
+          }
+        }
       }
 
       res.json({ success: true, approval });

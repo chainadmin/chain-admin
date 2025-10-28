@@ -529,18 +529,22 @@ export const paymentSchedules = pgTable("payment_schedules", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// Payment approvals for SMAX updates
+// Payment approvals for SMAX updates and card changes
 export const paymentApprovals = pgTable("payment_approvals", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  approvalType: text("approval_type").default("payment"), // "payment", "card_change"
   scheduleId: uuid("schedule_id").references(() => paymentSchedules.id, { onDelete: "cascade" }).notNull(),
   accountId: uuid("account_id").references(() => accounts.id, { onDelete: "cascade" }).notNull(),
   consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "cascade" }).notNull(),
-  filenumber: text("filenumber").notNull(), // SMAX filenumber
-  paymentDate: date("payment_date").notNull(), // Scheduled payment date
-  amountCents: bigint("amount_cents", { mode: "number" }).notNull(),
+  filenumber: text("filenumber"), // SMAX filenumber (nullable for non-SMAX tenants)
+  paymentDate: date("payment_date"), // Scheduled payment date (nullable for card changes)
+  amountCents: bigint("amount_cents", { mode: "number" }), // Payment amount (nullable for card changes)
   transactionId: text("transaction_id"), // Payment processor transaction ID
-  status: text("status").default("pending"), // "pending", "approved", "rejected"
+  oldPaymentMethodId: uuid("old_payment_method_id").references(() => paymentMethods.id), // For card changes
+  newPaymentMethodId: uuid("new_payment_method_id").references(() => paymentMethods.id), // For card changes
+  paymentData: jsonb("payment_data").default(sql`'{}'::jsonb`), // Additional data (SMAX comparison results, etc.)
+  status: text("status").default("pending"), // "pending", "approved", "rejected", "auto_approved"
   approvedBy: text("approved_by"), // Admin username who approved/rejected
   approvedAt: timestamp("approved_at"),
   rejectionReason: text("rejection_reason"),

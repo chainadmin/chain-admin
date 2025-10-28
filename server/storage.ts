@@ -2237,6 +2237,14 @@ export class DatabaseStorage implements IStorage {
     return newMethod;
   }
 
+  async getPaymentMethod(id: string): Promise<PaymentMethod | null> {
+    const [method] = await db
+      .select()
+      .from(paymentMethods)
+      .where(eq(paymentMethods.id, id));
+    return method || null;
+  }
+
   async deletePaymentMethod(id: string, consumerId: string, tenantId: string): Promise<boolean> {
     const result = await db
       .delete(paymentMethods)
