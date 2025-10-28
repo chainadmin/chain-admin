@@ -3364,9 +3364,9 @@ export default function Communications() {
                     <div className="flex justify-end gap-3 pt-4 border-t border-white/20">
                       <Button
                         type="button"
+                        variant="outline"
                         onClick={() => setShowAutomationModal(false)}
                         data-testid="button-cancel-automation"
-                        className="bg-white/10 text-white border-white/20 hover:bg-white/20"
                       >
                         Cancel
                       </Button>
@@ -3478,12 +3478,12 @@ export default function Communications() {
                   <div className="flex justify-end gap-3 pt-4 border-t border-white/20">
                     <Button
                       type="button"
+                      variant="outline"
                       onClick={() => {
                         setShowEditAutomationModal(false);
                         setEditingAutomation(null);
                       }}
                       data-testid="button-cancel-edit-automation"
-                      className="bg-white/10 text-white border-white/20 hover:bg-white/20"
                     >
                       Cancel
                     </Button>

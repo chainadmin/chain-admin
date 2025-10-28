@@ -929,7 +929,7 @@ export default function Accounts() {
             </div>
 
             <div className="flex justify-end gap-2 pt-4 border-t border-white/20">
-              <Button type="button" onClick={() => setShowCreateModal(false)} className="bg-white/10 text-white border-white/20 hover:bg-white/20">
+              <Button type="button" variant="outline" onClick={() => setShowCreateModal(false)}>
                 Cancel
               </Button>
               <Button type="submit" disabled={createAccountMutation.isPending} data-testid="button-submit-create" className="bg-blue-600 text-white hover:bg-blue-700">
@@ -1150,7 +1150,7 @@ export default function Accounts() {
             </div>
 
             <div className="flex justify-end gap-2 pt-4 border-t border-white/20">
-              <Button type="button" onClick={() => setShowEditModal(false)} className="bg-white/10 text-white border-white/20 hover:bg-white/20">
+              <Button type="button" variant="outline" onClick={() => setShowEditModal(false)}>
                 Cancel
               </Button>
               <Button type="submit" disabled={updateAccountMutation.isPending} data-testid="button-submit-edit" className="bg-blue-600 text-white hover:bg-blue-700">
