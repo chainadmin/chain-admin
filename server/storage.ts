@@ -29,6 +29,7 @@ import {
   payments,
   paymentMethods,
   paymentSchedules,
+  paymentApprovals,
   subscriptions,
   subscriptionPlans,
   invoices,
@@ -89,6 +90,8 @@ import {
   type InsertPaymentMethod,
   type PaymentSchedule,
   type InsertPaymentSchedule,
+  type PaymentApproval,
+  type InsertPaymentApproval,
   type Subscription,
   type InsertSubscription,
   type Invoice,
@@ -386,6 +389,12 @@ export interface IStorage {
   createPaymentSchedule(schedule: InsertPaymentSchedule): Promise<PaymentSchedule>;
   updatePaymentSchedule(id: string, tenantId: string, updates: Partial<PaymentSchedule>): Promise<PaymentSchedule>;
   cancelPaymentSchedule(id: string, tenantId: string): Promise<boolean>;
+  
+  // Payment approval operations
+  createPaymentApproval(approval: InsertPaymentApproval): Promise<PaymentApproval>;
+  getPendingPaymentApprovals(tenantId: string): Promise<(PaymentApproval & { consumer?: Consumer; account?: Account })[]>;
+  approvePaymentApproval(id: string, approvedBy: string): Promise<PaymentApproval>;
+  rejectPaymentApproval(id: string, approvedBy: string, reason: string): Promise<PaymentApproval>;
   
   // Billing operations
   getSubscriptionByTenant(tenantId: string): Promise<Subscription | undefined>;
@@ -2311,6 +2320,55 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(paymentSchedules.id, id), eq(paymentSchedules.tenantId, tenantId)))
       .returning();
     return result.length > 0;
+  }
+
+  // Payment approval operations
+  async createPaymentApproval(approval: InsertPaymentApproval): Promise<PaymentApproval> {
+    const [newApproval] = await db.insert(paymentApprovals).values(approval).returning();
+    return newApproval;
+  }
+
+  async getPendingPaymentApprovals(tenantId: string): Promise<(PaymentApproval & { consumer?: Consumer; account?: Account })[]> {
+    const result = await db
+      .select()
+      .from(paymentApprovals)
+      .leftJoin(consumers, eq(paymentApprovals.consumerId, consumers.id))
+      .leftJoin(accounts, eq(paymentApprovals.accountId, accounts.id))
+      .where(and(eq(paymentApprovals.tenantId, tenantId), eq(paymentApprovals.status, 'pending')))
+      .orderBy(desc(paymentApprovals.createdAt));
+    
+    return result.map(row => ({
+      ...row.payment_approvals,
+      consumer: row.consumers || undefined,
+      account: row.accounts || undefined,
+    }));
+  }
+
+  async approvePaymentApproval(id: string, approvedBy: string): Promise<PaymentApproval> {
+    const [approval] = await db
+      .update(paymentApprovals)
+      .set({ 
+        status: 'approved',
+        approvedBy,
+        approvedAt: new Date()
+      })
+      .where(eq(paymentApprovals.id, id))
+      .returning();
+    return approval;
+  }
+
+  async rejectPaymentApproval(id: string, approvedBy: string, reason: string): Promise<PaymentApproval> {
+    const [approval] = await db
+      .update(paymentApprovals)
+      .set({ 
+        status: 'rejected',
+        approvedBy,
+        approvedAt: new Date(),
+        rejectionReason: reason
+      })
+      .where(eq(paymentApprovals.id, id))
+      .returning();
+    return approval;
   }
 
   // Billing operations

@@ -7288,40 +7288,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       balanceCents: Math.max(0, newBalance)
                     });
 
-                    // Update payment in SMAX if enabled and filenumber exists
+                    // Create approval request for SMAX update
                     // Note: The payment already exists in SMAX as PENDING (from when arrangement was created)
-                    // We need to update it using the ORIGINAL SCHEDULED DATE (not today) so SMAX can find it
+                    // We need admin approval before updating it to COMPLETED
                     if (account.filenumber) {
                       try {
-                        // Update the existing PENDING payment in SMAX to COMPLETED
-                        // CRITICAL: Use the schedule's nextPaymentDate (not today) to match the PENDING record
-                        const updateSuccess = await smaxService.updatePayment(tenant.id, {
+                        // Create payment approval request instead of auto-updating SMAX
+                        await storage.createPaymentApproval({
+                          tenantId: tenant.id,
+                          scheduleId: schedule.id,
+                          accountId: schedule.accountId,
+                          consumerId: consumer.id,
                           filenumber: account.filenumber,
-                          paymentdate: schedule.nextPaymentDate, // Use original scheduled date, not today!
-                          paymentstatus: 'COMPLETED',
-                          invoice: paymentResult.refnum || paymentResult.key || `tx_${Date.now()}`,
+                          paymentDate: schedule.nextPaymentDate,
+                          amountCents: schedule.amountCents,
+                          transactionId: paymentResult.refnum || paymentResult.key || `tx_${Date.now()}`,
+                          status: 'pending',
                         });
 
-                        if (updateSuccess) {
-                          console.log(`✅ SMAX payment updated to COMPLETED for filenumber: ${account.filenumber}, date: ${schedule.nextPaymentDate}`);
-                        } else {
-                          console.warn(`⚠️ Could not update SMAX payment for date ${schedule.nextPaymentDate} - payment may not exist in SMAX, inserting new record`);
-                          // Fallback: If update fails (payment doesn't exist in SMAX), insert it
-                          const smaxPaymentData = smaxService.createSmaxPaymentData({
-                            filenumber: account.filenumber,
-                            paymentamount: schedule.amountCents / 100,
-                            paymentdate: today,
-                            payorname: `${consumer.firstName} ${consumer.lastName}`.trim() || 'Consumer',
-                            paymentmethod: 'CREDIT CARD',
-                            cardtype: paymentMethod.cardBrand || 'Unknown',
-                            cardLast4: paymentMethod.cardLast4,
-                            transactionid: paymentResult.refnum || paymentResult.key || `tx_${Date.now()}`,
-                          });
-                          await smaxService.insertPayment(tenant.id, smaxPaymentData);
-                          console.log(`✅ SMAX payment inserted (fallback) for filenumber: ${account.filenumber}`);
-                        }
+                        console.log(`✅ Payment approval request created for filenumber: ${account.filenumber}, date: ${schedule.nextPaymentDate}`);
+                        console.log(`⏸️  SMAX update pending approval - admin must review before syncing to SMAX`);
+                      } catch (approvalError) {
+                        console.error(`❌ Failed to create payment approval request:`, approvalError);
+                        
+                        // Fallback: If approval creation fails, insert payment directly to SMAX (backwards compatibility)
+                        console.warn(`⚠️ Falling back to direct SMAX insert due to approval creation failure`);
+                        const smaxPaymentData = smaxService.createSmaxPaymentData({
+                          filenumber: account.filenumber,
+                          paymentamount: schedule.amountCents / 100,
+                          paymentdate: today,
+                          payorname: `${consumer.firstName} ${consumer.lastName}`.trim() || 'Consumer',
+                          paymentmethod: 'CREDIT CARD',
+                          cardtype: paymentMethod.cardBrand || 'Unknown',
+                          cardLast4: paymentMethod.cardLast4,
+                          transactionid: paymentResult.refnum || paymentResult.key || `tx_${Date.now()}`,
+                        });
+                        await smaxService.insertPayment(tenant.id, smaxPaymentData);
+                        console.log(`✅ SMAX payment inserted (fallback) for filenumber: ${account.filenumber}`);
+                      }
 
-                        // Insert payment attempt to SMAX
+                      // Insert payment attempt to SMAX
+                      try {
                         await smaxService.insertAttempt(tenant.id, {
                           filenumber: account.filenumber,
                           attempttype: 'Payment',
@@ -7329,13 +7336,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
                           notes: `Scheduled payment of $${(schedule.amountCents / 100).toFixed(2)} processed successfully`,
                           result: 'Success',
                         });
-
                       } catch (smaxError) {
-                        console.error('❌ Error updating/sending scheduled payment to SMAX:', smaxError);
+                        console.error('❌ Error sending payment attempt to SMAX:', smaxError);
                         // Don't fail the whole payment if SMAX sync fails
                       }
                     } else {
-                      console.warn(`⚠️ No filenumber for account ${account.id} - skipping SMAX sync`);
+                      console.warn(`⚠️ No filenumber for account ${schedule.accountId} - skipping SMAX sync`);
                     }
                   }
 
