@@ -1950,12 +1950,12 @@ export default function Communications() {
                     Create {communicationType === "email" ? "email" : "SMS"} template
                   </Button>
                 </DialogTrigger>
-                <DialogContent className={communicationType === "email" ? "max-w-[98vw] w-full h-[95vh]" : "max-w-2xl rounded-3xl border border-white/20 bg-[#0b1733]/95 backdrop-blur-md text-blue-50"}>
+                <DialogContent className={communicationType === "email" ? "max-w-[98vw] w-full h-[95vh] rounded-3xl border border-white/20 bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] text-white" : "max-w-2xl rounded-3xl border border-white/20 bg-[#0b1733]/95 backdrop-blur-md text-blue-50"}>
                   {communicationType === "email" ? (
                     <>
-                      <DialogHeader className="pb-4 border-b">
-                        <DialogTitle className="flex items-center gap-2">
-                          <Sparkles className="h-5 w-5 text-blue-600" />
+                      <DialogHeader className="pb-4 border-b border-white/20">
+                        <DialogTitle className="flex items-center gap-2 text-white">
+                          <Sparkles className="h-5 w-5 text-blue-400" />
                           {editingTemplate ? "Edit" : "Create"} Email Template
                         </DialogTitle>
                       </DialogHeader>
@@ -1964,7 +1964,7 @@ export default function Communications() {
                         {/* Main Content - Template Editor */}
                         <div className="flex-1 overflow-y-auto pr-4 space-y-4">
                           <div>
-                            <Label className="text-sm font-medium mb-2 block">Choose Template Design</Label>
+                            <Label className="text-sm font-medium mb-2 block text-blue-100">Choose Template Design</Label>
                             <div className="grid grid-cols-2 gap-2">
                               {(Object.keys(POSTMARK_TEMPLATES) as PostmarkTemplateType[]).map((key) => {
                                 const template = POSTMARK_TEMPLATES[key];
@@ -1976,14 +1976,14 @@ export default function Communications() {
                                     className={cn(
                                       "p-3 border-2 rounded-lg text-left transition hover:border-blue-400",
                                       emailTemplateForm.designType === key
-                                        ? "border-blue-500 bg-blue-50"
-                                        : "border-gray-200 bg-white"
+                                        ? "border-blue-500 bg-blue-500/20 text-white"
+                                        : "border-white/20 bg-white/10 text-blue-100"
                                     )}
                                     data-testid={`button-design-${key}`}
                                   >
                                     <div className="text-2xl mb-1">{template.thumbnail}</div>
                                     <div className="font-medium text-sm">{template.name}</div>
-                                    <div className="text-xs text-gray-500 mt-1">{template.description}</div>
+                                    <div className="text-xs text-blue-200/70 mt-1">{template.description}</div>
                                   </button>
                                 );
                               })}
@@ -1991,36 +1991,36 @@ export default function Communications() {
                           </div>
                           
                           <div>
-                            <Label className="text-sm font-medium">Template Name *</Label>
+                            <Label className="text-sm font-medium text-blue-100">Template Name *</Label>
                             <Input
                               value={emailTemplateForm.name}
                               onChange={(e) => setEmailTemplateForm({...emailTemplateForm, name: e.target.value})}
                               placeholder="e.g., Payment Reminder"
-                              className="mt-1"
+                              className="mt-1 bg-white/10 border-white/20 text-white placeholder:text-blue-200/50"
                               data-testid="input-template-name"
                             />
                           </div>
                           
                           <div>
-                            <Label className="text-sm font-medium">Subject Line *</Label>
+                            <Label className="text-sm font-medium text-blue-100">Subject Line *</Label>
                             <Input
                               ref={subjectRef}
                               value={emailTemplateForm.subject}
                               onChange={(e) => setEmailTemplateForm({...emailTemplateForm, subject: e.target.value})}
                               onFocus={() => setActiveField('subject')}
                               placeholder="e.g., Payment Required - Account {{accountNumber}}"
-                              className="mt-1"
+                              className="mt-1 bg-white/10 border-white/20 text-white placeholder:text-blue-200/50"
                               data-testid="input-subject"
                             />
                           </div>
 
-                          <div className="space-y-3 rounded-xl border border-blue-100 bg-blue-50/40 p-4">
+                          <div className="space-y-3 rounded-xl border border-white/20 bg-white/5 p-4">
                             <div className="flex flex-wrap items-center justify-between gap-3">
                               <div>
-                                <h4 className="font-medium text-sm flex items-center gap-2">
+                                <h4 className="font-medium text-sm flex items-center gap-2 text-blue-100">
                                   ✏️ Build Your Email
                                 </h4>
-                                <p className="text-xs text-blue-900/70">Draft the full Outlook-style message in one editor.</p>
+                                <p className="text-xs text-blue-200/70">Draft the full Outlook-style message in one editor.</p>
                               </div>
                               <div className="flex flex-wrap items-center gap-1.5">
                                 {formattingButtons.map(({ Icon, command, label }) => (
@@ -2029,7 +2029,7 @@ export default function Communications() {
                                     type="button"
                                     size="icon"
                                     variant="outline"
-                                    className="h-8 w-8 border-blue-200 bg-white text-blue-600 hover:bg-blue-100"
+                                    className="h-8 w-8 border-white/20 bg-white/10 text-blue-100 hover:bg-white/20"
                                     onClick={() => {
                                       setActiveField("html");
                                       applyEditorCommand(command);
@@ -2043,7 +2043,7 @@ export default function Communications() {
                                   type="button"
                                   size="icon"
                                   variant="outline"
-                                  className="h-8 w-8 border-blue-200 bg-white text-blue-600 hover:bg-blue-100"
+                                  className="h-8 w-8 border-white/20 bg-white/10 text-blue-100 hover:bg-white/20"
                                   onClick={() => {
                                     setActiveField("html");
                                     applyEditorCommand("removeFormat");
@@ -2058,7 +2058,7 @@ export default function Communications() {
                                     applyEditorCommand("formatBlock", value);
                                   }}
                                 >
-                                  <SelectTrigger className="flex h-8 w-[130px] items-center gap-2 border-blue-200 bg-white text-xs">
+                                  <SelectTrigger className="flex h-8 w-[130px] items-center gap-2 border-white/20 bg-white/10 text-blue-100 text-xs">
                                     <SelectValue placeholder="Text style" />
                                   </SelectTrigger>
                                   <SelectContent>
@@ -2075,7 +2075,7 @@ export default function Communications() {
                                     applyEditorCommand("foreColor", value);
                                   }}
                                 >
-                                  <SelectTrigger className="flex h-8 w-[140px] items-center gap-2 border-blue-200 bg-white text-xs">
+                                  <SelectTrigger className="flex h-8 w-[140px] items-center gap-2 border-white/20 bg-white/10 text-blue-100 text-xs">
                                     <Palette className="h-3.5 w-3.5" />
                                     <SelectValue placeholder="Text color" />
                                   </SelectTrigger>
@@ -2095,7 +2095,7 @@ export default function Communications() {
                                   type="button"
                                   size="icon"
                                   variant="outline"
-                                  className="h-8 w-8 border-blue-200 bg-white text-blue-600 hover:bg-blue-100"
+                                  className="h-8 w-8 border-white/20 bg-white/10 text-blue-100 hover:bg-white/20"
                                   onClick={handleCreateLink}
                                   title="Insert link"
                                 >
@@ -2105,7 +2105,7 @@ export default function Communications() {
                                   type="button"
                                   size="icon"
                                   variant="outline"
-                                  className="h-8 w-8 border-blue-200 bg-white text-blue-600 hover:bg-blue-100"
+                                  className="h-8 w-8 border-white/20 bg-white/10 text-blue-100 hover:bg-white/20"
                                   onClick={handleRemoveLink}
                                   title="Remove link"
                                 >
@@ -2114,7 +2114,7 @@ export default function Communications() {
                               </div>
                             </div>
 
-                            <div className="rounded-lg border border-blue-200 bg-white shadow-sm">
+                            <div className="rounded-lg border border-white/20 bg-white shadow-sm">
                               <div className="relative">
                                 {!getPlainText(emailTemplateForm.html) && (
                                   <div className="pointer-events-none absolute inset-0 flex h-full w-full items-start justify-start p-5 text-sm text-blue-400">
@@ -2137,18 +2137,18 @@ export default function Communications() {
                                 />
                               </div>
                             </div>
-                            <p className="text-xs text-blue-900/70">
+                            <p className="text-xs text-blue-200/70">
                               Tip: Use {"{{ACCOUNT_SUMMARY_BLOCK}}"} in any design to auto-replace with your account table and payment
                               button quick inserts.
                             </p>
                           </div>
 
-                          <div className="border rounded-lg p-4 bg-gray-50">
-                            <Label className="text-sm font-medium flex items-center gap-2 mb-3">
+                          <div className="border border-white/20 rounded-lg p-4 bg-white/5">
+                            <Label className="text-sm font-medium flex items-center gap-2 mb-3 text-blue-100">
                               <Eye className="h-4 w-4" />
                               Preview
                             </Label>
-                            <div className="border rounded-lg overflow-auto bg-white p-4 max-h-96">
+                            <div className="border border-white/20 rounded-lg overflow-auto bg-white p-4 max-h-96">
                               {emailTemplateForm.html ? (
                                 <div className="bg-white">
                                   {(tenantSettings as any)?.logoUrl && (
@@ -2182,13 +2182,13 @@ export default function Communications() {
                         </div>
 
                         {/* Fixed Sidebar - Variables */}
-                        <div className="w-80 border-l pl-4 overflow-y-auto">
-                          <div className="sticky top-0 bg-white pb-3">
-                            <Label className="text-sm font-medium flex items-center gap-2">
+                        <div className="w-80 border-l border-white/20 pl-4 overflow-y-auto">
+                          <div className="sticky top-0 pb-3">
+                            <Label className="text-sm font-medium flex items-center gap-2 text-blue-100">
                               <Code className="h-4 w-4" />
                               Variables
                             </Label>
-                            <p className="text-xs text-gray-500 mt-1">
+                            <p className="text-xs text-blue-200/70 mt-1">
                               Click to insert into any field
                             </p>
                           </div>
@@ -2205,21 +2205,21 @@ export default function Communications() {
                               </button>
                             ))}
                           </div>
-                          <p className="text-xs text-gray-500 mt-2">
+                          <p className="text-xs text-blue-200/70 mt-2">
                             💡 Tip: Variables work in ALL fields - subject lines, buttons, and more.
                           </p>
 
                           <div className="mt-6">
-                            <Label className="text-sm font-medium flex items-center gap-2">
+                            <Label className="text-sm font-medium flex items-center gap-2 text-blue-100">
                               <Sparkles className="h-4 w-4" />
                               Quick Inserts
                             </Label>
-                            <p className="text-xs text-gray-500 mt-1">
+                            <p className="text-xs text-blue-200/70 mt-1">
                               Drop in ready-made layout blocks and adjust them in the editor.
                             </p>
                             <div className="mt-3 space-y-2">
                               {quickInsertSnippets.map((snippet) => (
-                                <div key={snippet.label} className="rounded-lg border border-dashed border-blue-200 bg-blue-50/60 p-3">
+                                <div key={snippet.label} className="rounded-lg border border-dashed border-white/20 bg-white/5 p-3">
                                   <Button
                                     type="button"
                                     variant="secondary"
@@ -2230,7 +2230,7 @@ export default function Communications() {
                                     <Plus className="h-3.5 w-3.5" />
                                     {snippet.label}
                                   </Button>
-                                  <p className="mt-2 text-[11px] text-blue-900/80 leading-snug">
+                                  <p className="mt-2 text-[11px] text-blue-200/70 leading-snug">
                                     {snippet.description}
                                   </p>
                                 </div>
@@ -2240,13 +2240,19 @@ export default function Communications() {
                         </div>
                       </div>
                       
-                      <div className="flex justify-end space-x-3 pt-4 border-t">
-                        <Button type="button" variant="outline" onClick={() => setShowTemplateModal(false)}>
+                      <div className="flex justify-end space-x-3 pt-4 border-t border-white/20">
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          onClick={() => setShowTemplateModal(false)}
+                          className="rounded-xl border border-white/20 bg-transparent px-4 py-2 text-blue-100 transition hover:bg-white/10"
+                        >
                           Cancel
                         </Button>
                         <Button 
                           onClick={handleTemplateSubmit} 
                           disabled={createEmailTemplateMutation.isPending || updateEmailTemplateMutation.isPending}
+                          className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white"
                         >
                           {(createEmailTemplateMutation.isPending || updateEmailTemplateMutation.isPending) ? (
                             <>
