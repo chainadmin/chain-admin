@@ -8293,6 +8293,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin routes for viewing all payment schedules and methods
+  app.get('/api/payment-schedules', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const schedules = await storage.getAllPaymentSchedulesByTenant(tenantId);
+      res.json(schedules);
+    } catch (error) {
+      console.error("Error fetching payment schedules:", error);
+      res.status(500).json({ message: "Failed to fetch payment schedules" });
+    }
+  });
+
+  app.get('/api/payment-methods', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const methods = await storage.getAllPaymentMethodsByTenant(tenantId);
+      res.json(methods);
+    } catch (error) {
+      console.error("Error fetching payment methods:", error);
+      res.status(500).json({ message: "Failed to fetch payment methods" });
+    }
+  });
+
   // Payment approval routes
   app.get('/api/payment-approvals', authenticateUser, async (req: any, res) => {
     try {
