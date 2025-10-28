@@ -1,0 +1,45 @@
+POST /update_payment_external
+The POST /update_payment_external endpoint allows authorized users to update existing payment records in the system. The payment record is identified by its filenumber, and only records with paymentstatus = 'PENDING' are eligible for updates.
+
+Users must provide the filenumber and at least one other field to update. The request must be authenticated with a valid JWT token. The system validates the input, performs the update if valid, and returns a confirmation message.
+
+Request Body
+{
+  "filenumber": "R1002",               // (datatype: String, required: True)
+  "paymentdate": "2025-04-15",          // (datatype: String, required: False)
+  "payorname": "Jane Smith",            // (datatype: String, required: False)
+  "paymentmethod": "ACH",               // (datatype: String, required: False)
+  "paymentstatus": "PENDING",           // (datatype: String, required: False)
+  "typeofpayment": "Online",            // (datatype: String, required: False)
+  "checkaddress": "456 Oak Street",     // (datatype: String, required: False)
+  "checkcity": "Springfield",           // (datatype: String, required: False)
+  "checkstate": "IL",                   // (datatype: String, required: False)
+  "checkzip": "62704",                  // (datatype: String, required: False)
+  "checkaccountnumber": "123456789",    // (datatype: String, required: False)
+  "checkroutingnumber": "012345678",    // (datatype: String, required: False)
+  "cardtype": "MasterCard",             // (datatype: String, required: False)
+  "cardnumber": "5555555555554444",     // (datatype: String, required: False)
+  "threedigitnumber": "321",            // (datatype: String, required: False)
+  "cardexpirationmonth": "11",          // (datatype: String, required: False)
+  "cardexpirationyear": "2026",         // (datatype: String, required: False)
+  "cardexpirationdate": "11/26",        // (datatype: String, required: False)
+  "checkaccounttype": "Checking",       // (datatype: String, required: False)
+  "acceptedfees": true,                 // (datatype: Boolean, required: False)
+  "printed": "no",                      // (datatype: String, required: False)
+  "invoice": "INV654321"                // (datatype: String, required: False)
+}
+Validation Rules
+filenumber is required
+
+At least one other field must be provided for update
+
+Only updates records where paymentstatus = 'PENDING'
+
+Fields with null, "", or [] are ignored during update
+Successful Response
+{
+    "result": {
+        "success": "Payments have been updated."
+    },
+    "state": "SUCCESS"
+}
