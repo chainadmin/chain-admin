@@ -29,7 +29,8 @@ class PushNotificationManager implements PushNotificationService {
       }
 
       if (permStatus.receive !== 'granted') {
-        throw new Error('User denied push notification permissions');
+        console.log('Push notification permissions not granted');
+        return; // Don't throw, just return quietly
       }
 
       // Register with Apple / Google to receive push via APNS/FCM
@@ -41,7 +42,7 @@ class PushNotificationManager implements PushNotificationService {
       console.log('Push notifications initialized successfully');
     } catch (error) {
       console.error('Error initializing push notifications:', error);
-      throw error;
+      // Don't throw - just log and continue
     }
   }
 
@@ -110,10 +111,19 @@ class PushNotificationManager implements PushNotificationService {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to register push token');
+        console.error('Failed to register push token:', response.status, response.statusText);
+        // Store token to retry later
+        localStorage.setItem('pendingPushToken', token);
+        return;
       }
 
-      console.log('Push token registered successfully');
+      // Try to parse JSON response, but don't crash if it fails
+      try {
+        const data = await response.json();
+        console.log('Push token registered successfully:', data);
+      } catch (jsonError) {
+        console.log('Push token registered (could not parse response)');
+      }
       
       // Remove pending token
       localStorage.removeItem('pendingPushToken');
@@ -123,6 +133,7 @@ class PushNotificationManager implements PushNotificationService {
       }
     } catch (error) {
       console.error('Error registering push token:', error);
+      // Don't crash - just log and continue
     }
   }
 
