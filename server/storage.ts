@@ -1608,15 +1608,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAutomation(automation: InsertCommunicationAutomation): Promise<CommunicationAutomation> {
-    const payload = {
-      ...automation,
-      templateIds: automation.templateIds ?? [],
-      templateSchedule: (automation.templateSchedule ?? []) as { templateId: string; dayOffset: number }[],
-    };
-
     const [newAutomation] = await db
       .insert(communicationAutomations)
-      .values(payload as any)
+      .values(automation)
       .returning();
     return newAutomation;
   }
