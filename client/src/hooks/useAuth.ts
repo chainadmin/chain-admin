@@ -1,12 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { getAuthToken, getStoredTenantName, getStoredTenantSlug, persistTenantMetadata } from "@/lib/cookies";
+import { Capacitor } from '@capacitor/core';
 
 export function useAuth() {
   const [jwtAuth, setJwtAuth] = useState<any>(null);
   const [checkingJwt, setCheckingJwt] = useState(true);
   
-  // Skip admin auth for consumer routes
+  // Detect if running in mobile app
+  const isMobileApp = Capacitor.isNativePlatform();
+  
+  // Skip admin auth for consumer routes AND mobile apps
   const pathname = window.location.pathname;
   const isConsumerRoute = pathname === '/consumer-dashboard' || 
                          pathname === '/consumer-login' ||
@@ -70,15 +74,15 @@ export function useAuth() {
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
-  // Original Replit auth check (only run if no JWT and not on consumer route)
+  // Original Replit auth check (only run if no JWT and not on consumer route or mobile app)
   const { data: replitUser, isLoading: replitLoading } = useQuery({
     queryKey: ["/api/auth/user"],
     retry: false,
-    enabled: !isConsumerRoute && !jwtAuth && !checkingJwt, // Skip for consumer routes
+    enabled: !isConsumerRoute && !isMobileApp && !jwtAuth && !checkingJwt, // Skip for consumer routes AND mobile apps
   });
 
   // Determine final auth state
-  const isLoading = isConsumerRoute ? false : (checkingJwt || (!jwtAuth && replitLoading));
+  const isLoading = (isConsumerRoute || isMobileApp) ? false : (checkingJwt || (!jwtAuth && replitLoading));
   const user = jwtAuth || replitUser;
   const isAuthenticated = !!(jwtAuth || replitUser);
 
