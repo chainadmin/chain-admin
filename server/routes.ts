@@ -8194,6 +8194,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Payment approval routes
+  app.get('/api/payment-approvals', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const approvals = await storage.getPendingPaymentApprovals(tenantId);
+      res.json(approvals);
+    } catch (error) {
+      console.error("Error fetching payment approvals:", error);
+      res.status(500).json({ message: "Failed to fetch payment approvals" });
+    }
+  });
+
+  app.post('/api/payment-approvals/:id/approve', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      const userId = req.user.id;
+      const { id } = req.params;
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const approval = await storage.approvePaymentApproval(id, userId);
+
+      if (!approval) {
+        return res.status(404).json({ message: "Approval not found" });
+      }
+
+      try {
+        await smaxService.updatePaymentExternal(
+          approval.accountId,
+          approval.paymentId,
+          approval.paymentData
+        );
+        console.log('✅ SMAX payment updated successfully after approval');
+      } catch (smaxError) {
+        console.warn('⚠️ Failed to update SMAX after approval (non-blocking):', smaxError);
+      }
+
+      res.json({ success: true, approval });
+    } catch (error) {
+      console.error("Error approving payment:", error);
+      res.status(500).json({ message: "Failed to approve payment" });
+    }
+  });
+
+  app.post('/api/payment-approvals/:id/reject', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      const userId = req.user.id;
+      const { id } = req.params;
+      const { reason } = req.body;
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      if (!reason) {
+        return res.status(400).json({ message: "Rejection reason is required" });
+      }
+
+      const approval = await storage.rejectPaymentApproval(id, userId, reason);
+
+      if (!approval) {
+        return res.status(404).json({ message: "Approval not found" });
+      }
+
+      res.json({ success: true, approval });
+    } catch (error) {
+      console.error("Error rejecting payment:", error);
+      res.status(500).json({ message: "Failed to reject payment" });
+    }
+  });
+
   // Payment methods routes (tokenized cards)
   app.get('/api/payment-methods/consumer/:consumerId', authenticateUser, async (req: any, res) => {
     try {
