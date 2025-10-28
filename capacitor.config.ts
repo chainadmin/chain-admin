@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.chaincomms.platform',
+  appId: 'com.chaincomms.chain',
   appName: 'Chain',
   webDir: 'dist/public',
   server: {
