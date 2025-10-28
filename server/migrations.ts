@@ -156,6 +156,44 @@ export async function runMigrations() {
     } catch (err) {
       console.log('  ⚠ Could not update existing campaign statuses');
     }
+
+    // Add tenant_id to sms_tracking table for multi-tenant SMS billing
+    console.log('Adding tenant_id to sms_tracking table...');
+    try {
+      await client.query(`
+        ALTER TABLE sms_tracking 
+        ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE
+      `);
+      console.log('  ✓ tenant_id column added to sms_tracking');
+      
+      // Make it NOT NULL by setting a default for existing rows (if any)
+      // First check if there are any rows without tenant_id
+      const checkResult = await client.query(`
+        SELECT COUNT(*) as count 
+        FROM sms_tracking 
+        WHERE tenant_id IS NULL
+      `);
+      
+      if (checkResult.rows[0].count > 0) {
+        console.log(`  ⚠ Found ${checkResult.rows[0].count} SMS tracking rows without tenant_id - these will be deleted`);
+        // Delete orphaned rows without tenant_id (can't determine which tenant they belong to)
+        await client.query(`DELETE FROM sms_tracking WHERE tenant_id IS NULL`);
+        console.log('  ✓ Cleaned up orphaned SMS tracking records');
+      }
+      
+      // Now make the column NOT NULL
+      await client.query(`
+        ALTER TABLE sms_tracking 
+        ALTER COLUMN tenant_id SET NOT NULL
+      `);
+      console.log('  ✓ tenant_id set to NOT NULL');
+    } catch (err: any) {
+      if (err.message?.includes('already exists')) {
+        console.log('  ✓ tenant_id column already exists');
+      } else {
+        console.log('  ⚠ tenant_id column error:', err.message);
+      }
+    }
     
     // Verify columns exist
     const result = await client.query(`
