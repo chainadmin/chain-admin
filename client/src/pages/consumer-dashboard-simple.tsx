@@ -359,6 +359,30 @@ export default function ConsumerDashboardSimple() {
     enabled: !!session?.email && !!session?.tenantSlug,
   });
 
+  // Mutation to update payment method for a schedule
+  const updateSchedulePaymentMethodMutation = useMutation({
+    mutationFn: async ({ scheduleId, paymentMethodId }: { scheduleId: string; paymentMethodId: string }) => {
+      const token = getStoredConsumerToken();
+      return apiCall("PATCH", `/api/consumer/payment-schedules/${scheduleId}/payment-method`, { paymentMethodId }, token);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Payment Method Updated",
+        description: "Your payment method for this schedule has been updated successfully.",
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: [`/api/consumer/payment-schedules/${session?.email}?tenantSlug=${session?.tenantSlug}`] 
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Update Failed",
+        description: error.message || "Failed to update payment method. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleLogout = () => {
     clearConsumerAuth();
     toast({
@@ -959,18 +983,48 @@ export default function ConsumerDashboardSimple() {
                         </div>
                         
                         <div className="mt-4 pt-4 border-t border-white/10">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <CreditCard className="h-4 w-4 text-blue-400" />
-                              <span className="text-sm text-blue-100/70">
-                                {schedule.cardBrand || 'Card'} ending in {schedule.cardLast4 || '****'}
-                              </span>
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <label className="text-sm font-medium text-white">Payment Method</label>
+                              {schedule.remainingPayments && (
+                                <span className="text-sm text-blue-100/70">
+                                  {schedule.remainingPayments} payment{schedule.remainingPayments !== 1 ? 's' : ''} remaining
+                                </span>
+                              )}
                             </div>
-                            {schedule.remainingPayments && (
-                              <span className="text-sm text-blue-100/70">
-                                {schedule.remainingPayments} payment{schedule.remainingPayments !== 1 ? 's' : ''} remaining
-                              </span>
-                            )}
+                            <Select
+                              value={schedule.paymentMethodId}
+                              onValueChange={(paymentMethodId) => {
+                                updateSchedulePaymentMethodMutation.mutate({
+                                  scheduleId: schedule.id,
+                                  paymentMethodId,
+                                });
+                              }}
+                            >
+                              <SelectTrigger className="w-full bg-white/5 border-white/20 text-blue-100">
+                                <SelectValue>
+                                  <div className="flex items-center gap-2">
+                                    <CreditCard className="h-4 w-4 text-blue-400" />
+                                    <span>
+                                      {schedule.cardBrand || 'Card'} ending in {schedule.cardLast4 || '****'}
+                                    </span>
+                                  </div>
+                                </SelectValue>
+                              </SelectTrigger>
+                              <SelectContent>
+                                {accountData?.paymentMethods?.map((method: any) => (
+                                  <SelectItem key={method.id} value={method.id}>
+                                    <div className="flex items-center gap-2">
+                                      <CreditCard className="h-4 w-4" />
+                                      <span>
+                                        {method.cardBrand || 'Card'} ending in {method.lastFour}
+                                        {method.isDefault && <span className="ml-2 text-xs text-emerald-400">(Default)</span>}
+                                      </span>
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </div>
                         </div>
 
