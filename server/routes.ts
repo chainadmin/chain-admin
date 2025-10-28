@@ -6837,6 +6837,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
             } catch (smaxError) {
               console.error('Failed to sync payment arrangement to SMAX:', smaxError);
             }
+
+            // Move account to "Payments Pending" folder after arrangement is created
+            try {
+              const paymentsPendingFolder = await storage.getPaymentsPendingFolder(tenantId);
+              if (paymentsPendingFolder && accountId) {
+                await storage.updateAccount(accountId, {
+                  folderId: paymentsPendingFolder.id
+                });
+                console.log(`📁 Moved account to "Payments Pending" folder (ID: ${paymentsPendingFolder.id})`);
+              } else if (!paymentsPendingFolder) {
+                console.log('⚠️ "Payments Pending" folder not found - skipping folder move');
+              }
+            } catch (folderError) {
+              console.error('Failed to move account to "Payments Pending" folder:', folderError);
+            }
           }
         } else if (arrangement.planType === 'settlement' || arrangement.planType === 'one_time_payment') {
           // For one-time or settlement payments, set to current after successful payment
