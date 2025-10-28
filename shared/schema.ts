@@ -526,6 +526,24 @@ export const paymentSchedules = pgTable("payment_schedules", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Payment approvals for SMAX updates
+export const paymentApprovals = pgTable("payment_approvals", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  scheduleId: uuid("schedule_id").references(() => paymentSchedules.id, { onDelete: "cascade" }).notNull(),
+  accountId: uuid("account_id").references(() => accounts.id, { onDelete: "cascade" }).notNull(),
+  consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "cascade" }).notNull(),
+  filenumber: text("filenumber").notNull(), // SMAX filenumber
+  paymentDate: date("payment_date").notNull(), // Scheduled payment date
+  amountCents: bigint("amount_cents", { mode: "number" }).notNull(),
+  transactionId: text("transaction_id"), // Payment processor transaction ID
+  status: text("status").default("pending"), // "pending", "approved", "rejected"
+  approvedBy: text("approved_by"), // Admin username who approved/rejected
+  approvedAt: timestamp("approved_at"),
+  rejectionReason: text("rejection_reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Subscription plans (platform-level plan definitions)
 export const subscriptionPlans = pgTable("subscription_plans", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1204,6 +1222,7 @@ export const insertCallbackRequestSchema = createInsertSchema(callbackRequests).
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true });
 export const insertPaymentMethodSchema = createInsertSchema(paymentMethods).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertPaymentScheduleSchema = createInsertSchema(paymentSchedules).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertPaymentApprovalSchema = createInsertSchema(paymentApprovals).omit({ id: true, createdAt: true });
 export const insertSubscriptionPlanSchema = createInsertSchema(subscriptionPlans).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true, createdAt: true });
@@ -1260,6 +1279,8 @@ export type PaymentMethod = typeof paymentMethods.$inferSelect;
 export type InsertPaymentMethod = z.infer<typeof insertPaymentMethodSchema>;
 export type PaymentSchedule = typeof paymentSchedules.$inferSelect;
 export type InsertPaymentSchedule = z.infer<typeof insertPaymentScheduleSchema>;
+export type PaymentApproval = typeof paymentApprovals.$inferSelect;
+export type InsertPaymentApproval = z.infer<typeof insertPaymentApprovalSchema>;
 export type SubscriptionPlan = typeof subscriptionPlans.$inferSelect;
 export type InsertSubscriptionPlan = z.infer<typeof insertSubscriptionPlanSchema>;
 export type Subscription = typeof subscriptions.$inferSelect;
