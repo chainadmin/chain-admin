@@ -833,6 +833,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
+  // Debug endpoint for webhook configuration
+  app.get('/api/debug/webhook-config', (req, res) => {
+    const baseUrl = process.env.APP_URL 
+      || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null)
+      || (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS}` : null)
+      || 'http://localhost:5000';
+    
+    const cleanBaseUrl = baseUrl.replace(/\/$/, '');
+    
+    res.json({
+      webhookUrls: {
+        twilioDelivery: `${cleanBaseUrl}/api/webhooks/twilio`,
+        twilioInbound: `${cleanBaseUrl}/api/webhooks/twilio-inbound`,
+        postmarkTracking: `${cleanBaseUrl}/api/webhooks/postmark`,
+        postmarkInbound: `${cleanBaseUrl}/api/webhooks/postmark-inbound`,
+      },
+      environment: {
+        APP_URL: process.env.APP_URL || 'NOT SET',
+        RAILWAY_PUBLIC_DOMAIN: process.env.RAILWAY_PUBLIC_DOMAIN || 'NOT SET',
+        REPLIT_DOMAINS: process.env.REPLIT_DOMAINS || 'NOT SET',
+        NODE_ENV: process.env.NODE_ENV || 'NOT SET',
+      },
+      usedBaseUrl: baseUrl,
+      cleanedBaseUrl: cleanBaseUrl,
+      instructions: 'Use these URLs to configure your Twilio and Postmark webhooks'
+    });
+  });
+
   // Note: Logos are now served from Cloudflare R2 via public URLs
 
   // Auth routes - Updated to support both JWT and Replit auth
@@ -9610,10 +9638,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Twilio webhook endpoint for SMS delivery tracking and usage
   app.post('/api/webhooks/twilio', async (req, res) => {
     try {
-      console.log('📱 Twilio webhook received:', JSON.stringify(req.body, null, 2));
+      const timestamp = new Date().toISOString();
+      console.log(`\n${'='.repeat(80)}`);
+      console.log(`📱 TWILIO DELIVERY WEBHOOK RECEIVED - ${timestamp}`);
+      console.log(`${'='.repeat(80)}`);
+      console.log('Full webhook body:', JSON.stringify(req.body, null, 2));
       
       const messageSid = req.body.MessageSid || req.body.SmsSid;
       const status = (req.body.MessageStatus || req.body.SmsStatus || '').toLowerCase();
+      
+      console.log(`📊 Parsed values:`);
+      console.log(`   MessageSid: ${messageSid}`);
+      console.log(`   Status: ${status}`);
 
       if (!messageSid) {
         console.error('❌ Twilio webhook missing MessageSid');
@@ -9640,6 +9676,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (trackingInfo?.tracking) {
+        console.log(`✅ Found tracking record: ID=${trackingInfo.tracking.id}`);
         const normalizedStatus = status === 'undelivered' ? 'failed' : status;
         const updates: Partial<SmsTracking> = {
           status: normalizedStatus as SmsTracking['status'],
@@ -9647,6 +9684,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         if (status === 'delivered') {
           updates.deliveredAt = new Date();
+          console.log(`📨 Marking as DELIVERED at ${updates.deliveredAt}`);
         }
 
         if (status === 'failed' || status === 'undelivered') {
@@ -9654,9 +9692,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (errorMessage) {
             updates.errorMessage = errorMessage;
           }
+          console.log(`❌ Marking as FAILED: ${errorMessage || 'No error message'}`);
         }
 
+        console.log(`💾 Updating tracking record with:`, updates);
         await storage.updateSmsTracking(trackingInfo.tracking.id, updates);
+        console.log(`✅ Tracking record updated successfully`);
 
         // Update campaign metrics when tracking status changes
         const campaignId = trackingInfo.tracking.campaignId;
@@ -9699,9 +9740,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.recordMessagingUsageEvent(usageEvent as any);
 
       console.log(`✅ Twilio webhook processed successfully - ${quantity} SMS segments recorded to database for tenant ${tenantId}`);
+      console.log(`${'='.repeat(80)}\n`);
       res.status(200).json({ message: 'Webhook processed' });
     } catch (error) {
-      console.error('Twilio webhook error:', error);
+      console.error('❌ Twilio webhook error:', error);
+      console.log(`${'='.repeat(80)}\n`);
       res.status(500).json({ message: 'Webhook processing failed' });
     }
   });

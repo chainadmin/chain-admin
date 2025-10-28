@@ -207,6 +207,10 @@ class SmsService {
       // Ensure baseUrl doesn't have trailing slash and has protocol
       const cleanBaseUrl = baseUrl.replace(/\/$/, '');
       const webhookUrl = `${cleanBaseUrl}/api/webhooks/twilio`;
+      
+      console.log(`📡 SMS Status Callback URL: ${webhookUrl}`);
+      console.log(`   APP_URL: ${process.env.APP_URL || 'NOT SET'}`);
+      console.log(`   RAILWAY_PUBLIC_DOMAIN: ${process.env.RAILWAY_PUBLIC_DOMAIN || 'NOT SET'}`);
 
       const result = await client.messages.create({
         body: message,
