@@ -345,6 +345,7 @@ class SmaxService {
   // Insert payment arrangement into SMAX
   async insertPaymentArrangement(tenantId: string, arrangementData: {
     filenumber: string;
+    payorname: string;
     arrangementtype: string; // "Fixed Monthly", "Settlement", "Range", etc.
     monthlypayment: number; // Dollar amount
     startdate: string; // YYYY-MM-DD
@@ -369,29 +370,105 @@ class SmaxService {
         return false;
       }
 
+      // Generate paymentdata array with scheduled payment dates and amounts
+      const paymentdata: Array<{ paymentamount: string; paymentdate: string }> = [];
+      
+      if (arrangementData.remainingpayments && arrangementData.remainingpayments > 0) {
+        const paymentAmount = arrangementData.monthlypayment;
+        let currentDate = new Date(arrangementData.nextpaymentdate);
+        
+        for (let i = 0; i < arrangementData.remainingpayments; i++) {
+          paymentdata.push({
+            paymentamount: paymentAmount.toFixed(2),
+            paymentdate: currentDate.toISOString().split('T')[0]
+          });
+          
+          // Move to next month
+          currentDate.setMonth(currentDate.getMonth() + 1);
+        }
+      } else if (arrangementData.startdate && arrangementData.enddate) {
+        // Calculate payments from start to end date
+        const paymentAmount = arrangementData.monthlypayment;
+        let currentDate = new Date(arrangementData.nextpaymentdate);
+        const endDate = new Date(arrangementData.enddate);
+        
+        while (currentDate <= endDate) {
+          paymentdata.push({
+            paymentamount: paymentAmount.toFixed(2),
+            paymentdate: currentDate.toISOString().split('T')[0]
+          });
+          
+          currentDate.setMonth(currentDate.getMonth() + 1);
+        }
+      } else {
+        // Single payment (settlement or pay-in-full)
+        paymentdata.push({
+          paymentamount: arrangementData.monthlypayment.toFixed(2),
+          paymentdate: arrangementData.nextpaymentdate
+        });
+      }
+
+      // Build payload using same structure as insert_payments_external
+      // but add paymentdata array for the payment plan
       const payload = {
-        ...arrangementData,
         filenumber: arrangementData.filenumber.trim(),
+        payorname: arrangementData.payorname || 'Consumer',
+        paymentmethod: 'CREDIT CARD',
+        paymentstatus: 'PENDING',
+        typeofpayment: 'Online',
+        // Check fields (not used for credit card)
+        checkaccountnumber: '',
+        checkroutingnumber: '',
+        checkaccounttype: '',
+        checkaddress: '',
+        checkcity: '',
+        checkstate: '',
+        checkzip: '',
+        // Card details - use tokenized data, NOT raw card numbers
+        cardtype: arrangementData.cardbrand || 'Unknown',
+        cardnumber: arrangementData.cardlast4 ? `XXXX-XXXX-XXXX-${arrangementData.cardlast4}` : 'XXXX-XXXX-XXXX-XXXX',
+        threedigitnumber: 'XXX', // Never send real CVV
+        cardexpirationmonth: arrangementData.expirymonth || '',
+        cardexpirationyear: arrangementData.expiryyear || '',
+        cardexpirationdate: (arrangementData.expirymonth && arrangementData.expiryyear) 
+          ? `${arrangementData.expirymonth}/${arrangementData.expiryyear}`
+          : '',
+        // Payment amount (total or first payment)
+        paymentamount: arrangementData.monthlypayment.toFixed(2),
+        acceptedfees: '0',
+        printed: 'false',
+        invoice: `ARR${Date.now()}`,
+        // Payment plan schedule
+        paymentdata: paymentdata
       };
 
-      console.log('📤 Sending payment arrangement to SMAX with payment method:', {
-        ...payload,
-        cardtoken: payload.cardtoken ? '***' : undefined, // Mask token in logs
-        cardlast4: payload.cardlast4,
-        cardbrand: payload.cardbrand
+      console.log('📤 Sending payment arrangement to SMAX via /insert_payplan_external:', {
+        filenumber: payload.filenumber,
+        payorname: payload.payorname,
+        arrangementType: arrangementData.arrangementtype,
+        monthlyPayment: arrangementData.monthlypayment,
+        totalPayments: paymentdata.length,
+        paymentSchedule: paymentdata,
+        cardLast4: arrangementData.cardlast4,
+        cardBrand: arrangementData.cardbrand
       });
 
       const result = await this.makeSmaxRequest(
         config,
-        '/insertpaymentplan',
+        '/insert_payplan_external',
         'POST',
         payload
       );
 
-      console.log('✅ SMAX payment arrangement inserted:', result);
+      console.log('✅ SMAX payment arrangement inserted successfully:', result);
       return result.state === 'SUCCESS' || result.success === true;
     } catch (error) {
       console.error('❌ Error inserting payment arrangement to SMAX:', error);
+      console.error('Arrangement data that failed:', {
+        filenumber: arrangementData.filenumber,
+        payments: arrangementData.remainingpayments,
+        amount: arrangementData.monthlypayment
+      });
       // Non-blocking - don't fail if SMAX is unavailable
       return false;
     }

@@ -108,26 +108,55 @@ Chain automatically syncs all payments to SMAX when they occur. The system uses 
 
 ### Adding Payment Arrangements to SMAX
 
-When consumers set up payment plans, Chain syncs the arrangement to SMAX using the `/insertpaymentplan` endpoint.
+When consumers set up payment plans, Chain syncs the arrangement to SMAX using the `/insert_payplan_external` endpoint.
+
+**SMAX Endpoint:** `POST /insert_payplan_external`
+
+**How It Works:**
+- Uses the **same base payload structure** as `/insert_payments_external`
+- Adds a `paymentdata` array containing all scheduled payment dates and amounts
+- Automatically generates the payment schedule based on:
+  - Number of remaining payments (`remainingpayments`)
+  - Start and end dates
+  - Monthly payment amount
 
 **Arrangement Data Format:**
 ```json
 {
   "filenumber": "ABC123",
-  "arrangementtype": "Fixed Monthly",
-  "monthlypayment": 100.00,
-  "startdate": "2025-01-15",
-  "enddate": "2025-06-15",
-  "nextpaymentdate": "2025-02-15",
-  "remainingpayments": 5,
-  "totalbalance": 500.00,
-  "cardtoken": "tok_12345",
-  "cardlast4": "4242",
-  "cardbrand": "Visa"
+  "payorname": "John Doe",
+  "paymentmethod": "CREDIT CARD",
+  "paymentstatus": "PENDING",
+  "typeofpayment": "Online",
+  "checkaccountnumber": "",
+  "checkroutingnumber": "",
+  "cardtype": "Visa",
+  "cardnumber": "XXXX-XXXX-XXXX-4242",
+  "threedigitnumber": "XXX",
+  "cardexpirationmonth": "12",
+  "cardexpirationyear": "2025",
+  "cardexpirationdate": "12/2025",
+  "paymentamount": "100.00",
+  "checkaccounttype": "",
+  "acceptedfees": "0",
+  "printed": "false",
+  "invoice": "ARR1234567890",
+  "paymentdata": [
+    {
+      "paymentamount": "100.00",
+      "paymentdate": "2025-01-15"
+    },
+    {
+      "paymentamount": "100.00",
+      "paymentdate": "2025-02-15"
+    },
+    {
+      "paymentamount": "100.00",
+      "paymentdate": "2025-03-15"
+    }
+  ]
 }
 ```
-
-**SMAX Endpoint:** `POST /insertpaymentplan`
 
 **Supported Arrangement Types:**
 
@@ -141,9 +170,11 @@ When consumers set up payment plans, Chain syncs the arrangement to SMAX using t
 | `one_time_payment` | One-Time Payment |
 
 **Security:**
-- Card tokens are stored securely and never logged
-- CVV is never stored or sent to SMAX
-- Only last 4 digits of card are included in arrangement data
+- Card numbers are **masked** (XXXX-XXXX-XXXX-4242) - never raw PANs
+- CVV is **never sent** (always "XXX")
+- Card tokens are securely stored but not logged
+- Only last 4 digits and card brand are included
+- PCI compliance maintained throughout
 
 ## Sync Process (Every 8 Hours)
 

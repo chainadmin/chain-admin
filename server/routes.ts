@@ -6800,9 +6800,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   const arrangementTypeName = arrangement.name || arrangement.planType;
                   const accountBalance = (account as any)?.balanceCents || 0;
                   
+                  // Build payor name from consumer data
+                  const payorNameRaw = `${
+                    consumerForSmax?.firstName || ''
+                  } ${consumerForSmax?.lastName || ''}`.trim();
+                  const payorName = payorNameRaw || 'Consumer';
+                  
                   // Include payment method details so SMAX can process recurring payments
                   const smaxArrangementSent = await smaxService.insertPaymentArrangement(tenantId, {
                     filenumber: fileNumber,
+                    payorname: payorName,
                     arrangementtype: arrangementTypeName,
                     monthlypayment: parseFloat(amountDollars),
                     startdate: firstPaymentDate,
