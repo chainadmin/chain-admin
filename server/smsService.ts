@@ -184,10 +184,17 @@ class SmsService {
         throw new Error('Twilio phone number not configured for this agency');
       }
 
+      // Get the webhook URL from environment
+      const baseUrl = process.env.REPLIT_DOMAINS || 'localhost:5000';
+      const webhookUrl = `https://${baseUrl}/api/webhooks/twilio`;
+
       const result = await client.messages.create({
         body: message,
         from: fromNumber,
         to: to,
+        statusCallback: webhookUrl,
+        // Include metadata for tracking
+        provideFeedback: true,
       });
 
       // Track ALL sent SMS for billing purposes (not just campaigns)
