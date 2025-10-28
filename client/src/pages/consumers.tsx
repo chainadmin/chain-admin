@@ -588,8 +588,8 @@ export default function Consumers() {
             <div className="flex justify-end gap-2 pt-4 border-t border-white/20">
               <Button
                 type="button"
+                variant="outline"
                 onClick={() => setShowEditDialog(false)}
-                className="bg-white/10 text-white border-white/20 hover:bg-white/20"
               >
                 Cancel
               </Button>
@@ -636,8 +636,8 @@ export default function Consumers() {
             <div className="flex justify-end gap-2 pt-4 border-t border-white/20">
               <Button
                 type="button"
+                variant="outline"
                 onClick={() => setShowContactDialog(false)}
-                className="bg-white/10 text-white border-white/20 hover:bg-white/20"
               >
                 Cancel
               </Button>

@@ -863,7 +863,7 @@ export default function CompanyManagement() {
               </div>
             </div>
             <div className="flex justify-end gap-2 pt-4 border-t border-white/20">
-              <Button type="button" onClick={handleCloseDialogs} className="bg-white/10 text-white border-white/20 hover:bg-white/20">
+              <Button type="button" variant="outline" onClick={handleCloseDialogs}>
                 Cancel
               </Button>
               <Button type="submit" disabled={editConsumerMutation.isPending} className="bg-blue-600 text-white hover:bg-blue-700">
