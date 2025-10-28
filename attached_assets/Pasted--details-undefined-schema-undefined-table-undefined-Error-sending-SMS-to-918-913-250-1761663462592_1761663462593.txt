@@ -1,0 +1,124 @@
+  details: undefined
+  schema: undefined,
+}
+  table: undefined,
+Error sending SMS to 918-913-2507: error: column "tenant_id" of relation "sms_tracking" does not exist
+    at /app/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async file:///app/node_modules/drizzle-orm/node-postgres/session.js:83:22
+    at async DatabaseStorage.createSmsTracking (file:///app/dist/index.js:2225:31)
+    at async SmsService.sendImmediately (file:///app/dist/index.js:3294:11)
+    at async SmsService.sendBulkSmsCampaign (file:///app/dist/index.js:3381:28)
+    at async file:///app/dist/index.js:7021:22 {
+  length: 134,
+  severity: 'ERROR',
+  code: '42703',
+  detail: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'parse_target.c',
+  line: '1065',
+  routine: 'checkInsertTargets'
+}
+2025-10-28 14:33:58.885 UTC [67073] ERROR:  column "tenant_id" of relation "sms_tracking" does not exist at character 35
+2025-10-28 14:33:58.885 UTC [67073] STATEMENT:  insert into "sms_tracking" ("id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data") values (default, $1, $2, $3, $4, $5, $6, default, $7, $8) returning "id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data"
+2025-10-28 14:33:58.942 UTC [67074] ERROR:  column "tenant_id" of relation "sms_tracking" does not exist at character 35
+2025-10-28 14:33:58.942 UTC [67074] STATEMENT:  insert into "sms_tracking" ("id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data") values (default, $1, $2, $3, $4, $5, $6, default, $7, $8) returning "id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data"
+2025-10-28 14:33:59.004 UTC [67075] ERROR:  column "tenant_id" of relation "sms_tracking" does not exist at character 35
+2025-10-28 14:33:59.004 UTC [67075] STATEMENT:  insert into "sms_tracking" ("id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data") values (default, $1, $2, $3, $4, $5, $6, default, $7, $8) returning "id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data"
+2025-10-28 14:33:59.066 UTC [67076] ERROR:  column "tenant_id" of relation "sms_tracking" does not exist at character 35
+2025-10-28 14:33:59.066 UTC [67076] STATEMENT:  insert into "sms_tracking" ("id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data") values (default, $1, $2, $3, $4, $5, $6, default, $7, $8) returning "id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data"
+2025-10-28 14:33:59.124 UTC [67077] ERROR:  column "tenant_id" of relation "sms_tracking" does not exist at character 35
+2025-10-28 14:33:59.124 UTC [67077] STATEMENT:  insert into "sms_tracking" ("id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data") values (default, $1, $2, $3, $4, $5, $6, default, $7, $8) returning "id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data"
+2025-10-28 14:33:59.192 UTC [67078] ERROR:  column "tenant_id" of relation "sms_tracking" does not exist at character 35
+2025-10-28 14:33:59.192 UTC [67078] STATEMENT:  insert into "sms_tracking" ("id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data") values (default, $1, $2, $3, $4, $5, $6, default, $7, $8) returning "id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data"
+2025-10-28 14:33:59.248 UTC [67079] ERROR:  column "tenant_id" of relation "sms_tracking" does not exist at character 35
+2025-10-28 14:33:59.248 UTC [67079] STATEMENT:  insert into "sms_tracking" ("id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data") values (default, $1, $2, $3, $4, $5, $6, default, $7, $8) returning "id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data"
+2025-10-28 14:33:59.306 UTC [67080] ERROR:  column "tenant_id" of relation "sms_tracking" does not exist at character 35
+2025-10-28 14:33:59.306 UTC [67080] STATEMENT:  insert into "sms_tracking" ("id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data") values (default, $1, $2, $3, $4, $5, $6, default, $7, $8) returning "id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data"
+2025-10-28 14:33:59.379 UTC [67081] ERROR:  column "tenant_id" of relation "sms_tracking" does not exist at character 35
+2025-10-28 14:33:59.379 UTC [67081] STATEMENT:  insert into "sms_tracking" ("id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data") values (default, $1, $2, $3, $4, $5, $6, default, $7, $8) returning "id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data"
+2025-10-28 14:33:59.448 UTC [67082] ERROR:  column "tenant_id" of relation "sms_tracking" does not exist at character 35
+2025-10-28 14:33:59.448 UTC [67082] STATEMENT:  insert into "sms_tracking" ("id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data") values (default, $1, $2, $3, $4, $5, $6, default, $7, $8) returning "id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data"
+2025-10-28 14:33:59.562 UTC [67083] ERROR:  column "tenant_id" of relation "sms_tracking" does not exist at character 35
+2025-10-28 14:33:59.562 UTC [67083] STATEMENT:  insert into "sms_tracking" ("id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data") values (default, $1, $2, $3, $4, $5, $6, default, $7, $8) returning "id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data"
+2025-10-28 14:33:59.620 UTC [67084] ERROR:  column "tenant_id" of relation "sms_tracking" does not exist at character 35
+2025-10-28 14:33:59.620 UTC [67084] STATEMENT:  insert into "sms_tracking" ("id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data") values (default, $1, $2, $3, $4, $5, $6, default, $7, $8) returning "id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data"
+2025-10-28 14:33:59.682 UTC [67085] ERROR:  column "tenant_id" of relation "sms_tracking" does not exist at character 35
+2025-10-28 14:33:59.682 UTC [67085] STATEMENT:  insert into "sms_tracking" ("id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data") values (default, $1, $2, $3, $4, $5, $6, default, $7, $8) returning "id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data"
+2025-10-28 14:33:59.752 UTC [67086] ERROR:  column "tenant_id" of relation "sms_tracking" does not exist at character 35
+2025-10-28 14:33:59.752 UTC [67086] STATEMENT:  insert into "sms_tracking" ("id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data") values (default, $1, $2, $3, $4, $5, $6, default, $7, $8) returning "id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data"
+2025-10-28 14:33:59.818 UTC [67087] ERROR:  column "tenant_id" of relation "sms_tracking" does not exist at character 35
+2025-10-28 14:33:59.818 UTC [67087] STATEMENT:  insert into "sms_tracking" ("id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data") values (default, $1, $2, $3, $4, $5, $6, default, $7, $8) returning "id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data"
+    at async SmsService.sendImmediately (file:///app/dist/index.js:3294:11)
+2025-10-28 14:33:59.872 UTC [67088] ERROR:  column "tenant_id" of relation "sms_tracking" does not exist at character 35
+2025-10-28 14:33:59.872 UTC [67088] STATEMENT:  insert into "sms_tracking" ("id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data") values (default, $1, $2, $3, $4, $5, $6, default, $7, $8) returning "id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data"
+Twilio SMS error: RestException [Error]: The 'StatusCallback' URL https://*.chainsoftwaregroup.com/api/webhooks/twilio is not a valid URL
+    at async file:///app/node_modules/drizzle-orm/node-postgres/session.js:83:22
+    at success (/app/node_modules/twilio/lib/base/Version.js:79:23)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async DatabaseStorage.createSmsTracking (file:///app/dist/index.js:2225:31)
+    at async SmsService.sendImmediately (file:///app/dist/index.js:3272:26)
+    at async SmsService.sendBulkSmsCampaign (file:///app/dist/index.js:3381:28)
+    at async SmsService.sendImmediately (file:///app/dist/index.js:3294:11)
+    at async file:///app/dist/index.js:7021:22 {
+  status: 400,
+    at async SmsService.sendBulkSmsCampaign (file:///app/dist/index.js:3381:28)
+    at async file:///app/dist/index.js:7021:22 {
+  code: 21609,
+  length: 134,
+  moreInfo: 'https://www.twilio.com/docs/errors/21609',
+  details: undefined
+}
+Error sending SMS to 830-369-9988: error: column "tenant_id" of relation "sms_tracking" does not exist
+    at /app/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+  severity: 'ERROR',
+  code: '42703',
+2025-10-28 14:33:59.928 UTC [67089] ERROR:  column "tenant_id" of relation "sms_tracking" does not exist at character 35
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+2025-10-28 14:33:59.928 UTC [67089] STATEMENT:  insert into "sms_tracking" ("id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data") values (default, $1, $2, $3, $4, $5, $6, default, $7, $8) returning "id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data"
+    at async SmsService.sendImmediately (file:///app/dist/index.js:3272:26)
+    at async SmsService.sendBulkSmsCampaign (file:///app/dist/index.js:3381:28)
+    at async file:///app/dist/index.js:7021:22 {
+Twilio SMS error: RestException [Error]: The 'StatusCallback' URL https://*.chainsoftwaregroup.com/api/webhooks/twilio is not a valid URL
+    at success (/app/node_modules/twilio/lib/base/Version.js:79:23)
+  status: 400,
+  code: 21609,
+  moreInfo: 'https://www.twilio.com/docs/errors/21609',
+  details: undefined
+}
+Error sending SMS to 424-653-8570: error: column "tenant_id" of relation "sms_tracking" does not exist
+    at /app/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async file:///app/node_modules/drizzle-orm/node-postgres/session.js:83:22
+    at async DatabaseStorage.createSmsTracking (file:///app/dist/index.js:2225:31)
+    at async SmsService.sendImmediately (file:///app/dist/index.js:3294:11)
+    at async SmsService.sendBulkSmsCampaign (file:///app/dist/index.js:3381:28)
+    at async file:///app/dist/index.js:7021:22 {
+  length: 134,
+  severity: 'ERROR',
+  code: '42703',
+  detail: undefined,
+  hint: undefined,
+  position: '35',
+  internalPosition: undefined,
+2025-10-28 14:33:59.986 UTC [67090] ERROR:  column "tenant_id" of relation "sms_tracking" does not exist at character 35
+    at async file:///app/node_modules/drizzle-orm/node-postgres/session.js:83:22
+2025-10-28 14:33:59.986 UTC [67090] STATEMENT:  insert into "sms_tracking" ("id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data") values (default, $1, $2, $3, $4, $5, $6, default, $7, $8) returning "id", "tenant_id", "campaign_id", "consumer_id", "phone_number", "status", "sent_at", "delivered_at", "error_message", "tracking_data"
+    at async DatabaseStorage.createSmsTracking (file:///app/dist/index.js:2225:31)
+Twilio SMS error: RestException [Error]: The 'StatusCallback' URL https://*.chainsoftwaregroup.com/api/webhooks/twilio is not a valid URL
+    at async SmsService.sendImmediately (file:///app/dist/index.js:3294:11)
+    at async SmsService.sendBulkSmsCampaign (file:///app/dist/index.js:3381:28)
+    at success (/app/node_modules/twilio/lib/base/Version.js:79:23)
+    at async file:///app/dist/index.js:7021:22 {
+  length: 134,
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async SmsService.sendImmediately (file:///app/dist/index.js:3272:26)
+    at async SmsService.sendBulkSmsCampaign (file:///app/dist/index.js:3381:28)
+    at async file:///app/dist/index.js:7021:22 {
+  status: 400,
+  code: 21609,
+  moreInfo: 'https://www.twilio.com/docs/errors/21609',
+  details: undefined
