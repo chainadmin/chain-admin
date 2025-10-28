@@ -7271,6 +7271,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update payment method for a payment schedule
+  app.patch('/api/consumer/payment-schedules/:scheduleId/payment-method', authenticateConsumer, async (req: any, res) => {
+    try {
+      const { id: consumerId, tenantId } = req.consumer || {};
+      const { scheduleId } = req.params;
+      const { paymentMethodId } = req.body;
+
+      if (!consumerId || !tenantId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      if (!paymentMethodId) {
+        return res.status(400).json({ message: "Payment method ID is required" });
+      }
+
+      // Verify the payment schedule belongs to this consumer
+      const schedules = await storage.getPaymentSchedulesByConsumer(consumerId, tenantId);
+      const schedule = schedules.find(s => s.id === scheduleId);
+
+      if (!schedule) {
+        return res.status(404).json({ message: "Payment schedule not found" });
+      }
+
+      // Verify the payment method belongs to this consumer
+      const paymentMethods = await storage.getPaymentMethodsByConsumer(consumerId, tenantId);
+      const paymentMethod = paymentMethods.find(pm => pm.id === paymentMethodId);
+
+      if (!paymentMethod) {
+        return res.status(404).json({ message: "Payment method not found" });
+      }
+
+      // Update the payment schedule with the new payment method
+      const updatedSchedule = await storage.updatePaymentSchedule(scheduleId, tenantId, {
+        paymentMethodId,
+        updatedAt: new Date(),
+      });
+
+      res.json({ 
+        message: "Payment method updated successfully",
+        schedule: updatedSchedule 
+      });
+    } catch (error) {
+      console.error("Error updating payment method for schedule:", error);
+      res.status(500).json({ message: "Failed to update payment method" });
+    }
+  });
+
   // Process scheduled payments (called by cron/scheduler)
   app.post('/api/payments/process-scheduled', async (req: any, res) => {
     try {
