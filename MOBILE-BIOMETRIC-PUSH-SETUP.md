@@ -69,7 +69,7 @@ Add to `ios/App/App/Info.plist`:
 ### Step 5: Add GoogleService-Info.plist
 
 1. In Firebase Console, add an iOS app:
-   - Bundle ID: `com.chaincomms.chain`
+   - Bundle ID: `com.chaincomms.platform`
    - Download `GoogleService-Info.plist`
 
 2. Add to Xcode:
@@ -139,7 +139,7 @@ cd ../..
 ### Step 1: Firebase Setup for Android
 
 1. In Firebase Console, add an Android app:
-   - Package name: `com.chaincomms.chain`
+   - Package name: `com.chaincomms.platform`
    - Download `google-services.json`
 
 2. Move to Android project:

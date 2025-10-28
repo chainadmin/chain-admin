@@ -10141,7 +10141,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       minVersion: '1.0.0',
       forceUpdate: false,
       updateUrl: 'https://apps.apple.com/app/chain', // Update with real URLs
-      androidUpdateUrl: 'https://play.google.com/store/apps/details?id=com.chaincomms.chain',
+      androidUpdateUrl: 'https://play.google.com/store/apps/details?id=com.chaincomms.platform',
       releaseNotes: 'Bug fixes and performance improvements'
     });
   });

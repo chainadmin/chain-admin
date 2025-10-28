@@ -1,4 +1,4 @@
-package com.chaincomms.chain;
+package com.chaincomms.platform;
 
 import com.getcapacitor.BridgeActivity;
 

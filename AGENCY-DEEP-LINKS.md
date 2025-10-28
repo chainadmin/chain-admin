@@ -113,7 +113,7 @@ Add to your agency website's `.well-known/apple-app-site-association`:
   "applinks": {
     "apps": [],
     "details": [{
-      "appID": "TEAM_ID.com.chaincomms.chain",
+      "appID": "TEAM_ID.com.chaincomms.platform",
       "paths": [
         "/consumer-login",
         "/consumer-dashboard",

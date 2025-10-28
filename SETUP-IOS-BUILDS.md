@@ -124,7 +124,7 @@ This automatically uploads your latest build to App Store Connect!
 3. Fill in:
    - Name: `Chain Consumer Portal`
    - Primary Language: English
-   - Bundle ID: `com.chaincomms.chain`
+   - Bundle ID: `com.chaincomms.platform`
    - SKU: `chain-consumer-portal`
 4. Add screenshots from your iPhone
 5. Write app description
