@@ -387,6 +387,12 @@ export interface IStorage {
   getPaymentSchedulesByConsumer(consumerId: string, tenantId: string): Promise<PaymentSchedule[]>;
   getPaymentSchedulesByAccount(accountId: string, tenantId: string): Promise<PaymentSchedule[]>;
   getActivePaymentSchedulesByConsumerAndAccount(consumerId: string, accountId: string, tenantId: string): Promise<PaymentSchedule[]>;
+  getAllPaymentSchedulesByTenant(tenantId: string): Promise<(PaymentSchedule & { 
+    consumer?: Consumer; 
+    account?: Account;
+    paymentMethod?: PaymentMethod;
+  })[]>;
+  getAllPaymentMethodsByTenant(tenantId: string): Promise<(PaymentMethod & { consumer?: Consumer })[]>;
   createPaymentSchedule(schedule: InsertPaymentSchedule): Promise<PaymentSchedule>;
   updatePaymentSchedule(id: string, tenantId: string, updates: Partial<PaymentSchedule>): Promise<PaymentSchedule>;
   cancelPaymentSchedule(id: string, tenantId: string): Promise<boolean>;
@@ -2330,6 +2336,76 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(paymentSchedules.id, id), eq(paymentSchedules.tenantId, tenantId)))
       .returning();
     return result.length > 0;
+  }
+
+  async getAllPaymentSchedulesByTenant(tenantId: string): Promise<(PaymentSchedule & { 
+    consumer?: Consumer; 
+    account?: Account;
+    paymentMethod?: PaymentMethod;
+  })[]> {
+    const schedules = await db
+      .select()
+      .from(paymentSchedules)
+      .where(eq(paymentSchedules.tenantId, tenantId))
+      .orderBy(desc(paymentSchedules.createdAt));
+
+    // Enrich with consumer, account, and payment method data
+    const enrichedSchedules = await Promise.all(
+      schedules.map(async (schedule) => {
+        const [consumer] = await db
+          .select()
+          .from(consumers)
+          .where(eq(consumers.id, schedule.consumerId));
+
+        const [account] = await db
+          .select()
+          .from(accounts)
+          .where(eq(accounts.id, schedule.accountId));
+
+        let paymentMethod = undefined;
+        if (schedule.paymentMethodId) {
+          const [method] = await db
+            .select()
+            .from(paymentMethods)
+            .where(eq(paymentMethods.id, schedule.paymentMethodId));
+          paymentMethod = method;
+        }
+
+        return {
+          ...schedule,
+          consumer,
+          account,
+          paymentMethod,
+        };
+      })
+    );
+
+    return enrichedSchedules;
+  }
+
+  async getAllPaymentMethodsByTenant(tenantId: string): Promise<(PaymentMethod & { consumer?: Consumer })[]> {
+    const methods = await db
+      .select()
+      .from(paymentMethods)
+      .where(eq(paymentMethods.tenantId, tenantId))
+      .orderBy(desc(paymentMethods.createdAt));
+
+    // Enrich with consumer data
+    const enrichedMethods = await Promise.all(
+      methods.map(async (method) => {
+        const [consumer] = await db
+          .select()
+          .from(consumers)
+          .where(eq(consumers.id, method.consumerId));
+
+        return {
+          ...method,
+          consumer,
+        };
+      })
+    );
+
+    return enrichedMethods;
   }
 
   // Payment approval operations
