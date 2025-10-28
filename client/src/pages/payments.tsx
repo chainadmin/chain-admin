@@ -14,7 +14,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { CreditCard, DollarSign, TrendingUp, Clock, CheckCircle, RefreshCw, Calendar, User, Building2, Lock, Trash2 } from "lucide-react";
+import { CreditCard, DollarSign, TrendingUp, Clock, CheckCircle, RefreshCw, Calendar, User, Building2, Lock, Trash2, ThumbsUp, ThumbsDown } from "lucide-react";
 import { PaymentSchedulingCalendar } from "@/components/payment-scheduling-calendar";
 
 export default function Payments() {
@@ -121,6 +121,48 @@ export default function Payments() {
         variant: "destructive",
       });
       setPaymentToDelete(null);
+    },
+  });
+
+  // Approve payment schedule mutation
+  const approveScheduleMutation = useMutation({
+    mutationFn: async (scheduleId: string) => {
+      await apiRequest("POST", `/api/payment-schedules/${scheduleId}/approve`, {});
+    },
+    onSuccess: () => {
+      toast({
+        title: "Arrangement Approved",
+        description: "Payment arrangement has been approved and synced to SMAX.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/payment-schedules"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Approval Failed",
+        description: error.message || "Unable to approve arrangement. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Reject payment schedule mutation
+  const rejectScheduleMutation = useMutation({
+    mutationFn: async (scheduleId: string) => {
+      await apiRequest("POST", `/api/payment-schedules/${scheduleId}/reject`, {});
+    },
+    onSuccess: () => {
+      toast({
+        title: "Arrangement Rejected",
+        description: "Payment arrangement has been rejected and cancelled.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/payment-schedules"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Rejection Failed",
+        description: error.message || "Unable to reject arrangement. Please try again.",
+        variant: "destructive",
+      });
     },
   });
 
@@ -716,10 +758,14 @@ export default function Payments() {
                                 <Badge
                                   className={cn(
                                     "rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-wide",
-                                    schedule.status === 'active' ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-100" : "border-slate-400/30 bg-slate-500/10 text-slate-100"
+                                    schedule.status === 'active' 
+                                      ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-100" 
+                                      : schedule.status === 'pending_approval'
+                                      ? "border-amber-400/40 bg-amber-500/10 text-amber-100"
+                                      : "border-slate-400/30 bg-slate-500/10 text-slate-100"
                                   )}
                                 >
-                                  {schedule.status}
+                                  {schedule.status === 'pending_approval' ? 'Pending Approval' : schedule.status}
                                 </Badge>
                               </div>
                               <div className="grid gap-4 text-sm text-blue-100/80 sm:grid-cols-2 lg:grid-cols-4">
@@ -768,6 +814,30 @@ export default function Payments() {
                                       )}
                                     </div>
                                   </div>
+                                </div>
+                              )}
+
+                              {schedule.status === 'pending_approval' && (
+                                <div className="flex gap-3 pt-3 border-t border-amber-400/20">
+                                  <Button
+                                    onClick={() => approveScheduleMutation.mutate(schedule.id)}
+                                    disabled={approveScheduleMutation.isPending || rejectScheduleMutation.isPending}
+                                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                                    data-testid={`button-approve-schedule-${schedule.id}`}
+                                  >
+                                    <ThumbsUp className="w-4 h-4 mr-2" />
+                                    Approve & Sync to SMAX
+                                  </Button>
+                                  <Button
+                                    onClick={() => rejectScheduleMutation.mutate(schedule.id)}
+                                    disabled={approveScheduleMutation.isPending || rejectScheduleMutation.isPending}
+                                    variant="destructive"
+                                    className="flex-1"
+                                    data-testid={`button-reject-schedule-${schedule.id}`}
+                                  >
+                                    <ThumbsDown className="w-4 h-4 mr-2" />
+                                    Reject
+                                  </Button>
                                 </div>
                               )}
                             </div>

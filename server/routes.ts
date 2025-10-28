@@ -6695,7 +6695,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 ? paymentStartDate.toISOString().split('T')[0]
                 : nextMonth.toISOString().split('T')[0],
               remainingPayments,
-              status: 'active',
+              status: 'pending_approval',
             });
             
             console.log('✅✅✅ PAYMENT SCHEDULE CREATED SUCCESSFULLY IN DATABASE! ✅✅✅');
@@ -8513,6 +8513,125 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching payment methods:", error);
       res.status(500).json({ message: "Failed to fetch payment methods" });
+    }
+  });
+
+  // Approve payment arrangement (activate and sync to SMAX)
+  app.post('/api/payment-schedules/:id/approve', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      const { id } = req.params;
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      // Get all schedules and find the one to approve
+      const allSchedules = await storage.getAllPaymentSchedulesByTenant(tenantId);
+      const schedule = allSchedules.find((s: any) => s.id === id);
+      
+      if (!schedule) {
+        return res.status(404).json({ message: "Payment schedule not found" });
+      }
+
+      // State validation: Only allow approval if status is pending_approval
+      if (schedule.status !== 'pending_approval') {
+        return res.status(409).json({ 
+          message: "Cannot approve this arrangement", 
+          reason: `Arrangement is already ${schedule.status}` 
+        });
+      }
+
+      // Update schedule status to active
+      await storage.updatePaymentSchedule(id, tenantId, {
+        status: 'active',
+        updatedAt: new Date(),
+      });
+
+      // Sync to SMAX if configured
+      try {
+        const account = await storage.getAccount(schedule.accountId, tenantId);
+        const consumer = await storage.getConsumer(schedule.consumerId, tenantId);
+        const paymentMethod = await storage.getPaymentMethod(schedule.paymentMethodId, tenantId);
+
+        if (account?.filenumber) {
+          console.log('💰 Syncing approved arrangement to SMAX...');
+          
+          const payorName = `${consumer?.firstName || ''} ${consumer?.lastName || ''}`.trim() || 'Consumer';
+          const arrangementTypeName = schedule.arrangementType;
+          const monthlyPayment = schedule.amountCents / 100;
+          
+          await smaxService.insertPaymentArrangement(tenantId, {
+            filenumber: account.filenumber,
+            payorname: payorName,
+            arrangementtype: arrangementTypeName,
+            monthlypayment: monthlyPayment,
+            startdate: schedule.startDate,
+            enddate: schedule.endDate || undefined,
+            nextpaymentdate: schedule.nextPaymentDate,
+            remainingpayments: schedule.remainingPayments || undefined,
+            totalbalance: (account.balanceCents || 0) / 100,
+            cardtoken: paymentMethod?.paymentToken || undefined,
+            cardlast4: paymentMethod?.cardLast4 || undefined,
+            cardbrand: paymentMethod?.cardBrand || undefined,
+            expirymonth: paymentMethod?.expiryMonth || undefined,
+            expiryyear: paymentMethod?.expiryYear || undefined,
+            cardholdername: paymentMethod?.cardholderName || undefined,
+            billingzip: paymentMethod?.billingZip || undefined,
+          });
+
+          console.log('✅ Arrangement synced to SMAX successfully');
+        }
+      } catch (smaxError) {
+        console.error('⚠️ Error syncing to SMAX (non-blocking):', smaxError);
+        // Don't fail the approval if SMAX sync fails
+      }
+
+      res.json({ message: "Arrangement approved and activated" });
+    } catch (error) {
+      console.error("Error approving payment schedule:", error);
+      res.status(500).json({ message: "Failed to approve arrangement" });
+    }
+  });
+
+  // Reject payment arrangement (mark as cancelled)
+  app.post('/api/payment-schedules/:id/reject', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      const { id } = req.params;
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      // Get the schedule and validate state
+      const allSchedules = await storage.getAllPaymentSchedulesByTenant(tenantId);
+      const schedule = allSchedules.find((s: any) => s.id === id);
+      
+      if (!schedule) {
+        return res.status(404).json({ message: "Payment schedule not found" });
+      }
+
+      // State validation: Only allow rejection if status is pending_approval
+      if (schedule.status !== 'pending_approval') {
+        return res.status(409).json({ 
+          message: "Cannot reject this arrangement", 
+          reason: `Arrangement is already ${schedule.status}` 
+        });
+      }
+
+      // Mark the payment schedule as cancelled instead of deleting
+      await storage.updatePaymentSchedule(id, tenantId, {
+        status: 'cancelled',
+        updatedAt: new Date(),
+      });
+
+      console.log(`🚫 Payment arrangement rejected: ${id} by admin (tenant: ${tenantId})`);
+
+      res.json({ message: "Arrangement rejected and cancelled" });
+    } catch (error) {
+      console.error("Error rejecting payment schedule:", error);
+      res.status(500).json({ message: "Failed to reject arrangement" });
     }
   });
 
