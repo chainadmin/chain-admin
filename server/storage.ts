@@ -217,6 +217,7 @@ export interface IStorage {
   deleteFolder(id: string, tenantId: string): Promise<void>;
   getDefaultFolder(tenantId: string): Promise<Folder | undefined>;
   getPortalRegistrationsFolder(tenantId: string): Promise<Folder | undefined>;
+  getPaymentsPendingFolder(tenantId: string): Promise<Folder | undefined>;
   ensureDefaultFolders(tenantId: string): Promise<void>;
   
   // Account operations
@@ -910,6 +911,13 @@ export class DatabaseStorage implements IStorage {
     return folder;
   }
 
+  async getPaymentsPendingFolder(tenantId: string): Promise<Folder | undefined> {
+    const [folder] = await db.select().from(folders).where(
+      and(eq(folders.tenantId, tenantId), eq(folders.name, "Payments Pending"))
+    );
+    return folder;
+  }
+
   async ensureDefaultFolders(tenantId: string): Promise<void> {
     // Create default folders if they don't exist
     const existingFolders = await this.getFoldersByTenant(tenantId);
@@ -917,10 +925,11 @@ export class DatabaseStorage implements IStorage {
     const defaultFolders = [
       { name: "All Accounts", description: "All imported accounts", color: "#3b82f6", isDefault: true, sortOrder: 0 },
       { name: "Portal Registrations", description: "Consumer portal self-registrations", color: "#06b6d4", isDefault: false, sortOrder: 1 },
-      { name: "New", description: "New accounts to be contacted", color: "#10b981", isDefault: false, sortOrder: 2 },
-      { name: "Decline", description: "Accounts that declined payment", color: "#ef4444", isDefault: false, sortOrder: 3 },
-      { name: "First Attempt", description: "First contact attempt made", color: "#f59e0b", isDefault: false, sortOrder: 4 },
-      { name: "Second Attempt", description: "Second contact attempt made", color: "#8b5cf6", isDefault: false, sortOrder: 5 }
+      { name: "Payments Pending", description: "Accounts with pending payment arrangements - excluded from automated communications", color: "#f59e0b", isDefault: false, sortOrder: 2 },
+      { name: "New", description: "New accounts to be contacted", color: "#10b981", isDefault: false, sortOrder: 3 },
+      { name: "Decline", description: "Accounts that declined payment", color: "#ef4444", isDefault: false, sortOrder: 4 },
+      { name: "First Attempt", description: "First contact attempt made", color: "#fb923c", isDefault: false, sortOrder: 5 },
+      { name: "Second Attempt", description: "Second contact attempt made", color: "#8b5cf6", isDefault: false, sortOrder: 6 }
     ];
     
     for (const folderData of defaultFolders) {
