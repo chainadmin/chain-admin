@@ -198,6 +198,23 @@ export async function runMigrations() {
     } catch (err) {
       console.log('  ⚠ expo_token nullable (already set or error)');
     }
+
+    // Add SMAX sync tracking to payment_schedules
+    console.log('Adding SMAX sync columns to payment_schedules...');
+    const paymentScheduleColumns = [
+      { name: 'source', type: 'TEXT', default: "'chain'" },
+      { name: 'smax_synced', type: 'BOOLEAN', default: 'false' }
+    ];
+    
+    for (const col of paymentScheduleColumns) {
+      try {
+        const defaultClause = col.default ? ` DEFAULT ${col.default}` : '';
+        await client.query(`ALTER TABLE payment_schedules ADD COLUMN IF NOT EXISTS ${col.name} ${col.type}${defaultClause}`);
+        console.log(`  ✓ ${col.name}`);
+      } catch (err) {
+        console.log(`  ⚠ ${col.name} (already exists or error)`);
+      }
+    }
     
     // Verify columns exist
     const result = await client.query(`

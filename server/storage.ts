@@ -396,6 +396,12 @@ export interface IStorage {
   createPaymentSchedule(schedule: InsertPaymentSchedule): Promise<PaymentSchedule>;
   updatePaymentSchedule(id: string, tenantId: string, updates: Partial<PaymentSchedule>): Promise<PaymentSchedule>;
   cancelPaymentSchedule(id: string, tenantId: string): Promise<boolean>;
+  syncSmaxArrangementToChain(
+    tenantId: string,
+    consumerId: string,
+    accountId: string,
+    smaxArrangement: any
+  ): Promise<PaymentSchedule | null>;
   
   // Payment approval operations
   createPaymentApproval(approval: InsertPaymentApproval): Promise<PaymentApproval>;

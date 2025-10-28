@@ -598,35 +598,65 @@ class SmaxService {
         return null;
       }
 
-      // First get account details which may include payment plan info
-      const accountDetails = await this.getAccount(tenantId, fileNumber);
-      
-      if (!accountDetails) {
+      // Call /getpayments to get both past and future scheduled payments
+      const result = await this.makeSmaxRequest(
+        config,
+        `/getpayments/${fileNumber}`,
+        'GET'
+      );
+
+      if (result.state !== 'SUCCESS' || !result.result) {
+        console.log('📋 No payment data found in SMAX for file:', fileNumber);
         return null;
       }
 
-      // SMAX typically stores payment arrangement info in the account details
-      // Extract payment plan/arrangement information if available
+      const payments = result.result;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      // Filter for future-dated payments (these represent the payment plan/arrangement)
+      const futurePayments = payments.filter((payment: any) => {
+        const paymentDate = new Date(payment.paymentdate);
+        return paymentDate >= today;
+      });
+
+      if (futurePayments.length === 0) {
+        console.log('📋 No future payments found for file:', fileNumber);
+        return null;
+      }
+
+      // Sort by date to get the next payment first
+      futurePayments.sort((a: any, b: any) => {
+        return new Date(a.paymentdate).getTime() - new Date(b.paymentdate).getTime();
+      });
+
+      const nextPayment = futurePayments[0];
+      const paymentAmount = parseFloat(nextPayment.paymentamount || nextPayment.paymentAmount || '0');
+
+      // Calculate arrangement details from the payment schedule
       const arrangement = {
         source: 'smax',
         filenumber: fileNumber,
-        accountDetails: accountDetails,
-        // Common SMAX fields for payment arrangements:
-        paymentAmount: accountDetails.paymentamount || accountDetails.PaymentAmount,
-        paymentFrequency: accountDetails.paymentfrequency || accountDetails.PaymentFrequency,
-        nextPaymentDate: accountDetails.nextpaymentdate || accountDetails.NextPaymentDate,
-        arrangementType: accountDetails.arrangementtype || accountDetails.ArrangementType,
-        totalBalance: accountDetails.balance || accountDetails.Balance,
-        monthlyPayment: accountDetails.monthlypayment || accountDetails.MonthlyPayment,
-        remainingPayments: accountDetails.remainingpayments || accountDetails.RemainingPayments,
-        startDate: accountDetails.arrangementstartdate || accountDetails.ArrangementStartDate,
-        endDate: accountDetails.arrangementenddate || accountDetails.ArrangementEndDate,
+        paymentAmount: paymentAmount,
+        monthlyPayment: paymentAmount,
+        nextPaymentDate: nextPayment.paymentdate,
+        remainingPayments: futurePayments.length,
+        paymentMethod: nextPayment.paymentmethod || nextPayment.paymentMethod,
+        typeOfPayment: nextPayment.typeofpayment || nextPayment.typeOfPayment,
+        portfolio: nextPayment.portfolio,
+        // Calculate start and end dates from the schedule
+        startDate: futurePayments[0].paymentdate,
+        endDate: futurePayments[futurePayments.length - 1].paymentdate,
+        // Store all future payments for reference
+        scheduledPayments: futurePayments,
       };
 
       console.log('📋 SMAX payment arrangement fetched:', {
         filenumber: fileNumber,
-        hasArrangement: !!(arrangement.paymentAmount || arrangement.monthlyPayment),
-        nextPaymentDate: arrangement.nextPaymentDate
+        hasArrangement: true,
+        nextPaymentDate: arrangement.nextPaymentDate,
+        remainingPayments: arrangement.remainingPayments,
+        monthlyPayment: paymentAmount
       });
 
       return arrangement;

@@ -523,6 +523,8 @@ export const paymentSchedules = pgTable("payment_schedules", {
   nextPaymentDate: date("next_payment_date").notNull(),
   remainingPayments: integer("remaining_payments"), // Null for indefinite
   status: text("status").default("active"), // "active", "paused", "completed", "cancelled", "failed"
+  source: text("source").default("chain"), // "chain" or "smax" - tracks where this arrangement came from
+  smaxSynced: boolean("smax_synced").default(false), // Whether this has been synced to SMAX
   failedAttempts: integer("failed_attempts").default(0),
   lastProcessedAt: timestamp("last_processed_at"),
   createdAt: timestamp("created_at").defaultNow(),
