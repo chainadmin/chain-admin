@@ -7308,16 +7308,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Account not found" });
       }
 
-      // Check if SMAX is enabled and account has filenumber
+      // Always allow the card change in Chain (consumers can switch cards anytime)
+      const updatedSchedule = await storage.updatePaymentSchedule(scheduleId, tenantId, {
+        paymentMethodId,
+        updatedAt: new Date(),
+      });
+
+      // Check if SMAX is enabled and we should sync card data
       const settings = await storage.getTenantSettings(tenantId);
       const smaxEnabled = settings?.smaxEnabled && account.filenumber;
 
-      let requiresApproval = false;
+      let canSyncToSmax = false;
       let comparisonResult: any = null;
 
       if (smaxEnabled) {
         try {
-          // Fetch SMAX arrangement for this account
+          // Fetch SMAX arrangement to check if we can sync
           const smaxArrangement = await smaxService.getPaymentArrangement(tenantId, account.filenumber!);
           
           if (smaxArrangement && (smaxArrangement.paymentAmount || smaxArrangement.monthlyPayment)) {
@@ -7342,140 +7348,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }
             };
 
-            // Require approval if dates or amounts don't match
-            requiresApproval = !amountsMatch || !datesMatch;
+            // Only sync to SMAX if dates and amounts match
+            canSyncToSmax = amountsMatch && datesMatch;
 
             console.log('💳 Card change SMAX comparison:', {
               scheduleId,
               filenumber: account.filenumber,
               amountsMatch,
               datesMatch,
-              requiresApproval,
+              canSyncToSmax,
               comparisonResult
             });
           }
         } catch (error) {
           console.error('⚠️ Error fetching SMAX arrangement for card change comparison:', error);
-          // If we can't fetch SMAX, proceed with approval required
-          requiresApproval = true;
+          // If we can't fetch SMAX, don't sync but still allow card change
+          canSyncToSmax = false;
         }
       }
 
-      if (requiresApproval) {
-        // Create approval request for admin review
-        const approval = await storage.createPaymentApproval({
-          tenantId,
-          approvalType: 'card_change',
-          scheduleId: schedule.id,
-          accountId: schedule.accountId,
-          consumerId,
-          filenumber: account.filenumber || null,
-          paymentDate: null,
-          amountCents: null,
-          transactionId: null,
-          oldPaymentMethodId: schedule.paymentMethodId,
-          newPaymentMethodId: paymentMethodId,
-          paymentData: comparisonResult || {},
-          status: 'pending',
-        });
+      // Sync card data to SMAX if schedules are aligned
+      if (smaxEnabled && account.filenumber && canSyncToSmax) {
+        try {
+          const oldMethod = paymentMethods.find(pm => pm.id === schedule.paymentMethodId);
+          
+          // Update card details in SMAX (partial update with PCI-compliant data only)
+          const smaxCardData: any = {
+            filenumber: account.filenumber,
+          };
 
-        console.log('📋 Card change approval created:', approval.id);
-
-        return res.json({
-          requiresApproval: true,
-          approvalId: approval.id,
-          message: "Card change request submitted for approval. Payment dates or amounts differ from SMAX, requiring admin review."
-        });
-      } else {
-        // Auto-approve: dates and amounts match (or SMAX not enabled)
-        // Update the payment schedule immediately
-        const updatedSchedule = await storage.updatePaymentSchedule(scheduleId, tenantId, {
-          paymentMethodId,
-          updatedAt: new Date(),
-        });
-
-        // Create auto-approved approval record for audit trail
-        const approval = await storage.createPaymentApproval({
-          tenantId,
-          approvalType: 'card_change',
-          scheduleId: schedule.id,
-          accountId: schedule.accountId,
-          consumerId,
-          filenumber: account.filenumber || null,
-          paymentDate: null,
-          amountCents: null,
-          transactionId: null,
-          oldPaymentMethodId: schedule.paymentMethodId,
-          newPaymentMethodId: paymentMethodId,
-          paymentData: comparisonResult || {},
-          status: 'auto_approved',
-          approvedBy: 'system',
-          approvedAt: new Date(),
-        });
-
-        // Sync card data to SMAX if enabled
-        if (smaxEnabled && account.filenumber) {
-          try {
-            const oldMethod = paymentMethods.find(pm => pm.id === schedule.paymentMethodId);
-            
-            // Update card details in SMAX (partial update with PCI-compliant data only)
-            const smaxCardData: any = {
-              filenumber: account.filenumber,
+          // Map card brand to SMAX card type
+          if (paymentMethod.cardBrand) {
+            const brandMap: Record<string, string> = {
+              'Visa': 'Visa',
+              'Mastercard': 'MasterCard',
+              'MasterCard': 'MasterCard',
+              'American Express': 'American Express',
+              'Amex': 'American Express',
+              'Discover': 'Discover',
             };
-
-            // Map card brand to SMAX card type
-            if (paymentMethod.cardBrand) {
-              const brandMap: Record<string, string> = {
-                'Visa': 'Visa',
-                'Mastercard': 'MasterCard',
-                'MasterCard': 'MasterCard',
-                'American Express': 'American Express',
-                'Amex': 'American Express',
-                'Discover': 'Discover',
-              };
-              smaxCardData.cardtype = brandMap[paymentMethod.cardBrand] || paymentMethod.cardBrand;
-            }
-
-            // Add expiration data
-            if (paymentMethod.expiryMonth && paymentMethod.expiryYear) {
-              smaxCardData.cardexpirationmonth = paymentMethod.expiryMonth;
-              smaxCardData.cardexpirationyear = paymentMethod.expiryYear.slice(-2); // Use last 2 digits (YY)
-              smaxCardData.cardexpirationdate = `${paymentMethod.expiryMonth}/${paymentMethod.expiryYear.slice(-2)}`;
-            }
-
-            // Add cardholder name if available
-            if (paymentMethod.cardholderName) {
-              smaxCardData.payorname = paymentMethod.cardholderName;
-            }
-
-            // Update SMAX payment record (PENDING payments only)
-            await smaxService.updatePayment(tenantId, smaxCardData);
-            console.log('✅ SMAX payment record updated with new card details');
-
-            // Also create a note for additional context about the card change
-            const noteText = `Payment method updated by consumer. New card: ${paymentMethod.cardBrand || 'Card'} ending in ${paymentMethod.cardLast4}. Previous card: ${oldMethod?.cardBrand || 'Card'} ending in ${oldMethod?.cardLast4 || '****'}. Dates and amounts match - auto-approved. Card expiration and type synced to SMAX.`;
-            
-            await smaxService.insertNote(tenantId, {
-              filenumber: account.filenumber,
-              collectorname: 'System',
-              logmessage: noteText
-            });
-
-            console.log('✅ SMAX note created for card change');
-          } catch (error) {
-            console.error('⚠️ Error syncing card data to SMAX (non-blocking):', error);
+            smaxCardData.cardtype = brandMap[paymentMethod.cardBrand] || paymentMethod.cardBrand;
           }
+
+          // Add expiration data
+          if (paymentMethod.expiryMonth && paymentMethod.expiryYear) {
+            smaxCardData.cardexpirationmonth = paymentMethod.expiryMonth;
+            smaxCardData.cardexpirationyear = paymentMethod.expiryYear.slice(-2); // Use last 2 digits (YY)
+            smaxCardData.cardexpirationdate = `${paymentMethod.expiryMonth}/${paymentMethod.expiryYear.slice(-2)}`;
+          }
+
+          // Add cardholder name if available
+          if (paymentMethod.cardholderName) {
+            smaxCardData.payorname = paymentMethod.cardholderName;
+          }
+
+          // Update SMAX payment record (PENDING payments only)
+          await smaxService.updatePayment(tenantId, smaxCardData);
+          console.log('✅ SMAX payment record updated with new card details');
+
+          // Create a note for the card change
+          const noteText = `Payment method updated by consumer. New card: ${paymentMethod.cardBrand || 'Card'} ending in ${paymentMethod.cardLast4}. Previous card: ${oldMethod?.cardBrand || 'Card'} ending in ${oldMethod?.cardLast4 || '****'}. Card expiration and type synced to SMAX.`;
+          
+          await smaxService.insertNote(tenantId, {
+            filenumber: account.filenumber,
+            collectorname: 'Consumer Portal',
+            logmessage: noteText
+          });
+
+          console.log('✅ SMAX note created for card change');
+        } catch (error) {
+          console.error('⚠️ Error syncing card data to SMAX (non-blocking):', error);
         }
+      } else if (smaxEnabled && account.filenumber && !canSyncToSmax) {
+        // Schedules don't match - just create a note but don't update SMAX payment
+        try {
+          const oldMethod = paymentMethods.find(pm => pm.id === schedule.paymentMethodId);
+          const noteText = `Payment method updated by consumer. New card: ${paymentMethod.cardBrand || 'Card'} ending in ${paymentMethod.cardLast4}. Previous card: ${oldMethod?.cardBrand || 'Card'} ending in ${oldMethod?.cardLast4 || '****'}. NOTE: Chain and SMAX schedules differ - card details not synced to SMAX payment record.`;
+          
+          await smaxService.insertNote(tenantId, {
+            filenumber: account.filenumber,
+            collectorname: 'Consumer Portal',
+            logmessage: noteText
+          });
 
-        console.log('✅ Card change auto-approved:', approval.id);
-
-        res.json({
-          message: "Payment method updated successfully",
-          schedule: updatedSchedule,
-          requiresApproval: false,
-          approvalId: approval.id
-        });
+          console.log('✅ SMAX note created (schedules out of sync - no card sync)');
+        } catch (error) {
+          console.error('⚠️ Error creating SMAX note (non-blocking):', error);
+        }
       }
+
+      console.log('✅ Card change completed:', scheduleId);
+
+      res.json({
+        message: "Payment method updated successfully",
+        schedule: updatedSchedule,
+        syncedToSmax: canSyncToSmax
+      });
     } catch (error) {
       console.error("Error updating payment method for schedule:", error);
       res.status(500).json({ message: "Failed to update payment method" });

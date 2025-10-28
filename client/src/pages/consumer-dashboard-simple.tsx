@@ -371,17 +371,12 @@ export default function ConsumerDashboardSimple() {
       return response.json();
     },
     onSuccess: (data: any) => {
-      if (data.requiresApproval) {
-        toast({
-          title: "Approval Required",
-          description: data.message || "Your card change request has been submitted for admin approval.",
-        });
-      } else {
-        toast({
-          title: "Payment Method Updated",
-          description: "Your payment method for this schedule has been updated successfully.",
-        });
-      }
+      toast({
+        title: "Payment Method Updated",
+        description: data.syncedToSmax 
+          ? "Your payment method has been updated and synced with our system."
+          : "Your payment method has been updated successfully.",
+      });
       queryClient.invalidateQueries({ 
         queryKey: [`/api/consumer/payment-schedules/${session?.email}?tenantSlug=${session?.tenantSlug}`] 
       });
