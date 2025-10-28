@@ -7523,10 +7523,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
             targetConsumers = allConsumers.filter(c => targetIds.has(c.id));
           }
           
-          console.log(`👥 Found ${targetConsumers.length} target consumers`);
+          console.log(`👥 Found ${targetConsumers.length} target consumers (before filtering)`);
+          
+          // Exclude consumers with accounts in "Payments Pending" folder
+          const paymentsPendingFolder = await storage.getPaymentsPendingFolder(automation.tenantId);
+          if (paymentsPendingFolder) {
+            const accountsInPaymentsPending = await storage.getAccountsByFolder(paymentsPendingFolder.id);
+            const consumerIdsToExclude = new Set(accountsInPaymentsPending.map(acc => acc.consumerId));
+            
+            const originalCount = targetConsumers.length;
+            targetConsumers = targetConsumers.filter(c => !consumerIdsToExclude.has(c.id));
+            const excludedCount = originalCount - targetConsumers.length;
+            
+            if (excludedCount > 0) {
+              console.log(`🚫 Excluded ${excludedCount} consumers with pending payment arrangements`);
+            }
+          }
+          
+          console.log(`👥 Final target consumers: ${targetConsumers.length}`);
           
           if (targetConsumers.length === 0) {
-            console.log(`⚠️ No targets for automation ${automation.name}`);
+            console.log(`⚠️ No targets for automation ${automation.name} after filtering`);
             continue;
           }
           
