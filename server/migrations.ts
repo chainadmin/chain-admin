@@ -172,6 +172,32 @@ export async function runMigrations() {
         console.log('  ⚠ tenant_id column error:', err.message);
       }
     }
+
+    // Update push_devices table to support native FCM/APNS tokens
+    console.log('Updating push_devices table for native push notifications...');
+    const pushDeviceColumns = [
+      { name: 'push_token', type: 'TEXT' },
+      { name: 'platform', type: 'TEXT' },
+      { name: 'updated_at', type: 'TIMESTAMP', default: 'NOW()' }
+    ];
+    
+    for (const col of pushDeviceColumns) {
+      try {
+        const defaultClause = col.default ? ` DEFAULT ${col.default}` : '';
+        await client.query(`ALTER TABLE push_devices ADD COLUMN IF NOT EXISTS ${col.name} ${col.type}${defaultClause}`);
+        console.log(`  ✓ ${col.name}`);
+      } catch (err) {
+        console.log(`  ⚠ ${col.name} (already exists or error)`);
+      }
+    }
+    
+    // Make expo_token nullable since we now support native tokens
+    try {
+      await client.query(`ALTER TABLE push_devices ALTER COLUMN expo_token DROP NOT NULL`);
+      console.log('  ✓ expo_token made nullable');
+    } catch (err) {
+      console.log('  ⚠ expo_token nullable (already set or error)');
+    }
     
     // Verify columns exist
     const result = await client.query(`

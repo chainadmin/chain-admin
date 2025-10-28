@@ -173,8 +173,11 @@ export const pushDevices = pgTable("push_devices", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
   consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "cascade" }).notNull(),
-  expoToken: text("expo_token").notNull(),
+  expoToken: text("expo_token"), // For Expo-based push notifications (legacy)
+  pushToken: text("push_token"), // For native FCM/APNS tokens
+  platform: text("platform"), // "ios", "android", "web", or "expo"
   createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // Email templates (per tenant)
