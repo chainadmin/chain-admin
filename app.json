@@ -22,7 +22,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.chaincomms.platform",
-      "versionCode": 1
+      "versionCode": 5
     },
     "web": {
       "bundler": "metro",
