@@ -6695,7 +6695,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 ? paymentStartDate.toISOString().split('T')[0]
                 : nextMonth.toISOString().split('T')[0],
               remainingPayments,
-              status: 'pending_approval',
+              status: 'active',
             });
             
             console.log('✅✅✅ PAYMENT SCHEDULE CREATED SUCCESSFULLY IN DATABASE! ✅✅✅');
