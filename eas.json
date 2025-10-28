@@ -27,7 +27,8 @@
     "production": {
       "autoIncrement": true,
       "env": {
-        "VITE_API_URL": "https://chain-admin-production.up.railway.app"
+        "VITE_API_URL": "https://chain-admin-production.up.railway.app",
+        "ADMIN_BASE_URL": "https://chain-admin-production.up.railway.app"
       },
       "ios": {
         "buildConfiguration": "Release",
@@ -38,6 +39,7 @@
         "buildType": "app-bundle",
         "gradleCommand": ":app:bundleRelease",
         "resourceClass": "medium",
+        "credentialsSource": "remote",
         "image": "latest"
       }
     }
