@@ -3967,6 +3967,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Push notification token registration
+  app.post('/api/consumer/push-token', authenticateConsumer, async (req: any, res) => {
+    try {
+      const { token, platform } = req.body;
+      const { id: consumerId, tenantId } = req.consumer || {};
+
+      if (!consumerId || !tenantId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      if (!token || !platform) {
+        return res.status(400).json({ message: "Token and platform are required" });
+      }
+
+      // Register the push token
+      await storage.registerPushToken({
+        tenantId,
+        consumerId,
+        pushToken: token,
+        platform,
+      });
+
+      console.log(`✅ Push token registered for consumer ${consumerId} on ${platform}`);
+
+      res.json({ success: true, message: "Push token registered successfully" });
+    } catch (error) {
+      console.error("Error registering push token:", error);
+      res.status(500).json({ message: "Failed to register push token" });
+    }
+  });
+
   // Mobile authentication endpoints
   // Step 1: Verify email + DOB and return matching agencies
   app.post('/api/mobile/auth/verify', async (req, res) => {
