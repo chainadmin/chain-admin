@@ -363,13 +363,25 @@ export default function ConsumerDashboardSimple() {
   const updateSchedulePaymentMethodMutation = useMutation({
     mutationFn: async ({ scheduleId, paymentMethodId }: { scheduleId: string; paymentMethodId: string }) => {
       const token = getStoredConsumerToken();
-      return apiCall("PATCH", `/api/consumer/payment-schedules/${scheduleId}/payment-method`, { paymentMethodId }, token);
+      const response = await apiCall("PATCH", `/api/consumer/payment-schedules/${scheduleId}/payment-method`, { paymentMethodId }, token);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to update payment method");
+      }
+      return response.json();
     },
-    onSuccess: () => {
-      toast({
-        title: "Payment Method Updated",
-        description: "Your payment method for this schedule has been updated successfully.",
-      });
+    onSuccess: (data: any) => {
+      if (data.requiresApproval) {
+        toast({
+          title: "Approval Required",
+          description: data.message || "Your card change request has been submitted for admin approval.",
+        });
+      } else {
+        toast({
+          title: "Payment Method Updated",
+          description: "Your payment method for this schedule has been updated successfully.",
+        });
+      }
       queryClient.invalidateQueries({ 
         queryKey: [`/api/consumer/payment-schedules/${session?.email}?tenantSlug=${session?.tenantSlug}`] 
       });
