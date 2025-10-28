@@ -126,6 +126,13 @@ class SmsService {
     }
   }
 
+  private decrementSentCount(tenantId: string) {
+    const currentData = this.sentCounts.get(tenantId);
+    if (currentData && currentData.count > 0) {
+      currentData.count--;
+    }
+  }
+
   async sendSms(
     to: string,
     message: string,
@@ -142,13 +149,19 @@ class SmsService {
 
     // Check if we can send immediately
     if (this.canSendSms(tenantId, throttleConfig.maxPerMinute)) {
+      // INCREMENT BEFORE SENDING to prevent race condition
+      this.incrementSentCount(tenantId);
+      
       try {
         const result = await this.sendImmediately(to, message, tenantId, campaignId, consumerId);
-        if (result.success) {
-          this.incrementSentCount(tenantId);
+        if (!result.success) {
+          // Rollback count on failure
+          this.decrementSentCount(tenantId);
         }
         return result;
       } catch (error) {
+        // Rollback count on error
+        this.decrementSentCount(tenantId);
         console.error('Error sending SMS:', error);
         return { success: false, error: 'Failed to send SMS' };
       }
