@@ -82,7 +82,13 @@ export function clearConsumerAuth(): void {
 }
 
 export function getStoredConsumerToken(): string | null {
-  return getFirstValue(CONSUMER_TOKEN_KEY);
+  const token = getFirstValue(CONSUMER_TOKEN_KEY);
+  console.log('🔐 Getting stored consumer token:', {
+    hasToken: !!token,
+    tokenLength: token?.length || 0,
+    storageAvailable: getStorages().length
+  });
+  return token;
 }
 
 export function getStoredConsumerSession(): ConsumerSession | null {
@@ -111,11 +117,21 @@ export function persistConsumerAuth({
   session: ConsumerSession;
   token: string;
 }): { sessionStored: boolean; tokenStored: boolean } {
+  console.log('💾 Persisting consumer auth:', {
+    email: session.email,
+    tenantSlug: session.tenantSlug,
+    hasToken: !!token,
+    tokenLength: token.length,
+    storageAvailable: getStorages().length
+  });
+  
   const sessionStored = setValue(CONSUMER_SESSION_KEY, JSON.stringify(session));
   const tokenStored = setValue(CONSUMER_TOKEN_KEY, token);
 
   if (!sessionStored || !tokenStored) {
-    console.error("Failed to persist consumer auth", { sessionStored, tokenStored });
+    console.error("❌ Failed to persist consumer auth", { sessionStored, tokenStored });
+  } else {
+    console.log('✅ Consumer auth persisted successfully');
   }
 
   return {

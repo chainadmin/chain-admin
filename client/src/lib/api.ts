@@ -49,6 +49,19 @@ export async function apiCall(
   
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
+    console.log('🔑 API call with token:', {
+      endpoint,
+      hasToken: !!token,
+      tokenLength: token.length,
+      platform: Capacitor.getPlatform(),
+      url
+    });
+  } else {
+    console.warn('⚠️ API call WITHOUT token:', {
+      endpoint,
+      platform: Capacitor.getPlatform(),
+      url
+    });
   }
   
   const options: RequestInit = {
@@ -63,6 +76,14 @@ export async function apiCall(
   
   try {
     const response = await fetch(url, options);
+    
+    // Log response details for debugging
+    console.log('📡 API response:', {
+      endpoint,
+      status: response.status,
+      ok: response.ok
+    });
+    
     return response;
   } catch (error) {
     console.error(`API call failed: ${method} ${url}`, error);
