@@ -1950,7 +1950,7 @@ export default function Communications() {
                     Create {communicationType === "email" ? "email" : "SMS"} template
                   </Button>
                 </DialogTrigger>
-                <DialogContent className={communicationType === "email" ? "max-w-[98vw] w-full h-[95vh]" : "max-w-2xl"}>
+                <DialogContent className={communicationType === "email" ? "max-w-[98vw] w-full h-[95vh]" : "max-w-2xl rounded-3xl border border-white/20 bg-[#0b1733]/95 backdrop-blur-md text-blue-50"}>
                   {communicationType === "email" ? (
                     <>
                       <DialogHeader className="pb-4 border-b">
@@ -2264,15 +2264,18 @@ export default function Communications() {
                     </>
                   ) : (
                     <>
-                      <DialogHeader>
-                        <DialogTitle>Create SMS Template</DialogTitle>
-                        <p className="text-sm text-muted-foreground">
+                      <DialogHeader className="pb-4 border-b border-white/20">
+                        <DialogTitle className="flex items-center gap-2 text-white">
+                          <Sparkles className="h-5 w-5 text-blue-400" />
+                          Create SMS Template
+                        </DialogTitle>
+                        <p className="text-sm text-blue-100/70">
                           Create a new SMS template for your campaigns.
                         </p>
                       </DialogHeader>
                       <form onSubmit={handleTemplateSubmit} className="space-y-4">
                         <div>
-                          <Label htmlFor="template-name">Template Name</Label>
+                          <Label htmlFor="template-name" className="text-blue-100">Template Name</Label>
                           <Input
                             id="template-name"
                             data-testid="input-template-name"
@@ -2280,20 +2283,21 @@ export default function Communications() {
                             onChange={(e) => setSmsTemplateForm({ ...smsTemplateForm, name: e.target.value })}
                             placeholder="Enter template name"
                             required
+                            className="mt-1 bg-white/10 border-white/20 text-white placeholder:text-blue-200/50"
                           />
                         </div>
                         
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                           {/* Variables Section - Scrollable */}
                           <div className="space-y-2">
-                            <Label className="text-sm font-medium flex items-center gap-2">
+                            <Label className="text-sm font-medium flex items-center gap-2 text-blue-100">
                               <Code className="h-4 w-4" />
                               Variables (30+ Available)
                             </Label>
-                            <p className="text-xs text-gray-500">
+                            <p className="text-xs text-blue-100/70">
                               Click any variable to insert it at cursor position
                             </p>
-                            <div className="h-80 overflow-y-auto border rounded-lg p-3 bg-gray-50">
+                            <div className="h-80 overflow-y-auto border border-white/20 rounded-lg p-3 bg-white/5">
                               <div className="flex flex-wrap gap-1.5">
                                 {templateVariables.map((variable) => (
                                   <Button
@@ -2302,7 +2306,7 @@ export default function Communications() {
                                     variant="outline"
                                     size="sm"
                                     onClick={() => insertVariable(variable.value)}
-                                    className="text-xs h-7 px-2 bg-white hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 flex-shrink-0"
+                                    className="text-xs h-7 px-2 bg-white/10 border-white/20 text-blue-100 hover:bg-white/20 hover:text-white hover:border-white/30 flex-shrink-0"
                                   >
                                     {variable.label}
                                   </Button>
@@ -2313,7 +2317,7 @@ export default function Communications() {
                           
                           {/* Message Content Section - Fixed */}
                           <div className="space-y-2">
-                            <Label htmlFor="message">Message Content</Label>
+                            <Label htmlFor="message" className="text-blue-100">Message Content</Label>
                             <Textarea
                               id="message"
                               ref={smsTextareaRef}
@@ -2323,25 +2327,27 @@ export default function Communications() {
                               placeholder="Enter your SMS message. Click variables to insert them."
                               maxLength={1600}
                               required
-                              className="font-mono text-sm h-80 resize-none"
+                              className="font-mono text-sm h-80 resize-none bg-white/10 border-white/20 text-white placeholder:text-blue-200/50"
                             />
-                            <p className="text-sm text-gray-500">
+                            <p className="text-sm text-blue-100/70">
                               {smsTemplateForm.message.length}/1600 characters
                             </p>
                           </div>
                         </div>
                         
-                        <div className="flex justify-end gap-2">
+                        <div className="flex justify-end gap-2 pt-4 border-t border-white/20">
                           <Button
                             type="button"
                             variant="outline"
                             onClick={() => setShowTemplateModal(false)}
                             data-testid="button-cancel-template"
+                            className="rounded-xl border border-white/20 bg-transparent px-4 py-2 text-blue-100 transition hover:bg-white/10"
                           >
                             Cancel
                           </Button>
                           <Button
                             type="submit"
+                            className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white"
                             disabled={createSmsTemplateMutation.isPending}
                             data-testid="button-save-template"
                           >
