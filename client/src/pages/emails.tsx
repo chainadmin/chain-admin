@@ -448,37 +448,37 @@ export default function Emails() {
                     {/* Left Panel - Template Editor */}
                     <div className="flex flex-col space-y-3 overflow-y-auto pr-2">
                       <div>
-                        <Label className="text-sm font-medium">Template Name *</Label>
+                        <Label className="text-sm font-medium text-blue-100">Template Name *</Label>
                         <Input
                           value={templateForm.name}
                           onChange={(e) => setTemplateForm({...templateForm, name: e.target.value})}
                           placeholder="e.g., Payment Reminder"
-                          className="mt-1"
+                          className="mt-1 bg-white/10 border-white/20 text-white placeholder:text-blue-200/50"
                           data-testid="input-template-name"
                         />
                       </div>
                       
                       <div>
-                        <Label className="text-sm font-medium">Subject Line *</Label>
+                        <Label className="text-sm font-medium text-blue-100">Subject Line *</Label>
                         <Input
                           value={templateForm.subject}
                           onChange={(e) => setTemplateForm({...templateForm, subject: e.target.value})}
                           placeholder="e.g., Payment Required - Account {{accountNumber}}"
-                          className="mt-1"
+                          className="mt-1 bg-white/10 border-white/20 text-white placeholder:text-blue-200/50"
                           data-testid="input-template-subject"
                         />
                       </div>
 
                       <div>
-                        <Label className="text-sm font-medium mb-2 block">Insert Variables</Label>
-                        <div className="flex flex-wrap gap-1.5 p-3 bg-gray-50 rounded-lg border mb-2">
+                        <Label className="text-sm font-medium mb-2 block text-blue-100">Insert Variables</Label>
+                        <div className="flex flex-wrap gap-1.5 p-3 bg-white/5 rounded-lg border border-white/20 mb-2">
                           {templateVariables.map((variable) => (
                             <Button
                               key={variable.value}
                               variant="outline"
                               size="sm"
                               onClick={() => insertVariable(variable.value)}
-                              className="text-xs h-7 px-2 bg-white hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300"
+                              className="text-xs h-7 px-2 bg-white/10 border-white/20 text-blue-100 hover:bg-white/20 hover:text-white hover:border-white/30"
                               data-testid={`button-var-${variable.value.replace(/[{}]/g, '')}`}
                             >
                               {variable.label}
@@ -488,7 +488,7 @@ export default function Emails() {
                       </div>
                       
                       <div className="flex-1">
-                        <Label className="text-sm font-medium">Email Content *</Label>
+                        <Label className="text-sm font-medium text-blue-100">Email Content *</Label>
                         <div className="mt-2 space-y-2">
                           <div className="flex flex-wrap items-center gap-2">
                             <Button
@@ -496,7 +496,7 @@ export default function Emails() {
                               variant="outline"
                               size="sm"
                               onClick={() => applyEditorCommand("bold")}
-                              className="h-8"
+                              className="h-8 bg-white/10 border-white/20 text-blue-100 hover:bg-white/20"
                             >
                               <BoldIcon className="mr-1 h-3.5 w-3.5" />
                               Bold
@@ -506,7 +506,7 @@ export default function Emails() {
                               variant="outline"
                               size="sm"
                               onClick={() => applyEditorCommand("italic")}
-                              className="h-8"
+                              className="h-8 bg-white/10 border-white/20 text-blue-100 hover:bg-white/20"
                             >
                               <ItalicIcon className="mr-1 h-3.5 w-3.5" />
                               Italic
@@ -516,7 +516,7 @@ export default function Emails() {
                               variant="outline"
                               size="sm"
                               onClick={() => applyEditorCommand("underline")}
-                              className="h-8"
+                              className="h-8 bg-white/10 border-white/20 text-blue-100 hover:bg-white/20"
                             >
                               <UnderlineIcon className="mr-1 h-3.5 w-3.5" />
                               Underline
@@ -526,7 +526,7 @@ export default function Emails() {
                               variant="outline"
                               size="sm"
                               onClick={() => applyEditorCommand("strikeThrough")}
-                              className="h-8"
+                              className="h-8 bg-white/10 border-white/20 text-blue-100 hover:bg-white/20"
                             >
                               <Strikethrough className="mr-1 h-3.5 w-3.5" />
                               Strike
@@ -536,7 +536,7 @@ export default function Emails() {
                               variant="outline"
                               size="sm"
                               onClick={() => applyEditorCommand("insertUnorderedList")}
-                              className="h-8"
+                              className="h-8 bg-white/10 border-white/20 text-blue-100 hover:bg-white/20"
                             >
                               <ListIcon className="mr-1 h-3.5 w-3.5" />
                               Bullets
@@ -546,19 +546,19 @@ export default function Emails() {
                               variant="outline"
                               size="sm"
                               onClick={() => applyEditorCommand("insertOrderedList")}
-                              className="h-8"
+                              className="h-8 bg-white/10 border-white/20 text-blue-100 hover:bg-white/20"
                             >
                               <ListOrdered className="mr-1 h-3.5 w-3.5" />
                               Numbered
                             </Button>
                             <div className="flex items-center gap-1">
-                              <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+                              <span className="inline-flex items-center gap-1 text-xs text-blue-100">
                                 <Palette className="h-3.5 w-3.5" />
                                 Color
                               </span>
                               <input
                                 type="color"
-                                className="h-8 w-8 cursor-pointer rounded border"
+                                className="h-8 w-8 cursor-pointer rounded border border-white/20"
                                 onChange={(event) => applyEditorCommand("foreColor", event.target.value)}
                                 aria-label="Text color"
                               />
@@ -568,7 +568,7 @@ export default function Emails() {
                               variant="outline"
                               size="sm"
                               onClick={() => applyEditorCommand("removeFormat")}
-                              className="h-8"
+                              className="h-8 bg-white/10 border-white/20 text-blue-100 hover:bg-white/20"
                             >
                               <Eraser className="mr-1 h-3.5 w-3.5" />
                               Clear
@@ -577,13 +577,13 @@ export default function Emails() {
 
                           <div className="relative">
                             {!templateForm.html && (
-                              <div className="pointer-events-none absolute left-3 top-3 text-sm text-gray-400">
+                              <div className="pointer-events-none absolute left-3 top-3 text-sm text-blue-200/50">
                                 Write your email content or paste existing HTML here.
                               </div>
                             )}
                             <div
                               ref={editorRef}
-                              className="min-h-[280px] w-full rounded-md border border-gray-200 bg-white p-3 text-sm text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              className="min-h-[280px] w-full rounded-md border border-white/20 bg-white/10 p-3 text-sm text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                               contentEditable
                               role="textbox"
                               aria-multiline="true"
@@ -598,18 +598,18 @@ export default function Emails() {
                     </div>
 
                     {/* Right Panel - Preview */}
-                    <div className="flex flex-col border-l pl-4 overflow-hidden">
+                    <div className="flex flex-col border-l border-white/20 pl-4 overflow-hidden">
                       <div className="mb-3">
-                        <Label className="text-sm font-medium flex items-center gap-2">
+                        <Label className="text-sm font-medium flex items-center gap-2 text-blue-100">
                           <Eye className="h-4 w-4" />
                           Email Preview
                         </Label>
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-blue-200/70 mt-1">
                           Preview with sample data
                         </p>
                       </div>
                       
-                      <div className="flex-1 border rounded-lg overflow-auto bg-gray-50 p-4">
+                      <div className="flex-1 border border-white/20 rounded-lg overflow-auto bg-white/5 p-4">
                         {showPreview && templateForm.html ? (
                           <div className="bg-white rounded shadow-sm p-6 mx-auto max-w-2xl">
                             {/* Logo if available */}
@@ -636,7 +636,7 @@ export default function Emails() {
                             />
                           </div>
                         ) : (
-                          <div className="h-full flex items-center justify-center text-gray-400">
+                          <div className="h-full flex items-center justify-center text-blue-200/50">
                             <div className="text-center">
                               <Eye className="h-12 w-12 mx-auto mb-3 opacity-30" />
                               <p className="text-sm">
@@ -649,11 +649,19 @@ export default function Emails() {
                     </div>
                   </div>
                   
-                  <div className="flex justify-end space-x-3 pt-4 border-t">
-                    <Button variant="outline" onClick={() => setShowTemplateModal(false)}>
+                  <div className="flex justify-end space-x-3 pt-4 border-t border-white/20">
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setShowTemplateModal(false)}
+                      className="rounded-xl border border-white/20 bg-transparent px-4 py-2 text-blue-100 transition hover:bg-white/10"
+                    >
                       Cancel
                     </Button>
-                    <Button onClick={handleCreateTemplate} disabled={createTemplateMutation.isPending}>
+                    <Button 
+                      onClick={handleCreateTemplate} 
+                      disabled={createTemplateMutation.isPending}
+                      className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white"
+                    >
                       {createTemplateMutation.isPending ? (
                         <>
                           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
