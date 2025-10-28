@@ -331,7 +331,7 @@ export const smsCampaigns = pgTable("sms_campaigns", {
 // SMS tracking for individual SMS sends
 export const smsTracking = pgTable("sms_tracking", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }), // Nullable temporarily for Railway compatibility
   campaignId: uuid("campaign_id").references(() => smsCampaigns.id, { onDelete: "cascade" }), // Nullable - not all SMS belong to campaigns
   consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "cascade" }), // Nullable - allows tracking non-consumer SMS
   phoneNumber: text("phone_number").notNull(),
