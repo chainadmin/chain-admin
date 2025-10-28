@@ -13,7 +13,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.chaincomms.chain",
+      "bundleIdentifier": "com.chaincomms.platform",
       "buildNumber": "1"
     },
     "android": {
@@ -21,7 +21,7 @@
         "foregroundImage": "./client/public/chain-logo.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.chaincomms.chain",
+      "package": "com.chaincomms.platform",
       "versionCode": 1
     },
     "web": {
