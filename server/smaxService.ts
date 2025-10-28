@@ -289,6 +289,65 @@ class SmaxService {
     }
   }
 
+  async updatePayment(tenantId: string, updateData: {
+    filenumber: string;
+    paymentdate?: string;
+    payorname?: string;
+    paymentmethod?: string;
+    paymentstatus?: string;
+    typeofpayment?: string;
+    checkaddress?: string;
+    checkcity?: string;
+    checkstate?: string;
+    checkzip?: string;
+    checkaccountnumber?: string;
+    checkroutingnumber?: string;
+    cardtype?: string;
+    cardnumber?: string;
+    threedigitnumber?: string;
+    cardexpirationmonth?: string;
+    cardexpirationyear?: string;
+    cardexpirationdate?: string;
+    checkaccounttype?: string;
+    acceptedfees?: string;
+    printed?: string;
+    invoice?: string;
+  }): Promise<boolean> {
+    try {
+      const config = await this.getSmaxConfig(tenantId);
+
+      if (!config) {
+        console.log('ℹ️ SMAX not configured or not enabled for this tenant - skipping payment update');
+        return false;
+      }
+
+      // Remove undefined/null fields - only send fields that are being updated
+      const payload = Object.fromEntries(
+        Object.entries(updateData).filter(([_, v]) => v !== undefined && v !== null && v !== '')
+      );
+
+      console.log('📤 Updating payment in SMAX:', {
+        filenumber: updateData.filenumber,
+        fieldsToUpdate: Object.keys(payload).filter(k => k !== 'filenumber'),
+        baseUrl: config.baseUrl
+      });
+
+      const result = await this.makeSmaxRequest(
+        config,
+        '/update_payment_external',
+        'POST',
+        payload
+      );
+
+      console.log('✅ SMAX payment updated successfully:', result);
+      return result.state === 'SUCCESS';
+    } catch (error) {
+      console.error('❌ Error updating payment in SMAX:', error);
+      console.error('Update data that failed:', JSON.stringify(updateData, null, 2));
+      return false;
+    }
+  }
+
   async insertAttempt(tenantId: string, attemptData: SmaxAttemptData): Promise<boolean> {
     try {
       const config = await this.getSmaxConfig(tenantId);
