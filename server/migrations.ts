@@ -17,7 +17,8 @@ export async function runMigrations() {
       { name: 'merchant_name', type: 'TEXT' },
       { name: 'merchant_type', type: 'TEXT' },
       { name: 'use_sandbox', type: 'BOOLEAN', default: 'true' },
-      { name: 'enable_online_payments', type: 'BOOLEAN', default: 'false' }
+      { name: 'enable_online_payments', type: 'BOOLEAN', default: 'false' },
+      { name: 'minimum_monthly_payment', type: 'INTEGER', default: '5000' }
     ];
     
     for (const col of usaepayColumns) {
