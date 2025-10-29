@@ -2,7 +2,12 @@
 import { Capacitor } from '@capacitor/core';
 
 function getApiBase(): string {
-  // First check if VITE_API_URL is set (allows override)
+  // First check if EXPO_PUBLIC_API_URL is set (for Expo builds)
+  if (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
+  }
+  
+  // Then check if VITE_API_URL is set (for Vite builds)
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
