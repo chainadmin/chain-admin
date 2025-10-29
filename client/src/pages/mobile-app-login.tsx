@@ -33,7 +33,7 @@ export default function MobileAppLogin() {
     
     if (agencySlug) {
       // Fetch agency branding for pre-selected agency
-      fetch(`/api/public/agency-branding?slug=${encodeURIComponent(agencySlug)}`)
+      apiCall("GET", `/api/public/agency-branding?slug=${encodeURIComponent(agencySlug)}`)
         .then(res => res.json())
         .then(data => {
           setAgencyContext({
