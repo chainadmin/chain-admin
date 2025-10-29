@@ -19,7 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, LogOut, User, Building2, CreditCard, DollarSign, TrendingUp, Mail, Phone, Edit, FileText, MessageSquare, Calendar } from "lucide-react";
+import { AlertCircle, LogOut, User, Building2, CreditCard, DollarSign, TrendingUp, Mail, Phone, Edit, FileText, MessageSquare, Calendar, Upload } from "lucide-react";
 import chainLogo from "@/assets/chain-logo.png";
 
 // Payment Methods Tab Component
@@ -200,6 +200,13 @@ export default function ConsumerDashboardSimple() {
   const [customAmount, setCustomAmount] = useState('');
   const [paymentFrequency, setPaymentFrequency] = useState<'weekly' | 'biweekly' | 'monthly'>('biweekly');
   const [calculatedPayment, setCalculatedPayment] = useState<number | null>(null);
+  
+  // Document upload state
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadTitle, setUploadTitle] = useState('');
+  const [uploadDescription, setUploadDescription] = useState('');
+  const [uploadAccountId, setUploadAccountId] = useState<string>('');
   
   const [editForm, setEditForm] = useState({
     firstName: "",
@@ -409,6 +416,63 @@ export default function ConsumerDashboardSimple() {
       });
     },
   });
+
+  // Document upload mutation
+  const uploadMutation = useMutation({
+    mutationFn: async (formData: FormData) => {
+      const response = await fetch('/api/consumer/documents/upload', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to upload document');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Document uploaded",
+        description: "Your document has been uploaded successfully",
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: [`/api/consumer/documents/${session?.email}?tenantSlug=${session?.tenantSlug}`] 
+      });
+      setUploadDialogOpen(false);
+      setSelectedFile(null);
+      setUploadTitle('');
+      setUploadDescription('');
+      setUploadAccountId('');
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Upload failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleUpload = () => {
+    if (!selectedFile || !uploadTitle) {
+      toast({
+        title: "Missing information",
+        description: "Please select a file and provide a title",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+    formData.append('title', uploadTitle);
+    if (uploadDescription) formData.append('description', uploadDescription);
+    if (uploadAccountId) formData.append('accountId', uploadAccountId);
+    formData.append('isPublic', 'false');
+
+    uploadMutation.mutate(formData);
+  };
 
   const handleLogout = () => {
     clearConsumerAuth();
@@ -712,7 +776,7 @@ export default function ConsumerDashboardSimple() {
               </Button>
               <Button 
                 onClick={handleLogout} 
-                className="w-full bg-blue-500 hover:bg-blue-400"
+                className="w-full bg-emerald-500 hover:bg-emerald-400"
               >
                 Sign In Again
               </Button>
@@ -967,10 +1031,107 @@ export default function ConsumerDashboardSimple() {
           <TabsContent value="documents" className="mt-6">
             <Card className="border-white/10 bg-white/5 backdrop-blur">
               <CardHeader className="border-b border-white/10">
-                <CardTitle className="flex items-center text-white">
-                  <FileText className="h-5 w-5 mr-2 text-blue-400" />
-                  Documents & Communications
-                </CardTitle>
+                <div className="flex justify-between items-center">
+                  <CardTitle className="flex items-center text-white">
+                    <FileText className="h-5 w-5 mr-2 text-blue-400" />
+                    Documents & Communications
+                  </CardTitle>
+                  {accountData?.accounts?.length > 0 && (
+                    <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+                      <Button
+                        onClick={() => setUploadDialogOpen(true)}
+                        variant="outline"
+                        size="sm"
+                        className="text-white border-white/20 hover:bg-white/10"
+                        data-testid="button-upload-document"
+                      >
+                        <Upload className="h-4 w-4 mr-2" />
+                        Upload Document
+                      </Button>
+                      <DialogContent className="bg-slate-900 text-white border-white/10">
+                        <DialogHeader>
+                          <DialogTitle className="text-white">Upload Document</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4 mt-4">
+                          <div>
+                            <Label htmlFor="file-upload" className="text-white">Select File *</Label>
+                            <Input
+                              id="file-upload"
+                              type="file"
+                              onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                              className="bg-white/5 border-white/10 text-white"
+                              data-testid="input-document-file"
+                            />
+                            {selectedFile && (
+                              <p className="text-sm text-blue-100/70 mt-1">{selectedFile.name}</p>
+                            )}
+                          </div>
+                          <div>
+                            <Label htmlFor="upload-title" className="text-white">Document Title *</Label>
+                            <Input
+                              id="upload-title"
+                              value={uploadTitle}
+                              onChange={(e) => setUploadTitle(e.target.value)}
+                              placeholder="e.g., Proof of Payment"
+                              className="bg-white/5 border-white/10 text-white placeholder:text-white/50"
+                              data-testid="input-document-title"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="upload-description" className="text-white">Description (Optional)</Label>
+                            <Textarea
+                              id="upload-description"
+                              value={uploadDescription}
+                              onChange={(e) => setUploadDescription(e.target.value)}
+                              placeholder="Add any relevant notes about this document"
+                              className="bg-white/5 border-white/10 text-white placeholder:text-white/50"
+                              data-testid="input-document-description"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="upload-account" className="text-white">Associated Account (Optional)</Label>
+                            <Select value={uploadAccountId} onValueChange={setUploadAccountId}>
+                              <SelectTrigger 
+                                id="upload-account" 
+                                className="bg-white/5 border-white/10 text-white"
+                                data-testid="select-document-account"
+                              >
+                                <SelectValue placeholder="Select an account" />
+                              </SelectTrigger>
+                              <SelectContent className="bg-slate-900 border-white/10">
+                                <SelectItem value="" className="text-white">None</SelectItem>
+                                {accountData?.accounts?.map((account: any) => (
+                                  <SelectItem key={account.id} value={account.id} className="text-white">
+                                    {account.creditor} - {account.accountNumber ? `••••${account.accountNumber.slice(-4)}` : 'No account number'}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="flex justify-end space-x-2 pt-4">
+                            <Button
+                              variant="outline"
+                              onClick={() => setUploadDialogOpen(false)}
+                              disabled={uploadMutation.isPending}
+                              className="border-white/20 text-white hover:bg-white/10"
+                              data-testid="button-cancel-upload"
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              onClick={handleUpload}
+                              disabled={uploadMutation.isPending || !selectedFile || !uploadTitle}
+                              className="bg-emerald-500 hover:bg-emerald-400 text-white"
+                              data-testid="button-confirm-upload"
+                            >
+                              {uploadMutation.isPending ? "Uploading..." : "Upload"}
+                            </Button>
+                          </div>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="p-6">
                 {(!documents || !(documents as any)?.length) ? (
@@ -978,7 +1139,10 @@ export default function ConsumerDashboardSimple() {
                     <FileText className="h-12 w-12 mx-auto mb-4 text-blue-400/30" />
                     <p className="text-blue-100/70">No documents available</p>
                     <p className="text-sm text-blue-100/50 mt-2">
-                      Documents and communications from your agency will appear here
+                      {accountData?.accounts?.length > 0 
+                        ? "Upload documents or view communications from your agency here"
+                        : "Documents and communications from your agency will appear here"
+                      }
                     </p>
                   </div>
                 ) : (
@@ -1409,7 +1573,7 @@ export default function ConsumerDashboardSimple() {
             </Button>
             <Button
               onClick={handleEditProfile}
-              className="bg-blue-500 hover:bg-blue-400"
+              className="bg-emerald-500 hover:bg-emerald-400"
               data-testid="button-save-profile"
             >
               Save Changes
@@ -1916,7 +2080,7 @@ export default function ConsumerDashboardSimple() {
               </Button>
               <Button
                 type="submit"
-                className="bg-blue-500 hover:bg-blue-400"
+                className="bg-emerald-500 hover:bg-emerald-400"
                 disabled={paymentProcessing}
                 data-testid="button-submit-payment"
               >
