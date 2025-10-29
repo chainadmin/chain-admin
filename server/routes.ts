@@ -6083,7 +6083,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         saveCard,
         setupRecurring,
         firstPaymentDate,
-        customPaymentAmountCents
+        customPaymentAmountCents,
+        simplifiedFlow // New simplified arrangement flow data
       } = req.body;
 
       let normalizedFirstPaymentDate: Date | null = null;
@@ -6129,12 +6130,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get arrangement if specified
       let arrangement = null;
       let amountCents = account.balanceCents || 0;
+      let isSimplifiedFlow = false;
+      let simplifiedArrangementData = null;
       
       console.log('📋 Arrangement check:', {
         hasArrangementId: !!arrangementId,
+        hasSimplifiedFlow: !!simplifiedFlow,
         arrangementId,
         accountBalance: amountCents
       });
+      
+      // Handle simplified flow (new consumer-friendly arrangement creation)
+      if (simplifiedFlow) {
+        isSimplifiedFlow = true;
+        const { paymentMethod, selectedTerm, paymentFrequency, calculatedPaymentCents } = simplifiedFlow;
+        
+        console.log('✨ Processing simplified flow:', {
+          paymentMethod,
+          selectedTerm,
+          paymentFrequency,
+          calculatedPaymentCents
+        });
+        
+        // Validate simplified flow data
+        if (!paymentMethod || !paymentFrequency || !calculatedPaymentCents) {
+          return res.status(400).json({ 
+            success: false,
+            message: "Invalid payment arrangement data" 
+          });
+        }
+        
+        // For term-based method, require selectedTerm
+        if (paymentMethod === 'term' && !selectedTerm) {
+          return res.status(400).json({ 
+            success: false,
+            message: "Please select a payment term (3, 6, or 12 months)" 
+          });
+        }
+        
+        // Use the calculated payment amount
+        amountCents = calculatedPaymentCents;
+        
+        // Store simplified arrangement data for payment schedule creation
+        simplifiedArrangementData = {
+          paymentMethod,
+          selectedTerm,
+          paymentFrequency,
+          amountCents: calculatedPaymentCents
+        };
+        
+        console.log('✅ Simplified flow validated:', simplifiedArrangementData);
+      }
       
       if (arrangementId) {
         const arrangements = await storage.getArrangementOptionsByTenant(tenantId);
@@ -6693,9 +6739,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
               consumerId,
               accountId,
               paymentMethodId: savedPaymentMethod.id,
-              arrangementType: arrangement.planType,
+              arrangementType: arrangement?.planType || 'simplified_plan',
               amountCents,
-              frequency: 'monthly',
+              frequency: simplifiedArrangementData?.paymentFrequency || 'monthly',
               startDate: paymentStartDate.toISOString().split('T')[0],
               endDate: endDate ? endDate.toISOString().split('T')[0] : null,
               nextPaymentDate: shouldSkipImmediateCharge

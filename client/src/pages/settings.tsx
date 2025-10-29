@@ -1084,6 +1084,31 @@ export default function Settings() {
                       onCheckedChange={(checked) => handleSettingsUpdate('allowSettlementRequests', checked)}
                     />
                   </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="minimumMonthlyPayment">Minimum Monthly Payment Amount</Label>
+                    <p className="text-sm text-blue-100/70">
+                      The minimum monthly payment amount for payment arrangements (applies to all accounts)
+                    </p>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-100/60">$</span>
+                      <Input
+                        id="minimumMonthlyPayment"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="50.00"
+                        value={localSettings?.minimumMonthlyPayment ? (localSettings.minimumMonthlyPayment / 100).toFixed(2) : ''}
+                        onChange={(e) => {
+                          const dollars = parseFloat(e.target.value) || 0;
+                          const cents = Math.round(dollars * 100);
+                          handleSettingsUpdate('minimumMonthlyPayment', cents);
+                        }}
+                        className={cn(inputClasses, "pl-8")}
+                        data-testid="input-minimum-monthly-payment"
+                      />
+                    </div>
+                  </div>
                 </CardContent>
                 {hasUnsavedChanges && (
                   <CardFooter>

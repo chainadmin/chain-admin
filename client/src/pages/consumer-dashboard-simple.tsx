@@ -193,6 +193,14 @@ export default function ConsumerDashboardSimple() {
   const [setupRecurring, setSetupRecurring] = useState(false);
   const [firstPaymentDate, setFirstPaymentDate] = useState<string>("");
   const [customPaymentAmount, setCustomPaymentAmount] = useState<string>("");
+  
+  // New simplified payment flow state
+  const [paymentMethod, setPaymentMethod] = useState<'term' | 'custom'>('term');
+  const [selectedTerm, setSelectedTerm] = useState<3 | 6 | 12 | null>(null);
+  const [customAmount, setCustomAmount] = useState('');
+  const [paymentFrequency, setPaymentFrequency] = useState<'weekly' | 'biweekly' | 'monthly'>('biweekly');
+  const [calculatedPayment, setCalculatedPayment] = useState<number | null>(null);
+  
   const [editForm, setEditForm] = useState({
     firstName: "",
     lastName: "",
@@ -318,6 +326,18 @@ export default function ConsumerDashboardSimple() {
     retry: 1,
   });
 
+  // Fetch settings to get minimum monthly payment
+  const { data: settings } = useQuery({
+    queryKey: ['/api/settings'],
+    queryFn: async () => {
+      const token = getStoredConsumerToken();
+      const response = await apiCall("GET", "/api/settings", null, token);
+      if (!response.ok) throw new Error("Failed to fetch settings");
+      return response.json();
+    },
+    enabled: !!session?.tenantSlug,
+  });
+
   // Fetch documents and communication history
   const { data: documents } = useQuery({
     queryKey: [`/api/consumer/documents/${session?.email}?tenantSlug=${session?.tenantSlug}`],
@@ -400,6 +420,38 @@ export default function ConsumerDashboardSimple() {
     setLocation("/");
   };
 
+  // Calculation helper functions for simplified payment flow
+  const calculatePaymentAmount = (balanceCents: number, term: number, minimumCents: number = 0) => {
+    const monthlyAmount = Math.ceil(balanceCents / term);
+    return monthlyAmount < minimumCents ? minimumCents : monthlyAmount;
+  };
+
+  const convertToFrequency = (monthlyAmountCents: number, frequency: 'weekly' | 'biweekly' | 'monthly') => {
+    // Use annualized math to avoid overcharging customers
+    // Weekly: monthly * 12 months / 52 weeks per year
+    // Biweekly: monthly * 12 months / 26 biweekly periods per year
+    if (frequency === 'weekly') return Math.ceil(monthlyAmountCents * 12 / 52);
+    if (frequency === 'biweekly') return Math.ceil(monthlyAmountCents * 12 / 26);
+    return monthlyAmountCents;
+  };
+
+  const generatePaymentSchedule = (amountCents: number, frequency: 'weekly' | 'biweekly' | 'monthly', startDate?: Date) => {
+    const start = startDate || new Date();
+    const schedule = [];
+    const daysIncrement = frequency === 'weekly' ? 7 : frequency === 'biweekly' ? 14 : 30;
+    
+    for (let i = 0; i < 4; i++) {
+      const date = new Date(start);
+      date.setDate(date.getDate() + (i * daysIncrement));
+      schedule.push({
+        date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        amount: amountCents,
+      });
+    }
+    
+    return schedule;
+  };
+
   const handlePayment = (account: any) => {
     setSelectedAccount(account);
     setSelectedArrangement(null);
@@ -407,6 +459,12 @@ export default function ConsumerDashboardSimple() {
     setSetupRecurring(false);
     setFirstPaymentDate("");
     setCustomPaymentAmount("");
+    // Reset simplified flow state
+    setPaymentMethod('term');
+    setSelectedTerm(null);
+    setCustomAmount('');
+    setPaymentFrequency('biweekly');
+    setCalculatedPayment(null);
     setShowPaymentDialog(true);
   };
 
@@ -427,19 +485,31 @@ export default function ConsumerDashboardSimple() {
     ? existingSMAXArrangements.find((arr: any) => arr.accountId === selectedAccount.id)
     : null;
 
-  // Calculate payment amount based on selected arrangement
+  // Calculate payment amount based on selected arrangement or simplified flow
   const paymentAmountCents = selectedAccount
     ? selectedArrangement
       ? (selectedArrangement.planType === 'one_time_payment' && customPaymentAmount
           ? Math.round(parseFloat(customPaymentAmount) * 100) // Convert dollars to cents
           : calculateArrangementPayment(selectedArrangement, selectedAccount.balanceCents || 0))
-      : selectedAccount.balanceCents || 0
+      : calculatedPayment !== null
+        ? calculatedPayment
+        : selectedAccount.balanceCents || 0
     : 0;
 
   const handlePaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!selectedAccount) return;
+
+    // Validate simplified flow
+    if (!selectedArrangement && calculatedPayment === null) {
+      toast({
+        title: "Select Payment Plan",
+        description: "Please select a payment term or enter a custom amount",
+        variant: "destructive",
+      });
+      return;
+    }
 
     // Validate one-time payment amount
     if (selectedArrangement?.planType === 'one_time_payment') {
@@ -484,6 +554,11 @@ export default function ConsumerDashboardSimple() {
         ? new Date().toISOString().split('T')[0]
         : firstPaymentDate || null;
       
+      // Determine if using simplified flow
+      const isSimplifiedFlow = !selectedArrangement && calculatedPayment !== null;
+      const shouldSetupRecurring = isSimplifiedFlow || (setupRecurring && selectedArrangement && 
+        (selectedArrangement.planType === 'fixed_monthly' || selectedArrangement.planType === 'range'));
+      
       const response = await apiCall("POST", `/api/consumer/payments/process`, {
         accountId: selectedAccount.id,
         arrangementId: selectedArrangement?.id || null,
@@ -493,12 +568,21 @@ export default function ConsumerDashboardSimple() {
         cvv: paymentForm.cvv,
         cardName: paymentForm.cardName,
         zipCode: paymentForm.zipCode,
-        saveCard: saveCard,
-        setupRecurring: setupRecurring,
+        saveCard: saveCard || isSimplifiedFlow,
+        setupRecurring: shouldSetupRecurring,
         firstPaymentDate: paymentDate,
         customPaymentAmountCents: selectedArrangement?.planType === 'one_time_payment' && customPaymentAmount
           ? Math.round(parseFloat(customPaymentAmount) * 100)
-          : null,
+          : isSimplifiedFlow
+            ? calculatedPayment
+            : null,
+        // Simplified flow specific data
+        simplifiedFlow: isSimplifiedFlow ? {
+          paymentMethod,
+          selectedTerm,
+          paymentFrequency,
+          calculatedPaymentCents: calculatedPayment,
+        } : null,
       }, token);
 
       const result = await response.json();
@@ -508,8 +592,7 @@ export default function ConsumerDashboardSimple() {
       }
 
       // Determine if this was an immediate payment or just a schedule setup
-      const isRecurringSetup = setupRecurring && selectedArrangement && 
-        (selectedArrangement.planType === 'fixed_monthly' || selectedArrangement.planType === 'range');
+      const isRecurringSetup = shouldSetupRecurring;
       
       const displayDate = firstPaymentDate || new Date().toISOString().split('T')[0];
       const formattedDate = new Date(displayDate).toLocaleDateString('en-US', { 
@@ -518,8 +601,11 @@ export default function ConsumerDashboardSimple() {
         year: 'numeric' 
       });
       
+      const frequencyText = paymentFrequency === 'weekly' ? 'weekly' : paymentFrequency === 'biweekly' ? 'bi-weekly' : 'monthly';
       const successMessage = isRecurringSetup
-        ? `Your payment plan has been set up successfully. Your first payment of ${formatCurrency(paymentAmountCents)} will be processed on ${formattedDate}.`
+        ? isSimplifiedFlow
+          ? `Your payment plan has been set up successfully. Your first ${frequencyText} payment of ${formatCurrency(paymentAmountCents)} will be processed on ${formattedDate}.`
+          : `Your payment plan has been set up successfully. Your first payment of ${formatCurrency(paymentAmountCents)} will be processed on ${formattedDate}.`
         : `Your payment of ${formatCurrency(paymentAmountCents)} has been processed.`;
 
       toast({
@@ -1360,7 +1446,7 @@ export default function ConsumerDashboardSimple() {
                   <div className="rounded-lg bg-green-50 p-4 border-2 border-green-500">
                     <div className="flex justify-between items-center">
                       <span className="text-sm font-semibold text-gray-700">
-                        {selectedArrangement ? 'Payment Amount:' : 'Amount to Pay:'}
+                        {selectedArrangement || calculatedPayment !== null ? 'Payment Amount:' : 'Amount to Pay:'}
                       </span>
                       <span className="text-2xl font-bold text-green-600">
                         {formatCurrency(paymentAmountCents)}
@@ -1373,6 +1459,13 @@ export default function ConsumerDashboardSimple() {
                         {selectedArrangement.planType === 'range' && (setupRecurring ? 'Minimum monthly payment (first payment on scheduled date)' : 'Minimum monthly payment')}
                         {selectedArrangement.planType === 'pay_in_full' && (selectedArrangement.payoffPercentageBasisPoints ? 'Discounted payoff amount' : 'One-time payment')}
                         {selectedArrangement.planType === 'one_time_payment' && (customPaymentAmount ? 'Custom one-time payment' : 'Enter payment amount below')}
+                      </p>
+                    )}
+                    {!selectedArrangement && calculatedPayment !== null && (
+                      <p className="text-xs text-gray-600 mt-1">
+                        {paymentMethod === 'term' && selectedTerm
+                          ? `${paymentFrequency.charAt(0).toUpperCase() + paymentFrequency.slice(1)} payment for ${selectedTerm}-month plan`
+                          : `${paymentFrequency.charAt(0).toUpperCase() + paymentFrequency.slice(1)} payment amount`}
                       </p>
                     )}
                   </div>
@@ -1409,64 +1502,220 @@ export default function ConsumerDashboardSimple() {
                 </>
               )}
 
-              {applicableArrangements.length > 0 && !selectedAccountSMAXArrangement && (
-                <div className="space-y-3">
-                  <Label className="text-base font-semibold">Payment Options</Label>
-                  <div className="space-y-2">
-                    {/* Pay in Full Option */}
-                    <div 
-                      onClick={() => setSelectedArrangement(null)}
-                      className={`cursor-pointer rounded-lg border-2 p-4 transition-all ${
-                        !selectedArrangement 
-                          ? 'border-blue-500 bg-blue-50' 
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                      data-testid="option-pay-full"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium">Pay Full Balance</p>
-                          <p className="text-sm text-gray-600">One-time payment</p>
-                        </div>
-                        <span className="text-lg font-bold text-blue-600">
-                          {formatCurrency(selectedAccount?.balanceCents || 0)}
-                        </span>
+              {!selectedAccountSMAXArrangement && (
+                <div className="space-y-4">
+                  {/* Settlement Offers Section */}
+                  {applicableArrangements.some((arr: any) => arr.planType === 'settlement') && (
+                    <div className="rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-500 p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <TrendingUp className="h-5 w-5 text-green-600" />
+                        <Label className="text-base font-semibold text-green-900">Special Settlement Offers</Label>
+                      </div>
+                      <div className="space-y-2">
+                        {applicableArrangements
+                          .filter((arr: any) => arr.planType === 'settlement')
+                          .map((arrangement: any) => {
+                            const summary = getArrangementSummary(arrangement);
+                            return (
+                              <div
+                                key={arrangement.id}
+                                onClick={() => setSelectedArrangement(arrangement)}
+                                className={`cursor-pointer rounded-lg border-2 p-3 transition-all ${
+                                  selectedArrangement?.id === arrangement.id
+                                    ? 'border-green-600 bg-green-100'
+                                    : 'border-green-300 bg-white hover:border-green-400'
+                                }`}
+                                data-testid={`option-settlement-${arrangement.id}`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex-1">
+                                    <p className="font-medium text-green-900">{summary.headline}</p>
+                                    {summary.detail && (
+                                      <p className="text-sm text-green-700 mt-1">{summary.detail}</p>
+                                    )}
+                                  </div>
+                                  <Badge className="bg-green-600 text-white">Save Money</Badge>
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Simplified Payment Plan Section */}
+                  <div className="space-y-3">
+                    <Label className="text-base font-semibold">Set Up Payment Plan</Label>
+                    
+                    {/* Quick Term Buttons */}
+                    <div>
+                      <Label className="text-sm text-gray-700 mb-2 block">Choose Payment Term</Label>
+                      <div className="grid grid-cols-3 gap-3">
+                        {([3, 6, 12] as const).map((term) => {
+                          const minimumMonthly = (settings?.minimumMonthlyPayment || 0) * 100;
+                          const monthlyPayment = calculatePaymentAmount(selectedAccount?.balanceCents || 0, term, minimumMonthly);
+                          const biweeklyPayment = convertToFrequency(monthlyPayment, 'biweekly');
+                          
+                          return (
+                            <button
+                              key={term}
+                              type="button"
+                              onClick={() => {
+                                setPaymentMethod('term');
+                                setSelectedTerm(term);
+                                setCalculatedPayment(biweeklyPayment);
+                                setSelectedArrangement(null);
+                              }}
+                              className={`p-4 rounded-lg border-2 transition-all text-left ${
+                                paymentMethod === 'term' && selectedTerm === term
+                                  ? 'border-blue-500 bg-blue-50'
+                                  : 'border-gray-200 hover:border-gray-300'
+                              }`}
+                              data-testid={`button-term-${term}`}
+                            >
+                              <div className="text-xs text-gray-600 mb-1">{term} Months</div>
+                              <div className="text-lg font-bold text-blue-600">
+                                {formatCurrency(biweeklyPayment)}
+                              </div>
+                              <div className="text-xs text-gray-500 mt-1">bi-weekly</div>
+                              {monthlyPayment >= minimumMonthly && monthlyPayment > (selectedAccount?.balanceCents || 0) / term && (
+                                <div className="text-xs text-amber-600 mt-1">Min. applied</div>
+                              )}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
 
-                    {/* Arrangement Options */}
-                    {applicableArrangements.map((arrangement: any) => {
-                      const summary = getArrangementSummary(arrangement);
-                      const isSettlement = arrangement.planType === 'settlement';
-                      const isPayInFull = arrangement.planType === 'pay_in_full';
-                      
-                      return (
-                        <div
-                          key={arrangement.id}
-                          onClick={() => setSelectedArrangement(arrangement)}
-                          className={`cursor-pointer rounded-lg border-2 p-4 transition-all ${
-                            selectedArrangement?.id === arrangement.id
-                              ? 'border-blue-500 bg-blue-50'
-                              : 'border-gray-200 hover:border-gray-300'
-                          }`}
-                          data-testid={`option-arrangement-${arrangement.id}`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <p className="font-medium">{summary.headline}</p>
-                                {isSettlement && (
-                                  <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Settlement</Badge>
-                                )}
-                              </div>
-                              {summary.detail && (
-                                <p className="text-sm text-gray-600 mt-1">{summary.detail}</p>
-                              )}
-                            </div>
-                          </div>
+                    {/* OR Divider */}
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 border-t border-gray-200"></div>
+                      <span className="text-sm text-gray-500 font-medium">OR</span>
+                      <div className="flex-1 border-t border-gray-200"></div>
+                    </div>
+
+                    {/* Custom Amount Input */}
+                    <div>
+                      <Label htmlFor="customAmountInput" className="text-sm text-gray-700 mb-2 block">
+                        Enter Custom Payment Amount
+                      </Label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-lg">$</span>
+                        <Input
+                          type="number"
+                          id="customAmountInput"
+                          value={customAmount}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setCustomAmount(value);
+                            setPaymentMethod('custom');
+                            setSelectedTerm(null);
+                            setSelectedArrangement(null);
+                            
+                            if (value) {
+                              const amountCents = Math.round(parseFloat(value) * 100);
+                              const minimumMonthly = (settings?.minimumMonthlyPayment || 0) * 100;
+                              const finalAmount = amountCents < minimumMonthly ? minimumMonthly : amountCents;
+                              setCalculatedPayment(finalAmount);
+                              
+                              if (amountCents < minimumMonthly) {
+                                toast({
+                                  title: "Minimum Applied",
+                                  description: `Amount adjusted to minimum: ${formatCurrency(minimumMonthly)}`,
+                                });
+                              }
+                            } else {
+                              setCalculatedPayment(null);
+                            }
+                          }}
+                          min={(settings?.minimumMonthlyPayment || 0)}
+                          max={(selectedAccount?.balanceCents || 0) / 100}
+                          step="0.01"
+                          placeholder="0.00"
+                          className="pl-8 text-lg"
+                          data-testid="input-custom-amount"
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Min: ${(settings?.minimumMonthlyPayment || 0).toFixed(2)} | Max: ${((selectedAccount?.balanceCents || 0) / 100).toFixed(2)}
+                      </p>
+                    </div>
+
+                    {/* Payment Frequency Selector */}
+                    {(calculatedPayment !== null || customAmount) && (
+                      <div>
+                        <Label className="text-sm text-gray-700 mb-2 block">Payment Frequency</Label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {(['weekly', 'biweekly', 'monthly'] as const).map((freq) => {
+                            const baseAmount = paymentMethod === 'term' && selectedTerm
+                              ? calculatePaymentAmount(
+                                  selectedAccount?.balanceCents || 0,
+                                  selectedTerm,
+                                  (settings?.minimumMonthlyPayment || 0) * 100
+                                )
+                              : calculatedPayment || 0;
+                            
+                            const amount = paymentMethod === 'term'
+                              ? convertToFrequency(baseAmount, freq)
+                              : freq === 'monthly'
+                                ? calculatedPayment || 0
+                                : freq === 'biweekly'
+                                  ? calculatedPayment || 0
+                                  : Math.ceil((calculatedPayment || 0) / 2);
+
+                            return (
+                              <button
+                                key={freq}
+                                type="button"
+                                onClick={() => {
+                                  setPaymentFrequency(freq);
+                                  if (paymentMethod === 'term' && selectedTerm) {
+                                    const monthlyPayment = calculatePaymentAmount(
+                                      selectedAccount?.balanceCents || 0,
+                                      selectedTerm,
+                                      (settings?.minimumMonthlyPayment || 0) * 100
+                                    );
+                                    setCalculatedPayment(convertToFrequency(monthlyPayment, freq));
+                                  }
+                                }}
+                                className={`p-3 rounded-lg border-2 transition-all ${
+                                  paymentFrequency === freq
+                                    ? 'border-blue-500 bg-blue-50'
+                                    : 'border-gray-200 hover:border-gray-300'
+                                }`}
+                                data-testid={`button-frequency-${freq}`}
+                              >
+                                <div className="text-sm font-medium capitalize">{freq}</div>
+                                <div className="text-xs text-gray-600 mt-1">
+                                  {formatCurrency(amount)}
+                                </div>
+                              </button>
+                            );
+                          })}
                         </div>
-                      );
-                    })}
+                      </div>
+                    )}
+
+                    {/* Payment Schedule Preview */}
+                    {calculatedPayment !== null && (
+                      <div className="rounded-lg bg-blue-50 border border-blue-200 p-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Calendar className="h-4 w-4 text-blue-600" />
+                          <Label className="text-sm font-semibold text-blue-900">Payment Schedule Preview</Label>
+                        </div>
+                        <div className="space-y-2">
+                          {generatePaymentSchedule(calculatedPayment, paymentFrequency).map((payment, index) => (
+                            <div key={index} className="flex items-center justify-between text-sm">
+                              <span className="text-gray-700">{payment.date}</span>
+                              <span className="font-medium text-blue-700">{formatCurrency(payment.amount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-xs text-gray-600 mt-3 border-t border-blue-200 pt-2">
+                          Showing next 4 scheduled payments
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

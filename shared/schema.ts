@@ -423,6 +423,7 @@ export const tenantSettings = pgTable("tenant_settings", {
   consumerPortalSettings: jsonb("consumer_portal_settings").default(sql`'{}'::jsonb`),
   enabledModules: text("enabled_modules").array().default(sql`ARRAY[]::text[]`), // Business service modules enabled for this tenant
   smsThrottleLimit: bigint("sms_throttle_limit", { mode: "number" }).default(10), // SMS per minute limit
+  minimumMonthlyPayment: bigint("minimum_monthly_payment", { mode: "number" }).default(5000), // In cents - global minimum for payment arrangements
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
   // Payment processor fields (USAePay)
