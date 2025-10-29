@@ -22,8 +22,14 @@ const { execSync } = require('child_process');
 
 // Step 1: Build web assets for mobile app
 console.log('🏗️  Building web assets...');
+console.log('📦 Environment variables for build:');
+console.log('  VITE_API_URL:', process.env.VITE_API_URL);
+console.log('  EXPO_PUBLIC_API_URL:', process.env.EXPO_PUBLIC_API_URL);
 try {
-  execSync('npm run build', { stdio: 'inherit' });
+  execSync('npm run build', { 
+    stdio: 'inherit',
+    env: { ...process.env }  // Explicitly pass all environment variables
+  });
   console.log('✅ Web assets built');
 } catch (error) {
   console.error('❌ Web build failed:', error.message);
