@@ -579,6 +579,21 @@ export default function ConsumerDashboardSimple() {
       return;
     }
 
+    // Determine if using simplified flow and if recurring
+    const isSimplifiedFlow = !selectedArrangement && calculatedPayment !== null;
+    const willSetupRecurring = isSimplifiedFlow || (setupRecurring && selectedArrangement && 
+      (selectedArrangement.planType === 'fixed_monthly' || selectedArrangement.planType === 'range'));
+
+    // Validate first payment date for recurring payments
+    if (willSetupRecurring && !firstPaymentDate) {
+      toast({
+        title: "Payment Date Required",
+        description: "Please select a first payment date for your payment plan",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Validate one-time payment amount
     if (selectedArrangement?.planType === 'one_time_payment') {
       const amount = parseFloat(customPaymentAmount);
@@ -1588,10 +1603,10 @@ export default function ConsumerDashboardSimple() {
 
       {/* Payment Dialog */}
       <Dialog open={showPaymentDialog} onOpenChange={setShowPaymentDialog}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-950 border-white/20 text-white">
           <DialogHeader>
-            <DialogTitle>Make a Payment</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-white">Make a Payment</DialogTitle>
+            <DialogDescription className="text-blue-100/70">
               {applicableArrangements.length > 0 
                 ? "Choose a payment plan or pay the full balance now"
                 : "Securely pay your account balance using a credit or debit card"}
@@ -1601,27 +1616,27 @@ export default function ConsumerDashboardSimple() {
             <div className="space-y-4 py-4">
               {selectedAccount && (
                 <>
-                  <div className="rounded-lg bg-blue-50 p-3 border border-blue-200">
-                    <p className="text-xs text-gray-600">Account: {selectedAccount.creditor}</p>
+                  <div className="rounded-lg bg-white/5 p-3 border border-white/10 backdrop-blur">
+                    <p className="text-xs text-blue-100/70">Account: {selectedAccount.creditor}</p>
                     <div className="flex justify-between items-center mt-1">
-                      <span className="text-sm font-medium text-gray-700">Total Balance:</span>
-                      <span className="text-xl font-bold text-blue-600">
+                      <span className="text-sm font-medium text-white">Total Balance:</span>
+                      <span className="text-xl font-bold text-blue-400">
                         {formatCurrency(selectedAccount.balanceCents || 0)}
                       </span>
                     </div>
                   </div>
                   
-                  <div className="rounded-lg bg-green-50 p-4 border-2 border-green-500">
+                  <div className="rounded-lg bg-emerald-500/10 p-4 border-2 border-emerald-400/30 backdrop-blur">
                     <div className="flex justify-between items-center">
-                      <span className="text-sm font-semibold text-gray-700">
+                      <span className="text-sm font-semibold text-white">
                         {selectedArrangement || calculatedPayment !== null ? 'Payment Amount:' : 'Amount to Pay:'}
                       </span>
-                      <span className="text-2xl font-bold text-green-600">
+                      <span className="text-2xl font-bold text-emerald-400">
                         {formatCurrency(paymentAmountCents)}
                       </span>
                     </div>
                     {selectedArrangement && (
-                      <p className="text-xs text-gray-600 mt-1">
+                      <p className="text-xs text-emerald-200/70 mt-1">
                         {selectedArrangement.planType === 'settlement' && 'Settlement payment - full balance will be cleared'}
                         {selectedArrangement.planType === 'fixed_monthly' && (setupRecurring ? 'Monthly installment amount (first payment on scheduled date)' : 'First installment payment')}
                         {selectedArrangement.planType === 'range' && (setupRecurring ? 'Minimum monthly payment (first payment on scheduled date)' : 'Minimum monthly payment')}
@@ -1630,7 +1645,7 @@ export default function ConsumerDashboardSimple() {
                       </p>
                     )}
                     {!selectedArrangement && calculatedPayment !== null && (
-                      <p className="text-xs text-gray-600 mt-1">
+                      <p className="text-xs text-emerald-200/70 mt-1">
                         {paymentMethod === 'term' && selectedTerm
                           ? `${paymentFrequency.charAt(0).toUpperCase() + paymentFrequency.slice(1)} payment for ${selectedTerm}-month plan`
                           : `${paymentFrequency.charAt(0).toUpperCase() + paymentFrequency.slice(1)} payment amount`}
@@ -1640,25 +1655,25 @@ export default function ConsumerDashboardSimple() {
                   
                   {/* SMAX Arrangement Warning */}
                   {selectedAccountSMAXArrangement && (
-                    <div className="rounded-lg bg-amber-50 border-2 border-amber-400 p-4">
+                    <div className="rounded-lg bg-amber-500/10 border-2 border-amber-400/30 p-4 backdrop-blur">
                       <div className="flex items-start gap-3">
-                        <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                        <AlertCircle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
                         <div className="flex-1">
-                          <h4 className="font-semibold text-amber-900">Existing Payment Arrangement</h4>
-                          <p className="text-sm text-amber-800 mt-1">
+                          <h4 className="font-semibold text-amber-200">Existing Payment Arrangement</h4>
+                          <p className="text-sm text-amber-100/70 mt-1">
                             This account already has a payment arrangement on file in our collection system.
                           </p>
                           {selectedAccountSMAXArrangement.monthlyPayment && (
-                            <p className="text-sm text-amber-800 mt-1">
-                              <strong>Current Monthly Payment:</strong> {formatCurrency(selectedAccountSMAXArrangement.monthlyPayment * 100)}
+                            <p className="text-sm text-amber-100/70 mt-1">
+                              <strong className="text-amber-200">Current Monthly Payment:</strong> {formatCurrency(selectedAccountSMAXArrangement.monthlyPayment * 100)}
                               {selectedAccountSMAXArrangement.nextPaymentDate && (
-                                <> | <strong>Next Due:</strong> {new Date(selectedAccountSMAXArrangement.nextPaymentDate).toLocaleDateString()}</>
+                                <> | <strong className="text-amber-200">Next Due:</strong> {new Date(selectedAccountSMAXArrangement.nextPaymentDate).toLocaleDateString()}</>
                               )}
                             </p>
                           )}
                           <div className="mt-3 space-y-2">
-                            <p className="text-sm font-medium text-amber-900">Your options:</p>
-                            <ul className="text-sm text-amber-800 list-disc list-inside space-y-1">
+                            <p className="text-sm font-medium text-amber-200">Your options:</p>
+                            <ul className="text-sm text-amber-100/70 list-disc list-inside space-y-1">
                               <li>Make a one-time payment below (does not change your existing arrangement)</li>
                               <li>Contact us to request a change to your payment arrangement</li>
                             </ul>
@@ -1674,10 +1689,10 @@ export default function ConsumerDashboardSimple() {
                 <div className="space-y-4">
                   {/* Settlement Offers Section */}
                   {applicableArrangements.some((arr: any) => arr.planType === 'settlement') && (
-                    <div className="rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-500 p-4">
+                    <div className="rounded-lg bg-gradient-to-r from-emerald-500/10 to-green-500/10 border-2 border-emerald-400/30 p-4 backdrop-blur">
                       <div className="flex items-center gap-2 mb-3">
-                        <TrendingUp className="h-5 w-5 text-green-600" />
-                        <Label className="text-base font-semibold text-green-900">Special Settlement Offers</Label>
+                        <TrendingUp className="h-5 w-5 text-emerald-400" />
+                        <Label className="text-base font-semibold text-emerald-200">Special Settlement Offers</Label>
                       </div>
                       <div className="space-y-2">
                         {applicableArrangements
@@ -1690,19 +1705,19 @@ export default function ConsumerDashboardSimple() {
                                 onClick={() => setSelectedArrangement(arrangement)}
                                 className={`cursor-pointer rounded-lg border-2 p-3 transition-all ${
                                   selectedArrangement?.id === arrangement.id
-                                    ? 'border-green-600 bg-green-100'
-                                    : 'border-green-300 bg-white hover:border-green-400'
+                                    ? 'border-emerald-400 bg-emerald-500/20 backdrop-blur'
+                                    : 'border-emerald-400/30 bg-white/5 hover:bg-white/10 hover:border-emerald-400/50'
                                 }`}
                                 data-testid={`option-settlement-${arrangement.id}`}
                               >
                                 <div className="flex items-center justify-between">
                                   <div className="flex-1">
-                                    <p className="font-medium text-green-900">{summary.headline}</p>
+                                    <p className="font-medium text-emerald-200">{summary.headline}</p>
                                     {summary.detail && (
-                                      <p className="text-sm text-green-700 mt-1">{summary.detail}</p>
+                                      <p className="text-sm text-emerald-100/70 mt-1">{summary.detail}</p>
                                     )}
                                   </div>
-                                  <Badge className="bg-green-600 text-white">Save Money</Badge>
+                                  <Badge className="bg-emerald-500 text-white border-emerald-400/30">Save Money</Badge>
                                 </div>
                               </div>
                             );
@@ -1713,11 +1728,11 @@ export default function ConsumerDashboardSimple() {
 
                   {/* Simplified Payment Plan Section */}
                   <div className="space-y-3">
-                    <Label className="text-base font-semibold">Set Up Payment Plan</Label>
+                    <Label className="text-base font-semibold text-white">Set Up Payment Plan</Label>
                     
                     {/* Quick Term Buttons */}
                     <div>
-                      <Label className="text-sm text-gray-700 mb-2 block">Choose Payment Term</Label>
+                      <Label className="text-sm text-blue-100/70 mb-2 block">Choose Payment Term</Label>
                       <div className="grid grid-cols-3 gap-3">
                         {([3, 6, 12] as const).map((term) => {
                           const minimumMonthly = settings?.minimumMonthlyPayment ?? 5000;
@@ -1734,20 +1749,20 @@ export default function ConsumerDashboardSimple() {
                                 setCalculatedPayment(biweeklyPayment);
                                 setSelectedArrangement(null);
                               }}
-                              className={`p-4 rounded-lg border-2 transition-all text-left ${
+                              className={`p-4 rounded-lg border-2 transition-all text-left backdrop-blur ${
                                 paymentMethod === 'term' && selectedTerm === term
-                                  ? 'border-blue-500 bg-blue-50'
-                                  : 'border-gray-200 hover:border-gray-300'
+                                  ? 'border-blue-400 bg-blue-500/20'
+                                  : 'border-white/20 bg-white/5 hover:border-blue-400/50 hover:bg-white/10'
                               }`}
                               data-testid={`button-term-${term}`}
                             >
-                              <div className="text-xs text-gray-600 mb-1">{term} Months</div>
-                              <div className="text-lg font-bold text-blue-600">
+                              <div className="text-xs text-blue-100/70 mb-1">{term} Months</div>
+                              <div className="text-lg font-bold text-blue-300">
                                 {formatCurrency(biweeklyPayment)}
                               </div>
-                              <div className="text-xs text-gray-500 mt-1">bi-weekly</div>
+                              <div className="text-xs text-blue-100/50 mt-1">bi-weekly</div>
                               {monthlyPayment >= minimumMonthly && monthlyPayment > (selectedAccount?.balanceCents || 0) / term && (
-                                <div className="text-xs text-amber-600 mt-1">Min. applied</div>
+                                <div className="text-xs text-amber-300 mt-1">Min. applied</div>
                               )}
                             </button>
                           );
@@ -1757,18 +1772,18 @@ export default function ConsumerDashboardSimple() {
 
                     {/* OR Divider */}
                     <div className="flex items-center gap-3">
-                      <div className="flex-1 border-t border-gray-200"></div>
-                      <span className="text-sm text-gray-500 font-medium">OR</span>
-                      <div className="flex-1 border-t border-gray-200"></div>
+                      <div className="flex-1 border-t border-white/20"></div>
+                      <span className="text-sm text-blue-100/50 font-medium">OR</span>
+                      <div className="flex-1 border-t border-white/20"></div>
                     </div>
 
                     {/* Custom Amount Input */}
                     <div>
-                      <Label htmlFor="customAmountInput" className="text-sm text-gray-700 mb-2 block">
+                      <Label htmlFor="customAmountInput" className="text-sm text-blue-100/70 mb-2 block">
                         Enter Custom Payment Amount
                       </Label>
                       <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-lg">$</span>
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-100/50 text-lg">$</span>
                         <Input
                           type="number"
                           id="customAmountInput"
@@ -1800,11 +1815,11 @@ export default function ConsumerDashboardSimple() {
                           max={(selectedAccount?.balanceCents || 0) / 100}
                           step="0.01"
                           placeholder="0.00"
-                          className="pl-8 text-lg"
+                          className="pl-8 text-lg bg-white/5 border-white/20 text-white placeholder:text-blue-100/30"
                           data-testid="input-custom-amount"
                         />
                       </div>
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-blue-100/50 mt-1">
                         Min: ${((settings?.minimumMonthlyPayment ?? 5000) / 100).toFixed(2)} | Max: ${((selectedAccount?.balanceCents || 0) / 100).toFixed(2)}
                       </p>
                     </div>
@@ -1812,7 +1827,7 @@ export default function ConsumerDashboardSimple() {
                     {/* Payment Frequency Selector */}
                     {(calculatedPayment !== null || customAmount) && (
                       <div>
-                        <Label className="text-sm text-gray-700 mb-2 block">Payment Frequency</Label>
+                        <Label className="text-sm text-blue-100/70 mb-2 block">Payment Frequency</Label>
                         <div className="grid grid-cols-3 gap-2">
                           {(['weekly', 'biweekly', 'monthly'] as const).map((freq) => {
                             const baseAmount = paymentMethod === 'term' && selectedTerm
@@ -1846,15 +1861,15 @@ export default function ConsumerDashboardSimple() {
                                     setCalculatedPayment(convertToFrequency(monthlyPayment, freq));
                                   }
                                 }}
-                                className={`p-3 rounded-lg border-2 transition-all ${
+                                className={`p-3 rounded-lg border-2 transition-all backdrop-blur ${
                                   paymentFrequency === freq
-                                    ? 'border-blue-500 bg-blue-50'
-                                    : 'border-gray-200 hover:border-gray-300'
+                                    ? 'border-blue-400 bg-blue-500/20'
+                                    : 'border-white/20 bg-white/5 hover:border-blue-400/50 hover:bg-white/10'
                                 }`}
                                 data-testid={`button-frequency-${freq}`}
                               >
-                                <div className="text-sm font-medium capitalize">{freq}</div>
-                                <div className="text-xs text-gray-600 mt-1">
+                                <div className="text-sm font-medium capitalize text-white">{freq}</div>
+                                <div className="text-xs text-blue-100/70 mt-1">
                                   {formatCurrency(amount)}
                                 </div>
                               </button>
@@ -1866,20 +1881,20 @@ export default function ConsumerDashboardSimple() {
 
                     {/* Payment Schedule Preview */}
                     {calculatedPayment !== null && (
-                      <div className="rounded-lg bg-blue-50 border border-blue-200 p-4">
+                      <div className="rounded-lg bg-white/5 border border-white/10 p-4 backdrop-blur">
                         <div className="flex items-center gap-2 mb-3">
-                          <Calendar className="h-4 w-4 text-blue-600" />
-                          <Label className="text-sm font-semibold text-blue-900">Payment Schedule Preview</Label>
+                          <Calendar className="h-4 w-4 text-blue-400" />
+                          <Label className="text-sm font-semibold text-blue-200">Payment Schedule Preview</Label>
                         </div>
                         <div className="space-y-2">
                           {generatePaymentSchedule(calculatedPayment, paymentFrequency).map((payment, index) => (
                             <div key={index} className="flex items-center justify-between text-sm">
-                              <span className="text-gray-700">{payment.date}</span>
-                              <span className="font-medium text-blue-700">{formatCurrency(payment.amount)}</span>
+                              <span className="text-blue-100/70">{payment.date}</span>
+                              <span className="font-medium text-blue-300">{formatCurrency(payment.amount)}</span>
                             </div>
                           ))}
                         </div>
-                        <p className="text-xs text-gray-600 mt-3 border-t border-blue-200 pt-2">
+                        <p className="text-xs text-blue-100/50 mt-3 border-t border-white/10 pt-2">
                           Showing next 4 scheduled payments
                         </p>
                       </div>
@@ -1888,23 +1903,24 @@ export default function ConsumerDashboardSimple() {
                 </div>
               )}
 
-              <div className="border-t pt-4 space-y-4">
-                <Label className="text-base font-semibold">Payment Information</Label>
+              <div className="border-t border-white/10 pt-4 space-y-4">
+                <Label className="text-base font-semibold text-white">Payment Information</Label>
 
                 <div>
-                  <Label htmlFor="cardName">Cardholder Name</Label>
+                  <Label htmlFor="cardName" className="text-white">Cardholder Name</Label>
                   <Input
                     id="cardName"
                     value={paymentForm.cardName}
                     onChange={(e) => setPaymentForm({ ...paymentForm, cardName: e.target.value })}
                     required
                     placeholder="John Doe"
+                    className="bg-white/5 border-white/20 text-white placeholder:text-blue-100/30"
                     data-testid="input-card-name"
                   />
                 </div>
 
                 <div>
-                  <Label htmlFor="cardNumber">Card Number</Label>
+                  <Label htmlFor="cardNumber" className="text-white">Card Number</Label>
                   <Input
                     id="cardNumber"
                     value={paymentForm.cardNumber}
@@ -1912,13 +1928,14 @@ export default function ConsumerDashboardSimple() {
                     required
                     maxLength={16}
                     placeholder="1234 5678 9012 3456"
+                    className="bg-white/5 border-white/20 text-white placeholder:text-blue-100/30"
                     data-testid="input-card-number"
                   />
                 </div>
 
                 <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <Label htmlFor="expiryMonth">Exp Month</Label>
+                    <Label htmlFor="expiryMonth" className="text-white">Exp Month</Label>
                     <Input
                       id="expiryMonth"
                       value={paymentForm.expiryMonth}
@@ -1926,11 +1943,12 @@ export default function ConsumerDashboardSimple() {
                       required
                       maxLength={2}
                       placeholder="MM"
+                      className="bg-white/5 border-white/20 text-white placeholder:text-blue-100/30"
                       data-testid="input-expiry-month"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="expiryYear">Exp Year</Label>
+                    <Label htmlFor="expiryYear" className="text-white">Exp Year</Label>
                     <Input
                       id="expiryYear"
                       value={paymentForm.expiryYear}
@@ -1938,11 +1956,12 @@ export default function ConsumerDashboardSimple() {
                       required
                       maxLength={4}
                       placeholder="YYYY"
+                      className="bg-white/5 border-white/20 text-white placeholder:text-blue-100/30"
                       data-testid="input-expiry-year"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="cvv">CVV</Label>
+                    <Label htmlFor="cvv" className="text-white">CVV</Label>
                     <Input
                       id="cvv"
                       value={paymentForm.cvv}
@@ -1950,27 +1969,29 @@ export default function ConsumerDashboardSimple() {
                       required
                       maxLength={4}
                       placeholder="123"
+                      className="bg-white/5 border-white/20 text-white placeholder:text-blue-100/30"
                       data-testid="input-cvv"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <Label htmlFor="zipCode">Billing ZIP Code</Label>
+                  <Label htmlFor="zipCode" className="text-white">Billing ZIP Code</Label>
                   <Input
                     id="zipCode"
                     value={paymentForm.zipCode}
                     onChange={(e) => setPaymentForm({ ...paymentForm, zipCode: e.target.value })}
                     placeholder="12345"
+                    className="bg-white/5 border-white/20 text-white placeholder:text-blue-100/30"
                     data-testid="input-payment-zip"
                   />
                 </div>
 
                 {selectedArrangement && selectedArrangement.planType === 'one_time_payment' && (
                   <div>
-                    <Label htmlFor="customAmount">Payment Amount *</Label>
+                    <Label htmlFor="customAmount" className="text-white">Payment Amount *</Label>
                     <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-100/50">$</span>
                       <Input
                         type="number"
                         id="customAmount"
@@ -1980,37 +2001,37 @@ export default function ConsumerDashboardSimple() {
                         max={(selectedAccount?.balanceCents || 0) / 100}
                         step="0.01"
                         placeholder="0.00"
-                        className="pl-8"
+                        className="pl-8 bg-white/5 border-white/20 text-white placeholder:text-blue-100/30"
                         required
                         data-testid="input-custom-payment-amount"
                       />
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-xs text-blue-100/50 mt-1">
                       Min: ${((selectedArrangement.oneTimePaymentMin || 0) / 100).toFixed(2)} | Max: ${((selectedAccount?.balanceCents || 0) / 100).toFixed(2)} (Full Balance)
                     </p>
                   </div>
                 )}
 
                 {selectedArrangement && (selectedArrangement.planType === 'fixed_monthly' || selectedArrangement.planType === 'range') && !selectedAccountSMAXArrangement && (
-                  <div className="flex items-center space-x-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex items-center space-x-2 p-3 bg-blue-500/10 rounded-lg border border-blue-400/30 backdrop-blur">
                     <input
                       type="checkbox"
                       id="setupRecurring"
                       checked={setupRecurring}
                       onChange={(e) => setSetupRecurring(e.target.checked)}
-                      className="h-4 w-4 text-blue-600 rounded"
+                      className="h-4 w-4 text-blue-400 rounded bg-white/5 border-white/20"
                       data-testid="checkbox-setup-recurring"
                     />
-                    <label htmlFor="setupRecurring" className="text-sm font-medium text-gray-700 cursor-pointer">
+                    <label htmlFor="setupRecurring" className="text-sm font-medium text-blue-100 cursor-pointer">
                       Set up automatic recurring payments with this card
                     </label>
                   </div>
                 )}
                 
                 {selectedArrangement && (selectedArrangement.planType === 'fixed_monthly' || selectedArrangement.planType === 'range') && selectedAccountSMAXArrangement && (
-                  <div className="p-3 bg-amber-50 rounded-lg border border-amber-300">
-                    <p className="text-sm text-amber-800">
-                      <strong>Note:</strong> Recurring payments cannot be set up because this account already has an existing arrangement. Please contact us to modify your payment arrangement.
+                  <div className="p-3 bg-amber-500/10 rounded-lg border border-amber-400/30 backdrop-blur">
+                    <p className="text-sm text-amber-100/70">
+                      <strong className="text-amber-200">Note:</strong> Recurring payments cannot be set up because this account already has an existing arrangement. Please contact us to modify your payment arrangement.
                     </p>
                   </div>
                 )}
@@ -2022,10 +2043,10 @@ export default function ConsumerDashboardSimple() {
                       id="saveCard"
                       checked={saveCard}
                       onChange={(e) => setSaveCard(e.target.checked)}
-                      className="h-4 w-4 text-blue-600 rounded"
+                      className="h-4 w-4 text-blue-400 rounded bg-white/5 border-white/20"
                       data-testid="checkbox-save-card"
                     />
-                    <label htmlFor="saveCard" className="text-sm text-gray-700 cursor-pointer">
+                    <label htmlFor="saveCard" className="text-sm text-blue-100 cursor-pointer">
                       Save this card for future payments
                     </label>
                   </div>
@@ -2092,8 +2113,8 @@ export default function ConsumerDashboardSimple() {
                   </div>
                 )}
 
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2 text-xs text-gray-600">
+                <div className="bg-white/5 border border-white/10 rounded-lg p-3 backdrop-blur">
+                  <div className="flex items-center gap-2 text-xs text-blue-100/70">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                     </svg>
@@ -2109,12 +2130,13 @@ export default function ConsumerDashboardSimple() {
                 variant="outline"
                 onClick={() => setShowPaymentDialog(false)}
                 disabled={paymentProcessing}
+                className="border-white/20 bg-white/5 text-white hover:bg-white/10"
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
-                className="bg-emerald-500 hover:bg-emerald-400"
+                className="bg-emerald-500 hover:bg-emerald-400 text-white"
                 disabled={paymentProcessing}
                 data-testid="button-submit-payment"
               >
