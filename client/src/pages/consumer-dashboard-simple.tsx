@@ -19,7 +19,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, LogOut, User, Building2, CreditCard, DollarSign, TrendingUp, Mail, Phone, Edit, FileText, MessageSquare, Calendar, Upload } from "lucide-react";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { AlertCircle, LogOut, User, Building2, CreditCard, DollarSign, TrendingUp, Mail, Phone, Edit, FileText, MessageSquare, Calendar, Upload, CalendarIcon } from "lucide-react";
+import { format } from "date-fns";
 import chainLogo from "@/assets/chain-logo.png";
 
 // Payment Methods Tab Component
@@ -191,7 +194,8 @@ export default function ConsumerDashboardSimple() {
   const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [saveCard, setSaveCard] = useState(false);
   const [setupRecurring, setSetupRecurring] = useState(false);
-  const [firstPaymentDate, setFirstPaymentDate] = useState<string>("");
+  const [firstPaymentDate, setFirstPaymentDate] = useState<Date | undefined>(undefined);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [customPaymentAmount, setCustomPaymentAmount] = useState<string>("");
   
   // New simplified payment flow state
@@ -521,7 +525,7 @@ export default function ConsumerDashboardSimple() {
     setSelectedArrangement(null);
     setSaveCard(false);
     setSetupRecurring(false);
-    setFirstPaymentDate("");
+    setFirstPaymentDate(undefined);
     setCustomPaymentAmount("");
     // Reset simplified flow state
     setPaymentMethod('term');
@@ -616,7 +620,7 @@ export default function ConsumerDashboardSimple() {
       // For one-time payments, use today's date automatically
       const paymentDate = selectedArrangement?.planType === 'one_time_payment' 
         ? new Date().toISOString().split('T')[0]
-        : firstPaymentDate || null;
+        : firstPaymentDate ? firstPaymentDate.toISOString().split('T')[0] : null;
       
       // Determine if using simplified flow
       const isSimplifiedFlow = !selectedArrangement && calculatedPayment !== null;
@@ -658,7 +662,7 @@ export default function ConsumerDashboardSimple() {
       // Determine if this was an immediate payment or just a schedule setup
       const isRecurringSetup = shouldSetupRecurring;
       
-      const displayDate = firstPaymentDate || new Date().toISOString().split('T')[0];
+      const displayDate = firstPaymentDate ? firstPaymentDate.toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
       const formattedDate = new Date(displayDate).toLocaleDateString('en-US', { 
         month: 'long', 
         day: 'numeric', 
@@ -2027,33 +2031,63 @@ export default function ConsumerDashboardSimple() {
                   </div>
                 )}
 
-                {(saveCard || setupRecurring || (selectedArrangement && selectedArrangement.planType !== 'one_time_payment')) && (
+                {(calculatedPayment !== null || setupRecurring || (selectedArrangement && selectedArrangement.planType !== 'one_time_payment')) && (
                   <div>
-                    <Label htmlFor="firstPaymentDate">
+                    <Label className="text-white">
                       {setupRecurring || (selectedArrangement && (selectedArrangement.planType === 'fixed_monthly' || selectedArrangement.planType === 'range'))
                         ? 'First Payment Date'
-                        : 'Payment Date'}
+                        : 'Payment Date (Optional)'}
                     </Label>
-                    <Input
-                      type="date"
-                      id="firstPaymentDate"
-                      value={firstPaymentDate}
-                      onChange={(e) => setFirstPaymentDate(e.target.value)}
-                      required={false}
-                      min={new Date().toISOString().split('T')[0]}
-                      max={(() => {
-                        const maxDate = new Date();
-                        maxDate.setMonth(maxDate.getMonth() + 1);
-                        return maxDate.toISOString().split('T')[0];
-                      })()}
-                      data-testid="input-first-payment-date"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
+                    <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="w-full justify-start text-left font-normal border-white/20 bg-white/5 text-white hover:bg-white/10"
+                          data-testid="button-select-payment-date"
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {firstPaymentDate ? format(firstPaymentDate, "PPP") : <span className="text-blue-100/50">Select date or leave blank for immediate payment</span>}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0 bg-slate-900 border-white/20">
+                        <CalendarComponent
+                          mode="single"
+                          selected={firstPaymentDate}
+                          onSelect={(date) => {
+                            setFirstPaymentDate(date);
+                            setDatePickerOpen(false);
+                          }}
+                          disabled={(date) => {
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            const maxDate = new Date();
+                            maxDate.setMonth(maxDate.getMonth() + 1);
+                            return date < today || date > maxDate;
+                          }}
+                          initialFocus
+                          className="bg-slate-900 text-white"
+                        />
+                        {firstPaymentDate && (
+                          <div className="p-3 border-t border-white/10">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setFirstPaymentDate(undefined);
+                                setDatePickerOpen(false);
+                              }}
+                              className="w-full text-blue-100 hover:bg-white/10"
+                            >
+                              Clear Date
+                            </Button>
+                          </div>
+                        )}
+                      </PopoverContent>
+                    </Popover>
+                    <p className="text-xs text-blue-100/70 mt-1">
                       {setupRecurring 
                         ? 'Choose when your first automatic payment should be charged'
-                        : saveCard || !selectedArrangement
-                        ? 'Leave blank to charge immediately, or select a future date (within next 30 days)'
-                        : 'Select payment date (within next 30 days)'}
+                        : 'Leave blank to charge immediately, or select a future date (within next 30 days)'}
                     </p>
                   </div>
                 )}
