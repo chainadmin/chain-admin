@@ -5366,6 +5366,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Consumer portal enhanced routes
+  // Get tenant settings for consumer (public settings only)
+  app.get('/api/consumer/tenant-settings', authenticateConsumer, async (req: any, res) => {
+    try {
+      const { tenantId } = req.consumer || {};
+
+      if (!tenantId) {
+        return res.status(401).json({ message: "No consumer access" });
+      }
+
+      const settings = await storage.getTenantSettings(tenantId);
+      
+      // Always return settings with defaults even if no record exists
+      res.json({
+        minimumMonthlyPayment: settings?.minimumMonthlyPayment || 5000, // Default $50
+        showPaymentPlans: settings?.showPaymentPlans ?? true,
+        showDocuments: settings?.showDocuments ?? true,
+        allowSettlementRequests: settings?.allowSettlementRequests ?? true,
+      });
+    } catch (error) {
+      console.error("Error fetching consumer tenant settings:", error);
+      res.status(500).json({ message: "Failed to fetch settings" });
+    }
+  });
+
   app.get('/api/consumer/documents/:email', authenticateConsumer, async (req: any, res) => {
     try {
       const { email } = req.params;

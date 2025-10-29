@@ -108,17 +108,31 @@ export default function MobileAppLogin() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Login failed");
+        // Safely parse error - check if response is JSON
+        let errorMessage = "Login failed";
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          try {
+            const error = await response.json();
+            errorMessage = error.message || errorMessage;
+          } catch (e) {
+            // JSON parse failed, use default message
+          }
+        } else {
+          // Non-JSON response (likely HTML error page)
+          const textError = await response.text();
+          console.error("Non-JSON error response:", textError);
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
 
-      if (data.token && data.agency) {
+      if (data.token && data.tenant) {
         persistConsumerAuth({
           session: {
             email: savedEmail,
-            tenantSlug: data.agency.slug,
+            tenantSlug: data.tenant.slug,
             consumerData: data.consumer,
           },
           token: data.token,
@@ -166,8 +180,22 @@ export default function MobileAppLogin() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Login failed");
+        // Safely parse error - check if response is JSON
+        let errorMessage = "Login failed";
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          try {
+            const error = await response.json();
+            errorMessage = error.message || errorMessage;
+          } catch (e) {
+            // JSON parse failed, use default message
+          }
+        } else {
+          // Non-JSON response (likely HTML error page)
+          const textError = await response.text();
+          console.error("Non-JSON error response:", textError);
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -182,12 +210,12 @@ export default function MobileAppLogin() {
         return;
       }
 
-      if (data.token && data.agency) {
+      if (data.token && data.tenant) {
         // Store auth and redirect
         persistConsumerAuth({
           session: {
             email,
-            tenantSlug: data.agency.slug,
+            tenantSlug: data.tenant.slug,
             consumerData: data.consumer,
           },
           token: data.token,
@@ -216,8 +244,14 @@ export default function MobileAppLogin() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-blue-600 to-blue-800 p-4">
-      <div className="w-full max-w-md space-y-8">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-slate-950 text-white p-4">
+      {/* Background gradients */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute -top-32 right-0 h-96 w-96 rounded-full bg-blue-500/30 blur-3xl" />
+        <div className="absolute bottom-0 left-0 h-[28rem] w-[28rem] rounded-full bg-indigo-500/20 blur-3xl" />
+      </div>
+
+      <div className="relative w-full max-w-md space-y-8">
         {/* Agency Logo */}
         {agencyContext?.logoUrl ? (
           <div className="flex justify-center">
@@ -230,7 +264,7 @@ export default function MobileAppLogin() {
           </div>
         ) : (
           <div className="flex justify-center">
-            <div className="h-20 w-20 rounded-full bg-white/10 flex items-center justify-center">
+            <div className="h-20 w-20 rounded-full bg-white/10 border border-white/20 flex items-center justify-center">
               <span className="text-3xl font-bold text-white">C</span>
             </div>
           </div>
@@ -241,16 +275,16 @@ export default function MobileAppLogin() {
           <h1 className="text-3xl font-bold text-white" data-testid="text-welcome-title">
             {agencyContext ? `Welcome to ${agencyContext.name}` : "Welcome"}
           </h1>
-          <p className="text-blue-100" data-testid="text-welcome-subtitle">
+          <p className="text-blue-100/70" data-testid="text-welcome-subtitle">
             {agencyContext ? "Sign in to access your account" : "Find your agency and sign in"}
           </p>
         </div>
 
         {/* Login Form */}
-        <form onSubmit={handleSubmit} className="space-y-6 rounded-2xl bg-white p-8 shadow-xl">
+        <form onSubmit={handleSubmit} className="space-y-6 rounded-2xl bg-white/5 backdrop-blur border border-white/10 p-8 shadow-2xl shadow-blue-900/30">
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-gray-700">Email Address</Label>
+              <Label htmlFor="email" className="text-white">Email Address</Label>
               <Input
                 id="email"
                 type="email"
@@ -258,21 +292,21 @@ export default function MobileAppLogin() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loading}
-                className="h-12 text-base"
+                className="h-12 text-base bg-white/5 border-white/10 text-white placeholder:text-white/50"
                 data-testid="input-email"
                 required
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="dob" className="text-gray-700">Date of Birth</Label>
+              <Label htmlFor="dob" className="text-white">Date of Birth</Label>
               <Input
                 id="dob"
                 type="date"
                 value={dateOfBirth}
                 onChange={(e) => setDateOfBirth(e.target.value)}
                 disabled={loading}
-                className="h-12 text-base"
+                className="h-12 text-base bg-white/5 border-white/10 text-white"
                 data-testid="input-dateofbirth"
                 required
               />
@@ -282,7 +316,7 @@ export default function MobileAppLogin() {
           <Button
             type="submit"
             disabled={loading}
-            className="h-12 w-full text-base font-semibold"
+            className="h-12 w-full text-base font-semibold bg-emerald-500 hover:bg-emerald-400 text-white"
             data-testid="button-signin"
           >
             {loading ? (
@@ -300,10 +334,10 @@ export default function MobileAppLogin() {
             <>
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t border-gray-300" />
+                  <span className="w-full border-t border-white/10" />
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-white px-2 text-gray-500">Or</span>
+                  <span className="bg-white/5 px-2 text-blue-100/70">Or</span>
                 </div>
               </div>
 
@@ -312,7 +346,7 @@ export default function MobileAppLogin() {
                 variant="outline"
                 onClick={handleBiometricLogin}
                 disabled={loading}
-                className="h-12 w-full text-base font-semibold border-2"
+                className="h-12 w-full text-base font-semibold border-2 border-white/20 text-white hover:bg-white/10"
                 data-testid="button-biometric-login"
               >
                 <Fingerprint className="mr-2 h-5 w-5" />
@@ -323,7 +357,7 @@ export default function MobileAppLogin() {
         </form>
 
         {/* Footer */}
-        <p className="text-center text-sm text-blue-100">
+        <p className="text-center text-sm text-blue-100/70">
           Need help? Contact your agency
         </p>
       </div>

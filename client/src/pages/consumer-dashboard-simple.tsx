@@ -335,10 +335,10 @@ export default function ConsumerDashboardSimple() {
 
   // Fetch settings to get minimum monthly payment
   const { data: settings } = useQuery({
-    queryKey: ['/api/settings'],
+    queryKey: ['/api/consumer/tenant-settings'],
     queryFn: async () => {
       const token = getStoredConsumerToken();
-      const response = await apiCall("GET", "/api/settings", null, token);
+      const response = await apiCall("GET", "/api/consumer/tenant-settings", null, token);
       if (!response.ok) throw new Error("Failed to fetch settings");
       return response.json();
     },
