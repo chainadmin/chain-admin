@@ -425,11 +425,7 @@ export default function ConsumerDashboardSimple() {
   // Document upload mutation
   const uploadMutation = useMutation({
     mutationFn: async (formData: FormData) => {
-      const response = await fetch('/api/consumer/documents/upload', {
-        method: 'POST',
-        body: formData,
-        credentials: 'include',
-      });
+      const response = await apiCall('POST', '/api/consumer/documents/upload', formData);
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.message || 'Failed to upload document');
