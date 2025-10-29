@@ -1,0 +1,252 @@
+2025-10-29 00:16:00.788  4179-4179  Zygote                  com.chaincomms.platform              I  Process 4179 created for com.chaincomms.platform
+2025-10-29 00:16:00.799  4179-4179  ncomms.platform         com.chaincomms.platform              I  Late-enabling -Xcheck:jni
+2025-10-29 00:16:01.251  4179-4179  ncomms.platform         com.chaincomms.platform              I  Using CollectorTypeCMC GC.
+2025-10-29 00:16:01.272  4179-4179  ncomms.platform         com.chaincomms.platform              W  Unexpected CPU variant for x86: x86_64.
+                                                                                                    Known variants: atom, sandybridge, silvermont, goldmont, goldmont-plus, goldmont-without-sha-xsaves, tremont, kabylake, alderlake, default
+2025-10-29 00:16:01.711  4179-4179  nativeloader            com.chaincomms.platform              D  Load libframework-connectivity-tiramisu-jni.so using APEX ns com_android_tethering for caller /apex/com.android.tethering/javalib/framework-connectivity-t.jar: ok
+2025-10-29 00:16:03.923  4179-4179  nativeloader            com.chaincomms.platform              D  Configuring clns-9 for other apk /data/app/~~t5OmLufn8w5tuzhb8wVbiA==/com.chaincomms.platform-_EZYc4Kqoh54jcSdJHvqXA==/base.apk. target_sdk_version=35, uses_libraries=, library_path=/data/app/~~t5OmLufn8w5tuzhb8wVbiA==/com.chaincomms.platform-_EZYc4Kqoh54jcSdJHvqXA==/lib/x86_64, permitted_path=/data:/mnt/expand:/data/user/0/com.chaincomms.platform
+2025-10-29 00:16:03.967  4179-4179  CompatChangeReporter    com.chaincomms.platform              D  Compat change id reported: 202956589; UID 10220; state: ENABLED
+2025-10-29 00:16:04.471  4179-4179  GraphicsEnvironment     com.chaincomms.platform              V  Currently set values for:
+2025-10-29 00:16:04.471  4179-4179  GraphicsEnvironment     com.chaincomms.platform              V    angle_gl_driver_selection_pkgs=[]
+2025-10-29 00:16:04.471  4179-4179  GraphicsEnvironment     com.chaincomms.platform              V    angle_gl_driver_selection_values=[]
+2025-10-29 00:16:04.471  4179-4179  GraphicsEnvironment     com.chaincomms.platform              V  com.chaincomms.platform is not listed in per-application setting
+2025-10-29 00:16:04.472  4179-4179  GraphicsEnvironment     com.chaincomms.platform              V  ANGLE allowlist from config: com.dreamgames.royalmatch com.dts.freefiremax com.dxx.firenow com.gramgames.mergedragons com.ludo.king com.mojang.minecraftpe com.my.defense com.nintendo.zaka com.os.airforce com.playrix.fishdomdd.gplay io.teslatech.callbreak jp.konami.prospia net.peakgames.toonblast
+2025-10-29 00:16:04.472  4179-4179  GraphicsEnvironment     com.chaincomms.platform              V  com.chaincomms.platform is not listed in ANGLE allowlist or settings, returning default
+2025-10-29 00:16:04.472  4179-4179  GraphicsEnvironment     com.chaincomms.platform              V  Neither updatable production driver nor prerelease driver is supported.
+2025-10-29 00:16:06.206  4179-4179  Choreographer           com.chaincomms.platform              I  Skipped 51 frames!  The application may be doing too much work on its main thread.
+2025-10-29 00:16:06.240  4179-4263  DisplayManager          com.chaincomms.platform              I  Choreographer implicitly registered for the refresh rate.
+2025-10-29 00:16:06.460  4179-4263  GFXSTREAM               com.chaincomms.platform              I  [eglDisplay.cpp(297)] Opening libGLESv1_CM_emulation.so
+2025-10-29 00:16:06.467  4179-4263  GFXSTREAM               com.chaincomms.platform              I  [eglDisplay.cpp(297)] Opening libGLESv2_emulation.so
+2025-10-29 00:16:06.594  4179-4263  HWUI                    com.chaincomms.platform              W  Failed to choose config with EGL_SWAP_BEHAVIOR_PRESERVED, retrying without...
+2025-10-29 00:16:06.594  4179-4263  HWUI                    com.chaincomms.platform              W  Failed to initialize 101010-2 format, error = EGL_SUCCESS
+2025-10-29 00:16:07.053  4179-4179  DesktopExperienceFlags  com.chaincomms.platform              D  Toggle override initialized to: false
+2025-10-29 00:16:07.236  4179-4179  AppCompatDelegate       com.chaincomms.platform              D  Checking for metadata for AppLocalesMetadataHolderService : Service not found
+2025-10-29 00:16:08.010  4179-4179  ashmem                  com.chaincomms.platform              E  Pinning is deprecated since Android Q. Please use trim or other methods.
+2025-10-29 00:16:09.087  4179-4179  CompatChangeReporter    com.chaincomms.platform              D  Compat change id reported: 309578419; UID 10220; state: ENABLED
+2025-10-29 00:16:09.088  4179-4179  DesktopModeFlags        com.chaincomms.platform              D  Toggle override initialized to: OVERRIDE_UNSET
+2025-10-29 00:16:09.214  4179-4179  ncomms.platform         com.chaincomms.platform              I  hiddenapi: Accessing hidden method Landroid/view/ViewGroup;->makeOptionalFitsSystemWindows()V (runtime_flags=0, domain=platform, api=unsupported) from Landroidx/appcompat/widget/ViewUtils; (domain=app) using reflection: allowed
+2025-10-29 00:16:09.819  4179-4179  WebViewFactory          com.chaincomms.platform              I  Loading com.google.android.webview version 141.0.7390.43 (code 739004338)
+2025-10-29 00:16:09.942  4179-4179  ResourcesManager        com.chaincomms.platform              V  The following library key has been added: ResourcesKey{ mHash=d8eddc05 mResDir=null mSplitDirs=[] mOverlayDirs=[] mLibDirs=[/data/app/~~WNHaPLAd0xM1DcmfmGI0QA==/com.google.android.webview-Q1PxMZ7JCWrXwXGVavGjXw==/base.apk,/data/app/~~WknXBjM2DSoq4PiQFEr8Gg==/com.google.android.trichromelibrary_739004338-MaooYQak-N2X6OsoKeJ4Vg==/base.apk,/system_ext/framework/androidx.window.extensions.jar] mDisplayId=0 mOverrideConfig=v36 mCompatInfo={420dpi always-compat} mLoaders=[]}
+2025-10-29 00:16:10.234  4179-4179  ncomms.platform         com.chaincomms.platform              W  Failed to find entry 'classes.dex': Entry not found
+2025-10-29 00:16:10.256  4179-4179  nativeloader            com.chaincomms.platform              D  Configuring clns-10 for other apk /data/app/~~WknXBjM2DSoq4PiQFEr8Gg==/com.google.android.trichromelibrary_739004338-MaooYQak-N2X6OsoKeJ4Vg==/base.apk. target_sdk_version=36, uses_libraries=ALL, library_path=/data/app/~~WNHaPLAd0xM1DcmfmGI0QA==/com.google.android.webview-Q1PxMZ7JCWrXwXGVavGjXw==/lib/x86_64:/data/app/~~WNHaPLAd0xM1DcmfmGI0QA==/com.google.android.webview-Q1PxMZ7JCWrXwXGVavGjXw==/base.apk!/lib/x86_64:/data/app/~~WknXBjM2DSoq4PiQFEr8Gg==/com.google.android.trichromelibrary_739004338-MaooYQak-N2X6OsoKeJ4Vg==/base.apk!/lib/x86_64, permitted_path=/data:/mnt/expand
+2025-10-29 00:16:10.268  4179-4179  ApplicationLoaders      com.chaincomms.platform              D  Returning zygote-cached class loader: /system_ext/framework/androidx.window.extensions.jar
+2025-10-29 00:16:10.317  4179-4179  nativeloader            com.chaincomms.platform              D  Configuring clns-11 for other apk /data/app/~~WNHaPLAd0xM1DcmfmGI0QA==/com.google.android.webview-Q1PxMZ7JCWrXwXGVavGjXw==/base.apk. target_sdk_version=36, uses_libraries=, library_path=/data/app/~~WNHaPLAd0xM1DcmfmGI0QA==/com.google.android.webview-Q1PxMZ7JCWrXwXGVavGjXw==/lib/x86_64:/data/app/~~WNHaPLAd0xM1DcmfmGI0QA==/com.google.android.webview-Q1PxMZ7JCWrXwXGVavGjXw==/base.apk!/lib/x86_64:/data/app/~~WknXBjM2DSoq4PiQFEr8Gg==/com.google.android.trichromelibrary_739004338-MaooYQak-N2X6OsoKeJ4Vg==/base.apk!/lib/x86_64, permitted_path=/data:/mnt/expand
+2025-10-29 00:16:11.120  4179-4179  cr_WVCFactoryProvider   com.chaincomms.platform              I  version=141.0.7390.43 (739004338) minSdkVersion=29 multiprocess=true packageId=2 splits=<none>
+2025-10-29 00:16:11.938  4179-4179  nativeloader            com.chaincomms.platform              D  Load /data/app/~~WknXBjM2DSoq4PiQFEr8Gg==/com.google.android.trichromelibrary_739004338-MaooYQak-N2X6OsoKeJ4Vg==/base.apk!/lib/x86_64/libmonochrome_64.so using class loader ns clns-11 (caller=/data/app/~~WNHaPLAd0xM1DcmfmGI0QA==/com.google.android.webview-Q1PxMZ7JCWrXwXGVavGjXw==/base.apk): ok
+2025-10-29 00:16:11.984  4179-4179  nativeloader            com.chaincomms.platform              D  Load /system/lib64/libwebviewchromium_plat_support.so using class loader ns clns-11 (caller=/data/app/~~WNHaPLAd0xM1DcmfmGI0QA==/com.google.android.webview-Q1PxMZ7JCWrXwXGVavGjXw==/base.apk): ok
+2025-10-29 00:16:12.249  4179-4372  chromium                com.chaincomms.platform              I  [1029/001612.184250:INFO:android_webview/browser/variations/variations_seed_loader.cc:67] Failed to open file for reading.: No such file or directory (2)
+2025-10-29 00:16:12.265  4179-4372  chromium                com.chaincomms.platform              I  [1029/001612.265523:INFO:android_webview/browser/variations/variations_seed_loader.cc:67] Failed to open file for reading.: No such file or directory (2)
+2025-10-29 00:16:12.512  4179-4179  cr_LibraryLoader        com.chaincomms.platform              I  Successfully loaded native library
+2025-10-29 00:16:12.584  4179-4179  cr_CachingUmaRecorder   com.chaincomms.platform              I  Flushed 16 samples from 16 histograms, 0 samples were dropped.
+2025-10-29 00:16:12.770  4179-4179  cr_CombinedPProvider    com.chaincomms.platform              I  #registerProvider() provider:WV.ak@a83533c isPolicyCacheEnabled:false policyProvidersSize:0
+2025-10-29 00:16:13.246  4179-4179  cr_PolicyProvider       com.chaincomms.platform              I  #setManagerAndSource() 0
+2025-10-29 00:16:14.189  4179-4179  cr_CombinedPProvider    com.chaincomms.platform              I  #linkNativeInternal() 1
+2025-10-29 00:16:14.281  4179-4179  cr_AppResProvider       com.chaincomms.platform              I  #getApplicationRestrictionsFromUserManager() Bundle[EMPTY_PARCEL]
+2025-10-29 00:16:14.281  4179-4179  cr_PolicyProvider       com.chaincomms.platform              I  #notifySettingsAvailable() 0
+2025-10-29 00:16:14.281  4179-4179  cr_CombinedPProvider    com.chaincomms.platform              I  #onSettingsAvailable() 0
+2025-10-29 00:16:14.281  4179-4179  cr_CombinedPProvider    com.chaincomms.platform              I  #flushPolicies()
+2025-10-29 00:16:15.035  4179-4407  chromium                com.chaincomms.platform              W  [WARNING:net/dns/dns_config_service_android.cc:69] Failed to read DnsConfig.
+2025-10-29 00:16:16.998  4179-4179  chromium                com.chaincomms.platform              W  [WARNING:android_webview/browser/network_service/net_helpers.cc:143] HTTP Cache size is: 20971520
+2025-10-29 00:16:22.264  4179-4179  Capacitor               com.chaincomms.platform              D  Starting BridgeActivity
+2025-10-29 00:16:22.622  4179-4179  Capacitor               com.chaincomms.platform              D  Registering plugin instance: CapacitorCookies
+2025-10-29 00:16:22.680  4179-4179  Capacitor               com.chaincomms.platform              D  Registering plugin instance: WebView
+2025-10-29 00:16:22.721  4179-4179  Capacitor               com.chaincomms.platform              D  Registering plugin instance: CapacitorHttp
+2025-10-29 00:16:22.752  4179-4179  Capacitor               com.chaincomms.platform              D  Registering plugin instance: Haptics
+2025-10-29 00:16:22.800  4179-4179  Capacitor               com.chaincomms.platform              D  Registering plugin instance: Keyboard
+2025-10-29 00:16:22.835  4179-4179  Capacitor               com.chaincomms.platform              D  Registering plugin instance: SplashScreen
+2025-10-29 00:16:23.220  4179-4179  Capacitor               com.chaincomms.platform              D  Registering plugin instance: StatusBar
+2025-10-29 00:16:23.488  4179-4179  Capacitor/...sBarPlugin com.chaincomms.platform              V  Notifying listeners for event statusBarOverlayChanged
+2025-10-29 00:16:23.488  4179-4179  Capacitor/...sBarPlugin com.chaincomms.platform              D  No listeners found for event statusBarOverlayChanged
+2025-10-29 00:16:23.517  4179-4179  Capacitor/...sBarPlugin com.chaincomms.platform              V  Notifying listeners for event statusBarOverlayChanged
+2025-10-29 00:16:23.517  4179-4179  Capacitor/...sBarPlugin com.chaincomms.platform              D  No listeners found for event statusBarOverlayChanged
+2025-10-29 00:16:24.384  4179-4179  Capacitor               com.chaincomms.platform              W  Unable to read file at path public/plugins
+2025-10-29 00:16:24.445  4179-4179  Capacitor               com.chaincomms.platform              D  Loading app at https://chain-admin-production.up.railway.app
+2025-10-29 00:16:25.430  4179-4408  cr_media                com.chaincomms.platform              W  BLUETOOTH_CONNECT permission is missing.
+2025-10-29 00:16:25.477  4179-4179  ncomms.platform         com.chaincomms.platform              I  Waiting for a blocking GC ClassLinker
+2025-10-29 00:16:25.723  4179-4408  cr_media                com.chaincomms.platform              W  getBluetoothAdapter() requires BLUETOOTH permission
+2025-10-29 00:16:25.723  4179-4408  cr_media                com.chaincomms.platform              W  registerBluetoothIntentsIfNeeded: Requires BLUETOOTH permission
+2025-10-29 00:16:27.441  4179-4199  ncomms.platform         com.chaincomms.platform              W  userfaultfd: MOVE ioctl seems unsupported: Connection timed out
+2025-10-29 00:16:27.471  4179-4199  ncomms.platform         com.chaincomms.platform              I  Background concurrent mark compact GC freed 3015KB AllocSpace bytes, 15(564KB) LOS objects, 49% free, 4090KB/8180KB, paused 70.124ms,8.613ms total 4.332s
+2025-10-29 00:16:27.474  4179-4179  ncomms.platform         com.chaincomms.platform              I  WaitForGcToComplete blocked ClassLinker on Background for 1.997s
+2025-10-29 00:16:28.292  4179-4396  Capacitor               com.chaincomms.platform              D  Handling local request: https://chain-admin-production.up.railway.app/
+2025-10-29 00:16:28.772  4179-4179  ncomms.platform         com.chaincomms.platform              W  Verification of java.util.Map kotlin.collections.MapsKt__MapsKt.mapValues(java.util.Map, kotlin.jvm.functions.Function1) took 105.403ms (645.14 bytecodes/s) (0B arena alloc)
+2025-10-29 00:16:29.434  4179-4179  Capacitor               com.chaincomms.platform              D  App started
+2025-10-29 00:16:29.456  4179-4179  Capacitor               com.chaincomms.platform              D  App resumed
+2025-10-29 00:16:30.457  4179-4179  CompatChangeReporter    com.chaincomms.platform              D  Compat change id reported: 349153669; UID 10220; state: ENABLED
+2025-10-29 00:16:30.549  4179-4179  HWUI                    com.chaincomms.platform              W  Unknown dataspace 0
+2025-10-29 00:16:31.942  4179-4544  CameraManagerGlobal     com.chaincomms.platform              I  Connecting to camera service
+2025-10-29 00:16:33.124  4179-4179  Capacitor               com.chaincomms.platform              D  App paused
+2025-10-29 00:16:33.349  4179-4179  Capacitor               com.chaincomms.platform              D  App stopped
+2025-10-29 00:16:33.351  4179-4179  Capacitor               com.chaincomms.platform              D  Saving instance state!
+2025-10-29 00:16:33.469  4179-4397  cr_AwSupervisedUserDel  com.chaincomms.platform              E  Unable to determine if restricted content blocking is required. Exception: java.util.concurrent.TimeoutException
+2025-10-29 00:16:33.497  4179-4179  Choreographer           com.chaincomms.platform              I  Skipped 32 frames!  The application may be doing too much work on its main thread.
+2025-10-29 00:16:33.534  4179-4397  Capacitor               com.chaincomms.platform              D  Handling local request: https://chain-admin-production.up.railway.app/assets/index-C2ChU1Iw.js
+2025-10-29 00:16:33.570  4179-4410  Capacitor               com.chaincomms.platform              D  Handling local request: https://chain-admin-production.up.railway.app/assets/index-BMRe7sY8.css
+2025-10-29 00:16:33.790  4179-4557  ProfileInstaller        com.chaincomms.platform              D  Installing profile for com.chaincomms.platform
+2025-10-29 00:16:33.835  4179-4179  VRI[MainActivity]       com.chaincomms.platform              D  WindowInsets changed: 1080x2400 
+2025-10-29 00:16:34.018  4179-4559  HWUI                    com.chaincomms.platform              I  Using FreeType backend (prop=Auto)
+2025-10-29 00:16:34.173  4179-4179  WindowOnBackDispatcher  com.chaincomms.platform              D  setTopOnBackInvokedCallback (unwrapped): android.view.ViewRootImpl$$ExternalSyntheticLambda12@5d47115
+2025-10-29 00:16:34.810  4179-4179  Choreographer           com.chaincomms.platform              I  Skipped 74 frames!  The application may be doing too much work on its main thread.
+2025-10-29 00:16:42.051  4179-4396  Capacitor               com.chaincomms.platform              D  Handling local request: https://chain-admin-production.up.railway.app/api/app-version
+2025-10-29 00:16:42.265  4179-4179  Capacitor/Plugin        com.chaincomms.platform              V  To native (Capacitor plugin): callbackId: 23520959, pluginId: StatusBar, methodName: setStyle
+2025-10-29 00:16:42.274  4179-4179  Capacitor               com.chaincomms.platform              V  callback: 23520959, pluginId: StatusBar, methodName: setStyle, methodData: {"style":"LIGHT"}
+2025-10-29 00:16:42.278  4179-4179  Capacitor/Plugin        com.chaincomms.platform              V  To native (Capacitor plugin): callbackId: 23520960, pluginId: StatusBar, methodName: setBackgroundColor
+2025-10-29 00:16:42.278  4179-4179  Capacitor               com.chaincomms.platform              V  callback: 23520960, pluginId: StatusBar, methodName: setBackgroundColor, methodData: {"color":"#ffffff"}
+2025-10-29 00:16:42.280  4179-4179  Capacitor/Plugin        com.chaincomms.platform              V  To native (Capacitor plugin): callbackId: 23520961, pluginId: SplashScreen, methodName: hide
+2025-10-29 00:16:42.280  4179-4179  Capacitor               com.chaincomms.platform              V  callback: 23520961, pluginId: SplashScreen, methodName: hide, methodData: {}
+2025-10-29 00:16:42.285  4179-4396  Capacitor               com.chaincomms.platform              D  Handling local request: https://chain-admin-production.up.railway.app/favicon.ico
+2025-10-29 00:16:42.292  4179-4179  Capacitor/Plugin        com.chaincomms.platform              V  To native (Capacitor plugin): callbackId: 23520962, pluginId: Keyboard, methodName: addListener
+2025-10-29 00:16:42.293  4179-4179  Capacitor               com.chaincomms.platform              V  callback: 23520962, pluginId: Keyboard, methodName: addListener, methodData: {"eventName":"keyboardWillShow"}
+2025-10-29 00:16:42.295  4179-4179  Capacitor/Plugin        com.chaincomms.platform              V  To native (Capacitor plugin): callbackId: 23520963, pluginId: Keyboard, methodName: addListener
+2025-10-29 00:16:42.295  4179-4179  Capacitor               com.chaincomms.platform              V  callback: 23520963, pluginId: Keyboard, methodName: addListener, methodData: {"eventName":"keyboardWillHide"}
+2025-10-29 00:16:42.495  4179-4396  Capacitor               com.chaincomms.platform              D  Handling local request: https://chain-admin-production.up.railway.app/api/auth/user
+2025-10-29 00:16:42.600  4179-4396  Capacitor               com.chaincomms.platform              D  Handling local request: https://chain-admin-production.up.railway.app/api/dynamic-content?type=templates
+2025-10-29 00:16:42.678  4179-4179  Capacitor/Console       com.chaincomms.platform              I  File: https://chain-admin-production.up.railway.app/assets/index-C2ChU1Iw.js - Line 48 - Msg: QueryClient Debug: [object Object]
+2025-10-29 00:16:42.699  4179-4179  Capacitor/Console       com.chaincomms.platform              E  File: https://chain-admin-production.up.railway.app/assets/index-C2ChU1Iw.js - Line 353 - Msg: Error checking for updates: SyntaxError: Unexpected token '<', "<!DOCTYPE "... is not valid JSON
+2025-10-29 00:16:42.700  4179-4179  Capacitor/Console       com.chaincomms.platform              I  File:  - Line 333 - Msg: undefined
+2025-10-29 00:16:42.743  4179-4179  Capacitor/Console       com.chaincomms.platform              I  File:  - Line 333 - Msg: undefined
+2025-10-29 00:16:43.374  4179-4179  Capacitor/Console       com.chaincomms.platform              I  File:  - Line 333 - Msg: undefined
+2025-10-29 00:16:43.387  4179-4397  Capacitor               com.chaincomms.platform              D  Handling local request: https://chain-admin-production.up.railway.app/api/dynamic-content?type=branding
+2025-10-29 00:16:43.420  4179-4179  Capacitor/Console       com.chaincomms.platform              E  File: https://chain-admin-production.up.railway.app/assets/index-C2ChU1Iw.js - Line 353 - Msg: Error fetching dynamic content: SyntaxError: Unexpected token '<', "<!DOCTYPE "... is not valid JSON
+2025-10-29 00:16:43.431  4179-4397  Capacitor               com.chaincomms.platform              D  Handling local request: https://chain-admin-production.up.railway.app/api/dynamic-content?type=branding
+2025-10-29 00:16:43.628  4179-4179  Capacitor/Console       com.chaincomms.platform              E  File: https://chain-admin-production.up.railway.app/assets/index-C2ChU1Iw.js - Line 353 - Msg: Error fetching dynamic content: SyntaxError: Unexpected token '<', "<!DOCTYPE "... is not valid JSON
+2025-10-29 00:16:43.674  4179-4179  Capacitor/Console       com.chaincomms.platform              E  File: https://chain-admin-production.up.railway.app/assets/index-C2ChU1Iw.js - Line 353 - Msg: Error fetching dynamic content: SyntaxError: Unexpected token '<', "<!DOCTYPE "... is not valid JSON
+2025-10-29 00:16:43.731  4179-4396  Capacitor               com.chaincomms.platform              D  Handling local request: https://chain-admin-production.up.railway.app/api/dynamic-content?type=settings
+2025-10-29 00:16:43.902  4179-4179  Capacitor/Console       com.chaincomms.platform              E  File: https://chain-admin-production.up.railway.app/assets/index-C2ChU1Iw.js - Line 353 - Msg: Error fetching dynamic content: SyntaxError: Unexpected token '<', "<!DOCTYPE "... is not valid JSON
+2025-10-29 00:16:43.930  4179-4199  ncomms.platform         com.chaincomms.platform              W  Suspending all threads took: 10.533ms
+2025-10-29 00:16:44.015  4179-4396  Capacitor               com.chaincomms.platform              D  Handling local request: https://chain-admin-production.up.railway.app/api/app-version
+2025-10-29 00:16:44.300  4179-4179  Capacitor/Console       com.chaincomms.platform              E  File: https://chain-admin-production.up.railway.app/assets/index-C2ChU1Iw.js - Line 353 - Msg: Error checking for updates: SyntaxError: Unexpected token '<', "<!DOCTYPE "... is not valid JSON
+2025-10-29 00:16:44.666  4179-4199  ncomms.platform         com.chaincomms.platform              I  Background young concurrent mark compact GC freed 1855KB AllocSpace bytes, 17(888KB) LOS objects, 48% free, 4202KB/8180KB, paused 52.211ms,157.633ms total 2.368s
+2025-10-29 00:16:55.775  4179-4197  ncomms.platform         com.chaincomms.platform              I  Compiler allocated 5200KB to compile void android.view.ViewRootImpl.performTraversals()
+2025-10-29 00:19:28.222  6236-6236  Zygote                  com.chaincomms.platform              I  Process 6236 created for com.chaincomms.platform
+2025-10-29 00:19:28.223  6236-6236  ncomms.platform         com.chaincomms.platform              I  Late-enabling -Xcheck:jni
+2025-10-29 00:19:28.516  6236-6236  ncomms.platform         com.chaincomms.platform              I  Using CollectorTypeCMC GC.
+2025-10-29 00:19:28.518  6236-6236  ncomms.platform         com.chaincomms.platform              W  Unexpected CPU variant for x86: x86_64.
+                                                                                                    Known variants: atom, sandybridge, silvermont, goldmont, goldmont-plus, goldmont-without-sha-xsaves, tremont, kabylake, alderlake, default
+2025-10-29 00:19:28.760  6236-6236  nativeloader            com.chaincomms.platform              D  Load libframework-connectivity-tiramisu-jni.so using APEX ns com_android_tethering for caller /apex/com.android.tethering/javalib/framework-connectivity-t.jar: ok
+2025-10-29 00:19:30.524  6236-6236  ncomms.platform         com.chaincomms.platform              W  Suspending all threads took: 10.591ms
+2025-10-29 00:19:30.586  6236-6236  nativeloader            com.chaincomms.platform              D  Load /data/user/0/com.chaincomms.platform/code_cache/startup_agents/65318d08-agent.so using system ns (caller=<unknown>): ok
+2025-10-29 00:19:30.544  6236-6236  re-initialized>         com.chaincomms.platform              W  type=1400 audit(0.0:282): avc:  granted  { execute } for  path="/data/data/com.chaincomms.platform/code_cache/startup_agents/65318d08-agent.so" dev="dm-56" ino=353768 scontext=u:r:untrusted_app:s0:c220,c256,c512,c768 tcontext=u:object_r:app_data_file:s0:c220,c256,c512,c768 tclass=file app=com.chaincomms.platform
+2025-10-29 00:19:30.946  6236-6236  ncomms.platform         com.chaincomms.platform              W  hiddenapi: DexFile /data/data/com.chaincomms.platform/code_cache/.studio/instruments-873176f2.jar is in boot class path but is not in a known location
+2025-10-29 00:19:38.289  6236-6236  ncomms.platform         com.chaincomms.platform              W  Redefining intrinsic method java.lang.Thread java.lang.Thread.currentThread(). This may cause the unexpected use of the original definition of java.lang.Thread java.lang.Thread.currentThread()in methods that have already been compiled.
+2025-10-29 00:19:38.297  6236-6236  ncomms.platform         com.chaincomms.platform              W  Redefining intrinsic method boolean java.lang.Thread.interrupted(). This may cause the unexpected use of the original definition of boolean java.lang.Thread.interrupted()in methods that have already been compiled.
+---------------------------- PROCESS STARTED (6416) for package com.chaincomms.platform ----------------------------
+2025-10-29 00:19:57.259  6416-6416  nativeloader            com.chaincomms.platform              D  Load libframework-connectivity-tiramisu-jni.so using APEX ns com_android_tethering for caller /apex/com.android.tethering/javalib/framework-connectivity-t.jar: ok
+2025-10-29 00:19:57.849  6416-6416  nativeloader            com.chaincomms.platform              D  Load /data/user/0/com.chaincomms.platform/code_cache/startup_agents/65318d08-agent.so using system ns (caller=<unknown>): ok
+2025-10-29 00:19:57.890  6416-6416  ncomms.platform         com.chaincomms.platform              W  hiddenapi: DexFile /data/data/com.chaincomms.platform/code_cache/.studio/instruments-873176f2.jar is in boot class path but is not in a known location
+2025-10-29 00:19:57.840  6416-6416  re-initialized>         com.chaincomms.platform              W  type=1400 audit(0.0:388): avc:  granted  { execute } for  path="/data/data/com.chaincomms.platform/code_cache/startup_agents/65318d08-agent.so" dev="dm-56" ino=353768 scontext=u:r:untrusted_app:s0:c220,c256,c512,c768 tcontext=u:object_r:app_data_file:s0:c220,c256,c512,c768 tclass=file app=com.chaincomms.platform
+2025-10-29 00:20:01.278  6416-6416  ncomms.platform         com.chaincomms.platform              W  Redefining intrinsic method java.lang.Thread java.lang.Thread.currentThread(). This may cause the unexpected use of the original definition of java.lang.Thread java.lang.Thread.currentThread()in methods that have already been compiled.
+2025-10-29 00:20:01.279  6416-6416  ncomms.platform         com.chaincomms.platform              W  Redefining intrinsic method boolean java.lang.Thread.interrupted(). This may cause the unexpected use of the original definition of boolean java.lang.Thread.interrupted()in methods that have already been compiled.
+2025-10-29 00:20:02.685  6416-6416  nativeloader            com.chaincomms.platform              D  Configuring clns-9 for other apk /data/app/~~t5OmLufn8w5tuzhb8wVbiA==/com.chaincomms.platform-_EZYc4Kqoh54jcSdJHvqXA==/base.apk. target_sdk_version=35, uses_libraries=, library_path=/data/app/~~t5OmLufn8w5tuzhb8wVbiA==/com.chaincomms.platform-_EZYc4Kqoh54jcSdJHvqXA==/lib/x86_64, permitted_path=/data:/mnt/expand:/data/user/0/com.chaincomms.platform
+2025-10-29 00:20:02.730  6416-6416  CompatChangeReporter    com.chaincomms.platform              D  Compat change id reported: 202956589; UID 10220; state: ENABLED
+2025-10-29 00:20:02.839  6416-6416  GraphicsEnvironment     com.chaincomms.platform              V  Currently set values for:
+2025-10-29 00:20:02.839  6416-6416  GraphicsEnvironment     com.chaincomms.platform              V    angle_gl_driver_selection_pkgs=[]
+2025-10-29 00:20:02.840  6416-6416  GraphicsEnvironment     com.chaincomms.platform              V    angle_gl_driver_selection_values=[]
+2025-10-29 00:20:02.856  6416-6416  GraphicsEnvironment     com.chaincomms.platform              V  com.chaincomms.platform is not listed in per-application setting
+2025-10-29 00:20:02.862  6416-6416  GraphicsEnvironment     com.chaincomms.platform              V  ANGLE allowlist from config: com.dreamgames.royalmatch com.dts.freefiremax com.dxx.firenow com.gramgames.mergedragons com.ludo.king com.mojang.minecraftpe com.my.defense com.nintendo.zaka com.os.airforce com.playrix.fishdomdd.gplay io.teslatech.callbreak jp.konami.prospia net.peakgames.toonblast
+2025-10-29 00:20:02.862  6416-6416  GraphicsEnvironment     com.chaincomms.platform              V  com.chaincomms.platform is not listed in ANGLE allowlist or settings, returning default
+2025-10-29 00:20:02.862  6416-6416  GraphicsEnvironment     com.chaincomms.platform              V  Neither updatable production driver nor prerelease driver is supported.
+2025-10-29 00:20:03.966  6416-6482  DisplayManager          com.chaincomms.platform              I  Choreographer implicitly registered for the refresh rate.
+2025-10-29 00:20:04.466  6416-6416  ncomms.platform         com.chaincomms.platform              W  Verification of void androidx.activity.ComponentActivity.<init>() took 126.313ms (1868.37 bytecodes/s) (0B arena alloc)
+2025-10-29 00:20:04.575  6416-6482  GFXSTREAM               com.chaincomms.platform              I  [eglDisplay.cpp(297)] Opening libGLESv1_CM_emulation.so
+2025-10-29 00:20:04.605  6416-6482  GFXSTREAM               com.chaincomms.platform              I  [eglDisplay.cpp(297)] Opening libGLESv2_emulation.so
+2025-10-29 00:20:04.817  6416-6482  HWUI                    com.chaincomms.platform              W  Failed to choose config with EGL_SWAP_BEHAVIOR_PRESERVED, retrying without...
+2025-10-29 00:20:04.819  6416-6482  HWUI                    com.chaincomms.platform              W  Failed to initialize 101010-2 format, error = EGL_SUCCESS
+2025-10-29 00:20:05.280  6416-6416  DesktopExperienceFlags  com.chaincomms.platform              D  Toggle override initialized to: false
+2025-10-29 00:20:05.393  6416-6416  AppCompatDelegate       com.chaincomms.platform              D  Checking for metadata for AppLocalesMetadataHolderService : Service not found
+2025-10-29 00:20:05.534  6416-6416  ashmem                  com.chaincomms.platform              E  Pinning is deprecated since Android Q. Please use trim or other methods.
+2025-10-29 00:20:06.136  6416-6416  CompatChangeReporter    com.chaincomms.platform              D  Compat change id reported: 309578419; UID 10220; state: ENABLED
+2025-10-29 00:20:06.146  6416-6416  DesktopModeFlags        com.chaincomms.platform              D  Toggle override initialized to: OVERRIDE_UNSET
+2025-10-29 00:20:06.584  6416-6416  ncomms.platform         com.chaincomms.platform              I  hiddenapi: Accessing hidden method Landroid/view/ViewGroup;->makeOptionalFitsSystemWindows()V (runtime_flags=0, domain=platform, api=unsupported) from Landroidx/appcompat/widget/ViewUtils; (domain=app) using reflection: allowed
+2025-10-29 00:20:06.911  6416-6416  WebViewFactory          com.chaincomms.platform              I  Loading com.google.android.webview version 141.0.7390.43 (code 739004338)
+2025-10-29 00:20:06.952  6416-6416  ResourcesManager        com.chaincomms.platform              V  The following library key has been added: ResourcesKey{ mHash=d8eddc05 mResDir=null mSplitDirs=[] mOverlayDirs=[] mLibDirs=[/data/app/~~WNHaPLAd0xM1DcmfmGI0QA==/com.google.android.webview-Q1PxMZ7JCWrXwXGVavGjXw==/base.apk,/data/app/~~WknXBjM2DSoq4PiQFEr8Gg==/com.google.android.trichromelibrary_739004338-MaooYQak-N2X6OsoKeJ4Vg==/base.apk,/system_ext/framework/androidx.window.extensions.jar] mDisplayId=0 mOverrideConfig=v36 mCompatInfo={420dpi always-compat} mLoaders=[]}
+2025-10-29 00:20:07.021  6416-6416  ncomms.platform         com.chaincomms.platform              W  Failed to find entry 'classes.dex': Entry not found
+2025-10-29 00:20:07.023  6416-6416  nativeloader            com.chaincomms.platform              D  Configuring clns-10 for other apk /data/app/~~WknXBjM2DSoq4PiQFEr8Gg==/com.google.android.trichromelibrary_739004338-MaooYQak-N2X6OsoKeJ4Vg==/base.apk. target_sdk_version=36, uses_libraries=ALL, library_path=/data/app/~~WNHaPLAd0xM1DcmfmGI0QA==/com.google.android.webview-Q1PxMZ7JCWrXwXGVavGjXw==/lib/x86_64:/data/app/~~WNHaPLAd0xM1DcmfmGI0QA==/com.google.android.webview-Q1PxMZ7JCWrXwXGVavGjXw==/base.apk!/lib/x86_64:/data/app/~~WknXBjM2DSoq4PiQFEr8Gg==/com.google.android.trichromelibrary_739004338-MaooYQak-N2X6OsoKeJ4Vg==/base.apk!/lib/x86_64, permitted_path=/data:/mnt/expand
+2025-10-29 00:20:07.024  6416-6416  ApplicationLoaders      com.chaincomms.platform              D  Returning zygote-cached class loader: /system_ext/framework/androidx.window.extensions.jar
+2025-10-29 00:20:07.088  6416-6416  nativeloader            com.chaincomms.platform              D  Configuring clns-11 for other apk /data/app/~~WNHaPLAd0xM1DcmfmGI0QA==/com.google.android.webview-Q1PxMZ7JCWrXwXGVavGjXw==/base.apk. target_sdk_version=36, uses_libraries=, library_path=/data/app/~~WNHaPLAd0xM1DcmfmGI0QA==/com.google.android.webview-Q1PxMZ7JCWrXwXGVavGjXw==/lib/x86_64:/data/app/~~WNHaPLAd0xM1DcmfmGI0QA==/com.google.android.webview-Q1PxMZ7JCWrXwXGVavGjXw==/base.apk!/lib/x86_64:/data/app/~~WknXBjM2DSoq4PiQFEr8Gg==/com.google.android.trichromelibrary_739004338-MaooYQak-N2X6OsoKeJ4Vg==/base.apk!/lib/x86_64, permitted_path=/data:/mnt/expand
+2025-10-29 00:20:08.364  6416-6416  cr_WVCFactoryProvider   com.chaincomms.platform              I  version=141.0.7390.43 (739004338) minSdkVersion=29 multiprocess=true packageId=2 splits=<none>
+2025-10-29 00:20:09.218  6416-6416  nativeloader            com.chaincomms.platform              D  Load /data/app/~~WknXBjM2DSoq4PiQFEr8Gg==/com.google.android.trichromelibrary_739004338-MaooYQak-N2X6OsoKeJ4Vg==/base.apk!/lib/x86_64/libmonochrome_64.so using class loader ns clns-11 (caller=/data/app/~~WNHaPLAd0xM1DcmfmGI0QA==/com.google.android.webview-Q1PxMZ7JCWrXwXGVavGjXw==/base.apk): ok
+2025-10-29 00:20:09.266  6416-6416  nativeloader            com.chaincomms.platform              D  Load /system/lib64/libwebviewchromium_plat_support.so using class loader ns clns-11 (caller=/data/app/~~WNHaPLAd0xM1DcmfmGI0QA==/com.google.android.webview-Q1PxMZ7JCWrXwXGVavGjXw==/base.apk): ok
+2025-10-29 00:20:09.398  6416-6507  chromium                com.chaincomms.platform              E  [1029/002009.379281:ERROR:android_webview/browser/variations/variations_seed_loader.cc:39] Seed missing signature.
+2025-10-29 00:20:09.563  6416-6507  chromium                com.chaincomms.platform              I  [1029/002009.476152:INFO:android_webview/browser/variations/variations_seed_loader.cc:67] Failed to open file for reading.: No such file or directory (2)
+2025-10-29 00:20:09.869  6416-6416  cr_LibraryLoader        com.chaincomms.platform              I  Successfully loaded native library
+2025-10-29 00:20:09.944  6416-6416  cr_CachingUmaRecorder   com.chaincomms.platform              I  Flushed 16 samples from 16 histograms, 0 samples were dropped.
+2025-10-29 00:20:10.146  6416-6416  cr_CombinedPProvider    com.chaincomms.platform              I  #registerProvider() provider:WV.ak@8b475e6 isPolicyCacheEnabled:false policyProvidersSize:0
+2025-10-29 00:20:10.199  6416-6416  cr_PolicyProvider       com.chaincomms.platform              I  #setManagerAndSource() 0
+2025-10-29 00:20:11.615  6416-6416  cr_CombinedPProvider    com.chaincomms.platform              I  #linkNativeInternal() 1
+2025-10-29 00:20:11.652  6416-6416  cr_AppResProvider       com.chaincomms.platform              I  #getApplicationRestrictionsFromUserManager() Bundle[EMPTY_PARCEL]
+2025-10-29 00:20:11.652  6416-6416  cr_PolicyProvider       com.chaincomms.platform              I  #notifySettingsAvailable() 0
+2025-10-29 00:20:11.652  6416-6416  cr_CombinedPProvider    com.chaincomms.platform              I  #onSettingsAvailable() 0
+2025-10-29 00:20:11.652  6416-6416  cr_CombinedPProvider    com.chaincomms.platform              I  #flushPolicies()
+2025-10-29 00:20:12.431  6416-6536  chromium                com.chaincomms.platform              W  [WARNING:net/dns/dns_config_service_android.cc:69] Failed to read DnsConfig.
+2025-10-29 00:20:13.272  6416-6416  chromium                com.chaincomms.platform              W  [WARNING:android_webview/browser/network_service/net_helpers.cc:143] HTTP Cache size is: 20971520
+2025-10-29 00:20:14.843  6416-6416  Capacitor               com.chaincomms.platform              D  Starting BridgeActivity
+2025-10-29 00:20:15.399  6416-6416  Capacitor               com.chaincomms.platform              D  Registering plugin instance: CapacitorCookies
+2025-10-29 00:20:15.436  6416-6416  Capacitor               com.chaincomms.platform              D  Registering plugin instance: WebView
+2025-10-29 00:20:15.456  6416-6416  Capacitor               com.chaincomms.platform              D  Registering plugin instance: CapacitorHttp
+2025-10-29 00:20:15.464  6416-6416  Capacitor               com.chaincomms.platform              D  Registering plugin instance: Haptics
+2025-10-29 00:20:15.477  6416-6416  Capacitor               com.chaincomms.platform              D  Registering plugin instance: Keyboard
+2025-10-29 00:20:15.487  6416-6416  Capacitor               com.chaincomms.platform              D  Registering plugin instance: SplashScreen
+2025-10-29 00:20:15.633  6416-6416  Capacitor               com.chaincomms.platform              D  Registering plugin instance: StatusBar
+2025-10-29 00:20:15.782  6416-6416  Capacitor/...sBarPlugin com.chaincomms.platform              V  Notifying listeners for event statusBarOverlayChanged
+2025-10-29 00:20:15.783  6416-6416  Capacitor/...sBarPlugin com.chaincomms.platform              D  No listeners found for event statusBarOverlayChanged
+2025-10-29 00:20:15.789  6416-6416  Capacitor/...sBarPlugin com.chaincomms.platform              V  Notifying listeners for event statusBarOverlayChanged
+2025-10-29 00:20:15.790  6416-6416  Capacitor/...sBarPlugin com.chaincomms.platform              D  No listeners found for event statusBarOverlayChanged
+2025-10-29 00:20:16.620  6416-6416  Capacitor               com.chaincomms.platform              W  Unable to read file at path public/plugins
+2025-10-29 00:20:16.697  6416-6416  Capacitor               com.chaincomms.platform              D  Loading app at https://chain-admin-production.up.railway.app
+2025-10-29 00:20:17.236  6416-6537  cr_media                com.chaincomms.platform              W  BLUETOOTH_CONNECT permission is missing.
+2025-10-29 00:20:17.366  6416-6416  ncomms.platform         com.chaincomms.platform              I  Waiting for a blocking GC ClassLinker
+2025-10-29 00:20:17.366  6416-6537  cr_media                com.chaincomms.platform              W  getBluetoothAdapter() requires BLUETOOTH permission
+2025-10-29 00:20:17.367  6416-6537  cr_media                com.chaincomms.platform              W  registerBluetoothIntentsIfNeeded: Requires BLUETOOTH permission
+2025-10-29 00:20:17.510  6416-6423  ncomms.platform         com.chaincomms.platform              W  userfaultfd: MOVE ioctl seems unsupported: Connection timed out
+2025-10-29 00:20:17.650  6416-6423  ncomms.platform         com.chaincomms.platform              I  Background concurrent mark compact GC freed 2779KB AllocSpace bytes, 12(432KB) LOS objects, 49% free, 4386KB/8772KB, paused 35.689ms,16.579ms total 2.023s
+2025-10-29 00:20:17.650  6416-6416  ncomms.platform         com.chaincomms.platform              I  WaitForGcToComplete blocked ClassLinker on Background for 284.857ms
+2025-10-29 00:20:17.991  6416-6529  Capacitor               com.chaincomms.platform              D  Handling local request: https://chain-admin-production.up.railway.app/
+2025-10-29 00:20:18.686  6416-6416  Capacitor               com.chaincomms.platform              D  App started
+2025-10-29 00:20:18.720  6416-6416  Capacitor               com.chaincomms.platform              D  App resumed
+2025-10-29 00:20:19.149  6416-6416  CompatChangeReporter    com.chaincomms.platform              D  Compat change id reported: 349153669; UID 10220; state: ENABLED
+2025-10-29 00:20:19.191  6416-6416  HWUI                    com.chaincomms.platform              W  Unknown dataspace 0
+2025-10-29 00:20:21.140  6416-6639  CameraManagerGlobal     com.chaincomms.platform              I  Connecting to camera service
+2025-10-29 00:20:21.650  6416-6531  Capacitor               com.chaincomms.platform              D  Handling local request: https://chain-admin-production.up.railway.app/assets/index-C2ChU1Iw.js
+2025-10-29 00:20:21.708  6416-6416  Capacitor               com.chaincomms.platform              D  App paused
+2025-10-29 00:20:21.710  6416-6416  Choreographer           com.chaincomms.platform              I  Skipped 1084 frames!  The application may be doing too much work on its main thread.
+2025-10-29 00:20:21.751  6416-6536  Capacitor               com.chaincomms.platform              D  Handling local request: https://chain-admin-production.up.railway.app/assets/index-BMRe7sY8.css
+2025-10-29 00:20:21.813  6416-6416  VRI[MainActivity]       com.chaincomms.platform              D  WindowInsets changed: 1080x2400 
+2025-10-29 00:20:22.230  6416-6416  WindowOnBackDispatcher  com.chaincomms.platform              D  setTopOnBackInvokedCallback (unwrapped): android.view.ViewRootImpl$$ExternalSyntheticLambda12@7095eb1
+2025-10-29 00:20:22.750  6416-6416  Capacitor               com.chaincomms.platform              D  App stopped
+2025-10-29 00:20:22.764  6416-6416  Capacitor               com.chaincomms.platform              D  Saving instance state!
+2025-10-29 00:20:22.930  6416-6530  cr_AwSupervisedUserDel  com.chaincomms.platform              E  Unable to determine if restricted content blocking is required. Exception: java.util.concurrent.TimeoutException
+2025-10-29 00:20:23.107  6416-6416  Choreographer           com.chaincomms.platform              I  Skipped 82 frames!  The application may be doing too much work on its main thread.
+2025-10-29 00:20:27.284  6416-6530  Capacitor               com.chaincomms.platform              D  Handling local request: https://chain-admin-production.up.railway.app/api/app-version
+2025-10-29 00:20:27.346  6416-6665  HWUI                    com.chaincomms.platform              I  Using FreeType backend (prop=Auto)
+2025-10-29 00:20:27.450  6416-6697  ncomms.platform         com.chaincomms.platform              W  Verification of void androidx.profileinstaller.ProfileInstaller.writeProfile(android.content.Context, java.util.concurrent.Executor, androidx.profileinstaller.ProfileInstaller$DiagnosticsCallback, boolean) took 105.008ms (1523.68 bytecodes/s) (0B arena alloc)
+2025-10-29 00:20:27.757  6416-6697  ProfileInstaller        com.chaincomms.platform              D  Installing profile for com.chaincomms.platform
+2025-10-29 00:20:28.120  6416-6416  Capacitor/Plugin        com.chaincomms.platform              V  To native (Capacitor plugin): callbackId: 131221758, pluginId: StatusBar, methodName: setStyle
+2025-10-29 00:20:28.292  6416-6530  Capacitor               com.chaincomms.platform              D  Handling local request: https://chain-admin-production.up.railway.app/favicon.ico
+2025-10-29 00:20:28.363  6416-6416  Capacitor               com.chaincomms.platform              V  callback: 131221758, pluginId: StatusBar, methodName: setStyle, methodData: {"style":"LIGHT"}
+2025-10-29 00:20:28.481  6416-6416  Capacitor/Console       com.chaincomms.platform              E  File: https://chain-admin-production.up.railway.app/assets/index-C2ChU1Iw.js - Line 353 - Msg: Error checking for updates: SyntaxError: Unexpected token '<', "<!DOCTYPE "... is not valid JSON
+2025-10-29 00:20:28.483  6416-6416  Capacitor/Plugin        com.chaincomms.platform              V  To native (Capacitor plugin): callbackId: 131221759, pluginId: StatusBar, methodName: setBackgroundColor
+2025-10-29 00:20:28.483  6416-6416  Capacitor               com.chaincomms.platform              V  callback: 131221759, pluginId: StatusBar, methodName: setBackgroundColor, methodData: {"color":"#ffffff"}
+2025-10-29 00:20:28.530  6416-6416  Capacitor/Plugin        com.chaincomms.platform              V  To native (Capacitor plugin): callbackId: 131221760, pluginId: SplashScreen, methodName: hide
+2025-10-29 00:20:28.531  6416-6416  Capacitor               com.chaincomms.platform              V  callback: 131221760, pluginId: SplashScreen, methodName: hide, methodData: {}
+2025-10-29 00:20:28.548  6416-6416  Capacitor/Plugin        com.chaincomms.platform              V  To native (Capacitor plugin): callbackId: 131221761, pluginId: Keyboard, methodName: addListener
+2025-10-29 00:20:28.549  6416-6416  Capacitor               com.chaincomms.platform              V  callback: 131221761, pluginId: Keyboard, methodName: addListener, methodData: {"eventName":"keyboardWillShow"}
+2025-10-29 00:20:28.579  6416-6416  Capacitor/Plugin        com.chaincomms.platform              V  To native (Capacitor plugin): callbackId: 131221762, pluginId: Keyboard, methodName: addListener
+2025-10-29 00:20:28.579  6416-6416  Capacitor               com.chaincomms.platform              V  callback: 131221762, pluginId: Keyboard, methodName: addListener, methodData: {"eventName":"keyboardWillHide"}
+2025-10-29 00:20:28.583  6416-6530  Capacitor               com.chaincomms.platform              D  Handling local request: https://chain-admin-production.up.railway.app/api/dynamic-content?type=templates
+2025-10-29 00:20:28.893  6416-6416  Capacitor/Console       com.chaincomms.platform              I  File: https://chain-admin-production.up.railway.app/assets/index-C2ChU1Iw.js - Line 48 - Msg: QueryClient Debug: [object Object]
+2025-10-29 00:20:29.086  6416-6697  ncomms.platform         com.chaincomms.platform              W  Verification of void androidx.concurrent.futures.AbstractResolvableFuture$Listener.<init>(java.lang.Runnable, java.util.concurrent.Executor) took 260.144ms (30.75 bytecodes/s) (0B arena alloc)
+2025-10-29 00:20:29.404  6416-6416  Capacitor/Console       com.chaincomms.platform              I  File:  - Line 333 - Msg: undefined
+2025-10-29 00:20:29.408  6416-6416  Capacitor/Console       com.chaincomms.platform              I  File:  - Line 333 - Msg: undefined
+2025-10-29 00:20:29.455  6416-6530  Capacitor               com.chaincomms.platform              D  Handling local request: https://chain-admin-production.up.railway.app/api/auth/user
+2025-10-29 00:20:29.642  6416-6416  Capacitor/Console       com.chaincomms.platform              I  File:  - Line 333 - Msg: undefined
+2025-10-29 00:20:29.798  6416-6416  Capacitor/Console       com.chaincomms.platform              E  File: https://chain-admin-production.up.railway.app/assets/index-C2ChU1Iw.js - Line 353 - Msg: Error fetching dynamic content: SyntaxError: Unexpected token '<', "<!DOCTYPE "... is not valid JSON
+2025-10-29 00:20:29.854  6416-6530  Capacitor               com.chaincomms.platform              D  Handling local request: https://chain-admin-production.up.railway.app/api/dynamic-content?type=branding
+2025-10-29 00:20:30.267  6416-6416  Capacitor/Console       com.chaincomms.platform              E  File: https://chain-admin-production.up.railway.app/assets/index-C2ChU1Iw.js - Line 353 - Msg: Error fetching dynamic content: SyntaxError: Unexpected token '<', "<!DOCTYPE "... is not valid JSON
+2025-10-29 00:20:30.278  6416-6531  Capacitor               com.chaincomms.platform              D  Handling local request: https://chain-admin-production.up.railway.app/api/dynamic-content?type=branding
+2025-10-29 00:20:30.291  6416-6531  Capacitor               com.chaincomms.platform              D  Handling local request: https://chain-admin-production.up.railway.app/api/dynamic-content?type=settings
+2025-10-29 00:20:30.519  6416-6416  Capacitor/Console       com.chaincomms.platform              E  File: https://chain-admin-production.up.railway.app/assets/index-C2ChU1Iw.js - Line 353 - Msg: Error fetching dynamic content: SyntaxError: Unexpected token '<', "<!DOCTYPE "... is not valid JSON
+2025-10-29 00:20:30.586  6416-6530  Capacitor               com.chaincomms.platform              D  Handling local request: https://chain-admin-production.up.railway.app/api/app-version
+2025-10-29 00:20:30.772  6416-6416  Capacitor/Console       com.chaincomms.platform              E  File: https://chain-admin-production.up.railway.app/assets/index-C2ChU1Iw.js - Line 353 - Msg: Error fetching dynamic content: SyntaxError: Unexpected token '<', "<!DOCTYPE "... is not valid JSON
+2025-10-29 00:20:31.228  6416-6416  Capacitor/Console       com.chaincomms.platform              E  File: https://chain-admin-production.up.railway.app/assets/index-C2ChU1Iw.js - Line 353 - Msg: Error checking for updates: SyntaxError: Unexpected token '<', "<!DOCTYPE "... is not valid JSON
+2
