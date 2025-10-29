@@ -8693,9 +8693,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Sync to SMAX if configured
       try {
-        const account = await storage.getAccount(schedule.accountId, tenantId);
-        const consumer = await storage.getConsumer(schedule.consumerId, tenantId);
-        const paymentMethod = await storage.getPaymentMethod(schedule.paymentMethodId, tenantId);
+        const account = await storage.getAccount(schedule.accountId);
+        const consumer = await storage.getConsumer(schedule.consumerId);
+        const paymentMethod = await storage.getPaymentMethod(schedule.paymentMethodId);
 
         if (account?.filenumber) {
           console.log('💰 Syncing approved arrangement to SMAX...');
