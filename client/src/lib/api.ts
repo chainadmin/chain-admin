@@ -7,8 +7,12 @@ function getApiBase(): string {
     return import.meta.env.VITE_API_URL;
   }
   
-  // For native mobile platforms (iOS/Android), use the production server
-  if (Capacitor.isNativePlatform()) {
+  // For native mobile platforms (iOS/Android), ALWAYS use the production server
+  // Check multiple platform indicators to ensure we catch all native scenarios
+  const platform = Capacitor.getPlatform();
+  const isNative = platform === 'ios' || platform === 'android' || Capacitor.isNativePlatform();
+  
+  if (isNative) {
     return import.meta.env.VITE_API_BASE_URL || 'https://chain-admin-production.up.railway.app';
   }
   
