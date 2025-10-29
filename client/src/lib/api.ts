@@ -7,23 +7,32 @@ function getApiBase(): string {
     return import.meta.env.VITE_API_URL;
   }
   
-  // For native mobile platforms (iOS/Android), ALWAYS use the production server
-  // Check multiple platform indicators to ensure we catch all native scenarios
-  const platform = Capacitor.getPlatform();
-  const isNative = platform === 'ios' || platform === 'android' || Capacitor.isNativePlatform();
+  // Check if we're in a Capacitor native environment FIRST (before localhost check)
+  // Capacitor WebViews use capacitor://localhost, so we need to detect this early
+  const isCapacitor = typeof window !== 'undefined' && 
+                     (window.location.protocol === 'capacitor:' || 
+                      window.location.protocol === 'ionic:' ||
+                      Capacitor.isNativePlatform());
   
-  if (isNative) {
-    return import.meta.env.VITE_API_BASE_URL || 'https://chain-admin-production.up.railway.app';
+  if (isCapacitor) {
+    // Native Capacitor apps ALWAYS use Railway production
+    return 'https://chain-admin-production.up.railway.app';
   }
   
-  // Only use localhost:5000 if we're actually on localhost
+  // Only use localhost:5000 if we're actually on localhost in a BROWSER (not Capacitor)
   if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
     return 'http://localhost:5000';
   }
   
-  // For Replit webview and production, use same origin (empty string = relative URLs)
-  // The Express server serves both frontend and API on the same port in Replit
-  return '';
+  // For web browsers on same domain (Replit), use relative URLs
+  if (typeof window !== 'undefined' && 
+      !window.location.hostname.includes('railway.app') &&
+      Capacitor.getPlatform() === 'web') {
+    return '';
+  }
+  
+  // For ALL other cases, use Railway production
+  return 'https://chain-admin-production.up.railway.app';
 }
 
 const API_BASE = getApiBase();
