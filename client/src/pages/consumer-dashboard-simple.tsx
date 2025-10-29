@@ -204,6 +204,7 @@ export default function ConsumerDashboardSimple() {
   const [customAmount, setCustomAmount] = useState('');
   const [paymentFrequency, setPaymentFrequency] = useState<'weekly' | 'biweekly' | 'monthly'>('biweekly');
   const [calculatedPayment, setCalculatedPayment] = useState<number | null>(null);
+  const [monthlyBaseAmount, setMonthlyBaseAmount] = useState<number | null>(null); // Always stores the monthly amount
   
   // Document upload state
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
@@ -1746,6 +1747,7 @@ export default function ConsumerDashboardSimple() {
                               onClick={() => {
                                 setPaymentMethod('term');
                                 setSelectedTerm(term);
+                                setMonthlyBaseAmount(monthlyPayment);
                                 setCalculatedPayment(biweeklyPayment);
                                 setSelectedArrangement(null);
                               }}
@@ -1798,16 +1800,21 @@ export default function ConsumerDashboardSimple() {
                             if (value) {
                               const amountCents = Math.round(parseFloat(value) * 100);
                               const minimumMonthly = settings?.minimumMonthlyPayment ?? 5000;
-                              const finalAmount = amountCents < minimumMonthly ? minimumMonthly : amountCents;
+                              const monthlyAmount = amountCents < minimumMonthly ? minimumMonthly : amountCents;
+                              
+                              // Store monthly base and convert to selected frequency
+                              setMonthlyBaseAmount(monthlyAmount);
+                              const finalAmount = convertToFrequency(monthlyAmount, paymentFrequency);
                               setCalculatedPayment(finalAmount);
                               
                               if (amountCents < minimumMonthly) {
                                 toast({
                                   title: "Minimum Applied",
-                                  description: `Amount adjusted to minimum: ${formatCurrency(minimumMonthly)}`,
+                                  description: `Amount adjusted to minimum monthly: ${formatCurrency(minimumMonthly)}`,
                                 });
                               }
                             } else {
+                              setMonthlyBaseAmount(null);
                               setCalculatedPayment(null);
                             }
                           }}
@@ -1830,21 +1837,9 @@ export default function ConsumerDashboardSimple() {
                         <Label className="text-sm text-blue-100/70 mb-2 block">Payment Frequency</Label>
                         <div className="grid grid-cols-3 gap-2">
                           {(['weekly', 'biweekly', 'monthly'] as const).map((freq) => {
-                            const baseAmount = paymentMethod === 'term' && selectedTerm
-                              ? calculatePaymentAmount(
-                                  selectedAccount?.balanceCents || 0,
-                                  selectedTerm,
-                                  settings?.minimumMonthlyPayment ?? 5000
-                                )
-                              : calculatedPayment || 0;
-                            
-                            const amount = paymentMethod === 'term'
-                              ? convertToFrequency(baseAmount, freq)
-                              : freq === 'monthly'
-                                ? calculatedPayment || 0
-                                : freq === 'biweekly'
-                                  ? calculatedPayment || 0
-                                  : Math.ceil((calculatedPayment || 0) / 2);
+                            // Always use monthlyBaseAmount for conversion to ensure accuracy
+                            const baseMonthlyAmount = monthlyBaseAmount || 0;
+                            const amount = convertToFrequency(baseMonthlyAmount, freq);
 
                             return (
                               <button
@@ -1852,13 +1847,9 @@ export default function ConsumerDashboardSimple() {
                                 type="button"
                                 onClick={() => {
                                   setPaymentFrequency(freq);
-                                  if (paymentMethod === 'term' && selectedTerm) {
-                                    const monthlyPayment = calculatePaymentAmount(
-                                      selectedAccount?.balanceCents || 0,
-                                      selectedTerm,
-                                      settings?.minimumMonthlyPayment ?? 5000
-                                    );
-                                    setCalculatedPayment(convertToFrequency(monthlyPayment, freq));
+                                  // Use stored monthlyBaseAmount for conversion
+                                  if (monthlyBaseAmount) {
+                                    setCalculatedPayment(convertToFrequency(monthlyBaseAmount, freq));
                                   }
                                 }}
                                 className={`p-3 rounded-lg border-2 transition-all backdrop-blur ${
