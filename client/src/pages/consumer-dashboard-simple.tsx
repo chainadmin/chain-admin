@@ -1716,7 +1716,7 @@ export default function ConsumerDashboardSimple() {
                       <Label className="text-sm text-gray-700 mb-2 block">Choose Payment Term</Label>
                       <div className="grid grid-cols-3 gap-3">
                         {([3, 6, 12] as const).map((term) => {
-                          const minimumMonthly = (settings?.minimumMonthlyPayment || 0) * 100;
+                          const minimumMonthly = settings?.minimumMonthlyPayment ?? 5000;
                           const monthlyPayment = calculatePaymentAmount(selectedAccount?.balanceCents || 0, term, minimumMonthly);
                           const biweeklyPayment = convertToFrequency(monthlyPayment, 'biweekly');
                           
@@ -1778,7 +1778,7 @@ export default function ConsumerDashboardSimple() {
                             
                             if (value) {
                               const amountCents = Math.round(parseFloat(value) * 100);
-                              const minimumMonthly = (settings?.minimumMonthlyPayment || 0) * 100;
+                              const minimumMonthly = settings?.minimumMonthlyPayment ?? 5000;
                               const finalAmount = amountCents < minimumMonthly ? minimumMonthly : amountCents;
                               setCalculatedPayment(finalAmount);
                               
@@ -1792,7 +1792,7 @@ export default function ConsumerDashboardSimple() {
                               setCalculatedPayment(null);
                             }
                           }}
-                          min={(settings?.minimumMonthlyPayment || 0)}
+                          min={((settings?.minimumMonthlyPayment ?? 5000) / 100)}
                           max={(selectedAccount?.balanceCents || 0) / 100}
                           step="0.01"
                           placeholder="0.00"
@@ -1801,7 +1801,7 @@ export default function ConsumerDashboardSimple() {
                         />
                       </div>
                       <p className="text-xs text-gray-500 mt-1">
-                        Min: ${(settings?.minimumMonthlyPayment || 0).toFixed(2)} | Max: ${((selectedAccount?.balanceCents || 0) / 100).toFixed(2)}
+                        Min: ${((settings?.minimumMonthlyPayment ?? 5000) / 100).toFixed(2)} | Max: ${((selectedAccount?.balanceCents || 0) / 100).toFixed(2)}
                       </p>
                     </div>
 
@@ -1815,7 +1815,7 @@ export default function ConsumerDashboardSimple() {
                               ? calculatePaymentAmount(
                                   selectedAccount?.balanceCents || 0,
                                   selectedTerm,
-                                  (settings?.minimumMonthlyPayment || 0) * 100
+                                  settings?.minimumMonthlyPayment ?? 5000
                                 )
                               : calculatedPayment || 0;
                             
@@ -1837,7 +1837,7 @@ export default function ConsumerDashboardSimple() {
                                     const monthlyPayment = calculatePaymentAmount(
                                       selectedAccount?.balanceCents || 0,
                                       selectedTerm,
-                                      (settings?.minimumMonthlyPayment || 0) * 100
+                                      settings?.minimumMonthlyPayment ?? 5000
                                     );
                                     setCalculatedPayment(convertToFrequency(monthlyPayment, freq));
                                   }
