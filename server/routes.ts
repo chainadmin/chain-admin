@@ -2641,6 +2641,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // In-memory lock to prevent concurrent campaign approvals
+  const campaignProcessingLocks = new Map<string, boolean>();
+
   app.post('/api/sms-campaigns/:id/approve', authenticateUser, requireSmsService, async (req: any, res) => {
     let campaign: any;
     let targetedConsumers: any[] = [];
@@ -2663,6 +2666,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!['pending', 'pending_approval'].includes(normalizedStatus)) {
         return res.status(400).json({ message: "Campaign is not awaiting approval" });
       }
+
+      // Check if this campaign is already being processed (idempotency guard)
+      if (campaignProcessingLocks.get(id)) {
+        return res.status(409).json({ message: "Campaign is already being processed" });
+      }
+
+      // Set processing lock
+      campaignProcessingLocks.set(id, true);
 
       const templates = await storage.getSmsTemplatesByTenant(tenantId);
       const template = templates.find(t => t.id === campaign.templateId);
@@ -2747,8 +2758,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             } catch (updateError) {
               console.error('Error updating campaign status after failure:', updateError);
             }
+          } finally {
+            // Release the processing lock
+            campaignProcessingLocks.delete(id);
           }
         })();
+      } else {
+        // No messages to send, release lock immediately
+        campaignProcessingLocks.delete(id);
       }
 
       // Return immediately with sending status so frontend can poll for progress

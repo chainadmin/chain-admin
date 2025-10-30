@@ -219,6 +219,20 @@ export default function SMS() {
           console.log(`✅ Campaign ${campaignId} finished with status: ${status.status}`);
           stopPollingCampaign(campaignId);
           
+          // Show appropriate toast message
+          if (status.status === 'completed') {
+            toast({
+              title: "Campaign Completed",
+              description: `Successfully sent ${status.totalSent || 0} of ${status.totalRecipients || 0} messages`,
+            });
+          } else if (status.status === 'failed') {
+            toast({
+              title: "Campaign Failed",
+              description: `Campaign failed after sending ${status.totalSent || 0} of ${status.totalRecipients || 0} messages`,
+              variant: "destructive",
+            });
+          }
+          
           // Final refresh of all data
           queryClient.invalidateQueries({ queryKey: ["/api/sms-campaigns"] });
           queryClient.invalidateQueries({ queryKey: ["/api/sms-metrics"] });
