@@ -2607,6 +2607,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get single campaign with latest progress (for polling during sending)
+  app.get('/api/sms-campaigns/:id/status', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { id } = req.params;
+      const campaign = await storage.getSmsCampaignById(id, tenantId);
+
+      if (!campaign) {
+        return res.status(404).json({ message: "Campaign not found" });
+      }
+
+      // Get latest metrics for live progress tracking
+      const metrics = await getSmsCampaignMetrics(campaign.id);
+
+      res.json({
+        id: campaign.id,
+        status: campaign.status,
+        totalRecipients: campaign.totalRecipients || 0,
+        totalSent: metrics.totalSent || campaign.totalSent || 0,
+        totalDelivered: metrics.totalDelivered || campaign.totalDelivered || 0,
+        totalErrors: metrics.totalErrors || campaign.totalErrors || 0,
+        totalOptOuts: metrics.totalOptOuts || campaign.totalOptOuts || 0,
+        completedAt: campaign.completedAt,
+      });
+    } catch (error) {
+      console.error("Error fetching SMS campaign status:", error);
+      res.status(500).json({ message: "Failed to fetch SMS campaign status" });
+    }
+  });
+
   app.post('/api/sms-campaigns/:id/approve', authenticateUser, requireSmsService, async (req: any, res) => {
     let campaign: any;
     let targetedConsumers: any[] = [];
@@ -2672,7 +2706,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
       // Update campaign status to sending
-      await storage.updateSmsCampaign(campaign.id, {
+      const updatedCampaign = await storage.updateSmsCampaign(campaign.id, {
         status: 'sending',
         totalRecipients: processedMessages.length,
         totalSent: 0,
@@ -2680,33 +2714,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
         completedAt: null,
       });
 
-      console.log(`✅ SMS campaign "${campaign.name}" approved. Sending ${processedMessages.length} SMS messages via Twilio...`);
+      console.log(`✅ SMS campaign "${campaign.name}" approved. Sending ${processedMessages.length} SMS messages in background...`);
 
-      let smsResults = { totalSent: 0, totalFailed: 0 };
+      // Send messages in background (non-blocking)
+      // This allows the frontend to poll for progress while messages are being sent
       if (processedMessages.length > 0) {
-        smsResults = await smsService.sendBulkSmsCampaign(processedMessages, tenantId, campaign.id);
+        (async () => {
+          try {
+            const smsResults = await smsService.sendBulkSmsCampaign(processedMessages, tenantId, campaign.id);
+            
+            // Update campaign metrics from tracking records (more accurate than send results)
+            await updateSmsCampaignMetrics(campaign.id);
+
+            // Mark campaign as completed
+            await storage.updateSmsCampaign(campaign.id, {
+              status: 'completed',
+              totalRecipients: processedMessages.length,
+              completedAt: new Date(),
+            });
+
+            console.log(
+              `✅ SMS campaign "${campaign.name}" completed: ${smsResults.totalSent} sent, ${smsResults.totalFailed} failed`
+            );
+          } catch (error) {
+            console.error(`Error in background SMS campaign send for ${campaign.id}:`, error);
+            // Mark campaign as failed
+            try {
+              await storage.updateSmsCampaign(campaign.id, {
+                status: 'failed',
+                completedAt: new Date(),
+              });
+            } catch (updateError) {
+              console.error('Error updating campaign status after failure:', updateError);
+            }
+          }
+        })();
       }
 
-      // Update campaign metrics from tracking records (more accurate than send results)
-      await updateSmsCampaignMetrics(campaign.id);
-
-      const updatedCampaign = await storage.updateSmsCampaign(campaign.id, {
-        status: 'completed',
-        totalRecipients: processedMessages.length,
-        completedAt: new Date(),
-      });
-
-      console.log(
-        `✅ SMS campaign completed: ${smsResults.totalSent} sent, ${smsResults.totalFailed} failed`
-      );
-
+      // Return immediately with sending status so frontend can poll for progress
       res.json({
         ...updatedCampaign,
-        smsResults: {
-          sent: smsResults.totalSent,
-          failed: smsResults.totalFailed,
-          totalProcessed: processedMessages.length,
-        }
+        message: 'Campaign approved and sending in background'
       });
     } catch (error) {
       console.error("Error approving SMS campaign:", error);
