@@ -847,10 +847,10 @@ export default function ConsumerDashboardSimple() {
 
       {/* Header with Agency Branding */}
       <header className="relative border-b border-white/10 bg-slate-950/60 backdrop-blur">
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between">
+        <div className="mx-auto max-w-7xl px-4 py-4 sm:py-6 sm:px-6 lg:px-8">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
             <div className="flex items-center gap-3">
-              <img src={agencyLogo} alt={agencyName} className="h-10 w-auto object-contain" />
+              <img src={agencyLogo} alt={agencyName} className="h-8 sm:h-10 w-auto object-contain" />
               <div>
                 <p className="text-sm font-semibold text-white">
                   {agencyName}
@@ -861,24 +861,26 @@ export default function ConsumerDashboardSimple() {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 self-end sm:self-auto">
               <Button
                 onClick={() => setShowContactDialog(true)}
                 variant="outline"
+                size="sm"
                 className="text-white border-white/20 hover:bg-white/10"
                 data-testid="button-contact-us"
               >
-                <Phone className="h-4 w-4 mr-2" />
-                Contact Us
+                <Phone className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Contact Us</span>
               </Button>
               <Button
                 onClick={handleLogout}
                 variant="ghost"
+                size="sm"
                 className="text-white hover:bg-white/10"
                 data-testid="button-logout"
               >
-                <LogOut className="h-4 w-4 mr-2" />
-                Sign Out
+                <LogOut className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Sign Out</span>
               </Button>
             </div>
           </div>
@@ -1012,13 +1014,13 @@ export default function ConsumerDashboardSimple() {
                           </Badge>
                         </div>
                         
-                        <div className="flex justify-between items-end">
+                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4">
                           <div>
-                            <div className="flex items-baseline gap-2">
-                              <span className="text-3xl font-bold text-white">
+                            <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-2">
+                              <span className="text-2xl sm:text-3xl font-bold text-white">
                                 {formatCurrency(account.balanceCents || 0)}
                               </span>
-                              <span className="text-sm text-blue-100/50">Current Balance</span>
+                              <span className="text-xs sm:text-sm text-blue-100/50">Current Balance</span>
                             </div>
                             {account.dueDate && (
                               <p className="text-sm text-blue-100/70 mt-2">
@@ -1029,7 +1031,8 @@ export default function ConsumerDashboardSimple() {
                           
                           <Button 
                             onClick={() => handlePayment(account)}
-                            className="bg-emerald-500 hover:bg-emerald-400 text-white"
+                            size="sm"
+                            className="bg-emerald-500 hover:bg-emerald-400 text-white w-full sm:w-auto"
                             data-testid={`button-pay-${account.id}`}
                           >
                             <DollarSign className="h-4 w-4 mr-1" />

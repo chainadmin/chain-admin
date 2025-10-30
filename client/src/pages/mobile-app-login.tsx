@@ -206,36 +206,39 @@ export default function MobileAppLogin() {
       
       setDebugInfo(prev => `${prev}\n✅ Response received: ${response.status} ${response.statusText}`);
 
-      if (!response.ok) {
-        // Safely parse error - check if response is JSON
-        let errorMessage = "Login failed";
-        const contentType = response.headers.get("content-type");
-        
-        setDebugInfo(prev => `${prev}\n📄 Content-Type: ${contentType}`);
-        
-        if (contentType && contentType.includes("application/json")) {
-          try {
-            const error = await response.json();
-            errorMessage = error.message || errorMessage;
-            setDebugInfo(prev => `${prev}\n❌ Error: ${errorMessage}`);
-          } catch (e) {
-            // JSON parse failed, use default message
-            setDebugInfo(prev => `${prev}\n⚠️ JSON parse failed`);
-          }
-        } else {
-          // Non-JSON response (likely HTML error page)
-          const textError = await response.text();
-          const preview = textError.substring(0, 200);
-          setDebugInfo(prev => `${prev}\n❌ Non-JSON response:\n${preview}...`);
-          console.error("Non-JSON error response:", textError);
+      // Parse the response body (works for both OK and error responses)
+      let data: any;
+      const contentType = response.headers.get("content-type");
+      setDebugInfo(prev => `${prev}\n📄 Content-Type: ${contentType}`);
+      
+      if (contentType && contentType.includes("application/json")) {
+        try {
+          data = await response.json();
+        } catch (e) {
+          setDebugInfo(prev => `${prev}\n⚠️ JSON parse failed`);
+          throw new Error("Invalid response from server");
         }
-        throw new Error(errorMessage);
+      } else {
+        const textError = await response.text();
+        const preview = textError.substring(0, 200);
+        setDebugInfo(prev => `${prev}\n❌ Non-JSON response:\n${preview}...`);
+        throw new Error("Server returned an invalid response");
       }
 
-      const data = await response.json();
+      // Handle unregistered users (409 status) - redirect to web registration
+      if (response.status === 409 && data.needsRegistration && data.agencies?.length > 0) {
+        const agency = data.agencies[0];
+        toast({
+          title: "Registration Required",
+          description: data.message || "Please complete your account registration first",
+        });
+        // Redirect to web registration page with pre-filled email and agency
+        window.location.href = `/consumer-register?email=${encodeURIComponent(email)}&tenant=${agency.slug}`;
+        return;
+      }
 
+      // Handle multiple agencies
       if (data.multipleAgencies && data.agencies?.length > 0) {
-        // Show agency selection
         toast({
           title: "Select Your Agency",
           description: "Your account is linked to multiple agencies",
@@ -244,6 +247,14 @@ export default function MobileAppLogin() {
         return;
       }
 
+      // Handle other error responses
+      if (!response.ok) {
+        const errorMessage = data.message || "Login failed";
+        setDebugInfo(prev => `${prev}\n❌ Error: ${errorMessage}`);
+        throw new Error(errorMessage);
+      }
+
+      // Handle successful login
       if (data.token && data.tenant) {
         // Store auth and redirect
         persistConsumerAuth({

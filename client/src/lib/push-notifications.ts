@@ -1,6 +1,7 @@
 import { PushNotifications } from '@capacitor/push-notifications';
 import type { Token, PushNotificationSchema, ActionPerformed } from '@capacitor/push-notifications';
 import { Capacitor } from '@capacitor/core';
+import { apiCall } from './api';
 
 export interface PushNotificationService {
   initialize: () => Promise<void>;
@@ -97,18 +98,16 @@ class PushNotificationManager implements PushNotificationService {
         return;
       }
 
-      // Send token to backend
-      const response = await fetch('/api/consumer/push-token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${jwtToken}`,
-        },
-        body: JSON.stringify({ 
+      // Send token to backend using apiCall helper (works on mobile)
+      const response = await apiCall(
+        'POST',
+        '/api/consumer/push-token',
+        { 
           token,
           platform: Capacitor.getPlatform(),
-        }),
-      });
+        },
+        jwtToken
+      );
 
       if (!response.ok) {
         console.error('Failed to register push token:', response.status, response.statusText);
