@@ -14,7 +14,7 @@ The frontend utilizes React with TypeScript, built with shadcn/ui components on 
 ## Technical Implementations
 - **Frontend**: React, TypeScript, Vite, TanStack Query, Wouter.
 - **Backend**: Express.js with TypeScript, RESTful API, layered architecture, Drizzle ORM, middleware for logging, error handling, and authentication.
-- **Authentication**: Replit's OIDC integration with Passport.js, session-based management, multi-tenant user isolation, and secure HTTP-only cookies. Mobile-specific consumer authentication uses email/date of birth verification and JWT tokens.
+- **Authentication**: Replit's OIDC integration with Passport.js, session-based management, multi-tenant user isolation, and secure HTTP-only cookies. **Mobile Consumer Authentication**: Email/date of birth verification with JWT tokens, biometric login support (fingerprint/Face ID), and native mobile registration screen with auto-login. Handles three response scenarios: successful login, multiple agencies selection, and unregistered user redirect to registration. Push notifications disabled pending Firebase/APNS configuration to prevent permission prompts and crashes.
 - **Multi-Tenancy**: Application-level tenant isolation with slug-based routing, platform users associated with tenants, and tenant-level data filtering.
 - **Subscription Billing**: Supports defined tiers, email/SMS limits, overage pricing, and segment-based SMS usage tracking. SMS tracking records created for ALL outbound messages (campaigns, automations, one-off sends) with tenantId for accurate billing attribution via Twilio webhooks.
 - **Email Sending**: Uses agency-branded sender addresses for improved deliverability.
