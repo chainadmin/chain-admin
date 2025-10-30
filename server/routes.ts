@@ -817,8 +817,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isTrustedDomain(origin, 'replit.app') ||
         isTrustedDomain(origin, 'repl.co') ||
         isTrustedDomain(origin, 'railway.app') || // Railway production
-        origin.startsWith('capacitor://') || // Capacitor mobile apps (no domain concept)
-        origin.startsWith('ionic://') || // Ionic mobile apps (no domain concept)
+        origin.startsWith('capacitor://') || // Capacitor mobile apps (old scheme)
+        origin.startsWith('ionic://') || // Ionic mobile apps (old scheme)
+        origin.startsWith('https://localhost') || // Capacitor mobile apps (https scheme)
+        origin.startsWith('http://localhost') || // Capacitor mobile apps (http scheme fallback)
         isLocalhost(origin) || // Localhost and emulator IPs
         isOriginOnKnownDomain(origin);
     

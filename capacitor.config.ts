@@ -6,7 +6,6 @@ const config: CapacitorConfig = {
   webDir: 'dist/public',
   server: {
     androidScheme: 'https',
-    hostname: 'chain-admin-production.up.railway.app',
     iosScheme: 'https'
   },
   plugins: {
