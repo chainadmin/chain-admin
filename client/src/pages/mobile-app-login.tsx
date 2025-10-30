@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Fingerprint } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { apiCall, getApiBase } from "@/lib/api";
+import { apiCall } from "@/lib/api";
 import { persistConsumerAuth } from "@/lib/consumer-auth";
 import { biometricAuth } from "@/lib/biometric-auth";
 import { pushNotificationService } from "@/lib/push-notifications";
@@ -26,7 +26,6 @@ export default function MobileAppLogin() {
   const [agencyContext, setAgencyContext] = useState<AgencyContext | null>(null);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricType, setBiometricType] = useState<string>("");
-  const [debugInfo, setDebugInfo] = useState<string>("");
 
   // Check for deep link agency parameter
   useEffect(() => {
@@ -94,52 +93,36 @@ export default function MobileAppLogin() {
     }
 
     setLoading(true);
-    
-    // Debug: Capture API info
-    const apiBase = getApiBase();
-    const fullUrl = `${apiBase}/api/mobile/auth/verify`;
-    setDebugInfo(`🔐 BIOMETRIC LOGIN\n🔍 CALLING: ${fullUrl}\n📱 Platform: ${Capacitor.getPlatform()}\n🌐 Protocol: ${window.location.protocol}\n📍 Hostname: ${window.location.hostname}`);
 
     try {
       // Perform biometric authentication
       const authResult = await biometricAuth.authenticate("Authenticate to sign in");
       
       if (!authResult.success) {
-        setDebugInfo(prev => `${prev}\n❌ Biometric auth failed: ${authResult.error}`);
         throw new Error(authResult.error || "Biometric authentication failed");
       }
-      
-      setDebugInfo(prev => `${prev}\n✅ Biometric auth successful`);
 
       // If biometric succeeds, log in with saved credentials
       const response = await apiCall("POST", "/api/mobile/auth/verify", {
         email: savedEmail,
         dateOfBirth: savedDOB,
       });
-      
-      setDebugInfo(prev => `${prev}\n✅ Response received: ${response.status} ${response.statusText}`);
 
       if (!response.ok) {
         // Safely parse error - check if response is JSON
         let errorMessage = "Login failed";
         const contentType = response.headers.get("content-type");
         
-        setDebugInfo(prev => `${prev}\n📄 Content-Type: ${contentType}`);
-        
         if (contentType && contentType.includes("application/json")) {
           try {
             const error = await response.json();
             errorMessage = error.message || errorMessage;
-            setDebugInfo(prev => `${prev}\n❌ Error: ${errorMessage}`);
           } catch (e) {
             // JSON parse failed, use default message
-            setDebugInfo(prev => `${prev}\n⚠️ JSON parse failed`);
           }
         } else {
           // Non-JSON response (likely HTML error page)
           const textError = await response.text();
-          const preview = textError.substring(0, 200);
-          setDebugInfo(prev => `${prev}\n❌ Non-JSON response:\n${preview}...`);
           console.error("Non-JSON error response:", textError);
         }
         throw new Error(errorMessage);
@@ -168,7 +151,6 @@ export default function MobileAppLogin() {
         setLocation("/consumer-dashboard");
       }
     } catch (error: any) {
-      setDebugInfo(prev => `${prev}\n💥 CATCH ERROR: ${error.message}\n📚 Stack: ${error.stack?.substring(0, 100)}`);
       toast({
         title: "Authentication Failed",
         description: error.message || "Please try again",
@@ -192,36 +174,26 @@ export default function MobileAppLogin() {
     }
 
     setLoading(true);
-    
-    // Debug: Capture API info
-    const apiBase = getApiBase();
-    const fullUrl = `${apiBase}/api/mobile/auth/verify`;
-    setDebugInfo(`🔍 CALLING: ${fullUrl}\n📱 Platform: ${Capacitor.getPlatform()}\n🌐 Protocol: ${window.location.protocol}\n📍 Hostname: ${window.location.hostname}`);
 
     try {
       const response = await apiCall("POST", "/api/mobile/auth/verify", {
         email,
         dateOfBirth,
       });
-      
-      setDebugInfo(prev => `${prev}\n✅ Response received: ${response.status} ${response.statusText}`);
 
       // Parse the response body (works for both OK and error responses)
       let data: any;
       const contentType = response.headers.get("content-type");
-      setDebugInfo(prev => `${prev}\n📄 Content-Type: ${contentType}`);
       
       if (contentType && contentType.includes("application/json")) {
         try {
           data = await response.json();
         } catch (e) {
-          setDebugInfo(prev => `${prev}\n⚠️ JSON parse failed`);
           throw new Error("Invalid response from server");
         }
       } else {
         const textError = await response.text();
-        const preview = textError.substring(0, 200);
-        setDebugInfo(prev => `${prev}\n❌ Non-JSON response:\n${preview}...`);
+        console.error("Non-JSON error response:", textError);
         throw new Error("Server returned an invalid response");
       }
 
@@ -250,7 +222,6 @@ export default function MobileAppLogin() {
       // Handle other error responses
       if (!response.ok) {
         const errorMessage = data.message || "Login failed";
-        setDebugInfo(prev => `${prev}\n❌ Error: ${errorMessage}`);
         throw new Error(errorMessage);
       }
 
@@ -278,7 +249,6 @@ export default function MobileAppLogin() {
         setLocation("/consumer-dashboard");
       }
     } catch (error: any) {
-      setDebugInfo(prev => `${prev}\n💥 CATCH ERROR: ${error.message}\n📚 Stack: ${error.stack?.substring(0, 100)}`);
       toast({
         title: "Login Failed",
         description: error.message || "Please check your credentials",
@@ -291,18 +261,6 @@ export default function MobileAppLogin() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-slate-950 text-white p-4">
-      {/* Debug Panel */}
-      <div className="fixed top-0 left-0 right-0 z-50 bg-black/90 text-green-400 p-4 text-xs font-mono border-b border-green-500/50 max-h-64 overflow-y-auto">
-        <div className="font-bold mb-2">🔧 DEBUG MODE</div>
-        <div className="whitespace-pre-wrap">
-          API Base: {getApiBase()}
-          {'\n'}Platform: {Capacitor.getPlatform()}
-          {'\n'}Protocol: {typeof window !== 'undefined' ? window.location.protocol : 'N/A'}
-          {'\n'}isNative: {Capacitor.isNativePlatform() ? 'YES' : 'NO'}
-          {debugInfo && `\n\n${debugInfo}`}
-        </div>
-      </div>
-      
       {/* Background gradients */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute -top-32 right-0 h-96 w-96 rounded-full bg-blue-500/30 blur-3xl" />
