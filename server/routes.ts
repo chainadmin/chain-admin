@@ -10386,6 +10386,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const normalizedStatus = status === 'undelivered' ? 'failed' : status;
         const updates: Partial<SmsTracking> = {
           status: normalizedStatus as SmsTracking['status'],
+          segments: quantity, // Store segment count from Twilio
         };
 
         if (status === 'delivered') {
@@ -10401,7 +10402,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log(`❌ Marking as FAILED: ${errorMessage || 'No error message'}`);
         }
 
-        console.log(`💾 Updating tracking record with:`, updates);
+        console.log(`💾 Updating tracking record with ${quantity} segments:`, updates);
         await storage.updateSmsTracking(trackingInfo.tracking.id, updates);
         console.log(`✅ Tracking record updated successfully`);
 

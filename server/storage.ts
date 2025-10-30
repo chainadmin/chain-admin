@@ -1476,11 +1476,12 @@ export class DatabaseStorage implements IStorage {
     totalErrors: number;
     totalOptOuts: number;
   }> {
-    // Efficient SQL aggregation - counts by status in a single query
+    // Efficient SQL aggregation - sums segments by status in a single query
+    // COALESCE(segments, 1) handles legacy records where segments might be NULL
     const results = await db
       .select({
         status: smsTracking.status,
-        count: sql<number>`COUNT(*)::int`,
+        totalSegments: sql<number>`COALESCE(SUM(COALESCE(${smsTracking.segments}, 1)), 0)::int`,
       })
       .from(smsTracking)
       .where(eq(smsTracking.campaignId, campaignId))
@@ -1494,31 +1495,31 @@ export class DatabaseStorage implements IStorage {
     };
 
     for (const row of results) {
-      const count = row.count || 0;
+      const segments = row.totalSegments || 0;
       const status = (row.status || '').toLowerCase();
       
-      // totalSent = successful or in-progress sends (NOT failures)
+      // totalSent = successful or in-progress sends (NOT failures) - SUM of segments
       // Twilio success/in-progress states: queued, accepted, scheduled, sending, sent, delivered, receiving, received, read
       const successStates = ['queued', 'accepted', 'scheduled', 'sending', 'sent', 'delivered', 'receiving', 'received', 'read'];
       if (successStates.includes(status)) {
-        metrics.totalSent += count;
+        metrics.totalSent += segments;
       }
       
-      // Only delivered messages count as delivered
+      // Only delivered messages count as delivered - SUM of segments
       if (status === 'delivered') {
-        metrics.totalDelivered = count;
+        metrics.totalDelivered += segments;
       }
       
-      // Count all failure statuses as errors (NOT in totalSent)
+      // Count all failure statuses as errors (NOT in totalSent) - SUM of segments
       // Twilio failure statuses: failed, undelivered, canceled, delivery-unknown
       const errorStates = ['failed', 'undelivered', 'canceled', 'delivery-unknown'];
       if (errorStates.includes(status)) {
-        metrics.totalErrors += count;
+        metrics.totalErrors += segments;
       }
       
-      // Opt-outs are tracked separately (not in totalSent or totalErrors)
+      // Opt-outs are tracked separately (not in totalSent or totalErrors) - SUM of segments
       if (status === 'opted_out') {
-        metrics.totalOptOuts = count;
+        metrics.totalOptOuts += segments;
       }
     }
 
