@@ -73,10 +73,10 @@ export default function MobileAppLogin() {
 
     checkBiometric();
 
-    // Initialize push notifications
-    pushNotificationService.initialize().catch(err => {
-      console.error('Failed to initialize push notifications:', err);
-    });
+    // Push notifications disabled - will be enabled after Firebase setup
+    // pushNotificationService.initialize().catch(err => {
+    //   console.error('Failed to initialize push notifications:', err);
+    // });
   }, []);
 
   // Handle biometric login
@@ -157,8 +157,8 @@ export default function MobileAppLogin() {
           token: data.token,
         });
 
-        // Register any pending push notification token
-        await pushNotificationService.registerPendingToken();
+        // Push notifications disabled - will be enabled after Firebase setup
+        // await pushNotificationService.registerPendingToken();
 
         toast({
           title: "Welcome Back!",
@@ -225,15 +225,15 @@ export default function MobileAppLogin() {
         throw new Error("Server returned an invalid response");
       }
 
-      // Handle unregistered users (409 status) - redirect to web registration
+      // Handle unregistered users (409 status) - redirect to native mobile registration
       if (response.status === 409 && data.needsRegistration && data.agencies?.length > 0) {
         const agency = data.agencies[0];
         toast({
           title: "Registration Required",
           description: data.message || "Please complete your account registration first",
         });
-        // Redirect to web registration page with pre-filled email and agency
-        window.location.href = `/consumer-register?email=${encodeURIComponent(email)}&tenant=${agency.slug}`;
+        // Redirect to native mobile registration page with pre-filled email and agency
+        setLocation(`/mobile-register?email=${encodeURIComponent(email)}&tenant=${agency.slug}`);
         return;
       }
 
@@ -272,8 +272,8 @@ export default function MobileAppLogin() {
           localStorage.setItem('biometric_dob', dateOfBirth);
         }
 
-        // Register any pending push notification token
-        await pushNotificationService.registerPendingToken();
+        // Push notifications disabled - will be enabled after Firebase setup
+        // await pushNotificationService.registerPendingToken();
 
         setLocation("/consumer-dashboard");
       }
