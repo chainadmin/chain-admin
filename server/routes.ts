@@ -2704,16 +2704,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
       targetedConsumers = audience.targetedConsumers;
       const { accountsData } = audience;
 
+      // Extract all phone numbers for each consumer
+      const extractPhoneNumbers = (consumer: any): string[] => {
+        const phones: string[] = [];
+        
+        // Add primary phone number
+        if (consumer.phone) {
+          phones.push(consumer.phone);
+        }
+        
+        // If sendToAllNumbers is enabled, look for additional phone numbers in additionalData
+        if (campaign.sendToAllNumbers && consumer.additionalData) {
+          const additionalData = consumer.additionalData as Record<string, any>;
+          
+          // Common phone field names to check
+          const phoneFieldNames = [
+            'phone2', 'phone_2', 'phone3', 'phone_3',
+            'mobile', 'cell', 'cellphone', 'cell_phone',
+            'alternate_phone', 'alt_phone', 'alternate', 
+            'home_phone', 'work_phone', 'business_phone',
+            'secondary_phone', 'other_phone'
+          ];
+          
+          // Extract phone numbers from additional data
+          for (const fieldName of phoneFieldNames) {
+            const value = additionalData[fieldName];
+            if (value && typeof value === 'string' && value.trim()) {
+              phones.push(value.trim());
+            }
+          }
+        }
+        
+        // Return unique phone numbers only
+        return [...new Set(phones)];
+      };
+
       const processedMessages = targetedConsumers
-        .filter(consumer => consumer.phone)
-        .map(consumer => {
+        .flatMap(consumer => {
+          const phoneNumbers = extractPhoneNumbers(consumer);
           const consumerAccount = accountsData.find(acc => acc.consumerId === consumer.id);
           const processedMessage = replaceTemplateVariables(template.message || '', consumer, consumerAccount, tenantWithSettings);
-          return {
-            to: consumer.phone!,
+          
+          // Create a message for each unique phone number
+          return phoneNumbers.map(phoneNumber => ({
+            to: phoneNumber,
             message: processedMessage,
             consumerId: consumer.id,
-          };
+          }));
         });
 
       // Update campaign status to sending

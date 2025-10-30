@@ -53,6 +53,7 @@ export default function SMS() {
     templateId: "",
     targetGroup: "all",
     folderIds: [] as string[],
+    sendToAllNumbers: false,
   });
 
   const { toast } = useToast();
@@ -123,7 +124,7 @@ export default function SMS() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sms-campaigns"] });
       setShowCampaignModal(false);
-      setCampaignForm({ name: "", templateId: "", targetGroup: "all", folderIds: [] });
+      setCampaignForm({ name: "", templateId: "", targetGroup: "all", folderIds: [], sendToAllNumbers: false });
       toast({
         title: "Success",
         description: "SMS campaign created and scheduled",
@@ -830,6 +831,19 @@ export default function SMS() {
                         </div>
                       </div>
                     )}
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="send-to-all-numbers"
+                        checked={campaignForm.sendToAllNumbers}
+                        onChange={(e) => setCampaignForm({ ...campaignForm, sendToAllNumbers: e.target.checked })}
+                        className="rounded border-gray-300"
+                        data-testid="checkbox-send-to-all-numbers"
+                      />
+                      <label htmlFor="send-to-all-numbers" className="text-sm cursor-pointer">
+                        Send to all available phone numbers (includes alternate phone numbers from CSV imports)
+                      </label>
+                    </div>
                     <div className="flex justify-end gap-2">
                       <Button
                         type="button"
