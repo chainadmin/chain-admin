@@ -8055,8 +8055,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           let sentCount = 0;
           let failedCount = 0;
           
+          // Get all accounts for consumers (for variable replacement)
+          const allAccounts = await storage.getAccountsByTenant(automation.tenantId);
+          
           // Send to each consumer
           for (const consumer of targetConsumers) {
+            // Get consumer's primary account for variable replacement
+            const consumerAccount = allAccounts.find(acc => acc.consumerId === consumer.id);
+            
             for (const templateId of templateIds) {
               try {
                 if (automation.type === 'email') {
@@ -8076,23 +8082,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     continue;
                   }
                   
-                  // Replace variables in subject and body
-                  const variables = {
-                    fullName: `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim(),
-                    firstName: consumer.firstName || '',
-                    lastName: consumer.lastName || '',
-                    email: consumer.email || '',
-                    agencyName: tenant.name,
+                  // Get tenant settings for additional context
+                  const tenantSettings = await storage.getTenantSettings(automation.tenantId);
+                  const tenantWithSettings = {
+                    ...tenant,
+                    contactEmail: tenantSettings?.contactEmail,
+                    contactPhone: tenantSettings?.contactPhone,
                   };
                   
-                  let subject = template.subject;
-                  let html = template.html;
-                  
-                  Object.entries(variables).forEach(([key, value]) => {
-                    const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
-                    subject = subject.replace(regex, value);
-                    html = html.replace(regex, value);
-                  });
+                  // Use the full replaceTemplateVariables function to support ALL fields including CSV additionalData
+                  const subject = replaceTemplateVariables(
+                    template.subject || '',
+                    consumer,
+                    consumerAccount,
+                    tenantWithSettings
+                  );
+                  const html = replaceTemplateVariables(
+                    template.html || '',
+                    consumer,
+                    consumerAccount,
+                    tenantWithSettings
+                  );
                   
                   // Send email
                   const { emailService } = await import('./emailService');
@@ -8129,18 +8139,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     continue;
                   }
                   
-                  // Replace variables in message
-                  const variables = {
-                    fullName: `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim(),
-                    firstName: consumer.firstName || '',
-                    agencyName: tenant.name,
+                  // Get tenant settings for additional context
+                  const tenantSettings = await storage.getTenantSettings(automation.tenantId);
+                  const tenantWithSettings = {
+                    ...tenant,
+                    contactEmail: tenantSettings?.contactEmail,
+                    contactPhone: tenantSettings?.contactPhone,
                   };
                   
-                  let message = template.message;
-                  Object.entries(variables).forEach(([key, value]) => {
-                    const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
-                    message = message.replace(regex, value);
-                  });
+                  // Use the full replaceTemplateVariables function to support ALL fields including CSV additionalData
+                  const message = replaceTemplateVariables(
+                    template.message || '',
+                    consumer,
+                    consumerAccount,
+                    tenantWithSettings
+                  );
                   
                   // Send SMS
                   const { smsService } = await import('./smsService');
