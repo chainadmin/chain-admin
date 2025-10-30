@@ -2736,7 +2736,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         
         // Return unique phone numbers only
-        return [...new Set(phones)];
+        return Array.from(new Set(phones));
       };
 
       const processedMessages = targetedConsumers
