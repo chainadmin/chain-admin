@@ -725,6 +725,16 @@ async function getTenantId(req: any, storage: IStorage): Promise<string | null> 
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Request logger - log all incoming requests for debugging
+  app.use((req, res, next) => {
+    console.log(`📨 [REQUEST] ${req.method} ${req.path}`, {
+      origin: req.headers.origin || 'none',
+      contentType: req.headers['content-type'] || 'none',
+      userAgent: req.headers['user-agent']?.substring(0, 50) || 'none'
+    });
+    next();
+  });
+  
   // CORS middleware - Allow web, mobile apps, and Vercel frontend to connect
   app.use((req, res, next) => {
     const allowedOrigins = new Set([
@@ -4001,10 +4011,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Mobile authentication endpoints
   // Step 1: Verify email + DOB and return matching agencies
   app.post('/api/mobile/auth/verify', async (req, res) => {
+    console.log('🔥 [MOBILE AUTH] Route handler called!', {
+      method: req.method,
+      path: req.path,
+      body: req.body ? 'present' : 'missing',
+      headers: {
+        'content-type': req.headers['content-type'],
+        origin: req.headers.origin,
+        'user-agent': req.headers['user-agent']?.substring(0, 50)
+      }
+    });
+    
     try {
       const { email, dateOfBirth } = req.body;
 
       if (!email || !dateOfBirth) {
+        console.log('❌ [MOBILE AUTH] Missing email or dateOfBirth');
         return res.status(400).json({ message: "Email and date of birth are required" });
       }
 
