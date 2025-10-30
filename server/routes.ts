@@ -10763,12 +10763,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   // Update SMS campaign metrics by counting tracking records with efficient SQL aggregation
+  async function getSmsCampaignMetrics(campaignId: string) {
+    try {
+      return await storage.getSmsCampaignMetrics(campaignId);
+    } catch (error) {
+      console.error('❌ Error getting SMS campaign metrics:', error);
+      return {
+        totalSent: 0,
+        totalDelivered: 0,
+        totalErrors: 0,
+        totalOptOuts: 0,
+      };
+    }
+  }
+
   async function updateSmsCampaignMetrics(campaignId: string) {
     try {
       console.log(`🔄 Updating SMS campaign ${campaignId} metrics from tracking records`);
       
       // Use SQL aggregation to efficiently count by status
-      const metrics = await storage.getSmsCampaignMetrics(campaignId);
+      const metrics = await getSmsCampaignMetrics(campaignId);
       
       // Update the campaign with actual counts
       await storage.updateSmsCampaign(campaignId, {

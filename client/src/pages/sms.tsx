@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -140,7 +140,9 @@ export default function SMS() {
 
   const approveCampaignMutation = useMutation({
     mutationFn: (id: string) => apiRequest("POST", `/api/sms-campaigns/${id}/approve`),
-    onSuccess: () => {
+    onSuccess: (data: any, campaignId: string) => {
+      // Start polling for this campaign's progress
+      startPollingCampaign(campaignId);
       queryClient.invalidateQueries({ queryKey: ["/api/sms-campaigns"] });
       queryClient.invalidateQueries({ queryKey: ["/api/sms-metrics"] });
       toast({
@@ -175,6 +177,84 @@ export default function SMS() {
       });
     },
   });
+
+  // Polling logic for tracking campaign progress in real-time
+  const pollingIntervals = useRef<Map<string, NodeJS.Timeout>>(new Map());
+
+  const startPollingCampaign = (campaignId: string) => {
+    // Clear existing interval if any
+    if (pollingIntervals.current.has(campaignId)) {
+      clearInterval(pollingIntervals.current.get(campaignId)!);
+    }
+
+    console.log(`🔄 Starting to poll campaign ${campaignId} for live progress`);
+
+    // Poll every 2 seconds for live progress
+    const intervalId = setInterval(async () => {
+      try {
+        const status: any = await apiRequest("GET", `/api/sms-campaigns/${campaignId}/status`);
+        
+        // Update the campaigns list with the latest progress
+        queryClient.setQueryData(["/api/sms-campaigns"], (oldCampaigns: any) => {
+          if (!Array.isArray(oldCampaigns)) return oldCampaigns;
+          
+          return oldCampaigns.map((campaign: any) => {
+            if (campaign.id === campaignId) {
+              return {
+                ...campaign,
+                status: status.status,
+                totalSent: status.totalSent,
+                totalDelivered: status.totalDelivered,
+                totalErrors: status.totalErrors,
+                totalOptOuts: status.totalOptOuts,
+                completedAt: status.completedAt,
+              };
+            }
+            return campaign;
+          });
+        });
+
+        // Stop polling if campaign is complete or failed
+        if (status.status === 'completed' || status.status === 'failed') {
+          console.log(`✅ Campaign ${campaignId} finished with status: ${status.status}`);
+          stopPollingCampaign(campaignId);
+          
+          // Final refresh of all data
+          queryClient.invalidateQueries({ queryKey: ["/api/sms-campaigns"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/sms-metrics"] });
+        }
+      } catch (error) {
+        console.error(`Error polling campaign ${campaignId}:`, error);
+      }
+    }, 2000);
+
+    pollingIntervals.current.set(campaignId, intervalId);
+  };
+
+  const stopPollingCampaign = (campaignId: string) => {
+    if (pollingIntervals.current.has(campaignId)) {
+      clearInterval(pollingIntervals.current.get(campaignId)!);
+      pollingIntervals.current.delete(campaignId);
+      console.log(`⏹️ Stopped polling campaign ${campaignId}`);
+    }
+  };
+
+  // Auto-start polling for any campaigns that are currently sending
+  useEffect(() => {
+    if (campaigns && Array.isArray(campaigns)) {
+      campaigns.forEach((campaign: any) => {
+        if (campaign.status === 'sending' && !pollingIntervals.current.has(campaign.id)) {
+          startPollingCampaign(campaign.id);
+        }
+      });
+    }
+
+    // Cleanup all polling intervals on unmount
+    return () => {
+      pollingIntervals.current.forEach((intervalId) => clearInterval(intervalId));
+      pollingIntervals.current.clear();
+    };
+  }, [campaigns]);
 
   const handleTemplateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
