@@ -94,35 +94,52 @@ export default function MobileAppLogin() {
     }
 
     setLoading(true);
+    
+    // Debug: Capture API info
+    const apiBase = getApiBase();
+    const fullUrl = `${apiBase}/api/mobile/auth/verify`;
+    setDebugInfo(`🔐 BIOMETRIC LOGIN\n🔍 CALLING: ${fullUrl}\n📱 Platform: ${Capacitor.getPlatform()}\n🌐 Protocol: ${window.location.protocol}\n📍 Hostname: ${window.location.hostname}`);
 
     try {
       // Perform biometric authentication
       const authResult = await biometricAuth.authenticate("Authenticate to sign in");
       
       if (!authResult.success) {
+        setDebugInfo(prev => `${prev}\n❌ Biometric auth failed: ${authResult.error}`);
         throw new Error(authResult.error || "Biometric authentication failed");
       }
+      
+      setDebugInfo(prev => `${prev}\n✅ Biometric auth successful`);
 
       // If biometric succeeds, log in with saved credentials
       const response = await apiCall("POST", "/api/mobile/auth/verify", {
         email: savedEmail,
         dateOfBirth: savedDOB,
       });
+      
+      setDebugInfo(prev => `${prev}\n✅ Response received: ${response.status} ${response.statusText}`);
 
       if (!response.ok) {
         // Safely parse error - check if response is JSON
         let errorMessage = "Login failed";
         const contentType = response.headers.get("content-type");
+        
+        setDebugInfo(prev => `${prev}\n📄 Content-Type: ${contentType}`);
+        
         if (contentType && contentType.includes("application/json")) {
           try {
             const error = await response.json();
             errorMessage = error.message || errorMessage;
+            setDebugInfo(prev => `${prev}\n❌ Error: ${errorMessage}`);
           } catch (e) {
             // JSON parse failed, use default message
+            setDebugInfo(prev => `${prev}\n⚠️ JSON parse failed`);
           }
         } else {
           // Non-JSON response (likely HTML error page)
           const textError = await response.text();
+          const preview = textError.substring(0, 200);
+          setDebugInfo(prev => `${prev}\n❌ Non-JSON response:\n${preview}...`);
           console.error("Non-JSON error response:", textError);
         }
         throw new Error(errorMessage);
@@ -151,6 +168,7 @@ export default function MobileAppLogin() {
         setLocation("/consumer-dashboard");
       }
     } catch (error: any) {
+      setDebugInfo(prev => `${prev}\n💥 CATCH ERROR: ${error.message}\n📚 Stack: ${error.stack?.substring(0, 100)}`);
       toast({
         title: "Authentication Failed",
         description: error.message || "Please try again",
@@ -249,6 +267,7 @@ export default function MobileAppLogin() {
         setLocation("/consumer-dashboard");
       }
     } catch (error: any) {
+      setDebugInfo(prev => `${prev}\n💥 CATCH ERROR: ${error.message}\n📚 Stack: ${error.stack?.substring(0, 100)}`);
       toast({
         title: "Login Failed",
         description: error.message || "Please check your credentials",
