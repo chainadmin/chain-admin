@@ -5,10 +5,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Fingerprint } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { apiCall } from "@/lib/api";
+import { apiCall, getApiBase } from "@/lib/api";
 import { persistConsumerAuth } from "@/lib/consumer-auth";
 import { biometricAuth } from "@/lib/biometric-auth";
 import { pushNotificationService } from "@/lib/push-notifications";
+import { Capacitor } from "@capacitor/core";
 
 interface AgencyContext {
   slug: string;
@@ -25,6 +26,7 @@ export default function MobileAppLogin() {
   const [agencyContext, setAgencyContext] = useState<AgencyContext | null>(null);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricType, setBiometricType] = useState<string>("");
+  const [debugInfo, setDebugInfo] = useState<string>("");
 
   // Check for deep link agency parameter
   useEffect(() => {
@@ -172,27 +174,41 @@ export default function MobileAppLogin() {
     }
 
     setLoading(true);
+    
+    // Debug: Capture API info
+    const apiBase = getApiBase();
+    const fullUrl = `${apiBase}/api/mobile/auth/verify`;
+    setDebugInfo(`🔍 CALLING: ${fullUrl}\n📱 Platform: ${Capacitor.getPlatform()}\n🌐 Protocol: ${window.location.protocol}\n📍 Hostname: ${window.location.hostname}`);
 
     try {
       const response = await apiCall("POST", "/api/mobile/auth/verify", {
         email,
         dateOfBirth,
       });
+      
+      setDebugInfo(prev => `${prev}\n✅ Response received: ${response.status} ${response.statusText}`);
 
       if (!response.ok) {
         // Safely parse error - check if response is JSON
         let errorMessage = "Login failed";
         const contentType = response.headers.get("content-type");
+        
+        setDebugInfo(prev => `${prev}\n📄 Content-Type: ${contentType}`);
+        
         if (contentType && contentType.includes("application/json")) {
           try {
             const error = await response.json();
             errorMessage = error.message || errorMessage;
+            setDebugInfo(prev => `${prev}\n❌ Error: ${errorMessage}`);
           } catch (e) {
             // JSON parse failed, use default message
+            setDebugInfo(prev => `${prev}\n⚠️ JSON parse failed`);
           }
         } else {
           // Non-JSON response (likely HTML error page)
           const textError = await response.text();
+          const preview = textError.substring(0, 200);
+          setDebugInfo(prev => `${prev}\n❌ Non-JSON response:\n${preview}...`);
           console.error("Non-JSON error response:", textError);
         }
         throw new Error(errorMessage);
@@ -245,13 +261,25 @@ export default function MobileAppLogin() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-slate-950 text-white p-4">
+      {/* Debug Panel */}
+      <div className="fixed top-0 left-0 right-0 z-50 bg-black/90 text-green-400 p-4 text-xs font-mono border-b border-green-500/50 max-h-64 overflow-y-auto">
+        <div className="font-bold mb-2">🔧 DEBUG MODE</div>
+        <div className="whitespace-pre-wrap">
+          API Base: {getApiBase()}
+          {'\n'}Platform: {Capacitor.getPlatform()}
+          {'\n'}Protocol: {typeof window !== 'undefined' ? window.location.protocol : 'N/A'}
+          {'\n'}isNative: {Capacitor.isNativePlatform() ? 'YES' : 'NO'}
+          {debugInfo && `\n\n${debugInfo}`}
+        </div>
+      </div>
+      
       {/* Background gradients */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute -top-32 right-0 h-96 w-96 rounded-full bg-blue-500/30 blur-3xl" />
         <div className="absolute bottom-0 left-0 h-[28rem] w-[28rem] rounded-full bg-indigo-500/20 blur-3xl" />
       </div>
 
-      <div className="relative w-full max-w-md space-y-8">
+      <div className="relative w-full max-w-md space-y-8 mt-72">
         {/* Agency Logo */}
         {agencyContext?.logoUrl ? (
           <div className="flex justify-center">

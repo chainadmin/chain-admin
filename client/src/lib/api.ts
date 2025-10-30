@@ -1,7 +1,7 @@
 // Helper functions for making API calls that work in both local and Vercel environments
 import { Capacitor } from '@capacitor/core';
 
-function getApiBase(): string {
+export function getApiBase(): string {
   // First check if EXPO_PUBLIC_API_URL is set (for Expo builds)
   if (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_API_URL) {
     return process.env.EXPO_PUBLIC_API_URL;
