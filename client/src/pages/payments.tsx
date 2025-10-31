@@ -179,6 +179,57 @@ export default function Payments() {
     },
   });
 
+  // Delete/cancel payment schedule mutation
+  const deleteScheduleMutation = useMutation({
+    mutationFn: async (scheduleId: string) => {
+      await apiRequest("DELETE", `/api/payment-schedules/${scheduleId}`);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Arrangement Deleted",
+        description: "Payment arrangement has been cancelled.",
+      });
+      // Invalidate all payment schedule queries to ensure UI updates everywhere
+      queryClient.invalidateQueries({ queryKey: ["/api/payment-schedules"] });
+      queryClient.invalidateQueries({ predicate: (query) => 
+        query.queryKey[0] === "/api/payment-schedules/consumer" 
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Delete Failed",
+        description: error.message || "Unable to delete arrangement. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Resync SMAX arrangements for a consumer
+  const resyncSmaxMutation = useMutation({
+    mutationFn: async (consumerId: string) => {
+      const response = await apiRequest("POST", `/api/payment-schedules/resync-smax/${consumerId}`, {});
+      return response.json();
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: "SMAX Resync Complete",
+        description: `Synced ${data.syncedCount} of ${data.totalAccounts} accounts.`,
+      });
+      // Invalidate all payment schedule queries to ensure UI updates everywhere
+      queryClient.invalidateQueries({ queryKey: ["/api/payment-schedules"] });
+      queryClient.invalidateQueries({ predicate: (query) => 
+        query.queryKey[0] === "/api/payment-schedules/consumer" 
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Resync Failed",
+        description: error.message || "Unable to resync SMAX arrangements. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Manual payment processor trigger mutation
   const processScheduledPaymentsMutation = useMutation({
     mutationFn: async () => {
@@ -871,6 +922,50 @@ export default function Payments() {
                                       )}
                                     </div>
                                   </div>
+                                </div>
+                              )}
+
+                              {(schedule.source || schedule.processor) && (
+                                <div className="flex gap-2">
+                                  {schedule.source && (
+                                    <Badge variant="outline" className="text-xs">
+                                      Source: {schedule.source.toUpperCase()}
+                                    </Badge>
+                                  )}
+                                  {schedule.processor && (
+                                    <Badge variant="outline" className="text-xs">
+                                      Processor: {schedule.processor.toUpperCase()}
+                                    </Badge>
+                                  )}
+                                </div>
+                              )}
+
+                              {schedule.status === 'active' && (
+                                <div className="flex gap-3 pt-3 border-t border-white/10">
+                                  <Button
+                                    onClick={() => deleteScheduleMutation.mutate(schedule.id)}
+                                    disabled={deleteScheduleMutation.isPending}
+                                    variant="destructive"
+                                    size="sm"
+                                    className="flex items-center gap-2"
+                                    data-testid={`button-delete-schedule-${schedule.id}`}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                    Cancel Arrangement
+                                  </Button>
+                                  {schedule.source === 'smax' && schedule.consumer && (
+                                    <Button
+                                      onClick={() => resyncSmaxMutation.mutate(schedule.consumer.id)}
+                                      disabled={resyncSmaxMutation.isPending}
+                                      variant="outline"
+                                      size="sm"
+                                      className="flex items-center gap-2"
+                                      data-testid={`button-resync-smax-${schedule.id}`}
+                                    >
+                                      <RefreshCw className="w-4 h-4" />
+                                      Resync from SMAX
+                                    </Button>
+                                  )}
                                 </div>
                               )}
 

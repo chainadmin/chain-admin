@@ -9778,9 +9778,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         try {
           const smaxArrangement = await smaxService.getPaymentArrangement(
-            tenantSettings.smaxApiKey!,
-            tenantSettings.smaxPin!,
-            tenantSettings.smaxBaseUrl!,
+            tenantId,
             account.filenumber
           );
 
