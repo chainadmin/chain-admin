@@ -1687,22 +1687,22 @@ export default function ConsumerDashboardSimple() {
                 </>
               )}
 
-              {/* Payment Options - Always show, but simplified when SMAX arrangement exists */}
+              {/* Payment Options - Always show, but simplified when existing arrangement */}
               {selectedAccountSMAXArrangement ? (
                 <div className="space-y-4">
-                  {/* Quick Payment Button for SMAX Arrangement */}
+                  {/* Quick Payment Button for Existing Arrangement */}
                   <div className="rounded-lg bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border-2 border-blue-400/30 p-4 backdrop-blur">
                     <div className="flex items-center gap-2 mb-3">
                       <DollarSign className="h-5 w-5 text-blue-400" />
-                      <Label className="text-base font-semibold text-blue-200">Make Payment on Existing Arrangement</Label>
+                      <Label className="text-base font-semibold text-blue-200">Pay My Arrangement</Label>
                     </div>
                     <button
                       type="button"
                       onClick={() => {
-                        // Use the SMAX arrangement's payment amount
-                        const smaxPaymentAmount = selectedAccountSMAXArrangement.monthlyPayment * 100;
-                        setCalculatedPayment(smaxPaymentAmount);
-                        setMonthlyBaseAmount(smaxPaymentAmount);
+                        // Use the arrangement's payment amount
+                        const arrangementPaymentAmount = selectedAccountSMAXArrangement.monthlyPayment * 100;
+                        setCalculatedPayment(arrangementPaymentAmount);
+                        setMonthlyBaseAmount(arrangementPaymentAmount);
                         setPaymentMethod('smax');
                         setSelectedArrangement(null);
                       }}
@@ -1711,11 +1711,11 @@ export default function ConsumerDashboardSimple() {
                           ? 'border-blue-400 bg-blue-500/20'
                           : 'border-white/20 bg-white/5 hover:border-blue-400/50 hover:bg-white/10'
                       }`}
-                      data-testid="button-pay-smax-arrangement"
+                      data-testid="button-pay-arrangement"
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <div className="text-sm text-blue-100/70 mb-1">Today's Payment Amount</div>
+                          <div className="text-sm text-blue-100/70 mb-1">Payment Amount</div>
                           <div className="text-2xl font-bold text-blue-300">
                             {formatCurrency(selectedAccountSMAXArrangement.monthlyPayment * 100)}
                           </div>
@@ -1726,12 +1726,12 @@ export default function ConsumerDashboardSimple() {
                           )}
                         </div>
                         <div className="text-right">
-                          <Badge className="bg-blue-500 text-white border-blue-400/30">Arrangement Payment</Badge>
+                          <Badge className="bg-blue-500 text-white border-blue-400/30">Pay Now</Badge>
                         </div>
                       </div>
                     </button>
                     <p className="text-xs text-blue-100/50 mt-2">
-                      This payment applies to your existing payment arrangement. To modify your arrangement terms, please contact us.
+                      Click to make a payment on your payment arrangement. To modify your arrangement terms, please contact us.
                     </p>
                   </div>
                 </div>
