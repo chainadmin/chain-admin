@@ -7997,6 +7997,123 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Add new payment method (for token recovery)
+  app.post('/api/consumer/payment-methods/add', authenticateConsumer, async (req: any, res) => {
+    console.log('💳 === ADD PAYMENT METHOD REQUEST ===');
+    try {
+      const { id: consumerId, tenantId } = req.consumer || {};
+
+      if (!consumerId || !tenantId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { cardNumber, expiryMonth, expiryYear, cvv, cardName, zipCode } = req.body;
+
+      if (!cardNumber || !expiryMonth || !expiryYear || !cvv || !cardName) {
+        return res.status(400).json({ message: "All card details are required" });
+      }
+
+      // Get tenant settings for USAePay credentials
+      const settings = await storage.getTenantSettings(tenantId);
+      if (!settings?.enableOnlinePayments) {
+        return res.status(403).json({ message: "Online payments are currently disabled" });
+      }
+
+      const merchantApiKey = settings.merchantApiKey?.trim();
+      const merchantApiPin = settings.merchantApiPin?.trim();
+      const useSandbox = settings.useSandbox;
+
+      if (!merchantApiKey || !merchantApiPin) {
+        return res.status(500).json({ message: "Payment processing is not configured" });
+      }
+
+      const usaepayBaseUrl = useSandbox 
+        ? "https://sandbox.usaepay.com/api/v2"
+        : "https://secure.usaepay.com/api/v2";
+
+      const authHeader = generateUSAePayAuthHeader(merchantApiKey, merchantApiPin);
+
+      // Tokenize card with USAePay
+      const tokenPayload = {
+        command: "cc:save",
+        creditcard: {
+          number: cardNumber.replace(/\s/g, ''),
+          expiration: `${expiryMonth}${expiryYear.slice(-2)}`,
+          cardholder: cardName,
+          cvc: cvv,
+          avs_street: "",
+          avs_zip: zipCode || ""
+        }
+      };
+
+      console.log('🔐 Tokenizing card...');
+      const tokenResponse = await fetch(`${usaepayBaseUrl}/transactions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authHeader
+        },
+        body: JSON.stringify(tokenPayload)
+      });
+
+      const responseText = await tokenResponse.text();
+      let tokenResult: any = null;
+
+      try {
+        tokenResult = responseText ? JSON.parse(responseText) : null;
+      } catch (err) {
+        console.error('❌ Failed to parse USAePay response:', err);
+        return res.status(500).json({ message: "Payment processor error" });
+      }
+
+      const savedCardKey = tokenResult?.savedcard?.key;
+      
+      if (!tokenResponse.ok || !savedCardKey) {
+        console.error('❌ Tokenization failed:', tokenResult);
+        const errorMessage = tokenResult?.error || tokenResult?.result || 'Unable to save your payment method';
+        return res.status(400).json({ message: errorMessage });
+      }
+
+      const paymentToken = savedCardKey;
+      const cardBrand = tokenResult.savedcard?.type || null;
+      const cardLast4 = tokenResult.savedcard?.cardnumber?.slice(-4) || cardNumber.slice(-4);
+
+      console.log('✅ Card tokenized:', { token: paymentToken, brand: cardBrand, last4: cardLast4 });
+
+      // Save payment method to database
+      const paymentMethod = await storage.createPaymentMethod({
+        tenantId,
+        consumerId,
+        paymentToken,
+        cardLast4,
+        cardBrand,
+        expiryMonth,
+        expiryYear,
+        cardholderName: cardName,
+        isDefault: false,
+      });
+
+      console.log('✅ Payment method saved:', paymentMethod.id);
+      
+      res.json({
+        success: true,
+        paymentMethod: {
+          id: paymentMethod.id,
+          cardLast4: paymentMethod.cardLast4,
+          cardBrand: paymentMethod.cardBrand,
+          expiryMonth: paymentMethod.expiryMonth,
+          expiryYear: paymentMethod.expiryYear,
+          cardholderName: paymentMethod.cardholderName,
+        },
+        message: "Payment method added successfully"
+      });
+
+    } catch (error) {
+      console.error("Error adding payment method:", error);
+      res.status(500).json({ message: "Failed to add payment method" });
+    }
+  });
+
   // Update payment method for a payment schedule with SMAX sync logic
   app.patch('/api/consumer/payment-schedules/:scheduleId/payment-method', authenticateConsumer, async (req: any, res) => {
     try {
