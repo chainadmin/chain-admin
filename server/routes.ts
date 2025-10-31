@@ -7247,9 +7247,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
             cardexpirationyear: expiryYear || undefined,
           });
           
+          console.log('🔍 SMAX Payment Sync - Card Token Details:', {
+            hasToken: !!paymentToken,
+            token: paymentToken ? `${paymentToken.substring(0, 8)}...` : 'none',
+            hasCardholderName: !!cardName,
+            cardholderName: cardName || 'missing',
+            hasBillingZip: !!zipCode,
+            billingZip: zipCode || 'missing',
+            hasExpiration: !!(expiryMonth && expiryYear),
+            expiration: (expiryMonth && expiryYear) ? `${expiryMonth}/${expiryYear}` : 'missing',
+            filenumber: account.filenumber
+          });
+          
           const smaxSuccess = await smaxService.insertPayment(tenantId, smaxPaymentData);
           if (smaxSuccess) {
-            console.log('✅ Payment synced to SMAX successfully');
+            console.log('✅ Payment synced to SMAX successfully with card token');
           } else {
             console.log('⚠️ Failed to sync payment to SMAX (non-blocking)');
           }
