@@ -391,8 +391,8 @@ export default function Payments() {
           </div>
         </section>
 
-        <div className="flex items-center justify-between mb-6">
-          <Tabs defaultValue="transactions" className="flex-1">
+        <Tabs defaultValue="transactions" className="w-full">
+          <div className="flex items-center justify-between mb-6">
             <TabsList className="bg-white/10 border border-white/15">
               <TabsTrigger value="transactions" data-testid="tab-transactions">
                 <CreditCard className="w-4 h-4 mr-2" />
@@ -412,20 +412,17 @@ export default function Payments() {
                 Payment Schedule
               </TabsTrigger>
             </TabsList>
-          </Tabs>
-          
-          <Button
-            onClick={() => processScheduledPaymentsMutation.mutate()}
-            disabled={processScheduledPaymentsMutation.isPending}
-            className="ml-4 bg-emerald-600 hover:bg-emerald-700 text-white"
-            data-testid="button-process-scheduled"
-          >
-            <RefreshCw className={cn("w-4 h-4 mr-2", processScheduledPaymentsMutation.isPending && "animate-spin")} />
-            {processScheduledPaymentsMutation.isPending ? "Processing..." : "Process Scheduled Payments"}
-          </Button>
-        </div>
-
-        <Tabs defaultValue="transactions" className="w-full">
+            
+            <Button
+              onClick={() => processScheduledPaymentsMutation.mutate()}
+              disabled={processScheduledPaymentsMutation.isPending}
+              className="ml-4 bg-emerald-600 hover:bg-emerald-700 text-white"
+              data-testid="button-process-scheduled"
+            >
+              <RefreshCw className={cn("w-4 h-4 mr-2", processScheduledPaymentsMutation.isPending && "animate-spin")} />
+              {processScheduledPaymentsMutation.isPending ? "Processing..." : "Process Scheduled Payments"}
+            </Button>
+          </div>
 
           <TabsContent value="transactions" className="mt-0">
             <section className="grid gap-8 lg:grid-cols-12">

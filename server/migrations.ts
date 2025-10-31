@@ -249,6 +249,22 @@ export async function runMigrations() {
       }
     }
 
+    // Add segments column to sms_tracking table for Twilio webhook tracking
+    console.log('Adding segments column to sms_tracking table...');
+    try {
+      await client.query(`
+        ALTER TABLE sms_tracking 
+        ADD COLUMN IF NOT EXISTS segments INTEGER DEFAULT 1
+      `);
+      console.log('  ✓ segments column added to sms_tracking');
+    } catch (err: any) {
+      if (err.message?.includes('already exists')) {
+        console.log('  ✓ segments column already exists');
+      } else {
+        console.log('  ⚠ segments column error:', err.message);
+      }
+    }
+
     // Update push_devices table to support native FCM/APNS tokens
     console.log('Updating push_devices table for native push notifications...');
     const pushDeviceColumns = [
