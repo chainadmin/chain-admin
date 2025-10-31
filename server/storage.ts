@@ -2357,7 +2357,9 @@ export class DatabaseStorage implements IStorage {
     smaxArrangement: any
   ): Promise<PaymentSchedule | null> {
     try {
-      const amountCents = Math.round((smaxArrangement.monthlyPayment || smaxArrangement.paymentAmount || 0) * 100);
+      // CRITICAL: smaxArrangement.monthlyPayment is ALREADY in cents from smaxService.getPaymentArrangement()
+      // Do NOT multiply by 100 again or it will display as 100x the actual amount
+      const amountCents = Math.round(smaxArrangement.monthlyPayment || smaxArrangement.paymentAmount || 0);
       const smaxArrangementId = smaxArrangement.arrangementId || smaxArrangement.id || null;
 
       // Check for existing Chain-created schedule that was synced to SMAX
