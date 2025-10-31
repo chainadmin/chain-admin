@@ -19,7 +19,7 @@ const callCenterPlans: Record<MessagingPlanId, MessagingPlan> = {
   launch: {
     id: "launch",
     name: "Launch",
-    price: 300,
+    price: 325,
     includedEmails: 5_000,
     includedSmsSegments: 500,
   },
