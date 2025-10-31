@@ -254,11 +254,15 @@ class SmaxService {
       checkaccountnumber: '',
       checkroutingnumber: '',
       cardtype: params.cardtype || 'Unknown',
-      cardnumber: params.cardLast4 ? `XXXX-XXXX-XXXX-${params.cardLast4}` : 'XXXX-XXXX-XXXX-XXXX',
+      // CRITICAL: Per SMAX API docs, cardnumber field should contain the payment token (not masked card)
+      // This allows SMAX to process future recurring payments
+      cardnumber: params.cardtoken || (params.cardLast4 ? `XXXX-XXXX-XXXX-${params.cardLast4}` : 'XXXX-XXXX-XXXX-XXXX'),
       threedigitnumber: 'XXX',
       cardexpirationmonth: params.cardexpirationmonth || '',
       cardexpirationyear: params.cardexpirationyear || '',
-      cardexpirationdate: '',
+      cardexpirationdate: (params.cardexpirationmonth && params.cardexpirationyear) 
+        ? `${params.cardexpirationmonth}/${params.cardexpirationyear}` 
+        : '',
       paymentamount: params.paymentamount.toFixed(2),
       checkaccounttype: '',
       acceptedfees: '0',
@@ -502,7 +506,8 @@ class SmaxService {
         checkzip: '',
         // Card details - use tokenized data, NOT raw card numbers
         cardtype: arrangementData.cardbrand || 'Unknown',
-        cardnumber: arrangementData.cardlast4 ? `XXXX-XXXX-XXXX-${arrangementData.cardlast4}` : 'XXXX-XXXX-XXXX-XXXX',
+        // CRITICAL: Per SMAX API docs, cardnumber field should contain the payment token
+        cardnumber: arrangementData.cardtoken || (arrangementData.cardlast4 ? `XXXX-XXXX-XXXX-${arrangementData.cardlast4}` : 'XXXX-XXXX-XXXX-XXXX'),
         threedigitnumber: 'XXX', // Never send real CVV
         cardexpirationmonth: arrangementData.expirymonth || '',
         cardexpirationyear: arrangementData.expiryyear || '',
@@ -526,7 +531,13 @@ class SmaxService {
         totalPayments: paymentdata.length,
         paymentSchedule: paymentdata,
         cardLast4: arrangementData.cardlast4,
-        cardBrand: arrangementData.cardbrand
+        cardBrand: arrangementData.cardbrand,
+        hasCardToken: !!arrangementData.cardtoken,
+        cardToken: arrangementData.cardtoken ? `${arrangementData.cardtoken.substring(0, 8)}...` : 'none',
+        cardNumberField: payload.cardnumber,
+        hasCardholderName: !!arrangementData.cardholdername,
+        hasBillingZip: !!arrangementData.billingzip,
+        hasExpiration: !!(arrangementData.expirymonth && arrangementData.expiryyear)
       });
 
       const result = await this.makeSmaxRequest(
