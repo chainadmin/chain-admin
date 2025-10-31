@@ -917,6 +917,7 @@ export const communicationAutomations = pgTable("communication_automations", {
   scheduleTime: text("schedule_time").notNull(), // Format: "HH:MM" (24-hour)
   
   // Target audience - which folder(s) to send to
+  targetType: text("target_type").notNull().default('folders'), // 'folders', 'all', 'consumers'
   targetFolderIds: uuid("target_folder_ids").array(), // Empty array means send to all
   
   // Execution tracking

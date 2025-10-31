@@ -876,7 +876,7 @@ export default function Payments() {
                                   {schedule.status === 'pending_approval' ? 'Pending Approval' : schedule.status}
                                 </Badge>
                               </div>
-                              <div className="grid gap-4 text-sm text-blue-100/80 sm:grid-cols-2 lg:grid-cols-4">
+                              <div className="grid gap-4 text-sm text-blue-100/80 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                                 <div>
                                   <span className="text-xs uppercase tracking-wide text-blue-200/80">Consumer</span>
                                   <p className="mt-1 font-semibold text-blue-50">
@@ -891,7 +891,7 @@ export default function Payments() {
                                   </p>
                                 </div>
                                 <div>
-                                  <span className="text-xs uppercase tracking-wide text-blue-200/80">Next Payment</span>
+                                  <span className="text-xs uppercase tracking-wide text-blue-200/80">Due Date (Next Payment)</span>
                                   <p className="mt-1 font-semibold text-blue-50">
                                     {schedule.nextPaymentDate ? formatDate(schedule.nextPaymentDate) : "N/A"}
                                   </p>
@@ -902,7 +902,29 @@ export default function Payments() {
                                     {schedule.frequency?.replace("_", " ") || "N/A"}
                                   </p>
                                 </div>
+                                <div>
+                                  <span className="text-xs uppercase tracking-wide text-blue-200/80">Remaining Payments</span>
+                                  <p className="mt-1 font-semibold text-blue-50">
+                                    {schedule.remainingPayments ?? "N/A"}
+                                  </p>
+                                </div>
                               </div>
+                              
+                              {/* Arrangement Date Range */}
+                              {(schedule.startDate || schedule.endDate) && (
+                                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                                  <span className="text-xs uppercase tracking-wide text-blue-200/80">Arrangement Period</span>
+                                  <div className="mt-1 flex items-center gap-2 text-sm">
+                                    <span className="font-semibold text-blue-50">
+                                      {schedule.startDate ? formatDate(schedule.startDate) : "N/A"}
+                                    </span>
+                                    <span className="text-blue-100/60">→</span>
+                                    <span className="font-semibold text-blue-50">
+                                      {schedule.endDate ? formatDate(schedule.endDate) : "N/A"}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
                               {schedule.paymentMethod && (
                                 <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
                                   <div className="flex items-center gap-3">

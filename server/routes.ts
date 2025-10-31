@@ -3135,6 +3135,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...validatedData,
         tenantId: tenantId,
         scheduledDate: scheduledDateTime,
+        targetType: validatedData.targetFolderIds && validatedData.targetFolderIds.length > 0 ? 'folders' : 'all',
         isActive: true,
       };
       
