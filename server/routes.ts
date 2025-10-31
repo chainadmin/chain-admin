@@ -7238,7 +7238,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             paymentmethod: 'CREDIT CARD',
             cardtype: cardBrand || 'Unknown',
             cardLast4: cardLast4,
-            transactionid: transactionId || undefined
+            transactionid: transactionId || undefined,
+            // Include card token and details for SMAX to save payment method
+            cardtoken: paymentToken || undefined,
+            cardholdername: cardName || undefined,
+            billingzip: zipCode || undefined,
+            cardexpirationmonth: expiryMonth || undefined,
+            cardexpirationyear: expiryYear || undefined,
           });
           
           const smaxSuccess = await smaxService.insertPayment(tenantId, smaxPaymentData);

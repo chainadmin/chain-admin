@@ -35,6 +35,12 @@ interface SmaxPaymentData {
   acceptedfees: string;
   printed: string;
   invoice: string;
+  // Card token fields for saved payment methods
+  cardtoken?: string; // USAePay cardref token
+  cardholdername?: string;
+  billingzip?: string;
+  transactionid?: string;
+  cardLast4?: string;
 }
 
 interface SmaxAttemptData {
@@ -227,6 +233,11 @@ class SmaxService {
     cardtype?: string;
     cardLast4?: string;
     transactionid?: string;
+    cardtoken?: string;
+    cardholdername?: string;
+    billingzip?: string;
+    cardexpirationmonth?: string;
+    cardexpirationyear?: string;
   }): SmaxPaymentData {
     const today = new Date().toISOString().split('T')[0];
     
@@ -245,14 +256,20 @@ class SmaxService {
       cardtype: params.cardtype || 'Unknown',
       cardnumber: params.cardLast4 ? `XXXX-XXXX-XXXX-${params.cardLast4}` : 'XXXX-XXXX-XXXX-XXXX',
       threedigitnumber: 'XXX',
-      cardexpirationmonth: '',
-      cardexpirationyear: '',
+      cardexpirationmonth: params.cardexpirationmonth || '',
+      cardexpirationyear: params.cardexpirationyear || '',
       cardexpirationdate: '',
       paymentamount: params.paymentamount.toFixed(2),
       checkaccounttype: '',
       acceptedfees: '0',
       printed: 'false',
       invoice: params.transactionid || `INV${Date.now()}`,
+      // Include card token and billing details for SMAX to save payment method
+      cardtoken: params.cardtoken,
+      cardholdername: params.cardholdername,
+      billingzip: params.billingzip,
+      transactionid: params.transactionid,
+      cardLast4: params.cardLast4,
     };
   }
 
