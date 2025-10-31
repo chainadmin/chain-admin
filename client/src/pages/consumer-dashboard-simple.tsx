@@ -1699,8 +1699,14 @@ export default function ConsumerDashboardSimple() {
                     <button
                       type="button"
                       onClick={() => {
-                        // Use the arrangement's payment amount
-                        const arrangementPaymentAmount = selectedAccountSMAXArrangement.monthlyPayment * 100;
+                        // Backend now returns monthlyPayment already normalized to cents
+                        const arrangementPaymentAmount = Math.round(selectedAccountSMAXArrangement.monthlyPayment);
+                        
+                        console.log('🔍 SMAX Arrangement Payment (normalized from backend):', {
+                          amountCents: arrangementPaymentAmount,
+                          displayAmount: formatCurrency(arrangementPaymentAmount)
+                        });
+                        
                         setCalculatedPayment(arrangementPaymentAmount);
                         setMonthlyBaseAmount(arrangementPaymentAmount);
                         setPaymentMethod('smax');
@@ -1717,7 +1723,7 @@ export default function ConsumerDashboardSimple() {
                         <div>
                           <div className="text-sm text-blue-100/70 mb-1">Payment Amount</div>
                           <div className="text-2xl font-bold text-blue-300">
-                            {formatCurrency(selectedAccountSMAXArrangement.monthlyPayment * 100)}
+                            {formatCurrency(Math.round(selectedAccountSMAXArrangement.monthlyPayment))}
                           </div>
                           {selectedAccountSMAXArrangement.nextPaymentDate && (
                             <div className="text-xs text-blue-100/50 mt-1">

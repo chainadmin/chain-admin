@@ -648,14 +648,32 @@ class SmaxService {
       });
 
       const nextPayment = futurePayments[0];
-      const paymentAmount = parseFloat(nextPayment.paymentamount || nextPayment.paymentAmount || '0');
+      const rawPaymentAmount = nextPayment.paymentamount || nextPayment.paymentAmount || '0';
+      const paymentAmountFloat = parseFloat(rawPaymentAmount);
+      
+      // CRITICAL: Normalize SMAX payment amounts to cents
+      // SMAX may return amounts in dollars (e.g., "150.00") or cents (e.g., "15000")
+      // Strategy: Check if the raw value contains a decimal point
+      // - If it has decimals (e.g., "150.00"), it's in dollars → multiply by 100
+      // - If no decimals (e.g., "15000"), it's already in cents → use as-is
+      const paymentAmountCents = rawPaymentAmount.toString().includes('.')
+        ? Math.round(paymentAmountFloat * 100) // Has decimal = dollars, convert to cents
+        : Math.round(paymentAmountFloat); // No decimal = already cents
+      
+      console.log('💰 SMAX Payment Amount Normalization:', {
+        raw: rawPaymentAmount,
+        parsed: paymentAmountFloat,
+        hasDecimal: rawPaymentAmount.toString().includes('.'),
+        normalizedCents: paymentAmountCents,
+        displayAmount: `$${(paymentAmountCents / 100).toFixed(2)}`
+      });
 
       // Calculate arrangement details from the payment schedule
       const arrangement = {
         source: 'smax',
         filenumber: fileNumber,
-        paymentAmount: paymentAmount,
-        monthlyPayment: paymentAmount,
+        paymentAmount: paymentAmountCents,
+        monthlyPayment: paymentAmountCents,
         nextPaymentDate: nextPayment.paymentdate,
         remainingPayments: futurePayments.length,
         paymentMethod: nextPayment.paymentmethod || nextPayment.paymentMethod,
@@ -673,7 +691,7 @@ class SmaxService {
         hasArrangement: true,
         nextPaymentDate: arrangement.nextPaymentDate,
         remainingPayments: arrangement.remainingPayments,
-        monthlyPayment: paymentAmount
+        monthlyPaymentCents: paymentAmountCents
       });
 
       return arrangement;
