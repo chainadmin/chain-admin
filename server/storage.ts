@@ -2374,8 +2374,8 @@ export class DatabaseStorage implements IStorage {
         return existing[0];
       }
 
-      // CRITICAL: Deactivate any active Chain-sourced schedules for this account
-      // This prevents duplicate charges when SMAX is already handling payments
+      // Check for active Chain-sourced schedules that are already synced to SMAX
+      // DO NOT cancel Chain arrangements that were created in Chain and synced to SMAX
       const activeChainSchedules = await db
         .select()
         .from(paymentSchedules)
@@ -2388,7 +2388,16 @@ export class DatabaseStorage implements IStorage {
         ));
 
       if (activeChainSchedules.length > 0) {
-        console.log(`⚠️ Found ${activeChainSchedules.length} active Chain schedule(s) for account - deactivating to prevent duplicates`);
+        // Check if any Chain schedule is already synced to SMAX
+        const smaxSyncedSchedule = activeChainSchedules.find(s => s.smaxSynced === true);
+        
+        if (smaxSyncedSchedule) {
+          console.log(`✓ Chain arrangement already exists and synced to SMAX - keeping it active (ID: ${smaxSyncedSchedule.id})`);
+          return smaxSyncedSchedule;
+        }
+        
+        // Only cancel Chain schedules that were NOT synced to SMAX (to prevent duplicates)
+        console.log(`⚠️ Found ${activeChainSchedules.length} active Chain schedule(s) NOT synced to SMAX - deactivating to prevent duplicates`);
         
         for (const schedule of activeChainSchedules) {
           await db
