@@ -3101,6 +3101,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
+      console.log('📝 Creating automation with body:', JSON.stringify(req.body, null, 2));
+
       // Simplified schema - each automation is a single scheduled send
       const insertAutomationSchema = z.object({
         name: z.string().min(1),
@@ -3113,9 +3115,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       const validatedData = insertAutomationSchema.parse(req.body);
+      console.log('✓ Validation passed:', validatedData);
 
       //  Convert scheduledDate to timestamp
       const scheduledDateTime = new Date(validatedData.scheduledDate);
+      console.log('✓ Scheduled date time:', scheduledDateTime.toISOString());
 
       const automationData: any = {
         ...validatedData,
@@ -3124,6 +3128,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isActive: true,
       };
       
+      console.log('✓ Creating automation with data:', automationData);
       const newAutomation = await storage.createAutomation(automationData);
       
       console.log('✅ Automation created:', {
@@ -3134,9 +3139,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       res.status(201).json(newAutomation);
-    } catch (error) {
-      console.error("Error creating automation:", error);
-      res.status(500).json({ message: "Failed to create automation" });
+    } catch (error: any) {
+      console.error("❌ Error creating automation:", {
+        message: error.message,
+        stack: error.stack,
+        validationErrors: error.errors,
+        error: error
+      });
+      
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ 
+          message: "Validation error", 
+          errors: error.errors 
+        });
+      }
+      
+      res.status(500).json({ 
+        message: "Failed to create automation",
+        error: error.message 
+      });
     }
   });
 
