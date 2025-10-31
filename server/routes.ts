@@ -6832,6 +6832,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log('✅ Simplified flow validated:', simplifiedArrangementData);
       }
       
+      // CRITICAL: If customPaymentAmountCents is provided WITHOUT an arrangement
+      // (e.g., SMAX arrangement payments), use it instead of full balance
+      if (!isSimplifiedFlow && !arrangementId && customPaymentAmountCents && customPaymentAmountCents > 0) {
+        amountCents = customPaymentAmountCents;
+        console.log('💰 Using custom payment amount (SMAX arrangement):', {
+          customPaymentAmountCents,
+          amountDollars: (customPaymentAmountCents / 100).toFixed(2),
+          originalBalance: account.balanceCents
+        });
+      }
+      
       if (arrangementId) {
         const arrangements = await storage.getArrangementOptionsByTenant(tenantId);
         console.log('📋 Available arrangements:', {
