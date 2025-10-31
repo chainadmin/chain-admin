@@ -2357,8 +2357,46 @@ export class DatabaseStorage implements IStorage {
     smaxArrangement: any
   ): Promise<PaymentSchedule | null> {
     try {
-      // Check if we already have this SMAX arrangement synced
-      const existing = await db
+      const amountCents = Math.round((smaxArrangement.monthlyPayment || smaxArrangement.paymentAmount || 0) * 100);
+      const smaxArrangementId = smaxArrangement.arrangementId || smaxArrangement.id || null;
+
+      // Check for existing Chain-created schedule that was synced to SMAX
+      const chainSyncedSchedule = await db
+        .select()
+        .from(paymentSchedules)
+        .where(and(
+          eq(paymentSchedules.tenantId, tenantId),
+          eq(paymentSchedules.consumerId, consumerId),
+          eq(paymentSchedules.accountId, accountId),
+          eq(paymentSchedules.source, 'chain'),
+          eq(paymentSchedules.smaxSynced, true),
+          eq(paymentSchedules.status, 'active')
+        ));
+
+      if (chainSyncedSchedule.length > 0) {
+        // Update existing Chain schedule with SMAX metadata - PRESERVE CARD TOKEN
+        const schedule = chainSyncedSchedule[0];
+        console.log(`✓ Updating Chain arrangement with SMAX metadata (ID: ${schedule.id}) - preserving card token`);
+        
+        const [updated] = await db
+          .update(paymentSchedules)
+          .set({
+            smaxArrangementId,
+            smaxLastSyncAt: new Date(),
+            smaxNextPaymentDate: smaxArrangement.nextPaymentDate || null,
+            smaxExpectedAmountCents: amountCents,
+            smaxStatus: smaxArrangement.status || 'active',
+            processor: 'chain', // Payments processed via Chain's USAePay
+            updatedAt: new Date(),
+          })
+          .where(eq(paymentSchedules.id, schedule.id))
+          .returning();
+        
+        return updated;
+      }
+
+      // Check if we already have a pure SMAX arrangement imported
+      const existingSmaxSchedule = await db
         .select()
         .from(paymentSchedules)
         .where(and(
@@ -2369,50 +2407,13 @@ export class DatabaseStorage implements IStorage {
           eq(paymentSchedules.status, 'active')
         ));
 
-      if (existing.length > 0) {
-        console.log('✓ SMAX arrangement already synced to Chain');
-        return existing[0];
+      if (existingSmaxSchedule.length > 0) {
+        console.log('✓ SMAX-only arrangement already exists');
+        return existingSmaxSchedule[0];
       }
 
-      // Check for active Chain-sourced schedules that are already synced to SMAX
-      // DO NOT cancel Chain arrangements that were created in Chain and synced to SMAX
-      const activeChainSchedules = await db
-        .select()
-        .from(paymentSchedules)
-        .where(and(
-          eq(paymentSchedules.tenantId, tenantId),
-          eq(paymentSchedules.consumerId, consumerId),
-          eq(paymentSchedules.accountId, accountId),
-          eq(paymentSchedules.source, 'chain'),
-          eq(paymentSchedules.status, 'active')
-        ));
-
-      if (activeChainSchedules.length > 0) {
-        // Check if any Chain schedule is already synced to SMAX
-        const smaxSyncedSchedule = activeChainSchedules.find(s => s.smaxSynced === true);
-        
-        if (smaxSyncedSchedule) {
-          console.log(`✓ Chain arrangement already exists and synced to SMAX - keeping it active (ID: ${smaxSyncedSchedule.id})`);
-          return smaxSyncedSchedule;
-        }
-        
-        // Only cancel Chain schedules that were NOT synced to SMAX (to prevent duplicates)
-        console.log(`⚠️ Found ${activeChainSchedules.length} active Chain schedule(s) NOT synced to SMAX - deactivating to prevent duplicates`);
-        
-        for (const schedule of activeChainSchedules) {
-          await db
-            .update(paymentSchedules)
-            .set({ 
-              status: 'cancelled',
-              notes: 'Auto-cancelled: SMAX arrangement detected for this account'
-            })
-            .where(eq(paymentSchedules.id, schedule.id));
-          
-          console.log(`✅ Cancelled Chain schedule ${schedule.id}`);
-        }
-      }
-
-      // Check for existing placeholder payment method to avoid duplicates
+      // No existing arrangement - this is a pure SMAX arrangement (not created in Chain)
+      // Create placeholder payment method for display purposes only
       const existingPlaceholder = await db
         .select()
         .from(paymentMethods)
@@ -2425,9 +2426,7 @@ export class DatabaseStorage implements IStorage {
       let placeholderMethod;
       if (existingPlaceholder.length > 0) {
         placeholderMethod = existingPlaceholder[0];
-        console.log('✓ Using existing SMAX placeholder payment method');
       } else {
-        // Create a placeholder payment method for SMAX arrangements (no actual card stored in Chain)
         [placeholderMethod] = await db.insert(paymentMethods).values({
           tenantId,
           consumerId,
@@ -2440,9 +2439,7 @@ export class DatabaseStorage implements IStorage {
         console.log('✅ Created SMAX placeholder payment method');
       }
 
-      // Sync SMAX arrangement to Chain
-      const amountCents = Math.round((smaxArrangement.monthlyPayment || smaxArrangement.paymentAmount || 0) * 100);
-      
+      // Create SMAX-only arrangement (payments processed by SMAX, not Chain)
       const [syncedSchedule] = await db.insert(paymentSchedules).values({
         tenantId,
         consumerId,
@@ -2457,10 +2454,16 @@ export class DatabaseStorage implements IStorage {
         remainingPayments: smaxArrangement.remainingPayments || null,
         status: 'active',
         source: 'smax',
+        processor: 'smax', // Payments processed by SMAX, not Chain
         smaxSynced: true,
+        smaxArrangementId,
+        smaxLastSyncAt: new Date(),
+        smaxNextPaymentDate: smaxArrangement.nextPaymentDate || null,
+        smaxExpectedAmountCents: amountCents,
+        smaxStatus: smaxArrangement.status || 'active',
       }).returning();
 
-      console.log('✅ SMAX arrangement synced to Chain:', syncedSchedule.id);
+      console.log('✅ SMAX-only arrangement synced to Chain:', syncedSchedule.id);
       return syncedSchedule;
     } catch (error) {
       console.error('❌ Error syncing SMAX arrangement to Chain:', error);

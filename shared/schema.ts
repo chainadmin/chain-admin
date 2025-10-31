@@ -529,6 +529,12 @@ export const paymentSchedules = pgTable("payment_schedules", {
   status: text("status").default("active"), // "active", "paused", "completed", "cancelled", "failed"
   source: text("source").default("chain"), // "chain" or "smax" - tracks where this arrangement came from
   smaxSynced: boolean("smax_synced").default(false), // Whether this has been synced to SMAX
+  processor: text("processor").default("chain"), // "chain" or "smax" - which processor handles the payments
+  smaxArrangementId: text("smax_arrangement_id"), // SMAX arrangement ID for linking
+  smaxLastSyncAt: timestamp("smax_last_sync_at"), // Last time we synced with SMAX
+  smaxNextPaymentDate: date("smax_next_payment_date"), // Next payment date from SMAX
+  smaxExpectedAmountCents: bigint("smax_expected_amount_cents", { mode: "number" }), // Expected payment amount from SMAX
+  smaxStatus: text("smax_status"), // Status from SMAX
   failedAttempts: integer("failed_attempts").default(0),
   lastProcessedAt: timestamp("last_processed_at"),
   createdAt: timestamp("created_at").defaultNow(),

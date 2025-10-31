@@ -295,7 +295,13 @@ export async function runMigrations() {
     console.log('Adding SMAX sync columns to payment_schedules...');
     const paymentScheduleColumns = [
       { name: 'source', type: 'TEXT', default: "'chain'" },
-      { name: 'smax_synced', type: 'BOOLEAN', default: 'false' }
+      { name: 'smax_synced', type: 'BOOLEAN', default: 'false' },
+      { name: 'processor', type: 'TEXT', default: "'chain'" },
+      { name: 'smax_arrangement_id', type: 'TEXT' },
+      { name: 'smax_last_sync_at', type: 'TIMESTAMP' },
+      { name: 'smax_next_payment_date', type: 'DATE' },
+      { name: 'smax_expected_amount_cents', type: 'BIGINT' },
+      { name: 'smax_status', type: 'TEXT' }
     ];
     
     for (const col of paymentScheduleColumns) {
