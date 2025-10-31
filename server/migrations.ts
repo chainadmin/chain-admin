@@ -50,6 +50,15 @@ export async function runMigrations() {
       }
     }
     
+    // Add business_type column for multi-module architecture
+    console.log('Adding business type column...');
+    try {
+      await client.query(`ALTER TABLE tenant_settings ADD COLUMN IF NOT EXISTS business_type TEXT DEFAULT 'call_center'`);
+      console.log(`  ✓ business_type`);
+    } catch (err) {
+      console.log(`  ⚠ business_type (already exists or error)`);
+    }
+    
     // Add missing tenants table columns for trial and service controls
     console.log('Adding tenants table service control columns...');
     const tenantColumns = [
