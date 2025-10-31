@@ -1,0 +1,24 @@
+{"message":"Error creating automation: error: null value in column \"trigger_type\" of relation \"communication_automations\" violates not-null constraint","attributes":{"level":"error"},"timestamp":"2025-10-31T12:54:42.740821199Z"}
+{"message":"    at /app/node_modules/pg-pool/index.js:45:11","attributes":{"level":"error"},"timestamp":"2025-10-31T12:54:42.740831158Z"}
+{"message":"    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)","attributes":{"level":"error"},"timestamp":"2025-10-31T12:54:42.740837758Z"}
+{"message":"    at async file:///app/node_modules/drizzle-orm/node-postgres/session.js:83:22","attributes":{"level":"error"},"timestamp":"2025-10-31T12:54:42.740843432Z"}
+{"message":"    at async DatabaseStorage.createAutomation (file:///app/dist/index.js:2492:33)","attributes":{"level":"error"},"timestamp":"2025-10-31T12:54:42.740849483Z"}
+{"message":"    at async file:///app/dist/index.js:8050:29 {","attributes":{"level":"error"},"timestamp":"2025-10-31T12:54:42.740855171Z"}
+{"message":"  length: 582,","attributes":{"level":"error"},"timestamp":"2025-10-31T12:54:42.740861156Z"}
+{"message":"  severity: 'ERROR',","attributes":{"level":"error"},"timestamp":"2025-10-31T12:54:42.740866883Z"}
+{"message":"  code: '23502',","attributes":{"level":"error"},"timestamp":"2025-10-31T12:54:42.740872765Z"}
+{"message":"  detail: 'Failing row contains (19e7c2fd-7c20-471a-9302-79f9a5635161, bc63d182-9691-455a-b372-10dfcad9c11e, recall, recall, email, d50d9f2d-4f4e-497f-bc11-66fb857d81d1, null, null, t, null, null, 2025-10-31 14:30:00, 10:30, null, null, null, null, null, {cae10573-105e-41ab-aee5-09f3bd962c89}, null, null, null, 0, 0, 2025-10-31 12:54:42.735269, 2025-10-31 12:54:42.735269).',","attributes":{"level":"error"},"timestamp":"2025-10-31T12:54:42.740878809Z"}
+{"message":"  hint: undefined,","attributes":{"level":"error"},"timestamp":"2025-10-31T12:54:42.740885035Z"}
+{"message":"  position: undefined,","attributes":{"level":"error"},"timestamp":"2025-10-31T12:54:42.740891129Z"}
+{"message":"  internalPosition: undefined,","attributes":{"level":"error"},"timestamp":"2025-10-31T12:54:42.740896983Z"}
+{"message":"  internalQuery: undefined,","attributes":{"level":"error"},"timestamp":"2025-10-31T12:54:42.740902517Z"}
+{"message":"  where: undefined,","attributes":{"level":"error"},"timestamp":"2025-10-31T12:54:42.740908236Z"}
+{"message":"  schema: 'public',","attributes":{"level":"error"},"timestamp":"2025-10-31T12:54:42.740914081Z"}
+{"message":"  table: 'communication_automations',","attributes":{"level":"error"},"timestamp":"2025-10-31T12:54:42.740924383Z"}
+{"message":"  column: 'trigger_type',","attributes":{"level":"error"},"timestamp":"2025-10-31T12:54:42.740931667Z"}
+{"message":"  dataType: undefined,","attributes":{"level":"error"},"timestamp":"2025-10-31T12:54:42.740937364Z"}
+{"message":"  constraint: undefined,","attributes":{"level":"error"},"timestamp":"2025-10-31T12:54:42.740944083Z"}
+{"message":"  file: 'execMain.c',","attributes":{"level":"error"},"timestamp":"2025-10-31T12:54:42.740949575Z"}
+{"message":"  line: '1981',","attributes":{"level":"error"},"timestamp":"2025-10-31T12:54:42.744728592Z"}
+{"message":"  routine: 'ExecConstraints'","attributes":{"level":"error"},"timestamp":"2025-10-31T12:54:42.744737419Z"}
+{"message":"}","attributes":{"level":"error"},"timestamp":"2025-10-31T12:54:42.744742816Z"}

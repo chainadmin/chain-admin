@@ -59,6 +59,36 @@ export async function runMigrations() {
       console.log(`  ⚠ business_type (already exists or error)`);
     }
     
+    // Fix communication_automations table - make trigger_type nullable (legacy column)
+    console.log('Fixing communication_automations table...');
+    try {
+      // Make trigger_type nullable if it exists
+      await client.query(`ALTER TABLE communication_automations ALTER COLUMN trigger_type DROP NOT NULL`);
+      console.log(`  ✓ trigger_type made nullable`);
+    } catch (err) {
+      console.log(`  ⚠ trigger_type (column may not exist or already nullable)`);
+    }
+    
+    // Remove other legacy columns if they exist
+    const legacyAutomationColumns = [
+      'automation_type',
+      'trigger_event', 
+      'delay_value',
+      'delay_unit',
+      'recurrence_pattern',
+      'recurrence_end_date',
+      'sequence_schedule'
+    ];
+    
+    for (const col of legacyAutomationColumns) {
+      try {
+        await client.query(`ALTER TABLE communication_automations DROP COLUMN IF EXISTS ${col}`);
+        console.log(`  ✓ Dropped legacy column: ${col}`);
+      } catch (err) {
+        // Silently ignore - column may not exist
+      }
+    }
+    
     // Add missing tenants table columns for trial and service controls
     console.log('Adding tenants table service control columns...');
     const tenantColumns = [
