@@ -19,9 +19,9 @@ import {
   messagingUsageEvents,
   communicationAutomations,
   automationExecutions,
-  emailSequences,
-  emailSequenceSteps,
-  emailSequenceEnrollments,
+  communicationSequences,
+  communicationSequenceSteps,
+  communicationSequenceEnrollments,
   documents,
   arrangementOptions,
   tenantSettings,
@@ -69,12 +69,12 @@ import {
   type InsertCommunicationAutomation,
   type AutomationExecution,
   type InsertAutomationExecution,
-  type EmailSequence,
-  type InsertEmailSequence,
-  type EmailSequenceStep,
-  type InsertEmailSequenceStep,
-  type EmailSequenceEnrollment,
-  type InsertEmailSequenceEnrollment,
+  type CommunicationSequence,
+  type InsertCommunicationSequence,
+  type CommunicationSequenceStep,
+  type InsertCommunicationSequenceStep,
+  type CommunicationSequenceEnrollment,
+  type InsertCommunicationSequenceEnrollment,
   type Document,
   type InsertDocument,
   type ArrangementOption,
@@ -301,24 +301,24 @@ export interface IStorage {
   getActiveAutomations(): Promise<CommunicationAutomation[]>;
   
   // Email sequence operations
-  getEmailSequencesByTenant(tenantId: string): Promise<EmailSequence[]>;
-  getEmailSequenceById(id: string, tenantId: string): Promise<EmailSequence | undefined>;
-  createEmailSequence(sequence: InsertEmailSequence): Promise<EmailSequence>;
-  updateEmailSequence(id: string, updates: Partial<EmailSequence>): Promise<EmailSequence>;
-  deleteEmailSequence(id: string, tenantId: string): Promise<void>;
+  getCommunicationSequencesByTenant(tenantId: string): Promise<CommunicationSequence[]>;
+  getCommunicationSequenceById(id: string, tenantId: string): Promise<CommunicationSequence | undefined>;
+  createCommunicationSequence(sequence: InsertCommunicationSequence): Promise<CommunicationSequence>;
+  updateCommunicationSequence(id: string, updates: Partial<CommunicationSequence>): Promise<CommunicationSequence>;
+  deleteCommunicationSequence(id: string, tenantId: string): Promise<void>;
   
   // Email sequence steps operations
-  getSequenceSteps(sequenceId: string): Promise<(EmailSequenceStep & { template: EmailTemplate })[]>;
-  createSequenceStep(step: InsertEmailSequenceStep): Promise<EmailSequenceStep>;
-  updateSequenceStep(id: string, updates: Partial<EmailSequenceStep>): Promise<EmailSequenceStep>;
+  getSequenceSteps(sequenceId: string): Promise<(CommunicationSequenceStep & { template: EmailTemplate })[]>;
+  createSequenceStep(step: InsertCommunicationSequenceStep): Promise<CommunicationSequenceStep>;
+  updateSequenceStep(id: string, updates: Partial<CommunicationSequenceStep>): Promise<CommunicationSequenceStep>;
   deleteSequenceStep(id: string): Promise<void>;
   reorderSequenceSteps(sequenceId: string, stepIds: string[]): Promise<void>;
   
   // Email sequence enrollment operations
-  getSequenceEnrollments(sequenceId: string): Promise<(EmailSequenceEnrollment & { consumer: Consumer })[]>;
-  enrollConsumerInSequence(enrollment: InsertEmailSequenceEnrollment): Promise<EmailSequenceEnrollment>;
-  updateEnrollment(id: string, updates: Partial<EmailSequenceEnrollment>): Promise<EmailSequenceEnrollment>;
-  getActiveEnrollments(): Promise<(EmailSequenceEnrollment & { sequence: EmailSequence; consumer: Consumer; currentStep?: EmailSequenceStep })[]>;
+  getSequenceEnrollments(sequenceId: string): Promise<(CommunicationSequenceEnrollment & { consumer: Consumer })[]>;
+  enrollConsumerInSequence(enrollment: InsertCommunicationSequenceEnrollment): Promise<CommunicationSequenceEnrollment>;
+  updateEnrollment(id: string, updates: Partial<CommunicationSequenceEnrollment>): Promise<CommunicationSequenceEnrollment>;
+  getActiveEnrollments(): Promise<(CommunicationSequenceEnrollment & { sequence: CommunicationSequence; consumer: Consumer; currentStep?: CommunicationSequenceStep })[]>;
   pauseEnrollment(id: string): Promise<void>;
   resumeEnrollment(id: string): Promise<void>;
   cancelEnrollment(id: string): Promise<void>;
@@ -1662,46 +1662,46 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Email sequence operations
-  async getEmailSequencesByTenant(tenantId: string): Promise<EmailSequence[]> {
+  async getCommunicationSequencesByTenant(tenantId: string): Promise<CommunicationSequence[]> {
     return await db.select()
-      .from(emailSequences)
-      .where(eq(emailSequences.tenantId, tenantId))
-      .orderBy(desc(emailSequences.createdAt));
+      .from(communicationSequences)
+      .where(eq(communicationSequences.tenantId, tenantId))
+      .orderBy(desc(communicationSequences.createdAt));
   }
 
-  async getEmailSequenceById(id: string, tenantId: string): Promise<EmailSequence | undefined> {
+  async getCommunicationSequenceById(id: string, tenantId: string): Promise<CommunicationSequence | undefined> {
     const [sequence] = await db.select()
-      .from(emailSequences)
-      .where(and(eq(emailSequences.id, id), eq(emailSequences.tenantId, tenantId)));
+      .from(communicationSequences)
+      .where(and(eq(communicationSequences.id, id), eq(communicationSequences.tenantId, tenantId)));
     return sequence || undefined;
   }
 
-  async createEmailSequence(sequence: InsertEmailSequence): Promise<EmailSequence> {
-    const [newSequence] = await db.insert(emailSequences).values(sequence).returning();
+  async createCommunicationSequence(sequence: InsertCommunicationSequence): Promise<CommunicationSequence> {
+    const [newSequence] = await db.insert(communicationSequences).values(sequence).returning();
     return newSequence;
   }
 
-  async updateEmailSequence(id: string, updates: Partial<EmailSequence>): Promise<EmailSequence> {
-    const [updatedSequence] = await db.update(emailSequences)
+  async updateCommunicationSequence(id: string, updates: Partial<CommunicationSequence>): Promise<CommunicationSequence> {
+    const [updatedSequence] = await db.update(communicationSequences)
       .set(updates)
-      .where(eq(emailSequences.id, id))
+      .where(eq(communicationSequences.id, id))
       .returning();
     return updatedSequence;
   }
 
-  async deleteEmailSequence(id: string, tenantId: string): Promise<void> {
-    await db.delete(emailSequences)
-      .where(and(eq(emailSequences.id, id), eq(emailSequences.tenantId, tenantId)));
+  async deleteCommunicationSequence(id: string, tenantId: string): Promise<void> {
+    await db.delete(communicationSequences)
+      .where(and(eq(communicationSequences.id, id), eq(communicationSequences.tenantId, tenantId)));
   }
 
   // Email sequence steps operations
-  async getSequenceSteps(sequenceId: string): Promise<(EmailSequenceStep & { template: EmailTemplate })[]> {
+  async getSequenceSteps(sequenceId: string): Promise<(CommunicationSequenceStep & { template: EmailTemplate })[]> {
     const result = await db
       .select()
-      .from(emailSequenceSteps)
-      .leftJoin(emailTemplates, eq(emailSequenceSteps.templateId, emailTemplates.id))
-      .where(eq(emailSequenceSteps.sequenceId, sequenceId))
-      .orderBy(emailSequenceSteps.stepOrder);
+      .from(communicationSequenceSteps)
+      .leftJoin(emailTemplates, eq(communicationSequenceSteps.templateId, emailTemplates.id))
+      .where(eq(communicationSequenceSteps.sequenceId, sequenceId))
+      .orderBy(communicationSequenceSteps.stepOrder);
     
     return result.map(row => ({
       ...row.email_sequence_steps,
@@ -1709,40 +1709,40 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async createSequenceStep(step: InsertEmailSequenceStep): Promise<EmailSequenceStep> {
-    const [newStep] = await db.insert(emailSequenceSteps).values(step).returning();
+  async createSequenceStep(step: InsertCommunicationSequenceStep): Promise<CommunicationSequenceStep> {
+    const [newStep] = await db.insert(communicationSequenceSteps).values(step).returning();
     return newStep;
   }
 
-  async updateSequenceStep(id: string, updates: Partial<EmailSequenceStep>): Promise<EmailSequenceStep> {
-    const [updatedStep] = await db.update(emailSequenceSteps)
+  async updateSequenceStep(id: string, updates: Partial<CommunicationSequenceStep>): Promise<CommunicationSequenceStep> {
+    const [updatedStep] = await db.update(communicationSequenceSteps)
       .set(updates)
-      .where(eq(emailSequenceSteps.id, id))
+      .where(eq(communicationSequenceSteps.id, id))
       .returning();
     return updatedStep;
   }
 
   async deleteSequenceStep(id: string): Promise<void> {
-    await db.delete(emailSequenceSteps)
-      .where(eq(emailSequenceSteps.id, id));
+    await db.delete(communicationSequenceSteps)
+      .where(eq(communicationSequenceSteps.id, id));
   }
 
   async reorderSequenceSteps(sequenceId: string, stepIds: string[]): Promise<void> {
     for (let i = 0; i < stepIds.length; i++) {
-      await db.update(emailSequenceSteps)
+      await db.update(communicationSequenceSteps)
         .set({ stepOrder: i + 1 })
-        .where(and(eq(emailSequenceSteps.id, stepIds[i]), eq(emailSequenceSteps.sequenceId, sequenceId)));
+        .where(and(eq(communicationSequenceSteps.id, stepIds[i]), eq(communicationSequenceSteps.sequenceId, sequenceId)));
     }
   }
 
   // Email sequence enrollment operations
-  async getSequenceEnrollments(sequenceId: string): Promise<(EmailSequenceEnrollment & { consumer: Consumer })[]> {
+  async getSequenceEnrollments(sequenceId: string): Promise<(CommunicationSequenceEnrollment & { consumer: Consumer })[]> {
     const result = await db
       .select()
-      .from(emailSequenceEnrollments)
-      .leftJoin(consumers, eq(emailSequenceEnrollments.consumerId, consumers.id))
-      .where(eq(emailSequenceEnrollments.sequenceId, sequenceId))
-      .orderBy(desc(emailSequenceEnrollments.enrolledAt));
+      .from(communicationSequenceEnrollments)
+      .leftJoin(consumers, eq(communicationSequenceEnrollments.consumerId, consumers.id))
+      .where(eq(communicationSequenceEnrollments.sequenceId, sequenceId))
+      .orderBy(desc(communicationSequenceEnrollments.enrolledAt));
     
     return result.map(row => ({
       ...row.email_sequence_enrollments,
@@ -1750,31 +1750,31 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async enrollConsumerInSequence(enrollment: InsertEmailSequenceEnrollment): Promise<EmailSequenceEnrollment> {
-    const [newEnrollment] = await db.insert(emailSequenceEnrollments).values(enrollment).returning();
+  async enrollConsumerInSequence(enrollment: InsertCommunicationSequenceEnrollment): Promise<CommunicationSequenceEnrollment> {
+    const [newEnrollment] = await db.insert(communicationSequenceEnrollments).values(enrollment).returning();
     return newEnrollment;
   }
 
-  async updateEnrollment(id: string, updates: Partial<EmailSequenceEnrollment>): Promise<EmailSequenceEnrollment> {
-    const [updatedEnrollment] = await db.update(emailSequenceEnrollments)
+  async updateEnrollment(id: string, updates: Partial<CommunicationSequenceEnrollment>): Promise<CommunicationSequenceEnrollment> {
+    const [updatedEnrollment] = await db.update(communicationSequenceEnrollments)
       .set(updates)
-      .where(eq(emailSequenceEnrollments.id, id))
+      .where(eq(communicationSequenceEnrollments.id, id))
       .returning();
     return updatedEnrollment;
   }
 
-  async getActiveEnrollments(): Promise<(EmailSequenceEnrollment & { sequence: EmailSequence; consumer: Consumer; currentStep?: EmailSequenceStep })[]> {
+  async getActiveEnrollments(): Promise<(CommunicationSequenceEnrollment & { sequence: CommunicationSequence; consumer: Consumer; currentStep?: CommunicationSequenceStep })[]> {
     const result = await db
       .select()
-      .from(emailSequenceEnrollments)
-      .leftJoin(emailSequences, eq(emailSequenceEnrollments.sequenceId, emailSequences.id))
-      .leftJoin(consumers, eq(emailSequenceEnrollments.consumerId, consumers.id))
-      .leftJoin(emailSequenceSteps, eq(emailSequenceEnrollments.currentStepId, emailSequenceSteps.id))
+      .from(communicationSequenceEnrollments)
+      .leftJoin(communicationSequences, eq(communicationSequenceEnrollments.sequenceId, communicationSequences.id))
+      .leftJoin(consumers, eq(communicationSequenceEnrollments.consumerId, consumers.id))
+      .leftJoin(communicationSequenceSteps, eq(communicationSequenceEnrollments.currentStepId, communicationSequenceSteps.id))
       .where(and(
-        eq(emailSequenceEnrollments.status, 'active'),
-        eq(emailSequences.isActive, true)
+        eq(communicationSequenceEnrollments.status, 'active'),
+        eq(communicationSequences.isActive, true)
       ))
-      .orderBy(emailSequenceEnrollments.nextEmailAt);
+      .orderBy(communicationSequenceEnrollments.nextEmailAt);
     
     return result.map(row => ({
       ...row.email_sequence_enrollments,
@@ -1785,21 +1785,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async pauseEnrollment(id: string): Promise<void> {
-    await db.update(emailSequenceEnrollments)
+    await db.update(communicationSequenceEnrollments)
       .set({ status: 'paused' })
-      .where(eq(emailSequenceEnrollments.id, id));
+      .where(eq(communicationSequenceEnrollments.id, id));
   }
 
   async resumeEnrollment(id: string): Promise<void> {
-    await db.update(emailSequenceEnrollments)
+    await db.update(communicationSequenceEnrollments)
       .set({ status: 'active' })
-      .where(eq(emailSequenceEnrollments.id, id));
+      .where(eq(communicationSequenceEnrollments.id, id));
   }
 
   async cancelEnrollment(id: string): Promise<void> {
-    await db.update(emailSequenceEnrollments)
+    await db.update(communicationSequenceEnrollments)
       .set({ status: 'cancelled' })
-      .where(eq(emailSequenceEnrollments.id, id));
+      .where(eq(communicationSequenceEnrollments.id, id));
   }
 
   // Consumer registration operations
