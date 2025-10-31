@@ -9711,6 +9711,107 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Cancel/Delete payment schedule (admin)
+  app.delete('/api/payment-schedules/:id', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      const { id } = req.params;
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      // Verify the schedule belongs to this tenant
+      const allSchedules = await storage.getAllPaymentSchedulesByTenant(tenantId);
+      const schedule = allSchedules.find((s: any) => s.id === id);
+      
+      if (!schedule) {
+        return res.status(404).json({ message: "Payment schedule not found" });
+      }
+
+      // Cancel the schedule
+      const success = await storage.cancelPaymentSchedule(id, tenantId);
+
+      if (success) {
+        console.log(`🗑️ Payment schedule ${id} cancelled by admin (tenant: ${tenantId})`);
+        res.json({ message: "Payment schedule cancelled successfully" });
+      } else {
+        res.status(500).json({ message: "Failed to cancel payment schedule" });
+      }
+    } catch (error) {
+      console.error("Error cancelling payment schedule:", error);
+      res.status(500).json({ message: "Failed to cancel payment schedule" });
+    }
+  });
+
+  // Resync SMAX arrangements for a consumer (admin)
+  app.post('/api/payment-schedules/resync-smax/:consumerId', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      const { consumerId } = req.params;
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      // Get tenant settings for SMAX
+      const tenantSettings = await storage.getTenantSettings(tenantId);
+      if (!tenantSettings?.smaxEnabled) {
+        return res.status(400).json({ message: "SMAX integration is not enabled for this tenant" });
+      }
+
+      // Verify consumer belongs to this tenant
+      const consumer = await storage.getConsumer(consumerId);
+      if (!consumer || consumer.tenantId !== tenantId) {
+        return res.status(404).json({ message: "Consumer not found" });
+      }
+
+      // Get all consumer accounts
+      const accounts = await storage.getAccountsByConsumer(consumerId);
+      
+      let syncedCount = 0;
+      let errors: string[] = [];
+
+      // Fetch and sync SMAX arrangements for each account
+      for (const account of accounts) {
+        if (!account.filenumber) continue;
+
+        try {
+          const smaxArrangement = await smaxService.getPaymentArrangement(
+            tenantSettings.smaxApiKey!,
+            tenantSettings.smaxPin!,
+            tenantSettings.smaxBaseUrl!,
+            account.filenumber
+          );
+
+          if (smaxArrangement) {
+            await storage.syncSmaxArrangementToChain(
+              tenantId,
+              consumerId,
+              account.id,
+              smaxArrangement
+            );
+            syncedCount++;
+            console.log(`✅ Resynced SMAX arrangement for account ${account.accountNumber}`);
+          }
+        } catch (error: any) {
+          console.error(`❌ Failed to resync account ${account.accountNumber}:`, error);
+          errors.push(`Account ${account.accountNumber}: ${error.message}`);
+        }
+      }
+
+      res.json({
+        message: "SMAX resync completed",
+        syncedCount,
+        totalAccounts: accounts.length,
+        errors: errors.length > 0 ? errors : undefined,
+      });
+    } catch (error) {
+      console.error("Error resyncing SMAX arrangements:", error);
+      res.status(500).json({ message: "Failed to resync SMAX arrangements" });
+    }
+  });
+
   // Payment approval routes
   app.get('/api/payment-approvals', authenticateUser, async (req: any, res) => {
     try {
