@@ -83,6 +83,25 @@ class EventService extends EventEmitter {
       // Enroll the consumer in each matching sequence
       for (const sequence of matchingSequences) {
         try {
+          // Check target audience filtering
+          if (sequence.targetType === 'folder' && sequence.targetFolderIds && sequence.targetFolderIds.length > 0) {
+            // Check if consumer has accounts in the target folders
+            const consumerAccounts = await storage.getAccountsByConsumerId(payload.consumerId);
+            const hasAccountInTargetFolder = consumerAccounts.some(account => 
+              sequence.targetFolderIds.includes(account.folderId)
+            );
+
+            if (!hasAccountInTargetFolder) {
+              console.log(`Consumer ${payload.consumerId} not in target folders for sequence ${sequence.id}, skipping enrollment`);
+              continue;
+            }
+          } else if (sequence.targetType === 'custom') {
+            // Custom targeting is manual only, skip event-based enrollment
+            console.log(`Sequence ${sequence.id} has custom targeting, skipping event-based enrollment`);
+            continue;
+          }
+          // targetType 'all' proceeds to enrollment
+
           // Check if consumer is already enrolled in this sequence
           const existingEnrollments = await storage.getSequenceEnrollments(sequence.id);
           const alreadyEnrolled = existingEnrollments.some(
@@ -105,11 +124,19 @@ class EventService extends EventEmitter {
 
           const firstStep = steps[0];
           
-          // Calculate when to send the first message based on triggerDelay
+          // Calculate when to send the first message based on triggerDelay + step delays
           const triggerDelayDays = Number(sequence.triggerDelay) || 0;
+          const stepDelayDays = Number(firstStep.delayDays) || 0;
+          const stepDelayHours = Number(firstStep.delayHours) || 0;
+          
           const nextMessageAt = new Date();
+          // Add sequence-level trigger delay
           nextMessageAt.setDate(nextMessageAt.getDate() + triggerDelayDays);
-          nextMessageAt.setHours(firstStep.delayHours || 0, 0, 0, 0);
+          // Add step-level delay
+          nextMessageAt.setDate(nextMessageAt.getDate() + stepDelayDays);
+          nextMessageAt.setHours(nextMessageAt.getHours() + stepDelayHours);
+          // Reset minutes and seconds for cleaner scheduling
+          nextMessageAt.setMinutes(0, 0, 0);
 
           // Enroll the consumer
           const enrollment = await storage.enrollConsumerInSequence({

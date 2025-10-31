@@ -8832,20 +8832,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
             if (dueDate < now && account.balanceCents > 0) {
               overdueChecked++;
 
-              // Trigger payment_overdue event
-              // Note: The sequence enrollment system will handle de-duplication to avoid
-              // enrolling the same consumer multiple times
-              await eventService.emitSystemEvent('payment_overdue', {
-                tenantId: tenant.id,
-                consumerId: account.consumerId,
-                accountId: account.id,
-                metadata: { 
-                  dueDate: dueDate.toISOString(),
-                  balanceCents: account.balanceCents,
-                  creditor: account.creditor
+              // Check if we've already triggered this overdue event recently
+              // Get all active enrollments for this consumer to avoid re-triggering
+              const sequences = await storage.getCommunicationSequencesByTenant(tenant.id);
+              const overdueSequences = sequences.filter(
+                seq => seq.isActive && seq.triggerType === 'event' && seq.triggerEvent === 'payment_overdue'
+              );
+
+              let shouldTrigger = true;
+              
+              // For each overdue sequence, check if consumer is already enrolled or was recently enrolled
+              for (const sequence of overdueSequences) {
+                const enrollments = await storage.getSequenceEnrollments(sequence.id);
+                const recentEnrollment = enrollments.find(enrollment => 
+                  enrollment.consumerId === account.consumerId &&
+                  (enrollment.status === 'active' || 
+                   (enrollment.status === 'completed' && 
+                    new Date(enrollment.completedAt || 0) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))) // Within last 7 days
+                );
+
+                if (recentEnrollment) {
+                  shouldTrigger = false;
+                  break;
                 }
-              });
-              overdueTriggered++;
+              }
+
+              if (shouldTrigger) {
+                // Trigger payment_overdue event
+                await eventService.emitSystemEvent('payment_overdue', {
+                  tenantId: tenant.id,
+                  consumerId: account.consumerId,
+                  accountId: account.id,
+                  metadata: { 
+                    dueDate: dueDate.toISOString(),
+                    balanceCents: account.balanceCents,
+                    creditor: account.creditor
+                  }
+                });
+                overdueTriggered++;
+              }
             }
           }
         }

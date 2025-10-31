@@ -75,6 +75,8 @@ import {
   Link2,
   Link2Off,
   Loader2,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 
@@ -220,6 +222,20 @@ export default function Communications() {
   });
 
   const [showAutomationModal, setShowAutomationModal] = useState(false);
+  const [showSequenceModal, setShowSequenceModal] = useState(false);
+  const [editingSequence, setEditingSequence] = useState<any>(null);
+  const [viewingEnrollmentsSequenceId, setViewingEnrollmentsSequenceId] = useState<number | null>(null);
+  const [sequenceSteps, setSequenceSteps] = useState<any[]>([]);
+  const [sequenceForm, setSequenceForm] = useState({
+    name: '',
+    description: '',
+    triggerType: 'immediate' as 'immediate' | 'scheduled' | 'event',
+    triggerEvent: '' as 'account_created' | 'payment_received' | 'payment_overdue' | 'payment_failed' | '',
+    triggerDelay: 0,
+    targetType: 'all' as 'all' | 'folder' | 'custom',
+    targetFolderIds: [] as number[],
+    isActive: true,
+  });
 
   useEffect(() => {
     if (typeof document !== "undefined") {
@@ -299,6 +315,16 @@ export default function Communications() {
 
   const { data: tenantSettings } = useQuery({
     queryKey: ["/api/settings"],
+  });
+
+  const { data: sequences, isLoading: sequencesLoading } = useQuery({
+    queryKey: ['/api/sequences'],
+    enabled: !!userData,
+  });
+
+  const { data: sequenceEnrollments } = useQuery({
+    queryKey: ['/api/sequences', viewingEnrollmentsSequenceId, 'enrollments'],
+    enabled: viewingEnrollmentsSequenceId !== null,
   });
 
   const consumerPortalUrl = useMemo(() => {
@@ -994,6 +1020,54 @@ export default function Communications() {
     },
   });
 
+  // Sequence mutations
+  const createSequenceMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("POST", "/api/sequences", data);
+      return res.json();
+    },
+    onSuccess: (newSequence) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sequences"] });
+      setShowSequenceModal(false);
+      resetSequenceForm();
+      toast({
+        title: "Success",
+        description: "Sequence created successfully",
+      });
+      return newSequence;
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create sequence",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const toggleSequenceMutation = useMutation({
+    mutationFn: ({ id, isActive }: { id: number; isActive: boolean }) =>
+      apiRequest("PUT", `/api/sequences/${id}`, { isActive }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sequences"] });
+      toast({
+        title: "Success",
+        description: "Sequence updated successfully",
+      });
+    },
+  });
+
+  const deleteSequenceMutation = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/sequences/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sequences"] });
+      toast({
+        title: "Success",
+        description: "Sequence deleted successfully",
+      });
+    },
+  });
+
   // Settings mutation for SMS throttle
   const updateSettingsMutation = useMutation({
     mutationFn: (data: any) => apiRequest("PUT", "/api/settings", data),
@@ -1157,6 +1231,95 @@ export default function Communications() {
 
     // Show confirmation dialog instead of immediately creating campaign
     setShowCampaignConfirmation(true);
+  };
+
+  const resetSequenceForm = () => {
+    setSequenceForm({
+      name: '',
+      description: '',
+      triggerType: 'immediate',
+      triggerEvent: '',
+      triggerDelay: 0,
+      targetType: 'all',
+      targetFolderIds: [],
+      isActive: true,
+    });
+    setSequenceSteps([]);
+    setEditingSequence(null);
+  };
+
+  const handleCreateSequence = async () => {
+    if (!sequenceForm.name.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a sequence name",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (sequenceForm.triggerType === 'event' && !sequenceForm.triggerEvent) {
+      toast({
+        title: "Error",
+        description: "Please select a trigger event",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (sequenceSteps.length === 0) {
+      toast({
+        title: "Error",
+        description: "Please add at least one step to the sequence",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const sequence = await createSequenceMutation.mutateAsync({
+        ...sequenceForm,
+        steps: sequenceSteps.map((step, index) => ({
+          ...step,
+          stepOrder: index + 1,
+        })),
+      });
+    } catch (error) {
+      console.error('Failed to create sequence:', error);
+    }
+  };
+
+  const addSequenceStep = () => {
+    setSequenceSteps([...sequenceSteps, {
+      stepType: 'email',
+      templateId: null,
+      delayDays: 0,
+      delayHours: 0,
+    }]);
+  };
+
+  const removeSequenceStep = (index: number) => {
+    setSequenceSteps(sequenceSteps.filter((_, i) => i !== index));
+  };
+
+  const updateSequenceStep = (index: number, field: string, value: any) => {
+    const updated = [...sequenceSteps];
+    updated[index] = { ...updated[index], [field]: value };
+    setSequenceSteps(updated);
+  };
+
+  const moveStepUp = (index: number) => {
+    if (index === 0) return;
+    const updated = [...sequenceSteps];
+    [updated[index - 1], updated[index]] = [updated[index], updated[index - 1]];
+    setSequenceSteps(updated);
+  };
+
+  const moveStepDown = (index: number) => {
+    if (index === sequenceSteps.length - 1) return;
+    const updated = [...sequenceSteps];
+    [updated[index], updated[index + 1]] = [updated[index + 1], updated[index]];
+    setSequenceSteps(updated);
   };
 
   const handleCampaignConfirm = () => {
@@ -1432,7 +1595,7 @@ export default function Communications() {
         </section>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-10">
-          <TabsList className="grid w-full grid-cols-5 gap-2 rounded-2xl border border-white/15 bg-white/10 p-2 text-blue-100 backdrop-blur">
+          <TabsList className="grid w-full grid-cols-6 gap-2 rounded-2xl border border-white/15 bg-white/10 p-2 text-blue-100 backdrop-blur">
             <TabsTrigger
               value="overview"
               className="rounded-xl px-4 py-2.5 text-sm font-semibold text-blue-100 transition data-[state=active]:bg-[#0b1733]/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/20"
@@ -1457,6 +1620,12 @@ export default function Communications() {
               className="rounded-xl px-4 py-2.5 text-sm font-semibold text-blue-100 transition data-[state=active]:bg-[#0b1733]/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/20"
             >
               Campaigns
+            </TabsTrigger>
+            <TabsTrigger
+              value="sequences"
+              className="rounded-xl px-4 py-2.5 text-sm font-semibold text-blue-100 transition data-[state=active]:bg-[#0b1733]/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/20"
+            >
+              Sequences
             </TabsTrigger>
             <TabsTrigger
               value="automation"
@@ -3493,7 +3662,460 @@ export default function Communications() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          <TabsContent value="sequences" className="space-y-10 text-white">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-semibold">Communication Sequences</h2>
+              <Dialog open={showSequenceModal} onOpenChange={setShowSequenceModal}>
+                <DialogTrigger asChild>
+                  <Button 
+                    data-testid="button-create-sequence"
+                    onClick={() => {
+                      resetSequenceForm();
+                      setShowSequenceModal(true);
+                    }}
+                    className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-md shadow-slate-400/40 transition hover:bg-slate-800"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Create Sequence
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-slate-900 text-white border-white/20">
+                  <DialogHeader>
+                    <DialogTitle className="text-blue-50">Create Communication Sequence</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-6">
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-sm font-semibold text-blue-100">Sequence Name</label>
+                        <Input
+                          data-testid="input-sequence-name"
+                          value={sequenceForm.name}
+                          onChange={(e) => setSequenceForm({ ...sequenceForm, name: e.target.value })}
+                          placeholder="e.g., Welcome Series"
+                          className="mt-2 bg-white/10 border-white/20 text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-semibold text-blue-100">Description</label>
+                        <Textarea
+                          value={sequenceForm.description || ''}
+                          onChange={(e) => setSequenceForm({ ...sequenceForm, description: e.target.value })}
+                          placeholder="Describe this sequence..."
+                          className="mt-2 bg-white/10 border-white/20 text-white"
+                          rows={2}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-sm font-semibold text-blue-100">Trigger Type</label>
+                          <Select
+                            value={sequenceForm.triggerType}
+                            onValueChange={(value: any) => setSequenceForm({ ...sequenceForm, triggerType: value })}
+                          >
+                            <SelectTrigger className="mt-2 bg-white/10 border-white/20 text-white">
+                              <SelectValue placeholder="Select trigger" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="immediate">Immediate (Manual)</SelectItem>
+                              <SelectItem value="scheduled">Scheduled</SelectItem>
+                              <SelectItem value="event">Event-Based</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {sequenceForm.triggerType === 'event' && (
+                          <div>
+                            <label className="text-sm font-semibold text-blue-100">Trigger Event</label>
+                            <Select
+                              value={sequenceForm.triggerEvent}
+                              onValueChange={(value: any) => setSequenceForm({ ...sequenceForm, triggerEvent: value })}
+                            >
+                              <SelectTrigger className="mt-2 bg-white/10 border-white/20 text-white">
+                                <SelectValue placeholder="Select event" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="account_created">Account Created</SelectItem>
+                                <SelectItem value="payment_received">Payment Received</SelectItem>
+                                <SelectItem value="payment_overdue">Payment Overdue</SelectItem>
+                                <SelectItem value="payment_failed">Payment Failed</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+
+                        {sequenceForm.triggerType !== 'event' && (
+                          <div>
+                            <label className="text-sm font-semibold text-blue-100">Trigger Delay (Days)</label>
+                            <Input
+                              type="number"
+                              value={sequenceForm.triggerDelay}
+                              onChange={(e) => setSequenceForm({ ...sequenceForm, triggerDelay: parseInt(e.target.value) || 0 })}
+                              className="mt-2 bg-white/10 border-white/20 text-white"
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="text-sm font-semibold text-blue-100">Target Audience</label>
+                        <Select
+                          value={sequenceForm.targetType}
+                          onValueChange={(value: any) => setSequenceForm({ ...sequenceForm, targetType: value })}
+                        >
+                          <SelectTrigger className="mt-2 bg-white/10 border-white/20 text-white">
+                            <SelectValue placeholder="Select target" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Consumers</SelectItem>
+                            <SelectItem value="folder">Specific Folders</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {sequenceForm.targetType === 'folder' && (
+                        <div>
+                          <label className="text-sm font-semibold text-blue-100">Target Folders</label>
+                          <Select
+                            value={sequenceForm.targetFolderIds[0]?.toString() || ''}
+                            onValueChange={(value) => setSequenceForm({ ...sequenceForm, targetFolderIds: [parseInt(value)] })}
+                          >
+                            <SelectTrigger className="mt-2 bg-white/10 border-white/20 text-white">
+                              <SelectValue placeholder="Select folder" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {folders?.map((folder: any) => (
+                                <SelectItem key={folder.id} value={folder.id.toString()}>
+                                  {folder.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-semibold text-blue-100">Sequence Steps</h3>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={addSequenceStep}
+                          className="bg-blue-600 hover:bg-blue-700"
+                        >
+                          <Plus className="mr-1 h-3 w-3" />
+                          Add Step
+                        </Button>
+                      </div>
+
+                      {sequenceSteps.map((step, index) => (
+                        <div key={index} className="rounded-xl border border-white/20 bg-white/5 p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-semibold text-blue-100">Step {index + 1}</span>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => moveStepUp(index)}
+                                disabled={index === 0}
+                                className="text-blue-400 hover:text-blue-300 disabled:opacity-30"
+                                title="Move up"
+                              >
+                                <ArrowUp className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => moveStepDown(index)}
+                                disabled={index === sequenceSteps.length - 1}
+                                className="text-blue-400 hover:text-blue-300 disabled:opacity-30"
+                                title="Move down"
+                              >
+                                <ArrowDown className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => removeSequenceStep(index)}
+                                className="text-red-400 hover:text-red-300"
+                                title="Remove step"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-xs text-blue-100/70">Type</label>
+                              <Select
+                                value={step.stepType}
+                                onValueChange={(value) => updateSequenceStep(index, 'stepType', value)}
+                              >
+                                <SelectTrigger className="mt-1 bg-white/10 border-white/20 text-white text-sm">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="email">Email</SelectItem>
+                                  <SelectItem value="sms">SMS</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            <div>
+                              <label className="text-xs text-blue-100/70">Template</label>
+                              <Select
+                                value={step.templateId?.toString() || ''}
+                                onValueChange={(value) => updateSequenceStep(index, 'templateId', parseInt(value))}
+                              >
+                                <SelectTrigger className="mt-1 bg-white/10 border-white/20 text-white text-sm">
+                                  <SelectValue placeholder="Select template" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {step.stepType === 'email'
+                                    ? emailTemplates?.map((template: any) => (
+                                        <SelectItem key={template.id} value={template.id.toString()}>
+                                          {template.subject}
+                                        </SelectItem>
+                                      ))
+                                    : smsTemplates?.map((template: any) => (
+                                        <SelectItem key={template.id} value={template.id.toString()}>
+                                          {template.name}
+                                        </SelectItem>
+                                      ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            <div>
+                              <label className="text-xs text-blue-100/70">Delay (Days)</label>
+                              <Input
+                                type="number"
+                                value={step.delayDays}
+                                onChange={(e) => updateSequenceStep(index, 'delayDays', parseInt(e.target.value) || 0)}
+                                className="mt-1 bg-white/10 border-white/20 text-white text-sm"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="text-xs text-blue-100/70">Delay (Hours)</label>
+                              <Input
+                                type="number"
+                                value={step.delayHours}
+                                onChange={(e) => updateSequenceStep(index, 'delayHours', parseInt(e.target.value) || 0)}
+                                className="mt-1 bg-white/10 border-white/20 text-white text-sm"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+
+                      {sequenceSteps.length === 0 && (
+                        <div className="rounded-xl border border-dashed border-white/15 bg-white/5 py-8 text-center text-sm text-blue-100/60">
+                          No steps added yet. Click "Add Step" to create your sequence.
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-4 border-t border-white/10">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setShowSequenceModal(false)}
+                        className="border-white/20 text-white hover:bg-white/10"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={handleCreateSequence}
+                        disabled={createSequenceMutation.isPending}
+                        className="bg-blue-600 hover:bg-blue-700"
+                        data-testid="button-save-sequence"
+                      >
+                        {createSequenceMutation.isPending ? "Creating..." : "Create Sequence"}
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+
+            <Card className="border-white/20 bg-white/5 backdrop-blur">
+              <CardHeader>
+                <CardTitle className="text-blue-50">Multi-step Communication Sequences</CardTitle>
+                <p className="text-sm text-blue-100/70">
+                  Create automated sequences that send multiple emails/SMS messages over time. Trigger them manually, on a schedule, or based on system events.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {sequencesLoading ? (
+                  <div className="text-center py-8 text-blue-100/70">Loading sequences...</div>
+                ) : sequences && sequences.length > 0 ? (
+                  <div className="space-y-3">
+                    {sequences.map((sequence: any) => (
+                      <div key={sequence.id} className="rounded-xl border border-white/15 bg-white/5 p-6 space-y-4">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3">
+                              <h3 className="text-lg font-semibold text-blue-50">{sequence.name}</h3>
+                              <Badge variant={sequence.isActive ? "default" : "secondary"} className={sequence.isActive ? "bg-green-600" : "bg-gray-600"}>
+                                {sequence.isActive ? "Active" : "Inactive"}
+                              </Badge>
+                              {sequence.triggerType === 'event' && (
+                                <Badge variant="outline" className="border-blue-400 text-blue-300">
+                                  Event: {sequence.triggerEvent?.replace('_', ' ')}
+                                </Badge>
+                              )}
+                            </div>
+                            {sequence.description && (
+                              <p className="mt-2 text-sm text-blue-100/70">{sequence.description}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setViewingEnrollmentsSequenceId(sequence.id)}
+                              className="border-white/20 text-white hover:bg-white/10"
+                              data-testid={`button-view-enrollments-${sequence.id}`}
+                            >
+                              <Eye className="mr-1 h-3 w-3" />
+                              View Enrollments
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => toggleSequenceMutation.mutate({ id: sequence.id, isActive: !sequence.isActive })}
+                              className="border-white/20 text-white hover:bg-white/10"
+                            >
+                              {sequence.isActive ? "Pause" : "Activate"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                if (confirm('Are you sure you want to delete this sequence?')) {
+                                  deleteSequenceMutation.mutate(sequence.id);
+                                }
+                              }}
+                              className="text-red-400 hover:text-red-300 hover:bg-red-400/10"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <span className="text-blue-100/70">Trigger Type:</span>
+                            <span className="ml-2 font-semibold text-blue-50">{sequence.triggerType}</span>
+                          </div>
+                          <div>
+                            <span className="text-blue-100/70">Target:</span>
+                            <span className="ml-2 font-semibold text-blue-50">{sequence.targetType}</span>
+                          </div>
+                          <div>
+                            <span className="text-blue-100/70">Created:</span>
+                            <span className="ml-2 font-semibold text-blue-50">{new Date(sequence.createdAt).toLocaleDateString()}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-white/15 bg-white/5 py-10 text-center text-blue-100/70">
+                    <Calendar className="mx-auto mb-4 h-12 w-12 text-blue-200/60" />
+                    <p className="text-base font-semibold">No sequences created yet.</p>
+                    <p className="text-sm text-blue-100/70">Create your first sequence to start multi-step communications.</p>
+                    <div className="mt-6 space-y-2">
+                      <p className="text-xs font-semibold text-blue-100/80">Sequence Examples:</p>
+                      <div className="mx-auto max-w-2xl space-y-1 text-xs">
+                        <p className="text-blue-100/60">• Welcome Series: Day 0 email, Day 2 SMS, Day 7 follow-up</p>
+                        <p className="text-blue-100/60">• Payment Reminder: Day 0 warning, Day 3 urgent notice, Day 7 final notice</p>
+                        <p className="text-blue-100/60">• Event-Based: Triggered when account created or payment overdue</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
+
+        {/* Enrollment Viewing Dialog */}
+        <Dialog open={viewingEnrollmentsSequenceId !== null} onOpenChange={(open) => !open && setViewingEnrollmentsSequenceId(null)}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-900 text-white border-white/20">
+            <DialogHeader>
+              <DialogTitle className="text-blue-50">Sequence Enrollments</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              {sequenceEnrollments && sequenceEnrollments.length > 0 ? (
+                <div className="space-y-3">
+                  {sequenceEnrollments.map((enrollment: any) => (
+                    <div key={enrollment.id} className="rounded-xl border border-white/15 bg-white/5 p-4 space-y-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3">
+                            <h4 className="font-semibold text-blue-50">
+                              {consumers?.find((c: any) => c.id === enrollment.consumerId)?.firstName} {consumers?.find((c: any) => c.id === enrollment.consumerId)?.lastName}
+                            </h4>
+                            <Badge variant={
+                              enrollment.status === 'active' ? 'default' :
+                              enrollment.status === 'completed' ? 'secondary' :
+                              enrollment.status === 'paused' ? 'outline' : 'destructive'
+                            }>
+                              {enrollment.status}
+                            </Badge>
+                          </div>
+                          <p className="mt-1 text-xs text-blue-100/70">
+                            Consumer ID: {enrollment.consumerId}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-4 text-sm">
+                        <div>
+                          <span className="text-blue-100/70">Enrolled:</span>
+                          <div className="mt-1 font-semibold text-blue-50">
+                            {new Date(enrollment.enrolledAt).toLocaleDateString()}
+                          </div>
+                        </div>
+                        <div>
+                          <span className="text-blue-100/70">Current Step:</span>
+                          <div className="mt-1 font-semibold text-blue-50">
+                            Step {enrollment.currentStepOrder || 'N/A'}
+                          </div>
+                        </div>
+                        <div>
+                          <span className="text-blue-100/70">Next Message:</span>
+                          <div className="mt-1 font-semibold text-blue-50">
+                            {enrollment.nextMessageAt ? new Date(enrollment.nextMessageAt).toLocaleDateString() : 'N/A'}
+                          </div>
+                        </div>
+                      </div>
+                      {enrollment.completedAt && (
+                        <div className="text-xs text-blue-100/60">
+                          Completed: {new Date(enrollment.completedAt).toLocaleDateString()}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-white/15 bg-white/5 py-8 text-center text-blue-100/70">
+                  <Users className="mx-auto mb-3 h-10 w-10 text-blue-200/60" />
+                  <p className="font-semibold">No enrollments found</p>
+                  <p className="text-sm text-blue-100/60">This sequence has no active or completed enrollments yet.</p>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Campaign Confirmation Dialog */}
         <AlertDialog open={showCampaignConfirmation} onOpenChange={setShowCampaignConfirmation}>
