@@ -3639,8 +3639,8 @@ export default function Communications() {
                           <div>
                             <span className="text-xs uppercase tracking-wide text-blue-100/70">Next Run</span>
                             <div className="mt-1 font-semibold text-blue-50">
-                              {automation.nextExecution
-                                ? new Date(automation.nextExecution).toLocaleDateString()
+                              {automation.scheduledDate && automation.scheduleTime
+                                ? `${new Date(automation.scheduledDate).toLocaleDateString()} at ${automation.scheduleTime}`
                                 : "Not scheduled"}
                             </div>
                           </div>
