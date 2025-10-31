@@ -2410,8 +2410,30 @@ export class DatabaseStorage implements IStorage {
         ));
 
       if (existingSmaxSchedule.length > 0) {
-        console.log('✓ SMAX-only arrangement already exists');
-        return existingSmaxSchedule[0];
+        // CRITICAL: Update existing SMAX arrangement with fresh data from SMAX
+        // This ensures resync actually updates the amount instead of returning stale data
+        console.log(`✓ Updating existing SMAX arrangement (ID: ${existingSmaxSchedule[0].id}) with fresh data`);
+        
+        const [updated] = await db
+          .update(paymentSchedules)
+          .set({
+            amountCents,
+            nextPaymentDate: smaxArrangement.nextPaymentDate,
+            remainingPayments: smaxArrangement.remainingPayments || null,
+            startDate: smaxArrangement.startDate,
+            endDate: smaxArrangement.endDate || null,
+            smaxArrangementId,
+            smaxLastSyncAt: new Date(),
+            smaxNextPaymentDate: smaxArrangement.nextPaymentDate || null,
+            smaxExpectedAmountCents: amountCents,
+            smaxStatus: smaxArrangement.status || 'active',
+            updatedAt: new Date(),
+          })
+          .where(eq(paymentSchedules.id, existingSmaxSchedule[0].id))
+          .returning();
+        
+        console.log(`✅ Updated SMAX arrangement amount from ${existingSmaxSchedule[0].amountCents} cents to ${amountCents} cents`);
+        return updated;
       }
 
       // No existing arrangement - this is a pure SMAX arrangement (not created in Chain)
