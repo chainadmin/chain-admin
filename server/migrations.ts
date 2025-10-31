@@ -89,6 +89,42 @@ export async function runMigrations() {
       }
     }
     
+    // Add missing SMS campaigns column
+    console.log('Updating SMS campaigns table...');
+    try {
+      await client.query(`ALTER TABLE sms_campaigns ADD COLUMN IF NOT EXISTS send_to_all_numbers BOOLEAN DEFAULT false`);
+      console.log(`  ✓ send_to_all_numbers column added`);
+    } catch (err) {
+      console.log(`  ⚠ send_to_all_numbers (already exists or error)`);
+    }
+    
+    // Create communication_sequences table if it doesn't exist
+    console.log('Creating communication_sequences table...');
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS communication_sequences (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          description TEXT,
+          is_active BOOLEAN DEFAULT true,
+          trigger_type TEXT NOT NULL,
+          trigger_event TEXT,
+          trigger_delay INTEGER,
+          target_type TEXT NOT NULL,
+          target_folder_ids TEXT[] DEFAULT ARRAY[]::TEXT[],
+          target_consumer_ids TEXT[] DEFAULT ARRAY[]::TEXT[],
+          total_enrolled INTEGER DEFAULT 0,
+          total_completed INTEGER DEFAULT 0,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      console.log(`  ✓ communication_sequences table created`);
+    } catch (err) {
+      console.log(`  ⚠ communication_sequences table (already exists or error)`);
+    }
+    
     // Add missing tenants table columns for trial and service controls
     console.log('Adding tenants table service control columns...');
     const tenantColumns = [
