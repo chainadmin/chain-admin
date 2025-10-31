@@ -6722,16 +6722,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Parse paymentDate for one-time payments (used for retrying failed SMAX payments)
+      // This date is ONLY for SMAX sync attribution, not for the actual processedAt timestamp
       let normalizedPaymentDate: Date | null = null;
       if (paymentDate) {
-        const parsedDate = new Date(paymentDate);
+        // Validate date format (YYYY-MM-DD)
+        if (typeof paymentDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(paymentDate)) {
+          return res.status(400).json({
+            success: false,
+            message: "Payment date must be in YYYY-MM-DD format",
+          });
+        }
+        
+        const parsedDate = new Date(paymentDate + 'T00:00:00.000Z'); // Parse as UTC to avoid timezone issues
         if (Number.isNaN(parsedDate.getTime())) {
           return res.status(400).json({
             success: false,
             message: "Invalid payment date provided",
           });
         }
-        parsedDate.setHours(0, 0, 0, 0);
+        
+        // Prevent future dates - payment can only be for today or past dates
+        const todayUTC = new Date();
+        todayUTC.setHours(0, 0, 0, 0);
+        if (parsedDate > todayUTC) {
+          return res.status(400).json({
+            success: false,
+            message: "Payment date cannot be in the future",
+          });
+        }
+        
         normalizedPaymentDate = parsedDate;
         console.log('📅 Payment date specified for SMAX retry:', normalizedPaymentDate.toISOString().split('T')[0]);
       }
@@ -7161,6 +7180,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Create payment record
+        // NOTE: processedAt is ALWAYS the actual processing time (now), never the user-supplied paymentDate
+        // The paymentDate is used ONLY for SMAX sync to attribute the payment to a specific date
         payment = await storage.createPayment({
           tenantId: tenantId,
           consumerId: consumerId,
@@ -7170,7 +7191,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: success ? 'completed' : 'failed',
           transactionId: transactionId,
           processorResponse: JSON.stringify(usaepayResult),
-          processedAt: success ? (normalizedPaymentDate || new Date()) : null,
+          processedAt: success ? new Date() : null, // Actual processing timestamp
           notes: arrangement
             ? `${arrangement.name} - ${cardName} ending in ${cardLast4}`
             : `Online payment - ${cardName} ending in ${cardLast4}`,
@@ -7205,6 +7226,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const consumer = await storage.getConsumer(consumerId);
           console.log('📤 Sending payment to SMAX...');
           
+          // Use the consumer-supplied paymentDate for SMAX attribution if provided
+          // This allows consumers to retry failed SMAX payments and have them show on the correct date
           const smaxPaymentData = smaxService.createSmaxPaymentData({
             filenumber: account.filenumber,
             paymentamount: amountCents / 100,
