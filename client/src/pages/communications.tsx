@@ -3160,11 +3160,11 @@ export default function Communications() {
                       data: {
                         name: automationForm.name,
                         description: automationForm.description,
-                        scheduleType: automationForm.scheduleType,
+                        type: automationForm.type,
+                        templateId: automationForm.templateId,
                         scheduledDate: automationForm.scheduledDate,
                         scheduleTime: automationForm.scheduleTime,
-                        scheduleWeekdays: automationForm.scheduleWeekdays,
-                        scheduleDayOfMonth: automationForm.scheduleDayOfMonth,
+                        targetFolderIds: automationForm.targetFolderIds,
                       }
                     });
                   }
@@ -3176,9 +3176,10 @@ export default function Communications() {
                         id="edit-automation-name"
                         value={automationForm.name}
                         onChange={(e) => setAutomationForm(prev => ({ ...prev, name: e.target.value }))}
-                        placeholder="e.g., Welcome Email Series"
+                        placeholder="e.g., Monthly Payment Reminder"
                         required
                         data-testid="input-edit-automation-name"
+                        className="bg-white/10 border-white/20 text-white"
                       />
                     </div>
                     
@@ -3190,51 +3191,119 @@ export default function Communications() {
                         onChange={(e) => setAutomationForm(prev => ({ ...prev, description: e.target.value }))}
                         placeholder="Describe what this automation does..."
                         data-testid="textarea-edit-automation-description"
+                        className="bg-white/10 border-white/20 text-white"
                       />
                     </div>
 
-                    {automationForm.triggerType === "schedule" && (
-                      <>
-                        <div>
-                          <Label>Schedule Type</Label>
-                          <Select 
-                            value={automationForm.scheduleType} 
-                            onValueChange={(value: "once" | "daily" | "weekly" | "monthly") => setAutomationForm(prev => ({ ...prev, scheduleType: value }))}
-                          >
-                            <SelectTrigger data-testid="select-edit-schedule-type">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="once">One-time</SelectItem>
-                              <SelectItem value="daily">Daily</SelectItem>
-                              <SelectItem value="weekly">Weekly</SelectItem>
-                              <SelectItem value="monthly">Monthly</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
+                    <div>
+                      <Label htmlFor="edit-automation-type">Type *</Label>
+                      <Select 
+                        value={automationForm.type} 
+                        onValueChange={(value: "email" | "sms") => setAutomationForm(prev => ({ ...prev, type: value }))}
+                      >
+                        <SelectTrigger data-testid="select-edit-automation-type" className="bg-white/10 border-white/20 text-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="email">Email</SelectItem>
+                          <SelectItem value="sms">SMS</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <Label>Start Date</Label>
-                            <Input
-                              type="date"
-                              value={automationForm.scheduledDate}
-                              onChange={(e) => setAutomationForm(prev => ({ ...prev, scheduledDate: e.target.value }))}
-                              data-testid="input-edit-schedule-date"
+                    <div>
+                      <Label htmlFor="edit-automation-template">Template *</Label>
+                      <Select 
+                        value={automationForm.templateId} 
+                        onValueChange={(value) => setAutomationForm(prev => ({ ...prev, templateId: value }))}
+                      >
+                        <SelectTrigger data-testid="select-edit-automation-template" className="bg-white/10 border-white/20 text-white">
+                          <SelectValue placeholder="Choose a template" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {automationForm.type === "email" 
+                            ? (emailTemplates as any[])?.map((template: any) => (
+                                <SelectItem key={template.id} value={template.id}>
+                                  {template.name}
+                                </SelectItem>
+                              )) || []
+                            : (smsTemplates as any[])?.map((template: any) => (
+                                <SelectItem key={template.id} value={template.id}>
+                                  {template.name}
+                                </SelectItem>
+                              )) || []
+                          }
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="edit-schedule-date">Date *</Label>
+                        <Input
+                          id="edit-schedule-date"
+                          type="date"
+                          value={automationForm.scheduledDate}
+                          onChange={(e) => setAutomationForm(prev => ({ ...prev, scheduledDate: e.target.value }))}
+                          data-testid="input-edit-schedule-date"
+                          className="bg-white/10 border-white/20 text-white"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="edit-schedule-time">Time *</Label>
+                        <Input
+                          id="edit-schedule-time"
+                          type="time"
+                          value={automationForm.scheduleTime}
+                          onChange={(e) => setAutomationForm(prev => ({ ...prev, scheduleTime: e.target.value }))}
+                          data-testid="input-edit-schedule-time"
+                          className="bg-white/10 border-white/20 text-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Target Folders (Optional)</Label>
+                      <div className="border border-white/20 rounded-md p-3 space-y-2 max-h-48 overflow-y-auto bg-white/5">
+                        {(folders as any[])?.map((folder: any) => (
+                          <div key={folder.id} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`edit-folder-${folder.id}`}
+                              checked={automationForm.targetFolderIds.includes(folder.id)}
+                              onCheckedChange={(checked: boolean) => {
+                                if (checked) {
+                                  setAutomationForm(prev => ({
+                                    ...prev,
+                                    targetFolderIds: [...prev.targetFolderIds, folder.id]
+                                  }));
+                                } else {
+                                  setAutomationForm(prev => ({
+                                    ...prev,
+                                    targetFolderIds: prev.targetFolderIds.filter(id => id !== folder.id)
+                                  }));
+                                }
+                              }}
+                              data-testid={`checkbox-edit-folder-${folder.id}`}
                             />
+                            <label
+                              htmlFor={`edit-folder-${folder.id}`}
+                              className="flex items-center gap-2 cursor-pointer text-sm text-white"
+                            >
+                              <span 
+                                className="inline-block h-3 w-3 rounded-full" 
+                                style={{ backgroundColor: folder.color }}
+                              />
+                              <span>{folder.name}</span>
+                            </label>
                           </div>
-                          <div>
-                            <Label>Time</Label>
-                            <Input
-                              type="time"
-                              value={automationForm.scheduleTime}
-                              onChange={(e) => setAutomationForm(prev => ({ ...prev, scheduleTime: e.target.value }))}
-                              data-testid="input-edit-schedule-time"
-                            />
-                          </div>
-                        </div>
-                      </>
-                    )}
+                        ))}
+                      </div>
+                      <p className="text-xs text-blue-100/60">
+                        {automationForm.targetFolderIds.length > 0 
+                          ? `${automationForm.targetFolderIds.length} folder(s) selected` 
+                          : "No folders selected - will send to all accounts"}
+                      </p>
+                    </div>
                   </div>
 
                   <div className="flex justify-end gap-3 pt-4 border-t border-white/20">
