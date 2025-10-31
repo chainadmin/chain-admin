@@ -2587,7 +2587,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Count consumers with phone numbers for accurate recipient count
       const consumersWithPhone = targetedConsumers.filter(consumer => consumer.phone);
       
-      const campaign = await storage.createSmsCampaign({
+      const campaignData = {
         tenantId,
         templateId,
         name,
@@ -2595,7 +2595,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         folderIds: folderIds || [],
         totalRecipients: consumersWithPhone.length,
         status: 'pending_approval',
-      });
+      };
+      
+      console.log(`📱 Creating campaign with data:`, campaignData);
+      const campaign = await storage.createSmsCampaign(campaignData);
 
       console.log(`📱 SMS campaign "${campaign.name}" created successfully`);
       console.log(`   Status: "${campaign.status}"`);
@@ -2609,9 +2612,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalRecipients: consumersWithPhone.length,
         message: 'Campaign created and awaiting approval',
       });
-    } catch (error) {
-      console.error("Error creating SMS campaign:", error);
-      res.status(500).json({ message: "Failed to create SMS campaign" });
+    } catch (error: any) {
+      console.error("❌ Error creating SMS campaign:", {
+        message: error.message,
+        stack: error.stack,
+        error: error
+      });
+      res.status(500).json({ 
+        message: "Failed to create SMS campaign",
+        error: error.message 
+      });
     }
   });
 
