@@ -3785,7 +3785,7 @@ export default function Communications() {
                               <SelectValue placeholder="Select folder" />
                             </SelectTrigger>
                             <SelectContent>
-                              {folders?.map((folder: any) => (
+                              {(folders as any[] || []).map((folder: any) => (
                                 <SelectItem key={folder.id} value={folder.id.toString()}>
                                   {folder.name}
                                 </SelectItem>
@@ -3878,12 +3878,12 @@ export default function Communications() {
                                 </SelectTrigger>
                                 <SelectContent>
                                   {step.stepType === 'email'
-                                    ? emailTemplates?.map((template: any) => (
+                                    ? (emailTemplates as any[] || []).map((template: any) => (
                                         <SelectItem key={template.id} value={template.id.toString()}>
                                           {template.subject}
                                         </SelectItem>
                                       ))
-                                    : smsTemplates?.map((template: any) => (
+                                    : (smsTemplates as any[] || []).map((template: any) => (
                                         <SelectItem key={template.id} value={template.id.toString()}>
                                           {template.name}
                                         </SelectItem>
@@ -3956,9 +3956,9 @@ export default function Communications() {
               <CardContent className="space-y-4">
                 {sequencesLoading ? (
                   <div className="text-center py-8 text-blue-100/70">Loading sequences...</div>
-                ) : sequences && sequences.length > 0 ? (
+                ) : sequences && (sequences as any[]).length > 0 ? (
                   <div className="space-y-3">
-                    {sequences.map((sequence: any) => (
+                    {(sequences as any[]).map((sequence: any) => (
                       <div key={sequence.id} className="rounded-xl border border-white/15 bg-white/5 p-6 space-y-4">
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
@@ -4055,15 +4055,15 @@ export default function Communications() {
               <DialogTitle className="text-blue-50">Sequence Enrollments</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
-              {sequenceEnrollments && sequenceEnrollments.length > 0 ? (
+              {sequenceEnrollments && (sequenceEnrollments as any[]).length > 0 ? (
                 <div className="space-y-3">
-                  {sequenceEnrollments.map((enrollment: any) => (
+                  {(sequenceEnrollments as any[]).map((enrollment: any) => (
                     <div key={enrollment.id} className="rounded-xl border border-white/15 bg-white/5 p-4 space-y-3">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-3">
                             <h4 className="font-semibold text-blue-50">
-                              {consumers?.find((c: any) => c.id === enrollment.consumerId)?.firstName} {consumers?.find((c: any) => c.id === enrollment.consumerId)?.lastName}
+                              {(consumers as any[] || []).find((c: any) => c.id === enrollment.consumerId)?.firstName} {(consumers as any[] || []).find((c: any) => c.id === enrollment.consumerId)?.lastName}
                             </h4>
                             <Badge variant={
                               enrollment.status === 'active' ? 'default' :
