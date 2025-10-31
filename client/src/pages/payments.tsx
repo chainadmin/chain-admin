@@ -166,6 +166,38 @@ export default function Payments() {
     },
   });
 
+  // Manual payment processor trigger mutation
+  const processScheduledPaymentsMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/api/payments/process-scheduled', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!response.ok) {
+        throw new Error('Failed to process scheduled payments');
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Payment Processing Complete",
+        description: `Processed: ${data.processed || 0} payments. Failed: ${data.failed || 0} payments.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payments/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payment-schedules"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Processing Failed",
+        description: error.message || "Unable to process scheduled payments. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
 
   const handlePayNowSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -359,26 +391,41 @@ export default function Payments() {
           </div>
         </section>
 
+        <div className="flex items-center justify-between mb-6">
+          <Tabs defaultValue="transactions" className="flex-1">
+            <TabsList className="bg-white/10 border border-white/15">
+              <TabsTrigger value="transactions" data-testid="tab-transactions">
+                <CreditCard className="w-4 h-4 mr-2" />
+                Transactions
+              </TabsTrigger>
+              <TabsTrigger value="pending" data-testid="tab-pending">
+                <Clock className="w-4 h-4 mr-2" />
+                Pending Payments
+                {paymentSchedules && (paymentSchedules as any[]).length > 0 ? (
+                  <Badge className="ml-2 bg-amber-500 text-white">
+                    {(paymentSchedules as any[]).length}
+                  </Badge>
+                ) : null}
+              </TabsTrigger>
+              <TabsTrigger value="calendar" data-testid="tab-calendar">
+                <Calendar className="w-4 h-4 mr-2" />
+                Payment Schedule
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          
+          <Button
+            onClick={() => processScheduledPaymentsMutation.mutate()}
+            disabled={processScheduledPaymentsMutation.isPending}
+            className="ml-4 bg-emerald-600 hover:bg-emerald-700 text-white"
+            data-testid="button-process-scheduled"
+          >
+            <RefreshCw className={cn("w-4 h-4 mr-2", processScheduledPaymentsMutation.isPending && "animate-spin")} />
+            {processScheduledPaymentsMutation.isPending ? "Processing..." : "Process Scheduled Payments"}
+          </Button>
+        </div>
+
         <Tabs defaultValue="transactions" className="w-full">
-          <TabsList className="mb-6 bg-white/10 border border-white/15">
-            <TabsTrigger value="transactions" data-testid="tab-transactions">
-              <CreditCard className="w-4 h-4 mr-2" />
-              Transactions
-            </TabsTrigger>
-            <TabsTrigger value="pending" data-testid="tab-pending">
-              <Clock className="w-4 h-4 mr-2" />
-              Pending Payments
-              {paymentSchedules && (paymentSchedules as any[]).length > 0 && (
-                <Badge className="ml-2 bg-amber-500 text-white">
-                  {(paymentSchedules as any[]).length}
-                </Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="calendar" data-testid="tab-calendar">
-              <Calendar className="w-4 h-4 mr-2" />
-              Payment Schedule
-            </TabsTrigger>
-          </TabsList>
 
           <TabsContent value="transactions" className="mt-0">
             <section className="grid gap-8 lg:grid-cols-12">
