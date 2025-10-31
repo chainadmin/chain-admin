@@ -61,8 +61,9 @@ async function main() {
 function setupScheduledTasks(port: number) {
   const baseUrl = `http://localhost:${port}`;
   
-  // Process scheduled payments daily at 8:00 AM Eastern Time (12:00 PM UTC)
-  cron.schedule('0 12 * * *', async () => {
+  // Process scheduled payments daily at 8:00 AM Eastern Time
+  // Using timezone-aware cron to handle DST automatically
+  cron.schedule('0 8 * * *', async () => {
     console.log('🕒 [CRON] Running scheduled payment processor at 8 AM ET...');
     try {
       const response = await fetch(`${baseUrl}/api/payments/process-scheduled`, {
@@ -73,6 +74,8 @@ function setupScheduledTasks(port: number) {
     } catch (error) {
       console.error('❌ [CRON] Payment processing failed:', error);
     }
+  }, {
+    timezone: 'America/New_York'
   });
   
   // Process automations every 15 minutes
@@ -90,7 +93,7 @@ function setupScheduledTasks(port: number) {
   });
   
   console.log('⏰ Scheduled tasks configured:');
-  console.log('   - Payment processor: Daily at 8:00 AM ET (12:00 PM UTC)');
+  console.log('   - Payment processor: Daily at 8:00 AM ET (America/New_York timezone)');
   console.log('   - Automation processor: Every 15 minutes');
 }
 
