@@ -414,6 +414,7 @@ export const arrangementOptions = pgTable("arrangement_options", {
 export const tenantSettings = pgTable("tenant_settings", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull().unique(),
+  businessType: text("business_type").default("call_center"), // call_center, property_management, subscription_provider, freelancer_consultant, billing_service
   privacyPolicy: text("privacy_policy"),
   termsOfService: text("terms_of_service"),
   contactEmail: text("contact_email"),

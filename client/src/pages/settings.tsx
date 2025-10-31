@@ -732,16 +732,21 @@ export default function Settings() {
 
         <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-blue-900/20 backdrop-blur">
           <Tabs defaultValue="general" className="space-y-8">
-            <TabsList className="grid w-full grid-cols-1 gap-2 p-2 text-blue-100 sm:grid-cols-6">
+            <TabsList className={cn(
+              "grid w-full grid-cols-1 gap-2 p-2 text-blue-100",
+              localSettings?.businessType === 'call_center' ? "sm:grid-cols-6" : "sm:grid-cols-5"
+            )}>
               <TabsTrigger value="general" className="px-4 py-2">
                 General
               </TabsTrigger>
               <TabsTrigger value="merchant" className="px-4 py-2">
                 Payment Processing
               </TabsTrigger>
-              <TabsTrigger value="smax" className="px-4 py-2">
-                SMAX Integration
-              </TabsTrigger>
+              {localSettings?.businessType === 'call_center' && (
+                <TabsTrigger value="smax" className="px-4 py-2">
+                  SMAX Integration
+                </TabsTrigger>
+              )}
               <TabsTrigger value="documents" className="px-4 py-2">
                 Documents
               </TabsTrigger>
@@ -762,6 +767,36 @@ export default function Settings() {
                   </p>
                 </CardHeader>
                 <CardContent className="space-y-6 text-sm text-blue-100/80">
+                  {/* Business Type Selection */}
+                  <div className="space-y-4 border-b border-white/10 pb-6">
+                    <div>
+                      <Label className="text-base font-medium text-white">Business Type</Label>
+                      <p className="text-sm text-blue-100/70">
+                        Select your business type to customize available features and subscription plans
+                      </p>
+                    </div>
+                    <Select
+                      value={localSettings?.businessType || 'call_center'}
+                      onValueChange={(value) => handleSettingsUpdate('businessType', value)}
+                    >
+                      <SelectTrigger className={selectTriggerClasses} data-testid="select-business-type">
+                        <SelectValue placeholder="Select business type" />
+                      </SelectTrigger>
+                      <SelectContent className="border-white/10 bg-[#0f172a] text-blue-50">
+                        <SelectItem value="call_center">Call Center / Debt Collection</SelectItem>
+                        <SelectItem value="property_management">Property Management</SelectItem>
+                        <SelectItem value="subscription_provider">Subscription Provider</SelectItem>
+                        <SelectItem value="freelancer_consultant">Freelancer / Consultant</SelectItem>
+                        <SelectItem value="billing_service">Billing / Service Company</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <div className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-3">
+                      <p className="text-xs text-amber-200">
+                        <strong>Note:</strong> Changing your business type will update available subscription plans and features. SMAX integration is only available for Call Centers.
+                      </p>
+                    </div>
+                  </div>
+                  
                   {/* Custom Agency URL Section */}
                   <div className="space-y-4 border-b pb-6">
                     <div>
@@ -1402,8 +1437,9 @@ export default function Settings() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="smax" className="space-y-6">
-              <Card className={cardBaseClasses}>
+            {localSettings?.businessType === 'call_center' && (
+              <TabsContent value="smax" className="space-y-6">
+                <Card className={cardBaseClasses}>
                 <CardHeader className="space-y-1 text-white">
                   <CardTitle className="text-xl font-semibold text-white">SMAX Collection Software Integration</CardTitle>
                   <p className="text-sm text-blue-100/70">
@@ -1581,6 +1617,7 @@ export default function Settings() {
                 )}
               </Card>
             </TabsContent>
+            )}
 
             <TabsContent value="documents" className="space-y-6">
               <Card className={cardBaseClasses}>

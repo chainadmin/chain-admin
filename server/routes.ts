@@ -9910,30 +9910,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/billing/plans', authenticateUser, async (_req: any, res) => {
+  app.get('/api/billing/plans', authenticateUser, async (req: any, res) => {
     try {
-      const plans = await db
-        .select()
-        .from(subscriptionPlans)
-        .where(eq(subscriptionPlans.isActive, true))
-        .orderBy(subscriptionPlans.displayOrder);
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      // Get tenant settings to determine business type
+      const tenantSettings = await storage.getTenantSettings(tenantId);
+      const businessType = (tenantSettings?.businessType || 'call_center') as import('../shared/terminology').BusinessType;
+
+      // Get business-type-specific plans
+      const { getPlanListForBusinessType, EMAIL_OVERAGE_RATE_PER_THOUSAND, SMS_OVERAGE_RATE_PER_SEGMENT } = await import('../shared/billing-plans');
+      const plans = getPlanListForBusinessType(businessType);
 
       const formattedPlans = plans.map(plan => ({
-        id: plan.slug,
+        id: plan.id,
         name: plan.name,
-        price: plan.monthlyPriceCents / 100,
-        setupFee: (plan.setupFeeCents ?? 10000) / 100,
+        price: plan.price,
+        setupFee: 100, // Standard setup fee
         includedEmails: plan.includedEmails,
-        includedSmsSegments: plan.includedSms,
-        emailOverageRatePer1000: (plan.emailOverageRatePer1000 ?? 250) / 100,
-        smsOverageRatePerSegment: (plan.smsOverageRatePerSegment ?? 3) / 100,
-        features: plan.features ? JSON.parse(plan.features) : [],
+        includedSmsSegments: plan.includedSmsSegments,
+        emailOverageRatePer1000: EMAIL_OVERAGE_RATE_PER_THOUSAND,
+        smsOverageRatePerSegment: SMS_OVERAGE_RATE_PER_SEGMENT,
+        features: [], // Can be customized per business type later
       }));
 
       res.json({
         plans: formattedPlans,
-        emailOverageRatePerThousand: 2.50,
-        smsOverageRatePerSegment: 0.03,
+        emailOverageRatePerThousand: EMAIL_OVERAGE_RATE_PER_THOUSAND,
+        smsOverageRatePerSegment: SMS_OVERAGE_RATE_PER_SEGMENT,
       });
     } catch (error) {
       console.error("Error fetching subscription plans:", error);
@@ -10041,8 +10048,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const stats = await storage.getBillingStats(tenantId);
       
+      // Get tenant settings to determine business type for correct plan limits
+      const tenantSettings = await storage.getTenantSettings(tenantId);
+      const businessType = (tenantSettings?.businessType || 'call_center') as import('../shared/terminology').BusinessType;
+      
+      // Get business-type-specific plans
+      const { getPlansForBusinessType, EMAIL_OVERAGE_RATE_PER_THOUSAND, SMS_OVERAGE_RATE_PER_SEGMENT } = await import('../shared/billing-plans');
+      const businessTypePlans = getPlansForBusinessType(businessType);
+      
+      // Find the current plan based on planId (if exists)
+      let currentPlan = stats.planId ? businessTypePlans[stats.planId as import('../shared/billing-plans').MessagingPlanId] : null;
+      
+      // If we have a current plan, recalculate usage with business-type-specific limits
+      if (currentPlan && stats.billingPeriod) {
+        const includedEmails = currentPlan.includedEmails;
+        const includedSms = currentPlan.includedSmsSegments;
+        
+        const emailOverage = Math.max(0, stats.emailUsage.used - includedEmails);
+        const smsOverage = Math.max(0, stats.smsUsage.used - includedSms);
+        
+        const emailOverageCharge = Number((emailOverage * (EMAIL_OVERAGE_RATE_PER_THOUSAND / 1000)).toFixed(2));
+        const smsOverageCharge = Number((smsOverage * SMS_OVERAGE_RATE_PER_SEGMENT).toFixed(2));
+        
+        const usageCharges = Number((emailOverageCharge + smsOverageCharge).toFixed(2));
+        const totalBill = Number((currentPlan.price + usageCharges).toFixed(2));
+        
+        // Update stats with business-type-specific limits
+        stats.emailUsage = {
+          used: stats.emailUsage.used,
+          included: includedEmails,
+          overage: emailOverage,
+          overageCharge: emailOverageCharge,
+        };
+        
+        stats.smsUsage = {
+          used: stats.smsUsage.used,
+          included: includedSms,
+          overage: smsOverage,
+          overageCharge: smsOverageCharge,
+        };
+        
+        stats.monthlyBase = currentPlan.price;
+        stats.usageCharges = usageCharges;
+        stats.totalBill = totalBill;
+        stats.planName = currentPlan.name;
+      }
+      
       // Enhanced logging for SMS usage debugging
-      console.log(`📊 Billing Stats for tenant ${tenantId}:`, JSON.stringify({
+      console.log(`📊 Billing Stats for tenant ${tenantId} (${businessType}):`, JSON.stringify({
         emailUsage: stats.emailUsage,
         smsUsage: stats.smsUsage,
         billingPeriod: stats.billingPeriod,
