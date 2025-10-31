@@ -9526,6 +9526,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get payment schedules for a specific consumer (admin access)
+  app.get('/api/payment-schedules/consumer/:consumerId', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      const { consumerId } = req.params;
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      // Verify consumer belongs to this tenant
+      const consumer = await storage.getConsumer(consumerId);
+      if (!consumer || consumer.tenantId !== tenantId) {
+        return res.status(404).json({ message: "Consumer not found" });
+      }
+
+      // Get active payment schedules for this consumer
+      const schedules = await storage.getPaymentSchedulesByConsumer(consumerId, tenantId);
+      const activeSchedules = schedules.filter(s => s.status === 'active');
+
+      // Enrich with account details
+      const enrichedSchedules = await Promise.all(activeSchedules.map(async (schedule) => {
+        const account = await storage.getAccount(schedule.accountId);
+        const paymentMethod = await storage.getPaymentMethod(schedule.paymentMethodId);
+
+        return {
+          id: schedule.id,
+          arrangementType: schedule.arrangementType,
+          amountCents: schedule.amountCents,
+          frequency: schedule.frequency,
+          nextPaymentDate: schedule.nextPaymentDate,
+          remainingPayments: schedule.remainingPayments,
+          status: schedule.status,
+          source: schedule.source,
+          processor: schedule.processor,
+          accountNumber: account?.accountNumber,
+          accountCreditor: account?.creditor,
+          cardLast4: paymentMethod?.cardLast4,
+          cardBrand: paymentMethod?.cardBrand,
+          startDate: schedule.startDate,
+          endDate: schedule.endDate,
+        };
+      }));
+
+      res.json(enrichedSchedules);
+    } catch (error) {
+      console.error("Error fetching consumer payment schedules:", error);
+      res.status(500).json({ message: "Failed to fetch consumer payment schedules" });
+    }
+  });
+
   app.get('/api/payment-methods', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;

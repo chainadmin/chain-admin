@@ -23,6 +23,7 @@ export default function Payments() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [showPayNowModal, setShowPayNowModal] = useState(false);
   const [paymentToDelete, setPaymentToDelete] = useState<string | null>(null);
+  const [selectedConsumerForArrangement, setSelectedConsumerForArrangement] = useState<any | null>(null);
 
 
   const [payNowForm, setPayNowForm] = useState({
@@ -58,6 +59,18 @@ export default function Payments() {
   // Fetch all payment methods (saved cards)
   const { data: paymentMethodsData, isLoading: methodsLoading } = useQuery({
     queryKey: ["/api/payment-methods"],
+  });
+
+  // Fetch selected consumer's payment arrangements
+  const { data: consumerArrangements, isLoading: arrangementsLoading } = useQuery({
+    queryKey: ["/api/payment-schedules/consumer", selectedConsumerForArrangement?.id],
+    queryFn: async () => {
+      if (!selectedConsumerForArrangement?.id) return [];
+      const response = await apiRequest("GET", `/api/payment-schedules/consumer/${selectedConsumerForArrangement.id}`, null);
+      const data = await response.json();
+      return data;
+    },
+    enabled: !!selectedConsumerForArrangement?.id,
   });
 
   const handlePayNowFormChange = (field: string, value: string) => {
