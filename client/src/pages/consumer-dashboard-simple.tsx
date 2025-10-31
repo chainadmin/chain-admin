@@ -1667,7 +1667,7 @@ export default function ConsumerDashboardSimple() {
                           </p>
                           {selectedAccountSMAXArrangement.monthlyPayment && (
                             <p className="text-sm text-amber-100/70 mt-1">
-                              <strong className="text-amber-200">Current Monthly Payment:</strong> {formatCurrency(selectedAccountSMAXArrangement.monthlyPayment * 100)}
+                              <strong className="text-amber-200">Current Monthly Payment:</strong> {formatCurrency(selectedAccountSMAXArrangement.monthlyPayment)}
                               {selectedAccountSMAXArrangement.nextPaymentDate && (
                                 <> | <strong className="text-amber-200">Next Due:</strong> {new Date(selectedAccountSMAXArrangement.nextPaymentDate).toLocaleDateString()}</>
                               )}
