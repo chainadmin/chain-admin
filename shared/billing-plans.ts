@@ -18,31 +18,31 @@ export const SMS_OVERAGE_RATE_PER_SEGMENT = 0.03;
 const callCenterPlans: Record<MessagingPlanId, MessagingPlan> = {
   launch: {
     id: "launch",
-    name: "Launch",
+    name: "Starter",
     price: 325,
-    includedEmails: 5_000,
-    includedSmsSegments: 500,
+    includedEmails: 10_000,
+    includedSmsSegments: 1_000,
   },
   growth: {
     id: "growth",
     name: "Growth",
-    price: 500,
+    price: 525,
     includedEmails: 25_000,
-    includedSmsSegments: 2_500,
+    includedSmsSegments: 3_000,
   },
   pro: {
     id: "pro",
-    name: "Pro",
+    name: "Professional",
     price: 1_000,
-    includedEmails: 100_000,
+    includedEmails: 75_000,
     includedSmsSegments: 10_000,
   },
   scale: {
     id: "scale",
-    name: "Scale",
+    name: "Enterprise",
     price: 2_000,
-    includedEmails: 250_000,
-    includedSmsSegments: 25_000,
+    includedEmails: 200_000,
+    includedSmsSegments: 30_000,
   },
 };
 
