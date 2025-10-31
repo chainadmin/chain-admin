@@ -3106,10 +3106,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         name: z.string().min(1),
         description: z.string().optional(),
         type: z.enum(['email', 'sms']),
-        templateId: z.string().uuid(),
+        templateId: z.union([z.string(), z.number()]).transform(String), // Accept string or number, convert to string
         scheduledDate: z.string(), // ISO timestamp
         scheduleTime: z.string(), // HH:MM format
-        targetFolderIds: z.array(z.string().uuid()).optional().default([]),
+        targetFolderIds: z.array(z.union([z.string(), z.number()]).transform(String)).optional().default([]),
       });
 
       const validatedData = insertAutomationSchema.parse(req.body);
