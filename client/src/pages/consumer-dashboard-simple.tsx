@@ -199,7 +199,7 @@ export default function ConsumerDashboardSimple() {
   const [customPaymentAmount, setCustomPaymentAmount] = useState<string>("");
   
   // New simplified payment flow state
-  const [paymentMethod, setPaymentMethod] = useState<'term' | 'custom'>('term');
+  const [paymentMethod, setPaymentMethod] = useState<'term' | 'custom' | 'smax'>('term');
   const [selectedTerm, setSelectedTerm] = useState<3 | 6 | 12 | null>(null);
   const [customAmount, setCustomAmount] = useState('');
   const [paymentFrequency, setPaymentFrequency] = useState<'weekly' | 'biweekly' | 'monthly'>('biweekly');
@@ -577,12 +577,13 @@ export default function ConsumerDashboardSimple() {
     }
 
     // Determine if using simplified flow and if recurring
-    const isSimplifiedFlow = !selectedArrangement && calculatedPayment !== null;
+    const isSMAXPayment = paymentMethod === 'smax';
+    const isSimplifiedFlow = !selectedArrangement && calculatedPayment !== null && !isSMAXPayment;
     const willSetupRecurring = isSimplifiedFlow || (setupRecurring && selectedArrangement && 
       (selectedArrangement.planType === 'fixed_monthly' || selectedArrangement.planType === 'range'));
 
-    // Validate first payment date for recurring payments
-    if (willSetupRecurring && !firstPaymentDate) {
+    // Validate first payment date for recurring payments (skip for SMAX one-time payments)
+    if (willSetupRecurring && !firstPaymentDate && !isSMAXPayment) {
       toast({
         title: "Payment Date Required",
         description: "Please select a first payment date for your payment plan",
@@ -634,8 +635,9 @@ export default function ConsumerDashboardSimple() {
         ? new Date().toISOString().split('T')[0]
         : firstPaymentDate ? firstPaymentDate.toISOString().split('T')[0] : null;
       
-      // Determine if using simplified flow
-      const isSimplifiedFlow = !selectedArrangement && calculatedPayment !== null;
+      // Determine if using simplified flow (exclude SMAX one-time payments)
+      const isSMAXPayment = paymentMethod === 'smax';
+      const isSimplifiedFlow = !selectedArrangement && calculatedPayment !== null && !isSMAXPayment;
       const shouldSetupRecurring = isSimplifiedFlow || (setupRecurring && selectedArrangement && 
         (selectedArrangement.planType === 'fixed_monthly' || selectedArrangement.planType === 'range'));
       
@@ -653,7 +655,7 @@ export default function ConsumerDashboardSimple() {
         firstPaymentDate: paymentDate,
         customPaymentAmountCents: selectedArrangement?.planType === 'one_time_payment' && customPaymentAmount
           ? Math.round(parseFloat(customPaymentAmount) * 100)
-          : isSimplifiedFlow
+          : (isSimplifiedFlow || isSMAXPayment)
             ? calculatedPayment
             : null,
         // Simplified flow specific data
@@ -1685,7 +1687,55 @@ export default function ConsumerDashboardSimple() {
                 </>
               )}
 
-              {!selectedAccountSMAXArrangement && (
+              {/* Payment Options - Always show, but simplified when SMAX arrangement exists */}
+              {selectedAccountSMAXArrangement ? (
+                <div className="space-y-4">
+                  {/* Quick Payment Button for SMAX Arrangement */}
+                  <div className="rounded-lg bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border-2 border-blue-400/30 p-4 backdrop-blur">
+                    <div className="flex items-center gap-2 mb-3">
+                      <DollarSign className="h-5 w-5 text-blue-400" />
+                      <Label className="text-base font-semibold text-blue-200">Make Payment on Existing Arrangement</Label>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Use the SMAX arrangement's payment amount
+                        const smaxPaymentAmount = selectedAccountSMAXArrangement.monthlyPayment * 100;
+                        setCalculatedPayment(smaxPaymentAmount);
+                        setMonthlyBaseAmount(smaxPaymentAmount);
+                        setPaymentMethod('smax');
+                        setSelectedArrangement(null);
+                      }}
+                      className={`w-full p-4 rounded-lg border-2 transition-all text-left backdrop-blur ${
+                        paymentMethod === 'smax'
+                          ? 'border-blue-400 bg-blue-500/20'
+                          : 'border-white/20 bg-white/5 hover:border-blue-400/50 hover:bg-white/10'
+                      }`}
+                      data-testid="button-pay-smax-arrangement"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-sm text-blue-100/70 mb-1">Today's Payment Amount</div>
+                          <div className="text-2xl font-bold text-blue-300">
+                            {formatCurrency(selectedAccountSMAXArrangement.monthlyPayment * 100)}
+                          </div>
+                          {selectedAccountSMAXArrangement.nextPaymentDate && (
+                            <div className="text-xs text-blue-100/50 mt-1">
+                              Due: {new Date(selectedAccountSMAXArrangement.nextPaymentDate).toLocaleDateString()}
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <Badge className="bg-blue-500 text-white border-blue-400/30">Arrangement Payment</Badge>
+                        </div>
+                      </div>
+                    </button>
+                    <p className="text-xs text-blue-100/50 mt-2">
+                      This payment applies to your existing payment arrangement. To modify your arrangement terms, please contact us.
+                    </p>
+                  </div>
+                </div>
+              ) : (
                 <div className="space-y-4">
                   {/* Settlement Offers Section */}
                   {applicableArrangements.some((arr: any) => arr.planType === 'settlement') && (
