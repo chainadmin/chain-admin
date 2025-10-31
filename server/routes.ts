@@ -6699,6 +6699,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         setupRecurring,
         firstPaymentDate,
         customPaymentAmountCents,
+        paymentDate, // For retrying failed SMAX payments with specific date
         simplifiedFlow // New simplified arrangement flow data
       } = req.body;
 
@@ -6718,6 +6719,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         normalizedFirstPaymentDate = today;
+      }
+
+      // Parse paymentDate for one-time payments (used for retrying failed SMAX payments)
+      let normalizedPaymentDate: Date | null = null;
+      if (paymentDate) {
+        const parsedDate = new Date(paymentDate);
+        if (Number.isNaN(parsedDate.getTime())) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid payment date provided",
+          });
+        }
+        parsedDate.setHours(0, 0, 0, 0);
+        normalizedPaymentDate = parsedDate;
+        console.log('📅 Payment date specified for SMAX retry:', normalizedPaymentDate.toISOString().split('T')[0]);
       }
 
       const today = new Date();
@@ -7154,7 +7170,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: success ? 'completed' : 'failed',
           transactionId: transactionId,
           processorResponse: JSON.stringify(usaepayResult),
-          processedAt: success ? new Date() : null,
+          processedAt: success ? (normalizedPaymentDate || new Date()) : null,
           notes: arrangement
             ? `${arrangement.name} - ${cardName} ending in ${cardLast4}`
             : `Online payment - ${cardName} ending in ${cardLast4}`,
@@ -7192,7 +7208,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const smaxPaymentData = smaxService.createSmaxPaymentData({
             filenumber: account.filenumber,
             paymentamount: amountCents / 100,
-            paymentdate: new Date().toISOString().split('T')[0],
+            paymentdate: normalizedPaymentDate 
+              ? normalizedPaymentDate.toISOString().split('T')[0] 
+              : new Date().toISOString().split('T')[0],
             payorname: consumer ? `${consumer.firstName} ${consumer.lastName}` : 'Consumer',
             paymentmethod: 'CREDIT CARD',
             cardtype: cardBrand || 'Unknown',
