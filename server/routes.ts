@@ -37,6 +37,7 @@ import express from "express";
 import { emailService } from "./emailService";
 import { smsService } from "./smsService";
 import { smaxService } from "./smaxService";
+import { eventService } from "./eventService";
 import { uploadLogo } from "./r2Storage";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -1627,6 +1628,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dueDate: dueDate || null,
       });
 
+      // Trigger account_created event for sequence enrollment
+      await eventService.emitSystemEvent('account_created', {
+        tenantId,
+        consumerId: consumer.id,
+        accountId: account.id,
+      });
+
       res.status(201).json(account);
     } catch (error) {
       console.error("Error creating account:", error);
@@ -3204,6 +3212,399 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching automation executions:", error);
       res.status(500).json({ message: "Failed to fetch automation executions" });
+    }
+  });
+
+  // Communication Sequences Routes
+  app.get('/api/sequences', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const sequences = await storage.getCommunicationSequencesByTenant(tenantId);
+      res.json(sequences);
+    } catch (error) {
+      console.error("Error fetching sequences:", error);
+      res.status(500).json({ message: "Failed to fetch sequences" });
+    }
+  });
+
+  app.get('/api/sequences/:id', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const sequence = await storage.getCommunicationSequenceById(req.params.id, tenantId);
+      if (!sequence) {
+        return res.status(404).json({ message: "Sequence not found" });
+      }
+
+      res.json(sequence);
+    } catch (error) {
+      console.error("Error fetching sequence:", error);
+      res.status(500).json({ message: "Failed to fetch sequence" });
+    }
+  });
+
+  app.post('/api/sequences', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const sequenceSchema = z.object({
+        name: z.string().min(1),
+        description: z.string().optional(),
+        triggerType: z.enum(['immediate', 'scheduled', 'event']).default('immediate'),
+        triggerEvent: z.enum(['account_created', 'payment_received', 'payment_overdue', 'payment_failed', 'manual']).optional(),
+        triggerDelay: z.number().int().min(0).optional().default(0),
+        targetType: z.enum(['all', 'folder', 'custom']).default('all'),
+        targetFolderIds: z.array(z.string().uuid()).optional().default([]),
+        isActive: z.boolean().optional().default(true),
+      });
+
+      const validatedData = sequenceSchema.parse(req.body);
+      const sequenceData = {
+        ...validatedData,
+        tenantId,
+      };
+
+      const newSequence = await storage.createCommunicationSequence(sequenceData);
+      
+      console.log('✅ Communication sequence created:', {
+        id: newSequence.id,
+        name: newSequence.name,
+        triggerType: newSequence.triggerType,
+      });
+
+      res.status(201).json(newSequence);
+    } catch (error) {
+      console.error("Error creating sequence:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create sequence" });
+    }
+  });
+
+  app.put('/api/sequences/:id', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const updateSchema = z.object({
+        name: z.string().min(1).optional(),
+        description: z.string().optional(),
+        triggerType: z.enum(['immediate', 'scheduled', 'event']).optional(),
+        triggerEvent: z.enum(['account_created', 'payment_received', 'payment_overdue', 'payment_failed', 'manual']).optional(),
+        triggerDelay: z.number().int().min(0).optional(),
+        targetType: z.enum(['all', 'folder', 'custom']).optional(),
+        targetFolderIds: z.array(z.string().uuid()).optional(),
+        isActive: z.boolean().optional(),
+      });
+
+      const validatedData = updateSchema.parse(req.body);
+      const updatedSequence = await storage.updateCommunicationSequence(req.params.id, validatedData);
+
+      if (!updatedSequence) {
+        return res.status(404).json({ message: "Sequence not found" });
+      }
+
+      res.json(updatedSequence);
+    } catch (error) {
+      console.error("Error updating sequence:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to update sequence" });
+    }
+  });
+
+  app.delete('/api/sequences/:id', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      await storage.deleteCommunicationSequence(req.params.id, tenantId);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting sequence:", error);
+      res.status(500).json({ message: "Failed to delete sequence" });
+    }
+  });
+
+  // Sequence Steps Routes
+  app.get('/api/sequences/:sequenceId/steps', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const steps = await storage.getSequenceSteps(req.params.sequenceId);
+      res.json(steps);
+    } catch (error) {
+      console.error("Error fetching sequence steps:", error);
+      res.status(500).json({ message: "Failed to fetch sequence steps" });
+    }
+  });
+
+  app.post('/api/sequences/:sequenceId/steps', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const stepSchema = z.object({
+        stepType: z.enum(['email', 'sms']),
+        templateId: z.string().uuid(),
+        delayDays: z.number().int().min(0).default(0),
+        delayHours: z.number().int().min(0).optional().default(0),
+        stepOrder: z.number().int().min(0),
+      });
+
+      const validatedData = stepSchema.parse(req.body);
+      const stepData = {
+        ...validatedData,
+        sequenceId: req.params.sequenceId,
+      };
+
+      const newStep = await storage.createSequenceStep(stepData);
+      
+      console.log('✅ Sequence step created:', {
+        id: newStep.id,
+        sequenceId: req.params.sequenceId,
+        stepType: newStep.stepType,
+        delayDays: newStep.delayDays,
+      });
+
+      res.status(201).json(newStep);
+    } catch (error) {
+      console.error("Error creating sequence step:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create sequence step" });
+    }
+  });
+
+  app.put('/api/sequences/steps/:id', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const updateSchema = z.object({
+        stepType: z.enum(['email', 'sms']).optional(),
+        templateId: z.string().uuid().optional(),
+        delayDays: z.number().int().min(0).optional(),
+        delayHours: z.number().int().min(0).optional(),
+        stepOrder: z.number().int().min(0).optional(),
+      });
+
+      const validatedData = updateSchema.parse(req.body);
+      const updatedStep = await storage.updateSequenceStep(req.params.id, validatedData);
+
+      if (!updatedStep) {
+        return res.status(404).json({ message: "Step not found" });
+      }
+
+      res.json(updatedStep);
+    } catch (error) {
+      console.error("Error updating sequence step:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to update sequence step" });
+    }
+  });
+
+  app.delete('/api/sequences/steps/:id', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      await storage.deleteSequenceStep(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting sequence step:", error);
+      res.status(500).json({ message: "Failed to delete sequence step" });
+    }
+  });
+
+  app.post('/api/sequences/steps/reorder', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const reorderSchema = z.object({
+        sequenceId: z.string().uuid(),
+        stepIds: z.array(z.string().uuid()),
+      });
+
+      const { sequenceId, stepIds } = reorderSchema.parse(req.body);
+      await storage.reorderSequenceSteps(sequenceId, stepIds);
+      
+      console.log('✅ Sequence steps reordered:', {
+        sequenceId,
+        count: stepIds.length,
+      });
+
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error reordering sequence steps:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to reorder sequence steps" });
+    }
+  });
+
+  // Sequence Enrollments Routes
+  app.get('/api/sequences/:sequenceId/enrollments', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const enrollments = await storage.getSequenceEnrollments(req.params.sequenceId);
+      res.json(enrollments);
+    } catch (error) {
+      console.error("Error fetching sequence enrollments:", error);
+      res.status(500).json({ message: "Failed to fetch sequence enrollments" });
+    }
+  });
+
+  app.post('/api/sequences/:sequenceId/enroll', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const enrollSchema = z.object({
+        consumerId: z.string().uuid(),
+      });
+
+      const { consumerId } = enrollSchema.parse(req.body);
+      const enrollmentData = {
+        sequenceId: req.params.sequenceId,
+        consumerId,
+        status: 'active' as const,
+        enrolledAt: new Date(),
+      };
+
+      const enrollment = await storage.enrollConsumerInSequence(enrollmentData);
+      
+      console.log('✅ Consumer enrolled in sequence:', {
+        enrollmentId: enrollment.id,
+        sequenceId: req.params.sequenceId,
+        consumerId,
+      });
+
+      res.status(201).json(enrollment);
+    } catch (error) {
+      console.error("Error enrolling consumer in sequence:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to enroll consumer" });
+    }
+  });
+
+  app.get('/api/sequences/enrollments/active', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const activeEnrollments = await storage.getActiveEnrollments();
+      res.json(activeEnrollments);
+    } catch (error) {
+      console.error("Error fetching active enrollments:", error);
+      res.status(500).json({ message: "Failed to fetch active enrollments" });
+    }
+  });
+
+  app.post('/api/sequences/enrollments/:id/complete', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      await storage.updateEnrollment(req.params.id, { 
+        status: 'completed',
+        completedAt: new Date(),
+      });
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error completing enrollment:", error);
+      res.status(500).json({ message: "Failed to complete enrollment" });
+    }
+  });
+
+  app.post('/api/sequences/enrollments/:id/pause', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      await storage.pauseEnrollment(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error pausing enrollment:", error);
+      res.status(500).json({ message: "Failed to pause enrollment" });
+    }
+  });
+
+  app.post('/api/sequences/enrollments/:id/advance', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const advanceSchema = z.object({
+        currentStepId: z.string().uuid().optional(),
+        currentStepOrder: z.number().int().optional(),
+        nextMessageAt: z.string().optional(),
+      });
+
+      const validatedData = advanceSchema.parse(req.body);
+      const updates: any = {};
+      
+      if (validatedData.currentStepId) updates.currentStepId = validatedData.currentStepId;
+      if (validatedData.currentStepOrder !== undefined) updates.currentStepOrder = validatedData.currentStepOrder;
+      if (validatedData.nextMessageAt) updates.nextMessageAt = new Date(validatedData.nextMessageAt);
+      
+      await storage.updateEnrollment(req.params.id, updates);
+      
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error advancing enrollment:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to advance enrollment" });
     }
   });
 
@@ -6734,6 +7135,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: payment.status,
           transactionId: payment.transactionId
         });
+
+        // Trigger payment event for sequence enrollment
+        if (success) {
+          await eventService.emitSystemEvent('payment_received', {
+            tenantId,
+            consumerId,
+            accountId: accountId || undefined,
+            metadata: { paymentId: payment.id, amountCents, transactionId }
+          });
+        } else {
+          await eventService.emitSystemEvent('payment_failed', {
+            tenantId,
+            consumerId,
+            accountId: accountId || undefined,
+            metadata: { paymentId: payment.id, amountCents, error: usaepayResult.error || usaepayResult.errorcode }
+          });
+        }
         
         // Send payment to SMAX if account has a filenumber
         if (success && account.filenumber) {
@@ -8390,6 +8808,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       console.log(`✅ Processed ${processedAutomations.length} automations, ${failedAutomations.length} failed`);
+
+      // Check for overdue payments and trigger payment_overdue events
+      try {
+        console.log('🔍 Checking for overdue payments...');
+        const tenants = await storage.getAllTenants();
+        let overdueChecked = 0;
+        let overdueTriggered = 0;
+
+        for (const tenant of tenants) {
+          if (!tenant.isActive) continue;
+
+          const accounts = await storage.getAccountsByTenant(tenant.id);
+          
+          for (const account of accounts) {
+            // Skip if account has no due date or no consumer
+            if (!account.dueDate || !account.consumerId) continue;
+
+            const dueDate = new Date(account.dueDate);
+            const now = new Date();
+
+            // Check if payment is overdue (due date is in the past)
+            if (dueDate < now && account.balanceCents > 0) {
+              overdueChecked++;
+
+              // Trigger payment_overdue event
+              // Note: The sequence enrollment system will handle de-duplication to avoid
+              // enrolling the same consumer multiple times
+              await eventService.emitSystemEvent('payment_overdue', {
+                tenantId: tenant.id,
+                consumerId: account.consumerId,
+                accountId: account.id,
+                metadata: { 
+                  dueDate: dueDate.toISOString(),
+                  balanceCents: account.balanceCents,
+                  creditor: account.creditor
+                }
+              });
+              overdueTriggered++;
+            }
+          }
+        }
+
+        if (overdueTriggered > 0) {
+          console.log(`⚠️ Triggered ${overdueTriggered} payment_overdue events (checked ${overdueChecked} overdue accounts)`);
+        }
+      } catch (error) {
+        console.error('Error checking for overdue payments:', error);
+        // Don't fail the entire processor if overdue check fails
+      }
       
       res.json({
         success: true,
