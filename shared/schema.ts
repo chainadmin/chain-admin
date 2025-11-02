@@ -399,6 +399,25 @@ export const signatureRequests = pgTable("signature_requests", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Signed documents (completed signature requests with full legal record)
+export const signedDocuments = pgTable("signed_documents", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  signatureRequestId: uuid("signature_request_id").references(() => signatureRequests.id, { onDelete: "cascade" }).notNull().unique(),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "cascade" }).notNull(),
+  accountId: uuid("account_id").references(() => accounts.id, { onDelete: "cascade" }),
+  documentId: uuid("document_id").references(() => documents.id, { onDelete: "cascade" }).notNull(),
+  title: text("title").notNull(),
+  signatureData: text("signature_data").notNull(), // Base64 encoded signature image
+  ipAddress: text("ip_address").notNull(), // IP address when signed (required for legal compliance)
+  userAgent: text("user_agent").notNull(), // Browser/device info when signed
+  legalConsent: boolean("legal_consent").notNull().default(true), // User agreed to legal terms
+  consentText: text("consent_text").notNull(), // The actual consent text shown
+  signedAt: timestamp("signed_at").notNull(), // When the document was signed
+  documentHash: text("document_hash"), // Optional: hash of the original document for integrity verification
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Signature audit trail (immutable log of all signature events)
 export const signatureAuditTrail = pgTable("signature_audit_trail", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -782,6 +801,33 @@ export const signatureRequestsRelations = relations(signatureRequests, ({ one, m
     references: [documents.id],
   }),
   auditTrail: many(signatureAuditTrail),
+  signedDocument: one(signedDocuments, {
+    fields: [signatureRequests.id],
+    references: [signedDocuments.signatureRequestId],
+  }),
+}));
+
+export const signedDocumentsRelations = relations(signedDocuments, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [signedDocuments.tenantId],
+    references: [tenants.id],
+  }),
+  consumer: one(consumers, {
+    fields: [signedDocuments.consumerId],
+    references: [consumers.id],
+  }),
+  account: one(accounts, {
+    fields: [signedDocuments.accountId],
+    references: [accounts.id],
+  }),
+  document: one(documents, {
+    fields: [signedDocuments.documentId],
+    references: [documents.id],
+  }),
+  signatureRequest: one(signatureRequests, {
+    fields: [signedDocuments.signatureRequestId],
+    references: [signatureRequests.id],
+  }),
 }));
 
 export const signatureAuditTrailRelations = relations(signatureAuditTrail, ({ one }) => ({
@@ -1155,6 +1201,7 @@ export const insertAccountSchema = createInsertSchema(accounts).omit({ id: true,
 export const insertEmailTemplateSchema = createInsertSchema(emailTemplates).omit({ id: true, createdAt: true });
 export const insertDocumentSchema = createInsertSchema(documents).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertSignatureRequestSchema = createInsertSchema(signatureRequests).omit({ id: true, createdAt: true, updatedAt: true, signedAt: true, declinedAt: true, viewedAt: true });
+export const insertSignedDocumentSchema = createInsertSchema(signedDocuments).omit({ id: true, createdAt: true });
 export const insertSignatureAuditTrailSchema = createInsertSchema(signatureAuditTrail).omit({ id: true, occurredAt: true });
 export const insertArrangementOptionSchema = createInsertSchema(arrangementOptions)
   .omit({ id: true, createdAt: true, updatedAt: true })
@@ -1342,6 +1389,8 @@ export type Document = typeof documents.$inferSelect;
 export type InsertDocument = z.infer<typeof insertDocumentSchema>;
 export type SignatureRequest = typeof signatureRequests.$inferSelect;
 export type InsertSignatureRequest = z.infer<typeof insertSignatureRequestSchema>;
+export type SignedDocument = typeof signedDocuments.$inferSelect;
+export type InsertSignedDocument = z.infer<typeof insertSignedDocumentSchema>;
 export type SignatureAuditTrail = typeof signatureAuditTrail.$inferSelect;
 export type InsertSignatureAuditTrail = z.infer<typeof insertSignatureAuditTrailSchema>;
 export type ArrangementOption = typeof arrangementOptions.$inferSelect;

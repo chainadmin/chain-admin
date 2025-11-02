@@ -734,7 +734,7 @@ export default function Settings() {
           <Tabs defaultValue="general" className="space-y-8">
             <TabsList className={cn(
               "grid w-full grid-cols-1 gap-2 p-2 text-blue-100",
-              localSettings?.businessType === 'call_center' ? "sm:grid-cols-6" : "sm:grid-cols-5"
+              localSettings?.businessType === 'call_center' ? "sm:grid-cols-7" : "sm:grid-cols-6"
             )}>
               <TabsTrigger value="general" className="px-4 py-2">
                 General
@@ -752,6 +752,9 @@ export default function Settings() {
               </TabsTrigger>
               <TabsTrigger value="arrangements" className="px-4 py-2">
                 Payment Plans
+              </TabsTrigger>
+              <TabsTrigger value="addons" className="px-4 py-2">
+                Add-ons
               </TabsTrigger>
               <TabsTrigger value="privacy" className="px-4 py-2">
                 Privacy & Legal
@@ -2199,6 +2202,56 @@ export default function Settings() {
                       ))}
                     </div>
                   )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="addons" className="space-y-6">
+              <Card className={cardBaseClasses}>
+                <CardHeader className="space-y-1 text-white">
+                  <CardTitle className="text-xl font-semibold text-white">Optional Add-ons</CardTitle>
+                  <p className="text-sm text-blue-100/70">
+                    Enable premium features for your organization. These add-ons may incur additional costs.
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-4">
+                    <div className="flex items-start justify-between rounded-lg border border-white/10 bg-white/5 p-4">
+                      <div className="flex-1 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-5 w-5 text-sky-400" />
+                          <h3 className="text-base font-semibold text-white">Document Signing</h3>
+                        </div>
+                        <p className="text-sm text-blue-100/70">
+                          Send documents for electronic signature with full ESIGN Act compliance. Perfect for contracts, agreements, and legal documents.
+                        </p>
+                        <div className="flex flex-wrap gap-2 text-xs text-blue-100/60">
+                          <span className="rounded-full bg-white/10 px-2 py-1">Legally Binding</span>
+                          <span className="rounded-full bg-white/10 px-2 py-1">Full Audit Trail</span>
+                          <span className="rounded-full bg-white/10 px-2 py-1">Custom Templates</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Switch
+                          checked={localSettings?.enabledAddons?.includes('document_signing') || false}
+                          onCheckedChange={(checked) => {
+                            const current = localSettings?.enabledAddons || [];
+                            const updated = checked
+                              ? [...current, 'document_signing']
+                              : current.filter((a: string) => a !== 'document_signing');
+                            handleSettingsUpdate('enabledAddons', updated);
+                          }}
+                          data-testid="switch-document-signing"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg border border-blue-400/30 bg-blue-500/10 p-3">
+                      <p className="text-xs text-blue-200">
+                        <strong>Note:</strong> More add-ons will be available soon. Contact support to request specific features for your business.
+                      </p>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
