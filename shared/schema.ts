@@ -375,6 +375,41 @@ export const documents = pgTable("documents", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Signature requests (for document signing addon)
+export const signatureRequests = pgTable("signature_requests", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "cascade" }).notNull(),
+  accountId: uuid("account_id").references(() => accounts.id, { onDelete: "cascade" }),
+  documentId: uuid("document_id").references(() => documents.id, { onDelete: "cascade" }).notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  status: text("status").default("pending"), // "pending", "viewed", "signed", "declined", "expired"
+  signedAt: timestamp("signed_at"),
+  declinedAt: timestamp("declined_at"),
+  declineReason: text("decline_reason"),
+  viewedAt: timestamp("viewed_at"),
+  expiresAt: timestamp("expires_at"),
+  signatureData: text("signature_data"), // Base64 encoded signature image
+  ipAddress: text("ip_address"), // IP address when signed
+  userAgent: text("user_agent"), // Browser/device info when signed
+  legalConsent: boolean("legal_consent").default(false), // User agreed to legal terms
+  consentText: text("consent_text"), // The actual consent text shown
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Signature audit trail (immutable log of all signature events)
+export const signatureAuditTrail = pgTable("signature_audit_trail", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  signatureRequestId: uuid("signature_request_id").references(() => signatureRequests.id, { onDelete: "cascade" }).notNull(),
+  eventType: text("event_type").notNull(), // "created", "sent", "viewed", "signed", "declined", "expired"
+  eventData: jsonb("event_data").default(sql`'{}'::jsonb`), // Additional event context
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  occurredAt: timestamp("occurred_at").defaultNow(),
+});
+
 // Arrangement/Settlement options (per tenant)
 export const arrangementPlanTypes = [
   "range",
@@ -425,6 +460,7 @@ export const tenantSettings = pgTable("tenant_settings", {
   customBranding: jsonb("custom_branding").default(sql`'{}'::jsonb`),
   consumerPortalSettings: jsonb("consumer_portal_settings").default(sql`'{}'::jsonb`),
   enabledModules: text("enabled_modules").array().default(sql`ARRAY[]::text[]`), // Business service modules enabled for this tenant
+  enabledAddons: text("enabled_addons").array().default(sql`ARRAY[]::text[]`), // Optional add-on features (document_signing, advanced_reporting, etc.)
   smsThrottleLimit: bigint("sms_throttle_limit", { mode: "number" }).default(10), // SMS per minute limit
   minimumMonthlyPayment: bigint("minimum_monthly_payment", { mode: "number" }).default(5000), // In cents - global minimum for payment arrangements
   createdAt: timestamp("created_at").defaultNow(),
@@ -716,7 +752,7 @@ export const accountsRelations = relations(accounts, ({ one }) => ({
 }));
 
 // Relations for new tables
-export const documentsRelations = relations(documents, ({ one }) => ({
+export const documentsRelations = relations(documents, ({ one, many }) => ({
   tenant: one(tenants, {
     fields: [documents.tenantId],
     references: [tenants.id],
@@ -724,6 +760,34 @@ export const documentsRelations = relations(documents, ({ one }) => ({
   account: one(accounts, {
     fields: [documents.accountId],
     references: [accounts.id],
+  }),
+  signatureRequests: many(signatureRequests),
+}));
+
+export const signatureRequestsRelations = relations(signatureRequests, ({ one, many }) => ({
+  tenant: one(tenants, {
+    fields: [signatureRequests.tenantId],
+    references: [tenants.id],
+  }),
+  consumer: one(consumers, {
+    fields: [signatureRequests.consumerId],
+    references: [consumers.id],
+  }),
+  account: one(accounts, {
+    fields: [signatureRequests.accountId],
+    references: [accounts.id],
+  }),
+  document: one(documents, {
+    fields: [signatureRequests.documentId],
+    references: [documents.id],
+  }),
+  auditTrail: many(signatureAuditTrail),
+}));
+
+export const signatureAuditTrailRelations = relations(signatureAuditTrail, ({ one }) => ({
+  signatureRequest: one(signatureRequests, {
+    fields: [signatureAuditTrail.signatureRequestId],
+    references: [signatureRequests.id],
   }),
 }));
 
@@ -1090,6 +1154,8 @@ export const insertConsumerSchema = createInsertSchema(consumers).omit({ id: tru
 export const insertAccountSchema = createInsertSchema(accounts).omit({ id: true, createdAt: true });
 export const insertEmailTemplateSchema = createInsertSchema(emailTemplates).omit({ id: true, createdAt: true });
 export const insertDocumentSchema = createInsertSchema(documents).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertSignatureRequestSchema = createInsertSchema(signatureRequests).omit({ id: true, createdAt: true, updatedAt: true, signedAt: true, declinedAt: true, viewedAt: true });
+export const insertSignatureAuditTrailSchema = createInsertSchema(signatureAuditTrail).omit({ id: true, occurredAt: true });
 export const insertArrangementOptionSchema = createInsertSchema(arrangementOptions)
   .omit({ id: true, createdAt: true, updatedAt: true })
   .superRefine((data, ctx) => {
@@ -1274,6 +1340,10 @@ export type EmailTemplate = typeof emailTemplates.$inferSelect;
 export type InsertEmailTemplate = z.infer<typeof insertEmailTemplateSchema>;
 export type Document = typeof documents.$inferSelect;
 export type InsertDocument = z.infer<typeof insertDocumentSchema>;
+export type SignatureRequest = typeof signatureRequests.$inferSelect;
+export type InsertSignatureRequest = z.infer<typeof insertSignatureRequestSchema>;
+export type SignatureAuditTrail = typeof signatureAuditTrail.$inferSelect;
+export type InsertSignatureAuditTrail = z.infer<typeof insertSignatureAuditTrailSchema>;
 export type ArrangementOption = typeof arrangementOptions.$inferSelect;
 export type InsertArrangementOption = z.infer<typeof insertArrangementOptionSchema>;
 export type TenantSettings = typeof tenantSettings.$inferSelect;

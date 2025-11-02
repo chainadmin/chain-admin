@@ -2080,6 +2080,28 @@ export class DatabaseStorage implements IStorage {
     return settings?.enabledModules || [];
   }
 
+  async updateEnabledAddons(tenantId: string, addons: string[]): Promise<TenantSettings> {
+    await ensureTenantSettingsSchema(db);
+
+    const [updatedSettings] = await db
+      .update(tenantSettings)
+      .set({
+        enabledAddons: addons,
+        updatedAt: new Date(),
+      })
+      .where(eq(tenantSettings.tenantId, tenantId))
+      .returning();
+
+    return updatedSettings;
+  }
+
+  async getEnabledAddons(tenantId: string): Promise<string[]> {
+    await ensureTenantSettingsSchema(db);
+
+    const settings = await this.getTenantSettings(tenantId);
+    return settings?.enabledAddons || [];
+  }
+
   // Tenant setup helper
   async setupTenantForUser(authId: string, tenantData: InsertTenant): Promise<{ tenant: Tenant; platformUser: PlatformUser }> {
     // Create tenant
@@ -2092,12 +2114,23 @@ export class DatabaseStorage implements IStorage {
       role: 'owner', // Default role for tenant creator
     }).returning();
 
+    // Determine default enabled addons based on business type
+    const businessType = tenant.businessType || 'call_center';
+    const defaultAddons: string[] = [];
+    
+    // Property management and subscription providers get document signing by default
+    if (businessType === 'property_management' || businessType === 'subscription_provider') {
+      defaultAddons.push('document_signing');
+    }
+
     // Create default tenant settings
     await this.upsertTenantSettings({
       tenantId: tenant.id,
+      businessType,
       showPaymentPlans: true,
       showDocuments: true,
       allowSettlementRequests: true,
+      enabledAddons: defaultAddons,
     });
 
     return { tenant, platformUser };
