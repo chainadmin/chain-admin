@@ -92,9 +92,26 @@ function setupScheduledTasks(port: number) {
     }
   });
   
+  // Process subscription renewals daily at 12:00 AM ET
+  cron.schedule('0 0 * * *', async () => {
+    console.log('🕒 [CRON] Running subscription renewal processor...');
+    try {
+      const response = await fetch(`${baseUrl}/api/billing/process-renewals`, {
+        method: 'POST'
+      });
+      const result = await response.json();
+      console.log('✅ [CRON] Subscription renewal processing complete:', result);
+    } catch (error) {
+      console.error('❌ [CRON] Subscription renewal processing failed:', error);
+    }
+  }, {
+    timezone: 'America/New_York'
+  });
+  
   console.log('⏰ Scheduled tasks configured:');
   console.log('   - Payment processor: Daily at 8:00 AM ET (America/New_York timezone)');
   console.log('   - Automation processor: Every 15 minutes');
+  console.log('   - Subscription renewal processor: Daily at 12:00 AM ET (America/New_York timezone)');
 }
 
 // Start the server in both development and production

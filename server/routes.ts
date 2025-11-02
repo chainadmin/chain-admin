@@ -18,6 +18,7 @@ import {
   users,
   subscriptionPlans,
   subscriptions,
+  invoices,
   emailLogs,
   emailCampaigns,
   type Account,
@@ -10495,6 +10496,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching current invoice:", error);
       res.status(500).json({ message: "Failed to fetch current invoice" });
+    }
+  });
+
+  // Process subscription renewals (called by cron job)
+  app.post('/api/billing/process-renewals', async (req, res) => {
+    try {
+      console.log('🔄 Processing subscription renewals...');
+      const now = new Date();
+      let renewedCount = 0;
+      let invoicesCreated = 0;
+      
+      // Get all active subscriptions
+      const allSubscriptions = await db.select().from(subscriptions).where(eq(subscriptions.status, 'active'));
+      
+      for (const subscription of allSubscriptions) {
+        const periodEnd = new Date(subscription.currentPeriodEnd);
+        
+        // Check if period has ended
+        if (periodEnd <= now) {
+          console.log(`📅 Renewing subscription for tenant ${subscription.tenantId}`);
+          
+          // Calculate next period (30 days)
+          const newPeriodStart = new Date(periodEnd);
+          newPeriodStart.setHours(0, 0, 0, 0);
+          const newPeriodEnd = new Date(newPeriodStart);
+          newPeriodEnd.setDate(newPeriodEnd.getDate() + 30);
+          newPeriodEnd.setHours(23, 59, 59, 999);
+          
+          // Get usage data for the completed period
+          const stats = await storage.getBillingStats(subscription.tenantId);
+          
+          // Create invoice for the completed period
+          if (stats) {
+            try {
+              const invoiceNumber = `INV-${subscription.tenantId.substring(0, 8)}-${Date.now()}`;
+              await db.insert(invoices).values({
+                tenantId: subscription.tenantId,
+                subscriptionId: subscription.id,
+                invoiceNumber,
+                periodStart: subscription.currentPeriodStart,
+                periodEnd: subscription.currentPeriodEnd,
+                status: 'pending',
+                baseAmountCents: Math.round(stats.monthlyBase * 100),
+                perConsumerCents: 0,
+                consumerCount: stats.activeConsumers,
+                totalAmountCents: Math.round(stats.totalBill * 100),
+                dueDate: newPeriodEnd,
+                paidAt: null,
+              });
+              invoicesCreated++;
+              console.log(`✅ Invoice created for tenant ${subscription.tenantId}: $${stats.totalBill} (${invoiceNumber})`);
+            } catch (invoiceError) {
+              console.error(`❌ Failed to create invoice for tenant ${subscription.tenantId}:`, invoiceError);
+            }
+          }
+          
+          // Update subscription to next period and reset usage
+          await db.update(subscriptions)
+            .set({
+              currentPeriodStart: newPeriodStart,
+              currentPeriodEnd: newPeriodEnd,
+              emailsUsedThisPeriod: 0,
+              smsUsedThisPeriod: 0,
+            })
+            .where(eq(subscriptions.id, subscription.id));
+          
+          renewedCount++;
+          console.log(`✅ Subscription renewed for tenant ${subscription.tenantId}: ${newPeriodStart.toLocaleDateString()} - ${newPeriodEnd.toLocaleDateString()}`);
+        }
+      }
+      
+      const message = `Subscription renewal complete: ${renewedCount} subscriptions renewed, ${invoicesCreated} invoices created`;
+      console.log(`✅ ${message}`);
+      
+      res.json({
+        success: true,
+        message,
+        renewedCount,
+        invoicesCreated,
+      });
+    } catch (error) {
+      console.error('❌ Subscription renewal processing failed:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to process subscription renewals',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
   });
 
