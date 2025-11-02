@@ -41,6 +41,8 @@ import TenantSetup from "@/components/tenant-setup";
 import GlobalAdmin from "@/pages/global-admin";
 import EmailTest from "@/pages/email-test";
 import FixDatabase from "@/pages/fix-db";
+import Documents from "@/pages/documents";
+import SignDocument from "@/pages/sign-document";
 
 function Router() {
   const { isAuthenticated, isLoading, user, isJwtAuth } = useAuth();
@@ -216,6 +218,7 @@ function Router() {
       <Route key="agency-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
       <Route key="agency-terms" path="/terms-of-service" component={TermsOfService} />,
       ...getSmsOptInRoutes("agency-sms"),
+      <Route key="agency-sign" path="/sign/:requestId" component={SignDocument} />,
       <Route key="agency-landing" path="/agency/:agencySlug" component={AgencyLanding} />,
       <Route key="agency-login" path="/agency-login" component={AgencyLogin} />,
       <Route
@@ -254,7 +257,8 @@ function Router() {
         <Route key="agency-payments" path="/payments" component={Payments} />,
         <Route key="agency-billing" path="/billing" component={Billing} />,
         <Route key="agency-company" path="/company" component={CompanyManagement} />,
-        <Route key="agency-settings" path="/settings" component={Settings} />
+        <Route key="agency-settings" path="/settings" component={Settings} />,
+        <Route key="agency-documents" path="/documents" component={Documents} />
       );
     }
 
@@ -312,6 +316,7 @@ function Router() {
       <Route key="public-terms" path="/terms-of-service" component={TermsOfService} />,
       ...getSmsOptInRoutes("public-sms"),
       <Route key="public-fix-db" path="/fix-db" component={FixDatabase} />,
+      <Route key="public-sign" path="/sign/:requestId" component={SignDocument} />,
       ...createRouteElements(adminRoutePaths, GlobalAdmin, "public-admin"),
       <Route key="public-fallback" path="/:rest*" component={NotFound} />
     ];
@@ -340,6 +345,7 @@ function Router() {
     <Route key="auth-billing" path="/billing" component={Billing} />,
     <Route key="auth-company" path="/company" component={CompanyManagement} />,
     <Route key="auth-settings" path="/settings" component={Settings} />,
+    <Route key="auth-documents" path="/documents" component={Documents} />,
     ...createRouteElements(adminRoutePaths, GlobalAdmin, "auth-admin"),
     <Route key="auth-agency-login" path="/agency-login" component={AgencyLogin} />,
     <Route key="auth-agency-register" path="/agency-register" component={AgencyRegistration} />,
