@@ -35,6 +35,7 @@ interface FailedPayment {
   arrangementType: string;
   accountNumber?: string;
   creditor?: string;
+  lastFailureReason?: string;
 }
 
 export function PaymentSchedulingCalendar() {
@@ -318,10 +319,25 @@ export function PaymentSchedulingCalendar() {
                           </Badge>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 text-xs text-blue-100/60">
-                        <span>Next attempt: {payment.nextPaymentDate ? format(parseISO(payment.nextPaymentDate), 'MMM d, yyyy') : 'N/A'}</span>
-                        <span>•</span>
-                        <span className="capitalize">{payment.arrangementType.replace('_', ' ')}</span>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-xs text-blue-100/60">
+                          <span>Next attempt: {payment.nextPaymentDate ? format(parseISO(payment.nextPaymentDate), 'MMM d, yyyy') : 'N/A'}</span>
+                          <span>•</span>
+                          <span className="capitalize">{payment.arrangementType.replace('_', ' ')}</span>
+                        </div>
+                        {payment.lastFailureReason && (
+                          <div className="mt-2 p-2 rounded-lg bg-rose-500/10 border border-rose-400/30">
+                            <div className="flex items-start gap-2">
+                              <AlertCircle className="w-4 h-4 text-rose-300 mt-0.5 flex-shrink-0" />
+                              <div>
+                                <span className="text-xs font-semibold text-rose-200">Decline Reason:</span>
+                                <p className="text-xs text-rose-100/90 mt-0.5" data-testid={`failure-reason-${idx}`}>
+                                  {payment.lastFailureReason}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </CardContent>
                   </Card>

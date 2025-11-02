@@ -536,6 +536,7 @@ export const paymentSchedules = pgTable("payment_schedules", {
   smaxExpectedAmountCents: bigint("smax_expected_amount_cents", { mode: "number" }), // Expected payment amount from SMAX
   smaxStatus: text("smax_status"), // Status from SMAX
   failedAttempts: integer("failed_attempts").default(0),
+  lastFailureReason: text("last_failure_reason"), // Reason for the last payment failure
   lastProcessedAt: timestamp("last_processed_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

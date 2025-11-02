@@ -8620,13 +8620,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
                   processedPayments.push({ scheduleId: schedule.id, consumerId: consumer.id });
                 } else {
-                  // Payment failed - update failed attempts
+                  // Payment failed - update failed attempts and store failure reason
                   const failedAttempts = (schedule.failedAttempts || 0) + 1;
                   const scheduleStatus = failedAttempts >= 3 ? 'failed' : 'active';
+                  const failureReason = paymentResult.error || paymentResult.result_code || 'Payment declined';
 
                   await storage.updatePaymentSchedule(schedule.id, tenant.id, {
                     failedAttempts,
                     status: scheduleStatus,
+                    lastFailureReason: failureReason,
+                    lastProcessedAt: new Date(),
                   });
 
                   // Update consumer status to payment_failed
@@ -9255,6 +9258,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               arrangementType: schedule.arrangementType,
               accountNumber: account?.accountNumber,
               creditor: account?.creditor,
+              lastFailureReason: schedule.lastFailureReason || 'No reason provided',
             });
           }
         }
