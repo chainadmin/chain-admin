@@ -5525,6 +5525,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         twilioBusinessName: tenant?.twilioBusinessName || '',
         twilioCampaignId: tenant?.twilioCampaignId || '',
         customSenderEmail: tenant?.customSenderEmail || '',
+        isTrialAccount: tenant?.isTrialAccount || false,
         // Redact sensitive SMAX credentials in response
         smaxApiKey: settings?.smaxApiKey ? '••••••••' : '',
         smaxPin: settings?.smaxPin ? '••••••••' : '',

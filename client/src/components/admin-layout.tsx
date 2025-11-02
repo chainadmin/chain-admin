@@ -44,7 +44,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
   // Fetch tenant settings to check trial status
   const { data: tenantSettings } = useQuery({
-    queryKey: ["/api/tenant-settings"],
+    queryKey: ["/api/settings"],
   });
 
   // Get tenant information from either JWT or Replit auth
