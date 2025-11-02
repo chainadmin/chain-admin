@@ -315,6 +315,64 @@ export async function runMigrations() {
       }
     }
     
+    // Create document signing tables
+    console.log('Creating document signing tables...');
+    
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS signature_requests (
+          id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,
+          tenant_id VARCHAR NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          consumer_id VARCHAR NOT NULL REFERENCES consumers(id) ON DELETE CASCADE,
+          document_id VARCHAR NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+          account_id VARCHAR REFERENCES accounts(id) ON DELETE SET NULL,
+          status VARCHAR NOT NULL DEFAULT 'pending',
+          expires_at TIMESTAMP NOT NULL,
+          message TEXT,
+          consent_text TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          signed_at TIMESTAMP
+        )
+      `);
+      console.log('  ✓ signature_requests table');
+    } catch (err) {
+      console.log('  ⚠ signature_requests (already exists)');
+    }
+    
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS signed_documents (
+          id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,
+          signature_request_id VARCHAR NOT NULL REFERENCES signature_requests(id) ON DELETE CASCADE,
+          consumer_id VARCHAR NOT NULL REFERENCES consumers(id) ON DELETE CASCADE,
+          signature_data TEXT NOT NULL,
+          ip_address VARCHAR,
+          user_agent TEXT,
+          signed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      console.log('  ✓ signed_documents table');
+    } catch (err) {
+      console.log('  ⚠ signed_documents (already exists)');
+    }
+    
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS signature_audit_trail (
+          id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,
+          signature_request_id VARCHAR NOT NULL REFERENCES signature_requests(id) ON DELETE CASCADE,
+          event_type VARCHAR NOT NULL,
+          event_data JSONB,
+          ip_address VARCHAR,
+          user_agent TEXT,
+          occurred_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      console.log('  ✓ signature_audit_trail table');
+    } catch (err) {
+      console.log('  ⚠ signature_audit_trail (already exists)');
+    }
+    
     // Verify columns exist
     const result = await client.query(`
       SELECT column_name 
