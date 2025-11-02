@@ -428,6 +428,7 @@ export interface IStorage {
   getBillingStats(tenantId: string): Promise<{
     activeConsumers: number;
     monthlyBase: number;
+    addonFees: number;
     usageCharges: number;
     totalBill: number;
     nextBillDate: string;
@@ -444,6 +445,10 @@ export interface IStorage {
       included: number;
       overage: number;
       overageCharge: number;
+    };
+    addons: {
+      documentSigning: boolean;
+      documentSigningFee: number;
     };
     billingPeriod: { start: string; end: string } | null;
   }>;
@@ -2700,6 +2705,7 @@ export class DatabaseStorage implements IStorage {
   async getBillingStats(tenantId: string): Promise<{
     activeConsumers: number;
     monthlyBase: number;
+    addonFees: number;
     usageCharges: number;
     totalBill: number;
     nextBillDate: string;
@@ -2716,6 +2722,10 @@ export class DatabaseStorage implements IStorage {
       included: number;
       overage: number;
       overageCharge: number;
+    };
+    addons: {
+      documentSigning: boolean;
+      documentSigningFee: number;
     };
     billingPeriod: { start: string; end: string } | null;
   }> {
@@ -2736,10 +2746,16 @@ export class DatabaseStorage implements IStorage {
 
     const monthlyBase = dbPlan ? Number(dbPlan.monthlyPriceCents) / 100 : 0;
 
+    // Check for enabled addons
+    const enabledAddons = await this.getEnabledAddons(tenantId);
+    const hasDocumentSigning = enabledAddons.includes('document_signing');
+    const documentSigningFee = hasDocumentSigning ? 50 : 0;
+    const addonFees = documentSigningFee;
+
     let emailUsage = { used: 0, included: dbPlan?.includedEmails ?? 0, overage: 0, overageCharge: 0 };
     let smsUsage = { used: 0, included: dbPlan?.includedSms ?? 0, overage: 0, overageCharge: 0 };
     let usageCharges = 0;
-    let totalBill = monthlyBase;
+    let totalBill = monthlyBase + addonFees;
     let nextBillDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString();
     let billingPeriod: { start: string; end: string } | null = null;
 
@@ -2775,12 +2791,13 @@ export class DatabaseStorage implements IStorage {
       };
 
       usageCharges = Number((emailOverageCharge + smsOverageCharge).toFixed(2));
-      totalBill = Number((monthlyBase + usageCharges).toFixed(2));
+      totalBill = Number((monthlyBase + addonFees + usageCharges).toFixed(2));
     }
 
     return {
       activeConsumers,
       monthlyBase,
+      addonFees,
       usageCharges,
       totalBill,
       nextBillDate,
@@ -2788,6 +2805,10 @@ export class DatabaseStorage implements IStorage {
       planName: dbPlan?.name ?? null,
       emailUsage,
       smsUsage,
+      addons: {
+        documentSigning: hasDocumentSigning,
+        documentSigningFee,
+      },
       billingPeriod,
     };
   }
