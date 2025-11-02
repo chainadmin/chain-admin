@@ -42,6 +42,11 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     enabled: !isJwtAuth, // Only fetch if not JWT auth
   });
 
+  // Fetch tenant settings to check trial status
+  const { data: tenantSettings } = useQuery({
+    queryKey: ["/api/tenant-settings"],
+  });
+
   // Get tenant information from either JWT or Replit auth
   const tenantName = isJwtAuth 
     ? (user as any)?.tenantName || 'Chain'
@@ -327,6 +332,18 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
               </div>
             </div>
           </div>
+
+          {/* Trial Mode Banner */}
+          {(tenantSettings as any)?.isTrialAccount && (
+            <div className="relative z-10 border-b border-amber-400/40 bg-amber-500/20 px-6 py-3">
+              <div className="flex items-center justify-center gap-3">
+                <i className="fas fa-exclamation-triangle text-amber-300"></i>
+                <p className="text-sm font-medium text-amber-100">
+                  <strong>Trial Account</strong> - This is a view-only trial. Email sending, SMS, and payment processing are disabled. Upgrade to unlock all features.
+                </p>
+              </div>
+            </div>
+          )}
 
           <main className="relative flex-1 overflow-y-auto">
             {children}
