@@ -11929,6 +11929,230 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Document signing routes
+  // Create signature request (admin)
+  app.post('/api/signature-requests', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      // Check if document signing addon is enabled
+      const enabledAddons = await storage.getEnabledAddons(tenantId);
+      if (!enabledAddons.includes('document_signing')) {
+        return res.status(403).json({ message: "Document signing feature is not enabled for your organization" });
+      }
+
+      const { consumerId, accountId, documentId, title, description, expiresAt } = req.body;
+
+      if (!consumerId || !documentId || !title) {
+        return res.status(400).json({ message: "Consumer ID, document ID, and title are required" });
+      }
+
+      // Verify consumer belongs to this tenant
+      const consumer = await storage.getConsumer(consumerId);
+      if (!consumer || consumer.tenantId !== tenantId) {
+        return res.status(404).json({ message: "Consumer not found" });
+      }
+
+      // Verify document belongs to this tenant
+      const documents = await storage.getDocumentsByTenant(tenantId);
+      const document = documents.find(d => d.id === documentId);
+      if (!document) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+
+      // Verify account belongs to this tenant (if provided)
+      if (accountId) {
+        const account = await storage.getAccount(accountId);
+        if (!account || account.tenantId !== tenantId) {
+          return res.status(404).json({ message: "Account not found" });
+        }
+      }
+
+      const signatureRequest = await storage.createSignatureRequest({
+        tenantId,
+        consumerId,
+        accountId: accountId || null,
+        documentId,
+        title,
+        description: description || null,
+        expiresAt: expiresAt ? new Date(expiresAt) : null,
+        consentText: `By signing this document, I agree that this electronic signature is the legal equivalent of my manual signature. I consent to be legally bound by this document's terms and conditions.`,
+      });
+
+      res.json(signatureRequest);
+    } catch (error) {
+      console.error("Error creating signature request:", error);
+      res.status(500).json({ message: "Failed to create signature request" });
+    }
+  });
+
+  // Get signature requests for tenant (admin)
+  app.get('/api/signature-requests', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      // Check if document signing addon is enabled
+      const enabledAddons = await storage.getEnabledAddons(tenantId);
+      if (!enabledAddons.includes('document_signing')) {
+        return res.status(403).json({ message: "Document signing feature is not enabled for your organization" });
+      }
+
+      const requests = await storage.getSignatureRequestsByTenant(tenantId);
+      res.json(requests);
+    } catch (error) {
+      console.error("Error fetching signature requests:", error);
+      res.status(500).json({ message: "Failed to fetch signature requests" });
+    }
+  });
+
+  // Get signature request by ID (consumer or admin)
+  app.get('/api/signature-requests/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const request = await storage.getSignatureRequestById(id);
+
+      if (!request) {
+        return res.status(404).json({ message: "Signature request not found" });
+      }
+
+      // Mark as viewed
+      const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.ip;
+      const userAgent = req.headers['user-agent'];
+      await storage.markSignatureRequestViewed(id, ipAddress, userAgent);
+
+      res.json(request);
+    } catch (error) {
+      console.error("Error fetching signature request:", error);
+      res.status(500).json({ message: "Failed to fetch signature request" });
+    }
+  });
+
+  // Capture signature (consumer)
+  app.post('/api/signature-requests/:id/sign', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { signatureData, legalConsent } = req.body;
+
+      if (!signatureData || !legalConsent) {
+        return res.status(400).json({ message: "Signature data and legal consent are required" });
+      }
+
+      const request = await storage.getSignatureRequestById(id);
+      if (!request) {
+        return res.status(404).json({ message: "Signature request not found" });
+      }
+
+      const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.ip || 'unknown';
+      const userAgent = req.headers['user-agent'] || 'unknown';
+
+      // Check if request has expired
+      if (request.expiresAt && new Date(request.expiresAt) < new Date()) {
+        // Log audit trail for failed signature attempt due to expiration
+        await storage.createSignatureAuditEntry({
+          signatureRequestId: id,
+          eventType: 'signature_attempt_rejected',
+          eventData: { reason: 'expired', expiresAt: request.expiresAt },
+          ipAddress,
+          userAgent,
+        });
+        return res.status(400).json({ message: "This signature request has expired" });
+      }
+
+      const result = await storage.captureSignature({
+        signatureRequestId: id,
+        signatureData,
+        ipAddress,
+        userAgent,
+        legalConsent,
+        consentText: request.consentText || 'I agree to sign this document electronically.',
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error capturing signature:", error);
+      res.status(500).json({ message: error.message || "Failed to capture signature" });
+    }
+  });
+
+  // Decline signature (consumer)
+  app.post('/api/signature-requests/:id/decline', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+
+      if (!reason) {
+        return res.status(400).json({ message: "Decline reason is required" });
+      }
+
+      const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.ip;
+      const userAgent = req.headers['user-agent'];
+
+      const result = await storage.declineSignature(id, reason, ipAddress, userAgent);
+      res.json(result);
+    } catch (error) {
+      console.error("Error declining signature:", error);
+      res.status(500).json({ message: "Failed to decline signature" });
+    }
+  });
+
+  // Get signed documents for tenant (admin)
+  app.get('/api/signed-documents', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      // Check if document signing addon is enabled
+      const enabledAddons = await storage.getEnabledAddons(tenantId);
+      if (!enabledAddons.includes('document_signing')) {
+        return res.status(403).json({ message: "Document signing feature is not enabled for your organization" });
+      }
+
+      const documents = await storage.getSignedDocumentsByTenant(tenantId);
+      res.json(documents);
+    } catch (error) {
+      console.error("Error fetching signed documents:", error);
+      res.status(500).json({ message: "Failed to fetch signed documents" });
+    }
+  });
+
+  // Get signature audit trail (admin)
+  app.get('/api/signature-requests/:id/audit', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      // Check if document signing addon is enabled
+      const enabledAddons = await storage.getEnabledAddons(tenantId);
+      if (!enabledAddons.includes('document_signing')) {
+        return res.status(403).json({ message: "Document signing feature is not enabled for your organization" });
+      }
+
+      const { id } = req.params;
+      
+      // Verify request belongs to this tenant
+      const request = await storage.getSignatureRequestById(id);
+      if (!request || request.tenantId !== tenantId) {
+        return res.status(404).json({ message: "Signature request not found" });
+      }
+
+      const auditTrail = await storage.getSignatureAuditTrail(id);
+      res.json(auditTrail);
+    } catch (error) {
+      console.error("Error fetching audit trail:", error);
+      res.status(500).json({ message: "Failed to fetch audit trail" });
+    }
+  });
+
   // Mobile app version check endpoint
   app.get('/api/app-version', (req, res) => {
     // This would typically check a database or config file

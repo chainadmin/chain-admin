@@ -23,6 +23,9 @@ import {
   communicationSequenceSteps,
   communicationSequenceEnrollments,
   documents,
+  signatureRequests,
+  signedDocuments,
+  signatureAuditTrail,
   arrangementOptions,
   tenantSettings,
   consumerNotifications,
@@ -77,6 +80,12 @@ import {
   type InsertCommunicationSequenceEnrollment,
   type Document,
   type InsertDocument,
+  type SignatureRequest,
+  type InsertSignatureRequest,
+  type SignedDocument,
+  type InsertSignedDocument,
+  type SignatureAuditTrail,
+  type InsertSignatureAuditTrail,
   type ArrangementOption,
   type InsertArrangementOption,
   type TenantSettings,
@@ -3030,6 +3039,206 @@ export class DatabaseStorage implements IStorage {
           eq(pushDevices.pushToken, pushToken)
         )
       );
+  }
+
+  // Document signing operations
+  async createSignatureRequest(data: InsertSignatureRequest): Promise<SignatureRequest> {
+    const [request] = await db.insert(signatureRequests).values(data).returning();
+    
+    // Create audit trail entry
+    await db.insert(signatureAuditTrail).values({
+      signatureRequestId: request.id,
+      eventType: 'created',
+      eventData: { createdBy: 'admin' },
+    });
+    
+    return request;
+  }
+
+  async getSignatureRequestById(id: string): Promise<SignatureRequest | undefined> {
+    const [request] = await db.select().from(signatureRequests).where(eq(signatureRequests.id, id));
+    return request;
+  }
+
+  async getSignatureRequestsByTenant(tenantId: string): Promise<SignatureRequest[]> {
+    return await db
+      .select()
+      .from(signatureRequests)
+      .where(eq(signatureRequests.tenantId, tenantId))
+      .orderBy(desc(signatureRequests.createdAt));
+  }
+
+  async getSignatureRequestsByConsumer(consumerId: string): Promise<SignatureRequest[]> {
+    return await db
+      .select()
+      .from(signatureRequests)
+      .where(eq(signatureRequests.consumerId, consumerId))
+      .orderBy(desc(signatureRequests.createdAt));
+  }
+
+  async updateSignatureRequest(id: string, updates: Partial<SignatureRequest>): Promise<SignatureRequest> {
+    const [updated] = await db
+      .update(signatureRequests)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(signatureRequests.id, id))
+      .returning();
+    return updated;
+  }
+
+  async captureSignature(data: {
+    signatureRequestId: string;
+    signatureData: string;
+    ipAddress: string;
+    userAgent: string;
+    legalConsent: boolean;
+    consentText: string;
+  }): Promise<{ signatureRequest: SignatureRequest; signedDocument: SignedDocument }> {
+    // Get the signature request to copy data
+    const [request] = await db.select().from(signatureRequests).where(eq(signatureRequests.id, data.signatureRequestId));
+    
+    if (!request) {
+      throw new Error('Signature request not found');
+    }
+
+    if (request.status === 'signed') {
+      throw new Error('Document already signed');
+    }
+
+    if (request.status === 'expired') {
+      throw new Error('Signature request expired');
+    }
+
+    const now = new Date();
+
+    // Update signature request to signed status
+    const [updatedRequest] = await db
+      .update(signatureRequests)
+      .set({
+        status: 'signed',
+        signedAt: now,
+        signatureData: data.signatureData,
+        ipAddress: data.ipAddress,
+        userAgent: data.userAgent,
+        legalConsent: data.legalConsent,
+        consentText: data.consentText,
+        updatedAt: now,
+      })
+      .where(eq(signatureRequests.id, data.signatureRequestId))
+      .returning();
+
+    // Create signed document record
+    const [signedDoc] = await db.insert(signedDocuments).values({
+      signatureRequestId: data.signatureRequestId,
+      tenantId: request.tenantId,
+      consumerId: request.consumerId,
+      accountId: request.accountId,
+      documentId: request.documentId,
+      title: request.title,
+      signatureData: data.signatureData,
+      ipAddress: data.ipAddress,
+      userAgent: data.userAgent,
+      legalConsent: data.legalConsent,
+      consentText: data.consentText,
+      signedAt: now,
+    }).returning();
+
+    // Create audit trail entry
+    await db.insert(signatureAuditTrail).values({
+      signatureRequestId: data.signatureRequestId,
+      eventType: 'signed',
+      eventData: { signedDocumentId: signedDoc.id },
+      ipAddress: data.ipAddress,
+      userAgent: data.userAgent,
+    });
+
+    return { signatureRequest: updatedRequest, signedDocument: signedDoc };
+  }
+
+  async declineSignature(signatureRequestId: string, reason: string, ipAddress?: string, userAgent?: string): Promise<SignatureRequest> {
+    const now = new Date();
+    
+    const [updated] = await db
+      .update(signatureRequests)
+      .set({
+        status: 'declined',
+        declinedAt: now,
+        declineReason: reason,
+        updatedAt: now,
+      })
+      .where(eq(signatureRequests.id, signatureRequestId))
+      .returning();
+
+    // Create audit trail entry
+    await db.insert(signatureAuditTrail).values({
+      signatureRequestId,
+      eventType: 'declined',
+      eventData: { reason },
+      ipAddress,
+      userAgent,
+    });
+
+    return updated;
+  }
+
+  async markSignatureRequestViewed(signatureRequestId: string, ipAddress?: string, userAgent?: string): Promise<SignatureRequest> {
+    const [request] = await db.select().from(signatureRequests).where(eq(signatureRequests.id, signatureRequestId));
+    
+    if (!request || request.viewedAt) {
+      // Already viewed or doesn't exist, return as is
+      return request;
+    }
+
+    const now = new Date();
+    
+    const [updated] = await db
+      .update(signatureRequests)
+      .set({
+        status: 'viewed',
+        viewedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(signatureRequests.id, signatureRequestId))
+      .returning();
+
+    // Create audit trail entry
+    await db.insert(signatureAuditTrail).values({
+      signatureRequestId,
+      eventType: 'viewed',
+      eventData: {},
+      ipAddress,
+      userAgent,
+    });
+
+    return updated;
+  }
+
+  async getSignedDocumentsByTenant(tenantId: string): Promise<SignedDocument[]> {
+    return await db
+      .select()
+      .from(signedDocuments)
+      .where(eq(signedDocuments.tenantId, tenantId))
+      .orderBy(desc(signedDocuments.signedAt));
+  }
+
+  async getSignedDocumentsByConsumer(consumerId: string): Promise<SignedDocument[]> {
+    return await db
+      .select()
+      .from(signedDocuments)
+      .where(eq(signedDocuments.consumerId, consumerId))
+      .orderBy(desc(signedDocuments.signedAt));
+  }
+
+  async getSignatureAuditTrail(signatureRequestId: string): Promise<SignatureAuditTrail[]> {
+    return await db
+      .select()
+      .from(signatureAuditTrail)
+      .where(eq(signatureAuditTrail.signatureRequestId, signatureRequestId))
+      .orderBy(signatureAuditTrail.occurredAt);
+  }
+
+  async createSignatureAuditEntry(data: InsertSignatureAuditTrail): Promise<SignatureAuditTrail> {
+    const [entry] = await db.insert(signatureAuditTrail).values(data).returning();
+    return entry;
   }
 }
 
