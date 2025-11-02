@@ -391,6 +391,11 @@ export default function Billing() {
                     <p className="mt-2 text-2xl font-semibold text-white" data-testid="text-total-bill">
                       {formatCurrency(stats.totalBill)}
                     </p>
+                    {stats.addonFees > 0 && (
+                      <p className="mt-2 text-xs text-blue-100/70">
+                        Base {formatCurrency(stats.monthlyBase)} · Addons {formatCurrency(stats.addonFees)} · Usage {formatCurrency(stats.usageCharges)}
+                      </p>
+                    )}
                   </div>
                 </CardContent>
               </Card>

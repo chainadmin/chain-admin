@@ -28,7 +28,7 @@ import {
   type SmsTracking,
 } from "@shared/schema";
 import { db } from "./db";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, sql, desc } from "drizzle-orm";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
@@ -10499,6 +10499,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Mark invoice as paid (admin only)
+  app.post('/api/billing/invoices/:invoiceId/mark-paid', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { invoiceId } = req.params;
+
+      // Verify invoice belongs to this tenant
+      const [invoice] = await db.select().from(invoices).where(eq(invoices.id, invoiceId));
+      if (!invoice) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      if (invoice.tenantId !== tenantId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      // Mark as paid
+      const [updatedInvoice] = await db.update(invoices)
+        .set({ status: 'paid', paidAt: new Date() })
+        .where(eq(invoices.id, invoiceId))
+        .returning();
+
+      res.json(updatedInvoice);
+    } catch (error) {
+      console.error("Error marking invoice as paid:", error);
+      res.status(500).json({ message: "Failed to mark invoice as paid" });
+    }
+  });
+
   // Process subscription renewals (called by cron job)
   app.post('/api/billing/process-renewals', async (req, res) => {
     try {
@@ -10531,22 +10563,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (stats) {
             try {
               const invoiceNumber = `INV-${subscription.tenantId.substring(0, 8)}-${Date.now()}`;
-              await db.insert(invoices).values({
+              const [invoice] = await db.insert(invoices).values({
                 tenantId: subscription.tenantId,
                 subscriptionId: subscription.id,
                 invoiceNumber,
                 periodStart: subscription.currentPeriodStart,
                 periodEnd: subscription.currentPeriodEnd,
                 status: 'pending',
-                baseAmountCents: Math.round(stats.monthlyBase * 100),
+                baseAmountCents: Math.round((stats.monthlyBase + stats.addonFees) * 100),
                 perConsumerCents: 0,
                 consumerCount: stats.activeConsumers,
                 totalAmountCents: Math.round(stats.totalBill * 100),
                 dueDate: newPeriodEnd,
                 paidAt: null,
-              });
+              }).returning();
               invoicesCreated++;
               console.log(`✅ Invoice created for tenant ${subscription.tenantId}: $${stats.totalBill} (${invoiceNumber})`);
+              
+              // Send invoice email to company
+              try {
+                const tenant = await storage.getTenant(subscription.tenantId);
+                if (tenant?.email) {
+                  const periodStartStr = new Date(subscription.currentPeriodStart).toLocaleDateString();
+                  const periodEndStr = new Date(subscription.currentPeriodEnd).toLocaleDateString();
+                  const dueDate = newPeriodEnd.toLocaleDateString();
+                  
+                  const emailHtml = `
+                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                      <h2>Monthly Invoice</h2>
+                      <p>Dear ${tenant.name},</p>
+                      <p>Your monthly invoice for Chain platform services is now available.</p>
+                      
+                      <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                        <h3 style="margin-top: 0;">Invoice #${invoiceNumber}</h3>
+                        <p><strong>Billing Period:</strong> ${periodStartStr} - ${periodEndStr}</p>
+                        <p><strong>Due Date:</strong> ${dueDate}</p>
+                        <hr style="border: 0; border-top: 1px solid #ddd; margin: 15px 0;">
+                        <p><strong>Monthly Base Fee:</strong> $${stats.monthlyBase.toFixed(2)}</p>
+                        ${stats.addonFees > 0 ? `<p><strong>Add-on Fees:</strong> $${stats.addonFees.toFixed(2)}</p>` : ''}
+                        ${stats.addons.documentSigning ? `<p style="margin-left: 20px;">• Document Signing: $${stats.addons.documentSigningFee.toFixed(2)}</p>` : ''}
+                        ${stats.usageCharges > 0 ? `<p><strong>Usage Overage Charges:</strong> $${stats.usageCharges.toFixed(2)}</p>` : ''}
+                        ${stats.emailUsage.overage > 0 ? `<p style="margin-left: 20px;">• Email Overage: ${stats.emailUsage.overage} emails @ $${stats.emailUsage.overageCharge.toFixed(2)}</p>` : ''}
+                        ${stats.smsUsage.overage > 0 ? `<p style="margin-left: 20px;">• SMS Overage: ${stats.smsUsage.overage} segments @ $${stats.smsUsage.overageCharge.toFixed(2)}</p>` : ''}
+                        <hr style="border: 0; border-top: 2px solid #333; margin: 15px 0;">
+                        <p style="font-size: 18px;"><strong>Total Due:</strong> $${stats.totalBill.toFixed(2)}</p>
+                      </div>
+                      
+                      <p>This invoice is available in your billing dashboard. Log in to view details and payment history.</p>
+                      <p>Thank you for using Chain!</p>
+                    </div>
+                  `;
+                  
+                  await emailService.sendEmail({
+                    to: tenant.email,
+                    subject: `Chain Invoice ${invoiceNumber} - $${stats.totalBill.toFixed(2)} Due ${dueDate}`,
+                    html: emailHtml,
+                    tenantId: subscription.tenantId,
+                  });
+                  console.log(`📧 Invoice email sent to ${tenant.email}`);
+                }
+              } catch (emailError) {
+                console.error(`❌ Failed to send invoice email for tenant ${subscription.tenantId}:`, emailError);
+              }
             } catch (invoiceError) {
               console.error(`❌ Failed to create invoice for tenant ${subscription.tenantId}:`, invoiceError);
             }
@@ -10752,6 +10830,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching platform stats:", error);
       res.status(500).json({ message: "Failed to fetch platform stats" });
+    }
+  });
+
+  // Get all invoices across all tenants (global admin)
+  app.get('/api/admin/invoices', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { status, tenantId, limit } = req.query;
+      
+      let query = db.select({
+        invoice: invoices,
+        tenant: tenants,
+        subscription: subscriptions,
+      })
+      .from(invoices)
+      .leftJoin(tenants, eq(invoices.tenantId, tenants.id))
+      .leftJoin(subscriptions, eq(invoices.subscriptionId, subscriptions.id))
+      .orderBy(desc(invoices.createdAt));
+      
+      // Filter by status if provided
+      if (status && typeof status === 'string') {
+        query = query.where(eq(invoices.status, status)) as any;
+      }
+      
+      // Filter by tenantId if provided
+      if (tenantId && typeof tenantId === 'string') {
+        query = query.where(eq(invoices.tenantId, tenantId)) as any;
+      }
+      
+      // Limit results if provided
+      if (limit && typeof limit === 'string') {
+        const limitNum = parseInt(limit, 10);
+        if (!isNaN(limitNum) && limitNum > 0) {
+          query = query.limit(limitNum) as any;
+        }
+      }
+      
+      const results = await query;
+      
+      const invoicesWithDetails = results.map(row => ({
+        ...row.invoice,
+        tenantName: row.tenant?.name,
+        tenantSlug: row.tenant?.slug,
+        tenantEmail: row.tenant?.email,
+        planId: row.subscription?.planId,
+      }));
+      
+      res.json(invoicesWithDetails);
+    } catch (error) {
+      console.error("Error fetching all invoices:", error);
+      res.status(500).json({ message: "Failed to fetch invoices" });
     }
   });
 
@@ -11459,6 +11587,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating business configuration:", error);
       res.status(500).json({ message: "Failed to update business configuration" });
+    }
+  });
+
+  // Toggle document signing addon (platform admin or tenant admin)
+  app.post('/api/admin/tenants/:id/toggle-addon', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { addon, enabled } = req.body;
+      
+      if (!addon || typeof enabled !== 'boolean') {
+        return res.status(400).json({ message: "Addon name and enabled status are required" });
+      }
+      
+      // Currently only document_signing is supported
+      if (addon !== 'document_signing') {
+        return res.status(400).json({ message: "Invalid addon. Only 'document_signing' is currently supported." });
+      }
+      
+      const settings = await storage.getTenantSettings(id);
+      const currentAddons = settings?.enabledAddons || [];
+      
+      let updatedAddons: string[];
+      if (enabled) {
+        // Add addon if not already present
+        updatedAddons = currentAddons.includes(addon) ? currentAddons : [...currentAddons, addon];
+      } else {
+        // Remove addon
+        updatedAddons = currentAddons.filter((a: string) => a !== addon);
+      }
+      
+      // Update tenant settings
+      if (settings) {
+        await db
+          .update(tenantSettings)
+          .set({ enabledAddons: updatedAddons as any, updatedAt: new Date() })
+          .where(eq(tenantSettings.tenantId, id));
+      } else {
+        await db
+          .insert(tenantSettings)
+          .values({
+            tenantId: id,
+            enabledAddons: updatedAddons as any,
+          });
+      }
+      
+      res.json({ 
+        success: true,
+        addon,
+        enabled,
+        message: `${addon} ${enabled ? 'enabled' : 'disabled'} successfully`
+      });
+    } catch (error) {
+      console.error("Error toggling addon:", error);
+      res.status(500).json({ message: "Failed to toggle addon" });
     }
   });
 

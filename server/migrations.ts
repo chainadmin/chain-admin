@@ -318,6 +318,32 @@ export async function runMigrations() {
     // Create document signing tables
     console.log('Creating document signing tables...');
     
+    // Create invoices table if it doesn't exist
+    console.log('Creating invoices table...');
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS invoices (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          subscription_id UUID REFERENCES subscriptions(id) ON DELETE CASCADE,
+          invoice_number VARCHAR NOT NULL UNIQUE,
+          status VARCHAR DEFAULT 'pending',
+          period_start TIMESTAMP NOT NULL,
+          period_end TIMESTAMP NOT NULL,
+          base_amount_cents BIGINT NOT NULL,
+          per_consumer_cents BIGINT NOT NULL,
+          consumer_count BIGINT NOT NULL,
+          total_amount_cents BIGINT NOT NULL,
+          due_date TIMESTAMP NOT NULL,
+          paid_at TIMESTAMP,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      console.log('  ✓ invoices table');
+    } catch (err) {
+      console.log('  ⚠ invoices (already exists)');
+    }
+
     try {
       await client.query(`
         CREATE TABLE IF NOT EXISTS signature_requests (
