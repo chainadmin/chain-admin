@@ -6969,6 +6969,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid payment amount" });
       }
 
+      // Check if payment processing is enabled for this tenant (trial mode restriction)
+      const tenant = await storage.getTenant(tenantId);
+      if (!tenant) {
+        return res.status(404).json({ message: "Agency not found" });
+      }
+
+      if (!tenant.paymentProcessingEnabled) {
+        console.log('❌ Payment blocked: Payment processing disabled for this tenant (trial mode)');
+        return res.status(403).json({ 
+          success: false,
+          message: "Payment processing is currently unavailable for your account. Please contact your agency for assistance." 
+        });
+      }
+
       // Get tenant settings to check if online payments are enabled
       const settings = await storage.getTenantSettings(tenantId);
       if (!settings?.enableOnlinePayments) {
@@ -8361,6 +8375,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Check if payment is due today and schedule is active
             if (schedule.status === 'active' && schedule.nextPaymentDate === today) {
               try {
+                // Check if payment processing is enabled for this tenant (trial mode restriction)
+                if (!tenant.paymentProcessingEnabled) {
+                  console.log(`⏭️ Skipping scheduled payment for tenant with disabled payment processing: ${tenant.id} (trial mode)`);
+                  failedPayments.push({
+                    scheduleId: schedule.id,
+                    accountId: schedule.accountId,
+                    reason: 'Payment processing disabled for this account (trial mode)'
+                  });
+                  continue;
+                }
+
                 // Check if account is inactive before processing payment
                 const scheduleAccount = await storage.getAccount(schedule.accountId);
                 if (scheduleAccount && scheduleAccount.status === 'inactive') {
