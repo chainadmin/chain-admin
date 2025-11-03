@@ -347,11 +347,11 @@ export async function runMigrations() {
     try {
       await client.query(`
         CREATE TABLE IF NOT EXISTS signature_requests (
-          id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,
-          tenant_id VARCHAR NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-          consumer_id VARCHAR NOT NULL REFERENCES consumers(id) ON DELETE CASCADE,
-          document_id VARCHAR NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
-          account_id VARCHAR REFERENCES accounts(id) ON DELETE SET NULL,
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          consumer_id UUID NOT NULL REFERENCES consumers(id) ON DELETE CASCADE,
+          document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+          account_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
           status VARCHAR NOT NULL DEFAULT 'pending',
           expires_at TIMESTAMP NOT NULL,
           message TEXT,
@@ -368,9 +368,9 @@ export async function runMigrations() {
     try {
       await client.query(`
         CREATE TABLE IF NOT EXISTS signed_documents (
-          id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,
-          signature_request_id VARCHAR NOT NULL REFERENCES signature_requests(id) ON DELETE CASCADE,
-          consumer_id VARCHAR NOT NULL REFERENCES consumers(id) ON DELETE CASCADE,
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          signature_request_id UUID NOT NULL REFERENCES signature_requests(id) ON DELETE CASCADE,
+          consumer_id UUID NOT NULL REFERENCES consumers(id) ON DELETE CASCADE,
           signature_data TEXT NOT NULL,
           ip_address VARCHAR,
           user_agent TEXT,
@@ -385,8 +385,8 @@ export async function runMigrations() {
     try {
       await client.query(`
         CREATE TABLE IF NOT EXISTS signature_audit_trail (
-          id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,
-          signature_request_id VARCHAR NOT NULL REFERENCES signature_requests(id) ON DELETE CASCADE,
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          signature_request_id UUID NOT NULL REFERENCES signature_requests(id) ON DELETE CASCADE,
           event_type VARCHAR NOT NULL,
           event_data JSONB,
           ip_address VARCHAR,
