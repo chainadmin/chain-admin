@@ -59,6 +59,15 @@ export async function runMigrations() {
       console.log(`  ⚠ business_type (already exists or error)`);
     }
     
+    // Add enabled_addons column for addon billing
+    console.log('Adding enabled_addons column...');
+    try {
+      await client.query(`ALTER TABLE tenant_settings ADD COLUMN IF NOT EXISTS enabled_addons TEXT[] DEFAULT ARRAY[]::TEXT[]`);
+      console.log(`  ✓ enabled_addons`);
+    } catch (err) {
+      console.log(`  ⚠ enabled_addons (already exists or error)`);
+    }
+    
     // Fix communication_automations table - make trigger_type nullable (legacy column)
     console.log('Fixing communication_automations table...');
     try {
