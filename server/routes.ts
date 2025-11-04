@@ -5680,6 +5680,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }),
         consumerPortalSettings: z.any().optional(),
         smsThrottleLimit: z.number().min(1).max(1000).optional(),
+        minimumMonthlyPayment: z.number().min(0).optional(),
+        blockedAccountStatuses: z.array(z.string()).optional(),
+        businessType: z.string().optional(), // Only platform_admin can change this
         // Email configuration per tenant
         customSenderEmail: z.string().email().nullable().optional().or(z.literal('')),
         // Twilio configuration per tenant
@@ -5705,6 +5708,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       const validatedData = settingsSchema.parse(req.body);
+      
+      // Authorization check: Only platform_admin can change businessType
+      if (validatedData.businessType !== undefined && req.user.role !== 'platform_admin') {
+        return res.status(403).json({ 
+          message: "Only global administrators can change the business type" 
+        });
+      }
 
       // Separate Twilio and email settings from other settings
       const { 
@@ -5751,6 +5761,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           twilioCampaignId: twilioCampaignId || null,
           customSenderEmail: customSenderEmail || null,
         });
+      }
+      
+      // Update tenant businessType if provided (already authorized above)
+      if (validatedData.businessType !== undefined) {
+        await db
+          .update(tenants)
+          .set({ businessType: validatedData.businessType })
+          .where(eq(tenants.id, tenantId));
+        console.log(`✅ Updated tenant businessType to: ${validatedData.businessType}`);
       }
 
       // Update tenant settings table with other settings

@@ -334,7 +334,12 @@ export default function Settings() {
   };
 
   const handleSaveSettings = () => {
-    updateSettingsMutation.mutate(localSettings);
+    // Filter out businessType for non-admin users
+    const settingsToSave = { ...localSettings };
+    if (authUser?.role !== 'platform_admin' && settingsToSave.businessType !== undefined) {
+      delete settingsToSave.businessType;
+    }
+    updateSettingsMutation.mutate(settingsToSave);
   };
 
   const handleDocumentUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -770,35 +775,37 @@ export default function Settings() {
                   </p>
                 </CardHeader>
                 <CardContent className="space-y-6 text-sm text-blue-100/80">
-                  {/* Business Type Selection */}
-                  <div className="space-y-4 border-b border-white/10 pb-6">
-                    <div>
-                      <Label className="text-base font-medium text-white">Business Type</Label>
-                      <p className="text-sm text-blue-100/70">
-                        Select your business type to customize available features and subscription plans
-                      </p>
+                  {/* Business Type Selection - Global Admins Only */}
+                  {authUser?.role === 'platform_admin' && (
+                    <div className="space-y-4 border-b border-white/10 pb-6">
+                      <div>
+                        <Label className="text-base font-medium text-white">Business Type</Label>
+                        <p className="text-sm text-blue-100/70">
+                          Select your business type to customize available features and subscription plans
+                        </p>
+                      </div>
+                      <Select
+                        value={localSettings?.businessType || 'call_center'}
+                        onValueChange={(value) => handleSettingsUpdate('businessType', value)}
+                      >
+                        <SelectTrigger className={selectTriggerClasses} data-testid="select-business-type">
+                          <SelectValue placeholder="Select business type" />
+                        </SelectTrigger>
+                        <SelectContent className="border-white/10 bg-[#0f172a] text-blue-50">
+                          <SelectItem value="call_center">Call Center / Debt Collection</SelectItem>
+                          <SelectItem value="property_management">Property Management</SelectItem>
+                          <SelectItem value="subscription_provider">Subscription Provider</SelectItem>
+                          <SelectItem value="freelancer_consultant">Freelancer / Consultant</SelectItem>
+                          <SelectItem value="billing_service">Billing / Service Company</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <div className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-3">
+                        <p className="text-xs text-amber-200">
+                          <strong>Note:</strong> Changing your business type will update available subscription plans and features. SMAX integration is only available for Call Centers.
+                        </p>
+                      </div>
                     </div>
-                    <Select
-                      value={localSettings?.businessType || 'call_center'}
-                      onValueChange={(value) => handleSettingsUpdate('businessType', value)}
-                    >
-                      <SelectTrigger className={selectTriggerClasses} data-testid="select-business-type">
-                        <SelectValue placeholder="Select business type" />
-                      </SelectTrigger>
-                      <SelectContent className="border-white/10 bg-[#0f172a] text-blue-50">
-                        <SelectItem value="call_center">Call Center / Debt Collection</SelectItem>
-                        <SelectItem value="property_management">Property Management</SelectItem>
-                        <SelectItem value="subscription_provider">Subscription Provider</SelectItem>
-                        <SelectItem value="freelancer_consultant">Freelancer / Consultant</SelectItem>
-                        <SelectItem value="billing_service">Billing / Service Company</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <div className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-3">
-                      <p className="text-xs text-amber-200">
-                        <strong>Note:</strong> Changing your business type will update available subscription plans and features. SMAX integration is only available for Call Centers.
-                      </p>
-                    </div>
-                  </div>
+                  )}
                   
                   {/* Custom Agency URL Section */}
                   <div className="space-y-4 border-b pb-6">
@@ -1121,31 +1128,6 @@ export default function Settings() {
                       checked={localSettings?.allowSettlementRequests ?? true}
                       onCheckedChange={(checked) => handleSettingsUpdate('allowSettlementRequests', checked)}
                     />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="minimumMonthlyPayment">Minimum Monthly Payment Amount</Label>
-                    <p className="text-sm text-blue-100/70">
-                      The minimum monthly payment amount for payment arrangements (applies to all accounts)
-                    </p>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-100/60">$</span>
-                      <Input
-                        id="minimumMonthlyPayment"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        placeholder="50.00"
-                        value={localSettings?.minimumMonthlyPayment ? (localSettings.minimumMonthlyPayment / 100).toFixed(2) : ''}
-                        onChange={(e) => {
-                          const dollars = parseFloat(e.target.value) || 0;
-                          const cents = Math.round(dollars * 100);
-                          handleSettingsUpdate('minimumMonthlyPayment', cents);
-                        }}
-                        className={cn(inputClasses, "pl-8")}
-                        data-testid="input-minimum-monthly-payment"
-                      />
-                    </div>
                   </div>
                 </CardContent>
                 {hasUnsavedChanges && (
@@ -1895,6 +1877,57 @@ export default function Settings() {
             </TabsContent>
 
             <TabsContent value="arrangements" className="space-y-6">
+              {/* Minimum Monthly Payment */}
+              <Card className={cardBaseClasses}>
+                <CardHeader className="text-white">
+                  <CardTitle className="text-xl font-semibold text-white">Arrangement Settings</CardTitle>
+                  <p className="text-sm text-blue-100/70">
+                    Configure global settings that apply to all payment arrangements
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-4 text-sm text-blue-100/80">
+                  <div className="space-y-2">
+                    <Label htmlFor="minimumMonthlyPayment" className="text-base font-medium text-white">Minimum Monthly Payment Amount</Label>
+                    <p className="text-sm text-blue-100/70">
+                      The minimum monthly payment amount for payment arrangements (applies to all accounts)
+                    </p>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-100/60">$</span>
+                      <Input
+                        id="minimumMonthlyPayment"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="50.00"
+                        value={localSettings?.minimumMonthlyPayment ? (localSettings.minimumMonthlyPayment / 100).toFixed(2) : ''}
+                        onChange={(e) => {
+                          const dollars = parseFloat(e.target.value) || 0;
+                          const cents = Math.round(dollars * 100);
+                          handleSettingsUpdate('minimumMonthlyPayment', cents);
+                        }}
+                        className={cn(inputClasses, "pl-8")}
+                        data-testid="input-minimum-monthly-payment"
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+                {hasUnsavedChanges && (
+                  <CardFooter className="border-t border-white/10 pt-6">
+                    <Button
+                      onClick={handleSaveSettings}
+                      disabled={updateSettingsMutation.isPending}
+                      className={cn(
+                        "ml-auto rounded-xl bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-6 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 transition hover:from-sky-400/80 hover:to-indigo-400/80",
+                        updateSettingsMutation.isPending && "opacity-60",
+                      )}
+                    >
+                      {updateSettingsMutation.isPending ? "Saving..." : "Save changes"}
+                    </Button>
+                  </CardFooter>
+                )}
+              </Card>
+
+              {/* Payment Arrangement Options */}
               <Card className={cardBaseClasses}>
                 <CardHeader className="text-white">
                   <div className="flex items-center justify-between gap-4">

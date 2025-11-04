@@ -15,6 +15,7 @@ The frontend uses React with TypeScript, built with shadcn/ui components on Radi
 - **Frontend**: React, TypeScript, Vite, TanStack Query, Wouter.
 - **Backend**: Express.js with TypeScript, RESTful API, layered architecture, Drizzle ORM, middleware for logging, error handling, and authentication.
 - **Authentication**: Replit's OIDC integration with Passport.js for platform users, and email/date of birth verification with JWT for mobile consumer authentication, including biometric login support. Multi-tenant user isolation is enforced.
+- **Authorization**: Role-based access controls with platform_admin privileges for Business Type configuration. Frontend UI gating and backend enforcement prevent unauthorized modifications. Non-admin payloads automatically filter restricted fields.
 - **Multi-Tenancy**: Application-level tenant isolation with slug-based routing and tenant-level data filtering.
 - **Subscription Billing**: Supports defined tiers, email/SMS limits, overage pricing, and segment-based SMS usage tracking.
 - **Email Sending**: Uses agency-branded sender addresses for improved deliverability and integrates with Postmark for professional templates and tracking.
