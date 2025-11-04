@@ -7155,7 +7155,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // With cardref, the token goes in the number field
           usaepayPayload.creditcard = {
             number: paymentToken,
-            cvc: cvv  // CVV can be included for additional verification
+            cvc: cvv,  // CVV can be included for additional verification
+            cardholder: cardName,
+            avs_street: "",
+            avs_zip: zipCode || ""
           };
         } else {
           // Use card directly
@@ -8475,6 +8478,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   description: `Scheduled ${schedule.arrangementType} payment`,
                   source: {
                     key: paymentMethod.paymentToken
+                  },
+                  billingAddress: {
+                    firstName: paymentMethod.cardholderName?.split(' ')[0] || '',
+                    lastName: paymentMethod.cardholderName?.split(' ').slice(1).join(' ') || '',
+                    zip: paymentMethod.billingZip || '',
+                    street: '',
+                    city: ''
                   }
                 };
 
