@@ -2736,26 +2736,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (campaign.sendToAllNumbers && consumer.additionalData) {
           const additionalData = consumer.additionalData as Record<string, any>;
           
-          // Common phone field names to check
-          const phoneFieldNames = [
-            'phone2', 'phone_2', 'phone3', 'phone_3',
-            'mobile', 'cell', 'cellphone', 'cell_phone',
-            'alternate_phone', 'alt_phone', 'alternate', 
-            'home_phone', 'work_phone', 'business_phone',
-            'secondary_phone', 'other_phone'
-          ];
-          
-          // Extract phone numbers from additional data
-          for (const fieldName of phoneFieldNames) {
-            const value = additionalData[fieldName];
-            if (value && typeof value === 'string' && value.trim()) {
-              phones.push(value.trim());
+          // Iterate through ALL fields (case-insensitive) to catch any phone field
+          // This matches the SMAX phone extraction logic
+          for (const [key, value] of Object.entries(additionalData)) {
+            const lowerKey = key.toLowerCase();
+            // Check if field name contains 'phone'
+            if (lowerKey.includes('phone') && value && typeof value === 'string') {
+              const trimmed = value.trim();
+              if (trimmed) {
+                // Validate: phone numbers should have at least 10 digits
+                const normalized = trimmed.replace(/\D/g, '');
+                if (normalized.length >= 10) {
+                  phones.push(trimmed);
+                }
+              }
             }
           }
         }
         
-        // Return unique phone numbers only
-        return Array.from(new Set(phones));
+        // Return unique phone numbers only (deduplicate by normalized digits)
+        const uniquePhones = new Map<string, string>();
+        for (const phone of phones) {
+          const normalized = phone.replace(/\D/g, '');
+          if (!uniquePhones.has(normalized)) {
+            uniquePhones.set(normalized, phone);
+          }
+        }
+        return Array.from(uniquePhones.values());
       };
 
       const processedMessages = targetedConsumers
