@@ -2789,9 +2789,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         (async () => {
           try {
             const smsResults = await smsService.sendBulkSmsCampaign(processedMessages, tenantId, campaign.id);
-            
+
             // Update campaign metrics from tracking records (more accurate than send results)
-            await updateSmsCampaignMetrics(campaign.id);
+            await updateSmsCampaignMetrics(campaign.id, { tenantId });
 
             // Mark campaign as completed
             await storage.updateSmsCampaign(campaign.id, {
@@ -2820,7 +2820,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         })();
       } else {
-        // No messages to send, release lock immediately
+        // No messages to send - mark as completed and release lock immediately
+        await storage.updateSmsCampaign(campaign.id, {
+          status: 'completed',
+          totalRecipients: 0,
+          totalSent: 0,
+          totalErrors: 0,
+          totalDelivered: 0,
+          totalOptOuts: 0,
+          completedAt: new Date(),
+        });
+        console.log(`ℹ️ SMS campaign "${campaign.name}" had no recipients. Marking as completed.`);
         campaignProcessingLocks.delete(id);
       }
 
@@ -11714,7 +11724,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const campaignId = trackingInfo.tracking.campaignId;
         if (campaignId) {
           try {
-            await updateSmsCampaignMetrics(campaignId);
+            await updateSmsCampaignMetrics(campaignId, {
+              tenantId,
+              ensureStatus: true,
+            });
           } catch (error) {
             console.error('Error updating SMS campaign metrics:', error);
           }
@@ -12020,10 +12033,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }
 
-  async function updateSmsCampaignMetrics(campaignId: string) {
+  async function updateSmsCampaignMetrics(
+    campaignId: string,
+    options: { tenantId?: string | null; ensureStatus?: boolean } = {}
+  ) {
     try {
       console.log(`🔄 Updating SMS campaign ${campaignId} metrics from tracking records`);
-      
+
       // Use SQL aggregation to efficiently count by status
       const metrics = await getSmsCampaignMetrics(campaignId);
       
@@ -12041,6 +12057,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalErrors: metrics.totalErrors,
         totalOptOuts: metrics.totalOptOuts
       });
+
+      if (options.ensureStatus) {
+        const tenantId = options.tenantId ?? null;
+        const campaign = tenantId
+          ? await storage.getSmsCampaignById(campaignId, tenantId)
+          : storage.getSmsCampaignByIdAdmin
+            ? await storage.getSmsCampaignByIdAdmin(campaignId)
+            : undefined;
+
+        if (campaign) {
+          const totalRecipients = campaign.totalRecipients || 0;
+          const progressCount = metrics.totalSent + metrics.totalErrors;
+
+          if (
+            totalRecipients > 0 &&
+            progressCount >= totalRecipients &&
+            !['completed', 'failed'].includes((campaign.status || '').toLowerCase())
+          ) {
+            await storage.updateSmsCampaign(campaignId, {
+              status: 'completed',
+              completedAt: campaign.completedAt || new Date(),
+              totalSent: metrics.totalSent,
+              totalDelivered: metrics.totalDelivered,
+              totalErrors: metrics.totalErrors,
+              totalOptOuts: metrics.totalOptOuts,
+            });
+
+            console.log(
+              `✅ Auto-completed SMS campaign ${campaignId} after webhook progress reached ${progressCount}/${totalRecipients}`
+            );
+          }
+        }
+      }
     } catch (error) {
       console.error('❌ Error updating SMS campaign metrics:', error);
     }
