@@ -2788,34 +2788,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (processedMessages.length > 0) {
         (async () => {
           try {
+            console.log(`📤 Starting background SMS send for campaign ${campaign.id}: ${processedMessages.length} messages`);
+            
             const smsResults = await smsService.sendBulkSmsCampaign(processedMessages, tenantId, campaign.id);
+            console.log(`✅ Bulk send completed for campaign ${campaign.id}: ${smsResults.totalSent} sent, ${smsResults.totalFailed} failed`);
 
             // Update campaign metrics from tracking records (more accurate than send results)
-            await updateSmsCampaignMetrics(campaign.id, { tenantId });
+            console.log(`🔄 Updating campaign ${campaign.id} metrics from tracking records...`);
+            await updateSmsCampaignMetrics(campaign.id, { tenantId, ensureStatus: true });
+            console.log(`✅ Campaign ${campaign.id} metrics updated (with auto-completion check)`);
 
-            // Mark campaign as completed
-            await storage.updateSmsCampaign(campaign.id, {
+            // Mark campaign as completed - CRITICAL: This must succeed
+            console.log(`🏁 Marking campaign ${campaign.id} as completed...`);
+            const completedCampaign = await storage.updateSmsCampaign(campaign.id, {
               status: 'completed',
               totalRecipients: processedMessages.length,
               completedAt: new Date(),
             });
-
+            console.log(`✅ Campaign ${campaign.id} marked as completed successfully`);
             console.log(
               `✅ SMS campaign "${campaign.name}" completed: ${smsResults.totalSent} sent, ${smsResults.totalFailed} failed`
             );
           } catch (error) {
-            console.error(`Error in background SMS campaign send for ${campaign.id}:`, error);
+            console.error(`❌ Error in background SMS campaign send for ${campaign.id}:`, error);
+            console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+            
             // Mark campaign as failed
             try {
+              console.log(`⚠️ Attempting to mark campaign ${campaign.id} as failed...`);
               await storage.updateSmsCampaign(campaign.id, {
                 status: 'failed',
                 completedAt: new Date(),
               });
+              console.log(`✅ Campaign ${campaign.id} marked as failed`);
             } catch (updateError) {
-              console.error('Error updating campaign status after failure:', updateError);
+              console.error(`❌ CRITICAL: Could not update campaign ${campaign.id} status after failure:`, updateError);
             }
           } finally {
             // Release the processing lock
+            console.log(`🔓 Releasing processing lock for campaign ${campaign.id}`);
             campaignProcessingLocks.delete(id);
           }
         })();
