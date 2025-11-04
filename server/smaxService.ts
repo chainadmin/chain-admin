@@ -301,6 +301,14 @@ class SmaxService {
         paymentData
       );
 
+      // Check for errors in the result - SMAX can return state='SUCCESS' with errors nested inside
+      if (result.result?.Error || result.Error) {
+        const errorMsg = result.result?.Error?.error || result.Error?.error || JSON.stringify(result);
+        console.error('❌ SMAX payment insert failed with error:', errorMsg);
+        console.error('Full SMAX response:', JSON.stringify(result, null, 2));
+        return false;
+      }
+
       console.log('✅ SMAX payment inserted successfully:', result);
       return result.state === 'SUCCESS';
     } catch (error) {
