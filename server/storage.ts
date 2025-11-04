@@ -375,6 +375,7 @@ export interface IStorage {
   
   // Payment operations
   getPaymentsByTenant(tenantId: string): Promise<(Payment & { consumerName?: string; consumerEmail?: string; accountCreditor?: string })[]>;
+  getPaymentById(id: string, tenantId: string): Promise<Payment | null>;
   createPayment(payment: InsertPayment): Promise<Payment>;
   deletePayment(id: string, tenantId: string): Promise<void>;
   bulkDeletePayments(ids: string[], tenantId: string): Promise<number>;
@@ -2175,6 +2176,16 @@ export class DatabaseStorage implements IStorage {
       consumerEmail: row.consumers?.email || undefined,
       accountCreditor: row.accounts?.creditor || undefined,
     }));
+  }
+
+  async getPaymentById(id: string, tenantId: string): Promise<Payment | null> {
+    const [payment] = await db
+      .select()
+      .from(payments)
+      .where(and(eq(payments.id, id), eq(payments.tenantId, tenantId)))
+      .limit(1);
+    
+    return payment || null;
   }
 
   async createPayment(payment: InsertPayment): Promise<Payment> {

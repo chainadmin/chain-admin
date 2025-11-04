@@ -10335,6 +10335,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Manually sync payment to SMAX
+  app.post('/api/payments/:id/sync-to-smax', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const paymentId = req.params.id;
+      
+      const payment = await storage.getPaymentById(paymentId, tenantId);
+      if (!payment) {
+        return res.status(404).json({ message: "Payment not found" });
+      }
+
+      if (!payment.accountId) {
+        return res.status(400).json({ message: "Payment has no associated account" });
+      }
+
+      const account = await storage.getAccount(payment.accountId);
+      if (!account || account.tenantId !== tenantId) {
+        return res.status(404).json({ message: "Account not found" });
+      }
+
+      if (!account.filenumber) {
+        return res.status(400).json({ message: "Account has no SMAX filenumber - cannot sync" });
+      }
+
+      const consumer = await storage.getConsumer(payment.consumerId);
+      if (!consumer) {
+        return res.status(404).json({ message: "Consumer not found" });
+      }
+
+      console.log('🔄 Manually syncing payment to SMAX:', {
+        paymentId: payment.id,
+        filenumber: account.filenumber,
+        amount: payment.amountCents / 100,
+        transactionId: payment.transactionId
+      });
+
+      const { smaxService } = await import('./smaxService');
+      
+      const processorResponse = payment.processorResponse 
+        ? (typeof payment.processorResponse === 'string' 
+          ? JSON.parse(payment.processorResponse) 
+          : payment.processorResponse)
+        : {};
+
+      const smaxPaymentData = smaxService.createSmaxPaymentData({
+        filenumber: account.filenumber,
+        paymentamount: payment.amountCents / 100,
+        paymentdate: payment.processedAt 
+          ? new Date(payment.processedAt).toISOString().split('T')[0]
+          : new Date(payment.createdAt).toISOString().split('T')[0],
+        payorname: `${consumer.firstName} ${consumer.lastName}`,
+        paymentmethod: 'CREDIT CARD',
+        cardtype: processorResponse.cardtype || 'Unknown',
+        cardLast4: processorResponse.card?.last4 || payment.notes?.match(/ending in (\d{4})/)?.[1] || '',
+        transactionid: payment.transactionId || undefined,
+      });
+
+      const smaxSuccess = await smaxService.insertPayment(tenantId, smaxPaymentData);
+      
+      if (smaxSuccess) {
+        console.log('✅ Payment manually synced to SMAX successfully');
+        res.json({ 
+          success: true, 
+          message: 'Payment synced to SMAX successfully' 
+        });
+      } else {
+        console.log('❌ Failed to manually sync payment to SMAX');
+        res.status(500).json({ 
+          success: false, 
+          message: 'Failed to sync payment to SMAX - please check SMAX configuration' 
+        });
+      }
+    } catch (error) {
+      console.error("Error manually syncing payment to SMAX:", error);
+      res.status(500).json({ message: "Failed to sync payment to SMAX" });
+    }
+  });
+
   // Billing endpoints
   app.get('/api/billing/subscription', authenticateUser, async (req: any, res) => {
     try {
