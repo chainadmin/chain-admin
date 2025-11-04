@@ -5843,6 +5843,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
               balanceCents: newBalanceCents,
             });
             
+            // Extract phone numbers from SMAX and store in consumer additionalData
+            // SMAX may have multiple phone fields: phone1, phone2, phone3, homephone, cellphone, workphone, etc.
+            const consumer = await storage.getConsumer(account.consumerId);
+            if (consumer && smaxAccountData) {
+              const existingData = (consumer.additionalData || {}) as Record<string, any>;
+              const updatedData = { ...existingData };
+              let phoneNumbersUpdated = false;
+              
+              // Collect all phone numbers with normalization and deduplication
+              const phoneNumbers = new Map<string, string>(); // normalized -> original
+              
+              // Iterate through ALL SMAX fields (case-insensitive) to catch any phone field
+              for (const [key, value] of Object.entries(smaxAccountData)) {
+                const lowerKey = key.toLowerCase();
+                // Check if field name contains 'phone' (catches phone1, homephone, cell_phone, etc.)
+                if (lowerKey.includes('phone') && value && typeof value === 'string') {
+                  const trimmed = value.trim();
+                  if (trimmed) {
+                    // Normalize phone number: keep only digits for deduplication check
+                    const normalized = trimmed.replace(/\D/g, '');
+                    if (normalized.length >= 10) { // Valid phone numbers have at least 10 digits
+                      // Store with normalized key to prevent duplicates
+                      const normalizedKey = lowerKey.replace(/[_\s]/g, '');
+                      if (!phoneNumbers.has(normalized)) {
+                        phoneNumbers.set(normalized, trimmed);
+                        updatedData[normalizedKey] = trimmed;
+                        phoneNumbersUpdated = true;
+                      }
+                    }
+                  }
+                }
+              }
+              
+              // Update consumer if any phone numbers were found
+              if (phoneNumbersUpdated) {
+                await storage.updateConsumer(consumer.id, {
+                  additionalData: updatedData
+                });
+                console.log(`📞 Updated ${phoneNumbers.size} unique phone number(s) from SMAX for consumer ${consumer.id}`);
+              }
+            }
+            
             syncResults.synced++;
             console.log(`✅ Synced account ${account.accountNumber}: Balance updated to $${smaxAccountData.balance}`);
           } else {
