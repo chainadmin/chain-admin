@@ -10383,6 +10383,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           : payment.processorResponse)
         : {};
 
+      // Get the saved payment method for this consumer to retrieve the token
+      const paymentMethods = await storage.getPaymentMethodsByConsumer(payment.consumerId, tenantId);
+      const savedPaymentMethod = paymentMethods.length > 0 ? paymentMethods[0] : null;
+      
+      // Extract card details from processor response
+      const cardLast4 = processorResponse.card?.last4 || payment.notes?.match(/ending in (\d{4})/)?.[1] || '';
+      const cardExpiryMatch = payment.notes?.match(/(\d{2})\/(\d{2,4})/);
+      
+      console.log('💳 Payment method details for SMAX sync:', {
+        hasSavedMethod: !!savedPaymentMethod,
+        paymentToken: savedPaymentMethod?.paymentToken ? `${savedPaymentMethod.paymentToken.substring(0, 8)}...` : 'none',
+        cardLast4,
+        cardExpiry: cardExpiryMatch ? `${cardExpiryMatch[1]}/${cardExpiryMatch[2]}` : 'none'
+      });
+
       const smaxPaymentData = smaxService.createSmaxPaymentData({
         filenumber: account.filenumber,
         paymentamount: payment.amountCents / 100,
@@ -10391,9 +10406,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           : new Date(payment.createdAt).toISOString().split('T')[0],
         payorname: `${consumer.firstName} ${consumer.lastName}`,
         paymentmethod: 'CREDIT CARD',
-        cardtype: processorResponse.cardtype || 'Unknown',
-        cardLast4: processorResponse.card?.last4 || payment.notes?.match(/ending in (\d{4})/)?.[1] || '',
+        cardtype: processorResponse.cardtype || savedPaymentMethod?.cardBrand || 'Unknown',
+        cardLast4: cardLast4,
         transactionid: payment.transactionId || undefined,
+        // CRITICAL: Pass the USAePay token so SMAX can use it for future payments
+        cardtoken: savedPaymentMethod?.paymentToken || undefined,
+        cardholdername: savedPaymentMethod?.cardholderName || undefined,
+        billingzip: savedPaymentMethod?.billingZip || undefined,
+        cardexpirationmonth: cardExpiryMatch?.[1] || undefined,
+        cardexpirationyear: cardExpiryMatch?.[2] || undefined,
       });
 
       const smaxSuccess = await smaxService.insertPayment(tenantId, smaxPaymentData);
