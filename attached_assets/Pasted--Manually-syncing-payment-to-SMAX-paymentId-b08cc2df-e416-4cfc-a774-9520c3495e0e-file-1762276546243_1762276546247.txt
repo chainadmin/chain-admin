@@ -1,0 +1,67 @@
+🔄 Manually syncing payment to SMAX: {
+  paymentId: 'b08cc2df-e416-4cfc-a774-9520c3495e0e',
+  filenumber: '740711',
+  amount: 50,
+  transactionId: '4181390324'
+}
+    '  "checkaddress": "",\n' +
+📤 Sending payment to SMAX: {
+  filenumber: '740711',
+  amount: '50.00',
+  method: 'CREDIT CARD',
+  baseUrl: 'https://api.smaxcollectionsoftware.com:8000',
+    '  "checkcity": "",\n' +
+    '  "checkstate": "",\n' +
+  pinFirst3: 'Way',
+    '  "cardexpirationmonth": "",\n' +
+    '  "checkzip": "",\n' +
+  paymentData: '{\n' +
+  hasWhitespace: { apiKey: false, pin: false }
+🔐 SMAX login attempt: {
+    '  "cardexpirationyear": "",\n' +
+    '  "cardtype": "Unknown",\n' +
+}
+    '  "cardexpirationdate": "",\n' +
+  baseUrl: 'https://api.smaxcollectionsoftware.com:8000',
+    '  "cardnumber": "XXXX-XXXX-XXXX-9034",\n' +
+🔍 SMAX auth response: {
+  apiKeyLength: 20,
+    '  "threedigitnumber": "XXX",\n' +
+    '  "paymentamount": "50.00",\n' +
+    '  "filenumber": "740711",\n' +
+  pinLength: 8,
+    '  "acceptedfees": "0",\n' +
+    '  "paymentdate": "2025-11-03",\n' +
+  apiKeyFirst3: 'W4t',
+    '  "printed": "false",\n' +
+    '  "payorname": "Robert Parker",\n' +
+    '  "invoice": "4181390324"\n' +
+    '  "paymentmethod": "CREDIT CARD",\n' +
+    '}'
+    '  "paymentstatus": "COMPLETED",\n' +
+}
+    '  "typeofpayment": "Online",\n' +
+    '  "checkaccountnumber": "",\n' +
+  "result": {
+    '  "checkroutingnumber": "",\n' +
+    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6ZmFsc2UsImlhdCI6MTc2MjI3NjQ3MCwianRpIjoiNTJiYjI0NjMtMTllNi00ZmYyLWI4MWItMTVhYWE2YTNjNDMzIiwidHlwZSI6ImFjY2VzcyIsInN1YiI6Ilc0dGVxZllYN2ZiRW5STUFkdUNPIiwibmJmIjoxNzYyMjc2NDcwLCJjc3JmIjoiNTdjNzg4NmQtMTdkZS00YjhlLWE2ZTUtZDQxZGY5ODUyNTQwIiwiZXhwIjoxNzYyMjgwMDcwLCJwaW4iOiJXYXlQb2ludCJ9.7T3MoxWD2Ppz95RjLbWJmiHk2yo8Jx7-mwtVF58hk54"
+    '  "checkaccounttype": "",\n' +
+  },
+  "state": "SUCCESS"
+}
+✅ Token found in result.access_token
+📨 [REQUEST] GET / {
+  origin: 'none',
+  contentType: 'none',
+  userAgent: 'Mozilla/5.0 (X11; U; FreeBSD x86_64; en-US) AppleW'
+}
+❌ Failed to manually sync payment to SMAX
+❌ SMAX payment insert failed with error: (1146, "Table 'collectionsmax.api_payments' doesn't exist")
+Full SMAX response: {
+  "result": {
+    "Error": {
+      "error": "(1146, \"Table 'collectionsmax.api_payments' doesn't exist\")"
+    }
+  },
+  "state": "SUCCESS"
+}
