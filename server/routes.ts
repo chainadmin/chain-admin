@@ -6352,6 +6352,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Arrangement Calculation Engine
+  const calculateArrangementDetails = (option: any, balanceCents: number, minimumMonthlyPayment: number = 5000) => {
+    const calculated: any = {
+      ...option,
+      calculatedMonthlyPayment: null,
+      calculatedTotalAmount: balanceCents,
+      calculatedTermMonths: null,
+      calculatedPayoffAmount: null,
+      calculatedPayoffPercentage: null,
+    };
+
+    switch (option.planType) {
+      case "range":
+        // Use the minimum monthly payment or calculate based on max term
+        const minPayment = Math.max(option.monthlyPaymentMin || 0, minimumMonthlyPayment);
+        const maxPayment = option.monthlyPaymentMax || balanceCents;
+        const maxTerm = option.maxTermMonths || 12;
+        
+        // Calculate minimum payment to pay off balance within max term
+        const calculatedMinimum = Math.ceil(balanceCents / maxTerm);
+        
+        // Use the greater of: configured minimum, global minimum, or calculated minimum
+        // But clamp to the configured maximum to respect plan constraints
+        const unclamped = Math.max(minPayment, calculatedMinimum);
+        calculated.calculatedMonthlyPayment = Math.min(unclamped, maxPayment);
+        
+        // Verify the payment is within bounds, otherwise this option is not viable
+        if (calculated.calculatedMonthlyPayment < minPayment || calculated.calculatedMonthlyPayment > maxPayment) {
+          return null; // This option doesn't work for this balance
+        }
+        
+        // Calculate term and verify it doesn't exceed the max term
+        calculated.calculatedTermMonths = Math.ceil(balanceCents / calculated.calculatedMonthlyPayment);
+        if (calculated.calculatedTermMonths > maxTerm) {
+          return null; // Payment would take too long to complete, option not viable
+        }
+        break;
+
+      case "fixed_monthly":
+        // Ensure fixed monthly payment respects the tenant minimum
+        if (option.fixedMonthlyPayment && option.fixedMonthlyPayment >= minimumMonthlyPayment) {
+          calculated.calculatedMonthlyPayment = option.fixedMonthlyPayment;
+          calculated.calculatedTermMonths = Math.ceil(balanceCents / option.fixedMonthlyPayment);
+        } else {
+          return null; // Fixed payment is below tenant minimum, option not viable
+        }
+        break;
+
+      case "pay_in_full":
+        calculated.calculatedPayoffAmount = balanceCents;
+        calculated.calculatedTotalAmount = balanceCents;
+        break;
+
+      case "settlement":
+        // Calculate settlement amount based on percentage
+        if (option.payoffPercentageBasisPoints) {
+          const percentage = option.payoffPercentageBasisPoints / 10000; // Convert basis points to decimal
+          calculated.calculatedPayoffAmount = Math.round(balanceCents * percentage);
+          calculated.calculatedPayoffPercentage = percentage * 100;
+          calculated.calculatedTotalAmount = calculated.calculatedPayoffAmount;
+        }
+        break;
+
+      case "one_time_payment":
+        // One-time payment uses the minimum specified or full balance
+        calculated.calculatedPayoffAmount = option.oneTimePaymentMin || balanceCents;
+        calculated.calculatedTotalAmount = calculated.calculatedPayoffAmount;
+        break;
+
+      case "custom_terms":
+        // Custom terms don't have specific calculations
+        break;
+    }
+
+    return calculated;
+  };
+
   app.get('/api/consumer/arrangements/:email', authenticateConsumer, async (req: any, res) => {
     try {
       const { email } = req.params;
@@ -6404,11 +6481,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const balanceCents = parseInt(balance as string) || 0;
       const options = await storage.getArrangementOptionsByTenant(tenant.id);
+      const minimumMonthlyPayment = settings.minimumMonthlyPayment || 5000; // Default $50
       
       // Filter options based on balance range
       const applicableOptions = options.filter(option => 
         balanceCents >= option.minBalance && balanceCents <= option.maxBalance
       );
+      
+      // Calculate payment details for each applicable option and filter out non-viable ones
+      const calculatedOptions = applicableOptions
+        .map(option => calculateArrangementDetails(option, balanceCents, minimumMonthlyPayment))
+        .filter(option => option !== null);
       
       // Fetch SMAX arrangements for all consumer accounts with filenumbers
       // Non-blocking: failures won't prevent returning Chain template options
@@ -6455,9 +6538,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Return both Chain template options AND existing SMAX arrangements
+      // Return both calculated Chain template options AND existing SMAX arrangements
       res.json({
-        templateOptions: applicableOptions,
+        templateOptions: calculatedOptions,
         existingArrangements: smaxArrangements,
         hasExistingSMAXArrangement: smaxArrangements.length > 0
       });
