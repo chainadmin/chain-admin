@@ -24,6 +24,11 @@ interface SmaxPaymentData {
   typeofpayment: string;
   checkaccountnumber: string;
   checkroutingnumber: string;
+  checkaccounttype: string;
+  checkaddress: string;
+  checkcity: string;
+  checkstate: string;
+  checkzip: string;
   cardtype: string;
   cardnumber: string;
   threedigitnumber: string;
@@ -31,7 +36,6 @@ interface SmaxPaymentData {
   cardexpirationyear: string;
   cardexpirationdate: string;
   paymentamount: string;
-  checkaccounttype: string;
   acceptedfees: string;
   printed: string;
   invoice: string;
@@ -250,9 +254,14 @@ class SmaxService {
       paymentmethod: (params.paymentmethod || 'CREDIT CARD').toUpperCase(),
       paymentstatus: 'COMPLETED',
       typeofpayment: 'Online',
-      // For security, we don't send actual card/bank data - use placeholders
+      // All fields are required by SMAX API - send empty strings for unused check/ACH fields
       checkaccountnumber: '',
       checkroutingnumber: '',
+      checkaccounttype: '',
+      checkaddress: '',
+      checkcity: '',
+      checkstate: '',
+      checkzip: '',
       cardtype: params.cardtype || 'Unknown',
       // CRITICAL: Per SMAX API docs, cardnumber field should contain the payment token (not masked card)
       // This allows SMAX to process future recurring payments
@@ -264,7 +273,6 @@ class SmaxService {
         ? `${params.cardexpirationmonth}/${params.cardexpirationyear}` 
         : '',
       paymentamount: params.paymentamount.toFixed(2),
-      checkaccounttype: '',
       acceptedfees: '0',
       printed: 'false',
       invoice: params.transactionid || `INV${Date.now()}`,
@@ -302,8 +310,11 @@ class SmaxService {
       );
 
       // Check for errors in the result - SMAX can return state='SUCCESS' with errors nested inside
-      if (result.result?.Error || result.Error) {
-        const errorMsg = result.result?.Error?.error || result.Error?.error || JSON.stringify(result);
+      // API docs show: result.error (lowercase)
+      // Actual responses show: result.Error.error (capital E)
+      const hasError = result.result?.Error || result.result?.error || result.Error;
+      if (hasError) {
+        const errorMsg = result.result?.Error?.error || result.result?.error || result.Error?.error || result.Error || JSON.stringify(result);
         console.error('❌ SMAX payment insert failed with error:', errorMsg);
         console.error('Full SMAX response:', JSON.stringify(result, null, 2));
         return false;
