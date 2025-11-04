@@ -294,19 +294,47 @@ class SmaxService {
         return false;
       }
 
+      // CRITICAL: Send ONLY the fields documented in SMAX API
+      // Remove optional/custom fields that SMAX doesn't expect
+      const smaxPayload = {
+        filenumber: paymentData.filenumber,
+        paymentdate: paymentData.paymentdate,
+        payorname: paymentData.payorname,
+        paymentmethod: paymentData.paymentmethod,
+        paymentstatus: paymentData.paymentstatus,
+        typeofpayment: paymentData.typeofpayment,
+        checkaccountnumber: paymentData.checkaccountnumber,
+        checkroutingnumber: paymentData.checkroutingnumber,
+        checkaccounttype: paymentData.checkaccounttype,
+        checkaddress: paymentData.checkaddress,
+        checkcity: paymentData.checkcity,
+        checkstate: paymentData.checkstate,
+        checkzip: paymentData.checkzip,
+        cardtype: paymentData.cardtype,
+        cardnumber: paymentData.cardnumber,
+        threedigitnumber: paymentData.threedigitnumber,
+        cardexpirationmonth: paymentData.cardexpirationmonth,
+        cardexpirationyear: paymentData.cardexpirationyear,
+        cardexpirationdate: paymentData.cardexpirationdate,
+        paymentamount: paymentData.paymentamount,
+        acceptedfees: paymentData.acceptedfees,
+        printed: paymentData.printed,
+        invoice: paymentData.invoice,
+      };
+
       console.log('📤 Sending payment to SMAX:', {
         filenumber: paymentData.filenumber,
         amount: paymentData.paymentamount,
         method: paymentData.paymentmethod,
         baseUrl: config.baseUrl,
-        paymentData: JSON.stringify(paymentData, null, 2)
+        paymentData: JSON.stringify(smaxPayload, null, 2)
       });
 
       const result = await this.makeSmaxRequest(
         config,
         '/insert_payments_external',
         'POST',
-        paymentData
+        smaxPayload
       );
 
       // Check for errors in the result - SMAX can return state='SUCCESS' with errors nested inside
