@@ -441,13 +441,51 @@ export const arrangementPlanTypes = [
 
 export type ArrangementPlanType = (typeof arrangementPlanTypes)[number];
 
+export const balanceTiers = [
+  "under_3000",      // < $3,000
+  "3000_to_5000",    // $3,000 - $5,000
+  "5000_to_10000",   // $5,000 - $10,000
+  "over_10000",      // > $10,000
+] as const;
+
+export type BalanceTier = (typeof balanceTiers)[number];
+
+// Helper to map balance tiers to min/max values (in cents)
+export function getBalanceRangeFromTier(tier: BalanceTier): { minBalance: number; maxBalance: number } {
+  switch (tier) {
+    case "under_3000":
+      return { minBalance: 0, maxBalance: 299999 }; // $0 - $2,999.99
+    case "3000_to_5000":
+      return { minBalance: 300000, maxBalance: 499999 }; // $3,000 - $4,999.99
+    case "5000_to_10000":
+      return { minBalance: 500000, maxBalance: 999999 }; // $5,000 - $9,999.99
+    case "over_10000":
+      return { minBalance: 1000000, maxBalance: 999999999 }; // $10,000+
+  }
+}
+
+// Helper to get display name for balance tier
+export function getBalanceTierLabel(tier: BalanceTier): string {
+  switch (tier) {
+    case "under_3000":
+      return "Under $3,000";
+    case "3000_to_5000":
+      return "$3,000 - $5,000";
+    case "5000_to_10000":
+      return "$5,000 - $10,000";
+    case "over_10000":
+      return "Over $10,000";
+  }
+}
+
 export const arrangementOptions = pgTable("arrangement_options", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
   name: text("name").notNull(), // e.g., "Standard Payment Plan"
   description: text("description"),
-  minBalance: bigint("min_balance", { mode: "number" }).notNull(), // In cents
-  maxBalance: bigint("max_balance", { mode: "number" }).notNull(), // In cents
+  balanceTier: text("balance_tier", { enum: balanceTiers }), // Tier-based balance ranges
+  minBalance: bigint("min_balance", { mode: "number" }).notNull(), // In cents (computed from balanceTier or custom)
+  maxBalance: bigint("max_balance", { mode: "number" }).notNull(), // In cents (computed from balanceTier or custom)
   planType: text("plan_type", { enum: arrangementPlanTypes }).default("range").notNull(),
   monthlyPaymentMin: bigint("monthly_payment_min", { mode: "number" }), // In cents
   monthlyPaymentMax: bigint("monthly_payment_max", { mode: "number" }), // In cents

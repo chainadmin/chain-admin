@@ -5450,8 +5450,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const planTypeRaw = typeof body.planType === "string" ? body.planType : "range";
     const planType = planTypeSet.has(planTypeRaw as any) ? (planTypeRaw as InsertArrangementOption["planType"]) : "range";
 
-    const minBalance = parseCurrencyInput(body.minBalance);
-    const maxBalance = parseCurrencyInput(body.maxBalance);
+    // Accept balanceTier if provided, otherwise use min/max balances for backward compatibility
+    const balanceTier = typeof body.balanceTier === "string" && body.balanceTier ? body.balanceTier : null;
+    
+    let minBalance: number | null;
+    let maxBalance: number | null;
+    
+    if (balanceTier) {
+      // Balance tier is provided - use it (already includes min/max from frontend)
+      minBalance = parseCurrencyInput(body.minBalance);
+      maxBalance = parseCurrencyInput(body.maxBalance);
+    } else {
+      // Legacy: min/max provided directly
+      minBalance = parseCurrencyInput(body.minBalance);
+      maxBalance = parseCurrencyInput(body.maxBalance);
+    }
 
     if (minBalance === null || maxBalance === null) {
       const error = new Error("Minimum and maximum balances must be valid numbers");
@@ -5484,6 +5497,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       tenantId,
       name,
       description,
+      balanceTier: balanceTier || undefined,
       minBalance,
       maxBalance,
       planType,

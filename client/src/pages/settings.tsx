@@ -41,6 +41,7 @@ import { isSubdomainSupported } from "@shared/utils/subdomain";
 import { resolveConsumerPortalUrl } from "@shared/utils/consumerPortal";
 import { getArrangementSummary, getPlanTypeLabel, formatCurrencyFromCents } from "@/lib/arrangements";
 import { cn } from "@/lib/utils";
+import { balanceTiers, getBalanceRangeFromTier, getBalanceTierLabel, type BalanceTier } from "@shared/schema";
 
 export default function Settings() {
   const [showDocumentModal, setShowDocumentModal] = useState(false);
@@ -71,8 +72,7 @@ export default function Settings() {
   type ArrangementFormState = {
     name: string;
     description: string;
-    minBalance: string;
-    maxBalance: string;
+    balanceTier: "under_3000" | "3000_to_5000" | "5000_to_10000" | "over_10000" | "";
     planType: "range" | "fixed_monthly" | "pay_in_full" | "settlement" | "custom_terms" | "one_time_payment";
     monthlyPaymentMin: string;
     monthlyPaymentMax: string;
@@ -88,8 +88,7 @@ export default function Settings() {
   const emptyArrangementForm: ArrangementFormState = {
     name: "",
     description: "",
-    minBalance: "",
-    maxBalance: "",
+    balanceTier: "",
     planType: "range",
     monthlyPaymentMin: "",
     monthlyPaymentMax: "",
@@ -458,31 +457,24 @@ export default function Settings() {
   const handleSubmitArrangement = () => {
     const name = arrangementForm.name.trim();
     const planType = arrangementForm.planType;
+    const balanceTier = arrangementForm.balanceTier;
 
-    const minBalance = parseCurrencyInput(arrangementForm.minBalance);
-    const maxBalance = parseCurrencyInput(arrangementForm.maxBalance);
-
-    if (!name || minBalance === null || maxBalance === null) {
+    if (!name || !balanceTier) {
       toast({
         title: "Missing Information",
-        description: "Provide a name and valid balance range for this plan.",
+        description: "Provide a name and select a balance tier for this plan.",
         variant: "destructive",
       });
       return;
     }
 
-    if (minBalance < 0 || maxBalance < 0 || minBalance > maxBalance) {
-      toast({
-        title: "Invalid Balance Range",
-        description: "Balance amounts must be positive and the minimum cannot exceed the maximum.",
-        variant: "destructive",
-      });
-      return;
-    }
+    // Calculate min/max from selected tier
+    const { minBalance, maxBalance } = getBalanceRangeFromTier(balanceTier as BalanceTier);
 
     const payload: any = {
       name,
       description: arrangementForm.description.trim() || undefined,
+      balanceTier,
       minBalance,
       maxBalance,
       planType,
@@ -1977,29 +1969,23 @@ export default function Settings() {
                             />
                           </div>
 
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <Label className="text-white">Min Balance ($) *</Label>
-                              <Input
-                                type="number"
-                                step="0.01"
-                                value={arrangementForm.minBalance}
-                                onChange={(e) => setArrangementForm({ ...arrangementForm, minBalance: e.target.value })}
-                                placeholder="100.00"
-                                className={inputClasses}
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-white">Max Balance ($) *</Label>
-                              <Input
-                                type="number"
-                                step="0.01"
-                                value={arrangementForm.maxBalance}
-                                onChange={(e) => setArrangementForm({ ...arrangementForm, maxBalance: e.target.value })}
-                                placeholder="1999.99"
-                                className={inputClasses}
-                              />
-                            </div>
+                          <div>
+                            <Label className="text-white">Balance Tier *</Label>
+                            <Select
+                              value={arrangementForm.balanceTier}
+                              onValueChange={(value) => setArrangementForm({ ...arrangementForm, balanceTier: value as ArrangementFormState["balanceTier"] })}
+                            >
+                              <SelectTrigger className={selectTriggerClasses} data-testid="select-balance-tier">
+                                <SelectValue placeholder="Select balance tier" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {balanceTiers.map((tier) => (
+                                  <SelectItem key={tier} value={tier} data-testid={`option-tier-${tier}`}>
+                                    {getBalanceTierLabel(tier)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </div>
 
                           <div>
@@ -2257,7 +2243,11 @@ export default function Settings() {
                                   <div>{summary.headline}</div>
                                   {summary.detail && <div className="text-blue-100/70">{summary.detail}</div>}
                                   <div className="text-blue-100/60">
-                                    Balance range: {formatCurrencyFromCents(option.minBalance)} - {formatCurrencyFromCents(option.maxBalance)}
+                                    {option.balanceTier ? (
+                                      <>Balance tier: {getBalanceTierLabel(option.balanceTier)}</>
+                                    ) : (
+                                      <>Balance range: {formatCurrencyFromCents(option.minBalance)} - {formatCurrencyFromCents(option.maxBalance)}</>
+                                    )}
                                   </div>
                                 </div>
                               );
