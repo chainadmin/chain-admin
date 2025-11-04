@@ -411,6 +411,11 @@ function replaceTemplateVariables(
     const consumersList = await storage.getConsumersByTenant(tenantId);
     const accountsData = await storage.getAccountsByTenant(tenantId);
 
+    // Filter out accounts with inactive/recalled/closed status
+    const activeAccountsData = accountsData.filter(acc => 
+      !acc.status || acc.status === 'active'
+    );
+
     const folderIds = Array.isArray(folderSelection)
       ? folderSelection.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
       : typeof folderSelection === 'string' && folderSelection.trim().length > 0
@@ -420,7 +425,7 @@ function replaceTemplateVariables(
     console.log(
       `🎯 Resolving campaign audience - targetGroup: "${targetGroup}", folders: ${folderIds.length > 0 ? folderIds.join(', ') : 'none'}`,
     );
-    console.log(`📊 Total consumers in tenant: ${consumersList.length}, Total accounts: ${accountsData.length}`);
+    console.log(`📊 Total consumers in tenant: ${consumersList.length}, Total accounts: ${accountsData.length}, Active accounts: ${activeAccountsData.length}`);
 
     let targetedConsumers = consumersList;
 
@@ -428,19 +433,19 @@ function replaceTemplateVariables(
       const folderSet = new Set(folderIds);
 
       console.log(`🔍 Filtering for folders: ${folderIds.join(', ')}`);
-      const accountsInFolder = accountsData.filter(acc => {
+      const accountsInFolder = activeAccountsData.filter(acc => {
         const accountFolderMatch = acc.folderId && folderSet.has(acc.folderId);
         const consumerFolderMatch = acc.consumer?.folderId && folderSet.has(acc.consumer.folderId);
         return accountFolderMatch || consumerFolderMatch;
       });
-      console.log(`📁 Found ${accountsInFolder.length} accounts matching selected folders`);
+      console.log(`📁 Found ${accountsInFolder.length} active accounts matching selected folders`);
 
       if (accountsInFolder.length === 0) {
-        const totalAccountsWithFolder = accountsData.filter(acc => acc.folderId).length;
-        const uniqueFolderCount = new Set(accountsData.map(a => a.folderId).filter(Boolean)).size;
-        console.warn(`⚠️ WARNING: No accounts found with this folder ID`);
-        console.log(`   Total accounts with folders: ${totalAccountsWithFolder}, Unique folders: ${uniqueFolderCount}`);
-        console.log(`   Sample folder IDs from accounts:`, Array.from(new Set(accountsData.slice(0, 5).map(a => a.folderId).filter(Boolean))));
+        const totalAccountsWithFolder = activeAccountsData.filter(acc => acc.folderId).length;
+        const uniqueFolderCount = new Set(activeAccountsData.map(a => a.folderId).filter(Boolean)).size;
+        console.warn(`⚠️ WARNING: No active accounts found with this folder ID`);
+        console.log(`   Total active accounts with folders: ${totalAccountsWithFolder}, Unique folders: ${uniqueFolderCount}`);
+        console.log(`   Sample folder IDs from active accounts:`, Array.from(new Set(activeAccountsData.slice(0, 5).map(a => a.folderId).filter(Boolean))));
       }
 
       const consumerIds = new Set(
@@ -453,7 +458,7 @@ function replaceTemplateVariables(
       console.log(`   Targeted consumer emails (first 3):`, targetedConsumers.slice(0, 3).map(c => c.email));
     } else if (targetGroup === 'with-balance') {
       const consumerIds = new Set(
-        accountsData
+        activeAccountsData
           .filter(acc => (acc.balanceCents || 0) > 0)
           .map(acc => acc.consumerId)
       );
@@ -471,7 +476,15 @@ function replaceTemplateVariables(
       );
     }
 
-    return { targetedConsumers, accountsData };
+    // Filter consumers to only those with at least one active account
+    const consumersWithActiveAccounts = new Set(
+      activeAccountsData.map(acc => acc.consumerId)
+    );
+    targetedConsumers = targetedConsumers.filter(c => consumersWithActiveAccounts.has(c.id));
+    
+    console.log(`🔒 Account status filter: ${targetedConsumers.length} consumers have active accounts (excluded inactive/recalled/closed)`);
+
+    return { targetedConsumers, accountsData: activeAccountsData };
   }
 
   async function buildTenantEmailContext(tenantId: string) {
@@ -1745,6 +1758,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch('/api/accounts/bulk-update-status', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { ids, status } = req.body ?? {};
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "Account IDs array is required" });
+      }
+      
+      if (!status || !['active', 'inactive', 'recalled', 'closed'].includes(status)) {
+        return res.status(400).json({ message: "Valid status is required (active, inactive, recalled, or closed)" });
+      }
+
+      // Get all accounts for this tenant
+      const allAccounts = await storage.getAccountsByTenant(tenantId);
+      const accountsToUpdate = allAccounts.filter(acc => ids.includes(acc.id));
+      
+      if (accountsToUpdate.length === 0) {
+        return res.status(404).json({ message: "No accounts found to update" });
+      }
+
+      // Update each account's status
+      let updatedCount = 0;
+      for (const account of accountsToUpdate) {
+        await storage.updateAccount(account.id, { status });
+        updatedCount++;
+      }
+
+      console.log(`📝 Bulk status update: ${updatedCount} accounts set to "${status}" by tenant ${tenantId}`);
+
+      return res.status(200).json({
+        success: true,
+        message: `${updatedCount} accounts updated to status: ${status}`,
+        updatedCount,
+      });
+    } catch (error) {
+      console.error("Error bulk updating account status:", error);
+      return res.status(500).json({ message: "Failed to update account status" });
+    }
+  });
+
   app.delete('/api/accounts/:id', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
@@ -2470,6 +2527,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const consumersList = await storage.getConsumersByTenant(tenantId);
     const accountsData = await storage.getAccountsByTenant(tenantId);
 
+    // Filter out accounts with inactive/recalled/closed status
+    const activeAccountsData = accountsData.filter(acc => 
+      !acc.status || acc.status === 'active'
+    );
+
     const folderIds = Array.isArray(folderSelection)
       ? folderSelection.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
       : typeof folderSelection === 'string' && folderSelection.trim().length > 0
@@ -2479,7 +2541,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log(
       `📱 Resolving SMS audience - targetGroup: "${targetGroup}", folders: ${folderIds.length > 0 ? folderIds.join(', ') : 'none'}`,
     );
-    console.log(`📊 Total consumers in tenant: ${consumersList.length}, Total accounts: ${accountsData.length}`);
+    console.log(`📊 Total consumers in tenant: ${consumersList.length}, Total accounts: ${accountsData.length}, Active accounts: ${activeAccountsData.length}`);
 
     let targetedConsumers = consumersList;
 
@@ -2487,19 +2549,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const folderSet = new Set(folderIds);
 
       console.log(`🔍 Filtering for folders: ${folderIds.join(', ')}`);
-      const accountsInFolder = accountsData.filter(acc => {
+      const accountsInFolder = activeAccountsData.filter(acc => {
         const accountFolderMatch = acc.folderId && folderSet.has(acc.folderId);
         const consumerFolderMatch = acc.consumer?.folderId && folderSet.has(acc.consumer.folderId);
         return accountFolderMatch || consumerFolderMatch;
       });
-      console.log(`📁 Found ${accountsInFolder.length} accounts matching selected folders`);
+      console.log(`📁 Found ${accountsInFolder.length} active accounts matching selected folders`);
 
       if (accountsInFolder.length === 0) {
-        const totalAccountsWithFolder = accountsData.filter(acc => acc.folderId).length;
-        const uniqueFolderCount = new Set(accountsData.map(a => a.folderId).filter(Boolean)).size;
-        console.warn(`⚠️ WARNING: No accounts found with this folder ID`);
-        console.log(`   Total accounts with folders: ${totalAccountsWithFolder}, Unique folders: ${uniqueFolderCount}`);
-        console.log(`   Sample folder IDs from accounts:`, Array.from(new Set(accountsData.slice(0, 5).map(a => a.folderId).filter(Boolean))));
+        const totalAccountsWithFolder = activeAccountsData.filter(acc => acc.folderId).length;
+        const uniqueFolderCount = new Set(activeAccountsData.map(a => a.folderId).filter(Boolean)).size;
+        console.warn(`⚠️ WARNING: No active accounts found with this folder ID`);
+        console.log(`   Total active accounts with folders: ${totalAccountsWithFolder}, Unique folders: ${uniqueFolderCount}`);
+        console.log(`   Sample folder IDs from active accounts:`, Array.from(new Set(activeAccountsData.slice(0, 5).map(a => a.folderId).filter(Boolean))));
       }
 
       const consumerIds = new Set(
@@ -2512,7 +2574,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`   Targeted consumer phones (first 3):`, targetedConsumers.slice(0, 3).map(c => c.phone));
     } else if (targetGroup === 'with-balance') {
       const consumerIds = new Set(
-        accountsData
+        activeAccountsData
           .filter(acc => (acc.balanceCents || 0) > 0)
           .map(acc => acc.consumerId)
       );
@@ -2530,7 +2592,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
     }
 
-    return { targetedConsumers, accountsData };
+    // Filter consumers to only those with at least one active account
+    const consumersWithActiveAccounts = new Set(
+      activeAccountsData.map(acc => acc.consumerId)
+    );
+    targetedConsumers = targetedConsumers.filter(c => consumersWithActiveAccounts.has(c.id));
+    
+    console.log(`🔒 Account status filter: ${targetedConsumers.length} consumers have active accounts (excluded inactive/recalled/closed)`);
+
+    return { targetedConsumers, accountsData: activeAccountsData };
   }
 
   // SMS campaign routes
@@ -6841,12 +6911,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Access denied to this account" });
       }
       
-      // Check if account is inactive
-      if (account.status === 'inactive') {
-        console.log('❌ Payment blocked: Account is inactive');
+      // Check if account is active (block inactive/recalled/closed)
+      if (account.status && account.status !== 'active') {
+        console.log(`❌ Payment blocked: Account status is "${account.status}"`);
         return res.status(403).json({ 
           success: false,
-          message: "This account is inactive and cannot accept payments. Please contact us for assistance." 
+          message: "This account is not active and cannot accept payments. Please contact us for assistance." 
         });
       }
 
@@ -8436,14 +8506,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   continue;
                 }
 
-                // Check if account is inactive before processing payment
+                // Check if account is active (block inactive/recalled/closed)
                 const scheduleAccount = await storage.getAccount(schedule.accountId);
-                if (scheduleAccount && scheduleAccount.status === 'inactive') {
-                  console.log(`⏭️ Skipping scheduled payment for inactive account: ${schedule.accountId}`);
+                if (scheduleAccount && scheduleAccount.status && scheduleAccount.status !== 'active') {
+                  console.log(`⏭️ Skipping scheduled payment for ${scheduleAccount.status} account: ${schedule.accountId}`);
                   failedPayments.push({
                     scheduleId: schedule.id,
                     accountId: schedule.accountId,
-                    reason: 'Account is inactive'
+                    reason: `Account status is ${scheduleAccount.status}`
                   });
                   continue;
                 }
@@ -10143,12 +10213,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if consumer has any active accounts before processing payment
       const consumerAccounts = await storage.getAccountsByConsumer(consumer.id);
       if (consumerAccounts && consumerAccounts.length > 0) {
-        const allInactive = consumerAccounts.every(acc => acc.status === 'inactive');
-        if (allInactive) {
-          console.log('❌ Payment blocked: All consumer accounts are inactive');
+        const allNonActive = consumerAccounts.every(acc => acc.status && acc.status !== 'active');
+        if (allNonActive) {
+          console.log('❌ Payment blocked: All consumer accounts are non-active (inactive/recalled/closed)');
           return res.status(403).json({ 
             success: false,
-            message: "All accounts for this consumer are inactive and cannot accept payments." 
+            message: "All accounts for this consumer are not active and cannot accept payments." 
           });
         }
       }
