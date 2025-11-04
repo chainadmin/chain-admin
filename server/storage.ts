@@ -280,6 +280,7 @@ export interface IStorage {
   // SMS campaign operations
   getSmsCampaignsByTenant(tenantId: string): Promise<(SmsCampaign & { templateName: string })[]>;
   getSmsCampaignById(id: string, tenantId: string): Promise<SmsCampaign | undefined>;
+  getSmsCampaignByIdAdmin?(id: string): Promise<SmsCampaign | undefined>;
   createSmsCampaign(campaign: InsertSmsCampaign): Promise<SmsCampaign>;
   updateSmsCampaign(id: string, updates: Partial<SmsCampaign>): Promise<SmsCampaign>;
   deleteSmsCampaign(id: string, tenantId: string): Promise<void>;
@@ -1426,6 +1427,14 @@ export class DatabaseStorage implements IStorage {
     const [campaign] = await db.select()
       .from(smsCampaigns)
       .where(and(eq(smsCampaigns.id, id), eq(smsCampaigns.tenantId, tenantId)));
+    return campaign;
+  }
+
+  async getSmsCampaignByIdAdmin(id: string): Promise<SmsCampaign | undefined> {
+    const [campaign] = await db.select()
+      .from(smsCampaigns)
+      .where(eq(smsCampaigns.id, id))
+      .limit(1);
     return campaign;
   }
 
