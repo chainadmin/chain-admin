@@ -252,7 +252,7 @@ class SmaxService {
       paymentdate: params.paymentdate || today,
       payorname: params.payorname || 'Consumer',
       paymentmethod: (params.paymentmethod || 'CREDIT CARD').toUpperCase(),
-      paymentstatus: 'COMPLETED',
+      paymentstatus: 'PENDING', // Use PENDING for test payments (deletable), PROCESSED for completed payments
       typeofpayment: 'Online',
       // All fields are required by SMAX API - send empty strings for unused check/ACH fields
       checkaccountnumber: '',
@@ -294,8 +294,8 @@ class SmaxService {
         return false;
       }
 
-      // CRITICAL: Send ONLY the fields documented in SMAX API
-      // Remove optional/custom fields that SMAX doesn't expect
+      // CRITICAL: Send ONLY the fields documented in SMAX API in EXACT order
+      // Field order must match SMAX documentation exactly
       const smaxPayload = {
         filenumber: paymentData.filenumber,
         paymentdate: paymentData.paymentdate,
@@ -305,11 +305,11 @@ class SmaxService {
         typeofpayment: paymentData.typeofpayment,
         checkaccountnumber: paymentData.checkaccountnumber,
         checkroutingnumber: paymentData.checkroutingnumber,
-        checkaccounttype: paymentData.checkaccounttype,
         checkaddress: paymentData.checkaddress,
         checkcity: paymentData.checkcity,
         checkstate: paymentData.checkstate,
         checkzip: paymentData.checkzip,
+        checkaccounttype: paymentData.checkaccounttype,
         cardtype: paymentData.cardtype,
         cardnumber: paymentData.cardnumber,
         threedigitnumber: paymentData.threedigitnumber,
