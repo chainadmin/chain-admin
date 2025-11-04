@@ -53,12 +53,16 @@ export default function ConsumerPortal() {
     enabled: !!documentsUrl,
   });
 
-  const { data: arrangements } = useQuery<any>({
+  const { data: arrangementsData } = useQuery<any>({
     queryKey: arrangementsUrl && (data as any)?.accounts ? [
       `${arrangementsUrl}&balance=${(data as any)?.accounts?.reduce((sum: number, acc: any) => sum + (acc.balanceCents || 0), 0) || 0}`
     ] : ['consumer-portal-arrangements'],
     enabled: !!((data as any)?.accounts && arrangementsUrl),
   });
+
+  // Extract template options and existing arrangements from the response
+  const templateOptions = arrangementsData?.templateOptions || [];
+  const existingArrangements = arrangementsData?.existingArrangements || [];
 
   // Upload mutation
   const uploadMutation = useMutation({
@@ -173,6 +177,70 @@ export default function ConsumerPortal() {
       month: 'short',
       day: 'numeric'
     });
+  };
+
+  const getCalculatedArrangementSummary = (arrangement: any) => {
+    const planType = arrangement.planType ?? 'range';
+    
+    switch (planType) {
+      case 'range':
+      case 'fixed_monthly': {
+        if (arrangement.calculatedMonthlyPayment && arrangement.calculatedTermMonths) {
+          return {
+            headline: `${formatCurrency(arrangement.calculatedMonthlyPayment)} per month`,
+            detail: `${arrangement.calculatedTermMonths} month${arrangement.calculatedTermMonths > 1 ? 's' : ''} • Total: ${formatCurrency(arrangement.calculatedTotalAmount || 0)}`
+          };
+        }
+        return getArrangementSummary(arrangement);
+      }
+      
+      case 'pay_in_full': {
+        if (arrangement.calculatedPayoffAmount) {
+          return {
+            headline: `Pay ${formatCurrency(arrangement.calculatedPayoffAmount)} today`,
+            detail: arrangement.calculatedPayoffPercentage 
+              ? `${arrangement.calculatedPayoffPercentage}% of balance`
+              : 'Full payment'
+          };
+        }
+        return getArrangementSummary(arrangement);
+      }
+      
+      case 'settlement': {
+        if (arrangement.calculatedPayoffAmount && arrangement.calculatedPayoffPercentage) {
+          return {
+            headline: `Settle for ${arrangement.calculatedPayoffPercentage}% of balance`,
+            detail: `Pay ${formatCurrency(arrangement.calculatedPayoffAmount)} to settle`
+          };
+        } else if (arrangement.calculatedPayoffAmount) {
+          return {
+            headline: `Settle for ${formatCurrency(arrangement.calculatedPayoffAmount)}`,
+            detail: 'Settlement offer'
+          };
+        }
+        return getArrangementSummary(arrangement);
+      }
+      
+      case 'one_time_payment': {
+        if (arrangement.calculatedPayoffAmount) {
+          return {
+            headline: `Minimum payment: ${formatCurrency(arrangement.calculatedPayoffAmount)}`,
+            detail: 'Make a single payment without setting up a plan'
+          };
+        }
+        return getArrangementSummary(arrangement);
+      }
+      
+      case 'custom_terms': {
+        return {
+          headline: arrangement.customTermsText || 'Contact us to discuss terms',
+          detail: undefined
+        };
+      }
+      
+      default:
+        return getArrangementSummary(arrangement);
+    }
   };
 
   const totalBalance = accounts?.reduce((sum: number, account: any) => sum + (account.balanceCents || 0), 0) || 0;
@@ -389,31 +457,58 @@ export default function ConsumerPortal() {
         ) : null}
 
         {/* Payment Arrangements Section */}
-        {arrangements && Array.isArray(arrangements) && arrangements.length > 0 && (
+        {(templateOptions.length > 0 || existingArrangements.length > 0) && (
           <div className="max-w-2xl mx-auto mt-8">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Available Payment Plans</h2>
             <div className="space-y-3">
-              {arrangements.map((arrangement: any) => (
-                <div key={arrangement.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+              {/* Template Options (Calculated from tenant settings) */}
+              {templateOptions.map((arrangement: any) => (
+                <div key={arrangement.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4" data-testid={`arrangement-option-${arrangement.id}`}>
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-medium text-gray-900">{arrangement.name}</h3>
                       <p className="text-sm text-gray-500 mt-1">{arrangement.description}</p>
                       {(() => {
-                        const summary = getArrangementSummary(arrangement);
+                        const summary = getCalculatedArrangementSummary(arrangement);
                         return (
                           <div className="text-sm text-blue-600 mt-2 space-y-1">
-                            <div>{summary.headline}</div>
+                            <div data-testid={`arrangement-headline-${arrangement.id}`}>{summary.headline}</div>
                             {summary.detail && <div className="text-gray-500">{summary.detail}</div>}
-                            <div className="text-gray-500">
-                              Eligible balance: {formatCurrencyFromCents(arrangement.minBalance)} - {formatCurrencyFromCents(arrangement.maxBalance)}
-                            </div>
                           </div>
                         );
                       })()}
                     </div>
-                    <Button className="bg-blue-600 hover:bg-blue-700">
+                    <Button className="bg-blue-600 hover:bg-blue-700" data-testid={`button-select-plan-${arrangement.id}`}>
                       Select Plan
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              
+              {/* Existing SMAX Arrangements */}
+              {existingArrangements.map((arrangement: any) => (
+                <div key={`smax-${arrangement.arrangementNumber}`} className="bg-blue-50 rounded-lg shadow-sm border border-blue-200 p-4" data-testid={`existing-arrangement-${arrangement.arrangementNumber}`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-medium text-gray-900">Active Payment Plan</h3>
+                        <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-blue-600 text-white">
+                          Current
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-500 mt-1">Arrangement #{arrangement.arrangementNumber}</p>
+                      <div className="text-sm text-blue-600 mt-2 space-y-1">
+                        <div>{formatCurrency(arrangement.paymentAmount)} per {arrangement.frequency?.toLowerCase() || 'month'}</div>
+                        {arrangement.nextPaymentDate && (
+                          <div className="text-gray-500">Next payment: {formatDate(arrangement.nextPaymentDate)}</div>
+                        )}
+                        {arrangement.remainingPayments && (
+                          <div className="text-gray-500">{arrangement.remainingPayments} payment{arrangement.remainingPayments > 1 ? 's' : ''} remaining</div>
+                        )}
+                      </div>
+                    </div>
+                    <Button variant="outline" data-testid={`button-view-arrangement-${arrangement.arrangementNumber}`}>
+                      View Details
                     </Button>
                   </div>
                 </div>
