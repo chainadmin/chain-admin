@@ -535,23 +535,17 @@ class SmaxService {
         });
       }
 
-      // Build payload using same structure as insert_payments_external
-      // but add paymentdata array for the payment plan
+      // Build payload using EXACT field order from SMAX API documentation
+      // Must match insert_payments_external field order exactly
       const payload = {
         filenumber: arrangementData.filenumber.trim(),
+        paymentdate: arrangementData.nextpaymentdate,
         payorname: arrangementData.payorname || 'Consumer',
         paymentmethod: 'CREDIT CARD',
         paymentstatus: 'PENDING',
         typeofpayment: 'Online',
-        // Check fields (not used for credit card)
         checkaccountnumber: '',
         checkroutingnumber: '',
-        checkaccounttype: '',
-        checkaddress: '',
-        checkcity: '',
-        checkstate: '',
-        checkzip: '',
-        // Card details - use tokenized data, NOT raw card numbers
         cardtype: arrangementData.cardbrand || 'Unknown',
         // CRITICAL: Per SMAX API docs, cardnumber field should contain the payment token
         cardnumber: arrangementData.cardtoken || (arrangementData.cardlast4 ? `XXXX-XXXX-XXXX-${arrangementData.cardlast4}` : 'XXXX-XXXX-XXXX-XXXX'),
@@ -561,12 +555,16 @@ class SmaxService {
         cardexpirationdate: (arrangementData.expirymonth && arrangementData.expiryyear) 
           ? `${arrangementData.expirymonth}/${arrangementData.expiryyear}`
           : '',
-        // Payment amount (total or first payment)
         paymentamount: arrangementData.monthlypayment.toFixed(2),
+        checkaccounttype: '',
+        checkaddress: '',
+        checkcity: '',
+        checkstate: '',
+        checkzip: '',
         acceptedfees: '0',
         printed: 'false',
         invoice: `ARR${Date.now()}`,
-        // Payment plan schedule
+        // Payment plan schedule (specific to insert_payplan_external)
         paymentdata: paymentdata
       };
 
