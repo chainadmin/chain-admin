@@ -5911,14 +5911,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Pull account data from SMAX
           const smaxAccountData = await smaxService.getAccount(tenantId, account.accountNumber);
           
-          if (smaxAccountData && smaxAccountData.balance !== undefined) {
-            // Convert SMAX balance to cents (assuming SMAX returns dollars)
-            const newBalanceCents = Math.round(parseFloat(smaxAccountData.balance) * 100);
+          if (smaxAccountData) {
+            // Sync account status from SMAX (do this regardless of balance data)
+            // Map SMAX status values to Chain status values
+            let chainStatus: string | null = null; // null = don't update status
             
-            // Update account balance in Chain
-            await storage.updateAccount(account.id, {
-              balanceCents: newBalanceCents,
-            });
+            // Iterate through ALL SMAX fields case-insensitively to find status
+            let smaxStatus: string | null = null;
+            for (const [key, value] of Object.entries(smaxAccountData)) {
+              const lowerKey = key.toLowerCase();
+              // Check if field name contains 'status' or is 'state'
+              if ((lowerKey.includes('status') || lowerKey === 'state' || lowerKey === 'accountstate') && 
+                  value && typeof value === 'string') {
+                smaxStatus = value;
+                break; // Use first matching status field
+              }
+            }
+            
+            if (smaxStatus) {
+              const normalizedStatus = smaxStatus.toLowerCase().trim();
+              
+              // Map SMAX statuses to Chain statuses
+              if (normalizedStatus.includes('closed') || normalizedStatus.includes('close')) {
+                chainStatus = 'closed';
+                console.log(`📊 SMAX status "${smaxStatus}" mapped to: closed`);
+              } else if (normalizedStatus.includes('recall') || normalizedStatus.includes('recalled')) {
+                chainStatus = 'recalled';
+                console.log(`📊 SMAX status "${smaxStatus}" mapped to: recalled`);
+              } else if (normalizedStatus.includes('inactive') || normalizedStatus.includes('deactivate')) {
+                chainStatus = 'inactive';
+                console.log(`📊 SMAX status "${smaxStatus}" mapped to: inactive`);
+              } else if (normalizedStatus.includes('active') || normalizedStatus.includes('open')) {
+                chainStatus = 'active';
+                console.log(`📊 SMAX status "${smaxStatus}" mapped to: active`);
+              } else {
+                // Unknown status - log it but don't change current status
+                console.warn(`⚠️ Unknown SMAX status "${smaxStatus}" - keeping current status`);
+              }
+            }
+            
+            // Update account balance if available
+            const updateData: any = {};
+            if (smaxAccountData.balance !== undefined) {
+              const newBalanceCents = Math.round(parseFloat(smaxAccountData.balance) * 100);
+              updateData.balanceCents = newBalanceCents;
+            }
+            
+            // Update status if we found one
+            if (chainStatus !== null) {
+              updateData.status = chainStatus;
+            }
+            
+            // Only update if we have something to update
+            if (Object.keys(updateData).length > 0) {
+              await storage.updateAccount(account.id, updateData);
+            }
             
             // Extract phone numbers from SMAX and store in consumer additionalData
             // SMAX may have multiple phone fields: phone1, phone2, phone3, homephone, cellphone, workphone, etc.
