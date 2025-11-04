@@ -10031,7 +10031,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Real-time payment processing endpoint
+  // Real-time payment processing endpoint (admin-initiated payments)
   app.post('/api/payments/process', authenticateUser, requirePaymentProcessing, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
@@ -10072,19 +10072,111 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // TODO: Integrate with USAePay or other payment processor
-      // For now, simulate payment processing
-      const processorResponse = {
-        success: true,
-        transactionId: `tx_${Date.now()}`,
-        message: "Payment processed successfully",
-        // In real implementation, this would be the actual processor response
-        processorData: {
-          processor: "USAePay", // or whatever processor is configured
-          authCode: `AUTH${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
-          last4: cardNumber.slice(-4),
+      // Get tenant settings for USAePay credentials
+      const settings = await storage.getTenantSettings(tenantId);
+      const merchantApiKey = settings?.merchantApiKey?.trim();
+      const merchantApiPin = settings?.merchantApiPin?.trim();
+      const useSandbox = settings?.useSandbox;
+
+      if (!merchantApiKey || !merchantApiPin) {
+        console.error("USAePay credentials not configured for tenant:", tenantId);
+        return res.status(500).json({ 
+          success: false,
+          message: "Payment processing is not configured. Please contact support." 
+        });
+      }
+
+      // Determine API endpoint based on sandbox mode
+      const usaepayBaseUrl = useSandbox 
+        ? "https://sandbox.usaepay.com/api/v2"
+        : "https://secure.usaepay.com/api/v2";
+
+      // Generate authentication header (same as consumer endpoint)
+      const generateAuthHeader = (apiKey: string, apiPin: string): string => {
+        const seed = Array.from({ length: 16 }, () => 
+          Math.random().toString(36).charAt(2)
+        ).join('');
+        const prehash = apiKey + seed + apiPin;
+        const hash = crypto.createHash('sha256').update(prehash).digest('hex');
+        const apihash = `s2/${seed}/${hash}`;
+        const authKey = Buffer.from(`${apiKey}:${apihash}`).toString('base64');
+        return `Basic ${authKey}`;
+      };
+
+      const authHeader = generateAuthHeader(merchantApiKey, merchantApiPin);
+
+      // Parse expiry date (MM/YY format)
+      const expiryParts = expiryDate.split('/');
+      const expiryMonth = expiryParts[0]?.trim();
+      const expiryYear = expiryParts[1]?.trim();
+
+      if (!expiryMonth || !expiryYear) {
+        return res.status(400).json({ 
+          success: false,
+          message: "Invalid expiry date format. Use MM/YY" 
+        });
+      }
+
+      // Process payment through USAePay
+      const usaepayPayload = {
+        command: "sale",
+        amount: (amountCents / 100).toFixed(2),
+        invoice: `admin_payment_${Date.now()}`,
+        description: `Admin-initiated payment for ${consumer.firstName} ${consumer.lastName}`,
+        creditcard: {
+          number: cardNumber.replace(/\s/g, ''),
+          expiration: `${expiryMonth}${expiryYear}`,
+          cvc: cvv,
+          cardholder: cardName,
+          avs_street: "",
+          avs_zip: zipCode || ""
         }
       };
+
+      console.log('💳 Processing admin payment through USAePay:', {
+        endpoint: `${usaepayBaseUrl}/transactions`,
+        amount: usaepayPayload.amount,
+        consumerEmail,
+        last4: cardNumber.slice(-4)
+      });
+
+      const usaepayResponse = await fetch(`${usaepayBaseUrl}/transactions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authHeader
+        },
+        body: JSON.stringify(usaepayPayload)
+      });
+
+      const usaepayResult = await usaepayResponse.json();
+
+      console.log('📥 USAePay response:', {
+        status: usaepayResponse.status,
+        ok: usaepayResponse.ok,
+        result: usaepayResult.result,
+        hasError: !!usaepayResult.error
+      });
+
+      // Check if payment was successful
+      const success = usaepayResult.result === 'Approved' || usaepayResult.status === 'Approved';
+      
+      if (!success) {
+        console.error('❌ USAePay payment failed:', {
+          error: usaepayResult.error,
+          errorcode: usaepayResult.errorcode,
+          result: usaepayResult.result
+        });
+
+        return res.status(400).json({
+          success: false,
+          message: usaepayResult.error || usaepayResult.result || 'Payment declined',
+          debug: process.env.NODE_ENV === 'development' ? usaepayResult : undefined
+        });
+      }
+
+      const transactionId = usaepayResult.refnum || usaepayResult.key || `tx_${Date.now()}`;
+      const cardLast4 = cardNumber.slice(-4);
 
       // Create payment record
       const payment = await storage.createPayment({
@@ -10092,20 +10184,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         consumerId: consumer.id,
         amountCents,
         paymentMethod: 'credit_card',
-        status: processorResponse.success ? 'completed' : 'failed',
-        transactionId: processorResponse.transactionId,
-        processorResponse: JSON.stringify(processorResponse),
+        status: 'completed',
+        transactionId: transactionId,
+        processorResponse: JSON.stringify(usaepayResult),
         processedAt: new Date(),
-        notes: `Online payment - ${cardName} ending in ${cardNumber.slice(-4)}`,
+        notes: `Admin payment - ${cardName} ending in ${cardLast4}`,
       });
 
-      // Notify SMAX if enabled
+      // Sync to SMAX if enabled
       try {
         const { smaxService } = await import('./smaxService');
         const accounts = await storage.getAccountsByConsumer(consumer.id);
         if (accounts && accounts.length > 0) {
           const account = accounts[0];
-          // Only send to SMAX if filenumber exists
           if (account.filenumber) {
             const paymentData = smaxService.createSmaxPaymentData({
               filenumber: account.filenumber,
@@ -10113,17 +10204,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
               paymentdate: new Date().toISOString().split('T')[0],
               payorname: `${consumer.firstName} ${consumer.lastName}`,
               paymentmethod: 'CREDIT CARD',
-              cardLast4: cardNumber.slice(-4),
-              transactionid: processorResponse.transactionId,
+              cardLast4: cardLast4,
+              transactionid: transactionId,
             });
             await smaxService.insertPayment(tenantId, paymentData);
-            console.log(`✅ Consumer payment sent to SMAX for filenumber: ${account.filenumber}`);
+            console.log(`✅ Admin payment synced to SMAX for filenumber: ${account.filenumber}`);
           } else {
             console.warn(`⚠️ No filenumber for account ${account.accountNumber || account.id} - skipping SMAX sync`);
           }
         }
       } catch (smaxError) {
-        console.error('SMAX notification failed:', smaxError);
+        console.error('SMAX sync failed:', smaxError);
       }
 
       res.json({
@@ -10139,7 +10230,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
     } catch (error) {
-      console.error("Error processing payment:", error);
+      console.error("Error processing admin payment:", error);
       res.status(500).json({ 
         success: false,
         message: "Payment processing failed. Please try again." 
