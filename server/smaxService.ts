@@ -252,7 +252,7 @@ class SmaxService {
       paymentdate: params.paymentdate || today,
       payorname: params.payorname || 'Consumer',
       paymentmethod: (params.paymentmethod || 'CREDIT CARD').toUpperCase(),
-      paymentstatus: 'PENDING', // Use PENDING for test payments (deletable), PROCESSED for completed payments
+      paymentstatus: 'PROCESSED', // PROCESSED for completed payments, PENDING for scheduled future payments
       typeofpayment: 'Online',
       // All fields are required by SMAX API - send empty strings for unused check/ACH fields
       checkaccountnumber: '',
@@ -465,6 +465,45 @@ class SmaxService {
       return result.state === 'SUCCESS';
     } catch (error) {
       console.error('Error inserting note to SMAX:', error);
+      return false;
+    }
+  }
+
+  // Helper to send payment note to SMAX
+  async sendPaymentNote(tenantId: string, params: {
+    filenumber: string;
+    status: 'processed' | 'declined' | 'scheduled';
+    amount: number;
+    reason?: string;
+    scheduledDate?: string;
+    transactionId?: string;
+  }): Promise<boolean> {
+    try {
+      let logMessage = '';
+      
+      if (params.status === 'processed') {
+        logMessage = `Payment processed successfully - $${params.amount.toFixed(2)}`;
+        if (params.transactionId) {
+          logMessage += ` (Transaction: ${params.transactionId})`;
+        }
+      } else if (params.status === 'declined') {
+        logMessage = `Payment declined - $${params.amount.toFixed(2)}`;
+        if (params.reason) {
+          logMessage += ` - ${params.reason}`;
+        }
+      } else if (params.status === 'scheduled') {
+        logMessage = `Payment scheduled for ${params.scheduledDate || 'future date'} - $${params.amount.toFixed(2)}`;
+      }
+
+      const noteData: SmaxNoteData = {
+        filenumber: params.filenumber.trim(),
+        collectorname: 'System',
+        logmessage: logMessage
+      };
+
+      return await this.insertNote(tenantId, noteData);
+    } catch (error) {
+      console.error('Error sending payment note to SMAX:', error);
       return false;
     }
   }

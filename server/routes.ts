@@ -7309,6 +7309,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const smaxSuccess = await smaxService.insertPayment(tenantId, smaxPaymentData);
           if (smaxSuccess) {
             console.log('✅ Payment synced to SMAX successfully with card token');
+            // Send note to SMAX about successful payment
+            await smaxService.sendPaymentNote(tenantId, {
+              filenumber: account.filenumber!,
+              status: 'processed',
+              amount: amountCents / 100,
+              transactionId: transactionId || undefined
+            });
           } else {
             console.log('⚠️ Failed to sync payment to SMAX (non-blocking)');
           }
@@ -7839,6 +7846,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } catch (emailError) {
           console.error("Error sending payment failure notification:", emailError);
           // Don't fail the response if email fails
+        }
+        
+        // Send note to SMAX about declined payment
+        try {
+          const account = await storage.getAccount(accountId);
+          if (account?.filenumber) {
+            await smaxService.sendPaymentNote(tenantId, {
+              filenumber: account.filenumber,
+              status: 'declined',
+              amount: amountCents / 100,
+              reason: usaepayResult.error || usaepayResult.result_code || 'Payment declined'
+            });
+          }
+        } catch (smaxError) {
+          console.error('Failed to send declined payment note to SMAX:', smaxError);
         }
         
         return res.status(400).json({
@@ -8539,8 +8561,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
                           cardLast4: paymentMethod.cardLast4,
                           transactionid: paymentResult.refnum || paymentResult.key || `tx_${Date.now()}`,
                         });
-                        await smaxService.insertPayment(tenant.id, smaxPaymentData);
-                        console.log(`✅ SMAX payment inserted (fallback) for filenumber: ${account.filenumber}`);
+                        const smaxInserted = await smaxService.insertPayment(tenant.id, smaxPaymentData);
+                        if (smaxInserted) {
+                          console.log(`✅ SMAX payment inserted (fallback) for filenumber: ${account.filenumber}`);
+                          // Send note about successful scheduled payment
+                          await smaxService.sendPaymentNote(tenant.id, {
+                            filenumber: account.filenumber,
+                            status: 'processed',
+                            amount: schedule.amountCents / 100,
+                            transactionId: paymentResult.refnum || paymentResult.key || undefined
+                          });
+                        }
                       }
 
                       // Insert payment attempt to SMAX
@@ -8636,6 +8667,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
                   // Update consumer status to payment_failed
                   await storage.updateConsumer(consumer.id, { paymentStatus: 'payment_failed' });
+
+                  // Send note to SMAX about failed scheduled payment
+                  const scheduleAccountForNote = await storage.getAccount(schedule.accountId);
+                  if (scheduleAccountForNote?.filenumber) {
+                    try {
+                      await smaxService.sendPaymentNote(tenant.id, {
+                        filenumber: scheduleAccountForNote.filenumber,
+                        status: 'declined',
+                        amount: schedule.amountCents / 100,
+                        reason: failureReason
+                      });
+                    } catch (smaxError) {
+                      console.error('Failed to send declined payment note to SMAX:', smaxError);
+                    }
+                  }
 
                   failedPayments.push({ 
                     scheduleId: schedule.id, 
@@ -10403,7 +10449,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         paymentamount: payment.amountCents / 100,
         paymentdate: payment.processedAt 
           ? new Date(payment.processedAt).toISOString().split('T')[0]
-          : new Date(payment.createdAt).toISOString().split('T')[0],
+          : (payment.createdAt ? new Date(payment.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]),
         payorname: `${consumer.firstName} ${consumer.lastName}`,
         paymentmethod: 'CREDIT CARD',
         cardtype: processorResponse.cardtype || savedPaymentMethod?.cardBrand || 'Unknown',
@@ -10421,6 +10467,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (smaxSuccess) {
         console.log('✅ Payment manually synced to SMAX successfully');
+        // Send note to SMAX about successful payment
+        await smaxService.sendPaymentNote(tenantId, {
+          filenumber: account.filenumber!,
+          status: 'processed',
+          amount: payment.amountCents / 100,
+          transactionId: payment.transactionId || undefined
+        });
         res.json({ 
           success: true, 
           message: 'Payment synced to SMAX successfully' 
