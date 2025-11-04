@@ -498,6 +498,7 @@ export const tenantSettings = pgTable("tenant_settings", {
   smaxApiKey: text("smax_api_key"),
   smaxPin: text("smax_pin"),
   smaxBaseUrl: text("smax_base_url").default("https://api.smaxcollectionsoftware.com:8000"),
+  blockedAccountStatuses: text("blocked_account_statuses").array().default(sql`ARRAY['inactive', 'recalled', 'closed']::text[]`), // Account statuses that block communications and payments
 });
 
 // Consumer notifications (when accounts are added)

@@ -1465,6 +1465,46 @@ export default function Settings() {
                     />
                   </div>
 
+                  {/* Blocked Account Statuses Configuration */}
+                  <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-4">
+                    <div>
+                      <Label className="text-base font-medium text-white">Blocked Account Statuses</Label>
+                      <p className="text-sm text-blue-100/70">
+                        Select which account statuses should prevent communications and payments
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-3">
+                      {['inactive', 'recalled', 'closed', 'pending', 'suspended'].map((status) => {
+                        const isSelected = (localSettings?.blockedAccountStatuses || ['inactive', 'recalled', 'closed']).includes(status);
+                        return (
+                          <button
+                            key={status}
+                            type="button"
+                            onClick={() => {
+                              const current = localSettings?.blockedAccountStatuses || ['inactive', 'recalled', 'closed'];
+                              const updated = isSelected
+                                ? current.filter((s: string) => s !== status)
+                                : [...current, status];
+                              handleSettingsUpdate('blockedAccountStatuses', updated);
+                            }}
+                            className={cn(
+                              "rounded-lg border px-4 py-2 text-sm font-medium transition-all",
+                              isSelected
+                                ? "border-sky-500 bg-sky-500/20 text-sky-300"
+                                : "border-white/20 bg-white/5 text-blue-100/60 hover:border-white/30 hover:bg-white/10"
+                            )}
+                            data-testid={`button-blocked-status-${status}`}
+                          >
+                            {status.charAt(0).toUpperCase() + status.slice(1)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-blue-100/60">
+                      Accounts with these statuses will not receive emails, SMS, or accept payments
+                    </p>
+                  </div>
+
                   {/* SMAX Configuration Fields */}
                   {localSettings?.smaxEnabled && (
                     <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-4">

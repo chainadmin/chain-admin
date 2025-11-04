@@ -410,10 +410,12 @@ function replaceTemplateVariables(
   ) {
     const consumersList = await storage.getConsumersByTenant(tenantId);
     const accountsData = await storage.getAccountsByTenant(tenantId);
+    const tenantSettings = await storage.getTenantSettings(tenantId);
 
-    // Filter out accounts with inactive/recalled/closed status
+    // Filter out accounts with blocked statuses (configured per tenant)
+    const blockedStatuses = tenantSettings?.blockedAccountStatuses || ['inactive', 'recalled', 'closed'];
     const activeAccountsData = accountsData.filter(acc => 
-      !acc.status || acc.status === 'active'
+      !acc.status || !blockedStatuses.includes(acc.status)
     );
 
     const folderIds = Array.isArray(folderSelection)
@@ -2526,10 +2528,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   ) {
     const consumersList = await storage.getConsumersByTenant(tenantId);
     const accountsData = await storage.getAccountsByTenant(tenantId);
+    const tenantSettings = await storage.getTenantSettings(tenantId);
 
-    // Filter out accounts with inactive/recalled/closed status
+    // Filter out accounts with blocked statuses (configured per tenant)
+    const blockedStatuses = tenantSettings?.blockedAccountStatuses || ['inactive', 'recalled', 'closed'];
     const activeAccountsData = accountsData.filter(acc => 
-      !acc.status || acc.status === 'active'
+      !acc.status || !blockedStatuses.includes(acc.status)
     );
 
     const folderIds = Array.isArray(folderSelection)
@@ -6958,9 +6962,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Access denied to this account" });
       }
       
-      // Check if account is active (block inactive/recalled/closed)
-      if (account.status && account.status !== 'active') {
-        console.log(`❌ Payment blocked: Account status is "${account.status}"`);
+      // Check if account status is blocked (configured per tenant)
+      const tenantSettings = await storage.getTenantSettings(tenantId);
+      const blockedStatuses = tenantSettings?.blockedAccountStatuses || ['inactive', 'recalled', 'closed'];
+      if (account.status && blockedStatuses.includes(account.status)) {
+        console.log(`❌ Payment blocked: Account status is "${account.status}" (blocked by tenant settings)`);
         return res.status(403).json({ 
           success: false,
           message: "This account is not active and cannot accept payments. Please contact us for assistance." 
@@ -8553,10 +8559,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   continue;
                 }
 
-                // Check if account is active (block inactive/recalled/closed)
+                // Get tenant settings (used for blocked status check, SMAX preflight check, and USAePay credentials)
+                const settings = await storage.getTenantSettings(tenant.id);
+                
+                // Check if account status is blocked (configured per tenant)
                 const scheduleAccount = await storage.getAccount(schedule.accountId);
-                if (scheduleAccount && scheduleAccount.status && scheduleAccount.status !== 'active') {
-                  console.log(`⏭️ Skipping scheduled payment for ${scheduleAccount.status} account: ${schedule.accountId}`);
+                const blockedStatuses = settings?.blockedAccountStatuses || ['inactive', 'recalled', 'closed'];
+                if (scheduleAccount && scheduleAccount.status && blockedStatuses.includes(scheduleAccount.status)) {
+                  console.log(`⏭️ Skipping scheduled payment for ${scheduleAccount.status} account: ${schedule.accountId} (blocked by tenant settings)`);
                   failedPayments.push({
                     scheduleId: schedule.id,
                     accountId: schedule.accountId,
@@ -8564,9 +8574,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   });
                   continue;
                 }
-
-                // Get tenant settings (used for both SMAX preflight check and USAePay credentials)
-                const settings = await storage.getTenantSettings(tenant.id);
 
                 // CRITICAL: Preflight check - Query SMAX for existing payments on this date
                 // This prevents duplicate charges if SMAX already has a payment scheduled
@@ -10257,21 +10264,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Consumer not found" });
       }
       
+      // Get tenant settings for blocked statuses and USAePay credentials
+      const settings = await storage.getTenantSettings(tenantId);
+      
       // Check if consumer has any active accounts before processing payment
       const consumerAccounts = await storage.getAccountsByConsumer(consumer.id);
       if (consumerAccounts && consumerAccounts.length > 0) {
-        const allNonActive = consumerAccounts.every(acc => acc.status && acc.status !== 'active');
-        if (allNonActive) {
-          console.log('❌ Payment blocked: All consumer accounts are non-active (inactive/recalled/closed)');
+        const blockedStatuses = settings?.blockedAccountStatuses || ['inactive', 'recalled', 'closed'];
+        const allBlocked = consumerAccounts.every(acc => acc.status && blockedStatuses.includes(acc.status));
+        if (allBlocked) {
+          console.log(`❌ Payment blocked: All consumer accounts have blocked statuses (${blockedStatuses.join('/')})`);
           return res.status(403).json({ 
             success: false,
             message: "All accounts for this consumer are not active and cannot accept payments." 
           });
         }
       }
-
-      // Get tenant settings for USAePay credentials
-      const settings = await storage.getTenantSettings(tenantId);
       const merchantApiKey = settings?.merchantApiKey?.trim();
       const merchantApiPin = settings?.merchantApiPin?.trim();
       const useSandbox = settings?.useSandbox;
