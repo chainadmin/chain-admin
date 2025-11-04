@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -64,6 +65,7 @@ import {
   Zap,
   BarChart3,
   Code,
+  LayoutDashboard,
   Bold as BoldIcon,
   Italic as ItalicIcon,
   Underline as UnderlineIcon,
@@ -92,7 +94,37 @@ import {
   type SummaryBlock,
 } from "./communicationsHelpers";
 
-const DEFAULT_ACCOUNT_HEADING_HTML = "<p>Your account details:</p>";
+const ACCOUNT_SUMMARY_MARKERS = {
+  start: "<!--ACCOUNT_SUMMARY_START-->",
+  end: "<!--ACCOUNT_SUMMARY_END-->",
+};
+
+const ACCOUNT_SUMMARY_PLACEHOLDER_REGEX = /\{\{ACCOUNT_SUMMARY_BLOCK\}\}/gi;
+const ACCOUNT_SUMMARY_META_REGEX = /<!--ACCOUNT_SUMMARY_META:([^>]*)-->/i;
+
+type AccountSummaryOptions = {
+  headingText: string;
+  showHeading: boolean;
+  showAccountDetails: boolean;
+  includeButton: boolean;
+  buttonText: string;
+  buttonColor: string;
+  buttonTextColor: string;
+  buttonStyle: "solid" | "outline";
+  buttonSize: "sm" | "md" | "lg";
+  buttonAlignment: "left" | "center" | "right" | "full";
+  buttonShape: "rounded" | "pill" | "square";
+};
+
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+
+const DEFAULT_ACCOUNT_HEADING_TEXT = "Your account details:";
 const DEFAULT_ACCOUNT_TABLE_HTML = `<table class="attribute-list" width="100%" cellpadding="0" cellspacing="0">
   <tr>
     <td class="attribute-list-container">
@@ -106,20 +138,180 @@ const DEFAULT_ACCOUNT_TABLE_HTML = `<table class="attribute-list" width="100%" c
     </td>
   </tr>
 </table>`;
-const DEFAULT_PAYMENT_BUTTON_HTML = `<table class="body-action" align="center" width="100%" cellpadding="0" cellspacing="0">
+
+const BUTTON_SIZE_STYLES: Record<AccountSummaryOptions["buttonSize"], { padding: string; fontSize: string }> = {
+  sm: { padding: "8px 18px", fontSize: "13px" },
+  md: { padding: "12px 24px", fontSize: "15px" },
+  lg: { padding: "16px 32px", fontSize: "17px" },
+};
+
+const BUTTON_SHAPE_RADIUS: Record<AccountSummaryOptions["buttonShape"], string> = {
+  square: "6px",
+  rounded: "10px",
+  pill: "9999px",
+};
+
+const createDefaultAccountSummaryOptions = (): AccountSummaryOptions => ({
+  headingText: DEFAULT_ACCOUNT_HEADING_TEXT,
+  showHeading: true,
+  showAccountDetails: true,
+  includeButton: true,
+  buttonText: "Make a Payment",
+  buttonColor: "#22BC66",
+  buttonTextColor: "#ffffff",
+  buttonStyle: "solid",
+  buttonSize: "md",
+  buttonAlignment: "center",
+  buttonShape: "rounded",
+});
+
+const encodeAccountSummaryMeta = (options: AccountSummaryOptions) =>
+  encodeURIComponent(JSON.stringify({ ...options, __v: 1 }));
+
+const decodeAccountSummaryMeta = (value: string): AccountSummaryOptions | null => {
+  try {
+    const parsed = JSON.parse(decodeURIComponent(value));
+    const { __v, ...rest } = parsed;
+    return {
+      ...createDefaultAccountSummaryOptions(),
+      ...(rest as Partial<AccountSummaryOptions>),
+    };
+  } catch (error) {
+    return null;
+  }
+};
+
+const buildPaymentButtonHtml = (options: AccountSummaryOptions) => {
+  const size = BUTTON_SIZE_STYLES[options.buttonSize];
+  const borderRadius = BUTTON_SHAPE_RADIUS[options.buttonShape];
+  const alignment = options.buttonAlignment === "full" ? "center" : options.buttonAlignment;
+  const display = options.buttonAlignment === "full" ? "block" : "inline-block";
+  const width = options.buttonAlignment === "full" ? "100%" : "auto";
+  const backgroundColor = options.buttonStyle === "solid" ? options.buttonColor : "transparent";
+  const textColor = options.buttonStyle === "solid" ? options.buttonTextColor : options.buttonColor;
+  const border = options.buttonStyle === "solid" ? `1px solid ${options.buttonColor}` : `2px solid ${options.buttonColor}`;
+  const anchorStyles = [
+    `background-color:${backgroundColor}`,
+    `color:${textColor}`,
+    `display:${display}`,
+    "font-weight:600",
+    "text-decoration:none",
+    `padding:${size.padding}`,
+    `font-size:${size.fontSize}`,
+    `border-radius:${borderRadius}`,
+    "text-align:center",
+    `border:${border}`,
+    width === "100%" ? "width:100%" : "",
+  ]
+    .filter(Boolean)
+    .join(";");
+
+  const requiresFullWidth = options.buttonAlignment === "full";
+  const edgeAligned = options.buttonAlignment === "left" || options.buttonAlignment === "right";
+  const innerTableWidth = requiresFullWidth || edgeAligned ? ' width="100%"' : "";
+  const outerTableStyle = requiresFullWidth || edgeAligned ? "margin:30px 0;width:100%;" : "margin:30px auto;width:auto;";
+
+  return `<table class="body-action" align="center" width="100%" cellpadding="0" cellspacing="0" role="presentation" style="${outerTableStyle}">
   <tr>
-    <td align="center">
-      <table border="0" cellspacing="0" cellpadding="0">
+    <td align="${alignment}">
+      <table border="0" cellspacing="0" cellpadding="0" role="presentation"${innerTableWidth}>
         <tr>
-          <td>
-            <a href="{{consumerPortalLink}}" class="button button--green" target="_blank">Make a Payment</a>
+          <td align="${alignment}">
+            <a href="{{consumerPortalLink}}" class="button" target="_blank" style="${anchorStyles}">${escapeHtml(
+              options.buttonText || "Make a Payment",
+            )}</a>
           </td>
         </tr>
       </table>
     </td>
   </tr>
 </table>`;
-const DEFAULT_ACCOUNT_SUMMARY_HTML = `${DEFAULT_ACCOUNT_HEADING_HTML}\n${DEFAULT_ACCOUNT_TABLE_HTML}\n${DEFAULT_PAYMENT_BUTTON_HTML}`;
+};
+
+const buildAccountSummaryHtml = (options: AccountSummaryOptions, wrap = false) => {
+  const sections: string[] = [`<!--ACCOUNT_SUMMARY_META:${encodeAccountSummaryMeta(options)}-->`];
+
+  if (options.showHeading && options.headingText.trim()) {
+    sections.push(`<p>${escapeHtml(options.headingText)}</p>`);
+  }
+
+  if (options.showAccountDetails) {
+    sections.push(DEFAULT_ACCOUNT_TABLE_HTML);
+  }
+
+  if (options.includeButton) {
+    sections.push(buildPaymentButtonHtml(options));
+  }
+
+  const html = sections.join("\n");
+
+  if (!wrap) {
+    return html;
+  }
+
+  return `${ACCOUNT_SUMMARY_MARKERS.start}\n${html}\n${ACCOUNT_SUMMARY_MARKERS.end}`;
+};
+
+const DEFAULT_ACCOUNT_HEADING_HTML = `<p>${escapeHtml(DEFAULT_ACCOUNT_HEADING_TEXT)}</p>`;
+
+const getAccountSummaryBlockRegex = () =>
+  new RegExp(`${ACCOUNT_SUMMARY_MARKERS.start}[\\s\\S]*?${ACCOUNT_SUMMARY_MARKERS.end}`, "gi");
+
+const replaceAccountSummaryBlock = (html: string, options: AccountSummaryOptions) => {
+  if (!html) return html;
+  const wrapped = buildAccountSummaryHtml(options, true);
+  const blockRegex = getAccountSummaryBlockRegex();
+
+  if (blockRegex.test(html)) {
+    return html.replace(getAccountSummaryBlockRegex(), wrapped);
+  }
+
+  ACCOUNT_SUMMARY_PLACEHOLDER_REGEX.lastIndex = 0;
+  if (ACCOUNT_SUMMARY_PLACEHOLDER_REGEX.test(html)) {
+    ACCOUNT_SUMMARY_PLACEHOLDER_REGEX.lastIndex = 0;
+    return html.replace(ACCOUNT_SUMMARY_PLACEHOLDER_REGEX, wrapped);
+  }
+
+  ACCOUNT_SUMMARY_PLACEHOLDER_REGEX.lastIndex = 0;
+  return html;
+};
+
+const extractAccountSummaryOptionsFromHtml = (html: string): AccountSummaryOptions => {
+  if (!html) {
+    return createDefaultAccountSummaryOptions();
+  }
+
+  const metaMatch = ACCOUNT_SUMMARY_META_REGEX.exec(html);
+  if (metaMatch) {
+    const decoded = decodeAccountSummaryMeta(metaMatch[1]);
+    if (decoded) {
+      return decoded;
+    }
+  }
+
+  const fallback = createDefaultAccountSummaryOptions();
+  const blockMatch = getAccountSummaryBlockRegex().exec(html);
+  const blockHtml = blockMatch ? blockMatch[0] : null;
+  const contentToInspect = blockHtml || html;
+  const buttonTextMatch = /<a[^>]*>([^<]+)<\/a>/i.exec(contentToInspect);
+  if (buttonTextMatch) {
+    fallback.buttonText = buttonTextMatch[1].trim();
+  }
+
+  if (!contentToInspect.includes(DEFAULT_ACCOUNT_TABLE_HTML)) {
+    fallback.showAccountDetails = false;
+  }
+
+  if (!buttonTextMatch) {
+    fallback.includeButton = false;
+  }
+
+  if (!contentToInspect.includes(DEFAULT_ACCOUNT_HEADING_TEXT)) {
+    fallback.showHeading = false;
+  }
+
+  return fallback;
+};
 const DEFAULT_GREETING_HTML = "<p>Hi {{firstName}},</p>";
 const DEFAULT_MESSAGE_HTML = "<p>This is a friendly reminder about your account. Your current balance is {{balance}} for account {{accountNumber}}.</p>";
 const DEFAULT_CLOSING_HTML = "<p>If you have any questions, please don't hesitate to contact us.</p>";
@@ -151,11 +343,23 @@ export default function Communications() {
   const [activeField, setActiveField] = useState<"subject" | "html">("html");
 
   const [emailTemplateForm, setEmailTemplateForm] = useState(createEmptyEmailTemplateForm());
-  
+
   const [smsTemplateForm, setSmsTemplateForm] = useState({
     name: "",
     message: "",
   });
+
+  const [accountSummaryOptions, setAccountSummaryOptions] = useState(createDefaultAccountSummaryOptions());
+
+  const updateAccountSummaryOption = <K extends keyof AccountSummaryOptions>(
+    key: K,
+    value: AccountSummaryOptions[K],
+  ) => {
+    setAccountSummaryOptions((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+  };
   
   const [campaignForm, setCampaignForm] = useState({
     name: "",
@@ -383,18 +587,21 @@ export default function Communications() {
     { label: "Unsubscribe Button", value: "{{unsubscribeButton}}", category: "compliance" },
   ];
 
-  const quickInsertSnippets = [
-    {
-      label: "Account Summary Table",
-      description: "Adds a styled table with key account merge fields",
-      html: `${DEFAULT_ACCOUNT_HEADING_HTML}\n${DEFAULT_ACCOUNT_TABLE_HTML}`,
-    },
-    {
-      label: "Payment Button",
-      description: "Adds a primary button that links to the consumer portal",
-      html: DEFAULT_PAYMENT_BUTTON_HTML,
-    },
-  ];
+  const quickInsertSnippets = useMemo(
+    () => [
+      {
+        label: "Account Summary Table",
+        description: "Adds a styled table with key account merge fields",
+        html: `${DEFAULT_ACCOUNT_HEADING_HTML}\n${DEFAULT_ACCOUNT_TABLE_HTML}`,
+      },
+      {
+        label: "Payment Button",
+        description: "Adds a primary button that links to the consumer portal",
+        html: buildPaymentButtonHtml(accountSummaryOptions),
+      },
+    ],
+    [accountSummaryOptions],
+  );
 
   const formattingButtons = useMemo(
     () => [
@@ -542,6 +749,28 @@ export default function Communications() {
     }
   }, [emailTemplateForm.html, showTemplateModal]);
 
+  useEffect(() => {
+    if (!showTemplateModal || communicationType !== "email") {
+      return;
+    }
+
+    setEmailTemplateForm((prev) => {
+      if (!prev.html) {
+        return prev;
+      }
+
+      const updatedHtml = replaceAccountSummaryBlock(prev.html, accountSummaryOptions);
+      if (updatedHtml === prev.html) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        html: updatedHtml,
+      };
+    });
+  }, [accountSummaryOptions, communicationType, showTemplateModal]);
+
   // Function to insert variable at cursor position (works with any field)
   const insertVariable = (variable: string) => {
     if (communicationType === "sms") {
@@ -596,10 +825,12 @@ export default function Communications() {
     let contentHtml = template.html || "";
     contentHtml = contentHtml.replace("{{CUSTOM_GREETING}}", DEFAULT_GREETING_HTML);
     contentHtml = contentHtml.replace("{{CUSTOM_MESSAGE}}", DEFAULT_MESSAGE_HTML);
-    contentHtml = contentHtml.replace(/\{\{ACCOUNT_SUMMARY_BLOCK\}\}/g, DEFAULT_ACCOUNT_SUMMARY_HTML);
     contentHtml = contentHtml.replace("{{CUSTOM_CLOSING_MESSAGE}}", DEFAULT_CLOSING_HTML);
     contentHtml = contentHtml.replace("{{CUSTOM_SIGNOFF}}", DEFAULT_SIGNOFF_HTML);
+    contentHtml = replaceAccountSummaryBlock(contentHtml, createDefaultAccountSummaryOptions());
     const fullHtml = template.styles ? `${template.styles}\n${contentHtml}` : contentHtml;
+
+    setAccountSummaryOptions(createDefaultAccountSummaryOptions());
 
     setEmailTemplateForm((prev) => ({
       ...prev,
@@ -685,8 +916,8 @@ export default function Communications() {
     const agencyEmail = (tenantSettings as any)?.agencyEmail || "support@example.com";
     const agencyPhone = (tenantSettings as any)?.agencyPhone || "(555) 123-4567";
 
-    let previewHtml = emailTemplateForm.html.replace(/<!--SECTION_ORDER:[^>]+-->/gi, "");
-    previewHtml = previewHtml.replace(/\{\{ACCOUNT_SUMMARY_BLOCK\}\}/gi, DEFAULT_ACCOUNT_SUMMARY_HTML);
+    let previewHtml = replaceAccountSummaryBlock(emailTemplateForm.html || "", accountSummaryOptions);
+    previewHtml = previewHtml.replace(/<!--SECTION_ORDER:[^>]+-->/gi, "");
     previewHtml = replacePreviewVariables(previewHtml, "html", {
       resolvedConsumerPortalUrl,
       sampleUnsubscribeUrl,
@@ -1152,6 +1383,7 @@ export default function Communications() {
         html: template.html || "",
         designType: template.designType || "postmark-invoice",
       });
+      setAccountSummaryOptions(extractAccountSummaryOptionsFromHtml(template.html || ""));
     } else {
       setSmsTemplateForm({
         name: template.name,
@@ -2101,6 +2333,7 @@ export default function Communications() {
                     setEditingTemplate(null);
                     setEmailTemplateForm(createEmptyEmailTemplateForm());
                     setSmsTemplateForm({ name: "", message: "" });
+                    setAccountSummaryOptions(createDefaultAccountSummaryOptions());
                     setActiveField("html");
                     setTimeout(() => {
                       if (editorRef.current) {
@@ -2404,6 +2637,194 @@ export default function Communications() {
                                   </p>
                                 </div>
                               ))}
+                            </div>
+                          </div>
+
+                          <div className="mt-6">
+                            <Label className="text-sm font-medium flex items-center gap-2 text-blue-100">
+                              <LayoutDashboard className="h-4 w-4" />
+                              Account Summary Layout
+                            </Label>
+                            <p className="text-xs text-blue-200/70 mt-1">
+                              Fine-tune the default table and payment button without editing HTML.
+                            </p>
+                            <div className="mt-3 space-y-3">
+                              <div className="space-y-3 rounded-lg border border-white/15 bg-white/5 p-3">
+                                <div className="flex items-center justify-between gap-3">
+                                  <div>
+                                    <p className="text-xs font-medium text-blue-100">Heading</p>
+                                    <p className="text-[11px] text-blue-200/70">Toggle and rename the intro line above your table.</p>
+                                  </div>
+                                  <Switch
+                                    checked={accountSummaryOptions.showHeading}
+                                    onCheckedChange={(checked) => updateAccountSummaryOption("showHeading", checked)}
+                                    aria-label="Toggle account summary heading"
+                                  />
+                                </div>
+                                {accountSummaryOptions.showHeading && (
+                                  <div>
+                                    <Label className="text-[11px] uppercase tracking-wide text-blue-200/70">Heading text</Label>
+                                    <Input
+                                      value={accountSummaryOptions.headingText}
+                                      onChange={(e) => updateAccountSummaryOption("headingText", e.target.value)}
+                                      className="mt-1 h-8 bg-white/10 border-white/20 text-white placeholder:text-blue-200/50 text-xs"
+                                      placeholder="e.g., Your account details"
+                                    />
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="space-y-3 rounded-lg border border-white/15 bg-white/5 p-3">
+                                <div className="flex items-center justify-between gap-3">
+                                  <div>
+                                    <p className="text-xs font-medium text-blue-100">Account table</p>
+                                    <p className="text-[11px] text-blue-200/70">Show or hide the merge-field summary rows.</p>
+                                  </div>
+                                  <Switch
+                                    checked={accountSummaryOptions.showAccountDetails}
+                                    onCheckedChange={(checked) => updateAccountSummaryOption("showAccountDetails", checked)}
+                                    aria-label="Toggle account details table"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="space-y-3 rounded-lg border border-white/15 bg-white/5 p-3">
+                                <div className="flex items-center justify-between gap-3">
+                                  <div>
+                                    <p className="text-xs font-medium text-blue-100">Payment button</p>
+                                    <p className="text-[11px] text-blue-200/70">
+                                      Adjust the label, alignment, size, and colors used for the pay-now call to action.
+                                    </p>
+                                  </div>
+                                  <Switch
+                                    checked={accountSummaryOptions.includeButton}
+                                    onCheckedChange={(checked) => updateAccountSummaryOption("includeButton", checked)}
+                                    aria-label="Toggle payment button"
+                                  />
+                                </div>
+
+                                {accountSummaryOptions.includeButton && (
+                                  <div className="space-y-3">
+                                    <div>
+                                      <Label className="text-[11px] uppercase tracking-wide text-blue-200/70">Button label</Label>
+                                      <Input
+                                        value={accountSummaryOptions.buttonText}
+                                        onChange={(e) => updateAccountSummaryOption("buttonText", e.target.value)}
+                                        className="mt-1 h-8 bg-white/10 border-white/20 text-white placeholder:text-blue-200/50 text-xs"
+                                        placeholder="e.g., Pay balance now"
+                                      />
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <div>
+                                        <Label className="text-[11px] uppercase tracking-wide text-blue-200/70">Alignment</Label>
+                                        <Select
+                                          value={accountSummaryOptions.buttonAlignment}
+                                          onValueChange={(value) =>
+                                            updateAccountSummaryOption(
+                                              "buttonAlignment",
+                                              value as AccountSummaryOptions["buttonAlignment"],
+                                            )
+                                          }
+                                        >
+                                          <SelectTrigger className="mt-1 h-8 border-white/20 bg-white/10 text-xs text-blue-100">
+                                            <SelectValue placeholder="Choose alignment" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="left">Left</SelectItem>
+                                            <SelectItem value="center">Center</SelectItem>
+                                            <SelectItem value="right">Right</SelectItem>
+                                            <SelectItem value="full">Full width</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      <div>
+                                        <Label className="text-[11px] uppercase tracking-wide text-blue-200/70">Size</Label>
+                                        <Select
+                                          value={accountSummaryOptions.buttonSize}
+                                          onValueChange={(value) =>
+                                            updateAccountSummaryOption("buttonSize", value as AccountSummaryOptions["buttonSize"])
+                                          }
+                                        >
+                                          <SelectTrigger className="mt-1 h-8 border-white/20 bg-white/10 text-xs text-blue-100">
+                                            <SelectValue placeholder="Choose size" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="sm">Compact</SelectItem>
+                                            <SelectItem value="md">Comfortable</SelectItem>
+                                            <SelectItem value="lg">Large</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <div>
+                                        <Label className="text-[11px] uppercase tracking-wide text-blue-200/70">Style</Label>
+                                        <Select
+                                          value={accountSummaryOptions.buttonStyle}
+                                          onValueChange={(value) =>
+                                            updateAccountSummaryOption(
+                                              "buttonStyle",
+                                              value as AccountSummaryOptions["buttonStyle"],
+                                            )
+                                          }
+                                        >
+                                          <SelectTrigger className="mt-1 h-8 border-white/20 bg-white/10 text-xs text-blue-100">
+                                            <SelectValue placeholder="Choose style" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="solid">Solid</SelectItem>
+                                            <SelectItem value="outline">Outline</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      <div>
+                                        <Label className="text-[11px] uppercase tracking-wide text-blue-200/70">Shape</Label>
+                                        <Select
+                                          value={accountSummaryOptions.buttonShape}
+                                          onValueChange={(value) =>
+                                            updateAccountSummaryOption(
+                                              "buttonShape",
+                                              value as AccountSummaryOptions["buttonShape"],
+                                            )
+                                          }
+                                        >
+                                          <SelectTrigger className="mt-1 h-8 border-white/20 bg-white/10 text-xs text-blue-100">
+                                            <SelectValue placeholder="Choose shape" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="rounded">Rounded</SelectItem>
+                                            <SelectItem value="pill">Pill</SelectItem>
+                                            <SelectItem value="square">Square</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <div>
+                                        <Label className="text-[11px] uppercase tracking-wide text-blue-200/70">Button color</Label>
+                                        <Input
+                                          type="color"
+                                          value={accountSummaryOptions.buttonColor}
+                                          onChange={(e) => updateAccountSummaryOption("buttonColor", e.target.value)}
+                                          className="mt-1 h-8 w-full cursor-pointer border-white/20 bg-white/10 p-1"
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label className="text-[11px] uppercase tracking-wide text-blue-200/70">Text color</Label>
+                                        <Input
+                                          type="color"
+                                          value={accountSummaryOptions.buttonTextColor}
+                                          onChange={(e) => updateAccountSummaryOption("buttonTextColor", e.target.value)}
+                                          className="mt-1 h-8 w-full cursor-pointer border-white/20 bg-white/10 p-1"
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
