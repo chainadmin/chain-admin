@@ -412,11 +412,9 @@ function replaceTemplateVariables(
     const accountsData = await storage.getAccountsByTenant(tenantId);
     const tenantSettings = await storage.getTenantSettings(tenantId);
 
-    // Filter out accounts with blocked statuses (configured per tenant)
+    // NOTE: We do NOT filter out blocked accounts here - they should still be visible in campaigns
+    // Blocked statuses only prevent the actual sending of communications, not visibility
     const blockedStatuses = tenantSettings?.blockedAccountStatuses || ['inactive', 'recalled', 'closed'];
-    const activeAccountsData = accountsData.filter(acc => 
-      !acc.status || !blockedStatuses.includes(acc.status)
-    );
 
     const folderIds = Array.isArray(folderSelection)
       ? folderSelection.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
@@ -427,7 +425,7 @@ function replaceTemplateVariables(
     console.log(
       `🎯 Resolving campaign audience - targetGroup: "${targetGroup}", folders: ${folderIds.length > 0 ? folderIds.join(', ') : 'none'}`,
     );
-    console.log(`📊 Total consumers in tenant: ${consumersList.length}, Total accounts: ${accountsData.length}, Active accounts: ${activeAccountsData.length}`);
+    console.log(`📊 Total consumers in tenant: ${consumersList.length}, Total accounts: ${accountsData.length}`);
 
     let targetedConsumers = consumersList;
 
@@ -435,12 +433,12 @@ function replaceTemplateVariables(
       const folderSet = new Set(folderIds);
 
       console.log(`🔍 Filtering for folders: ${folderIds.join(', ')}`);
-      const accountsInFolder = activeAccountsData.filter(acc => {
+      const accountsInFolder = accountsData.filter(acc => {
         const accountFolderMatch = acc.folderId && folderSet.has(acc.folderId);
         const consumerFolderMatch = acc.consumer?.folderId && folderSet.has(acc.consumer.folderId);
         return accountFolderMatch || consumerFolderMatch;
       });
-      console.log(`📁 Found ${accountsInFolder.length} active accounts matching selected folders`);
+      console.log(`📁 Found ${accountsInFolder.length} accounts matching selected folders`);
 
       if (accountsInFolder.length === 0) {
         const totalAccountsWithFolder = activeAccountsData.filter(acc => acc.folderId).length;
@@ -2530,11 +2528,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const accountsData = await storage.getAccountsByTenant(tenantId);
     const tenantSettings = await storage.getTenantSettings(tenantId);
 
-    // Filter out accounts with blocked statuses (configured per tenant)
+    // NOTE: We do NOT filter out blocked accounts here - they should still be visible in campaigns
+    // Blocked statuses only prevent the actual sending of communications, not visibility
     const blockedStatuses = tenantSettings?.blockedAccountStatuses || ['inactive', 'recalled', 'closed'];
-    const activeAccountsData = accountsData.filter(acc => 
-      !acc.status || !blockedStatuses.includes(acc.status)
-    );
 
     const folderIds = Array.isArray(folderSelection)
       ? folderSelection.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
@@ -2545,7 +2541,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log(
       `📱 Resolving SMS audience - targetGroup: "${targetGroup}", folders: ${folderIds.length > 0 ? folderIds.join(', ') : 'none'}`,
     );
-    console.log(`📊 Total consumers in tenant: ${consumersList.length}, Total accounts: ${accountsData.length}, Active accounts: ${activeAccountsData.length}`);
+    console.log(`📊 Total consumers in tenant: ${consumersList.length}, Total accounts: ${accountsData.length}`);
 
     let targetedConsumers = consumersList;
 
@@ -2553,12 +2549,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const folderSet = new Set(folderIds);
 
       console.log(`🔍 Filtering for folders: ${folderIds.join(', ')}`);
-      const accountsInFolder = activeAccountsData.filter(acc => {
+      const accountsInFolder = accountsData.filter(acc => {
         const accountFolderMatch = acc.folderId && folderSet.has(acc.folderId);
         const consumerFolderMatch = acc.consumer?.folderId && folderSet.has(acc.consumer.folderId);
         return accountFolderMatch || consumerFolderMatch;
       });
-      console.log(`📁 Found ${accountsInFolder.length} active accounts matching selected folders`);
+      console.log(`📁 Found ${accountsInFolder.length} accounts matching selected folders`);
 
       if (accountsInFolder.length === 0) {
         const totalAccountsWithFolder = activeAccountsData.filter(acc => acc.folderId).length;
