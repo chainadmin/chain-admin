@@ -36,7 +36,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Trash2, Upload, Plus, Save, CreditCard, Shield, Settings as SettingsIcon, ImageIcon, Copy, ExternalLink, Repeat, FileText, Users, MessagesSquare, DollarSign, Code, Table } from "lucide-react";
+import { Trash2, Upload, Plus, Save, CreditCard, Shield, Settings as SettingsIcon, ImageIcon, Copy, ExternalLink, Repeat, FileText, Users, MessagesSquare, DollarSign, Code, Table, Eye } from "lucide-react";
 import { useRef } from "react";
 import { isSubdomainSupported } from "@shared/utils/subdomain";
 import { resolveConsumerPortalUrl } from "@shared/utils/consumerPortal";
@@ -685,6 +685,43 @@ export default function Settings() {
       const newPosition = start + html.length + 2;
       textarea.setSelectionRange(newPosition, newPosition);
     }, 0);
+  };
+
+  // Render document preview with sample data
+  const renderDocumentPreview = () => {
+    if (!docTemplateForm.content) {
+      return "";
+    }
+
+    let output = docTemplateForm.content;
+
+    // Replace variables with sample data
+    output = output.replace(/\{\{consumer_name\}\}/gi, "John Doe");
+    output = output.replace(/\{\{consumer_first_name\}\}/gi, "John");
+    output = output.replace(/\{\{consumer_last_name\}\}/gi, "Doe");
+    output = output.replace(/\{\{consumer_email\}\}/gi, "john.doe@example.com");
+    output = output.replace(/\{\{consumer_phone\}\}/gi, "(555) 123-4567");
+    output = output.replace(/\{\{consumer_address\}\}/gi, "123 Main St, Anytown, ST 12345");
+    
+    output = output.replace(/\{\{account_number\}\}/gi, "ACC-123456");
+    output = output.replace(/\{\{creditor_name\}\}/gi, "Sample Creditor");
+    output = output.replace(/\{\{balance\}\}/gi, "$1,234.56");
+    output = output.replace(/\{\{original_balance\}\}/gi, "$1,500.00");
+    output = output.replace(/\{\{monthly_payment\}\}/gi, "$150.00");
+    output = output.replace(/\{\{remaining_balance\}\}/gi, "$1,084.56");
+    
+    output = output.replace(/\{\{current_date\}\}/gi, new Date().toLocaleDateString());
+    output = output.replace(/\{\{today\}\}/gi, new Date().toLocaleDateString());
+    output = output.replace(/\{\{signature_date\}\}/gi, new Date().toLocaleDateString());
+    
+    output = output.replace(/\{\{agency_name\}\}/gi, (settings as any)?.agencyName || "Your Agency");
+    output = output.replace(/\{\{agency_email\}\}/gi, (settings as any)?.agencyEmail || "support@example.com");
+    output = output.replace(/\{\{agency_phone\}\}/gi, (settings as any)?.agencyPhone || "(555) 123-4567");
+    
+    output = output.replace(/\{\{consumer_signature\}\}/gi, '<div style="margin: 20px 0; padding: 10px; border: 2px dashed #cbd5e1; border-radius: 4px; color: #64748b; font-style: italic;">Consumer signature will appear here</div>');
+    output = output.replace(/\{\{signature_field\}\}/gi, '<div style="margin: 20px 0; padding: 10px; border: 2px dashed #cbd5e1; border-radius: 4px; color: #64748b; font-style: italic;">Signature field</div>');
+
+    return output;
   };
 
   const handleSubmitDocument = () => {
@@ -2456,20 +2493,45 @@ export default function Settings() {
 
                     <div className="grid grid-cols-3 gap-4">
                       {/* Content Editor */}
-                      <div className="col-span-2">
-                        <Label className="text-white mb-2 block">Document Content *</Label>
-                        <Textarea
-                          ref={docContentRef}
-                          value={docTemplateForm.content}
-                          onChange={(e) => setDocTemplateForm({ ...docTemplateForm, content: e.target.value })}
-                          placeholder="Enter the document content here. Click variables or tables to insert them."
-                          className={textareaClasses}
-                          rows={16}
-                          data-testid="input-template-content"
-                        />
-                        <p className="text-xs text-blue-100/60 mt-1">
-                          Click variables or tables on the right to insert them at your cursor position
-                        </p>
+                      <div className="col-span-2 space-y-4">
+                        <div>
+                          <Label className="text-white mb-2 block">Document Content *</Label>
+                          <Textarea
+                            ref={docContentRef}
+                            value={docTemplateForm.content}
+                            onChange={(e) => setDocTemplateForm({ ...docTemplateForm, content: e.target.value })}
+                            placeholder="Enter the document content here. Click variables or tables to insert them."
+                            className={textareaClasses}
+                            rows={16}
+                            data-testid="input-template-content"
+                          />
+                          <p className="text-xs text-blue-100/60 mt-1">
+                            Click variables or tables on the right to insert them at your cursor position
+                          </p>
+                        </div>
+
+                        {/* Preview Section */}
+                        <div className="border border-white/20 rounded-lg p-4 bg-white/5">
+                          <Label className="text-sm font-medium flex items-center gap-2 mb-3 text-blue-100">
+                            <Eye className="h-4 w-4" />
+                            Preview
+                          </Label>
+                          <div className="border border-white/20 rounded-lg overflow-auto bg-white p-4 max-h-96">
+                            {docTemplateForm.content ? (
+                              <div
+                                className="prose prose-sm max-w-none"
+                                dangerouslySetInnerHTML={{ __html: renderDocumentPreview() }}
+                              />
+                            ) : (
+                              <div className="h-full flex items-center justify-center text-gray-400 py-8">
+                                <div className="text-center">
+                                  <Eye className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                                  <p className="text-sm">Enter content to see preview</p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </div>
 
                       {/* Variables & Tables Sidebar */}
