@@ -137,27 +137,6 @@ export default function Payments() {
     },
   });
 
-  // Manually sync payment to SMAX
-  const syncPaymentToSmaxMutation = useMutation({
-    mutationFn: async (paymentId: string) => {
-      const response = await apiRequest("POST", `/api/payments/${paymentId}/sync-to-smax`, {});
-      return response.json();
-    },
-    onSuccess: () => {
-      toast({
-        title: "Payment Synced",
-        description: "Payment has been successfully synced to SMAX.",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Sync Failed",
-        description: error.message || "Unable to sync payment to SMAX. Please check SMAX configuration.",
-        variant: "destructive",
-      });
-    },
-  });
-
   // Approve payment schedule mutation
   const approveScheduleMutation = useMutation({
     mutationFn: async (scheduleId: string) => {
@@ -583,17 +562,6 @@ export default function Payments() {
                                 {payment.createdBy || "Agent"}
                               </div>
                               <div className="flex gap-2">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => syncPaymentToSmaxMutation.mutate(payment.id)}
-                                  disabled={syncPaymentToSmaxMutation.isPending || !payment.accountId}
-                                  className="h-8 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 text-emerald-100 transition hover:bg-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                                  data-testid={`button-sync-payment-${payment.id}`}
-                                  title={!payment.accountId ? "Payment has no associated account" : "Manually sync this payment to SMAX"}
-                                >
-                                  <RefreshCw className={cn("h-4 w-4", syncPaymentToSmaxMutation.isPending && "animate-spin")} />
-                                </Button>
                                 <Button
                                   variant="ghost"
                                   size="sm"
