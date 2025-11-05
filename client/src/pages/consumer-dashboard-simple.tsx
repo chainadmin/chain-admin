@@ -1171,25 +1171,48 @@ export default function ConsumerDashboardSimple() {
                     {(documents as any[]).map((doc: any) => (
                       <div
                         key={doc.id}
-                        className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-4 hover:bg-white/10 transition-colors"
+                        className={`flex items-center justify-between rounded-xl border p-4 transition-colors ${
+                          doc.isPendingSignature 
+                            ? 'border-amber-400/30 bg-amber-500/10 hover:bg-amber-500/20' 
+                            : 'border-white/10 bg-white/5 hover:bg-white/10'
+                        }`}
                       >
-                        <div className="flex items-center gap-3">
-                          <FileText className="h-5 w-5 text-blue-400" />
-                          <div>
-                            <p className="text-white font-medium">{doc.name || doc.fileName}</p>
+                        <div className="flex items-center gap-3 flex-1">
+                          <FileText className={`h-5 w-5 ${doc.isPendingSignature ? 'text-amber-400' : 'text-blue-400'}`} />
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="text-white font-medium">{doc.title || doc.name || doc.fileName}</p>
+                              {doc.isPendingSignature && (
+                                <Badge className="border-amber-400/30 bg-amber-500/20 text-amber-200 border text-xs">
+                                  Signature Required
+                                </Badge>
+                              )}
+                            </div>
                             <p className="text-sm text-blue-100/70">
-                              {new Date(doc.uploadedAt || doc.createdAt).toLocaleDateString()}
+                              {doc.description || (doc.isPendingSignature ? 'Please review and sign this document' : new Date(doc.uploadedAt || doc.createdAt).toLocaleDateString())}
                             </p>
                           </div>
                         </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-white border-white/20 hover:bg-white/10"
-                          onClick={() => window.open(doc.fileUrl, '_blank')}
-                        >
-                          View
-                        </Button>
+                        {doc.isPendingSignature ? (
+                          <Button
+                            size="sm"
+                            className="bg-amber-500 hover:bg-amber-400 text-white font-semibold"
+                            onClick={() => window.location.href = `/sign/${doc.id}?tenant=${session?.tenantSlug}`}
+                            data-testid={`button-sign-${doc.id}`}
+                          >
+                            Sign Now
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-white border-white/20 hover:bg-white/10"
+                            onClick={() => window.open(doc.fileUrl, '_blank')}
+                            data-testid={`button-view-${doc.id}`}
+                          >
+                            View
+                          </Button>
+                        )}
                       </div>
                     ))}
                   </div>

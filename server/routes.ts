@@ -6470,7 +6470,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return true;
       });
 
-      res.json(visibleDocuments);
+      // Fetch pending signature requests for this consumer
+      const signatureRequests = await storage.getSignatureRequestsByConsumer(consumer.id);
+      const pendingRequests = signatureRequests
+        .filter(req => req.status === 'pending' || req.status === 'viewed')
+        .map(req => ({
+          ...req,
+          isPendingSignature: true, // Flag to identify it as a signature request
+          type: 'signature_request',
+        }));
+
+      // Combine documents and pending signature requests
+      const combinedResults = [...visibleDocuments, ...pendingRequests];
+
+      res.json(combinedResults);
     } catch (error) {
       console.error("Error fetching consumer documents:", error);
       res.status(500).json({ message: "Failed to fetch documents" });
@@ -13199,6 +13212,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
         consentText: `By signing this document, I agree that this electronic signature is the legal equivalent of my manual signature. I consent to be legally bound by this document's terms and conditions.`,
       });
 
+      // Send email notification to consumer
+      try {
+        const tenant = await storage.getTenant(tenantId);
+        if (tenant && consumer.email) {
+          const tenantSettings = await storage.getTenantSettings(tenantId);
+          const consumerPortalSettings = tenantSettings?.consumerPortalSettings;
+          
+          const consumerLoginUrl = resolveConsumerPortalUrl({
+            tenantSlug: tenant.slug,
+            consumerPortalSettings,
+            baseUrl: ensureBaseUrl(req),
+          });
+          
+          await sendEmail({
+            to: consumer.email,
+            from: tenant.fromEmail || `noreply@${tenant.slug}.replit.app`,
+            subject: `Action Required: Sign ${title}`,
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #1e40af;">Signature Requested</h2>
+                <p>Hello ${consumer.firstName || consumer.email},</p>
+                <p>You have a new document that requires your electronic signature:</p>
+                <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; margin: 20px 0;">
+                  <h3 style="margin-top: 0; color: #92400e;">${title}</h3>
+                  ${description ? `<p style="color: #78350f; margin-bottom: 0;">${description}</p>` : ''}
+                </div>
+                <p>To review and sign this document:</p>
+                <ol style="line-height: 1.8;">
+                  <li>Click the button below to log in to your portal</li>
+                  <li>Navigate to the "Documents" section</li>
+                  <li>Click "Sign Now" on the pending document</li>
+                </ol>
+                <div style="text-align: center; margin: 30px 0;">
+                  <a href="${consumerLoginUrl}" style="background-color: #f59e0b; color: white; padding: 12px 32px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+                    Access Your Portal
+                  </a>
+                </div>
+                ${expiresAt ? `<p style="color: #dc2626; font-weight: bold;">⚠️ This signature request expires on ${new Date(expiresAt).toLocaleDateString()}</p>` : ''}
+                <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
+                  If you have any questions, please contact us.
+                </p>
+              </div>
+            `,
+            text: `
+              Signature Requested
+              
+              Hello ${consumer.firstName || consumer.email},
+              
+              You have a new document that requires your electronic signature:
+              
+              ${title}
+              ${description ? description : ''}
+              
+              To review and sign this document:
+              1. Visit: ${consumerLoginUrl}
+              2. Log in to your portal
+              3. Navigate to the "Documents" section
+              4. Click "Sign Now" on the pending document
+              
+              ${expiresAt ? `⚠️ This signature request expires on ${new Date(expiresAt).toLocaleDateString()}` : ''}
+              
+              If you have any questions, please contact us.
+            `,
+          });
+          console.log(`📧 Signature request notification sent to ${consumer.email}`);
+        }
+      } catch (emailError) {
+        console.error("Error sending signature request notification:", emailError);
+        // Don't fail the request if email fails - signature request was created successfully
+      }
+
       res.json(signatureRequest);
     } catch (error) {
       console.error("Error creating signature request:", error);
@@ -13250,8 +13334,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Capture signature (consumer)
-  app.post('/api/signature-requests/:id/sign', async (req, res) => {
+  // Capture signature (consumer) - requires authentication
+  app.post('/api/signature-requests/:id/sign', authenticateConsumer, async (req: any, res) => {
     try {
       const { id } = req.params;
       const { signatureData, legalConsent } = req.body;
@@ -13263,6 +13347,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const request = await storage.getSignatureRequestById(id);
       if (!request) {
         return res.status(404).json({ message: "Signature request not found" });
+      }
+
+      // Verify the authenticated consumer matches the signature request recipient
+      const consumerEmail = req.consumerEmail;
+      const consumer = await storage.getConsumerById(request.consumerId);
+      if (!consumer || consumer.email !== consumerEmail) {
+        return res.status(403).json({ message: "You are not authorized to sign this document" });
       }
 
       const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.ip || 'unknown';
@@ -13289,6 +13380,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         legalConsent,
         consentText: request.consentText || 'I agree to sign this document electronically.',
       });
+
+      // After successful signature, create a document record so it appears in consumer's Documents section
+      try {
+        const document = await storage.getDocumentById(request.documentId);
+        await storage.createDocument({
+          tenantId: request.tenantId,
+          title: `Signed: ${request.title || document?.title || 'Document'}`,
+          description: `Electronically signed on ${new Date().toLocaleDateString()}`,
+          fileName: `signed-${request.title || 'document'}.pdf`,
+          fileUrl: `/api/signed-documents/${result.signedDocument.id}`, // Link to the signed document
+          fileSize: 0, // Can be updated later if needed
+          mimeType: 'application/pdf',
+          isPublic: false,
+          accountId: request.accountId,
+        });
+      } catch (docError) {
+        console.error("Error creating document record after signature:", docError);
+        // Don't fail the signature if document creation fails - signature is more important
+      }
 
       res.json(result);
     } catch (error: any) {
