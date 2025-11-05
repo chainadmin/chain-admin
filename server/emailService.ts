@@ -119,7 +119,9 @@ export class EmailService {
             successful++;
             
             // Create SMAX note if filenumber and tenantId are available
-            if (email.metadata?.filenumber && email.tenantId) {
+            // Skip internal notifications (payment_notification, arrangement_notification, etc.)
+            const isInternalNotification = typeof email.metadata?.type === 'string' && email.metadata.type.includes('notification');
+            if (email.metadata?.filenumber && email.tenantId && !isInternalNotification) {
               try {
                 await smaxService.insertNote(email.tenantId, {
                   filenumber: String(email.metadata.filenumber),
