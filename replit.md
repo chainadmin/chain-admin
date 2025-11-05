@@ -1,6 +1,6 @@
 # Overview
 
-Chain is a multi-tenant platform evolving from a debt collection solution into a universal multi-industry platform. It supports five business types (Call Centers, Billing/Service Companies, Subscription Providers, Freelancers/Consultants, and Property Management) with module-specific terminology and branding. The platform offers administrative dashboards, streamlined communication, and consumer portals for account management, real-time data, subscription billing, branded email, payment processing, and third-party integrations, all built on a consistent core structure.
+Chain is a multi-tenant platform evolving from a debt collection solution into a universal multi-industry platform. It supports six business types (Call Centers, Billing/Service Companies, Subscription Providers, Freelancers/Consultants, Property Management, and Non-Profit Organizations) with module-specific terminology and branding. The platform offers administrative dashboards, streamlined communication, and consumer portals for account management, real-time data, subscription billing, branded email, payment processing, and third-party integrations, all built on a consistent core structure.
 
 # User Preferences
 
