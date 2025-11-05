@@ -68,6 +68,15 @@ export async function runMigrations() {
       console.log(`  ⚠ enabled_addons (already exists or error)`);
     }
     
+    // Add blocked_account_statuses column for controlling communications and payments
+    console.log('Adding blocked_account_statuses column...');
+    try {
+      await client.query(`ALTER TABLE tenant_settings ADD COLUMN IF NOT EXISTS blocked_account_statuses TEXT[] DEFAULT ARRAY['inactive', 'recalled', 'closed']::TEXT[]`);
+      console.log(`  ✓ blocked_account_statuses`);
+    } catch (err) {
+      console.log(`  ⚠ blocked_account_statuses (already exists or error)`);
+    }
+    
     // Fix communication_automations table - make trigger_type nullable (legacy column)
     console.log('Fixing communication_automations table...');
     try {
