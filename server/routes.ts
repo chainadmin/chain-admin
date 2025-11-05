@@ -6483,10 +6483,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const options = await storage.getArrangementOptionsByTenant(tenant.id);
       const minimumMonthlyPayment = settings.minimumMonthlyPayment || 5000; // Default $50
       
-      // Filter options based on balance range
-      const applicableOptions = options.filter(option => 
-        balanceCents >= option.minBalance && balanceCents <= option.maxBalance
-      );
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); // Set to start of day for date comparison
+      
+      // Filter options based on balance range and expiration
+      const applicableOptions = options.filter(option => {
+        // Check balance range
+        if (balanceCents < option.minBalance || balanceCents > option.maxBalance) {
+          return false;
+        }
+        
+        // Check if settlement offer has expired
+        if (option.planType === 'settlement' && option.settlementOfferExpiresDate) {
+          const expirationDate = new Date(option.settlementOfferExpiresDate);
+          expirationDate.setHours(0, 0, 0, 0);
+          if (expirationDate < today) {
+            return false; // Offer has expired
+          }
+        }
+        
+        return true;
+      });
       
       // Calculate payment details for each applicable option and filter out non-viable ones
       const calculatedOptions = applicableOptions
