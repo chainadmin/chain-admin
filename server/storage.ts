@@ -23,6 +23,7 @@ import {
   communicationSequenceSteps,
   communicationSequenceEnrollments,
   documents,
+  documentTemplates,
   signatureRequests,
   signedDocuments,
   signatureAuditTrail,
@@ -80,6 +81,8 @@ import {
   type InsertCommunicationSequenceEnrollment,
   type Document,
   type InsertDocument,
+  type DocumentTemplate,
+  type InsertDocumentTemplate,
   type SignatureRequest,
   type InsertSignatureRequest,
   type SignedDocument,
@@ -355,6 +358,13 @@ export interface IStorage {
   getDocumentsByTenant(tenantId: string): Promise<DocumentWithAccount[]>;
   createDocument(document: InsertDocument): Promise<Document>;
   deleteDocument(id: string, tenantId: string): Promise<boolean>;
+  
+  // Document template operations
+  getDocumentTemplatesByTenant(tenantId: string): Promise<DocumentTemplate[]>;
+  getDocumentTemplateById(id: string, tenantId: string): Promise<DocumentTemplate | undefined>;
+  createDocumentTemplate(template: InsertDocumentTemplate): Promise<DocumentTemplate>;
+  updateDocumentTemplate(id: string, tenantId: string, template: Partial<InsertDocumentTemplate>): Promise<DocumentTemplate | undefined>;
+  deleteDocumentTemplate(id: string, tenantId: string): Promise<boolean>;
   
   // Arrangement options operations
   getArrangementOptionsByTenant(tenantId: string): Promise<ArrangementOption[]>;
@@ -2006,6 +2016,58 @@ export class DatabaseStorage implements IStorage {
       .delete(documents)
       .where(and(eq(documents.id, id), eq(documents.tenantId, tenantId)))
       .returning({ id: documents.id });
+
+    return deleted.length > 0;
+  }
+
+  // Document template operations
+  async getDocumentTemplatesByTenant(tenantId: string): Promise<DocumentTemplate[]> {
+    await ensureDocumentsSchema(db);
+
+    return db
+      .select()
+      .from(documentTemplates)
+      .where(eq(documentTemplates.tenantId, tenantId))
+      .orderBy(desc(documentTemplates.createdAt));
+  }
+
+  async getDocumentTemplateById(id: string, tenantId: string): Promise<DocumentTemplate | undefined> {
+    await ensureDocumentsSchema(db);
+
+    const [template] = await db
+      .select()
+      .from(documentTemplates)
+      .where(and(eq(documentTemplates.id, id), eq(documentTemplates.tenantId, tenantId)));
+
+    return template;
+  }
+
+  async createDocumentTemplate(template: InsertDocumentTemplate): Promise<DocumentTemplate> {
+    await ensureDocumentsSchema(db);
+
+    const [newTemplate] = await db.insert(documentTemplates).values(template).returning();
+    return newTemplate;
+  }
+
+  async updateDocumentTemplate(id: string, tenantId: string, template: Partial<InsertDocumentTemplate>): Promise<DocumentTemplate | undefined> {
+    await ensureDocumentsSchema(db);
+
+    const [updatedTemplate] = await db
+      .update(documentTemplates)
+      .set({ ...template, updatedAt: new Date() })
+      .where(and(eq(documentTemplates.id, id), eq(documentTemplates.tenantId, tenantId)))
+      .returning();
+
+    return updatedTemplate;
+  }
+
+  async deleteDocumentTemplate(id: string, tenantId: string): Promise<boolean> {
+    await ensureDocumentsSchema(db);
+
+    const deleted = await db
+      .delete(documentTemplates)
+      .where(and(eq(documentTemplates.id, id), eq(documentTemplates.tenantId, tenantId)))
+      .returning({ id: documentTemplates.id });
 
     return deleted.length > 0;
   }

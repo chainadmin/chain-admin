@@ -1908,6 +1908,127 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Document template routes
+  app.get('/api/document-templates', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const templates = await storage.getDocumentTemplatesByTenant(tenantId);
+      res.json(templates);
+    } catch (error) {
+      console.error("Error fetching document templates:", error);
+      res.status(500).json({ message: "Failed to fetch document templates" });
+    }
+  });
+
+  app.get('/api/document-templates/:id', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { id } = req.params;
+      const template = await storage.getDocumentTemplateById(id, tenantId);
+      
+      if (!template) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+
+      res.json(template);
+    } catch (error) {
+      console.error("Error fetching document template:", error);
+      res.status(500).json({ message: "Failed to fetch document template" });
+    }
+  });
+
+  app.post('/api/document-templates', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { name, title, content, description, signaturePlacement, legalDisclaimer, consentText } = req.body;
+      
+      if (!name || !title || !content) {
+        return res.status(400).json({ message: "Name, title, and content are required" });
+      }
+
+      const template = await storage.createDocumentTemplate({
+        tenantId,
+        name,
+        title,
+        content,
+        description,
+        signaturePlacement: signaturePlacement || 'bottom',
+        legalDisclaimer,
+        consentText: consentText || 'I agree to the terms and conditions outlined in this document.',
+      });
+      
+      res.json(template);
+    } catch (error) {
+      console.error("Error creating document template:", error);
+      res.status(500).json({ message: "Failed to create document template" });
+    }
+  });
+
+  app.put('/api/document-templates/:id', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { id } = req.params;
+      const { name, title, content, description, signaturePlacement, legalDisclaimer, consentText } = req.body;
+      
+      const updates: Partial<any> = {};
+      if (name !== undefined) updates.name = name;
+      if (title !== undefined) updates.title = title;
+      if (content !== undefined) updates.content = content;
+      if (description !== undefined) updates.description = description;
+      if (signaturePlacement !== undefined) updates.signaturePlacement = signaturePlacement;
+      if (legalDisclaimer !== undefined) updates.legalDisclaimer = legalDisclaimer;
+      if (consentText !== undefined) updates.consentText = consentText;
+
+      const updatedTemplate = await storage.updateDocumentTemplate(id, tenantId, updates);
+      
+      if (!updatedTemplate) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+
+      res.json(updatedTemplate);
+    } catch (error) {
+      console.error("Error updating document template:", error);
+      res.status(500).json({ message: "Failed to update document template" });
+    }
+  });
+
+  app.delete('/api/document-templates/:id', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { id } = req.params;
+      const deleted = await storage.deleteDocumentTemplate(id, tenantId);
+      
+      if (!deleted) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+
+      res.json({ message: "Document template deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting document template:", error);
+      res.status(500).json({ message: "Failed to delete document template" });
+    }
+  });
+
   // Email campaign routes
   app.get('/api/email-campaigns', authenticateUser, async (req: any, res) => {
     try {

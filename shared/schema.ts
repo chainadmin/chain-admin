@@ -429,6 +429,21 @@ export const signatureAuditTrail = pgTable("signature_audit_trail", {
   occurredAt: timestamp("occurred_at").defaultNow(),
 });
 
+// Document templates (per tenant) - for creating documents with variable replacement
+export const documentTemplates = pgTable("document_templates", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  title: text("title").notNull(), // Document title, can include variables like {{consumer_name}}
+  content: text("content").notNull(), // HTML content with variable placeholders
+  description: text("description"),
+  signaturePlacement: text("signature_placement").default("bottom"), // "bottom", "custom"
+  legalDisclaimer: text("legal_disclaimer"), // Optional legal text shown above signature
+  consentText: text("consent_text").default("I agree to the terms and conditions outlined in this document."),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Arrangement/Settlement options (per tenant)
 export const arrangementPlanTypes = [
   "range",
@@ -823,6 +838,13 @@ export const documentsRelations = relations(documents, ({ one, many }) => ({
     references: [accounts.id],
   }),
   signatureRequests: many(signatureRequests),
+}));
+
+export const documentTemplatesRelations = relations(documentTemplates, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [documentTemplates.tenantId],
+    references: [tenants.id],
+  }),
 }));
 
 export const signatureRequestsRelations = relations(signatureRequests, ({ one, many }) => ({
@@ -1242,6 +1264,7 @@ export const insertConsumerSchema = createInsertSchema(consumers).omit({ id: tru
 export const insertAccountSchema = createInsertSchema(accounts).omit({ id: true, createdAt: true });
 export const insertEmailTemplateSchema = createInsertSchema(emailTemplates).omit({ id: true, createdAt: true });
 export const insertDocumentSchema = createInsertSchema(documents).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertDocumentTemplateSchema = createInsertSchema(documentTemplates).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertSignatureRequestSchema = createInsertSchema(signatureRequests).omit({ id: true, createdAt: true, updatedAt: true, signedAt: true, declinedAt: true, viewedAt: true });
 export const insertSignedDocumentSchema = createInsertSchema(signedDocuments).omit({ id: true, createdAt: true });
 export const insertSignatureAuditTrailSchema = createInsertSchema(signatureAuditTrail).omit({ id: true, occurredAt: true });
@@ -1429,6 +1452,8 @@ export type EmailTemplate = typeof emailTemplates.$inferSelect;
 export type InsertEmailTemplate = z.infer<typeof insertEmailTemplateSchema>;
 export type Document = typeof documents.$inferSelect;
 export type InsertDocument = z.infer<typeof insertDocumentSchema>;
+export type DocumentTemplate = typeof documentTemplates.$inferSelect;
+export type InsertDocumentTemplate = z.infer<typeof insertDocumentTemplateSchema>;
 export type SignatureRequest = typeof signatureRequests.$inferSelect;
 export type InsertSignatureRequest = z.infer<typeof insertSignatureRequestSchema>;
 export type SignedDocument = typeof signedDocuments.$inferSelect;
