@@ -5817,6 +5817,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         smsThrottleLimit: z.number().min(1).max(1000).optional(),
         minimumMonthlyPayment: z.number().min(0).optional(),
         blockedAccountStatuses: z.array(z.string()).optional(),
+        enabledAddons: z.array(z.string()).optional(), // Add-on features like document_signing
         businessType: z.string().optional(), // Only platform_admin can change this
         // Email configuration per tenant
         customSenderEmail: z.string().email().nullable().optional().or(z.literal('')),
@@ -11256,71 +11257,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Get usage data for the completed period
           const stats = await storage.getBillingStats(subscription.tenantId);
           
-          // Create invoice for the completed period
+          // Create invoice for the completed period (with idempotency check)
           if (stats) {
             try {
-              const invoiceNumber = `INV-${subscription.tenantId.substring(0, 8)}-${Date.now()}`;
-              const [invoice] = await db.insert(invoices).values({
-                tenantId: subscription.tenantId,
-                subscriptionId: subscription.id,
-                invoiceNumber,
-                periodStart: subscription.currentPeriodStart,
-                periodEnd: subscription.currentPeriodEnd,
-                status: 'pending',
-                baseAmountCents: Math.round((stats.monthlyBase + stats.addonFees) * 100),
-                perConsumerCents: 0,
-                consumerCount: stats.activeConsumers,
-                totalAmountCents: Math.round(stats.totalBill * 100),
-                dueDate: newPeriodEnd,
-                paidAt: null,
-              }).returning();
-              invoicesCreated++;
-              console.log(`✅ Invoice created for tenant ${subscription.tenantId}: $${stats.totalBill} (${invoiceNumber})`);
+              // Check if invoice already exists for this period
+              const existingInvoice = await db.select()
+                .from(invoices)
+                .where(
+                  and(
+                    eq(invoices.subscriptionId, subscription.id),
+                    eq(invoices.periodStart, subscription.currentPeriodStart),
+                    eq(invoices.periodEnd, subscription.currentPeriodEnd)
+                  )
+                )
+                .limit(1);
               
-              // Send invoice email to company
-              try {
-                const tenant = await storage.getTenant(subscription.tenantId);
-                if (tenant?.email) {
-                  const periodStartStr = new Date(subscription.currentPeriodStart).toLocaleDateString();
-                  const periodEndStr = new Date(subscription.currentPeriodEnd).toLocaleDateString();
-                  const dueDate = newPeriodEnd.toLocaleDateString();
-                  
-                  const emailHtml = `
-                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                      <h2>Monthly Invoice</h2>
-                      <p>Dear ${tenant.name},</p>
-                      <p>Your monthly invoice for Chain platform services is now available.</p>
-                      
-                      <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                        <h3 style="margin-top: 0;">Invoice #${invoiceNumber}</h3>
-                        <p><strong>Billing Period:</strong> ${periodStartStr} - ${periodEndStr}</p>
-                        <p><strong>Due Date:</strong> ${dueDate}</p>
-                        <hr style="border: 0; border-top: 1px solid #ddd; margin: 15px 0;">
-                        <p><strong>Monthly Base Fee:</strong> $${stats.monthlyBase.toFixed(2)}</p>
-                        ${stats.addonFees > 0 ? `<p><strong>Add-on Fees:</strong> $${stats.addonFees.toFixed(2)}</p>` : ''}
-                        ${stats.addons.documentSigning ? `<p style="margin-left: 20px;">• Document Signing: $${stats.addons.documentSigningFee.toFixed(2)}</p>` : ''}
-                        ${stats.usageCharges > 0 ? `<p><strong>Usage Overage Charges:</strong> $${stats.usageCharges.toFixed(2)}</p>` : ''}
-                        ${stats.emailUsage.overage > 0 ? `<p style="margin-left: 20px;">• Email Overage: ${stats.emailUsage.overage} emails @ $${stats.emailUsage.overageCharge.toFixed(2)}</p>` : ''}
-                        ${stats.smsUsage.overage > 0 ? `<p style="margin-left: 20px;">• SMS Overage: ${stats.smsUsage.overage} segments @ $${stats.smsUsage.overageCharge.toFixed(2)}</p>` : ''}
-                        <hr style="border: 0; border-top: 2px solid #333; margin: 15px 0;">
-                        <p style="font-size: 18px;"><strong>Total Due:</strong> $${stats.totalBill.toFixed(2)}</p>
+              if (existingInvoice.length > 0) {
+                console.log(`⏭️  Invoice already exists for tenant ${subscription.tenantId} (${existingInvoice[0].invoiceNumber}) - skipping creation`);
+              } else {
+                const invoiceNumber = `INV-${subscription.tenantId.substring(0, 8)}-${Date.now()}`;
+                const [invoice] = await db.insert(invoices).values({
+                  tenantId: subscription.tenantId,
+                  subscriptionId: subscription.id,
+                  invoiceNumber,
+                  periodStart: subscription.currentPeriodStart,
+                  periodEnd: subscription.currentPeriodEnd,
+                  status: 'pending',
+                  baseAmountCents: Math.round((stats.monthlyBase + stats.addonFees) * 100),
+                  perConsumerCents: 0,
+                  consumerCount: stats.activeConsumers,
+                  totalAmountCents: Math.round(stats.totalBill * 100),
+                  dueDate: newPeriodEnd,
+                  paidAt: null,
+                }).returning();
+                invoicesCreated++;
+                console.log(`✅ Invoice created for tenant ${subscription.tenantId}: $${stats.totalBill} (${invoiceNumber})`);
+                
+                // Send invoice email to company
+                try {
+                  const tenant = await storage.getTenant(subscription.tenantId);
+                  if (tenant?.email) {
+                    const periodStartStr = new Date(subscription.currentPeriodStart).toLocaleDateString();
+                    const periodEndStr = new Date(subscription.currentPeriodEnd).toLocaleDateString();
+                    const dueDate = newPeriodEnd.toLocaleDateString();
+                    
+                    const emailHtml = `
+                      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                        <h2>Monthly Invoice</h2>
+                        <p>Dear ${tenant.name},</p>
+                        <p>Your monthly invoice for Chain platform services is now available.</p>
+                        
+                        <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                          <h3 style="margin-top: 0;">Invoice #${invoiceNumber}</h3>
+                          <p><strong>Billing Period:</strong> ${periodStartStr} - ${periodEndStr}</p>
+                          <p><strong>Due Date:</strong> ${dueDate}</p>
+                          <hr style="border: 0; border-top: 1px solid #ddd; margin: 15px 0;">
+                          <p><strong>Monthly Base Fee:</strong> $${stats.monthlyBase.toFixed(2)}</p>
+                          ${stats.addonFees > 0 ? `<p><strong>Add-on Fees:</strong> $${stats.addonFees.toFixed(2)}</p>` : ''}
+                          ${stats.addons.documentSigning ? `<p style="margin-left: 20px;">• Document Signing: $${stats.addons.documentSigningFee.toFixed(2)}</p>` : ''}
+                          ${stats.usageCharges > 0 ? `<p><strong>Usage Overage Charges:</strong> $${stats.usageCharges.toFixed(2)}</p>` : ''}
+                          ${stats.emailUsage.overage > 0 ? `<p style="margin-left: 20px;">• Email Overage: ${stats.emailUsage.overage} emails @ $${stats.emailUsage.overageCharge.toFixed(2)}</p>` : ''}
+                          ${stats.smsUsage.overage > 0 ? `<p style="margin-left: 20px;">• SMS Overage: ${stats.smsUsage.overage} segments @ $${stats.smsUsage.overageCharge.toFixed(2)}</p>` : ''}
+                          <hr style="border: 0; border-top: 2px solid #333; margin: 15px 0;">
+                          <p style="font-size: 18px;"><strong>Total Due:</strong> $${stats.totalBill.toFixed(2)}</p>
+                        </div>
+                        
+                        <p>This invoice is available in your billing dashboard. Log in to view details and payment history.</p>
+                        <p>Thank you for using Chain!</p>
                       </div>
-                      
-                      <p>This invoice is available in your billing dashboard. Log in to view details and payment history.</p>
-                      <p>Thank you for using Chain!</p>
-                    </div>
-                  `;
-                  
-                  await emailService.sendEmail({
-                    to: tenant.email,
-                    subject: `Chain Invoice ${invoiceNumber} - $${stats.totalBill.toFixed(2)} Due ${dueDate}`,
-                    html: emailHtml,
-                    tenantId: subscription.tenantId,
-                  });
-                  console.log(`📧 Invoice email sent to ${tenant.email}`);
+                    `;
+                    
+                    await emailService.sendEmail({
+                      to: tenant.email,
+                      subject: `Chain Invoice ${invoiceNumber} - $${stats.totalBill.toFixed(2)} Due ${dueDate}`,
+                      html: emailHtml,
+                      tenantId: subscription.tenantId,
+                    });
+                    console.log(`📧 Invoice email sent to ${tenant.email}`);
+                  }
+                } catch (emailError) {
+                  console.error(`❌ Failed to send invoice email for tenant ${subscription.tenantId}:`, emailError);
                 }
-              } catch (emailError) {
-                console.error(`❌ Failed to send invoice email for tenant ${subscription.tenantId}:`, emailError);
               }
             } catch (invoiceError) {
               console.error(`❌ Failed to create invoice for tenant ${subscription.tenantId}:`, invoiceError);
@@ -11356,6 +11373,137 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({
         success: false,
         message: 'Failed to process subscription renewals',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
+
+  // Generate monthly invoices and send to all active tenants (called by monthly cron)
+  app.post('/api/billing/generate-monthly-invoices', async (req, res) => {
+    try {
+      console.log('📊 Generating monthly invoices for all active tenants...');
+      let invoicesSent = 0;
+      let errors = 0;
+      let skipped = 0;
+      
+      // Get all active subscriptions
+      const allSubscriptions = await db.select().from(subscriptions).where(eq(subscriptions.status, 'active'));
+      
+      for (const subscription of allSubscriptions) {
+        try {
+          // Check if invoice already exists for this billing period (idempotency)
+          const existingInvoice = await db.select()
+            .from(invoices)
+            .where(
+              and(
+                eq(invoices.subscriptionId, subscription.id),
+                eq(invoices.periodStart, subscription.currentPeriodStart),
+                eq(invoices.periodEnd, subscription.currentPeriodEnd)
+              )
+            )
+            .limit(1);
+          
+          if (existingInvoice.length > 0) {
+            console.log(`⏭️  Invoice already exists for tenant ${subscription.tenantId} (period ${new Date(subscription.currentPeriodStart).toLocaleDateString()} - ${new Date(subscription.currentPeriodEnd).toLocaleDateString()})`);
+            skipped++;
+            continue;
+          }
+          
+          // Get billing stats for this tenant
+          const stats = await storage.getBillingStats(subscription.tenantId);
+          const tenant = await storage.getTenant(subscription.tenantId);
+          
+          if (!tenant?.email) {
+            console.log(`⚠️ Skipping tenant ${subscription.tenantId} - no email address`);
+            skipped++;
+            continue;
+          }
+          
+          // Create invoice record
+          const invoiceNumber = `INV-${subscription.tenantId.substring(0, 8)}-${Date.now()}`;
+          const dueDate = new Date();
+          dueDate.setDate(dueDate.getDate() + 15); // Due in 15 days
+          
+          const [invoice] = await db.insert(invoices).values({
+            tenantId: subscription.tenantId,
+            subscriptionId: subscription.id,
+            invoiceNumber,
+            periodStart: subscription.currentPeriodStart,
+            periodEnd: subscription.currentPeriodEnd,
+            status: 'pending',
+            baseAmountCents: Math.round((stats.monthlyBase + stats.addonFees) * 100),
+            perConsumerCents: 0,
+            consumerCount: stats.activeConsumers,
+            totalAmountCents: Math.round(stats.totalBill * 100),
+            dueDate,
+            paidAt: null,
+          }).returning();
+          
+          // Send invoice email
+          const periodStartStr = new Date(subscription.currentPeriodStart).toLocaleDateString();
+          const periodEndStr = new Date(subscription.currentPeriodEnd).toLocaleDateString();
+          const dueDateStr = dueDate.toLocaleDateString();
+          
+          const emailHtml = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #1e40af;">Monthly Invoice</h2>
+              <p>Dear ${tenant.name},</p>
+              <p>Your monthly invoice for Chain platform services is now available.</p>
+              
+              <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <h3 style="margin-top: 0; color: #1e40af;">Invoice #${invoiceNumber}</h3>
+                <p><strong>Billing Period:</strong> ${periodStartStr} - ${periodEndStr}</p>
+                <p><strong>Due Date:</strong> ${dueDateStr}</p>
+                <hr style="border: 0; border-top: 1px solid #ddd; margin: 15px 0;">
+                <p><strong>Monthly Base Fee:</strong> $${stats.monthlyBase.toFixed(2)}</p>
+                ${stats.addonFees > 0 ? `
+                  <p><strong>Add-on Fees:</strong> $${stats.addonFees.toFixed(2)}</p>
+                  ${stats.addons.documentSigning ? `<p style="margin-left: 20px; color: #666;">• Document Signing: $${stats.addons.documentSigningFee.toFixed(2)}</p>` : ''}
+                ` : ''}
+                ${stats.usageCharges > 0 ? `
+                  <p><strong>Usage Overage Charges:</strong> $${stats.usageCharges.toFixed(2)}</p>
+                  ${stats.emailUsage.overage > 0 ? `<p style="margin-left: 20px; color: #666;">• Email Overage: ${stats.emailUsage.overage} emails - $${stats.emailUsage.overageCharge.toFixed(2)}</p>` : ''}
+                  ${stats.smsUsage.overage > 0 ? `<p style="margin-left: 20px; color: #666;">• SMS Overage: ${stats.smsUsage.overage} segments - $${stats.smsUsage.overageCharge.toFixed(2)}</p>` : ''}
+                ` : ''}
+                <hr style="border: 0; border-top: 2px solid #333; margin: 15px 0;">
+                <p style="font-size: 18px;"><strong>Total Due:</strong> $${stats.totalBill.toFixed(2)}</p>
+              </div>
+              
+              <p>This invoice is available in your billing dashboard. Log in to view details and payment history.</p>
+              <p style="color: #666; font-size: 12px; margin-top: 30px;">Thank you for using Chain!</p>
+            </div>
+          `;
+          
+          await emailService.sendEmail({
+            to: tenant.email,
+            subject: `Chain Invoice ${invoiceNumber} - $${stats.totalBill.toFixed(2)} Due ${dueDateStr}`,
+            html: emailHtml,
+            tenantId: subscription.tenantId,
+          });
+          
+          invoicesSent++;
+          console.log(`✅ Invoice sent to ${tenant.name} (${tenant.email}): $${stats.totalBill.toFixed(2)}`);
+        } catch (error) {
+          errors++;
+          console.error(`❌ Failed to generate invoice for tenant ${subscription.tenantId}:`, error);
+        }
+      }
+      
+      const message = `Monthly invoice generation complete: ${invoicesSent} invoices sent, ${skipped} skipped (already exist), ${errors} errors`;
+      console.log(`✅ ${message}`);
+      
+      res.json({
+        success: true,
+        message,
+        invoicesSent,
+        skipped,
+        errors,
+      });
+    } catch (error) {
+      console.error('❌ Monthly invoice generation failed:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to generate monthly invoices',
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }

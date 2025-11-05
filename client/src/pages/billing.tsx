@@ -414,6 +414,44 @@ export default function Billing() {
               </CardContent>
             </Card>
 
+            {/* Add-ons & Features */}
+            {stats.addonFees > 0 && stats.addons && (
+              <Card className="rounded-3xl border-white/10 bg-white/5 text-blue-50 shadow-lg shadow-blue-900/20">
+                <CardHeader className="border-b border-white/10 pb-4">
+                  <CardTitle className="text-lg font-semibold text-white">Add-ons & Premium Features</CardTitle>
+                  <p className="text-sm text-blue-100/70">Active premium add-ons and their monthly fees.</p>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <div className="space-y-4">
+                    {stats.addons.documentSigning && (
+                      <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="rounded-lg bg-sky-500/20 p-2">
+                            <FileText className="h-5 w-5 text-sky-300" />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-white">Document Signing</p>
+                            <p className="text-xs text-blue-100/60">Electronic signatures with full ESIGN compliance</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-semibold text-white" data-testid="text-addon-document-signing">
+                            {formatCurrency(stats.addons.documentSigningFee)}
+                          </p>
+                          <p className="text-xs text-blue-100/60">per month</p>
+                        </div>
+                      </div>
+                    )}
+                    <div className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-3">
+                      <p className="text-xs text-amber-200">
+                        <strong>Total add-on fees:</strong> {formatCurrency(stats.addonFees)}/month
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Current Invoice */}
             {currentInvoice && (currentInvoice as any) && (
               <Card className="rounded-3xl border-white/10 bg-[#101c3c]/70 text-blue-50 shadow-lg shadow-blue-900/20">

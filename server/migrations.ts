@@ -384,6 +384,19 @@ export async function runMigrations() {
     } catch (err) {
       console.log('  ⚠ invoices (already exists)');
     }
+    
+    // Add unique constraint to prevent duplicate invoices per billing period
+    console.log('Adding unique constraint to invoices...');
+    try {
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_subscription_period
+        ON invoices(subscription_id, period_start, period_end)
+        WHERE subscription_id IS NOT NULL
+      `);
+      console.log('  ✓ invoices unique constraint (subscription_id, period_start, period_end)');
+    } catch (err) {
+      console.log('  ⚠ invoices unique constraint (already exists)');
+    }
 
     try {
       await client.query(`

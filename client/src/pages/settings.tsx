@@ -110,6 +110,7 @@ export default function Settings() {
   const [arrangementForm, setArrangementForm] = useState<ArrangementFormState>({ ...emptyArrangementForm });
   const [localSettings, setLocalSettings] = useState<any>({});
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showAddonConfirmDialog, setShowAddonConfirmDialog] = useState(false);
 
   const cardBaseClasses =
     "border border-white/10 bg-white/5 text-blue-50 shadow-lg shadow-blue-900/20 backdrop-blur";
@@ -2344,6 +2345,9 @@ export default function Settings() {
                         <div className="flex items-center gap-2">
                           <FileText className="h-5 w-5 text-sky-400" />
                           <h3 className="text-base font-semibold text-white">Document Signing</h3>
+                          <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-200 border border-amber-400/30">
+                            +$40/mo
+                          </span>
                         </div>
                         <p className="text-sm text-blue-100/70">
                           Send documents for electronic signature with full ESIGN Act compliance. Perfect for contracts, agreements, and legal documents.
@@ -2358,16 +2362,69 @@ export default function Settings() {
                         <Switch
                           checked={localSettings?.enabledAddons?.includes('document_signing') || false}
                           onCheckedChange={(checked) => {
-                            const current = localSettings?.enabledAddons || [];
-                            const updated = checked
-                              ? [...current, 'document_signing']
-                              : current.filter((a: string) => a !== 'document_signing');
-                            handleSettingsUpdate('enabledAddons', updated);
+                            // If enabling, show confirmation dialog
+                            if (checked) {
+                              setShowAddonConfirmDialog(true);
+                            } else {
+                              // If disabling, just update directly
+                              const current = localSettings?.enabledAddons || [];
+                              const updated = current.filter((a: string) => a !== 'document_signing');
+                              handleSettingsUpdate('enabledAddons', updated);
+                            }
                           }}
                           data-testid="switch-document-signing"
                         />
                       </div>
                     </div>
+
+                    {/* Addon Pricing Confirmation Dialog */}
+                    <AlertDialog open={showAddonConfirmDialog} onOpenChange={setShowAddonConfirmDialog}>
+                      <AlertDialogContent className="border-white/10 bg-gradient-to-br from-slate-900 to-slate-800 text-white">
+                        <AlertDialogHeader>
+                          <AlertDialogTitle className="flex items-center gap-2 text-xl">
+                            <DollarSign className="h-5 w-5 text-amber-400" />
+                            Enable Document Signing Add-on
+                          </AlertDialogTitle>
+                          <AlertDialogDescription className="space-y-3 text-blue-100/80">
+                            <p>
+                              By enabling the Document Signing add-on, your subscription will increase by <strong className="text-amber-300">$40.00 per month</strong>.
+                            </p>
+                            <p>
+                              This premium feature includes:
+                            </p>
+                            <ul className="ml-4 space-y-1 list-disc text-sm">
+                              <li>Unlimited document templates</li>
+                              <li>Electronic signature requests with full ESIGN Act compliance</li>
+                              <li>Complete audit trail for legal protection</li>
+                              <li>Integration with communication sequences</li>
+                            </ul>
+                            <p className="text-xs text-blue-200/70">
+                              The addon fee will be reflected on your next invoice and visible in your billing page.
+                            </p>
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel 
+                            className="border-white/20 bg-white/10 text-white hover:bg-white/20"
+                            data-testid="button-cancel-addon"
+                          >
+                            Cancel
+                          </AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => {
+                              const current = localSettings?.enabledAddons || [];
+                              const updated = [...current, 'document_signing'];
+                              handleSettingsUpdate('enabledAddons', updated);
+                              setShowAddonConfirmDialog(false);
+                            }}
+                            className="bg-gradient-to-r from-sky-500 to-indigo-500 text-white hover:from-sky-400 hover:to-indigo-400"
+                            data-testid="button-confirm-addon"
+                          >
+                            Enable for $40/month
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
 
                     <div className="rounded-lg border border-blue-400/30 bg-blue-500/10 p-3">
                       <p className="text-xs text-blue-200">

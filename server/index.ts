@@ -108,10 +108,27 @@ function setupScheduledTasks(port: number) {
     timezone: 'America/New_York'
   });
   
+  // Generate monthly invoices on the 1st of each month at 12:00 AM ET
+  cron.schedule('0 0 1 * *', async () => {
+    console.log('🕒 [CRON] Running monthly invoice generator...');
+    try {
+      const response = await fetch(`${baseUrl}/api/billing/generate-monthly-invoices`, {
+        method: 'POST'
+      });
+      const result = await response.json();
+      console.log('✅ [CRON] Monthly invoice generation complete:', result);
+    } catch (error) {
+      console.error('❌ [CRON] Monthly invoice generation failed:', error);
+    }
+  }, {
+    timezone: 'America/New_York'
+  });
+  
   console.log('⏰ Scheduled tasks configured:');
   console.log('   - Payment processor: Daily at 8:00 AM ET (America/New_York timezone)');
   console.log('   - Automation processor: Every 15 minutes');
   console.log('   - Subscription renewal processor: Daily at 12:00 AM ET (America/New_York timezone)');
+  console.log('   - Monthly invoice generator: 1st of each month at 12:00 AM ET (America/New_York timezone)');
 }
 
 // Start the server in both development and production

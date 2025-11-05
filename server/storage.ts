@@ -2831,7 +2831,7 @@ export class DatabaseStorage implements IStorage {
     // Check for enabled addons
     const enabledAddons = await this.getEnabledAddons(tenantId);
     const hasDocumentSigning = enabledAddons.includes('document_signing');
-    const documentSigningFee = hasDocumentSigning ? 50 : 0;
+    const documentSigningFee = hasDocumentSigning ? 40 : 0;
     const addonFees = documentSigningFee;
 
     let emailUsage = { used: 0, included: dbPlan?.includedEmails ?? 0, overage: 0, overageCharge: 0 };
