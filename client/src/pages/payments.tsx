@@ -14,7 +14,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { CreditCard, DollarSign, TrendingUp, Clock, CheckCircle, Calendar, User, Building2, Lock, Trash2, ThumbsUp, ThumbsDown } from "lucide-react";
+import { CreditCard, DollarSign, TrendingUp, Clock, CheckCircle, Calendar, User, Building2, Lock, Trash2, ThumbsUp, ThumbsDown, RefreshCw } from "lucide-react";
 import { PaymentSchedulingCalendar } from "@/components/payment-scheduling-calendar";
 
 export default function Payments() {
