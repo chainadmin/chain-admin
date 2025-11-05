@@ -1934,6 +1934,49 @@ export default function Settings() {
                   )}
                 </CardContent>
               </Card>
+
+              {/* Document Signing Templates Section */}
+              <Card className={cardBaseClasses}>
+                <CardHeader className="text-white">
+                  <div>
+                    <CardTitle className="text-xl font-semibold text-white">Document Signing Templates</CardTitle>
+                    <p className="text-sm text-blue-100/70 mt-2">
+                      Create customizable document templates for e-signatures. Great for agreements, authorizations, and contracts.
+                    </p>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4 text-sm text-blue-100/80">
+                  {!(localSettings as any)?.enabledAddons?.includes('document_signing') ? (
+                    <div className="rounded-2xl border border-dashed border-white/20 bg-white/5 py-10 text-center">
+                      <FileText className="h-16 w-16 mx-auto mb-4 text-blue-400/60" />
+                      <h3 className="text-lg font-semibold text-blue-100 mb-2">Document Signing Not Enabled</h3>
+                      <p className="text-sm text-blue-200/70 mb-6 max-w-md mx-auto">
+                        Enable document signing in the Add-ons tab to create professional document templates for e-signatures, payment agreements, service contracts, and authorization forms.
+                      </p>
+                      <Button
+                        onClick={() => {
+                          const tabsList = document.querySelector('[role="tablist"]');
+                          const addonsTab = tabsList?.querySelector('[value="addons"]') as HTMLElement;
+                          if (addonsTab) {
+                            addonsTab.click();
+                          }
+                        }}
+                        className="rounded-xl bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 transition hover:from-sky-400/80 hover:to-indigo-400/80"
+                      >
+                        Go to Add-ons
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-white/20 bg-white/5 py-10 text-center">
+                      <FileText className="h-12 w-12 mx-auto mb-4 text-blue-400/40" />
+                      <h3 className="text-lg font-semibold text-blue-100 mb-2">Document Templates</h3>
+                      <p className="text-sm text-blue-200/70 mb-6 max-w-md mx-auto">
+                        Document signing template management coming soon. You can create templates via API for now.
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </TabsContent>
 
             <TabsContent value="arrangements" className="space-y-6">
