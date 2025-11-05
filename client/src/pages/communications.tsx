@@ -1878,6 +1878,13 @@ export default function Communications() {
             >
               Automation
             </TabsTrigger>
+            <TabsTrigger
+              value="documents"
+              className="rounded-xl px-4 py-2.5 text-sm font-semibold text-blue-100 transition data-[state=active]:bg-[#0b1733]/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/20"
+            >
+              <FileText className="h-4 w-4 mr-1.5 inline" />
+              Documents
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-10 text-white">
@@ -2987,11 +2994,23 @@ export default function Communications() {
                     <CardContent className="space-y-4">
                       {communicationType === "email" ? (
                         <>
-                          <p className="text-sm font-semibold text-blue-100/70">Subject</p>
-                          <p className="text-sm text-blue-100/80">{template.subject}</p>
-                          <p className="text-sm text-blue-100/70 line-clamp-3">
-                            {template.html.replace(/<[^>]*>/g, '')}
-                          </p>
+                          <div>
+                            <p className="text-xs font-semibold text-blue-100/50 mb-1">Subject:</p>
+                            <p className="text-sm text-blue-100 font-medium">{template.subject}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold text-blue-100/50 mb-1">Preview:</p>
+                            <p className="text-xs text-blue-100/80 line-clamp-4">
+                              {(template.html || '')
+                                .replace(/<script[^>]*>.*?<\/script>/gi, '')
+                                .replace(/<style[^>]*>.*?<\/style>/gi, '')
+                                .replace(/<[^>]*>/g, ' ')
+                                .replace(/\s+/g, ' ')
+                                .trim()
+                                .substring(0, 250)}
+                              {template.html?.length > 250 ? '...' : ''}
+                            </p>
+                          </div>
                         </>
                       ) : (
                         <p className="text-sm text-blue-100/70 line-clamp-3">
@@ -4231,21 +4250,27 @@ export default function Communications() {
                       {sequenceForm.targetType === 'folder' && (
                         <div>
                           <label className="text-sm font-semibold text-blue-100">Target Folders</label>
-                          <Select
-                            value={sequenceForm.targetFolderIds[0]?.toString() || ''}
-                            onValueChange={(value) => setSequenceForm({ ...sequenceForm, targetFolderIds: [parseInt(value)] })}
-                          >
-                            <SelectTrigger className="mt-2 bg-white/10 border-white/20 text-white">
-                              <SelectValue placeholder="Select folder" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {(folders as any[] || []).map((folder: any) => (
-                                <SelectItem key={folder.id} value={folder.id.toString()}>
-                                  {folder.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          {(folders as any[] || []).length === 0 ? (
+                            <div className="mt-2 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-md text-yellow-200 text-xs">
+                              No folders found. Create folders first in the Accounts section.
+                            </div>
+                          ) : (
+                            <Select
+                              value={sequenceForm.targetFolderIds[0]?.toString() || ''}
+                              onValueChange={(value) => setSequenceForm({ ...sequenceForm, targetFolderIds: [parseInt(value)] })}
+                            >
+                              <SelectTrigger className="mt-2 bg-white/10 border-white/20 text-white">
+                                <SelectValue placeholder="Select folder" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {(folders as any[]).map((folder: any) => (
+                                  <SelectItem key={folder.id} value={folder.id.toString()}>
+                                    {folder.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
                         </div>
                       )}
                     </div>
@@ -4577,6 +4602,139 @@ export default function Communications() {
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Documents Tab */}
+        <TabsContent value="documents" className="space-y-10 text-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-semibold">Document Signing Templates</h2>
+              <p className="text-sm text-blue-100/70 mt-1">
+                Create customizable document templates for e-signatures. Great for agreements, authorizations, and contracts.
+              </p>
+            </div>
+            <Button
+              onClick={() => {
+                window.location.href = '/admin/settings?tab=addons';
+              }}
+              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+            >
+              <Settings className="h-4 w-4 mr-2" />
+              Enable Document Signing
+            </Button>
+          </div>
+
+          {!(tenantSettings as any)?.enabledAddons?.includes('document_signing') ? (
+            <Card className={glassPanelClass}>
+              <CardContent className="py-12">
+                <div className="text-center max-w-md mx-auto">
+                  <FileText className="h-16 w-16 mx-auto mb-4 text-blue-400/60" />
+                  <h3 className="text-lg font-semibold text-blue-100 mb-2">Document Signing Not Enabled</h3>
+                  <p className="text-sm text-blue-200/70 mb-6">
+                    Enable document signing in Settings to create professional document templates for e-signatures, payment agreements, service contracts, and authorization forms.
+                  </p>
+                  <Button
+                    onClick={() => {
+                      window.location.href = '/admin/settings?tab=addons';
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    <Settings className="h-4 w-4 mr-2" />
+                    Go to Settings
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+                {documentTemplatesLoading ? (
+                  <div className="col-span-full text-center py-8">Loading document templates...</div>
+                ) : (documentTemplates as any)?.length > 0 ? (
+                  (documentTemplates as any).map((template: any) => (
+                    <Card key={template.id} className={glassPanelClass}>
+                      <CardHeader className="pb-4">
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-lg font-semibold text-blue-50">{template.name}</CardTitle>
+                          <Badge variant="outline" className="text-xs">
+                            Document
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div>
+                          <p className="text-xs font-semibold text-blue-100/50 mb-1">Title:</p>
+                          <p className="text-sm text-blue-100 font-medium">{template.title}</p>
+                        </div>
+                        {template.description && (
+                          <div>
+                            <p className="text-xs font-semibold text-blue-100/50 mb-1">Description:</p>
+                            <p className="text-xs text-blue-100/80">{template.description}</p>
+                          </div>
+                        )}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex items-center gap-2 rounded-full border border-white/20 bg-transparent px-3 py-1 text-xs font-semibold text-blue-100 transition hover:bg-white/10"
+                            onClick={() => {
+                              toast({
+                                title: "Preview",
+                                description: "Document preview feature coming soon",
+                              });
+                            }}
+                            data-testid={`button-preview-doc-${template.id}`}
+                          >
+                            <Eye className="h-4 w-4" /> Preview
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex items-center gap-2 rounded-full border border-white/20 bg-transparent px-3 py-1 text-xs font-semibold text-blue-100 transition hover:bg-white/10"
+                            onClick={() => {
+                              toast({
+                                title: "Edit",
+                                description: "Document editing feature coming soon",
+                              });
+                            }}
+                            data-testid={`button-edit-doc-${template.id}`}
+                          >
+                            <Settings className="h-4 w-4" /> Edit
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                ) : (
+                  <div className="col-span-full">
+                    <Card className={glassPanelClass}>
+                      <CardContent className="py-12">
+                        <div className="text-center max-w-md mx-auto">
+                          <FileText className="h-12 w-12 mx-auto mb-4 text-blue-400/40" />
+                          <h3 className="text-lg font-semibold text-blue-100 mb-2">No Document Templates Yet</h3>
+                          <p className="text-sm text-blue-200/70 mb-6">
+                            Create your first document template to send for electronic signatures. Perfect for payment agreements, service contracts, and authorization forms.
+                          </p>
+                          <Button
+                            onClick={() => {
+                              toast({
+                                title: "Coming Soon",
+                                description: "Document template creation UI is being developed. You can create templates via API for now.",
+                              });
+                            }}
+                            className="bg-blue-600 hover:bg-blue-700"
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Create Document Template
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </TabsContent>
 
         {/* Campaign Confirmation Dialog */}
         <AlertDialog open={showCampaignConfirmation} onOpenChange={setShowCampaignConfirmation}>
