@@ -2376,6 +2376,21 @@ export default function Settings() {
                     </div>
                   </div>
                 </CardContent>
+                {hasUnsavedChanges && (
+                  <CardFooter className="border-t border-white/10 pt-6">
+                    <Button
+                      onClick={handleSaveSettings}
+                      disabled={updateSettingsMutation.isPending}
+                      className={cn(
+                        "ml-auto rounded-xl bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-6 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 transition hover:from-sky-400/80 hover:to-indigo-400/80",
+                        updateSettingsMutation.isPending && "opacity-60",
+                      )}
+                      data-testid="button-save-addons"
+                    >
+                      {updateSettingsMutation.isPending ? "Saving..." : "Save Changes"}
+                    </Button>
+                  </CardFooter>
+                )}
               </Card>
             </TabsContent>
 
