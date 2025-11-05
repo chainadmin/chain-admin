@@ -36,7 +36,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Trash2, Upload, Plus, Save, CreditCard, Shield, Settings as SettingsIcon, ImageIcon, Copy, ExternalLink, Repeat, FileText, Users, MessagesSquare, DollarSign } from "lucide-react";
+import { Trash2, Upload, Plus, Save, CreditCard, Shield, Settings as SettingsIcon, ImageIcon, Copy, ExternalLink, Repeat, FileText, Users, MessagesSquare, DollarSign, Code, Table } from "lucide-react";
+import { useRef } from "react";
 import { isSubdomainSupported } from "@shared/utils/subdomain";
 import { resolveConsumerPortalUrl } from "@shared/utils/consumerPortal";
 import { getArrangementSummary, getPlanTypeLabel, formatCurrencyFromCents } from "@/lib/arrangements";
@@ -48,6 +49,7 @@ export default function Settings() {
   const [showArrangementModal, setShowArrangementModal] = useState(false);
   const [showDocTemplateModal, setShowDocTemplateModal] = useState(false);
   const [editingDocTemplate, setEditingDocTemplate] = useState<any>(null);
+  const docContentRef = useRef<HTMLTextAreaElement>(null);
   
   type DocumentFormState = {
     title: string;
@@ -488,6 +490,196 @@ export default function Settings() {
     } else {
       createDocTemplateMutation.mutate(docTemplateForm);
     }
+  };
+
+  // Template variables for document templates
+  const docTemplateVariables = [
+    { label: "First Name", value: "{{firstName}}", category: "consumer" },
+    { label: "Last Name", value: "{{lastName}}", category: "consumer" },
+    { label: "Full Name", value: "{{consumer_name}}", category: "consumer" },
+    { label: "Email", value: "{{email}}", category: "consumer" },
+    { label: "Phone", value: "{{phone}}", category: "consumer" },
+    { label: "Phone 2", value: "{{phone2}}", category: "consumer" },
+    { label: "Address", value: "{{address}}", category: "consumer" },
+    { label: "City", value: "{{city}}", category: "consumer" },
+    { label: "State", value: "{{state}}", category: "consumer" },
+    { label: "ZIP", value: "{{zip}}", category: "consumer" },
+    { label: "Date of Birth", value: "{{dateOfBirth}}", category: "consumer" },
+    { label: "SSN Last 4", value: "{{ssn_last_4}}", category: "consumer" },
+    
+    { label: "Account Number", value: "{{account_number}}", category: "account" },
+    { label: "Original Creditor", value: "{{original_creditor}}", category: "account" },
+    { label: "Current Balance", value: "{{balance}}", category: "account" },
+    { label: "Original Balance", value: "{{original_balance}}", category: "account" },
+    { label: "Last Payment", value: "{{last_payment}}", category: "account" },
+    { label: "Last Payment Date", value: "{{last_payment_date}}", category: "account" },
+    { label: "Account Status", value: "{{status}}", category: "account" },
+    { label: "Charge-Off Date", value: "{{charge_off_date}}", category: "account" },
+    { label: "Client Reference", value: "{{client_reference}}", category: "account" },
+    { label: "Account Type", value: "{{account_type}}", category: "account" },
+    
+    { label: "Today's Date", value: "{{today_date}}", category: "dates" },
+    { label: "Current Month", value: "{{current_month}}", category: "dates" },
+    { label: "Current Year", value: "{{current_year}}", category: "dates" },
+    { label: "Tomorrow's Date", value: "{{tomorrow_date}}", category: "dates" },
+    { label: "Next Week Date", value: "{{next_week_date}}", category: "dates" },
+    { label: "Next Month Date", value: "{{next_month_date}}", category: "dates" },
+    { label: "Current Date Time", value: "{{current_datetime}}", category: "dates" },
+    
+    { label: "Monthly Payment", value: "{{monthly_payment}}", category: "payments" },
+    { label: "Number of Payments", value: "{{number_of_payments}}", category: "payments" },
+    { label: "Arrangement Start", value: "{{arrangement_start}}", category: "payments" },
+    { label: "Arrangement End", value: "{{arrangement_end}}", category: "payments" },
+    { label: "Next Payment Date", value: "{{next_payment_date}}", category: "payments" },
+    { label: "Payment Frequency", value: "{{payment_frequency}}", category: "payments" },
+    { label: "Settlement Offer", value: "{{settlement_offer}}", category: "payments" },
+    { label: "Settlement Expires", value: "{{settlement_expires}}", category: "payments" },
+    { label: "Total Paid", value: "{{total_paid}}", category: "payments" },
+    { label: "Remaining Balance", value: "{{remaining_balance}}", category: "payments" },
+    { label: "Payoff Amount", value: "{{payoff_amount}}", category: "payments" },
+    
+    { label: "Portal Login Link", value: "{{portal_login_link}}", category: "links" },
+    { label: "Make Payment Link", value: "{{payment_link}}", category: "links" },
+    { label: "View Account Link", value: "{{account_link}}", category: "links" },
+    { label: "Unsubscribe Link", value: "{{unsubscribe_link}}", category: "links" },
+    
+    { label: "Agency Name", value: "{{agency_name}}", category: "agency" },
+    { label: "Agency Email", value: "{{agency_email}}", category: "agency" },
+    { label: "Agency Phone", value: "{{agency_phone}}", category: "agency" },
+    { label: "Agency Address", value: "{{agency_address}}", category: "agency" },
+    { label: "Agent Name", value: "{{agent_name}}", category: "agency" },
+    { label: "License Number", value: "{{license_number}}", category: "agency" },
+    { label: "Company Website", value: "{{company_website}}", category: "agency" },
+    
+    { label: "Validation Notice", value: "{{validation_notice}}", category: "compliance" },
+    { label: "FDCPA Disclaimer", value: "{{fdcpa_disclaimer}}", category: "compliance" },
+    { label: "Privacy Notice", value: "{{privacy_notice}}", category: "compliance" },
+    { label: "ESIGN Consent", value: "{{esign_consent}}", category: "compliance" },
+    { label: "Terms of Service", value: "{{terms_of_service}}", category: "compliance" },
+  ];
+
+  // Table templates for document templates
+  const docTableTemplates = [
+    {
+      name: "Basic Table",
+      description: "Simple bordered table with account details",
+      html: `<table style="width: 100%; border-collapse: collapse; border: 1px solid #ddd;">
+  <tr style="background-color: #f8f9fa;">
+    <th style="border: 1px solid #ddd; padding: 12px; text-align: left; font-weight: 600;">Field</th>
+    <th style="border: 1px solid #ddd; padding: 12px; text-align: left; font-weight: 600;">Details</th>
+  </tr>
+  <tr>
+    <td style="border: 1px solid #ddd; padding: 10px;">Account Number</td>
+    <td style="border: 1px solid #ddd; padding: 10px;">{{account_number}}</td>
+  </tr>
+  <tr>
+    <td style="border: 1px solid #ddd; padding: 10px;">Current Balance</td>
+    <td style="border: 1px solid #ddd; padding: 10px;">{{balance}}</td>
+  </tr>
+  <tr>
+    <td style="border: 1px solid #ddd; padding: 10px;">Monthly Payment</td>
+    <td style="border: 1px solid #ddd; padding: 10px;">{{monthly_payment}}</td>
+  </tr>
+  <tr>
+    <td style="border: 1px solid #ddd; padding: 10px;">Payment Start Date</td>
+    <td style="border: 1px solid #ddd; padding: 10px;">{{arrangement_start}}</td>
+  </tr>
+</table>`
+    },
+    {
+      name: "Modern Table",
+      description: "Rounded corners with subtle shadows",
+      html: `<table style="width: 100%; border-collapse: collapse; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+  <tr style="background-color: #3b82f6; color: white;">
+    <th style="padding: 14px; text-align: left; font-weight: 600;">Item</th>
+    <th style="padding: 14px; text-align: left; font-weight: 600;">Value</th>
+  </tr>
+  <tr style="background-color: #f9fafb;">
+    <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">Consumer Name</td>
+    <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">{{consumer_name}}</td>
+  </tr>
+  <tr style="background-color: white;">
+    <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">Account Number</td>
+    <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">{{account_number}}</td>
+  </tr>
+  <tr style="background-color: #f9fafb;">
+    <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">Balance</td>
+    <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">{{balance}}</td>
+  </tr>
+  <tr style="background-color: white;">
+    <td style="padding: 12px;">Settlement Amount</td>
+    <td style="padding: 12px;">{{settlement_offer}}</td>
+  </tr>
+</table>`
+    },
+    {
+      name: "Minimal Table",
+      description: "Clean lines without borders",
+      html: `<table style="width: 100%; border-collapse: collapse;">
+  <tr style="border-bottom: 2px solid #e5e7eb;">
+    <th style="padding: 12px 0; text-align: left; font-weight: 600; color: #374151;">Description</th>
+    <th style="padding: 12px 0; text-align: left; font-weight: 600; color: #374151;">Amount</th>
+  </tr>
+  <tr style="border-bottom: 1px solid #f3f4f6;">
+    <td style="padding: 12px 0; color: #6b7280;">Original Balance</td>
+    <td style="padding: 12px 0;">{{original_balance}}</td>
+  </tr>
+  <tr style="border-bottom: 1px solid #f3f4f6;">
+    <td style="padding: 12px 0; color: #6b7280;">Current Balance</td>
+    <td style="padding: 12px 0;">{{balance}}</td>
+  </tr>
+  <tr style="border-bottom: 1px solid #f3f4f6;">
+    <td style="padding: 12px 0; color: #6b7280;">Monthly Payment</td>
+    <td style="padding: 12px 0;">{{monthly_payment}}</td>
+  </tr>
+  <tr>
+    <td style="padding: 12px 0; font-weight: 600;">Remaining Balance</td>
+    <td style="padding: 12px 0; font-weight: 600;">{{remaining_balance}}</td>
+  </tr>
+</table>`
+    }
+  ];
+
+  // Insert variable at cursor position in document template
+  const insertDocVariable = (variable: string) => {
+    const textarea = docContentRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = docTemplateForm.content;
+    const before = text.substring(0, start);
+    const after = text.substring(end);
+
+    const newText = before + variable + after;
+    setDocTemplateForm({ ...docTemplateForm, content: newText });
+
+    setTimeout(() => {
+      textarea.focus();
+      const newPosition = start + variable.length;
+      textarea.setSelectionRange(newPosition, newPosition);
+    }, 0);
+  };
+
+  // Insert table at cursor position in document template
+  const insertDocTable = (html: string) => {
+    const textarea = docContentRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = docTemplateForm.content;
+    const before = text.substring(0, start);
+    const after = text.substring(end);
+
+    const newText = before + "\n" + html + "\n" + after;
+    setDocTemplateForm({ ...docTemplateForm, content: newText });
+
+    setTimeout(() => {
+      textarea.focus();
+      const newPosition = start + html.length + 2;
+      textarea.setSelectionRange(newPosition, newPosition);
+    }, 0);
   };
 
   const handleSubmitDocument = () => {
@@ -2212,35 +2404,37 @@ export default function Settings() {
 
               {/* Document Template Dialog */}
               <Dialog open={showDocTemplateModal} onOpenChange={setShowDocTemplateModal}>
-                <DialogContent className="border-white/10 bg-[#0f172a] text-blue-50 sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogContent className="border-white/10 bg-[#0f172a] text-blue-50 max-w-6xl max-h-[90vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle className="text-lg font-semibold text-white">
                       {editingDocTemplate ? "Edit Template" : "Create Document Template"}
                     </DialogTitle>
                   </DialogHeader>
                   <div className="space-y-4">
-                    <div>
-                      <Label className="text-white">Template Name *</Label>
-                      <Input
-                        value={docTemplateForm.name}
-                        onChange={(e) => setDocTemplateForm({ ...docTemplateForm, name: e.target.value })}
-                        placeholder="e.g., Payment Agreement, Authorization Form"
-                        className={inputClasses}
-                        data-testid="input-template-name"
-                      />
-                      <p className="text-xs text-blue-100/60 mt-1">Internal name for reference</p>
-                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-white">Template Name *</Label>
+                        <Input
+                          value={docTemplateForm.name}
+                          onChange={(e) => setDocTemplateForm({ ...docTemplateForm, name: e.target.value })}
+                          placeholder="e.g., Payment Agreement, Authorization Form"
+                          className={inputClasses}
+                          data-testid="input-template-name"
+                        />
+                        <p className="text-xs text-blue-100/60 mt-1">Internal name for reference</p>
+                      </div>
 
-                    <div>
-                      <Label className="text-white">Document Title *</Label>
-                      <Input
-                        value={docTemplateForm.title}
-                        onChange={(e) => setDocTemplateForm({ ...docTemplateForm, title: e.target.value })}
-                        placeholder="e.g., Payment Plan Agreement"
-                        className={inputClasses}
-                        data-testid="input-template-title"
-                      />
-                      <p className="text-xs text-blue-100/60 mt-1">Title shown to signers</p>
+                      <div>
+                        <Label className="text-white">Document Title *</Label>
+                        <Input
+                          value={docTemplateForm.title}
+                          onChange={(e) => setDocTemplateForm({ ...docTemplateForm, title: e.target.value })}
+                          placeholder="e.g., Payment Plan Agreement"
+                          className={inputClasses}
+                          data-testid="input-template-title"
+                        />
+                        <p className="text-xs text-blue-100/60 mt-1">Title shown to signers</p>
+                      </div>
                     </div>
 
                     <div>
@@ -2255,19 +2449,82 @@ export default function Settings() {
                       />
                     </div>
 
-                    <div>
-                      <Label className="text-white">Document Content *</Label>
-                      <Textarea
-                        value={docTemplateForm.content}
-                        onChange={(e) => setDocTemplateForm({ ...docTemplateForm, content: e.target.value })}
-                        placeholder="Enter the document content here. Use variables like {{consumer_name}}, {{account_number}}, etc."
-                        className={textareaClasses}
-                        rows={12}
-                        data-testid="input-template-content"
-                      />
-                      <p className="text-xs text-blue-100/60 mt-1">
-                        Supports variable replacement: &#123;&#123;consumer_name&#125;&#125;, &#123;&#123;account_number&#125;&#125;, &#123;&#123;balance&#125;&#125;, etc.
-                      </p>
+                    <div className="grid grid-cols-3 gap-4">
+                      {/* Content Editor */}
+                      <div className="col-span-2">
+                        <Label className="text-white mb-2 block">Document Content *</Label>
+                        <Textarea
+                          ref={docContentRef}
+                          value={docTemplateForm.content}
+                          onChange={(e) => setDocTemplateForm({ ...docTemplateForm, content: e.target.value })}
+                          placeholder="Enter the document content here. Click variables or tables to insert them."
+                          className={textareaClasses}
+                          rows={16}
+                          data-testid="input-template-content"
+                        />
+                        <p className="text-xs text-blue-100/60 mt-1">
+                          Click variables or tables on the right to insert them at your cursor position
+                        </p>
+                      </div>
+
+                      {/* Variables & Tables Sidebar */}
+                      <div className="space-y-4">
+                        {/* Variables */}
+                        <div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <Code className="h-4 w-4 text-sky-400" />
+                            <Label className="text-white text-sm">Variables</Label>
+                          </div>
+                          <div className="h-80 overflow-y-auto border border-white/20 rounded-lg p-2 bg-white/5 space-y-2">
+                            {[
+                              { name: "Consumer Info", vars: docTemplateVariables.filter(v => v.category === "consumer") },
+                              { name: "Account Details", vars: docTemplateVariables.filter(v => v.category === "account") },
+                              { name: "Dates", vars: docTemplateVariables.filter(v => v.category === "dates") },
+                              { name: "Payment Info", vars: docTemplateVariables.filter(v => v.category === "payments") },
+                              { name: "Links", vars: docTemplateVariables.filter(v => v.category === "links") },
+                              { name: "Agency Info", vars: docTemplateVariables.filter(v => v.category === "agency") },
+                              { name: "Compliance", vars: docTemplateVariables.filter(v => v.category === "compliance") },
+                            ].map((group) => (
+                              <div key={group.name}>
+                                <p className="text-xs font-semibold text-blue-300 mb-1">{group.name}</p>
+                                <div className="flex flex-wrap gap-1">
+                                  {group.vars.map((variable) => (
+                                    <button
+                                      key={variable.value}
+                                      onClick={() => insertDocVariable(variable.value)}
+                                      className="px-2 py-1 text-xs rounded bg-sky-500/20 text-sky-100 border border-sky-400/30 hover:bg-sky-500/30 hover:border-sky-400/50 transition"
+                                      data-testid={`button-insert-var-${variable.value}`}
+                                    >
+                                      {variable.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Table Templates */}
+                        <div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <Table className="h-4 w-4 text-emerald-400" />
+                            <Label className="text-white text-sm">Table Templates</Label>
+                          </div>
+                          <div className="space-y-2">
+                            {docTableTemplates.map((template) => (
+                              <button
+                                key={template.name}
+                                onClick={() => insertDocTable(template.html)}
+                                className="w-full text-left px-3 py-2 rounded-lg bg-emerald-500/20 border border-emerald-400/30 hover:bg-emerald-500/30 hover:border-emerald-400/50 transition"
+                                data-testid={`button-insert-table-${template.name.toLowerCase().replace(/\s+/g, '-')}`}
+                              >
+                                <p className="text-sm font-semibold text-emerald-100">{template.name}</p>
+                                <p className="text-xs text-emerald-200/70">{template.description}</p>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
                     <div className="flex justify-end space-x-2 pt-4 border-t border-white/10">
