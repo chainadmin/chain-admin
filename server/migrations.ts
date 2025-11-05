@@ -71,7 +71,7 @@ export async function runMigrations() {
     // Add blocked_account_statuses column for controlling communications and payments
     console.log('Adding blocked_account_statuses column...');
     try {
-      await client.query(`ALTER TABLE tenant_settings ADD COLUMN IF NOT EXISTS blocked_account_statuses TEXT[] DEFAULT ARRAY['inactive', 'recalled', 'closed']::TEXT[]`);
+      await client.query(`ALTER TABLE tenant_settings ADD COLUMN IF NOT EXISTS blocked_account_statuses TEXT[] DEFAULT ARRAY[]::TEXT[]`);
       console.log(`  ✓ blocked_account_statuses`);
     } catch (err) {
       console.log(`  ⚠ blocked_account_statuses (already exists or error)`);
@@ -98,6 +98,15 @@ export async function runMigrations() {
       console.log(`  ✓ settlement_offer_expires_date`);
     } catch (err) {
       console.log(`  ⚠ settlement_offer_expires_date (already exists or error)`);
+    }
+    
+    // Add balance_tier column to arrangement_options for tier-based payment plans
+    console.log('Adding balance_tier column to arrangement_options...');
+    try {
+      await client.query(`ALTER TABLE arrangement_options ADD COLUMN IF NOT EXISTS balance_tier TEXT`);
+      console.log(`  ✓ balance_tier`);
+    } catch (err) {
+      console.log(`  ⚠ balance_tier (already exists or error)`);
     }
     
     // Fix communication_automations table - make trigger_type nullable (legacy column)
