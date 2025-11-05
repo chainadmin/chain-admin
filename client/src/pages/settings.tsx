@@ -36,7 +36,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Trash2, Upload, Plus, Save, CreditCard, Shield, Settings as SettingsIcon, ImageIcon, Copy, ExternalLink, Repeat, FileText, Users, MessagesSquare, DollarSign, Code, Table, Eye } from "lucide-react";
+import { Trash2, Upload, Plus, Save, CreditCard, Shield, Settings as SettingsIcon, ImageIcon, Copy, ExternalLink, Repeat, FileText, Users, MessagesSquare, DollarSign, Code, Table, Eye, Bold, Italic, Underline, List, ListOrdered, Heading1, Heading2, Heading3, Palette, Link2, Link2Off, Eraser } from "lucide-react";
 import { useRef } from "react";
 import { isSubdomainSupported } from "@shared/utils/subdomain";
 import { resolveConsumerPortalUrl } from "@shared/utils/consumerPortal";
@@ -49,7 +49,7 @@ export default function Settings() {
   const [showArrangementModal, setShowArrangementModal] = useState(false);
   const [showDocTemplateModal, setShowDocTemplateModal] = useState(false);
   const [editingDocTemplate, setEditingDocTemplate] = useState<any>(null);
-  const docContentRef = useRef<HTMLTextAreaElement>(null);
+  const docEditorRef = useRef<HTMLDivElement>(null);
   
   type DocumentFormState = {
     title: string;
@@ -219,6 +219,43 @@ export default function Settings() {
       setLocalSettings(settings);
     }
   }, [settings]);
+
+  // Initialize document editor settings
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      try {
+        document.execCommand("defaultParagraphSeparator", false, "p");
+        document.execCommand("styleWithCSS", false, "true");
+      } catch (error) {
+        // Ignore browsers that no longer support execCommand
+      }
+    }
+  }, []);
+
+  // Formatting options for document editor
+  const blockOptions = [
+    { label: "Normal", value: "p" },
+    { label: "Heading 1", value: "h1" },
+    { label: "Heading 2", value: "h2" },
+    { label: "Heading 3", value: "h3" },
+  ];
+
+  const colorOptions = [
+    { label: "Black", value: "#000000" },
+    { label: "Dark Gray", value: "#4B5563" },
+    { label: "Blue", value: "#3B82F6" },
+    { label: "Red", value: "#EF4444" },
+    { label: "Green", value: "#10B981" },
+    { label: "Orange", value: "#F59E0B" },
+    { label: "Purple", value: "#8B5CF6" },
+  ];
+
+  // Helper to get plain text from HTML
+  const getPlainText = (html: string) => {
+    const temp = document.createElement("div");
+    temp.innerHTML = html;
+    return temp.textContent || temp.innerText || "";
+  };
 
   const updateSettingsMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -465,9 +502,21 @@ export default function Settings() {
         description: template.description || "",
         content: template.content || "",
       });
+      // Set editor content after modal opens
+      setTimeout(() => {
+        if (docEditorRef.current) {
+          docEditorRef.current.innerHTML = template.content || "";
+        }
+      }, 100);
     } else {
       setEditingDocTemplate(null);
       setDocTemplateForm({ ...emptyDocTemplateForm });
+      // Clear editor content
+      setTimeout(() => {
+        if (docEditorRef.current) {
+          docEditorRef.current.innerHTML = "";
+        }
+      }, 100);
     }
     setShowDocTemplateModal(true);
   };
@@ -645,46 +694,79 @@ export default function Settings() {
     }
   ];
 
+  // Sync document editor HTML to form state
+  const syncDocEditorHtml = () => {
+    const editor = docEditorRef.current;
+    if (!editor) return;
+    const html = editor.innerHTML;
+    setDocTemplateForm({ ...docTemplateForm, content: html });
+  };
+
+  // Apply formatting command to document editor
+  const applyDocCommand = (command: string, value?: string) => {
+    const editor = docEditorRef.current;
+    if (!editor) return;
+    editor.focus();
+    if (command === "foreColor") {
+      document.execCommand("styleWithCSS", false, "true");
+    }
+    document.execCommand(command, false, value);
+    setTimeout(syncDocEditorHtml, 0);
+  };
+
   // Insert variable at cursor position in document template
   const insertDocVariable = (variable: string) => {
-    const textarea = docContentRef.current;
-    if (!textarea) return;
-
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const text = docTemplateForm.content;
-    const before = text.substring(0, start);
-    const after = text.substring(end);
-
-    const newText = before + variable + after;
-    setDocTemplateForm({ ...docTemplateForm, content: newText });
-
-    setTimeout(() => {
-      textarea.focus();
-      const newPosition = start + variable.length;
-      textarea.setSelectionRange(newPosition, newPosition);
-    }, 0);
+    const editor = docEditorRef.current;
+    if (!editor) return;
+    editor.focus();
+    const selection = window.getSelection();
+    if (!selection) return;
+    const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+    if (range) {
+      range.deleteContents();
+      const textNode = document.createTextNode(variable);
+      range.insertNode(textNode);
+      range.setStartAfter(textNode);
+      range.setEndAfter(textNode);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+    syncDocEditorHtml();
   };
 
   // Insert table at cursor position in document template
   const insertDocTable = (html: string) => {
-    const textarea = docContentRef.current;
-    if (!textarea) return;
+    const editor = docEditorRef.current;
+    if (!editor) return;
+    editor.focus();
+    const selection = window.getSelection();
+    if (!selection) return;
+    const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+    if (range) {
+      range.deleteContents();
+      const tempDiv = document.createElement("div");
+      tempDiv.innerHTML = html;
+      const fragment = document.createDocumentFragment();
+      while (tempDiv.firstChild) {
+        fragment.appendChild(tempDiv.firstChild);
+      }
+      range.insertNode(fragment);
+    }
+    syncDocEditorHtml();
+  };
 
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const text = docTemplateForm.content;
-    const before = text.substring(0, start);
-    const after = text.substring(end);
+  // Insert link in document editor
+  const handleDocCreateLink = () => {
+    if (typeof window === "undefined") return;
+    const url = window.prompt("Enter URL:");
+    if (url) {
+      applyDocCommand("createLink", url);
+    }
+  };
 
-    const newText = before + "\n" + html + "\n" + after;
-    setDocTemplateForm({ ...docTemplateForm, content: newText });
-
-    setTimeout(() => {
-      textarea.focus();
-      const newPosition = start + html.length + 2;
-      textarea.setSelectionRange(newPosition, newPosition);
-    }, 0);
+  // Remove link in document editor
+  const handleDocRemoveLink = () => {
+    applyDocCommand("unlink");
   };
 
   // Render document preview with sample data
@@ -2496,17 +2578,144 @@ export default function Settings() {
                       <div className="col-span-2 space-y-4">
                         <div>
                           <Label className="text-white mb-2 block">Document Content *</Label>
-                          <Textarea
-                            ref={docContentRef}
-                            value={docTemplateForm.content}
-                            onChange={(e) => setDocTemplateForm({ ...docTemplateForm, content: e.target.value })}
-                            placeholder="Enter the document content here. Click variables or tables to insert them."
-                            className={textareaClasses}
-                            rows={16}
-                            data-testid="input-template-content"
-                          />
+                          
+                          {/* Formatting Toolbar */}
+                          <div className="mb-2 flex flex-wrap items-center gap-1 rounded-lg border border-white/20 bg-white/5 p-2">
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              className="h-8 w-8 border-white/20 bg-white/10 text-blue-100 hover:bg-white/20"
+                              onClick={() => applyDocCommand("bold")}
+                              title="Bold"
+                            >
+                              <Bold className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              className="h-8 w-8 border-white/20 bg-white/10 text-blue-100 hover:bg-white/20"
+                              onClick={() => applyDocCommand("italic")}
+                              title="Italic"
+                            >
+                              <Italic className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              className="h-8 w-8 border-white/20 bg-white/10 text-blue-100 hover:bg-white/20"
+                              onClick={() => applyDocCommand("underline")}
+                              title="Underline"
+                            >
+                              <Underline className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              className="h-8 w-8 border-white/20 bg-white/10 text-blue-100 hover:bg-white/20"
+                              onClick={() => applyDocCommand("insertUnorderedList")}
+                              title="Bullet list"
+                            >
+                              <List className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              className="h-8 w-8 border-white/20 bg-white/10 text-blue-100 hover:bg-white/20"
+                              onClick={() => applyDocCommand("insertOrderedList")}
+                              title="Numbered list"
+                            >
+                              <ListOrdered className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              className="h-8 w-8 border-white/20 bg-white/10 text-blue-100 hover:bg-white/20"
+                              onClick={() => applyDocCommand("removeFormat")}
+                              title="Clear formatting"
+                            >
+                              <Eraser className="h-4 w-4" />
+                            </Button>
+                            <Select onValueChange={(value) => applyDocCommand("formatBlock", value)}>
+                              <SelectTrigger className="flex h-8 w-[130px] items-center gap-2 border-white/20 bg-white/10 text-blue-100 text-xs">
+                                <SelectValue placeholder="Text style" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {blockOptions.map((option) => (
+                                  <SelectItem key={option.value} value={option.value} className="text-sm">
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Select onValueChange={(value) => applyDocCommand("foreColor", value)}>
+                              <SelectTrigger className="flex h-8 w-[120px] items-center gap-2 border-white/20 bg-white/10 text-blue-100 text-xs">
+                                <Palette className="h-3.5 w-3.5" />
+                                <SelectValue placeholder="Color" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {colorOptions.map((option) => (
+                                  <SelectItem key={option.value} value={option.value} className="flex items-center gap-2">
+                                    <span
+                                      className="h-4 w-4 rounded-full border"
+                                      style={{ backgroundColor: option.value }}
+                                    ></span>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              className="h-8 w-8 border-white/20 bg-white/10 text-blue-100 hover:bg-white/20"
+                              onClick={handleDocCreateLink}
+                              title="Insert link"
+                            >
+                              <Link2 className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              className="h-8 w-8 border-white/20 bg-white/10 text-blue-100 hover:bg-white/20"
+                              onClick={handleDocRemoveLink}
+                              title="Remove link"
+                            >
+                              <Link2Off className="h-4 w-4" />
+                            </Button>
+                          </div>
+
+                          {/* WYSIWYG Editor */}
+                          <div className="rounded-lg border border-white/20 bg-white shadow-sm">
+                            <div className="relative">
+                              {!getPlainText(docTemplateForm.content) && (
+                                <div className="pointer-events-none absolute inset-0 flex h-full w-full items-start justify-start p-5 text-sm text-blue-400">
+                                  <p>
+                                    Start typing your document here. Use the formatting toolbar above and click variables or tables from the right sidebar to insert them.
+                                  </p>
+                                </div>
+                              )}
+                              <div
+                                ref={docEditorRef}
+                                className="min-h-[420px] w-full resize-y overflow-auto rounded-lg bg-white p-5 text-sm leading-relaxed text-slate-900 focus:outline-none"
+                                contentEditable
+                                suppressContentEditableWarning
+                                onInput={syncDocEditorHtml}
+                                onBlur={syncDocEditorHtml}
+                                spellCheck
+                                data-testid="input-template-content"
+                              />
+                            </div>
+                          </div>
                           <p className="text-xs text-blue-100/60 mt-1">
-                            Click variables or tables on the right to insert them at your cursor position
+                            Use the toolbar to format text, and click variables or tables to insert them
                           </p>
                         </div>
 
