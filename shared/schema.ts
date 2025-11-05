@@ -1141,12 +1141,12 @@ export const communicationSequences = pgTable("communication_sequences", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// Individual steps in a communication sequence (can be email or SMS)
+// Individual steps in a communication sequence (can be email, SMS, or signature request)
 export const communicationSequenceSteps = pgTable("communication_sequence_steps", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   sequenceId: uuid("sequence_id").references(() => communicationSequences.id, { onDelete: "cascade" }).notNull(),
-  stepType: text("step_type", { enum: ['email', 'sms'] }).notNull(), // Type of this step
-  templateId: uuid("template_id").notNull(), // References either emailTemplates or smsTemplates depending on stepType
+  stepType: text("step_type", { enum: ['email', 'sms', 'signature_request'] }).notNull(), // Type of this step
+  templateId: uuid("template_id"), // References emailTemplates, smsTemplates, or documentTemplates depending on stepType
   
   stepOrder: bigint("step_order", { mode: "number" }).notNull(), // 1, 2, 3, etc.
   delayDays: bigint("delay_days", { mode: "number" }).default(0), // Days to wait before sending (from previous step or enrollment)

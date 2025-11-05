@@ -469,6 +469,10 @@ export default function Communications() {
     queryKey: ["/api/sms-templates"],
   });
 
+  const { data: documentTemplates, isLoading: documentTemplatesLoading } = useQuery({
+    queryKey: ["/api/document-templates"],
+  });
+
   const { data: automations, isLoading: automationsLoading } = useQuery({
     queryKey: ["/api/automations"],
   });
@@ -4289,6 +4293,7 @@ export default function Communications() {
                                 <SelectContent>
                                   <SelectItem value="email">Email</SelectItem>
                                   <SelectItem value="sms">SMS</SelectItem>
+                                  <SelectItem value="signature_request">Signature Request</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
@@ -4297,7 +4302,7 @@ export default function Communications() {
                               <label className="text-xs text-blue-100/70">Template</label>
                               <Select
                                 value={step.templateId?.toString() || ''}
-                                onValueChange={(value) => updateSequenceStep(index, 'templateId', parseInt(value))}
+                                onValueChange={(value) => updateSequenceStep(index, 'templateId', value)}
                               >
                                 <SelectTrigger className="mt-1 bg-white/10 border-white/20 text-white text-sm">
                                   <SelectValue placeholder="Select template" />
@@ -4305,12 +4310,18 @@ export default function Communications() {
                                 <SelectContent>
                                   {step.stepType === 'email'
                                     ? (emailTemplates as any[] || []).map((template: any) => (
-                                        <SelectItem key={template.id} value={template.id.toString()}>
+                                        <SelectItem key={template.id} value={template.id}>
                                           {template.subject}
                                         </SelectItem>
                                       ))
-                                    : (smsTemplates as any[] || []).map((template: any) => (
-                                        <SelectItem key={template.id} value={template.id.toString()}>
+                                    : step.stepType === 'sms'
+                                    ? (smsTemplates as any[] || []).map((template: any) => (
+                                        <SelectItem key={template.id} value={template.id}>
+                                          {template.name}
+                                        </SelectItem>
+                                      ))
+                                    : (documentTemplates as any[] || []).map((template: any) => (
+                                        <SelectItem key={template.id} value={template.id}>
                                           {template.name}
                                         </SelectItem>
                                       ))}
