@@ -960,24 +960,26 @@ export default function Accounts() {
           >
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="edit-firstName">First Name *</Label>
+                <Label htmlFor="edit-firstName" className="text-white">First Name *</Label>
                 <Input
                   id="edit-firstName"
                   data-testid="input-edit-first-name"
                   value={editForm.firstName}
                   onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
                   placeholder="Enter first name"
+                  className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
                   required
                 />
               </div>
               <div>
-                <Label htmlFor="edit-lastName">Last Name *</Label>
+                <Label htmlFor="edit-lastName" className="text-white">Last Name *</Label>
                 <Input
                   id="edit-lastName"
                   data-testid="input-edit-last-name"
                   value={editForm.lastName}
                   onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
                   placeholder="Enter last name"
+                  className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
                   required
                 />
               </div>
@@ -985,7 +987,7 @@ export default function Accounts() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="edit-email">Email *</Label>
+                <Label htmlFor="edit-email" className="text-white">Email *</Label>
                 <Input
                   id="edit-email"
                   type="email"
@@ -993,40 +995,44 @@ export default function Accounts() {
                   value={editForm.email}
                   onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
                   placeholder="Enter email address"
+                  className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
                   required
                 />
               </div>
               <div>
-                <Label htmlFor="edit-phone">Phone</Label>
+                <Label htmlFor="edit-phone" className="text-white">Phone</Label>
                 <Input
                   id="edit-phone"
                   data-testid="input-edit-phone"
                   value={editForm.phone}
                   onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
                   placeholder="Enter phone number"
+                  className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="edit-accountNumber">Account Number</Label>
+                <Label htmlFor="edit-accountNumber" className="text-white">Account Number</Label>
                 <Input
                   id="edit-accountNumber"
                   data-testid="input-edit-account-number"
                   value={editForm.accountNumber}
                   onChange={(e) => setEditForm({ ...editForm, accountNumber: e.target.value })}
                   placeholder="Enter account number"
+                  className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
                 />
               </div>
               <div>
-                <Label htmlFor="edit-filenumber">File Number *</Label>
+                <Label htmlFor="edit-filenumber" className="text-white">File Number *</Label>
                 <Input
                   id="edit-filenumber"
                   data-testid="input-edit-filenumber"
                   value={editForm.filenumber}
                   onChange={(e) => setEditForm({ ...editForm, filenumber: e.target.value })}
                   placeholder="Enter file number"
+                  className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
                   required
                 />
               </div>
@@ -1034,18 +1040,19 @@ export default function Accounts() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="edit-creditor">Creditor *</Label>
+                <Label htmlFor="edit-creditor" className="text-white">Creditor *</Label>
                 <Input
                   id="edit-creditor"
                   data-testid="input-edit-creditor"
                   value={editForm.creditor}
                   onChange={(e) => setEditForm({ ...editForm, creditor: e.target.value })}
                   placeholder="Enter creditor name"
+                  className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
                   required
                 />
               </div>
               <div>
-                <Label htmlFor="edit-balance">Balance *</Label>
+                <Label htmlFor="edit-balance" className="text-white">Balance *</Label>
                 <Input
                   id="edit-balance"
                   type="number"
@@ -1054,6 +1061,7 @@ export default function Accounts() {
                   value={editForm.balance}
                   onChange={(e) => setEditForm({ ...editForm, balance: e.target.value })}
                   placeholder="Enter balance"
+                  className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
                   required
                 />
               </div>
@@ -1061,12 +1069,12 @@ export default function Accounts() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="edit-folder">Folder</Label>
+                <Label htmlFor="edit-folder" className="text-white">Folder</Label>
                 <Select
                   value={editForm.folderId}
                   onValueChange={(value) => setEditForm({ ...editForm, folderId: value })}
                 >
-                  <SelectTrigger id="edit-folder" data-testid="select-edit-folder">
+                  <SelectTrigger id="edit-folder" data-testid="select-edit-folder" className="bg-white/10 border-white/20 text-white">
                     <SelectValue placeholder="Select folder" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1079,12 +1087,12 @@ export default function Accounts() {
                 </Select>
               </div>
               <div>
-                <Label htmlFor="edit-status">Account Status *</Label>
+                <Label htmlFor="edit-status" className="text-white">Account Status *</Label>
                 <Select
                   value={editForm.status}
                   onValueChange={(value) => setEditForm({ ...editForm, status: value })}
                 >
-                  <SelectTrigger id="edit-status" data-testid="select-edit-status">
+                  <SelectTrigger id="edit-status" data-testid="select-edit-status" className="bg-white/10 border-white/20 text-white">
                     <SelectValue placeholder="Select status" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1099,7 +1107,7 @@ export default function Accounts() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="edit-dateOfBirth">Date of Birth *</Label>
+                <Label htmlFor="edit-dateOfBirth" className="text-white">Date of Birth *</Label>
                 <Input
                   id="edit-dateOfBirth"
                   type="date"
@@ -1107,50 +1115,55 @@ export default function Accounts() {
                   value={editForm.dateOfBirth}
                   onChange={(e) => setEditForm({ ...editForm, dateOfBirth: e.target.value })}
                   placeholder="Select date of birth"
+                  className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
                   required
                 />
               </div>
               <div>
-                <Label htmlFor="edit-address">Address</Label>
+                <Label htmlFor="edit-address" className="text-white">Address</Label>
                 <Input
                   id="edit-address"
                   data-testid="input-edit-address"
                   value={editForm.address}
                   onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
                   placeholder="Enter address"
+                  className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <Label htmlFor="edit-city">City</Label>
+                <Label htmlFor="edit-city" className="text-white">City</Label>
                 <Input
                   id="edit-city"
                   data-testid="input-edit-city"
                   value={editForm.city}
                   onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
                   placeholder="Enter city"
+                  className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
                 />
               </div>
               <div>
-                <Label htmlFor="edit-state">State</Label>
+                <Label htmlFor="edit-state" className="text-white">State</Label>
                 <Input
                   id="edit-state"
                   data-testid="input-edit-state"
                   value={editForm.state}
                   onChange={(e) => setEditForm({ ...editForm, state: e.target.value })}
                   placeholder="Enter state"
+                  className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
                 />
               </div>
               <div>
-                <Label htmlFor="edit-zipCode">Zip Code</Label>
+                <Label htmlFor="edit-zipCode" className="text-white">Zip Code</Label>
                 <Input
                   id="edit-zipCode"
                   data-testid="input-edit-zip-code"
                   value={editForm.zipCode}
                   onChange={(e) => setEditForm({ ...editForm, zipCode: e.target.value })}
                   placeholder="Enter zip code"
+                  className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
                 />
               </div>
             </div>
