@@ -1537,6 +1537,11 @@ export default function Communications() {
   const updateSequenceStep = (index: number, field: string, value: any) => {
     const updated = [...sequenceSteps];
     updated[index] = { ...updated[index], [field]: value };
+    
+    if (field === 'stepType') {
+      updated[index].templateId = null;
+    }
+    
     setSequenceSteps(updated);
   };
 
