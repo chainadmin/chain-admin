@@ -9182,6 +9182,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   const failedAttempts = (schedule.failedAttempts || 0) + 1;
                   const scheduleStatus = failedAttempts >= 3 ? 'failed' : 'active';
                   const failureReason = paymentResult.error || paymentResult.result_code || 'Payment declined';
+                  
+                  // Get account details for comprehensive logging
+                  const failedAccount = await storage.getAccount(schedule.accountId);
+                  const consumerName = `${consumer.firstName} ${consumer.lastName}`.trim();
+                  const accountInfo = failedAccount 
+                    ? `Account: ${failedAccount.accountNumber || 'N/A'}, Creditor: ${failedAccount.creditor || 'N/A'}` 
+                    : 'Account details unavailable';
+                  
+                  // Log comprehensive payment failure details
+                  console.error(`❌ SCHEDULED PAYMENT FAILED:`);
+                  console.error(`   Consumer: ${consumerName} (ID: ${consumer.id})`);
+                  console.error(`   ${accountInfo}`);
+                  console.error(`   Amount: $${(schedule.amountCents / 100).toFixed(2)}`);
+                  console.error(`   Payment Method: ${paymentMethod.cardBrand || 'Card'} ending in ${paymentMethod.cardLast4}`);
+                  console.error(`   Failure Reason: ${failureReason}`);
+                  console.error(`   Failed Attempts: ${failedAttempts}/3`);
+                  console.error(`   Status: ${scheduleStatus}`);
 
                   await storage.updatePaymentSchedule(schedule.id, tenant.id, {
                     failedAttempts,
@@ -9194,15 +9211,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   await storage.updateConsumer(consumer.id, { paymentStatus: 'payment_failed' });
 
                   // Send note to SMAX about failed scheduled payment
-                  const scheduleAccountForNote = await storage.getAccount(schedule.accountId);
-                  if (scheduleAccountForNote?.filenumber) {
+                  if (failedAccount?.filenumber) {
                     try {
                       await smaxService.sendPaymentNote(tenant.id, {
-                        filenumber: scheduleAccountForNote.filenumber,
+                        filenumber: failedAccount.filenumber,
                         status: 'declined',
                         amount: schedule.amountCents / 100,
                         reason: failureReason
                       });
+                      console.log(`📝 SMAX note created for failed payment on account ${failedAccount.filenumber}`);
                     } catch (smaxError) {
                       console.error('Failed to send declined payment note to SMAX:', smaxError);
                     }
@@ -9210,8 +9227,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
                   failedPayments.push({ 
                     scheduleId: schedule.id, 
-                    consumerId: consumer.id, 
-                    error: paymentResult.error || 'Payment declined'
+                    consumerId: consumer.id,
+                    consumerName,
+                    accountNumber: failedAccount?.accountNumber || 'Unknown',
+                    creditor: failedAccount?.creditor || 'Unknown',
+                    amount: schedule.amountCents / 100,
+                    error: failureReason,
+                    attemptCount: failedAttempts
                   });
                 }
               } catch (err) {
@@ -10332,71 +10354,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Resync SMAX arrangements for a consumer (admin)
-  app.post('/api/payment-schedules/resync-smax/:consumerId', authenticateUser, async (req: any, res) => {
-    try {
-      const tenantId = req.user.tenantId;
-      const { consumerId } = req.params;
-
-      if (!tenantId) {
-        return res.status(403).json({ message: "No tenant access" });
-      }
-
-      // Get tenant settings for SMAX
-      const tenantSettings = await storage.getTenantSettings(tenantId);
-      if (!tenantSettings?.smaxEnabled) {
-        return res.status(400).json({ message: "SMAX integration is not enabled for this tenant" });
-      }
-
-      // Verify consumer belongs to this tenant
-      const consumer = await storage.getConsumer(consumerId);
-      if (!consumer || consumer.tenantId !== tenantId) {
-        return res.status(404).json({ message: "Consumer not found" });
-      }
-
-      // Get all consumer accounts
-      const accounts = await storage.getAccountsByConsumer(consumerId);
-      
-      let syncedCount = 0;
-      let errors: string[] = [];
-
-      // Fetch and sync SMAX arrangements for each account
-      for (const account of accounts) {
-        if (!account.filenumber) continue;
-
-        try {
-          const smaxArrangement = await smaxService.getPaymentArrangement(
-            tenantId,
-            account.filenumber
-          );
-
-          if (smaxArrangement) {
-            await storage.syncSmaxArrangementToChain(
-              tenantId,
-              consumerId,
-              account.id,
-              smaxArrangement
-            );
-            syncedCount++;
-            console.log(`✅ Resynced SMAX arrangement for account ${account.accountNumber}`);
-          }
-        } catch (error: any) {
-          console.error(`❌ Failed to resync account ${account.accountNumber}:`, error);
-          errors.push(`Account ${account.accountNumber}: ${error.message}`);
-        }
-      }
-
-      res.json({
-        message: "SMAX resync completed",
-        syncedCount,
-        totalAccounts: accounts.length,
-        errors: errors.length > 0 ? errors : undefined,
-      });
-    } catch (error) {
-      console.error("Error resyncing SMAX arrangements:", error);
-      res.status(500).json({ message: "Failed to resync SMAX arrangements" });
-    }
-  });
 
   // Payment approval routes
   app.get('/api/payment-approvals', authenticateUser, async (req: any, res) => {

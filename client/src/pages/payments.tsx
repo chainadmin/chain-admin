@@ -14,7 +14,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { CreditCard, DollarSign, TrendingUp, Clock, CheckCircle, RefreshCw, Calendar, User, Building2, Lock, Trash2, ThumbsUp, ThumbsDown } from "lucide-react";
+import { CreditCard, DollarSign, TrendingUp, Clock, CheckCircle, Calendar, User, Building2, Lock, Trash2, ThumbsUp, ThumbsDown } from "lucide-react";
 import { PaymentSchedulingCalendar } from "@/components/payment-scheduling-calendar";
 
 export default function Payments() {
@@ -225,31 +225,6 @@ export default function Payments() {
     },
   });
 
-  // Resync SMAX arrangements for a consumer
-  const resyncSmaxMutation = useMutation({
-    mutationFn: async (consumerId: string) => {
-      const response = await apiRequest("POST", `/api/payment-schedules/resync-smax/${consumerId}`, {});
-      return response.json();
-    },
-    onSuccess: (data: any) => {
-      toast({
-        title: "SMAX Resync Complete",
-        description: `Synced ${data.syncedCount} of ${data.totalAccounts} accounts.`,
-      });
-      // Invalidate all payment schedule queries to ensure UI updates everywhere
-      queryClient.invalidateQueries({ queryKey: ["/api/payment-schedules"] });
-      queryClient.invalidateQueries({ predicate: (query) => 
-        query.queryKey[0] === "/api/payment-schedules/consumer" 
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Resync Failed",
-        description: error.message || "Unable to resync SMAX arrangements. Please try again.",
-        variant: "destructive",
-      });
-    },
-  });
 
   // Manual payment processor trigger mutation
   const processScheduledPaymentsMutation = useMutation({
@@ -1009,19 +984,6 @@ export default function Payments() {
                                     <Trash2 className="w-4 h-4" />
                                     Cancel Arrangement
                                   </Button>
-                                  {schedule.source === 'smax' && schedule.consumer && (
-                                    <Button
-                                      onClick={() => resyncSmaxMutation.mutate(schedule.consumer.id)}
-                                      disabled={resyncSmaxMutation.isPending}
-                                      variant="outline"
-                                      size="sm"
-                                      className="flex items-center gap-2"
-                                      data-testid={`button-resync-smax-${schedule.id}`}
-                                    >
-                                      <RefreshCw className="w-4 h-4" />
-                                      Resync from SMAX
-                                    </Button>
-                                  )}
                                 </div>
                               )}
 
