@@ -1728,7 +1728,7 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(communicationSequences.id, id), eq(communicationSequences.tenantId, tenantId)));
   }
 
-  // Email sequence steps operations
+  // Communication sequence steps operations
   async getSequenceSteps(sequenceId: string): Promise<(CommunicationSequenceStep & { template: EmailTemplate })[]> {
     const result = await db
       .select()
@@ -1738,7 +1738,7 @@ export class DatabaseStorage implements IStorage {
       .orderBy(communicationSequenceSteps.stepOrder);
     
     return result.map(row => ({
-      ...row.email_sequence_steps,
+      ...row.communication_sequence_steps,
       template: row.email_templates!,
     }));
   }
@@ -1769,7 +1769,7 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  // Email sequence enrollment operations
+  // Communication sequence enrollment operations
   async getSequenceEnrollments(sequenceId: string): Promise<(CommunicationSequenceEnrollment & { consumer: Consumer })[]> {
     const result = await db
       .select()
@@ -1779,7 +1779,7 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(communicationSequenceEnrollments.enrolledAt));
     
     return result.map(row => ({
-      ...row.email_sequence_enrollments,
+      ...row.communication_sequence_enrollments,
       consumer: row.consumers!,
     }));
   }
@@ -1808,13 +1808,13 @@ export class DatabaseStorage implements IStorage {
         eq(communicationSequenceEnrollments.status, 'active'),
         eq(communicationSequences.isActive, true)
       ))
-      .orderBy(communicationSequenceEnrollments.nextEmailAt);
+      .orderBy(communicationSequenceEnrollments.nextMessageAt);
     
     return result.map(row => ({
-      ...row.email_sequence_enrollments,
-      sequence: row.email_sequences!,
+      ...row.communication_sequence_enrollments,
+      sequence: row.communication_sequences!,
       consumer: row.consumers!,
-      currentStep: row.email_sequence_steps || undefined,
+      currentStep: row.communication_sequence_steps || undefined,
     }));
   }
 
