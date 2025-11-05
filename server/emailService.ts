@@ -2,6 +2,7 @@ import { Client } from 'postmark';
 import { db } from './db';
 import { emailLogs, tenants, tenantSettings } from '@shared/schema';
 import { eq } from 'drizzle-orm';
+import { smaxService } from './smaxService';
 
 // Postmark client will be validated at server startup, not module load
 // This allows Docker build to succeed without runtime env vars
@@ -116,6 +117,21 @@ export class EmailService {
           const result = await this.sendEmail(email);
           if (result.success) {
             successful++;
+            
+            // Create SMAX note if filenumber and tenantId are available
+            if (email.metadata?.filenumber && email.tenantId) {
+              try {
+                await smaxService.insertNote(email.tenantId, {
+                  filenumber: String(email.metadata.filenumber),
+                  collectorname: 'System',
+                  logmessage: `Email sent: ${email.subject}`
+                });
+                console.log(`📝 SMAX note created for email to account ${email.metadata.filenumber}`);
+              } catch (noteError) {
+                console.error('Error creating SMAX note for email:', noteError);
+                // Don't fail the email send if note creation fails
+              }
+            }
           } else {
             failed++;
           }

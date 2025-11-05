@@ -3031,6 +3031,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             to: phoneNumber,
             message: processedMessage,
             consumerId: consumer.id,
+            accountId: consumerAccount?.id,
           }));
         });
 
@@ -7996,6 +7997,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 : nextMonth.toISOString().split('T')[0],
               remainingPayments,
               status: 'active',
+              source: 'chain', // Mark as Chain-created
+              smaxSynced: false, // Will be set to true after SMAX sync
             });
             
             console.log('✅✅✅ PAYMENT SCHEDULE CREATED SUCCESSFULLY IN DATABASE! ✅✅✅');
@@ -8212,6 +8215,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
                   if (smaxArrangementSent) {
                     console.log('✅✅✅ PAYMENT ARRANGEMENT CREATED IN SMAX WITH CARD DETAILS! ✅✅✅');
+                    
+                    // Mark the schedule as synced to prevent duplication when pulling from SMAX
+                    if (createdSchedule?.id) {
+                      await storage.updatePaymentSchedule(createdSchedule.id, tenantId, {
+                        smaxSynced: true,
+                        smaxLastSyncAt: new Date(),
+                      });
+                      console.log('✅ Payment schedule marked as synced to SMAX');
+                    }
                   } else {
                     console.log('⚠️ SMAX payment arrangement not created (SMAX may be disabled, misconfigured, or endpoint not available)');
                   }
@@ -10203,7 +10215,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const arrangementTypeName = schedule.arrangementType;
           const monthlyPayment = schedule.amountCents / 100;
           
-          await smaxService.insertPaymentArrangement(tenantId, {
+          const smaxSyncResult = await smaxService.insertPaymentArrangement(tenantId, {
             filenumber: account.filenumber,
             payorname: payorName,
             arrangementtype: arrangementTypeName,
@@ -10222,7 +10234,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
             billingzip: paymentMethod?.billingZip || undefined,
           });
 
-          console.log('✅ Arrangement synced to SMAX successfully');
+          if (smaxSyncResult) {
+            // Mark as synced to prevent duplication when pulling from SMAX
+            await storage.updatePaymentSchedule(id, tenantId, {
+              source: 'chain',
+              smaxSynced: true,
+              smaxLastSyncAt: new Date(),
+            });
+            console.log('✅ Arrangement synced to SMAX successfully and marked as synced');
+          } else {
+            console.log('⚠️ SMAX sync returned false - not marking as synced');
+          }
         }
       } catch (smaxError) {
         console.error('⚠️ Error syncing to SMAX (non-blocking):', smaxError);

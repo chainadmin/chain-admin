@@ -367,6 +367,7 @@ export default function Communications() {
     targetGroup: "all",
     targetType: "all" as "all" | "folder" | "custom",
     targetFolderIds: [] as string[],
+    sendToAllNumbers: false,
     customFilters: {
       balanceMin: "",
       balanceMax: "",
@@ -1068,6 +1069,7 @@ export default function Communications() {
         targetGroup: "all",
         targetType: "all",
         targetFolderIds: [],
+        sendToAllNumbers: false,
         customFilters: {
           balanceMin: "",
           balanceMax: "",
@@ -1132,6 +1134,7 @@ export default function Communications() {
         targetGroup: "all",
         targetType: "all",
         targetFolderIds: [],
+        sendToAllNumbers: false,
         customFilters: {
           balanceMin: "",
           balanceMax: "",
@@ -1593,6 +1596,7 @@ export default function Communications() {
           campaignForm.targetType === "folder"
             ? campaignForm.targetFolderIds
             : [],
+        sendToAllNumbers: campaignForm.sendToAllNumbers,
       };
 
       createSmsCampaignMutation.mutate(payload);
@@ -3355,6 +3359,26 @@ export default function Communications() {
                         </div>
                       </div>
                     )}
+
+                    {communicationType === "sms" && (
+                      <div className="flex items-center space-x-2 border border-white/20 rounded-md p-3 bg-white/5">
+                        <input
+                          type="checkbox"
+                          id="send-to-all-numbers"
+                          checked={campaignForm.sendToAllNumbers}
+                          onChange={(e) => setCampaignForm({ ...campaignForm, sendToAllNumbers: e.target.checked })}
+                          className="rounded"
+                          data-testid="checkbox-send-to-all-numbers"
+                        />
+                        <label htmlFor="send-to-all-numbers" className="text-sm font-medium">
+                          Send to all phone numbers
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Include additional phone numbers from CSV imports and SMAX (not just the primary number)
+                          </p>
+                        </label>
+                      </div>
+                    )}
+
                     <div className="flex justify-end gap-2">
                       <Button
                         type="button"

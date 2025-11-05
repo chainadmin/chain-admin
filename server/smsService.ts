@@ -1,5 +1,6 @@
 import twilio from 'twilio';
 import { storage } from './storage';
+import { smaxService } from './smaxService';
 
 interface SmsThrottleConfig {
   maxPerMinute: number;
@@ -184,7 +185,8 @@ class SmsService {
     message: string,
     tenantId: string,
     campaignId?: string,
-    consumerId?: string
+    consumerId?: string,
+    accountId?: string
   ): Promise<{ success: boolean; messageId?: string; error?: string }> {
     try {
       const client = await this.getTwilioClient(tenantId);
@@ -246,6 +248,25 @@ class SmsService {
       });
       
       console.log(`📱 SMS tracking created: tenant=${tenantId}, sid=${result.sid}, campaign=${campaignId || 'none'}`);
+
+      // Create SMAX note if accountId is provided
+      if (accountId) {
+        try {
+          const account = await storage.getAccountById(accountId);
+          if (account && account.filenumber) {
+            const messagePreview = message.length > 100 ? message.substring(0, 100) + '...' : message;
+            await smaxService.insertNote(tenantId, {
+              filenumber: account.filenumber,
+              collectorname: 'System',
+              logmessage: `SMS sent: ${messagePreview}`
+            });
+            console.log(`📝 SMAX note created for SMS to account ${account.filenumber}`);
+          }
+        } catch (noteError) {
+          console.error('Error creating SMAX note for SMS:', noteError);
+          // Don't fail the SMS send if note creation fails
+        }
+      }
 
       return { success: true, messageId: result.sid };
     } catch (error: any) {
@@ -349,7 +370,7 @@ class SmsService {
 
   // Synchronous bulk send for campaigns - bypasses queue to ensure accurate metrics
   async sendBulkSmsCampaign(
-    recipients: Array<{ to: string; message: string; consumerId?: string }>,
+    recipients: Array<{ to: string; message: string; consumerId?: string; accountId?: string }>,
     tenantId: string,
     campaignId: string
   ): Promise<{ totalSent: number; totalFailed: number }> {
@@ -379,7 +400,8 @@ class SmsService {
           recipient.message,
           tenantId,
           campaignId,
-          recipient.consumerId
+          recipient.consumerId,
+          recipient.accountId
         );
 
         if (result.success) {

@@ -239,6 +239,7 @@ export default function Billing() {
   const stats = (billingStats as any) || {
     activeConsumers: 0,
     monthlyBase: 0,
+    addonFees: 0,
     usageCharges: 0,
     totalBill: 0,
     nextBillDate: "N/A",
@@ -309,7 +310,9 @@ export default function Billing() {
                     {formatCurrency(stats.totalBill)}
                   </p>
                   <span className="text-xs font-medium text-blue-100/70">
-                    Base {formatCurrency(stats.monthlyBase)} · Usage {formatCurrency(stats.usageCharges)}
+                    Base {formatCurrency(stats.monthlyBase)}
+                    {stats.addonFees > 0 && ` · Add-ons ${formatCurrency(stats.addonFees)}`}
+                    {` · Usage ${formatCurrency(stats.usageCharges)}`}
                   </span>
                 </div>
               </div>
