@@ -556,6 +556,11 @@ export default function Settings() {
     { label: "Privacy Notice", value: "{{privacy_notice}}", category: "compliance" },
     { label: "ESIGN Consent", value: "{{esign_consent}}", category: "compliance" },
     { label: "Terms of Service", value: "{{terms_of_service}}", category: "compliance" },
+    
+    { label: "Signature Field", value: "{{signature}}", category: "signature" },
+    { label: "Initials Field", value: "{{initials}}", category: "signature" },
+    { label: "Date Signed", value: "{{date_signed}}", category: "signature" },
+    { label: "Signature Line", value: "{{signature_line}}", category: "signature" },
   ];
 
   // Table templates for document templates
@@ -2484,6 +2489,7 @@ export default function Settings() {
                               { name: "Links", vars: docTemplateVariables.filter(v => v.category === "links") },
                               { name: "Agency Info", vars: docTemplateVariables.filter(v => v.category === "agency") },
                               { name: "Compliance", vars: docTemplateVariables.filter(v => v.category === "compliance") },
+                              { name: "Signature Fields", vars: docTemplateVariables.filter(v => v.category === "signature") },
                             ].map((group) => (
                               <div key={group.name}>
                                 <p className="text-xs font-semibold text-blue-300 mb-1">{group.name}</p>
