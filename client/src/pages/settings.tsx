@@ -146,6 +146,10 @@ export default function Settings() {
     queryKey: ["/api/email-usage-stats"],
   });
 
+  const { data: documentTemplates, isLoading: documentTemplatesLoading } = useQuery({
+    queryKey: ["/api/document-templates"],
+  });
+
   const quickStatusItems = [
     {
       label: "Portal branding",
@@ -1967,12 +1971,60 @@ export default function Settings() {
                       </Button>
                     </div>
                   ) : (
-                    <div className="rounded-2xl border border-dashed border-white/20 bg-white/5 py-10 text-center">
-                      <FileText className="h-12 w-12 mx-auto mb-4 text-blue-400/40" />
-                      <h3 className="text-lg font-semibold text-blue-100 mb-2">Document Templates</h3>
-                      <p className="text-sm text-blue-200/70 mb-6 max-w-md mx-auto">
-                        Document signing template management coming soon. You can create templates via API for now.
+                    <div className="space-y-6">
+                      <p className="text-sm text-blue-200/70">
+                        Manage your document templates for electronic signatures. Templates can be used in communication sequences and sent to consumers for signing.
                       </p>
+                      
+                      {documentTemplatesLoading ? (
+                        <div className="rounded-2xl border border-white/10 bg-white/5 py-8 text-center text-blue-100/70">
+                          Loading document templates...
+                        </div>
+                      ) : (documentTemplates as any)?.length > 0 ? (
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                          {(documentTemplates as any).map((template: any) => (
+                            <div key={template.id} className="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <h3 className="text-base font-semibold text-white">{template.name}</h3>
+                                <span className="rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-xs text-blue-100">
+                                  Template
+                                </span>
+                              </div>
+                              <div className="space-y-2 text-sm">
+                                <div>
+                                  <p className="text-xs text-blue-100/50">Title:</p>
+                                  <p className="text-blue-100 font-medium">{template.title}</p>
+                                </div>
+                                {template.description && (
+                                  <div>
+                                    <p className="text-xs text-blue-100/50">Description:</p>
+                                    <p className="text-xs text-blue-100/80">{template.description}</p>
+                                  </div>
+                                )}
+                                <div>
+                                  <p className="text-xs text-blue-100/50">Created:</p>
+                                  <p className="text-xs text-blue-100/70">
+                                    {new Date(template.createdAt).toLocaleDateString()}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="rounded-2xl border border-dashed border-white/20 bg-white/5 py-10 text-center">
+                          <FileText className="h-12 w-12 mx-auto mb-4 text-blue-400/40" />
+                          <h3 className="text-lg font-semibold text-blue-100 mb-2">No Document Templates Yet</h3>
+                          <p className="text-sm text-blue-200/70 mb-6 max-w-md mx-auto">
+                            Create your first document template to send for electronic signatures. Perfect for payment agreements, service contracts, and authorization forms.
+                          </p>
+                          <div className="max-w-md mx-auto text-left space-y-2 text-xs text-blue-100/60 bg-black/20 p-4 rounded-xl">
+                            <p className="font-semibold text-blue-100/80">API Endpoint:</p>
+                            <code className="block bg-black/30 p-2 rounded">POST /api/document-templates</code>
+                            <p className="mt-3">Required fields: name, title, content</p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </CardContent>
