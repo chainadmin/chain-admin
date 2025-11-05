@@ -6,7 +6,8 @@ export type BusinessType =
   | 'billing_service' 
   | 'subscription_provider' 
   | 'freelancer_consultant' 
-  | 'property_management';
+  | 'property_management'
+  | 'nonprofit_organization';
 
 export interface TerminologyMap {
   // Person/Entity terms
@@ -198,6 +199,36 @@ const terminologyMaps: Record<BusinessType, TerminologyMap> = {
     statusInProgress: 'In Progress',
     statusCompleted: 'Resolved',
   },
+  
+  // Non-Profit Organization
+  nonprofit_organization: {
+    consumer: 'Donor',
+    consumerPlural: 'Donors',
+    creditor: 'Organization',
+    creditorPlural: 'Organizations',
+    account: 'Giving Record',
+    accountPlural: 'Giving Records',
+    placement: 'Campaign',
+    placementPlural: 'Campaigns',
+    balance: 'Pledge Amount',
+    payment: 'Donation',
+    paymentPlural: 'Donations',
+    settlement: 'Final Contribution',
+    settlementPlural: 'Final Contributions',
+    collect: 'Solicit',
+    collecting: 'Fundraising',
+    collection: 'Fundraising',
+    delinquent: 'Pledge Pending',
+    current: 'Active Donor',
+    paidOff: 'Fulfilled',
+    callbackRequest: 'Contact Request',
+    callbackRequestPlural: 'Contact Requests',
+    statusCalled: 'Contacted',
+    statusNoAnswer: 'No Response',
+    statusScheduled: 'Scheduled',
+    statusInProgress: 'In Progress',
+    statusCompleted: 'Completed',
+  },
 };
 
 /**
@@ -225,6 +256,7 @@ export function getBusinessTypeName(businessType: BusinessType): string {
     subscription_provider: 'Subscription Provider',
     freelancer_consultant: 'Freelancer / Consultant',
     property_management: 'Property Management',
+    nonprofit_organization: 'Non-Profit Organization',
   };
   return names[businessType] || 'Debt Collection / Call Center';
 }
@@ -239,5 +271,6 @@ export function getBusinessTypes(): { value: BusinessType; label: string }[] {
     { value: 'subscription_provider', label: 'Subscription Provider' },
     { value: 'freelancer_consultant', label: 'Freelancer / Consultant' },
     { value: 'property_management', label: 'Property Management' },
+    { value: 'nonprofit_organization', label: 'Non-Profit Organization' },
   ];
 }
