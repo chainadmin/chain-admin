@@ -82,6 +82,7 @@ export default function Settings() {
     payoffDueDate: string;
     settlementPaymentCount: string;
     settlementPaymentFrequency: string;
+    settlementOfferExpiresDate: string;
     payoffText: string;
     customTermsText: string;
     maxTermMonths: string;
@@ -100,6 +101,7 @@ export default function Settings() {
     payoffDueDate: "",
     settlementPaymentCount: "1",
     settlementPaymentFrequency: "monthly",
+    settlementOfferExpiresDate: "",
     payoffText: "",
     customTermsText: "",
     maxTermMonths: "12",
@@ -623,6 +625,7 @@ export default function Settings() {
       payload.payoffPercentageBasisPoints = settlementPercentage;
       payload.settlementPaymentCount = settlementPaymentCount;
       payload.settlementPaymentFrequency = settlementPaymentFrequency;
+      payload.settlementOfferExpiresDate = arrangementForm.settlementOfferExpiresDate ? parseDateInput(arrangementForm.settlementOfferExpiresDate) : null;
       payload.payoffText = settlementText || undefined;
       payload.maxTermMonths = null;
     } else if (planType === "custom_terms") {
@@ -2170,6 +2173,19 @@ export default function Settings() {
                                     How often payments occur
                                   </p>
                                 </div>
+                              </div>
+                              <div>
+                                <Label className="text-white">Settlement Offer Expires (Optional)</Label>
+                                <Input
+                                  type="date"
+                                  value={arrangementForm.settlementOfferExpiresDate}
+                                  onChange={(e) => setArrangementForm({ ...arrangementForm, settlementOfferExpiresDate: e.target.value })}
+                                  className={inputClasses}
+                                  data-testid="input-settlement-expires-date"
+                                />
+                                <p className="mt-1 text-xs text-blue-100/70">
+                                  Leave blank for indefinite availability. If set, consumers can only accept this settlement before this date.
+                                </p>
                               </div>
                               <div>
                                 <Label className="text-white">Settlement Terms</Label>
