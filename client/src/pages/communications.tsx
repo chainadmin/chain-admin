@@ -114,6 +114,9 @@ type AccountSummaryOptions = {
   buttonSize: "sm" | "md" | "lg";
   buttonAlignment: "left" | "center" | "right" | "full";
   buttonShape: "rounded" | "pill" | "square";
+  tableWidth: "auto" | "600px" | "100%";
+  tableFontSize: "sm" | "md" | "lg";
+  tableBorderColor: string;
 };
 
 const escapeHtml = (value: string) =>
@@ -151,6 +154,12 @@ const BUTTON_SHAPE_RADIUS: Record<AccountSummaryOptions["buttonShape"], string> 
   pill: "9999px",
 };
 
+const TABLE_FONT_SIZES: Record<AccountSummaryOptions["tableFontSize"], string> = {
+  sm: "13px",
+  md: "15px",
+  lg: "17px",
+};
+
 const createDefaultAccountSummaryOptions = (): AccountSummaryOptions => ({
   headingText: DEFAULT_ACCOUNT_HEADING_TEXT,
   showHeading: true,
@@ -163,6 +172,9 @@ const createDefaultAccountSummaryOptions = (): AccountSummaryOptions => ({
   buttonSize: "md",
   buttonAlignment: "center",
   buttonShape: "rounded",
+  tableWidth: "600px",
+  tableFontSize: "md",
+  tableBorderColor: "#e5e7eb",
 });
 
 const encodeAccountSummaryMeta = (options: AccountSummaryOptions) =>
@@ -228,6 +240,39 @@ const buildPaymentButtonHtml = (options: AccountSummaryOptions) => {
 </table>`;
 };
 
+const buildAccountTableHtml = (options: AccountSummaryOptions) => {
+  const fontSize = TABLE_FONT_SIZES[options.tableFontSize];
+  const borderColor = options.tableBorderColor || "#e5e7eb";
+  const tableWidth = options.tableWidth || "600px";
+  
+  // Handle width properly: use width attribute for percentages, CSS for pixel values
+  let widthAttr = "";
+  let widthStyle = "";
+  
+  if (tableWidth === "100%") {
+    widthAttr = ' width="100%"';
+  } else if (tableWidth === "600px") {
+    widthStyle = "width:600px;max-width:600px;";
+  } else {
+    // auto
+    widthStyle = "width:auto;";
+  }
+  
+  return `<table class="attribute-list"${widthAttr} cellpadding="0" cellspacing="0" style="${widthStyle}margin:20px auto;border:1px solid ${borderColor};border-radius:8px;font-size:${fontSize};">
+  <tr>
+    <td class="attribute-list-container" style="padding:20px;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="font-size:${fontSize};">
+        <tr><td class="attribute-list-item" style="padding:8px 0;border-bottom:1px solid ${borderColor};"><strong>Account #:</strong> {{accountNumber}}</td></tr>
+        <tr><td class="attribute-list-item" style="padding:8px 0;border-bottom:1px solid ${borderColor};"><strong>File #:</strong> {{filenumber}}</td></tr>
+        <tr><td class="attribute-list-item" style="padding:8px 0;border-bottom:1px solid ${borderColor};"><strong>Creditor:</strong> {{creditor}}</td></tr>
+        <tr><td class="attribute-list-item" style="padding:8px 0;border-bottom:1px solid ${borderColor};"><strong>Balance:</strong> {{balance}}</td></tr>
+        <tr><td class="attribute-list-item" style="padding:8px 0;"><strong>Due Date:</strong> {{dueDate}}</td></tr>
+      </table>
+    </td>
+  </tr>
+</table>`;
+};
+
 const buildAccountSummaryHtml = (options: AccountSummaryOptions, wrap = false) => {
   const sections: string[] = [`<!--ACCOUNT_SUMMARY_META:${encodeAccountSummaryMeta(options)}-->`];
 
@@ -236,7 +281,7 @@ const buildAccountSummaryHtml = (options: AccountSummaryOptions, wrap = false) =
   }
 
   if (options.showAccountDetails) {
-    sections.push(DEFAULT_ACCOUNT_TABLE_HTML);
+    sections.push(buildAccountTableHtml(options));
   }
 
   if (options.includeButton) {
@@ -583,8 +628,24 @@ export default function Communications() {
     { label: "Balance 100%", value: "{{balance100%}}", category: "account" },
     { label: "Due Date", value: "{{dueDate}}", category: "account" },
     { label: "Due Date (ISO)", value: "{{dueDateIso}}", category: "account" },
+    { label: "Today's Date", value: "{{currentDate}}", category: "dates" },
+    { label: "Today (Long Format)", value: "{{currentDateLong}}", category: "dates" },
+    { label: "Today (Short Format)", value: "{{currentDateShort}}", category: "dates" },
+    { label: "Current Month", value: "{{currentMonth}}", category: "dates" },
+    { label: "Current Year", value: "{{currentYear}}", category: "dates" },
+    { label: "Payment Arrangement", value: "{{paymentArrangement}}", category: "payments" },
+    { label: "Monthly Payment", value: "{{monthlyPayment}}", category: "payments" },
+    { label: "Arrangement Start", value: "{{arrangementStartDate}}", category: "payments" },
+    { label: "Arrangement End", value: "{{arrangementEndDate}}", category: "payments" },
+    { label: "Next Payment Date", value: "{{nextPaymentDate}}", category: "payments" },
+    { label: "Payment Method", value: "{{paymentMethod}}", category: "payments" },
+    { label: "Total Paid", value: "{{totalPaid}}", category: "payments" },
+    { label: "Remaining Balance", value: "{{remainingBalance}}", category: "payments" },
+    { label: "Settlement Offer", value: "{{settlementOffer}}", category: "payments" },
+    { label: "Settlement Expires", value: "{{settlementExpires}}", category: "payments" },
     { label: "Consumer Portal Link", value: "{{consumerPortalLink}}", category: "links" },
     { label: "App Download Link", value: "{{appDownloadLink}}", category: "links" },
+    { label: "Payment Link", value: "{{paymentLink}}", category: "links" },
     { label: "Agency Name", value: "{{agencyName}}", category: "agency" },
     { label: "Agency Email", value: "{{agencyEmail}}", category: "agency" },
     { label: "Agency Phone", value: "{{agencyPhone}}", category: "agency" },
@@ -2699,6 +2760,59 @@ export default function Communications() {
                                     aria-label="Toggle account details table"
                                   />
                                 </div>
+                                
+                                {accountSummaryOptions.showAccountDetails && (
+                                  <div className="space-y-3 pt-3 border-t border-white/10">
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <div>
+                                        <Label className="text-[11px] uppercase tracking-wide text-blue-200/70">Table width</Label>
+                                        <Select
+                                          value={accountSummaryOptions.tableWidth}
+                                          onValueChange={(value) =>
+                                            updateAccountSummaryOption("tableWidth", value as AccountSummaryOptions["tableWidth"])
+                                          }
+                                        >
+                                          <SelectTrigger className="mt-1 h-8 border-white/20 bg-white/10 text-xs text-blue-100">
+                                            <SelectValue placeholder="Choose width" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="auto">Auto</SelectItem>
+                                            <SelectItem value="600px">600px (Standard)</SelectItem>
+                                            <SelectItem value="100%">Full Width</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      <div>
+                                        <Label className="text-[11px] uppercase tracking-wide text-blue-200/70">Font size</Label>
+                                        <Select
+                                          value={accountSummaryOptions.tableFontSize}
+                                          onValueChange={(value) =>
+                                            updateAccountSummaryOption("tableFontSize", value as AccountSummaryOptions["tableFontSize"])
+                                          }
+                                        >
+                                          <SelectTrigger className="mt-1 h-8 border-white/20 bg-white/10 text-xs text-blue-100">
+                                            <SelectValue placeholder="Choose size" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="sm">Small</SelectItem>
+                                            <SelectItem value="md">Medium</SelectItem>
+                                            <SelectItem value="lg">Large</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                    </div>
+                                    
+                                    <div>
+                                      <Label className="text-[11px] uppercase tracking-wide text-blue-200/70">Border color</Label>
+                                      <Input
+                                        type="color"
+                                        value={accountSummaryOptions.tableBorderColor}
+                                        onChange={(e) => updateAccountSummaryOption("tableBorderColor", e.target.value)}
+                                        className="mt-1 h-8 w-full cursor-pointer border-white/20 bg-white/10 p-1"
+                                      />
+                                    </div>
+                                  </div>
+                                )}
                               </div>
 
                               <div className="space-y-3 rounded-lg border border-white/15 bg-white/5 p-3">
