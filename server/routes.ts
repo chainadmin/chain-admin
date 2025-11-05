@@ -11206,7 +11206,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const smsOverageCharge = Number((smsOverage * SMS_OVERAGE_RATE_PER_SEGMENT).toFixed(2));
         
         const usageCharges = Number((emailOverageCharge + smsOverageCharge).toFixed(2));
-        const totalBill = Number((currentPlan.price + usageCharges).toFixed(2));
+        const totalBill = Number((currentPlan.price + (stats.addonFees || 0) + usageCharges).toFixed(2));
         
         // Update stats with business-type-specific limits
         stats.emailUsage = {
