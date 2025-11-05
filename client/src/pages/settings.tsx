@@ -46,6 +46,9 @@ import { balanceTiers, getBalanceRangeFromTier, getBalanceTierLabel, type Balanc
 export default function Settings() {
   const [showDocumentModal, setShowDocumentModal] = useState(false);
   const [showArrangementModal, setShowArrangementModal] = useState(false);
+  const [showDocTemplateModal, setShowDocTemplateModal] = useState(false);
+  const [editingDocTemplate, setEditingDocTemplate] = useState<any>(null);
+  
   type DocumentFormState = {
     title: string;
     description: string;
@@ -69,6 +72,22 @@ export default function Settings() {
   };
 
   const [documentForm, setDocumentForm] = useState<DocumentFormState>({ ...emptyDocumentForm });
+
+  type DocTemplateFormState = {
+    name: string;
+    title: string;
+    description: string;
+    content: string;
+  };
+
+  const emptyDocTemplateForm: DocTemplateFormState = {
+    name: "",
+    title: "",
+    description: "",
+    content: "",
+  };
+
+  const [docTemplateForm, setDocTemplateForm] = useState<DocTemplateFormState>({ ...emptyDocTemplateForm });
   type ArrangementFormState = {
     name: string;
     description: string;
@@ -299,7 +318,71 @@ export default function Settings() {
     },
   });
 
+  const createDocTemplateMutation = useMutation({
+    mutationFn: async (data: any) => {
+      await apiRequest("POST", "/api/document-templates", data);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Template Created",
+        description: "Document template has been created successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/document-templates"] });
+      setShowDocTemplateModal(false);
+      setDocTemplateForm({ ...emptyDocTemplateForm });
+      setEditingDocTemplate(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Creation Failed",
+        description: error?.message || "Unable to create template.",
+        variant: "destructive",
+      });
+    },
+  });
 
+  const updateDocTemplateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      await apiRequest("PUT", `/api/document-templates/${id}`, data);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Template Updated",
+        description: "Document template has been updated successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/document-templates"] });
+      setShowDocTemplateModal(false);
+      setDocTemplateForm({ ...emptyDocTemplateForm });
+      setEditingDocTemplate(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Update Failed",
+        description: error?.message || "Unable to update template.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteDocTemplateMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/document-templates/${id}`);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Template Deleted",
+        description: "Document template has been removed successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/document-templates"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Delete Failed",
+        description: error?.message || "Unable to delete template.",
+        variant: "destructive",
+      });
+    },
+  });
 
   const createArrangementMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -369,6 +452,42 @@ export default function Settings() {
       fileSize: file.size,
       mimeType: file.type,
     });
+  };
+
+  const handleOpenDocTemplateDialog = (template?: any) => {
+    if (template) {
+      setEditingDocTemplate(template);
+      setDocTemplateForm({
+        name: template.name,
+        title: template.title,
+        description: template.description || "",
+        content: template.content || "",
+      });
+    } else {
+      setEditingDocTemplate(null);
+      setDocTemplateForm({ ...emptyDocTemplateForm });
+    }
+    setShowDocTemplateModal(true);
+  };
+
+  const handleSubmitDocTemplate = () => {
+    if (!docTemplateForm.name || !docTemplateForm.title || !docTemplateForm.content) {
+      toast({
+        title: "Missing Information",
+        description: "Please provide name, title, and content for the template.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (editingDocTemplate) {
+      updateDocTemplateMutation.mutate({
+        id: editingDocTemplate.id,
+        data: docTemplateForm,
+      });
+    } else {
+      createDocTemplateMutation.mutate(docTemplateForm);
+    }
   };
 
   const handleSubmitDocument = () => {
@@ -1942,11 +2061,23 @@ export default function Settings() {
               {/* Document Signing Templates Section */}
               <Card className={cardBaseClasses}>
                 <CardHeader className="text-white">
-                  <div>
-                    <CardTitle className="text-xl font-semibold text-white">Document Signing Templates</CardTitle>
-                    <p className="text-sm text-blue-100/70 mt-2">
-                      Create customizable document templates for e-signatures. Great for agreements, authorizations, and contracts.
-                    </p>
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <CardTitle className="text-xl font-semibold text-white">Document Signing Templates</CardTitle>
+                      <p className="text-sm text-blue-100/70 mt-2">
+                        Create customizable document templates for e-signatures. Great for agreements, authorizations, and contracts.
+                      </p>
+                    </div>
+                    {(localSettings as any)?.enabledAddons?.includes('document_signing') && (
+                      <Button
+                        onClick={() => handleOpenDocTemplateDialog()}
+                        className="rounded-xl bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 transition hover:from-sky-400/80 hover:to-indigo-400/80"
+                        data-testid="button-create-doc-template"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Create Template
+                      </Button>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4 text-sm text-blue-100/80">
@@ -2008,6 +2139,53 @@ export default function Settings() {
                                   </p>
                                 </div>
                               </div>
+                              <div className="flex gap-2 pt-2 border-t border-white/10">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleOpenDocTemplateDialog(template)}
+                                  className="flex-1 border-white/20 bg-white/5 text-blue-100 hover:bg-white/10"
+                                  data-testid={`button-edit-template-${template.id}`}
+                                >
+                                  <SettingsIcon className="h-3 w-3 mr-1" />
+                                  Edit
+                                </Button>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="border-red-400/30 bg-red-500/10 text-red-300 hover:bg-red-500/20"
+                                      data-testid={`button-delete-template-${template.id}`}
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent className="border-white/10 bg-[#0f172a] text-blue-50">
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle className="text-lg font-semibold text-white">Delete Template?</AlertDialogTitle>
+                                      <AlertDialogDescription className="text-sm text-blue-100/70">
+                                        This action cannot be undone. The template "{template.name}" will be permanently deleted.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel className="rounded-xl border-white/20 bg-white/5 px-4 py-2 text-blue-50 transition hover:bg-white/10">
+                                        Cancel
+                                      </AlertDialogCancel>
+                                      <AlertDialogAction asChild>
+                                        <Button
+                                          variant="destructive"
+                                          onClick={() => deleteDocTemplateMutation.mutate(template.id)}
+                                          disabled={deleteDocTemplateMutation.isPending}
+                                          className="rounded-xl bg-red-600/80 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-red-900/30 transition hover:bg-red-500/80"
+                                        >
+                                          Delete
+                                        </Button>
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -2018,17 +2196,109 @@ export default function Settings() {
                           <p className="text-sm text-blue-200/70 mb-6 max-w-md mx-auto">
                             Create your first document template to send for electronic signatures. Perfect for payment agreements, service contracts, and authorization forms.
                           </p>
-                          <div className="max-w-md mx-auto text-left space-y-2 text-xs text-blue-100/60 bg-black/20 p-4 rounded-xl">
-                            <p className="font-semibold text-blue-100/80">API Endpoint:</p>
-                            <code className="block bg-black/30 p-2 rounded">POST /api/document-templates</code>
-                            <p className="mt-3">Required fields: name, title, content</p>
-                          </div>
+                          <Button
+                            onClick={() => handleOpenDocTemplateDialog()}
+                            className="rounded-xl bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 transition hover:from-sky-400/80 hover:to-indigo-400/80"
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Create Your First Template
+                          </Button>
                         </div>
                       )}
                     </div>
                   )}
                 </CardContent>
               </Card>
+
+              {/* Document Template Dialog */}
+              <Dialog open={showDocTemplateModal} onOpenChange={setShowDocTemplateModal}>
+                <DialogContent className="border-white/10 bg-[#0f172a] text-blue-50 sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle className="text-lg font-semibold text-white">
+                      {editingDocTemplate ? "Edit Template" : "Create Document Template"}
+                    </DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label className="text-white">Template Name *</Label>
+                      <Input
+                        value={docTemplateForm.name}
+                        onChange={(e) => setDocTemplateForm({ ...docTemplateForm, name: e.target.value })}
+                        placeholder="e.g., Payment Agreement, Authorization Form"
+                        className={inputClasses}
+                        data-testid="input-template-name"
+                      />
+                      <p className="text-xs text-blue-100/60 mt-1">Internal name for reference</p>
+                    </div>
+
+                    <div>
+                      <Label className="text-white">Document Title *</Label>
+                      <Input
+                        value={docTemplateForm.title}
+                        onChange={(e) => setDocTemplateForm({ ...docTemplateForm, title: e.target.value })}
+                        placeholder="e.g., Payment Plan Agreement"
+                        className={inputClasses}
+                        data-testid="input-template-title"
+                      />
+                      <p className="text-xs text-blue-100/60 mt-1">Title shown to signers</p>
+                    </div>
+
+                    <div>
+                      <Label className="text-white">Description (Optional)</Label>
+                      <Textarea
+                        value={docTemplateForm.description}
+                        onChange={(e) => setDocTemplateForm({ ...docTemplateForm, description: e.target.value })}
+                        placeholder="Brief description of this template"
+                        className={textareaClasses}
+                        rows={2}
+                        data-testid="input-template-description"
+                      />
+                    </div>
+
+                    <div>
+                      <Label className="text-white">Document Content *</Label>
+                      <Textarea
+                        value={docTemplateForm.content}
+                        onChange={(e) => setDocTemplateForm({ ...docTemplateForm, content: e.target.value })}
+                        placeholder="Enter the document content here. Use variables like {{consumer_name}}, {{account_number}}, etc."
+                        className={textareaClasses}
+                        rows={12}
+                        data-testid="input-template-content"
+                      />
+                      <p className="text-xs text-blue-100/60 mt-1">
+                        Supports variable replacement: &#123;&#123;consumer_name&#125;&#125;, &#123;&#123;account_number&#125;&#125;, &#123;&#123;balance&#125;&#125;, etc.
+                      </p>
+                    </div>
+
+                    <div className="flex justify-end space-x-2 pt-4 border-t border-white/10">
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setShowDocTemplateModal(false);
+                          setDocTemplateForm({ ...emptyDocTemplateForm });
+                          setEditingDocTemplate(null);
+                        }}
+                        className="border-white/20 bg-white/5 text-blue-50 transition hover:bg-white/10"
+                        data-testid="button-cancel-template"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={handleSubmitDocTemplate}
+                        disabled={createDocTemplateMutation.isPending || updateDocTemplateMutation.isPending}
+                        className="rounded-xl bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 transition hover:from-sky-400/80 hover:to-indigo-400/80"
+                        data-testid="button-save-template"
+                      >
+                        {createDocTemplateMutation.isPending || updateDocTemplateMutation.isPending
+                          ? "Saving..."
+                          : editingDocTemplate
+                          ? "Update Template"
+                          : "Create Template"}
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </TabsContent>
 
             <TabsContent value="arrangements" className="space-y-6">
