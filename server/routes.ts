@@ -71,6 +71,7 @@ const csvUploadSchema = z.object({
     balanceCents: z.number(),
     dueDate: z.string().optional(),
     consumerEmail: z.string().email(),
+    status: z.string().optional(), // Account status (for blocked status checking)
     additionalData: z.record(z.any()).optional(),
   })),
 });
@@ -403,6 +404,61 @@ function replaceTemplateVariables(
     }
   }
 
+  /**
+   * Validates if a payment is allowed based on account status
+   * Checks SMAX statusname (if SMAX enabled) or Chain account status against tenant's blocked list
+   * Uses case-insensitive comparison to prevent mismatches
+   */
+  async function validatePaymentStatus(
+    account: Account,
+    tenantId: string,
+    tenantSettings: any
+  ): Promise<{ isBlocked: boolean; status: string | null; reason: string }> {
+    const blockedStatuses = tenantSettings?.blockedAccountStatuses || [];
+    
+    // If no blocked statuses configured, allow payment
+    if (blockedStatuses.length === 0) {
+      return { isBlocked: false, status: null, reason: '' };
+    }
+    
+    let currentStatus: string | null = null;
+    
+    // Check SMAX for current status if enabled and account has filenumber
+    if (tenantSettings?.smaxEnabled && account.filenumber) {
+      try {
+        const smaxAccount = await smaxService.getAccount(tenantId, account.filenumber);
+        if (smaxAccount?.statusname) {
+          currentStatus = smaxAccount.statusname;
+          console.log(`📋 Using SMAX status for payment validation: "${currentStatus}"`);
+        }
+      } catch (error) {
+        console.warn(`⚠️ Failed to get SMAX status for ${account.filenumber}, falling back to Chain status`, error);
+      }
+    }
+    
+    // Fall back to Chain's account status if SMAX status not available
+    if (!currentStatus && account.status) {
+      currentStatus = account.status;
+      console.log(`📋 Using Chain account status for payment validation: "${currentStatus}"`);
+    }
+    
+    // Check if status is in blocked list (case-insensitive comparison)
+    if (currentStatus) {
+      const currentStatusLower = currentStatus.toLowerCase();
+      const blockedStatusesLower = blockedStatuses.map((s: string) => s.toLowerCase());
+      
+      if (blockedStatusesLower.includes(currentStatusLower)) {
+        return {
+          isBlocked: true,
+          status: currentStatus,
+          reason: `Account status "${currentStatus}" is blocked by tenant settings`
+        };
+      }
+    }
+    
+    return { isBlocked: false, status: currentStatus, reason: '' };
+  }
+
   async function resolveEmailCampaignAudience(
     tenantId: string,
     targetGroup: string,
@@ -413,9 +469,11 @@ function replaceTemplateVariables(
     const tenantSettings = await storage.getTenantSettings(tenantId);
 
     // Filter out accounts with blocked statuses (configured per tenant) to prevent communications
-    const blockedStatuses = tenantSettings?.blockedAccountStatuses || ['inactive', 'recalled', 'closed'];
+    // Use case-insensitive comparison
+    const blockedStatuses = tenantSettings?.blockedAccountStatuses || [];
+    const blockedStatusesLower = blockedStatuses.map((s: string) => s.toLowerCase());
     const activeAccountsData = accountsData.filter(acc => 
-      !acc.status || !blockedStatuses.includes(acc.status)
+      !acc.status || !blockedStatusesLower.includes(acc.status.toLowerCase())
     );
 
     const folderIds = Array.isArray(folderSelection)
@@ -1556,7 +1614,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           creditor: accountData.creditor,
           balanceCents: accountData.balanceCents,
           dueDate: accountData.dueDate || null,
-          status: 'active',
+          status: accountData.status || null, // Use status from CSV if provided, otherwise null
           additionalData: accountData.additionalData || {},
         };
         
@@ -2652,9 +2710,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const tenantSettings = await storage.getTenantSettings(tenantId);
 
     // Filter out accounts with blocked statuses (configured per tenant) to prevent communications
-    const blockedStatuses = tenantSettings?.blockedAccountStatuses || ['inactive', 'recalled', 'closed'];
+    // Use case-insensitive comparison
+    const blockedStatuses = tenantSettings?.blockedAccountStatuses || [];
+    const blockedStatusesLower = blockedStatuses.map((s: string) => s.toLowerCase());
     const activeAccountsData = accountsData.filter(acc => 
-      !acc.status || !blockedStatuses.includes(acc.status)
+      !acc.status || !blockedStatusesLower.includes(acc.status.toLowerCase())
     );
 
     const folderIds = Array.isArray(folderSelection)
@@ -7218,13 +7278,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Check if account status is blocked (configured per tenant)
+      // This checks SMAX statusname (if SMAX enabled) or Chain's account status
       const tenantSettings = await storage.getTenantSettings(tenantId);
-      const blockedStatuses = tenantSettings?.blockedAccountStatuses || ['inactive', 'recalled', 'closed'];
-      if (account.status && blockedStatuses.includes(account.status)) {
-        console.log(`❌ Payment blocked: Account status is "${account.status}" (blocked by tenant settings)`);
+      const statusValidation = await validatePaymentStatus(account, tenantId, tenantSettings);
+      if (statusValidation.isBlocked) {
+        console.log(`❌ Payment blocked: ${statusValidation.reason}`);
         return res.status(403).json({ 
           success: false,
-          message: "This account is not active and cannot accept payments. Please contact us for assistance." 
+          message: "This account is not eligible for payments at this time. Please contact us for assistance." 
         });
       }
 
@@ -8818,16 +8879,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 const settings = await storage.getTenantSettings(tenant.id);
                 
                 // Check if account status is blocked (configured per tenant)
+                // This checks SMAX statusname (if SMAX enabled) or Chain's account status
                 const scheduleAccount = await storage.getAccount(schedule.accountId);
-                const blockedStatuses = settings?.blockedAccountStatuses || ['inactive', 'recalled', 'closed'];
-                if (scheduleAccount && scheduleAccount.status && blockedStatuses.includes(scheduleAccount.status)) {
-                  console.log(`⏭️ Skipping scheduled payment for ${scheduleAccount.status} account: ${schedule.accountId} (blocked by tenant settings)`);
-                  failedPayments.push({
-                    scheduleId: schedule.id,
-                    accountId: schedule.accountId,
-                    reason: `Account status is ${scheduleAccount.status}`
-                  });
-                  continue;
+                if (scheduleAccount) {
+                  const statusValidation = await validatePaymentStatus(scheduleAccount, tenant.id, settings);
+                  if (statusValidation.isBlocked) {
+                    console.log(`⏭️ Skipping scheduled payment: ${statusValidation.reason}`);
+                    failedPayments.push({
+                      scheduleId: schedule.id,
+                      accountId: schedule.accountId,
+                      reason: statusValidation.reason
+                    });
+                    continue;
+                  }
                 }
 
                 // CRITICAL: Preflight check - Query SMAX for existing payments on this date
@@ -10523,15 +10587,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const settings = await storage.getTenantSettings(tenantId);
       
       // Check if consumer has any active accounts before processing payment
+      // This checks SMAX statusname (if SMAX enabled) or Chain's account status for each account
       const consumerAccounts = await storage.getAccountsByConsumer(consumer.id);
       if (consumerAccounts && consumerAccounts.length > 0) {
-        const blockedStatuses = settings?.blockedAccountStatuses || ['inactive', 'recalled', 'closed'];
-        const allBlocked = consumerAccounts.every(acc => acc.status && blockedStatuses.includes(acc.status));
+        const accountValidations = await Promise.all(
+          consumerAccounts.map(acc => validatePaymentStatus(acc, tenantId, settings))
+        );
+        const allBlocked = accountValidations.every(v => v.isBlocked);
         if (allBlocked) {
-          console.log(`❌ Payment blocked: All consumer accounts have blocked statuses (${blockedStatuses.join('/')})`);
+          const blockedStatuses = accountValidations.map(v => v.status).filter(Boolean).join(', ');
+          console.log(`❌ Payment blocked: All consumer accounts have blocked statuses (${blockedStatuses})`);
           return res.status(403).json({ 
             success: false,
-            message: "All accounts for this consumer are not active and cannot accept payments." 
+            message: "All accounts for this consumer are not eligible for payments at this time." 
           });
         }
       }
@@ -10712,6 +10780,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const consumer = await storage.getConsumerByEmailAndTenant(consumerEmail, tenantId);
       if (!consumer) {
         return res.status(404).json({ message: "Consumer not found" });
+      }
+
+      // Check if account status is blocked (if accountId is provided)
+      if (accountId) {
+        const account = await storage.getAccount(accountId);
+        if (account) {
+          const tenantSettings = await storage.getTenantSettings(tenantId);
+          const statusValidation = await validatePaymentStatus(account, tenantId, tenantSettings);
+          if (statusValidation.isBlocked) {
+            console.log(`❌ Manual payment blocked: ${statusValidation.reason}`);
+            return res.status(403).json({ 
+              success: false,
+              message: "This account is not eligible for payments at this time." 
+            });
+          }
+        }
       }
 
       // Create payment record

@@ -111,6 +111,7 @@ export default function Settings() {
   const [localSettings, setLocalSettings] = useState<any>({});
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showAddonConfirmDialog, setShowAddonConfirmDialog] = useState(false);
+  const [newStatusInput, setNewStatusInput] = useState("");
 
   const cardBaseClasses =
     "border border-white/10 bg-white/5 text-blue-50 shadow-lg shadow-blue-900/20 backdrop-blur";
@@ -1146,38 +1147,86 @@ export default function Settings() {
                     <div>
                       <Label className="text-base font-medium text-white">Blocked Account Statuses</Label>
                       <p className="text-sm text-blue-100/70">
-                        Select which account statuses should prevent communications and payments
+                        Add status names that should prevent communications and payments. These should match SMAX statusname values or status values from CSV imports.
                       </p>
                     </div>
-                    <div className="flex flex-wrap gap-3">
-                      {['inactive', 'recalled', 'closed', 'pending', 'suspended'].map((status) => {
-                        const isSelected = (localSettings?.blockedAccountStatuses || ['inactive', 'recalled', 'closed']).includes(status);
-                        return (
-                          <button
-                            key={status}
-                            type="button"
-                            onClick={() => {
-                              const current = localSettings?.blockedAccountStatuses || ['inactive', 'recalled', 'closed'];
-                              const updated = isSelected
-                                ? current.filter((s: string) => s !== status)
-                                : [...current, status];
-                              handleSettingsUpdate('blockedAccountStatuses', updated);
-                            }}
-                            className={cn(
-                              "rounded-lg border px-4 py-2 text-sm font-medium transition-all",
-                              isSelected
-                                ? "border-sky-500 bg-sky-500/20 text-sky-300"
-                                : "border-white/20 bg-white/5 text-blue-100/60 hover:border-white/30 hover:bg-white/10"
-                            )}
-                            data-testid={`button-blocked-status-${status}`}
-                          >
-                            {status.charAt(0).toUpperCase() + status.slice(1)}
-                          </button>
-                        );
-                      })}
+                    
+                    {/* Add Status Input */}
+                    <div className="flex gap-2">
+                      <Input
+                        type="text"
+                        placeholder="Enter status name (e.g., 'Litigation', 'Bankruptcy', 'Deceased')"
+                        value={newStatusInput}
+                        onChange={(e) => setNewStatusInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            const trimmed = newStatusInput.trim();
+                            if (trimmed) {
+                              const current = localSettings?.blockedAccountStatuses || [];
+                              if (!current.includes(trimmed)) {
+                                handleSettingsUpdate('blockedAccountStatuses', [...current, trimmed]);
+                              }
+                              setNewStatusInput("");
+                            }
+                          }
+                        }}
+                        className="flex-1 bg-white/5 border-white/20 text-white placeholder:text-blue-100/40"
+                        data-testid="input-new-blocked-status"
+                      />
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          const trimmed = newStatusInput.trim();
+                          if (trimmed) {
+                            const current = localSettings?.blockedAccountStatuses || [];
+                            if (!current.includes(trimmed)) {
+                              handleSettingsUpdate('blockedAccountStatuses', [...current, trimmed]);
+                            }
+                            setNewStatusInput("");
+                          }
+                        }}
+                        disabled={!newStatusInput.trim()}
+                        className="px-6"
+                        data-testid="button-add-blocked-status"
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add
+                      </Button>
                     </div>
+                    
+                    {/* Current Blocked Statuses */}
+                    {(localSettings?.blockedAccountStatuses || []).length > 0 && (
+                      <div className="space-y-2">
+                        <Label className="text-sm text-blue-100/70">Current Blocked Statuses:</Label>
+                        <div className="flex flex-wrap gap-2">
+                          {(localSettings?.blockedAccountStatuses || []).map((status: string) => (
+                            <div
+                              key={status}
+                              className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-sm text-red-300"
+                              data-testid={`chip-blocked-status-${status}`}
+                            >
+                              <span>{status}</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const current = localSettings?.blockedAccountStatuses || [];
+                                  const updated = current.filter((s: string) => s !== status);
+                                  handleSettingsUpdate('blockedAccountStatuses', updated);
+                                }}
+                                className="hover:text-red-100 transition-colors"
+                                data-testid={`button-remove-blocked-status-${status}`}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
                     <p className="text-xs text-blue-100/60">
-                      Accounts with these statuses will not receive emails, SMS, or accept payments
+                      Accounts with these statuses will not receive emails, SMS, or accept payments. Status matching is case-insensitive (e.g., "Closed" and "closed" are treated the same).
                     </p>
                   </div>
                 </CardContent>

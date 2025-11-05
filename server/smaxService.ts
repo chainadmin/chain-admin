@@ -660,7 +660,11 @@ class SmaxService {
       );
 
       if (result.state === 'SUCCESS') {
-        return result.result;
+        const accountData = result.result;
+        if (accountData?.statusname) {
+          console.log(`📋 SMAX Account Status for ${fileNumber}: "${accountData.statusname}"`);
+        }
+        return accountData;
       }
 
       return null;
