@@ -77,6 +77,22 @@ export async function runMigrations() {
       console.log(`  ⚠ blocked_account_statuses (already exists or error)`);
     }
     
+    // Add settlement payment terms columns to arrangement_options
+    console.log('Adding settlement payment terms columns...');
+    try {
+      await client.query(`ALTER TABLE arrangement_options ADD COLUMN IF NOT EXISTS settlement_payment_count INTEGER`);
+      console.log(`  ✓ settlement_payment_count`);
+    } catch (err) {
+      console.log(`  ⚠ settlement_payment_count (already exists or error)`);
+    }
+    
+    try {
+      await client.query(`ALTER TABLE arrangement_options ADD COLUMN IF NOT EXISTS settlement_payment_frequency TEXT`);
+      console.log(`  ✓ settlement_payment_frequency`);
+    } catch (err) {
+      console.log(`  ⚠ settlement_payment_frequency (already exists or error)`);
+    }
+    
     // Fix communication_automations table - make trigger_type nullable (legacy column)
     console.log('Fixing communication_automations table...');
     try {

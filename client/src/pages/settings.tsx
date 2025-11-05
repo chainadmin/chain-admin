@@ -80,6 +80,8 @@ export default function Settings() {
     oneTimePaymentMin: string;
     payoffPercentage: string;
     payoffDueDate: string;
+    settlementPaymentCount: string;
+    settlementPaymentFrequency: string;
     payoffText: string;
     customTermsText: string;
     maxTermMonths: string;
@@ -96,6 +98,8 @@ export default function Settings() {
     oneTimePaymentMin: "",
     payoffPercentage: "",
     payoffDueDate: "",
+    settlementPaymentCount: "1",
+    settlementPaymentFrequency: "monthly",
     payoffText: "",
     customTermsText: "",
     maxTermMonths: "12",
@@ -576,7 +580,8 @@ export default function Settings() {
       payload.maxTermMonths = null;
     } else if (planType === "settlement") {
       const settlementPercentage = parsePercentageInput(arrangementForm.payoffPercentage);
-      const settlementDueDate = parseDateInput(arrangementForm.payoffDueDate);
+      const settlementPaymentCount = parseInt(arrangementForm.settlementPaymentCount, 10);
+      const settlementPaymentFrequency = arrangementForm.settlementPaymentFrequency.trim();
       const settlementText = arrangementForm.payoffText.trim();
 
       if (settlementPercentage === null || settlementPercentage <= 0) {
@@ -597,17 +602,27 @@ export default function Settings() {
         return;
       }
 
-      if (!settlementDueDate) {
+      if (!settlementPaymentCount || settlementPaymentCount < 1) {
         toast({
-          title: "Settlement Due Date Required",
-          description: "Select a valid date for the settlement terms.",
+          title: "Payment Count Required",
+          description: "Enter the number of payments allowed (e.g., 1, 3, 6).",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!settlementPaymentFrequency) {
+        toast({
+          title: "Payment Frequency Required",
+          description: "Select how often payments will be made.",
           variant: "destructive",
         });
         return;
       }
 
       payload.payoffPercentageBasisPoints = settlementPercentage;
-      payload.payoffDueDate = settlementDueDate;
+      payload.settlementPaymentCount = settlementPaymentCount;
+      payload.settlementPaymentFrequency = settlementPaymentFrequency;
       payload.payoffText = settlementText || undefined;
       payload.maxTermMonths = null;
     } else if (planType === "custom_terms") {
@@ -2114,19 +2129,47 @@ export default function Settings() {
                                   onChange={(e) => setArrangementForm({ ...arrangementForm, payoffPercentage: e.target.value })}
                                   placeholder="60"
                                   className={inputClasses}
+                                  data-testid="input-settlement-percentage"
                                 />
                                 <p className="mt-1 text-xs text-blue-100/70">
                                   Enter the percentage of balance required to settle this debt (e.g., 60% means consumer pays 60% of their balance).
                                 </p>
                               </div>
-                              <div>
-                                <Label className="text-white">Settlement Due Date *</Label>
-                                <Input
-                                  type="date"
-                                  value={arrangementForm.payoffDueDate}
-                                  onChange={(e) => setArrangementForm({ ...arrangementForm, payoffDueDate: e.target.value })}
-                                  className={inputClasses}
-                                />
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <Label className="text-white">Number of Payments *</Label>
+                                  <Input
+                                    type="number"
+                                    min="1"
+                                    value={arrangementForm.settlementPaymentCount}
+                                    onChange={(e) => setArrangementForm({ ...arrangementForm, settlementPaymentCount: e.target.value })}
+                                    placeholder="3"
+                                    className={inputClasses}
+                                    data-testid="input-settlement-payment-count"
+                                  />
+                                  <p className="mt-1 text-xs text-blue-100/70">
+                                    How many payments allowed
+                                  </p>
+                                </div>
+                                <div>
+                                  <Label className="text-white">Payment Frequency *</Label>
+                                  <Select
+                                    value={arrangementForm.settlementPaymentFrequency}
+                                    onValueChange={(value) => setArrangementForm({ ...arrangementForm, settlementPaymentFrequency: value })}
+                                  >
+                                    <SelectTrigger className={selectTriggerClasses} data-testid="select-settlement-frequency">
+                                      <SelectValue placeholder="Select frequency" />
+                                    </SelectTrigger>
+                                    <SelectContent className="border-white/10 bg-[#0f172a] text-blue-50">
+                                      <SelectItem value="weekly">Weekly</SelectItem>
+                                      <SelectItem value="biweekly">Bi-weekly</SelectItem>
+                                      <SelectItem value="monthly">Monthly</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  <p className="mt-1 text-xs text-blue-100/70">
+                                    How often payments occur
+                                  </p>
+                                </div>
                               </div>
                               <div>
                                 <Label className="text-white">Settlement Terms</Label>
@@ -2135,6 +2178,7 @@ export default function Settings() {
                                   onChange={(e) => setArrangementForm({ ...arrangementForm, payoffText: e.target.value })}
                                   placeholder="Describe settlement terms and conditions"
                                   className={textareaClasses}
+                                  data-testid="textarea-settlement-terms"
                                 />
                               </div>
                             </div>

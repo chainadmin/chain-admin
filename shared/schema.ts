@@ -495,6 +495,8 @@ export const arrangementOptions = pgTable("arrangement_options", {
   payoffText: text("payoff_text"),
   payoffPercentageBasisPoints: integer("payoff_percentage_basis_points"),
   payoffDueDate: date("payoff_due_date"),
+  settlementPaymentCount: integer("settlement_payment_count"), // Number of payments allowed for settlement (e.g., 1, 3, 6)
+  settlementPaymentFrequency: text("settlement_payment_frequency"), // "monthly", "weekly", "biweekly"
   customTermsText: text("custom_terms_text"),
   maxTermMonths: bigint("max_term_months", { mode: "number" }).default(12),
   isActive: boolean("is_active").default(true),
