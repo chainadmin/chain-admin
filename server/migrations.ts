@@ -93,6 +93,13 @@ export async function runMigrations() {
       console.log(`  ⚠ settlement_payment_frequency (already exists or error)`);
     }
     
+    try {
+      await client.query(`ALTER TABLE arrangement_options ADD COLUMN IF NOT EXISTS settlement_offer_expires_date DATE`);
+      console.log(`  ✓ settlement_offer_expires_date`);
+    } catch (err) {
+      console.log(`  ⚠ settlement_offer_expires_date (already exists or error)`);
+    }
+    
     // Fix communication_automations table - make trigger_type nullable (legacy column)
     console.log('Fixing communication_automations table...');
     try {
