@@ -3158,9 +3158,22 @@ export class DatabaseStorage implements IStorage {
     return request;
   }
 
-  async getSignatureRequestById(id: string): Promise<SignatureRequest | undefined> {
-    const [request] = await db.select().from(signatureRequests).where(eq(signatureRequests.id, id));
-    return request;
+  async getSignatureRequestById(id: string): Promise<any> {
+    const [result] = await db
+      .select({
+        signatureRequest: signatureRequests,
+        document: documents,
+      })
+      .from(signatureRequests)
+      .leftJoin(documents, eq(signatureRequests.documentId, documents.id))
+      .where(eq(signatureRequests.id, id));
+    
+    if (!result) return undefined;
+    
+    return {
+      ...result.signatureRequest,
+      document: result.document,
+    };
   }
 
   async getSignatureRequestsByTenant(tenantId: string): Promise<SignatureRequest[]> {
