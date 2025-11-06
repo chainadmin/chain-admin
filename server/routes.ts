@@ -2179,7 +2179,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`📧 Sending signature request email to ${consumer.email} for request ${signatureRequest.id}`);
         await emailService.sendEmail({
           to: consumer.email!,
-          from: settings?.contactEmail || process.env.DEFAULT_FROM_EMAIL || 'noreply@chainsoftware.com',
           subject: `Document Signature Request - ${processedTitle}`,
           html: `
             <h2>Document Signature Request</h2>
@@ -2192,6 +2191,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             <p>Or copy this link: ${signUrl}</p>
             <p>Best regards,<br/>${companyName}</p>
           `,
+          tenantId,
         });
         console.log(`✅ Email sent successfully to ${consumer.email}`);
       } catch (emailError) {
