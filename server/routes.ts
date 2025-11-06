@@ -2087,6 +2087,121 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Send document template to consumer for signature
+  app.post('/api/document-templates/:id/send', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { id } = req.params;
+      const { consumerId, accountId, expiresInDays = 7, message } = req.body;
+
+      if (!consumerId) {
+        return res.status(400).json({ message: "Consumer ID is required" });
+      }
+
+      // Get the template
+      const template = await storage.getDocumentTemplateById(id, tenantId);
+      if (!template) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+
+      // Get consumer data
+      const consumer = await storage.getConsumer(consumerId);
+      if (!consumer || consumer.tenantId !== tenantId) {
+        return res.status(404).json({ message: "Consumer not found" });
+      }
+
+      // Get account data if provided
+      let account = null;
+      if (accountId) {
+        account = await storage.getAccount(accountId);
+        if (!account || account.consumerId !== consumerId || account.tenantId !== tenantId) {
+          return res.status(400).json({ message: "Invalid account for this consumer" });
+        }
+      }
+
+      // Get tenant data for variable replacement
+      const tenant = await storage.getTenant(tenantId);
+      const settings = await storage.getTenantSettings(tenantId);
+
+      // Replace variables in template content using existing shared function
+      const processedContent = replaceTemplateVariables(template.content, consumer, account, { ...tenant, ...settings }, undefined);
+      const processedTitle = replaceTemplateVariables(template.title, consumer, account, { ...tenant, ...settings }, undefined);
+
+      // Create a document record (HTML content stored as data URL)
+      const htmlContent = `data:text/html;charset=utf-8,${encodeURIComponent(processedContent)}`;
+      const document = await storage.createDocument({
+        tenantId,
+        accountId: accountId || null,
+        title: processedTitle,
+        description: template.description || `Generated from template: ${template.name}`,
+        fileName: `${processedTitle}.html`,
+        fileUrl: htmlContent,
+        fileSize: processedContent.length,
+        mimeType: 'text/html',
+        isPublic: false,
+      });
+
+      // Create signature request
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + expiresInDays);
+
+      const signatureRequest = await storage.createSignatureRequest({
+        tenantId,
+        consumerId,
+        accountId: accountId || null,
+        documentId: document.id,
+        title: processedTitle,
+        description: message || null,
+        status: 'pending',
+        expiresAt,
+        consentText: template.consentText,
+      });
+
+      // Send email notification
+      const customBranding = settings?.customBranding as any;
+      const consumerPortalSettings = settings?.consumerPortalSettings;
+      const portalUrl = resolveConsumerPortalUrl({
+        tenantSlug: tenant?.slug,
+        consumerPortalSettings,
+        baseUrl: process.env.REPLIT_DOMAINS,
+      });
+      const signUrl = `${portalUrl}/sign/${signatureRequest.id}`;
+      
+      // Use safe name handling
+      const consumerFirstName = consumer.firstName || 'there';
+      const companyName = customBranding?.companyName || 'Our Company';
+      
+      await emailService.sendEmail({
+        to: consumer.email!,
+        from: settings?.contactEmail || process.env.DEFAULT_FROM_EMAIL || 'noreply@chainsoftware.com',
+        subject: `Document Signature Request - ${processedTitle}`,
+        html: `
+          <h2>Document Signature Request</h2>
+          <p>Hi ${consumerFirstName},</p>
+          <p>You have a document that requires your signature.</p>
+          <p><strong>Document:</strong> ${processedTitle}</p>
+          ${message ? `<p><strong>Message:</strong> ${message}</p>` : ''}
+          <p><strong>Expires:</strong> ${expiresAt.toLocaleDateString()}</p>
+          <p><a href="${signUrl}" style="display: inline-block; background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 16px 0;">Sign Document</a></p>
+          <p>Or copy this link: ${signUrl}</p>
+          <p>Best regards,<br/>${companyName}</p>
+        `,
+      });
+
+      res.json({ 
+        message: "Signature request sent successfully",
+        signatureRequest 
+      });
+    } catch (error) {
+      console.error("Error sending document template:", error);
+      res.status(500).json({ message: "Failed to send document template" });
+    }
+  });
+
   // Email campaign routes
   app.get('/api/email-campaigns', authenticateUser, async (req: any, res) => {
     try {

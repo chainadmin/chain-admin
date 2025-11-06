@@ -36,7 +36,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Trash2, Upload, Plus, Save, CreditCard, Shield, Settings as SettingsIcon, ImageIcon, Copy, ExternalLink, Repeat, FileText, Users, MessagesSquare, DollarSign, Code, Table, Eye, Bold, Italic, Underline, List, ListOrdered, Heading1, Heading2, Heading3, Palette, Link2, Link2Off, Eraser } from "lucide-react";
+import { Trash2, Upload, Plus, Save, CreditCard, Shield, Settings as SettingsIcon, ImageIcon, Copy, ExternalLink, Repeat, FileText, Users, MessagesSquare, DollarSign, Code, Table, Eye, Bold, Italic, Underline, List, ListOrdered, Heading1, Heading2, Heading3, Palette, Link2, Link2Off, Eraser, Send } from "lucide-react";
 import { useRef } from "react";
 import { isSubdomainSupported } from "@shared/utils/subdomain";
 import { resolveConsumerPortalUrl } from "@shared/utils/consumerPortal";
@@ -49,6 +49,8 @@ export default function Settings() {
   const [showArrangementModal, setShowArrangementModal] = useState(false);
   const [showDocTemplateModal, setShowDocTemplateModal] = useState(false);
   const [editingDocTemplate, setEditingDocTemplate] = useState<any>(null);
+  const [showSendTemplateModal, setShowSendTemplateModal] = useState(false);
+  const [sendingTemplate, setSendingTemplate] = useState<any>(null);
   const docEditorRef = useRef<HTMLDivElement>(null);
   
   type DocumentFormState = {
@@ -90,6 +92,23 @@ export default function Settings() {
   };
 
   const [docTemplateForm, setDocTemplateForm] = useState<DocTemplateFormState>({ ...emptyDocTemplateForm });
+  
+  type SendTemplateFormState = {
+    consumerId: string;
+    accountId: string;
+    expiresInDays: number;
+    message: string;
+  };
+
+  const emptySendTemplateForm: SendTemplateFormState = {
+    consumerId: "",
+    accountId: "",
+    expiresInDays: 7,
+    message: "",
+  };
+
+  const [sendTemplateForm, setSendTemplateForm] = useState<SendTemplateFormState>({ ...emptySendTemplateForm });
+
   type ArrangementFormState = {
     name: string;
     description: string;
@@ -169,6 +188,10 @@ export default function Settings() {
 
   const { data: documentTemplates, isLoading: documentTemplatesLoading } = useQuery({
     queryKey: ["/api/document-templates"],
+  });
+
+  const { data: consumers = [] } = useQuery<any[]>({
+    queryKey: ["/api/consumers"],
   });
 
   const quickStatusItems = [
@@ -418,6 +441,38 @@ export default function Settings() {
       toast({
         title: "Delete Failed",
         description: error?.message || "Unable to delete template.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const sendTemplateMutation = useMutation({
+    mutationFn: async ({ templateId, data }: { templateId: string; data: any }) => {
+      const response = await fetch(`/api/document-templates/${templateId}/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to send template");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Signature Request Sent",
+        description: "The document has been sent to the consumer for signature.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/signature-requests"] });
+      setShowSendTemplateModal(false);
+      setSendTemplateForm({ ...emptySendTemplateForm });
+      setSendingTemplate(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Send Failed",
+        description: error?.message || "Unable to send template.",
         variant: "destructive",
       });
     },
@@ -2459,12 +2514,24 @@ export default function Settings() {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => handleOpenDocTemplateDialog(template)}
+                                  onClick={() => {
+                                    setSendingTemplate(template);
+                                    setShowSendTemplateModal(true);
+                                  }}
                                   className="flex-1 border-white/20 bg-white/5 text-blue-100 hover:bg-white/10"
+                                  data-testid={`button-send-template-${template.id}`}
+                                >
+                                  <Send className="h-3 w-3 mr-1" />
+                                  Send
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleOpenDocTemplateDialog(template)}
+                                  className="border-white/20 bg-white/5 text-blue-100 hover:bg-white/10"
                                   data-testid={`button-edit-template-${template.id}`}
                                 >
-                                  <SettingsIcon className="h-3 w-3 mr-1" />
-                                  Edit
+                                  <SettingsIcon className="h-3 w-3" />
                                 </Button>
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
@@ -2828,6 +2895,122 @@ export default function Settings() {
                           : editingDocTemplate
                           ? "Update Template"
                           : "Create Template"}
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+
+              {/* Send Template Dialog */}
+              <Dialog open={showSendTemplateModal} onOpenChange={setShowSendTemplateModal}>
+                <DialogContent className="border-white/10 bg-[#0f172a] text-blue-50 max-w-md">
+                  <DialogHeader>
+                    <DialogTitle className="text-lg font-semibold text-white">
+                      Send Document for Signature
+                    </DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div className="rounded-lg bg-white/5 p-3 border border-white/10">
+                      <p className="text-sm text-blue-100/70">Template: <span className="font-semibold text-white">{sendingTemplate?.name}</span></p>
+                    </div>
+
+                    <div>
+                      <Label className="text-white">Consumer *</Label>
+                      <Select 
+                        value={sendTemplateForm.consumerId}
+                        onValueChange={(value) => setSendTemplateForm({ ...sendTemplateForm, consumerId: value })}
+                      >
+                        <SelectTrigger className={selectTriggerClasses} data-testid="select-send-consumer">
+                          <SelectValue placeholder="Select consumer" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {consumers.map((consumer: any) => (
+                            <SelectItem key={consumer.id} value={consumer.id}>
+                              {consumer.firstName} {consumer.lastName} - {consumer.email}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <Label className="text-white">Account (Optional)</Label>
+                      <Select 
+                        value={sendTemplateForm.accountId}
+                        onValueChange={(value) => setSendTemplateForm({ ...sendTemplateForm, accountId: value })}
+                      >
+                        <SelectTrigger className={selectTriggerClasses} data-testid="select-send-account">
+                          <SelectValue placeholder="Select account (optional)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">None</SelectItem>
+                          {(accounts as any)?.filter((acc: any) => !sendTemplateForm.consumerId || acc.consumerId === sendTemplateForm.consumerId).map((account: any) => (
+                            <SelectItem key={account.id} value={account.id}>
+                              {account.accountNumber} - {account.companyName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <Label className="text-white">Expires In (Days)</Label>
+                      <Input
+                        type="number"
+                        value={sendTemplateForm.expiresInDays}
+                        onChange={(e) => setSendTemplateForm({ ...sendTemplateForm, expiresInDays: parseInt(e.target.value) || 7 })}
+                        className={inputClasses}
+                        min="1"
+                        max="90"
+                        data-testid="input-expires-days"
+                      />
+                    </div>
+
+                    <div>
+                      <Label className="text-white">Custom Message (Optional)</Label>
+                      <Textarea
+                        value={sendTemplateForm.message}
+                        onChange={(e) => setSendTemplateForm({ ...sendTemplateForm, message: e.target.value })}
+                        placeholder="Add a personal message to the consumer..."
+                        className={textareaClasses}
+                        rows={3}
+                        data-testid="textarea-custom-message"
+                      />
+                    </div>
+
+                    <div className="flex gap-2 pt-4">
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setShowSendTemplateModal(false);
+                          setSendTemplateForm({ ...emptySendTemplateForm });
+                          setSendingTemplate(null);
+                        }}
+                        className="flex-1 border-white/20 bg-white/5 text-blue-50 transition hover:bg-white/10"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          if (!sendTemplateForm.consumerId) {
+                            toast({ title: "Please select a consumer", variant: "destructive" });
+                            return;
+                          }
+                          sendTemplateMutation.mutate({
+                            templateId: sendingTemplate.id,
+                            data: {
+                              consumerId: sendTemplateForm.consumerId,
+                              accountId: sendTemplateForm.accountId || undefined,
+                              expiresInDays: sendTemplateForm.expiresInDays,
+                              message: sendTemplateForm.message || undefined,
+                            },
+                          });
+                        }}
+                        disabled={sendTemplateMutation.isPending || !sendTemplateForm.consumerId}
+                        className="flex-1 rounded-xl bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 transition hover:from-sky-400/80 hover:to-indigo-400/80"
+                        data-testid="button-send-signature-request"
+                      >
+                        {sendTemplateMutation.isPending ? "Sending..." : "Send for Signature"}
                       </Button>
                     </div>
                   </div>
