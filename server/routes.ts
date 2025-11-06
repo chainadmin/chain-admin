@@ -2175,22 +2175,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const consumerFirstName = consumer.firstName || 'there';
       const companyName = customBranding?.companyName || 'Our Company';
       
-      await emailService.sendEmail({
-        to: consumer.email!,
-        from: settings?.contactEmail || process.env.DEFAULT_FROM_EMAIL || 'noreply@chainsoftware.com',
-        subject: `Document Signature Request - ${processedTitle}`,
-        html: `
-          <h2>Document Signature Request</h2>
-          <p>Hi ${consumerFirstName},</p>
-          <p>You have a document that requires your signature.</p>
-          <p><strong>Document:</strong> ${processedTitle}</p>
-          ${message ? `<p><strong>Message:</strong> ${message}</p>` : ''}
-          <p><strong>Expires:</strong> ${expiresAt.toLocaleDateString()}</p>
-          <p><a href="${signUrl}" style="display: inline-block; background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 16px 0;">Sign Document</a></p>
-          <p>Or copy this link: ${signUrl}</p>
-          <p>Best regards,<br/>${companyName}</p>
-        `,
-      });
+      try {
+        console.log(`📧 Sending signature request email to ${consumer.email} for request ${signatureRequest.id}`);
+        await emailService.sendEmail({
+          to: consumer.email!,
+          from: settings?.contactEmail || process.env.DEFAULT_FROM_EMAIL || 'noreply@chainsoftware.com',
+          subject: `Document Signature Request - ${processedTitle}`,
+          html: `
+            <h2>Document Signature Request</h2>
+            <p>Hi ${consumerFirstName},</p>
+            <p>You have a document that requires your signature.</p>
+            <p><strong>Document:</strong> ${processedTitle}</p>
+            ${message ? `<p><strong>Message:</strong> ${message}</p>` : ''}
+            <p><strong>Expires:</strong> ${expiresAt.toLocaleDateString()}</p>
+            <p><a href="${signUrl}" style="display: inline-block; background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 16px 0;">Sign Document</a></p>
+            <p>Or copy this link: ${signUrl}</p>
+            <p>Best regards,<br/>${companyName}</p>
+          `,
+        });
+        console.log(`✅ Email sent successfully to ${consumer.email}`);
+      } catch (emailError) {
+        console.error(`❌ Failed to send email to ${consumer.email}:`, emailError);
+        // Continue anyway - signature request was created, just email failed
+      }
 
       res.json({ 
         message: "Signature request sent successfully",
@@ -6565,7 +6572,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const documents = await storage.getDocumentsByTenant(tenant.id);
+      
+      // Fetch pending signature requests for this consumer
+      const signatureRequests = await storage.getSignatureRequestsByConsumer(consumer.id);
+      const pendingRequests = signatureRequests
+        .filter(req => req.status === 'pending' || req.status === 'viewed')
+        .map(req => ({
+          ...req,
+          isPendingSignature: true,
+          type: 'signature_request',
+        }));
+      
+      // Get document IDs that are associated with pending signature requests
+      const pendingDocumentIds = new Set(pendingRequests.map(req => req.documentId).filter(Boolean));
+      
+      // Filter out documents that are part of pending signature requests to avoid duplicates
       const visibleDocuments = documents.filter(doc => {
+        // Skip documents that are part of pending signature requests
+        if (pendingDocumentIds.has(doc.id)) {
+          return false;
+        }
+        
         if (doc.isPublic) {
           return true;
         }
@@ -6584,16 +6611,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         return true;
       });
-
-      // Fetch pending signature requests for this consumer
-      const signatureRequests = await storage.getSignatureRequestsByConsumer(consumer.id);
-      const pendingRequests = signatureRequests
-        .filter(req => req.status === 'pending' || req.status === 'viewed')
-        .map(req => ({
-          ...req,
-          isPendingSignature: true, // Flag to identify it as a signature request
-          type: 'signature_request',
-        }));
 
       // Combine documents and pending signature requests
       const combinedResults = [...visibleDocuments, ...pendingRequests];
