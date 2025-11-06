@@ -13340,9 +13340,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             baseUrl: ensureBaseUrl(req),
           });
           
-          await sendEmail({
+          await emailService.sendEmail({
             to: consumer.email,
-            from: tenant.fromEmail || `noreply@${tenant.slug}.replit.app`,
+            from: tenantSettings?.contactEmail || `noreply@${tenant.slug}.replit.app`,
             subject: `Action Required: Sign ${title}`,
             html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -13465,8 +13465,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Verify the authenticated consumer matches the signature request recipient
-      const consumerEmail = req.consumerEmail;
-      const consumer = await storage.getConsumerById(request.consumerId);
+      const consumerEmail = req.consumer?.email;
+      const consumer = await storage.getConsumer(request.consumerId);
       if (!consumer || consumer.email !== consumerEmail) {
         return res.status(403).json({ message: "You are not authorized to sign this document" });
       }
@@ -13498,10 +13498,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // After successful signature, create a document record so it appears in consumer's Documents section
       try {
-        const document = await storage.getDocumentById(request.documentId);
+        const template = await storage.getDocumentTemplateById(request.documentId, request.tenantId);
         await storage.createDocument({
           tenantId: request.tenantId,
-          title: `Signed: ${request.title || document?.title || 'Document'}`,
+          title: `Signed: ${request.title || template?.name || 'Document'}`,
           description: `Electronically signed on ${new Date().toLocaleDateString()}`,
           fileName: `signed-${request.title || 'document'}.pdf`,
           fileUrl: `/api/signed-documents/${result.signedDocument.id}`, // Link to the signed document

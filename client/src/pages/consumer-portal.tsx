@@ -432,23 +432,49 @@ export default function ConsumerPortal() {
             </div>
             {documents && Array.isArray(documents) && documents.length > 0 ? (
               <div className="space-y-3">
-                {documents.map((document: any) => (
-                  <div key={document.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <i className="fas fa-file-alt text-blue-500 text-lg"></i>
-                        <div>
-                          <h3 className="font-medium text-gray-900">{document.title}</h3>
-                          <p className="text-sm text-gray-500">{document.description}</p>
+                {documents.map((document: any) => {
+                  const isSignatureRequest = document.type === 'signature_request' || document.isPendingSignature;
+                  
+                  return (
+                    <div key={document.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <i className={`fas ${isSignatureRequest ? 'fa-file-signature' : 'fa-file-alt'} text-blue-500 text-lg`}></i>
+                          <div>
+                            <h3 className="font-medium text-gray-900">
+                              {isSignatureRequest ? document.templateName : document.title}
+                            </h3>
+                            {document.description && (
+                              <p className="text-sm text-gray-500">{document.description}</p>
+                            )}
+                            {isSignatureRequest && (
+                              <p className="text-sm text-amber-600 mt-1">
+                                <i className="fas fa-clock mr-1"></i>
+                                Awaiting your signature
+                              </p>
+                            )}
+                          </div>
                         </div>
+                        {isSignatureRequest ? (
+                          <Button 
+                            className="bg-blue-600 hover:bg-blue-700" 
+                            size="sm"
+                            onClick={() => window.location.href = `/sign/${document.id}`}
+                            data-testid="button-sign-document"
+                          >
+                            <i className="fas fa-pen mr-2"></i>
+                            Sign Now
+                          </Button>
+                        ) : (
+                          <Button variant="outline" size="sm" onClick={() => window.open(document.fileUrl, '_blank')}>
+                            <i className="fas fa-download mr-2"></i>
+                            Download
+                          </Button>
+                        )}
                       </div>
-                      <Button variant="outline" size="sm" onClick={() => window.open(document.fileUrl, '_blank')}>
-                        <i className="fas fa-download mr-2"></i>
-                        Download
-                      </Button>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <p className="text-sm text-gray-500 text-center py-8">No documents available yet.</p>
