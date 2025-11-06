@@ -409,6 +409,27 @@ export async function runMigrations() {
 
     try {
       await client.query(`
+        CREATE TABLE IF NOT EXISTS document_templates (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          title TEXT NOT NULL,
+          content TEXT NOT NULL,
+          description TEXT,
+          signature_placement TEXT DEFAULT 'bottom',
+          legal_disclaimer TEXT,
+          consent_text TEXT DEFAULT 'I agree to the terms and conditions outlined in this document.',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      console.log('  ✓ document_templates table');
+    } catch (err) {
+      console.log('  ⚠ document_templates (already exists)');
+    }
+
+    try {
+      await client.query(`
         CREATE TABLE IF NOT EXISTS signature_requests (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
