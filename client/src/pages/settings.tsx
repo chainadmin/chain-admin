@@ -2948,7 +2948,10 @@ export default function Settings() {
                                     key={consumer.id}
                                     value={`${consumer.firstName} ${consumer.lastName} ${consumer.email}`}
                                     onSelect={() => {
-                                      setSendTemplateForm({ ...sendTemplateForm, consumerId: consumer.id, accountId: "" });
+                                      // Auto-select account if consumer has only one account
+                                      const consumerAccounts = (accounts as any)?.filter((acc: any) => acc.consumerId === consumer.id) || [];
+                                      const autoSelectedAccountId = consumerAccounts.length === 1 ? consumerAccounts[0].id : "";
+                                      setSendTemplateForm({ ...sendTemplateForm, consumerId: consumer.id, accountId: autoSelectedAccountId });
                                       setConsumerSearchOpen(false);
                                     }}
                                     className="cursor-pointer"
@@ -2985,7 +2988,7 @@ export default function Settings() {
                           <SelectItem value="none">None</SelectItem>
                           {(accounts as any)?.filter((acc: any) => !sendTemplateForm.consumerId || acc.consumerId === sendTemplateForm.consumerId).map((account: any) => (
                             <SelectItem key={account.id} value={account.id}>
-                              {account.accountNumber} - {account.creditor}
+                              {account.creditor} - Balance: ${((account.balanceCents || 0) / 100).toFixed(2)} (Acct: {account.accountNumber})
                             </SelectItem>
                           ))}
                         </SelectContent>
