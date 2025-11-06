@@ -6,6 +6,15 @@ Chain is a multi-tenant platform evolving from a debt collection solution into a
 
 Preferred communication style: Simple, everyday language.
 
+# Deployment Workflow
+
+**CRITICAL**: Database changes are deployed ONLY through GitHub push to Railway.
+- Schema changes in `shared/schema.ts` must be committed to Git
+- Push to GitHub triggers Railway deployment
+- Railway automatically runs `npm run db:push` during deployment
+- DO NOT suggest manual database updates or running commands on Railway
+- The user cannot run migrations manually - they happen automatically on deploy
+
 # System Architecture
 
 ## UI/UX Decisions
