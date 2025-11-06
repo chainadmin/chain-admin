@@ -2164,12 +2164,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Send email notification
       const customBranding = settings?.customBranding as any;
       const consumerPortalSettings = settings?.consumerPortalSettings;
+      
+      console.log(`🔍 Generating sign URL - Tenant: ${tenant?.slug}, BaseURL: ${process.env.REPLIT_DOMAINS}`);
+      console.log(`🔍 Consumer Portal Settings:`, consumerPortalSettings);
+      
       const portalUrl = resolveConsumerPortalUrl({
         tenantSlug: tenant?.slug,
         consumerPortalSettings,
         baseUrl: process.env.REPLIT_DOMAINS,
       });
-      const signUrl = `${portalUrl}/sign/${signatureRequest.id}`;
+      
+      console.log(`🔍 Portal URL (with /consumer-login): ${portalUrl}`);
+      
+      // Remove /consumer-login suffix and add /sign path
+      const basePortalUrl = portalUrl.replace(/\/consumer-login$/, '');
+      const signUrl = `${basePortalUrl}/sign/${signatureRequest.id}`;
+      
+      console.log(`✅ Final sign URL: ${signUrl}`);
       
       // Use safe name handling
       const consumerFirstName = consumer.firstName || 'there';
