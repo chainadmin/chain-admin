@@ -442,7 +442,7 @@ export default function ConsumerPortal() {
                           <i className={`fas ${isSignatureRequest ? 'fa-file-signature' : 'fa-file-alt'} text-blue-500 text-lg`}></i>
                           <div>
                             <h3 className="font-medium text-gray-900">
-                              {isSignatureRequest ? document.templateName : document.title}
+                              {document.title}
                             </h3>
                             {document.description && (
                               <p className="text-sm text-gray-500">{document.description}</p>
