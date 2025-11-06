@@ -10,10 +10,11 @@ Preferred communication style: Simple, everyday language.
 
 **CRITICAL**: Database changes are deployed ONLY through GitHub push to Railway.
 - Schema changes in `shared/schema.ts` must be committed to Git
+- **IMPORTANT**: New columns must ALSO be added to `server/migrations.ts` as ALTER TABLE statements
 - Push to GitHub triggers Railway deployment
-- Railway automatically runs `npm run db:push` during deployment
+- Railway automatically runs migrations from `server/migrations.ts` on startup
 - DO NOT suggest manual database updates or running commands on Railway
-- The user cannot run migrations manually - they happen automatically on deploy
+- DO NOT suggest using `npm run db:push` - migrations are in server/migrations.ts
 
 # System Architecture
 

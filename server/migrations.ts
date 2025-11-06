@@ -449,20 +449,35 @@ export async function runMigrations() {
       console.log('  ⚠ signature_requests (already exists)');
     }
     
-    // Add title and description columns to signature_requests
-    console.log('Adding title and description columns to signature_requests...');
-    try {
-      await client.query(`ALTER TABLE signature_requests ADD COLUMN IF NOT EXISTS title TEXT NOT NULL DEFAULT ''`);
-      console.log('  ✓ title column added');
-    } catch (err) {
-      console.log('  ⚠ title column (already exists or error)');
-    }
+    // Add missing columns to signature_requests to match schema
+    console.log('Adding missing columns to signature_requests...');
+    const signatureRequestColumns = [
+      { name: 'title', type: 'TEXT', notNull: true, default: "''" },
+      { name: 'description', type: 'TEXT' },
+      { name: 'declined_at', type: 'TIMESTAMP' },
+      { name: 'decline_reason', type: 'TEXT' },
+      { name: 'viewed_at', type: 'TIMESTAMP' },
+      { name: 'signature_data', type: 'TEXT' },
+      { name: 'ip_address', type: 'TEXT' },
+      { name: 'user_agent', type: 'TEXT' },
+      { name: 'legal_consent', type: 'BOOLEAN', default: 'false' },
+      { name: 'updated_at', type: 'TIMESTAMP', default: 'NOW()' }
+    ];
     
-    try {
-      await client.query(`ALTER TABLE signature_requests ADD COLUMN IF NOT EXISTS description TEXT`);
-      console.log('  ✓ description column added');
-    } catch (err) {
-      console.log('  ⚠ description column (already exists or error)');
+    for (const col of signatureRequestColumns) {
+      try {
+        let sql = `ALTER TABLE signature_requests ADD COLUMN IF NOT EXISTS ${col.name} ${col.type}`;
+        if (col.default) {
+          sql += ` DEFAULT ${col.default}`;
+        }
+        if (col.notNull) {
+          sql += ` NOT NULL`;
+        }
+        await client.query(sql);
+        console.log(`  ✓ ${col.name}`);
+      } catch (err) {
+        console.log(`  ⚠ ${col.name} (already exists or error)`);
+      }
     }
     
     try {
