@@ -94,6 +94,7 @@ function Router() {
                        pathname === '/consumer-login' ||
                        pathname === '/consumer-dashboard' ||
                        pathname.startsWith('/consumer-register') ||
+                       pathname.startsWith('/sign/') ||
                        pathname === '/mobile-register' ||
                        pathname === '/mobile-login' ||
                        pathname === '/privacy-policy' ||
