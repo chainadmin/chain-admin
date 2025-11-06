@@ -34,7 +34,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { FolderOpen, Plus, Upload, Trash2, Mail, Phone, MapPin, Calendar } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { FolderOpen, Plus, Upload, Trash2, Mail, Phone, MapPin, Calendar, FileSignature, Check, ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export default function Accounts() {
   const [selectedFolderId, setSelectedFolderId] = useState<string>("all");
@@ -46,8 +49,16 @@ export default function Accounts() {
   const [showContactDialog, setShowContactDialog] = useState(false);
   const [showComposeEmailDialog, setShowComposeEmailDialog] = useState(false);
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
+  const [showSendDocumentDialog, setShowSendDocumentDialog] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<any>(null);
   const [displayLimit, setDisplayLimit] = useState(50);
+  const [sendDocumentForm, setSendDocumentForm] = useState({
+    templateId: "",
+    accountId: "",
+    expiresInDays: 7,
+    message: "",
+  });
+  const [documentSearchOpen, setDocumentSearchOpen] = useState(false);
   const [deleteFolderDialog, setDeleteFolderDialog] = useState<{ open: boolean; folder: any }>({
     open: false,
     folder: null,
@@ -115,6 +126,11 @@ export default function Accounts() {
   const { data: emailTemplates, isLoading: emailTemplatesLoading } = useQuery({
     queryKey: ["/api/email-templates"],
     enabled: showComposeEmailDialog,
+  });
+
+  const { data: documentTemplates, isLoading: documentTemplatesLoading } = useQuery({
+    queryKey: ["/api/document-templates"],
+    enabled: showSendDocumentDialog,
   });
 
   // Fetch payment methods for the selected account's consumer
@@ -287,6 +303,28 @@ export default function Accounts() {
     },
   });
 
+  const sendDocumentMutation = useMutation({
+    mutationFn: async ({ templateId, data }: { templateId: string; data: any }) => {
+      return apiRequest("POST", `/api/document-templates/${templateId}/send`, data);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Document sent",
+        description: "Signature request sent successfully to the consumer.",
+      });
+      setShowSendDocumentDialog(false);
+      setSendDocumentForm({ templateId: "", accountId: "", expiresInDays: 7, message: "" });
+      setSelectedAccount(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to send document",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Handlers
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -340,6 +378,17 @@ export default function Accounts() {
   const handleContact = (account: any) => {
     setSelectedAccount(account);
     setShowContactDialog(true);
+  };
+
+  const handleSendDocument = (account: any) => {
+    setSelectedAccount(account);
+    setSendDocumentForm({
+      templateId: "",
+      accountId: account.id,
+      expiresInDays: 7,
+      message: "",
+    });
+    setShowSendDocumentDialog(true);
   };
 
   const handleViewModalChange = (open: boolean) => {
@@ -721,6 +770,7 @@ export default function Accounts() {
             onView={handleView}
             onContact={handleContact}
             onEdit={handleEdit}
+            onSendDocument={handleSendDocument}
             showFolderColumn
             showDeleteButton
           />
@@ -1575,6 +1625,145 @@ export default function Accounts() {
               {sendEmailMutation.isPending ? "Sending..." : "Send Email"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Send Document Dialog */}
+      <Dialog open={showSendDocumentDialog} onOpenChange={setShowSendDocumentDialog}>
+        <DialogContent className="border-white/10 bg-[#0f172a] text-blue-50 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold text-white">
+              Send Document for Signature
+            </DialogTitle>
+            <DialogDescription className="text-blue-100/70">
+              Choose a document template to send to the consumer for signing.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedAccount && (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-white/5 p-3 border border-white/10">
+                <p className="text-sm text-blue-100/70">
+                  Consumer: <span className="font-semibold text-white">{selectedAccount.consumer?.firstName} {selectedAccount.consumer?.lastName}</span>
+                </p>
+                <p className="text-xs text-blue-100/60 mt-1">Account: {selectedAccount.accountNumber}</p>
+              </div>
+
+              <div>
+                <Label className="text-white">Document Template *</Label>
+                <Popover open={documentSearchOpen} onOpenChange={setDocumentSearchOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={documentSearchOpen}
+                      className="w-full justify-between rounded-lg border-white/10 bg-white/5 text-blue-100 hover:bg-white/10"
+                      data-testid="select-document-template"
+                    >
+                      {sendDocumentForm.templateId
+                        ? (() => {
+                            const template = (documentTemplates as any)?.find((t: any) => t.id === sendDocumentForm.templateId);
+                            return template ? template.name : "Select template...";
+                          })()
+                        : "Select template..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[400px] p-0 border-white/10 bg-[#0f172a] text-blue-50">
+                    <Command className="border-0">
+                      <CommandInput placeholder="Search document templates..." className="border-0" />
+                      <CommandList>
+                        <CommandEmpty>No template found.</CommandEmpty>
+                        <CommandGroup>
+                          {(documentTemplates as any)?.map((template: any) => (
+                            <CommandItem
+                              key={template.id}
+                              value={template.name}
+                              onSelect={() => {
+                                setSendDocumentForm({ ...sendDocumentForm, templateId: template.id });
+                                setDocumentSearchOpen(false);
+                              }}
+                              className="cursor-pointer"
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  sendDocumentForm.templateId === template.id ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              <div className="flex flex-col">
+                                <span>{template.name}</span>
+                                {template.description && <span className="text-xs text-blue-100/60">{template.description}</span>}
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div>
+                <Label className="text-white">Expires In (Days)</Label>
+                <Input
+                  type="number"
+                  value={sendDocumentForm.expiresInDays}
+                  onChange={(e) => setSendDocumentForm({ ...sendDocumentForm, expiresInDays: parseInt(e.target.value) || 7 })}
+                  className="rounded-lg border-white/10 bg-white/5 text-blue-100"
+                  min="1"
+                  max="90"
+                  data-testid="input-expires-days"
+                />
+              </div>
+
+              <div>
+                <Label className="text-white">Custom Message (Optional)</Label>
+                <Textarea
+                  value={sendDocumentForm.message}
+                  onChange={(e) => setSendDocumentForm({ ...sendDocumentForm, message: e.target.value })}
+                  placeholder="Add a personal message to the consumer..."
+                  className="rounded-lg border-white/10 bg-white/5 text-blue-100"
+                  rows={3}
+                  data-testid="textarea-custom-message"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowSendDocumentDialog(false);
+                    setSendDocumentForm({ templateId: "", accountId: "", expiresInDays: 7, message: "" });
+                  }}
+                  className="flex-1 border-white/20 bg-white/5 text-blue-50 transition hover:bg-white/10"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (!sendDocumentForm.templateId) {
+                      toast({ title: "Please select a document template", variant: "destructive" });
+                      return;
+                    }
+                    sendDocumentMutation.mutate({
+                      templateId: sendDocumentForm.templateId,
+                      data: {
+                        consumerId: selectedAccount.consumerId,
+                        accountId: sendDocumentForm.accountId || undefined,
+                        expiresInDays: sendDocumentForm.expiresInDays,
+                        message: sendDocumentForm.message || undefined,
+                      },
+                    });
+                  }}
+                  disabled={sendDocumentMutation.isPending || !sendDocumentForm.templateId}
+                  className="flex-1 rounded-xl bg-gradient-to-r from-sky-500/80 to-indigo-500/80 text-white hover:from-sky-400/80 hover:to-indigo-400/80"
+                  data-testid="button-send-document"
+                >
+                  {sendDocumentMutation.isPending ? "Sending..." : "Send Document"}
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

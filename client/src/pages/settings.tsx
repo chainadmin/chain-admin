@@ -36,13 +36,15 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Trash2, Upload, Plus, Save, CreditCard, Shield, Settings as SettingsIcon, ImageIcon, Copy, ExternalLink, Repeat, FileText, Users, MessagesSquare, DollarSign, Code, Table, Eye, Bold, Italic, Underline, List, ListOrdered, Heading1, Heading2, Heading3, Palette, Link2, Link2Off, Eraser, Send } from "lucide-react";
+import { Trash2, Upload, Plus, Save, CreditCard, Shield, Settings as SettingsIcon, ImageIcon, Copy, ExternalLink, Repeat, FileText, Users, MessagesSquare, DollarSign, Code, Table, Eye, Bold, Italic, Underline, List, ListOrdered, Heading1, Heading2, Heading3, Palette, Link2, Link2Off, Eraser, Send, Check, ChevronsUpDown } from "lucide-react";
 import { useRef } from "react";
 import { isSubdomainSupported } from "@shared/utils/subdomain";
 import { resolveConsumerPortalUrl } from "@shared/utils/consumerPortal";
 import { getArrangementSummary, getPlanTypeLabel, formatCurrencyFromCents } from "@/lib/arrangements";
 import { cn } from "@/lib/utils";
 import { balanceTiers, getBalanceRangeFromTier, getBalanceTierLabel, type BalanceTier } from "@shared/schema";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 
 export default function Settings() {
   const [showDocumentModal, setShowDocumentModal] = useState(false);
@@ -108,6 +110,7 @@ export default function Settings() {
   };
 
   const [sendTemplateForm, setSendTemplateForm] = useState<SendTemplateFormState>({ ...emptySendTemplateForm });
+  const [consumerSearchOpen, setConsumerSearchOpen] = useState(false);
 
   type ArrangementFormState = {
     name: string;
@@ -2916,25 +2919,61 @@ export default function Settings() {
 
                     <div>
                       <Label className="text-white">Consumer *</Label>
-                      <Select 
-                        value={sendTemplateForm.consumerId}
-                        onValueChange={(value) => setSendTemplateForm({ ...sendTemplateForm, consumerId: value })}
-                      >
-                        <SelectTrigger className={selectTriggerClasses} data-testid="select-send-consumer">
-                          <SelectValue placeholder="Select consumer" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {consumers.map((consumer: any) => (
-                            <SelectItem key={consumer.id} value={consumer.id}>
-                              {consumer.firstName} {consumer.lastName} - {consumer.email}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Popover open={consumerSearchOpen} onOpenChange={setConsumerSearchOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={consumerSearchOpen}
+                            className={cn(selectTriggerClasses, "w-full justify-between")}
+                            data-testid="select-send-consumer"
+                          >
+                            {sendTemplateForm.consumerId
+                              ? (() => {
+                                  const consumer = consumers.find((c: any) => c.id === sendTemplateForm.consumerId);
+                                  return consumer ? `${consumer.firstName} ${consumer.lastName} - ${consumer.email}` : "Select consumer...";
+                                })()
+                              : "Select consumer..."}
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[400px] p-0 border-white/10 bg-[#0f172a] text-blue-50">
+                          <Command className="border-0">
+                            <CommandInput placeholder="Search consumers by name or email..." className="border-0" />
+                            <CommandList>
+                              <CommandEmpty>No consumer found.</CommandEmpty>
+                              <CommandGroup>
+                                {consumers.map((consumer: any) => (
+                                  <CommandItem
+                                    key={consumer.id}
+                                    value={`${consumer.firstName} ${consumer.lastName} ${consumer.email}`}
+                                    onSelect={() => {
+                                      setSendTemplateForm({ ...sendTemplateForm, consumerId: consumer.id, accountId: "" });
+                                      setConsumerSearchOpen(false);
+                                    }}
+                                    className="cursor-pointer"
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        sendTemplateForm.consumerId === consumer.id ? "opacity-100" : "opacity-0"
+                                      )}
+                                    />
+                                    {consumer.firstName} {consumer.lastName} - {consumer.email}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                     </div>
 
                     <div>
                       <Label className="text-white">Account (Optional)</Label>
+                      <p className="text-xs text-blue-100/60 mb-2">
+                        Link this document to a specific account to include account details like balance and account number
+                      </p>
                       <Select 
                         value={sendTemplateForm.accountId || "none"}
                         onValueChange={(value) => setSendTemplateForm({ ...sendTemplateForm, accountId: value === "none" ? "" : value })}
@@ -2946,7 +2985,7 @@ export default function Settings() {
                           <SelectItem value="none">None</SelectItem>
                           {(accounts as any)?.filter((acc: any) => !sendTemplateForm.consumerId || acc.consumerId === sendTemplateForm.consumerId).map((account: any) => (
                             <SelectItem key={account.id} value={account.id}>
-                              {account.accountNumber} - {account.companyName}
+                              {account.accountNumber} - {account.creditor}
                             </SelectItem>
                           ))}
                         </SelectContent>

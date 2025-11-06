@@ -16,7 +16,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Trash2 } from "lucide-react";
+import { Trash2, FileSignature } from "lucide-react";
 
 interface AccountsTableProps {
   accounts: any[];
@@ -26,6 +26,7 @@ interface AccountsTableProps {
   onView?: (account: any) => void;
   onContact?: (account: any) => void;
   onEdit?: (account: any) => void;
+  onSendDocument?: (account: any) => void;
 }
 
 export default function AccountsTable({
@@ -36,6 +37,7 @@ export default function AccountsTable({
   onView,
   onContact,
   onEdit,
+  onSendDocument,
 }: AccountsTableProps) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
@@ -328,6 +330,18 @@ export default function AccountsTable({
                         >
                           Contact
                         </Button>
+                        {onSendDocument && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="rounded-lg border border-indigo-400/40 bg-indigo-500/20 px-3 text-xs font-semibold text-white hover:bg-indigo-500/30"
+                            data-testid={`button-send-document-${account.id}`}
+                            onClick={() => onSendDocument(account)}
+                          >
+                            <FileSignature className="h-4 w-4 mr-1" />
+                            Send Document
+                          </Button>
+                        )}
                         {showDeleteButton && (
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
