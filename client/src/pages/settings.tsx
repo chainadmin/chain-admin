@@ -2936,14 +2936,14 @@ export default function Settings() {
                     <div>
                       <Label className="text-white">Account (Optional)</Label>
                       <Select 
-                        value={sendTemplateForm.accountId}
-                        onValueChange={(value) => setSendTemplateForm({ ...sendTemplateForm, accountId: value })}
+                        value={sendTemplateForm.accountId || "none"}
+                        onValueChange={(value) => setSendTemplateForm({ ...sendTemplateForm, accountId: value === "none" ? "" : value })}
                       >
                         <SelectTrigger className={selectTriggerClasses} data-testid="select-send-account">
                           <SelectValue placeholder="Select account (optional)" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">None</SelectItem>
+                          <SelectItem value="none">None</SelectItem>
                           {(accounts as any)?.filter((acc: any) => !sendTemplateForm.consumerId || acc.consumerId === sendTemplateForm.consumerId).map((account: any) => (
                             <SelectItem key={account.id} value={account.id}>
                               {account.accountNumber} - {account.companyName}
