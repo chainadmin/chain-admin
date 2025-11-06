@@ -449,6 +449,22 @@ export async function runMigrations() {
       console.log('  ⚠ signature_requests (already exists)');
     }
     
+    // Add title and description columns to signature_requests
+    console.log('Adding title and description columns to signature_requests...');
+    try {
+      await client.query(`ALTER TABLE signature_requests ADD COLUMN IF NOT EXISTS title TEXT NOT NULL DEFAULT ''`);
+      console.log('  ✓ title column added');
+    } catch (err) {
+      console.log('  ⚠ title column (already exists or error)');
+    }
+    
+    try {
+      await client.query(`ALTER TABLE signature_requests ADD COLUMN IF NOT EXISTS description TEXT`);
+      console.log('  ✓ description column added');
+    } catch (err) {
+      console.log('  ⚠ description column (already exists or error)');
+    }
+    
     try {
       await client.query(`
         CREATE TABLE IF NOT EXISTS signed_documents (
