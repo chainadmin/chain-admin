@@ -451,15 +451,7 @@ export default function Settings() {
 
   const sendTemplateMutation = useMutation({
     mutationFn: async ({ templateId, data }: { templateId: string; data: any }) => {
-      const response = await fetch(`/api/document-templates/${templateId}/send`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to send template");
-      }
+      const response = await apiRequest("POST", `/api/document-templates/${templateId}/send`, data);
       return response.json();
     },
     onSuccess: () => {
