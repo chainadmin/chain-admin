@@ -19,6 +19,8 @@ export default function SignDocumentPage() {
   const [hasSignature, setHasSignature] = useState(false);
   const [hasInitials, setHasInitials] = useState(false);
   const [consentGiven, setConsentGiven] = useState(false);
+  const [signatureDataUrl, setSignatureDataUrl] = useState<string>('');
+  const [initialsDataUrl, setInitialsDataUrl] = useState<string>('');
 
   const { data: request, isLoading } = useQuery<any>({
     queryKey: [`/api/signature-requests/${requestId}`],
@@ -61,20 +63,27 @@ export default function SignDocumentPage() {
   // Inject signatures into document HTML
   const documentUrlWithSignatures = useMemo(() => {
     if (!request?.document?.fileUrl) return null;
-    if (!hasSignature && !hasInitials) return request.document.fileUrl;
+    if (!signatureDataUrl && !initialsDataUrl) return request.document.fileUrl;
 
     try {
       // Decode the data URL to get HTML content
-      const dataUrlMatch = request.document.fileUrl.match(/^data:text\/html;charset=utf-8,(.+)$/);
-      if (!dataUrlMatch) return request.document.fileUrl;
+      let htmlContent = '';
+      const urlEncodedMatch = request.document.fileUrl.match(/^data:text\/html;charset=utf-8,(.+)$/);
+      const base64Match = request.document.fileUrl.match(/^data:text\/html;base64,(.+)$/);
+      
+      if (urlEncodedMatch) {
+        htmlContent = decodeURIComponent(urlEncodedMatch[1]);
+      } else if (base64Match) {
+        htmlContent = atob(base64Match[1]);
+      } else {
+        return request.document.fileUrl;
+      }
 
-      const htmlContent = decodeURIComponent(dataUrlMatch[1]);
       let modifiedHtml = htmlContent;
 
       // Replace signature line placeholders
-      if (hasSignature && signatureCanvasRef.current) {
-        const signatureImg = signatureCanvasRef.current.toDataURL();
-        const signatureHtml = `<div style="border-bottom: 1px solid #000; padding-bottom: 10px; margin-bottom: 5px;"><img src="${signatureImg}" alt="Signature" style="max-width: 300px; height: auto; display: block;" /></div>`;
+      if (signatureDataUrl) {
+        const signatureHtml = `<div style="border-bottom: 1px solid #000; padding-bottom: 10px; margin-bottom: 5px;"><img src="${signatureDataUrl}" alt="Signature" style="max-width: 300px; height: auto; display: block;" /></div>`;
         
         // Replace various signature line patterns
         modifiedHtml = modifiedHtml.replace(/\{\{SIGNATURE_LINE\}\}/gi, signatureHtml);
@@ -83,9 +92,8 @@ export default function SignDocumentPage() {
       }
 
       // Replace initial placeholders
-      if (hasInitials && initialsCanvasRef.current) {
-        const initialsImg = initialsCanvasRef.current.toDataURL();
-        const initialsHtml = `<div style="border-bottom: 1px solid #000; padding-bottom: 10px; margin-bottom: 5px;"><img src="${initialsImg}" alt="Initials" style="max-width: 150px; height: auto; display: block;" /></div>`;
+      if (initialsDataUrl) {
+        const initialsHtml = `<div style="border-bottom: 1px solid #000; padding-bottom: 10px; margin-bottom: 5px;"><img src="${initialsDataUrl}" alt="Initials" style="max-width: 150px; height: auto; display: block;" /></div>`;
         
         // Replace various initial patterns
         modifiedHtml = modifiedHtml.replace(/\{\{INITIAL\}\}/gi, initialsHtml);
@@ -101,7 +109,7 @@ export default function SignDocumentPage() {
       console.error('Error injecting signatures into document:', error);
       return request.document.fileUrl;
     }
-  }, [request, hasSignature, hasInitials]);
+  }, [request?.document?.fileUrl, signatureDataUrl, initialsDataUrl]);
 
   const getCoordinates = (
     e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>,
@@ -177,8 +185,16 @@ export default function SignDocumentPage() {
   const stopDrawing = (type: 'signature' | 'initials') => {
     if (type === 'signature') {
       setIsDrawingSignature(false);
+      // Update signature data URL when drawing stops
+      if (signatureCanvasRef.current) {
+        setSignatureDataUrl(signatureCanvasRef.current.toDataURL());
+      }
     } else {
       setIsDrawingInitials(false);
+      // Update initials data URL when drawing stops
+      if (initialsCanvasRef.current) {
+        setInitialsDataUrl(initialsCanvasRef.current.toDataURL());
+      }
     }
   };
 
@@ -193,8 +209,10 @@ export default function SignDocumentPage() {
     
     if (type === 'signature') {
       setHasSignature(false);
+      setSignatureDataUrl('');
     } else {
       setHasInitials(false);
+      setInitialsDataUrl('');
     }
   };
 
