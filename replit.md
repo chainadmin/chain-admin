@@ -6,6 +6,24 @@ Chain is a multi-tenant platform evolving from a debt collection solution into a
 
 Preferred communication style: Simple, everyday language.
 
+# Recent Changes
+
+## Document Signing Variable Standardization (November 2025)
+- **Standardized Variable Names**: Document templates now use EXACT same variable naming as email templates for consistency
+  - Primary format: camelCase only (accountNumber, consumerName, creditor, agencyName, agencyEmail, agencyPhone)
+  - Removed all underscore variations (account_number, consumer_name, etc.)
+  - Ensures reliable variable replacement across email and document templates
+- **Smart SSN Extraction**: Auto-extracts last 4 digits from full SSN in CSV data
+  - Checks multiple field names: ssnLast4, ssn_last_4, ssn, socialSecurityNumber, social_security_number
+  - {{ssnLast4}} displays "6789" from "123-45-6789" automatically
+- **Enhanced Visual Design**: Upgraded document signing page to DocuSign-quality professional aesthetics
+  - Gradient backgrounds (slate-50 → blue-50 → slate-100)
+  - Refined shadows and elevated cards (shadow-lg, shadow-xl)
+  - Elegant spacing and rounded corners (rounded-xl, rounded-2xl)
+  - Modern typography with semibold/bold weights
+  - Emerald green success states with rings
+  - Gradient buttons with smooth transitions
+
 # Deployment Workflow
 
 **CRITICAL**: Database changes are deployed ONLY through GitHub push to Railway.
