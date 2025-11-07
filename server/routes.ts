@@ -5870,7 +5870,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const description = sanitizeOptionalText(body.description);
     const isActive = body.isActive === undefined ? true : Boolean(body.isActive);
 
-    const settlementPaymentCount = parseOptionalInteger(body.settlementPaymentCount);
+    // Parse settlementPaymentCounts as array
+    const settlementPaymentCounts = Array.isArray(body.settlementPaymentCounts) 
+      ? body.settlementPaymentCounts.map((c: number | string) => parseOptionalInteger(c)).filter((c): c is number => c !== null)
+      : [];
     const settlementPaymentFrequency = typeof body.settlementPaymentFrequency === "string" ? body.settlementPaymentFrequency.trim() : null;
     const settlementOfferExpiresDate = parseDateInput(body.settlementOfferExpiresDate);
 
@@ -5889,7 +5892,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       payoffText: planType === "settlement" ? payoffText : null,
       payoffPercentageBasisPoints: planType === "settlement" ? payoffPercentage : null,
       payoffDueDate: null,
-      settlementPaymentCount: planType === "settlement" ? settlementPaymentCount : null,
+      settlementPaymentCounts: planType === "settlement" ? settlementPaymentCounts : null,
       settlementPaymentFrequency: planType === "settlement" ? settlementPaymentFrequency : null,
       settlementOfferExpiresDate: planType === "settlement" ? settlementOfferExpiresDate : null,
       customTermsText: planType === "custom_terms" ? customTermsText : null,
@@ -6812,9 +6815,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Calculate settlement amount based on percentage
         if (option.payoffPercentageBasisPoints) {
           const percentage = option.payoffPercentageBasisPoints / 10000; // Convert basis points to decimal
-          calculated.calculatedPayoffAmount = Math.round(balanceCents * percentage);
+          const settlementTotal = Math.round(balanceCents * percentage);
+          calculated.calculatedPayoffAmount = settlementTotal;
           calculated.calculatedPayoffPercentage = percentage * 100;
-          calculated.calculatedTotalAmount = calculated.calculatedPayoffAmount;
+          calculated.calculatedTotalAmount = settlementTotal;
+          
+          // If this settlement has multiple payments, calculate the per-payment amount
+          if (option.settlementPaymentCount && option.settlementPaymentCount > 1) {
+            // Use floor to avoid overcharging - final payment logic will handle remainder
+            const perPaymentAmount = Math.floor(settlementTotal / option.settlementPaymentCount);
+            calculated.calculatedMonthlyPayment = perPaymentAmount;
+            calculated.calculatedTermMonths = option.settlementPaymentCount;
+            calculated.settlementPaymentCount = option.settlementPaymentCount;
+            calculated.settlementPaymentFrequency = option.settlementPaymentFrequency || 'monthly';
+          } else {
+            // Single payment settlement (pay in full)
+            calculated.settlementPaymentCount = 1;
+          }
         }
         break;
 
@@ -6907,8 +6924,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return true;
       });
       
-      // Calculate payment details for each applicable option and filter out non-viable ones
-      const calculatedOptions = applicableOptions
+      // Expand settlement options with multiple payment counts into separate options
+      const expandedOptions: any[] = [];
+      for (const option of applicableOptions) {
+        if (option.planType === 'settlement' && option.settlementPaymentCounts && Array.isArray(option.settlementPaymentCounts) && option.settlementPaymentCounts.length > 0) {
+          // Create a separate option for each payment count
+          for (const paymentCount of option.settlementPaymentCounts) {
+            expandedOptions.push({
+              ...option,
+              settlementPaymentCount: paymentCount, // Add individual count for calculation
+              name: `${option.name} - ${paymentCount} ${paymentCount === 1 ? 'Payment' : 'Payments'}`, // Unique name for each option
+            });
+          }
+        } else {
+          // Non-settlement or settlement without counts array
+          expandedOptions.push(option);
+        }
+      }
+      
+      // Calculate payment details for each expanded option and filter out non-viable ones
+      const calculatedOptions = expandedOptions
         .map(option => calculateArrangementDetails(option, balanceCents))
         .filter(option => option !== null);
       

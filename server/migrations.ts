@@ -100,6 +100,28 @@ export async function runMigrations() {
       console.log(`  ⚠ settlement_offer_expires_date (already exists or error)`);
     }
     
+    // Migrate settlement_payment_count to settlement_payment_counts array
+    console.log('Migrating settlement_payment_count to settlement_payment_counts array...');
+    try {
+      // First, add the new array column
+      await client.query(`ALTER TABLE arrangement_options ADD COLUMN IF NOT EXISTS settlement_payment_counts INTEGER[]`);
+      
+      // Migrate existing data: convert single values to arrays
+      await client.query(`
+        UPDATE arrangement_options 
+        SET settlement_payment_counts = ARRAY[settlement_payment_count]
+        WHERE settlement_payment_count IS NOT NULL 
+          AND (settlement_payment_counts IS NULL OR settlement_payment_counts = '{}')
+      `);
+      
+      // Drop the old column
+      await client.query(`ALTER TABLE arrangement_options DROP COLUMN IF EXISTS settlement_payment_count`);
+      
+      console.log(`  ✓ settlement_payment_counts (migrated from settlement_payment_count)`);
+    } catch (err) {
+      console.log(`  ⚠ settlement_payment_counts migration (error):`, err);
+    }
+    
     // Add balance_tier column to arrangement_options for tier-based payment plans
     console.log('Adding balance_tier column to arrangement_options...');
     try {

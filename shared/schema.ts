@@ -511,7 +511,7 @@ export const arrangementOptions = pgTable("arrangement_options", {
   payoffText: text("payoff_text"),
   payoffPercentageBasisPoints: integer("payoff_percentage_basis_points"),
   payoffDueDate: date("payoff_due_date"),
-  settlementPaymentCount: integer("settlement_payment_count"), // Number of payments allowed for settlement (e.g., 1, 3, 6)
+  settlementPaymentCounts: integer("settlement_payment_counts").array(), // Array of payment count options (e.g., [1, 3, 6] creates 3 options)
   settlementPaymentFrequency: text("settlement_payment_frequency"), // "monthly", "weekly", "biweekly"
   settlementOfferExpiresDate: date("settlement_offer_expires_date"), // Optional expiration date for settlement offers
   customTermsText: text("custom_terms_text"),
@@ -1344,11 +1344,17 @@ export const insertArrangementOptionSchema = createInsertSchema(arrangementOptio
           });
         }
 
-        if (!data.settlementPaymentCount || data.settlementPaymentCount < 1) {
+        if (!data.settlementPaymentCounts || !Array.isArray(data.settlementPaymentCounts) || data.settlementPaymentCounts.length === 0) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            path: ["settlementPaymentCount"],
-            message: "Number of payments is required for settlement arrangements",
+            path: ["settlementPaymentCounts"],
+            message: "At least one settlement payment count option is required",
+          });
+        } else if (data.settlementPaymentCounts.some((count: number) => count < 1)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["settlementPaymentCounts"],
+            message: "All payment count options must be at least 1",
           });
         }
 

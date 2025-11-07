@@ -123,7 +123,7 @@ export default function Settings() {
     oneTimePaymentMin: string;
     payoffPercentage: string;
     payoffDueDate: string;
-    settlementPaymentCount: string;
+    settlementPaymentCounts: string; // Comma-separated values like "1,3,6"
     settlementPaymentFrequency: string;
     settlementOfferExpiresDate: string;
     payoffText: string;
@@ -142,7 +142,7 @@ export default function Settings() {
     oneTimePaymentMin: "",
     payoffPercentage: "",
     payoffDueDate: "",
-    settlementPaymentCount: "1",
+    settlementPaymentCounts: "1,3,6", // Default to 3 options
     settlementPaymentFrequency: "monthly",
     settlementOfferExpiresDate: "",
     payoffText: "",
@@ -1037,7 +1037,11 @@ export default function Settings() {
       payload.maxTermMonths = maxTermMonths ?? null;
     } else if (planType === "settlement") {
       const settlementPercentage = parsePercentageInput(arrangementForm.payoffPercentage);
-      const settlementPaymentCount = parseInt(arrangementForm.settlementPaymentCount, 10);
+      // Parse comma-separated payment counts like "1,3,6"
+      const settlementPaymentCounts = arrangementForm.settlementPaymentCounts
+        .split(',')
+        .map(s => parseInt(s.trim(), 10))
+        .filter(n => !isNaN(n) && n > 0);
       const settlementPaymentFrequency = arrangementForm.settlementPaymentFrequency.trim();
       const settlementText = arrangementForm.payoffText.trim();
 
@@ -1059,10 +1063,10 @@ export default function Settings() {
         return;
       }
 
-      if (!settlementPaymentCount || settlementPaymentCount < 1) {
+      if (settlementPaymentCounts.length === 0) {
         toast({
-          title: "Payment Count Required",
-          description: "Enter the number of payments allowed (e.g., 1, 3, 6).",
+          title: "Payment Count Options Required",
+          description: "Enter payment count options separated by commas (e.g., 1,3,6).",
           variant: "destructive",
         });
         return;
@@ -1078,7 +1082,7 @@ export default function Settings() {
       }
 
       payload.payoffPercentageBasisPoints = settlementPercentage;
-      payload.settlementPaymentCount = settlementPaymentCount;
+      payload.settlementPaymentCounts = settlementPaymentCounts;
       payload.settlementPaymentFrequency = settlementPaymentFrequency;
       payload.settlementOfferExpiresDate = arrangementForm.settlementOfferExpiresDate ? parseDateInput(arrangementForm.settlementOfferExpiresDate) : null;
       payload.payoffText = settlementText || undefined;
@@ -3230,18 +3234,17 @@ export default function Settings() {
                               </div>
                               <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                  <Label className="text-white">Number of Payments *</Label>
+                                  <Label className="text-white">Payment Options *</Label>
                                   <Input
-                                    type="number"
-                                    min="1"
-                                    value={arrangementForm.settlementPaymentCount}
-                                    onChange={(e) => setArrangementForm({ ...arrangementForm, settlementPaymentCount: e.target.value })}
-                                    placeholder="3"
+                                    type="text"
+                                    value={arrangementForm.settlementPaymentCounts}
+                                    onChange={(e) => setArrangementForm({ ...arrangementForm, settlementPaymentCounts: e.target.value })}
+                                    placeholder="1,3,6"
                                     className={inputClasses}
-                                    data-testid="input-settlement-payment-count"
+                                    data-testid="input-settlement-payment-counts"
                                   />
                                   <p className="mt-1 text-xs text-blue-100/70">
-                                    How many payments allowed
+                                    Comma-separated (e.g., "1,3,6" creates 3 options)
                                   </p>
                                 </div>
                                 <div>
