@@ -1786,16 +1786,20 @@ export default function ConsumerDashboardSimple() {
                           .filter((arr: any) => arr.planType === 'settlement')
                           .map((arrangement: any) => {
                             const summary = getArrangementSummary(arrangement);
+                            // Create unique key combining id and payment count for expanded settlement options
+                            const uniqueKey = `${arrangement.id}-${arrangement.settlementPaymentCount || 'default'}`;
+                            const isSelected = selectedArrangement?.id === arrangement.id && 
+                              selectedArrangement?.settlementPaymentCount === arrangement.settlementPaymentCount;
                             return (
                               <div
-                                key={arrangement.id}
+                                key={uniqueKey}
                                 onClick={() => setSelectedArrangement(arrangement)}
                                 className={`cursor-pointer rounded-lg border-2 p-3 transition-all ${
-                                  selectedArrangement?.id === arrangement.id
+                                  isSelected
                                     ? 'border-emerald-400 bg-emerald-500/20 backdrop-blur'
                                     : 'border-emerald-400/30 bg-white/5 hover:bg-white/10 hover:border-emerald-400/50'
                                 }`}
-                                data-testid={`option-settlement-${arrangement.id}`}
+                                data-testid={`option-settlement-${uniqueKey}`}
                               >
                                 <div className="flex items-center justify-between">
                                   <div className="flex-1">
