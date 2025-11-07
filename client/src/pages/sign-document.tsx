@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -57,6 +57,51 @@ export default function SignDocumentPage() {
       });
     },
   });
+
+  // Inject signatures into document HTML
+  const documentUrlWithSignatures = useMemo(() => {
+    if (!request?.document?.fileUrl) return null;
+    if (!hasSignature && !hasInitials) return request.document.fileUrl;
+
+    try {
+      // Decode the data URL to get HTML content
+      const dataUrlMatch = request.document.fileUrl.match(/^data:text\/html;charset=utf-8,(.+)$/);
+      if (!dataUrlMatch) return request.document.fileUrl;
+
+      const htmlContent = decodeURIComponent(dataUrlMatch[1]);
+      let modifiedHtml = htmlContent;
+
+      // Replace signature line placeholders
+      if (hasSignature && signatureCanvasRef.current) {
+        const signatureImg = signatureCanvasRef.current.toDataURL();
+        const signatureHtml = `<div style="border-bottom: 1px solid #000; padding-bottom: 10px; margin-bottom: 5px;"><img src="${signatureImg}" alt="Signature" style="max-width: 300px; height: auto; display: block;" /></div>`;
+        
+        // Replace various signature line patterns
+        modifiedHtml = modifiedHtml.replace(/\{\{SIGNATURE_LINE\}\}/gi, signatureHtml);
+        modifiedHtml = modifiedHtml.replace(/Signature line/gi, signatureHtml);
+        modifiedHtml = modifiedHtml.replace(/_+\s*\(signature\)/gi, signatureHtml);
+      }
+
+      // Replace initial placeholders
+      if (hasInitials && initialsCanvasRef.current) {
+        const initialsImg = initialsCanvasRef.current.toDataURL();
+        const initialsHtml = `<div style="border-bottom: 1px solid #000; padding-bottom: 10px; margin-bottom: 5px;"><img src="${initialsImg}" alt="Initials" style="max-width: 150px; height: auto; display: block;" /></div>`;
+        
+        // Replace various initial patterns
+        modifiedHtml = modifiedHtml.replace(/\{\{INITIAL\}\}/gi, initialsHtml);
+        modifiedHtml = modifiedHtml.replace(/\{\{INITIALS\}\}/gi, initialsHtml);
+        modifiedHtml = modifiedHtml.replace(/Initial:/gi, initialsHtml);
+        modifiedHtml = modifiedHtml.replace(/Initials:/gi, initialsHtml);
+        modifiedHtml = modifiedHtml.replace(/_+\s*\(initial[s]?\)/gi, initialsHtml);
+      }
+
+      // Re-encode as data URL
+      return `data:text/html;charset=utf-8,${encodeURIComponent(modifiedHtml)}`;
+    } catch (error) {
+      console.error('Error injecting signatures into document:', error);
+      return request.document.fileUrl;
+    }
+  }, [request, hasSignature, hasInitials]);
 
   const getCoordinates = (
     e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>,
@@ -319,7 +364,7 @@ export default function SignDocumentPage() {
         </div>
 
         {/* Document Content */}
-        {request.document?.fileUrl && (
+        {documentUrlWithSignatures && (
           <Card className="shadow-sm border border-gray-200">
             <CardHeader className="bg-gray-50 border-b border-gray-200">
               <CardTitle className="text-lg font-semibold text-gray-900">
@@ -332,42 +377,14 @@ export default function SignDocumentPage() {
             <CardContent className="p-6">
               <div className="bg-white border-2 border-gray-200 rounded-lg overflow-hidden">
                 <iframe
-                  src={request.document.fileUrl}
+                  key={documentUrlWithSignatures}
+                  src={documentUrlWithSignatures}
                   className="w-full h-[500px]"
                   title="Document Content"
                   sandbox="allow-same-origin"
                   data-testid="iframe-document-content"
                 />
               </div>
-
-              {/* Signature Preview on Document */}
-              {(hasSignature || hasInitials) && (
-                <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <h4 className="text-sm font-semibold text-gray-900 mb-3">Your Signatures</h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    {hasSignature && (
-                      <div className="bg-white p-3 rounded border border-gray-300">
-                        <p className="text-xs text-gray-500 mb-2">Full Signature</p>
-                        <img 
-                          src={signatureCanvasRef.current?.toDataURL()} 
-                          alt="Signature preview" 
-                          className="w-full h-auto"
-                        />
-                      </div>
-                    )}
-                    {hasInitials && (
-                      <div className="bg-white p-3 rounded border border-gray-300">
-                        <p className="text-xs text-gray-500 mb-2">Initials</p>
-                        <img 
-                          src={initialsCanvasRef.current?.toDataURL()} 
-                          alt="Initials preview" 
-                          className="w-full h-auto"
-                        />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
             </CardContent>
           </Card>
         )}
