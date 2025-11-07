@@ -212,15 +212,30 @@ export default function SignDocumentPage() {
               <p className="text-sm" data-testid="text-document-filename">
                 <span className="font-medium">File:</span> {request.document?.fileName}
               </p>
-              {request.message && (
+              {request.description && (
                 <p className="text-sm mt-2" data-testid="text-custom-message">
-                  <span className="font-medium">Message:</span> {request.message}
+                  <span className="font-medium">Message:</span> {request.description}
                 </p>
               )}
               <p className="text-sm mt-2 text-muted-foreground" data-testid="text-expiration">
                 Expires: {new Date(request.expiresAt).toLocaleDateString()}
               </p>
             </div>
+
+            {request.document?.fileUrl && (
+              <div className="border rounded-lg p-6 bg-white">
+                <h3 className="font-semibold mb-4">Document to Sign</h3>
+                <div className="prose max-w-none">
+                  <iframe
+                    src={request.document.fileUrl}
+                    className="w-full h-96 border rounded"
+                    title="Document Content"
+                    sandbox="allow-same-origin"
+                    data-testid="iframe-document-content"
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="border-2 border-dashed rounded-lg p-4">
               <h3 className="font-semibold mb-2">Your Signature</h3>
