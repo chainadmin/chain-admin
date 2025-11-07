@@ -391,6 +391,7 @@ export const signatureRequests = pgTable("signature_requests", {
   viewedAt: timestamp("viewed_at"),
   expiresAt: timestamp("expires_at"),
   signatureData: text("signature_data"), // Base64 encoded signature image
+  initialsData: text("initials_data"), // Base64 encoded initials image
   ipAddress: text("ip_address"), // IP address when signed
   userAgent: text("user_agent"), // Browser/device info when signed
   legalConsent: boolean("legal_consent").default(false), // User agreed to legal terms
@@ -409,6 +410,7 @@ export const signedDocuments = pgTable("signed_documents", {
   documentId: uuid("document_id").references(() => documents.id, { onDelete: "cascade" }).notNull(),
   title: text("title").notNull(),
   signatureData: text("signature_data").notNull(), // Base64 encoded signature image
+  initialsData: text("initials_data"), // Base64 encoded initials image
   ipAddress: text("ip_address").notNull(), // IP address when signed (required for legal compliance)
   userAgent: text("user_agent").notNull(), // Browser/device info when signed
   legalConsent: boolean("legal_consent").notNull().default(true), // User agreed to legal terms

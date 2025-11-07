@@ -2,19 +2,22 @@ import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, AlertCircle } from "lucide-react";
+import { CheckCircle, AlertCircle, FileText, Clock } from "lucide-react";
 import { useRoute } from "wouter";
 
 export default function SignDocumentPage() {
   const { toast } = useToast();
   const [, params] = useRoute("/sign/:requestId");
   const requestId = params?.requestId;
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [hasDrawn, setHasDrawn] = useState(false);
+  const signatureCanvasRef = useRef<HTMLCanvasElement>(null);
+  const initialsCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [isDrawingSignature, setIsDrawingSignature] = useState(false);
+  const [isDrawingInitials, setIsDrawingInitials] = useState(false);
+  const [hasSignature, setHasSignature] = useState(false);
+  const [hasInitials, setHasInitials] = useState(false);
   const [consentGiven, setConsentGiven] = useState(false);
 
   const { data: request, isLoading } = useQuery<any>({
@@ -23,11 +26,15 @@ export default function SignDocumentPage() {
   });
 
   const signMutation = useMutation({
-    mutationFn: async (signatureData: string) => {
+    mutationFn: async (data: { signatureData: string; initialsData: string }) => {
       const response = await fetch(`/api/signature-requests/${requestId}/sign`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ signatureData }),
+        body: JSON.stringify({ 
+          signatureData: data.signatureData,
+          initialsData: data.initialsData,
+          legalConsent: true 
+        }),
       });
       if (!response.ok) {
         const error = await response.json();
@@ -36,7 +43,10 @@ export default function SignDocumentPage() {
       return await response.json();
     },
     onSuccess: () => {
-      toast({ title: "Document signed successfully!" });
+      toast({ 
+        title: "Document signed successfully!",
+        description: "Your signature has been recorded."
+      });
       queryClient.invalidateQueries({ queryKey: [`/api/signature-requests/${requestId}`] });
     },
     onError: (error: any) => {
@@ -48,10 +58,10 @@ export default function SignDocumentPage() {
     },
   });
 
-  const getCoordinates = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return null;
-
+  const getCoordinates = (
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>,
+    canvas: HTMLCanvasElement
+  ) => {
     const rect = canvas.getBoundingClientRect();
     
     if ('touches' in e) {
@@ -68,85 +78,161 @@ export default function SignDocumentPage() {
     }
   };
 
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+  const startDrawing = (
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>,
+    type: 'signature' | 'initials'
+  ) => {
     e.preventDefault();
-    const coords = getCoordinates(e);
-    if (!coords) return;
-
-    const canvas = canvasRef.current;
+    const canvas = type === 'signature' ? signatureCanvasRef.current : initialsCanvasRef.current;
     if (!canvas) return;
 
+    const coords = getCoordinates(e, canvas);
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
     ctx.beginPath();
     ctx.moveTo(coords.x, coords.y);
-    setIsDrawing(true);
+    
+    if (type === 'signature') {
+      setIsDrawingSignature(true);
+    } else {
+      setIsDrawingInitials(true);
+    }
   };
 
-  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+  const draw = (
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>,
+    type: 'signature' | 'initials'
+  ) => {
     e.preventDefault();
+    const isDrawing = type === 'signature' ? isDrawingSignature : isDrawingInitials;
     if (!isDrawing) return;
 
-    const coords = getCoordinates(e);
-    if (!coords) return;
-
-    const canvas = canvasRef.current;
+    const canvas = type === 'signature' ? signatureCanvasRef.current : initialsCanvasRef.current;
     if (!canvas) return;
 
+    const coords = getCoordinates(e, canvas);
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
     ctx.lineTo(coords.x, coords.y);
-    ctx.strokeStyle = "#000";
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = "#1e3a8a";
+    ctx.lineWidth = 2.5;
     ctx.lineCap = "round";
+    ctx.lineJoin = "round";
     ctx.stroke();
-    setHasDrawn(true);
+    
+    if (type === 'signature') {
+      setHasSignature(true);
+    } else {
+      setHasInitials(true);
+    }
   };
 
-  const stopDrawing = () => {
-    setIsDrawing(false);
+  const stopDrawing = (type: 'signature' | 'initials') => {
+    if (type === 'signature') {
+      setIsDrawingSignature(false);
+    } else {
+      setIsDrawingInitials(false);
+    }
   };
 
-  const clearSignature = () => {
-    const canvas = canvasRef.current;
+  const clearCanvas = (type: 'signature' | 'initials') => {
+    const canvas = type === 'signature' ? signatureCanvasRef.current : initialsCanvasRef.current;
     if (!canvas) return;
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    setHasDrawn(false);
+    
+    if (type === 'signature') {
+      setHasSignature(false);
+    } else {
+      setHasInitials(false);
+    }
   };
 
   const handleSign = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    // Validation checks
+    if (!hasSignature) {
+      toast({
+        title: "Signature Required",
+        description: "Please provide your full signature before submitting.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    const signatureData = canvas.toDataURL("image/png");
-    signMutation.mutate(signatureData);
+    if (!hasInitials) {
+      toast({
+        title: "Initials Required",
+        description: "Please provide your initials before submitting.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!consentGiven) {
+      toast({
+        title: "Consent Required",
+        description: "Please agree to the electronic signature consent before submitting.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const signatureCanvas = signatureCanvasRef.current;
+    const initialsCanvas = initialsCanvasRef.current;
+    if (!signatureCanvas || !initialsCanvas) return;
+
+    const signatureData = signatureCanvas.toDataURL("image/png");
+    const initialsData = initialsCanvas.toDataURL("image/png");
+    
+    // Additional validation: check that the data URLs contain actual image data
+    if (!signatureData || signatureData.length < 100) {
+      toast({
+        title: "Invalid Signature",
+        description: "Please draw your signature before submitting.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!initialsData || initialsData.length < 100) {
+      toast({
+        title: "Invalid Initials",
+        description: "Please draw your initials before submitting.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    signMutation.mutate({ signatureData, initialsData });
   };
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p data-testid="text-loading">Loading...</p>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600" data-testid="text-loading">Loading document...</p>
+        </div>
       </div>
     );
   }
 
   if (!request) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Card className="max-w-md">
-          <CardHeader>
-            <CardTitle className="flex items-center text-red-600" data-testid="heading-not-found">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Card className="max-w-md shadow-lg">
+          <CardHeader className="bg-red-50 border-b border-red-100">
+            <CardTitle className="flex items-center text-red-700" data-testid="heading-not-found">
               <AlertCircle className="w-6 h-6 mr-2" />
               Request Not Found
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-6">
             <p data-testid="text-not-found">This signature request does not exist or has been removed.</p>
           </CardContent>
         </Card>
@@ -156,17 +242,17 @@ export default function SignDocumentPage() {
 
   if (request.status === "completed") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-blue-50">
-        <Card className="max-w-md">
-          <CardHeader>
-            <CardTitle className="flex items-center text-green-600" data-testid="heading-completed">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Card className="max-w-md shadow-lg">
+          <CardHeader className="bg-green-50 border-b border-green-100">
+            <CardTitle className="flex items-center text-green-700" data-testid="heading-completed">
               <CheckCircle className="w-6 h-6 mr-2" />
               Already Signed
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-6">
             <p data-testid="text-completed">This document has already been signed.</p>
-            <p className="text-sm text-muted-foreground mt-2" data-testid="text-signed-at">
+            <p className="text-sm text-gray-500 mt-2" data-testid="text-signed-at">
               Signed on {new Date(request.signedAt).toLocaleString()}
             </p>
           </CardContent>
@@ -177,17 +263,17 @@ export default function SignDocumentPage() {
 
   if (request.status === "expired") {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Card className="max-w-md">
-          <CardHeader>
-            <CardTitle className="flex items-center text-amber-600" data-testid="heading-expired">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Card className="max-w-md shadow-lg">
+          <CardHeader className="bg-amber-50 border-b border-amber-100">
+            <CardTitle className="flex items-center text-amber-700" data-testid="heading-expired">
               <AlertCircle className="w-6 h-6 mr-2" />
               Request Expired
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-6">
             <p data-testid="text-expired">This signature request has expired.</p>
-            <p className="text-sm text-muted-foreground mt-2" data-testid="text-expired-at">
+            <p className="text-sm text-gray-500 mt-2" data-testid="text-expired-at">
               Expired on {new Date(request.expiresAt).toLocaleString()}
             </p>
           </CardContent>
@@ -197,109 +283,224 @@ export default function SignDocumentPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-6">
-      <div className="max-w-4xl mx-auto">
-        <Card>
-          <CardHeader>
-            <CardTitle data-testid="heading-sign-document">Sign Document</CardTitle>
-            <CardDescription>
-              Please review and sign the document below
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="bg-muted p-4 rounded-lg">
-              <h3 className="font-semibold mb-2">Document Details</h3>
-              <p className="text-sm" data-testid="text-document-filename">
-                <span className="font-medium">File:</span> {request.document?.fileName}
-              </p>
-              {request.description && (
-                <p className="text-sm mt-2" data-testid="text-custom-message">
-                  <span className="font-medium">Message:</span> {request.description}
+    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-5xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="bg-white shadow-sm rounded-lg p-6 border border-gray-200">
+          <div className="flex items-start justify-between">
+            <div className="flex items-start space-x-3">
+              <div className="bg-blue-100 rounded-full p-3">
+                <FileText className="w-6 h-6 text-blue-700" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900" data-testid="heading-sign-document">
+                  {request.title || 'Document Signature Request'}
+                </h1>
+                <p className="text-sm text-gray-500 mt-1">
+                  Please review and sign the document below
                 </p>
-              )}
-              <p className="text-sm mt-2 text-muted-foreground" data-testid="text-expiration">
-                Expires: {new Date(request.expiresAt).toLocaleDateString()}
+              </div>
+            </div>
+            <div className="flex items-center text-sm text-gray-500">
+              <Clock className="w-4 h-4 mr-1" />
+              <span data-testid="text-expiration">
+                Expires {new Date(request.expiresAt).toLocaleDateString()}
+              </span>
+            </div>
+          </div>
+
+          {request.description && (
+            <div className="mt-4 p-3 bg-blue-50 border-l-4 border-blue-400 rounded">
+              <p className="text-sm text-gray-700" data-testid="text-custom-message">
+                {request.description}
               </p>
             </div>
+          )}
+        </div>
 
-            {request.document?.fileUrl && (
-              <div className="border rounded-lg p-6 bg-white">
-                <h3 className="font-semibold mb-4">Document to Sign</h3>
-                <div className="prose max-w-none">
-                  <iframe
-                    src={request.document.fileUrl}
-                    className="w-full h-96 border rounded"
-                    title="Document Content"
-                    sandbox="allow-same-origin"
-                    data-testid="iframe-document-content"
-                  />
-                </div>
-              </div>
-            )}
-
-            <div className="border-2 border-dashed rounded-lg p-4">
-              <h3 className="font-semibold mb-2">Your Signature</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                Draw your signature in the box below using your mouse or finger
+        {/* Document Content */}
+        {request.document?.fileUrl && (
+          <Card className="shadow-sm border border-gray-200">
+            <CardHeader className="bg-gray-50 border-b border-gray-200">
+              <CardTitle className="text-lg font-semibold text-gray-900">
+                Document Content
+              </CardTitle>
+              <p className="text-sm text-gray-500 mt-1" data-testid="text-document-filename">
+                {request.document?.fileName}
               </p>
-              <canvas
-                ref={canvasRef}
-                width={700}
-                height={200}
-                className="border-2 border-gray-300 rounded bg-white cursor-crosshair w-full touch-none"
-                onMouseDown={startDrawing}
-                onMouseMove={draw}
-                onMouseUp={stopDrawing}
-                onMouseLeave={stopDrawing}
-                onTouchStart={startDrawing}
-                onTouchMove={draw}
-                onTouchEnd={stopDrawing}
-                data-testid="canvas-signature"
-              />
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="bg-white border-2 border-gray-200 rounded-lg overflow-hidden">
+                <iframe
+                  src={request.document.fileUrl}
+                  className="w-full h-[500px]"
+                  title="Document Content"
+                  sandbox="allow-same-origin"
+                  data-testid="iframe-document-content"
+                />
+              </div>
+
+              {/* Signature Preview on Document */}
+              {(hasSignature || hasInitials) && (
+                <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-3">Your Signatures</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    {hasSignature && (
+                      <div className="bg-white p-3 rounded border border-gray-300">
+                        <p className="text-xs text-gray-500 mb-2">Full Signature</p>
+                        <img 
+                          src={signatureCanvasRef.current?.toDataURL()} 
+                          alt="Signature preview" 
+                          className="w-full h-auto"
+                        />
+                      </div>
+                    )}
+                    {hasInitials && (
+                      <div className="bg-white p-3 rounded border border-gray-300">
+                        <p className="text-xs text-gray-500 mb-2">Initials</p>
+                        <img 
+                          src={initialsCanvasRef.current?.toDataURL()} 
+                          alt="Initials preview" 
+                          className="w-full h-auto"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Signature and Initials */}
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* Full Signature */}
+          <Card className="shadow-sm border border-gray-200">
+            <CardHeader className="bg-gray-50 border-b border-gray-200">
+              <CardTitle className="text-lg font-semibold text-gray-900">
+                Full Signature
+              </CardTitle>
+              <p className="text-sm text-gray-500 mt-1">
+                Sign your name as you would on paper
+              </p>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="bg-white border-2 border-blue-300 rounded-lg overflow-hidden">
+                <canvas
+                  ref={signatureCanvasRef}
+                  width={500}
+                  height={150}
+                  className="w-full cursor-crosshair touch-none bg-white"
+                  onMouseDown={(e) => startDrawing(e, 'signature')}
+                  onMouseMove={(e) => draw(e, 'signature')}
+                  onMouseUp={() => stopDrawing('signature')}
+                  onMouseLeave={() => stopDrawing('signature')}
+                  onTouchStart={(e) => startDrawing(e, 'signature')}
+                  onTouchMove={(e) => draw(e, 'signature')}
+                  onTouchEnd={() => stopDrawing('signature')}
+                  data-testid="canvas-signature"
+                />
+              </div>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={clearSignature}
-                className="mt-2"
+                onClick={() => clearCanvas('signature')}
+                className="mt-3 w-full"
                 data-testid="button-clear-signature"
               >
                 Clear Signature
               </Button>
-            </div>
+            </CardContent>
+          </Card>
 
-            <div className="bg-blue-50 p-4 rounded-lg space-y-3">
-              <h3 className="font-semibold">Electronic Signature Consent</h3>
-              <p className="text-sm" data-testid="text-consent-notice">
-                By signing this document electronically, you agree that your electronic signature
-                is the legal equivalent of your manual signature and has the same legal force and
-                effect as a manual signature under the Electronic Signatures in Global and National
-                Commerce Act (ESIGN Act).
+          {/* Initials */}
+          <Card className="shadow-sm border border-gray-200">
+            <CardHeader className="bg-gray-50 border-b border-gray-200">
+              <CardTitle className="text-lg font-semibold text-gray-900">
+                Initials
+              </CardTitle>
+              <p className="text-sm text-gray-500 mt-1">
+                Provide your initials
               </p>
-              <div className="flex items-start space-x-2">
-                <Checkbox
-                  id="consent"
-                  checked={consentGiven}
-                  onCheckedChange={(checked) => setConsentGiven(checked as boolean)}
-                  data-testid="checkbox-consent"
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="bg-white border-2 border-blue-300 rounded-lg overflow-hidden">
+                <canvas
+                  ref={initialsCanvasRef}
+                  width={500}
+                  height={150}
+                  className="w-full cursor-crosshair touch-none bg-white"
+                  onMouseDown={(e) => startDrawing(e, 'initials')}
+                  onMouseMove={(e) => draw(e, 'initials')}
+                  onMouseUp={() => stopDrawing('initials')}
+                  onMouseLeave={() => stopDrawing('initials')}
+                  onTouchStart={(e) => startDrawing(e, 'initials')}
+                  onTouchMove={(e) => draw(e, 'initials')}
+                  onTouchEnd={() => stopDrawing('initials')}
+                  data-testid="canvas-initials"
                 />
-                <label htmlFor="consent" className="text-sm cursor-pointer">
-                  I consent to use electronic signatures and agree that this document will be
-                  legally binding
-                </label>
               </div>
-            </div>
-
-            <div className="flex justify-end space-x-2">
               <Button
-                onClick={handleSign}
-                disabled={!hasDrawn || !consentGiven || signMutation.isPending}
-                data-testid="button-sign-document"
+                variant="outline"
+                size="sm"
+                onClick={() => clearCanvas('initials')}
+                className="mt-3 w-full"
+                data-testid="button-clear-initials"
               >
-                {signMutation.isPending ? "Signing..." : "Sign Document"}
+                Clear Initials
               </Button>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Legal Consent */}
+        <Card className="shadow-sm border border-gray-200">
+          <CardHeader className="bg-amber-50 border-b border-amber-100">
+            <CardTitle className="text-lg font-semibold text-gray-900">
+              Electronic Signature Consent
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6">
+            <p className="text-sm text-gray-700 mb-4" data-testid="text-consent-notice">
+              By signing this document electronically, you agree that your electronic signature
+              is the legal equivalent of your manual signature and has the same legal force and
+              effect as a manual signature under the Electronic Signatures in Global and National
+              Commerce Act (ESIGN Act).
+            </p>
+            <div className="flex items-start space-x-3 bg-white p-4 rounded-lg border border-gray-200">
+              <Checkbox
+                id="consent"
+                checked={consentGiven}
+                onCheckedChange={(checked) => setConsentGiven(checked as boolean)}
+                data-testid="checkbox-consent"
+                className="mt-1"
+              />
+              <label htmlFor="consent" className="text-sm text-gray-700 cursor-pointer flex-1">
+                I consent to use electronic signatures and agree that this document will be
+                legally binding. I have reviewed the document and my signature/initials are accurate.
+              </label>
             </div>
           </CardContent>
         </Card>
+
+        {/* Submit Button */}
+        <div className="flex justify-end space-x-3 pb-8">
+          <Button
+            onClick={handleSign}
+            disabled={!hasSignature || !hasInitials || !consentGiven || signMutation.isPending}
+            className="px-8 py-6 text-lg bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300"
+            data-testid="button-sign-document"
+          >
+            {signMutation.isPending ? (
+              <>
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                Processing...
+              </>
+            ) : (
+              "Complete Signature"
+            )}
+          </Button>
+        </div>
       </div>
     </div>
   );

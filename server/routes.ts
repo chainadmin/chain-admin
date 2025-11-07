@@ -13481,11 +13481,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/signature-requests/:id/sign', authenticateConsumer, async (req: any, res) => {
     try {
       const { id } = req.params;
-      const { signatureData, legalConsent } = req.body;
+      
+      // Validate request body with Zod
+      const signatureRequestSchema = z.object({
+        signatureData: z.string().min(100, "Signature data must be at least 100 characters"),
+        initialsData: z.string().min(100, "Initials data must be at least 100 characters"),
+        legalConsent: z.literal(true, { errorMap: () => ({ message: "Legal consent must be explicitly true" }) }),
+      });
 
-      if (!signatureData || !legalConsent) {
-        return res.status(400).json({ message: "Signature data and legal consent are required" });
+      const validationResult = signatureRequestSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        const firstError = validationResult.error.errors[0];
+        return res.status(400).json({ message: firstError.message });
       }
+
+      const { signatureData, initialsData, legalConsent } = validationResult.data;
 
       const request = await storage.getSignatureRequestById(id);
       if (!request) {
@@ -13518,6 +13528,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await storage.captureSignature({
         signatureRequestId: id,
         signatureData,
+        initialsData,
         ipAddress,
         userAgent,
         legalConsent,

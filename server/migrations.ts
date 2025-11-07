@@ -458,6 +458,7 @@ export async function runMigrations() {
       { name: 'decline_reason', type: 'TEXT' },
       { name: 'viewed_at', type: 'TIMESTAMP' },
       { name: 'signature_data', type: 'TEXT' },
+      { name: 'initials_data', type: 'TEXT' },
       { name: 'ip_address', type: 'TEXT' },
       { name: 'user_agent', type: 'TEXT' },
       { name: 'legal_consent', type: 'BOOLEAN', default: 'false' },
@@ -487,6 +488,7 @@ export async function runMigrations() {
           signature_request_id UUID NOT NULL REFERENCES signature_requests(id) ON DELETE CASCADE,
           consumer_id UUID NOT NULL REFERENCES consumers(id) ON DELETE CASCADE,
           signature_data TEXT NOT NULL,
+          initials_data TEXT,
           ip_address VARCHAR,
           user_agent TEXT,
           signed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -495,6 +497,15 @@ export async function runMigrations() {
       console.log('  ✓ signed_documents table');
     } catch (err) {
       console.log('  ⚠ signed_documents (already exists)');
+    }
+    
+    // Add initials_data column to signed_documents if it doesn't exist
+    console.log('Adding initials_data to signed_documents...');
+    try {
+      await client.query(`ALTER TABLE signed_documents ADD COLUMN IF NOT EXISTS initials_data TEXT`);
+      console.log('  ✓ initials_data');
+    } catch (err) {
+      console.log('  ⚠ initials_data (already exists or error)');
     }
     
     try {

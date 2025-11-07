@@ -3204,6 +3204,7 @@ export class DatabaseStorage implements IStorage {
   async captureSignature(data: {
     signatureRequestId: string;
     signatureData: string;
+    initialsData?: string;
     ipAddress: string;
     userAgent: string;
     legalConsent: boolean;
@@ -3233,6 +3234,7 @@ export class DatabaseStorage implements IStorage {
         status: 'signed',
         signedAt: now,
         signatureData: data.signatureData,
+        initialsData: data.initialsData || null,
         ipAddress: data.ipAddress,
         userAgent: data.userAgent,
         legalConsent: data.legalConsent,
@@ -3251,6 +3253,7 @@ export class DatabaseStorage implements IStorage {
       documentId: request.documentId,
       title: request.title,
       signatureData: data.signatureData,
+      initialsData: data.initialsData || null,
       ipAddress: data.ipAddress,
       userAgent: data.userAgent,
       legalConsent: data.legalConsent,
