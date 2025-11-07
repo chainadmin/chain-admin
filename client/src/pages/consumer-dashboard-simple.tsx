@@ -492,11 +492,11 @@ export default function ConsumerDashboardSimple() {
   };
 
   const convertToFrequency = (monthlyAmountCents: number, frequency: 'weekly' | 'biweekly' | 'monthly') => {
-    // Use annualized math to avoid overcharging customers
-    // Weekly: monthly * 12 months / 52 weeks per year
-    // Biweekly: monthly * 12 months / 26 biweekly periods per year
-    if (frequency === 'weekly') return Math.ceil(monthlyAmountCents * 12 / 52);
-    if (frequency === 'biweekly') return Math.ceil(monthlyAmountCents * 12 / 26);
+    // Convert monthly minimum to the requested frequency
+    // Weekly: 4 weeks per month, so divide by 4
+    // Bi-weekly: 2 payments per month, so divide by 2
+    if (frequency === 'weekly') return Math.ceil(monthlyAmountCents / 4);
+    if (frequency === 'biweekly') return Math.ceil(monthlyAmountCents / 2);
     return monthlyAmountCents;
   };
 

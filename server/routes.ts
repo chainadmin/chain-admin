@@ -9196,9 +9196,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 // Generate proper USAePay API v2 authentication header with hash
                 const authHeader = generateUSAePayAuthHeader(settings.merchantApiKey, settings.merchantApiPin);
 
+                // Determine payment amount - use remaining balance for final payment
+                let paymentAmountCents = schedule.amountCents;
+                const isFinalPayment = schedule.remainingPayments !== null && schedule.remainingPayments === 1;
+                
+                if (isFinalPayment) {
+                  // Get current account balance for final payment
+                  const account = await storage.getAccount(schedule.accountId);
+                  if (account && account.balanceCents > 0) {
+                    // Use actual remaining balance for final payment
+                    paymentAmountCents = account.balanceCents;
+                    console.log(`💳 Final payment - using remaining balance: $${(paymentAmountCents / 100).toFixed(2)} instead of scheduled $${(schedule.amountCents / 100).toFixed(2)}`);
+                  }
+                }
+
                 // Process payment using saved token (USAePay v2 format)
                 const paymentPayload = {
-                  amount: (schedule.amountCents / 100).toFixed(2),
+                  amount: (paymentAmountCents / 100).toFixed(2),
                   invoice: schedule.accountId,
                   description: `Scheduled ${schedule.arrangementType} payment`,
                   source: {
@@ -9230,7 +9244,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   tenantId: tenant.id,
                   consumerId: consumer.id,
                   accountId: schedule.accountId,
-                  amountCents: schedule.amountCents,
+                  amountCents: paymentAmountCents,
                   paymentMethod: 'credit_card',
                   status: success ? 'completed' : 'failed',
                   transactionId: paymentResult.refnum || paymentResult.key || `tx_${Date.now()}`,
@@ -9243,7 +9257,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   // Update account balance
                   const account = await storage.getAccount(schedule.accountId);
                   if (account) {
-                    const newBalance = (account.balanceCents || 0) - schedule.amountCents;
+                    const newBalance = (account.balanceCents || 0) - paymentAmountCents;
                     await storage.updateAccount(schedule.accountId, {
                       balanceCents: Math.max(0, newBalance)
                     });
@@ -9256,7 +9270,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                         // Prepare SMAX payment data for approval
                         const smaxPaymentData = {
                           paymentdate: today,
-                          paymentamount: (schedule.amountCents / 100).toString(),
+                          paymentamount: (paymentAmountCents / 100).toString(),
                           payorname: `${consumer.firstName} ${consumer.lastName}`.trim() || 'Consumer',
                           paymentmethod: 'CREDIT CARD',
                           cardtype: paymentMethod.cardBrand || 'Unknown',
@@ -9273,7 +9287,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                           consumerId: consumer.id,
                           filenumber: account.filenumber,
                           paymentDate: schedule.nextPaymentDate,
-                          amountCents: schedule.amountCents,
+                          amountCents: paymentAmountCents,
                           transactionId: paymentResult.refnum || paymentResult.key || `tx_${Date.now()}`,
                           paymentData: smaxPaymentData,
                           status: 'pending',
@@ -9288,7 +9302,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                         console.warn(`⚠️ Falling back to direct SMAX insert due to approval creation failure`);
                         const smaxPaymentData = smaxService.createSmaxPaymentData({
                           filenumber: account.filenumber,
-                          paymentamount: schedule.amountCents / 100,
+                          paymentamount: paymentAmountCents / 100,
                           paymentdate: today,
                           payorname: `${consumer.firstName} ${consumer.lastName}`.trim() || 'Consumer',
                           paymentmethod: 'CREDIT CARD',
@@ -9303,7 +9317,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                           await smaxService.sendPaymentNote(tenant.id, {
                             filenumber: account.filenumber,
                             status: 'processed',
-                            amount: schedule.amountCents / 100,
+                            amount: paymentAmountCents / 100,
                             transactionId: paymentResult.refnum || paymentResult.key || undefined
                           });
                         }
@@ -9315,7 +9329,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                           filenumber: account.filenumber,
                           attempttype: 'Payment',
                           attemptdate: today,
-                          notes: `Scheduled payment of $${(schedule.amountCents / 100).toFixed(2)} processed successfully`,
+                          notes: `Scheduled payment of $${(paymentAmountCents / 100).toFixed(2)} processed successfully`,
                           result: 'Success',
                         });
                       } catch (smaxError) {
@@ -9377,7 +9391,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       tenantId: tenant.id,
                       consumerName: `${consumer.firstName} ${consumer.lastName}`,
                       accountNumber: account?.accountNumber || 'N/A',
-                      amountCents: schedule.amountCents,
+                      amountCents: paymentAmountCents,
                       paymentMethod: `Card ending in ${paymentMethod.cardLast4}`,
                       transactionId: paymentResult.refnum || paymentResult.key || undefined,
                       paymentType: 'scheduled',
@@ -9404,7 +9418,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   console.error(`❌ SCHEDULED PAYMENT FAILED:`);
                   console.error(`   Consumer: ${consumerName} (ID: ${consumer.id})`);
                   console.error(`   ${accountInfo}`);
-                  console.error(`   Amount: $${(schedule.amountCents / 100).toFixed(2)}`);
+                  console.error(`   Amount: $${(paymentAmountCents / 100).toFixed(2)}`);
                   console.error(`   Payment Method: ${paymentMethod.cardBrand || 'Card'} ending in ${paymentMethod.cardLast4}`);
                   console.error(`   Failure Reason: ${failureReason}`);
                   console.error(`   Failed Attempts: ${failedAttempts}/3`);
@@ -9426,7 +9440,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       await smaxService.sendPaymentNote(tenant.id, {
                         filenumber: failedAccount.filenumber,
                         status: 'declined',
-                        amount: schedule.amountCents / 100,
+                        amount: paymentAmountCents / 100,
                         reason: failureReason
                       });
                       console.log(`📝 SMAX note created for failed payment on account ${failedAccount.filenumber}`);
@@ -9441,7 +9455,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     consumerName,
                     accountNumber: failedAccount?.accountNumber || 'Unknown',
                     creditor: failedAccount?.creditor || 'Unknown',
-                    amount: schedule.amountCents / 100,
+                    amount: paymentAmountCents / 100,
                     error: failureReason,
                     attemptCount: failedAttempts
                   });
