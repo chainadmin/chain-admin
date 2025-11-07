@@ -10,6 +10,9 @@ export interface ArrangementLike {
   maxTermMonths?: number | null;
   payoffPercentageBasisPoints?: number | null;
   payoffDueDate?: string | null;
+  calculatedMonthlyPayment?: number | null;
+  settlementPaymentCount?: number | null;
+  settlementPaymentFrequency?: string | null;
 }
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
@@ -115,6 +118,9 @@ export const getArrangementSummary = (arrangement: ArrangementLike) => {
         ? arrangement.payoffPercentageBasisPoints
         : null;
       const dueDate = arrangement.payoffDueDate;
+      const paymentCount = typeof arrangement.settlementPaymentCount === 'number' ? arrangement.settlementPaymentCount : null;
+      const perPaymentAmount = typeof arrangement.calculatedMonthlyPayment === 'number' ? arrangement.calculatedMonthlyPayment : null;
+      const frequency = arrangement.settlementPaymentFrequency;
 
       const formattedPercentage = percentageBasisPoints !== null
         ? (percentageBasisPoints / 100).toLocaleString('en-US', {
@@ -130,13 +136,40 @@ export const getArrangementSummary = (arrangement: ArrangementLike) => {
           })()
         : null;
 
-      const headline = formattedPercentage
-        ? `Settle for ${formattedPercentage} of balance`
-        : settlementText || 'Settlement offer';
+      // Build headline based on payment structure
+      let headline = '';
+      if (paymentCount && paymentCount === 1) {
+        // Single payment settlement
+        headline = formattedPercentage
+          ? `Settle for ${formattedPercentage} - Pay in Full`
+          : settlementText || 'Settlement offer - Pay in Full';
+      } else if (paymentCount && perPaymentAmount) {
+        // Multi-payment settlement
+        const frequencyLabel = frequency === 'weekly' ? 'week' 
+          : frequency === 'biweekly' ? 'bi-weekly' 
+          : 'month';
+        headline = formattedPercentage
+          ? `Settle for ${formattedPercentage} - ${paymentCount} payments`
+          : `Settlement - ${paymentCount} payments`;
+      } else {
+        // Default settlement display
+        headline = formattedPercentage
+          ? `Settle for ${formattedPercentage} of balance`
+          : settlementText || 'Settlement offer';
+      }
 
       const detailParts: string[] = [];
+      
+      // Add per-payment amount if multi-payment
+      if (paymentCount && paymentCount > 1 && perPaymentAmount) {
+        const frequencyLabel = frequency === 'weekly' ? 'weekly' 
+          : frequency === 'biweekly' ? 'bi-weekly' 
+          : 'monthly';
+        detailParts.push(`${formatCurrencyFromCents(perPaymentAmount)} per payment (${frequencyLabel})`);
+      }
+      
       if (formattedDueDate) {
-        detailParts.push(`Due by ${formattedDueDate}`);
+        detailParts.push(`Expires ${formattedDueDate}`);
       }
 
       const supplementalText = settlementText && settlementText !== headline ? settlementText : null;
