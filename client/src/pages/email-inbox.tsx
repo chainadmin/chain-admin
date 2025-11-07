@@ -5,7 +5,7 @@ import AdminLayout from '@/components/admin-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -56,6 +56,7 @@ export default function CommunicationsInbox() {
   const [selectedSms, setSelectedSms] = useState<SmsReply | null>(null);
   const [showEmailReplyDialog, setShowEmailReplyDialog] = useState(false);
   const [showSmsReplyDialog, setShowSmsReplyDialog] = useState(false);
+  const [showConversationDialog, setShowConversationDialog] = useState(false);
   const [emailReplySubject, setEmailReplySubject] = useState('');
   const [emailReplyMessage, setEmailReplyMessage] = useState('');
   const [smsReplyMessage, setSmsReplyMessage] = useState('');
@@ -70,6 +71,25 @@ export default function CommunicationsInbox() {
   const { data: smsMessages = [], isLoading: isLoadingSms, isError: isErrorSms, error: smsError, refetch: refetchSms } = useQuery<SmsReply[]>({
     queryKey: ['/api/sms-replies'],
     retry: 2,
+  });
+
+  // Get consumer ID from selected email or SMS
+  const selectedConsumerId = selectedEmail?.consumerId || selectedSms?.consumerId;
+
+  // Fetch conversation history for selected consumer
+  const { data: conversationData, isLoading: isLoadingConversation } = useQuery<{
+    messages: any[];
+    summary: {
+      totalEmails: number;
+      totalSms: number;
+      emailsSent: number;
+      emailsReceived: number;
+      smsSent: number;
+      smsReceived: number;
+    };
+  }>({
+    queryKey: ['/api/consumers', selectedConsumerId, 'conversation'],
+    enabled: showConversationDialog && !!selectedConsumerId,
   });
 
   // Mark email as read mutation
@@ -456,6 +476,17 @@ export default function CommunicationsInbox() {
                           <Reply className="w-4 h-4" />
                           Reply
                         </Button>
+                        {selectedEmail.consumerId && (
+                          <Button 
+                            onClick={() => setShowConversationDialog(true)} 
+                            data-testid="button-view-conversation"
+                            variant="outline"
+                            className="gap-2"
+                          >
+                            <MessageSquare className="w-4 h-4" />
+                            View Conversation
+                          </Button>
+                        )}
                         <Button 
                           onClick={() => deleteEmailMutation.mutate(selectedEmail.id)} 
                           data-testid="button-delete-email"
@@ -652,6 +683,17 @@ export default function CommunicationsInbox() {
                           <Reply className="w-4 h-4" />
                           Reply
                         </Button>
+                        {selectedSms.consumerId && (
+                          <Button 
+                            onClick={() => setShowConversationDialog(true)} 
+                            data-testid="button-view-sms-conversation"
+                            variant="outline"
+                            className="gap-2"
+                          >
+                            <MessageSquare className="w-4 h-4" />
+                            View Conversation
+                          </Button>
+                        )}
                         <Button 
                           onClick={() => deleteSmsMutation.mutate(selectedSms.id)} 
                           data-testid="button-delete-sms"
@@ -776,6 +818,127 @@ export default function CommunicationsInbox() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Conversation History Dialog */}
+      <Dialog open={showConversationDialog} onOpenChange={setShowConversationDialog}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col border border-white/10 bg-[#0f1a3c] text-blue-100">
+          {(selectedEmail || selectedSms) && (
+            <>
+              <DialogHeader className="space-y-2 text-left pb-4 border-b border-white/10">
+                <DialogTitle className="text-xl font-semibold text-white">
+                  Conversation History
+                </DialogTitle>
+                <DialogDescription className="text-sm text-blue-100/70">
+                  All communications with {selectedEmail?.consumerName || selectedSms?.consumerName || selectedEmail?.fromEmail || selectedSms?.fromPhone}
+                </DialogDescription>
+                {conversationData?.summary && (
+                  <div className="flex gap-4 pt-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-3.5 w-3.5 text-sky-400" />
+                      <span className="text-blue-100/80">
+                        {conversationData.summary.totalEmails} emails 
+                        ({conversationData.summary.emailsSent} sent, {conversationData.summary.emailsReceived} received)
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="h-3.5 w-3.5 text-emerald-400" />
+                      <span className="text-blue-100/80">
+                        {conversationData.summary.totalSms} SMS 
+                        ({conversationData.summary.smsSent} sent, {conversationData.summary.smsReceived} received)
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </DialogHeader>
+
+              <div className="flex-1 overflow-y-auto py-4 space-y-3" data-testid="conversation-timeline">
+                {isLoadingConversation ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="text-sm text-blue-100/60">Loading conversation...</div>
+                  </div>
+                ) : conversationData?.messages && conversationData.messages.length > 0 ? (
+                  conversationData.messages.map((message: any, index: number) => {
+                    const isOutbound = message.direction === 'outbound';
+                    const isEmail = message.channel === 'email';
+                    
+                    return (
+                      <div 
+                        key={`${message.channel}-${message.id}-${index}`}
+                        className={`flex ${isOutbound ? 'justify-end' : 'justify-start'}`}
+                        data-testid={`message-${message.channel}-${message.direction}`}
+                      >
+                        <div className={`max-w-[75%] rounded-xl p-4 ${
+                          isOutbound 
+                            ? 'bg-sky-500/20 border border-sky-400/30' 
+                            : 'bg-white/10 border border-white/20'
+                        }`}>
+                          <div className="flex items-center gap-2 mb-2">
+                            {isEmail ? (
+                              <Mail className={`h-4 w-4 ${isOutbound ? 'text-sky-300' : 'text-blue-300'}`} />
+                            ) : (
+                              <MessageSquare className={`h-4 w-4 ${isOutbound ? 'text-emerald-300' : 'text-green-300'}`} />
+                            )}
+                            <span className={`text-xs font-semibold uppercase tracking-wide ${
+                              isOutbound ? 'text-sky-200' : 'text-blue-200'
+                            }`}>
+                              {isOutbound ? 'Sent' : 'Received'} {isEmail ? 'Email' : 'SMS'}
+                            </span>
+                            <span className="text-xs text-blue-100/50 ml-auto">
+                              {formatDistanceToNow(new Date(message.timestamp), { addSuffix: true })}
+                            </span>
+                          </div>
+
+                          {isEmail && message.subject && (
+                            <div className="text-sm font-semibold text-white mb-2">
+                              {message.subject}
+                            </div>
+                          )}
+
+                          <div className="text-sm text-blue-100/90 whitespace-pre-wrap">
+                            {message.body || message.message || message.messageContent || message.messageBody || message.textBody || 'No content'}
+                          </div>
+
+                          {isEmail && (isOutbound ? message.toEmail : message.fromEmail) && (
+                            <div className="text-xs text-blue-100/50 mt-2 pt-2 border-t border-white/10">
+                              {isOutbound ? 'To' : 'From'}: {isOutbound ? message.toEmail : message.fromEmail}
+                            </div>
+                          )}
+
+                          {!isEmail && (isOutbound ? message.toPhone : message.fromPhone) && (
+                            <div className="text-xs text-blue-100/50 mt-2 pt-2 border-t border-white/10">
+                              {isOutbound ? 'To' : 'From'}: {isOutbound ? message.toPhone : message.fromPhone}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="text-center">
+                      <MessageSquare className="h-12 w-12 text-blue-100/30 mx-auto mb-3" />
+                      <p className="text-sm text-blue-100/60">No messages yet</p>
+                      <p className="text-xs text-blue-100/40 mt-1">
+                        Start a conversation by replying to this message
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter className="pt-4 border-t border-white/10">
+                <Button
+                  variant="ghost"
+                  className="rounded-lg border border-white/10 bg-white/5 px-4 text-blue-100 hover:bg-white/10"
+                  onClick={() => setShowConversationDialog(false)}
+                >
+                  Close
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </AdminLayout>
