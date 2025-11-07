@@ -535,10 +535,19 @@ export default function ConsumerDashboardSimple() {
 
   // Get arrangements applicable to the selected account
   const applicableArrangements = selectedAccount && arrangements
-    ? (arrangements as any).templateOptions?.filter((arr: any) => 
-        selectedAccount.balanceCents >= arr.minBalance && 
-        selectedAccount.balanceCents <= arr.maxBalance
-      ) || []
+    ? (arrangements as any).templateOptions?.filter((arr: any) => {
+        // Check if balance is within range
+        const inBalanceRange = selectedAccount.balanceCents >= arr.minBalance && 
+          selectedAccount.balanceCents <= arr.maxBalance;
+        
+        // Block one-time payments if consumer has no active payment schedules
+        if (arr.planType === 'one_time_payment') {
+          const hasActiveSchedule = paymentSchedules && paymentSchedules.length > 0;
+          return inBalanceRange && hasActiveSchedule;
+        }
+        
+        return inBalanceRange;
+      }) || []
     : [];
   
   // Get existing SMAX arrangements for this consumer
@@ -1965,6 +1974,21 @@ export default function ConsumerDashboardSimple() {
                         <p className="text-xs text-blue-100/50 mt-3 border-t border-white/10 pt-2">
                           Showing next 4 scheduled payments
                         </p>
+                      </div>
+                    )}
+
+                    {/* Info message about one-time payments */}
+                    {(!paymentSchedules || paymentSchedules.length === 0) && (
+                      <div className="rounded-lg bg-blue-500/10 border border-blue-400/30 p-3 backdrop-blur">
+                        <div className="flex gap-2">
+                          <AlertCircle className="h-4 w-4 text-blue-400 flex-shrink-0 mt-0.5" />
+                          <div className="text-sm text-blue-100/80">
+                            <p className="font-medium text-blue-200 mb-1">Set Up a Payment Plan First</p>
+                            <p className="text-xs text-blue-100/70">
+                              To make payments on this account, please choose a payment plan above. This creates a payment arrangement that helps us track and process your payments correctly.
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
