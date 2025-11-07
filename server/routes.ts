@@ -237,194 +237,83 @@ function replaceTemplateVariables(
 
   // Get additional account fields from additionalData
   const accountData = account?.additionalData || {};
-  const ssnLast4 = accountData?.ssn_last_4 || accountData?.ssn || '';
-  const originalCreditor = accountData?.original_creditor || account?.creditor || '';
-  const chargeOffDate = accountData?.charge_off_date || '';
+  
+  // Smart SSN extraction - check multiple field names and auto-extract last 4 if full SSN provided
+  let ssnLast4 = '';
+  const ssnFieldNames = ['ssnLast4', 'ssn_last_4', 'ssn', 'socialSecurityNumber', 'social_security_number'];
+  for (const fieldName of ssnFieldNames) {
+    const ssnValue = accountData?.[fieldName];
+    if (ssnValue && String(ssnValue).trim()) {
+      const ssnStr = String(ssnValue).replace(/\D/g, ''); // Remove non-digits
+      if (ssnStr.length >= 4) {
+        ssnLast4 = ssnStr.slice(-4); // Get last 4 digits
+        break;
+      }
+    }
+  }
+  
+  const originalCreditor = accountData?.originalCreditor || accountData?.original_creditor || account?.creditor || '';
+  const chargeOffDate = accountData?.chargeOffDate || accountData?.charge_off_date || '';
   const accountStatus = account?.status || '';
-  const lastPaymentDate = accountData?.last_payment_date || '';
-  const clientReference = accountData?.client_reference || account?.accountNumber || '';
+  const lastPaymentDate = accountData?.lastPaymentDate || accountData?.last_payment_date || '';
+  const clientReference = accountData?.clientReference || accountData?.client_reference || account?.accountNumber || '';
 
   const replacements: Record<string, string> = {
-    // Name variations
+    // Primary camelCase format (matching email templates exactly)
     firstName,
-    'first name': firstName,
-    'first_name': firstName,
-    'first-name': firstName,
     lastName,
-    'last name': lastName,
-    'last_name': lastName,
-    'last-name': lastName,
     fullName,
-    'full name': fullName,
-    'full_name': fullName,
-    'full-name': fullName,
     consumerName: fullName,
-    'consumer name': fullName,
-    'consumer_name': fullName,
-    'consumer-name': fullName,
     name: fullName,
-    // Contact info
     email: consumerEmail,
     consumerEmail,
-    consumer_email: consumerEmail,
-    'consumer email': consumerEmail,
-    'consumer-email': consumerEmail,
     phone: consumerPhone,
     consumerPhone,
-    consumer_phone: consumerPhone,
-    'consumer phone': consumerPhone,
-    'consumer-phone': consumerPhone,
     phoneNumber: consumerPhone,
-    phone_number: consumerPhone,
-    'phone number': consumerPhone,
-    'phone-number': consumerPhone,
-    // IDs
     consumerId: consumer?.id || '',
-    'consumer id': consumer?.id || '',
-    'consumer-id': consumer?.id || '',
     accountId: account?.id || '',
-    'account id': account?.id || '',
-    'account-id': account?.id || '',
     accountNumber: account?.accountNumber || '',
-    'account number': account?.accountNumber || '',
-    'account_number': account?.accountNumber || '',
-    'account-number': account?.accountNumber || '',
     fileNumber,
-    'file number': fileNumber,
-    'file_number': fileNumber,
-    'file-number': fileNumber,
-    filenumber: fileNumber,
-    // Account details
     creditor: account?.creditor || '',
     balance: formattedBalance,
-    balence: formattedBalance,
-    'account balance': formattedBalance,
-    'account-balance': formattedBalance,
     balanceCents: balanceCents !== undefined && balanceCents !== null ? String(balanceCents) : '',
-    balance_cents: balanceCents !== undefined && balanceCents !== null ? String(balanceCents) : '',
-    'balance-cents': balanceCents !== undefined && balanceCents !== null ? String(balanceCents) : '',
-    'balance cents': balanceCents !== undefined && balanceCents !== null ? String(balanceCents) : '',
     dueDate: formattedDueDate,
-    'due date': formattedDueDate,
-    'due_date': formattedDueDate,
-    'due-date': formattedDueDate,
     dueDateIso,
-    // Address variations
     address: consumerAddress,
     consumerAddress,
-    'consumer address': consumerAddress,
-    'consumer-address': consumerAddress,
     city: consumerCity,
     consumerCity,
-    'consumer city': consumerCity,
-    'consumer-city': consumerCity,
     state: consumerState,
     consumerState,
-    'consumer state': consumerState,
-    'consumer-state': consumerState,
     zip: consumerZip,
     zipCode: consumerZip,
-    'zip code': consumerZip,
-    'zip-code': consumerZip,
-    'consumer zip': consumerZip,
-    'consumer-zip': consumerZip,
     fullAddress,
-    'full address': fullAddress,
-    'full-address': fullAddress,
-    consumerFullAddress: fullAddress,
-    // Links
     consumerPortalLink: consumerPortalUrl,
-    consumer_portal_link: consumerPortalUrl,
-    'consumer portal link': consumerPortalUrl,
-    'consumer-portal-link': consumerPortalUrl,
     portalLink: consumerPortalUrl,
-    portal_link: consumerPortalUrl,
-    'portal link': consumerPortalUrl,
-    'portal-link': consumerPortalUrl,
     appDownloadLink: appDownloadUrl,
-    app_download_link: appDownloadUrl,
-    'app download link': appDownloadUrl,
-    'app-download-link': appDownloadUrl,
-    // Agency info
     agencyName: tenant?.name || '',
-    'agency name': tenant?.name || '',
-    'company name': tenant?.name || '',
-    agency_name: tenant?.name || '',
-    'agency-name': tenant?.name || '',
-    'company-name': tenant?.name || '',
     agencyEmail: (tenant as any)?.contactEmail || tenant?.email || '',
-    'agency email': (tenant as any)?.contactEmail || tenant?.email || '',
-    agency_email: (tenant as any)?.contactEmail || tenant?.email || '',
-    'agency-email': (tenant as any)?.contactEmail || tenant?.email || '',
     agencyPhone: (tenant as any)?.contactPhone || tenant?.phoneNumber || tenant?.twilioPhoneNumber || '',
-    'agency phone': (tenant as any)?.contactPhone || tenant?.phoneNumber || tenant?.twilioPhoneNumber || '',
-    agency_phone: (tenant as any)?.contactPhone || tenant?.phoneNumber || tenant?.twilioPhoneNumber || '',
-    'agency-phone': (tenant as any)?.contactPhone || tenant?.phoneNumber || tenant?.twilioPhoneNumber || '',
-    // Legal/policy content
-    privacy_notice: (tenant as any)?.privacyPolicy || '',
-    'privacy-notice': (tenant as any)?.privacyPolicy || '',
     privacyNotice: (tenant as any)?.privacyPolicy || '',
-    'privacy notice': (tenant as any)?.privacyPolicy || '',
-    terms_of_service: (tenant as any)?.termsOfService || '',
-    'terms-of-service': (tenant as any)?.termsOfService || '',
     termsOfService: (tenant as any)?.termsOfService || '',
-    'terms of service': (tenant as any)?.termsOfService || '',
-    // Additional account fields
-    ssn_last_4: ssnLast4,
-    'ssn-last-4': ssnLast4,
     ssnLast4,
-    'ssn last 4': ssnLast4,
-    original_creditor: originalCreditor,
-    'original-creditor': originalCreditor,
     originalCreditor,
-    'original creditor': originalCreditor,
-    charge_off_date: chargeOffDate,
-    'charge-off-date': chargeOffDate,
     chargeOffDate,
-    'charge off date': chargeOffDate,
     status: accountStatus,
     accountStatus,
-    account_status: accountStatus,
-    'account-status': accountStatus,
-    'account status': accountStatus,
-    last_payment_date: lastPaymentDate,
-    'last-payment-date': lastPaymentDate,
     lastPaymentDate,
-    'last payment date': lastPaymentDate,
-    client_reference: clientReference,
-    'client-reference': clientReference,
     clientReference,
-    'client reference': clientReference,
-    // Signature placeholders (will be replaced by actual images on sign page)
     signature: 'Signature line',
     SIGNATURE_LINE: 'Signature line',
-    date_signed: todaysDate,
-    'date-signed': todaysDate,
     dateSigned: todaysDate,
-    'date signed': todaysDate,
     initial: 'Initial',
     initials: 'Initials',
     INITIAL: 'Initial',
     INITIALS: 'Initials',
-    // Other
     unsubscribeLink: unsubscribeUrl,
-    unsubscribe_link: unsubscribeUrl,
-    'unsubscribe link': unsubscribeUrl,
-    'unsubscribe-link': unsubscribeUrl,
     unsubscribeUrl,
-    unsubscribe_url: unsubscribeUrl,
-    'unsubscribe url': unsubscribeUrl,
-    'unsubscribe-url': unsubscribeUrl,
     unsubscribeButton: unsubscribeButtonHtml,
-    unsubscribe_button: unsubscribeButtonHtml,
-    'unsubscribe button': unsubscribeButtonHtml,
-    'unsubscribe-button': unsubscribeButtonHtml,
     todaysDate: todaysDate,
-    todays_date: todaysDate,
-    'todays date': todaysDate,
-    'todays-date': todaysDate,
-    "today's date": todaysDate,
-    // Balance percentage variables for settlement offers
     'balance50%': balance50,
     'balance60%': balance60,
     'balance70%': balance70,

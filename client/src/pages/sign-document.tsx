@@ -346,28 +346,28 @@ export default function SignDocumentPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      {/* Top Header Bar */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-[1800px] mx-auto px-6 py-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100">
+      {/* Top Header Bar - DocuSign Style */}
+      <div className="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
+        <div className="max-w-[1800px] mx-auto px-8 py-5">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <div className="bg-blue-600 rounded-lg p-2">
-                <FileText className="w-6 h-6 text-white" />
+            <div className="flex items-center space-x-5">
+              <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl p-2.5 shadow-md">
+                <FileText className="w-7 h-7 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-semibold text-gray-900 tracking-tight" data-testid="heading-sign-document">
+                <h1 className="text-2xl font-semibold text-slate-900 tracking-tight" data-testid="heading-sign-document">
                   {request.title || 'Document Signature Request'}
                 </h1>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Step 1 of 2: Review and Sign
+                <p className="text-sm text-slate-500 mt-1 font-medium">
+                  Review and complete your signature
                 </p>
               </div>
             </div>
             <div className="flex items-center space-x-6">
-              <div className="flex items-center text-sm text-gray-600">
-                <Clock className="w-4 h-4 mr-1.5" />
-                <span data-testid="text-expiration">
+              <div className="flex items-center bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">
+                <Clock className="w-4 h-4 mr-2 text-amber-600" />
+                <span className="text-sm font-medium text-amber-700" data-testid="text-expiration">
                   Expires {new Date(request.expiresAt).toLocaleDateString()}
                 </span>
               </div>
@@ -375,8 +375,8 @@ export default function SignDocumentPage() {
           </div>
           
           {request.description && (
-            <div className="mt-3 p-3 bg-blue-50 border-l-4 border-blue-500 rounded">
-              <p className="text-sm text-gray-700" data-testid="text-custom-message">
+            <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-xl shadow-sm">
+              <p className="text-sm text-slate-700 leading-relaxed" data-testid="text-custom-message">
                 {request.description}
               </p>
             </div>
@@ -385,25 +385,25 @@ export default function SignDocumentPage() {
       </div>
 
       {/* Two-Panel Layout */}
-      <div className="max-w-[1800px] mx-auto">
-        <div className="flex flex-col lg:flex-row min-h-[calc(100vh-100px)]">
-          {/* Left Panel - Document Viewer (60-70% width) */}
-          <div className="flex-1 lg:w-[65%] p-6 bg-gray-100">
-            <div className="bg-white rounded-lg shadow-md border border-gray-200 h-full">
+      <div className="max-w-[1800px] mx-auto p-6">
+        <div className="flex flex-col lg:flex-row gap-6 min-h-[calc(100vh-180px)]">
+          {/* Left Panel - Document Viewer (65% width) */}
+          <div className="flex-1 lg:w-[65%]">
+            <div className="bg-white rounded-2xl shadow-xl border border-slate-200 h-full overflow-hidden">
               {/* Document Header */}
-              <div className="border-b border-gray-200 px-6 py-4 bg-gray-50">
-                <h2 className="text-base font-semibold text-gray-900">
+              <div className="border-b border-slate-200 px-8 py-5 bg-gradient-to-r from-slate-50 to-white">
+                <h2 className="text-lg font-semibold text-slate-900">
                   Document Preview
                 </h2>
-                <p className="text-xs text-gray-500 mt-1" data-testid="text-document-filename">
+                <p className="text-sm text-slate-500 mt-1 font-medium" data-testid="text-document-filename">
                   {request.document?.fileName}
                 </p>
               </div>
               
               {/* Document Content */}
-              <div className="p-6 h-[calc(100%-80px)] overflow-auto">
+              <div className="p-8 h-[calc(100%-90px)] overflow-auto bg-slate-50">
                 {documentUrlWithSignatures && (
-                  <div className="bg-white border border-gray-300 rounded-md shadow-sm overflow-hidden">
+                  <div className="bg-white border-2 border-slate-200 rounded-xl shadow-lg overflow-hidden">
                     <iframe
                       key={documentUrlWithSignatures}
                       src={documentUrlWithSignatures}
@@ -418,31 +418,32 @@ export default function SignDocumentPage() {
             </div>
           </div>
 
-          {/* Right Panel - Signature Panel (30-40% width) */}
-          <div className="lg:w-[35%] bg-white border-l border-gray-200 p-6 overflow-y-auto">
-            <div className="max-w-md mx-auto space-y-6">
+          {/* Right Panel - Signature Panel (35% width) */}
+          <div className="lg:w-[35%]">
+            <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-8 overflow-y-auto max-h-[calc(100vh-180px)] sticky top-32">
+              <div className="space-y-7">
               {/* Sign Here Header */}
-              <div className="text-center pb-4 border-b border-gray-200">
-                <h2 className="text-2xl font-semibold text-gray-900 tracking-tight">
+              <div className="text-center pb-6 border-b border-slate-200">
+                <h2 className="text-3xl font-bold text-slate-900 tracking-tight">
                   Sign Here
                 </h2>
-                <p className="text-sm text-gray-600 mt-2 leading-normal">
+                <p className="text-sm text-slate-600 mt-3 leading-relaxed font-medium">
                   Complete all required fields to finish signing
                 </p>
               </div>
 
               {/* Progress Indicator */}
-              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-medium text-blue-900">Progress</span>
-                  <span className="text-xs font-medium text-blue-900">
+              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-5 border-2 border-blue-200 shadow-sm">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm font-semibold text-blue-900">Completion Progress</span>
+                  <span className="text-sm font-bold text-blue-900">
                     {(hasSignature && hasInitials && consentGiven) ? '100%' : 
                      (hasSignature || hasInitials || consentGiven) ? '50%' : '0%'}
                   </span>
                 </div>
-                <div className="w-full bg-blue-200 rounded-full h-2">
+                <div className="w-full bg-white rounded-full h-3 shadow-inner">
                   <div 
-                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                    className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-500 shadow-sm"
                     style={{
                       width: `${(hasSignature && hasInitials && consentGiven) ? '100%' : 
                                (hasSignature || hasInitials || consentGiven) ? '50%' : '0%'}`
@@ -452,21 +453,21 @@ export default function SignDocumentPage() {
               </div>
 
               {/* Full Signature */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-900">
-                  Your Signature <span className="text-red-500">*</span>
+              <div className="space-y-3">
+                <label className="text-base font-semibold text-slate-900 block">
+                  Your Signature <span className="text-red-600">*</span>
                 </label>
-                <p className="text-xs text-gray-600 leading-relaxed">
+                <p className="text-sm text-slate-600 leading-relaxed">
                   Draw your full signature in the box below
                 </p>
-                <div className={`border-2 rounded-lg overflow-hidden transition-colors ${
-                  hasSignature ? 'border-green-400' : 'border-gray-300'
+                <div className={`border-3 rounded-xl overflow-hidden transition-all duration-300 shadow-md ${
+                  hasSignature ? 'border-emerald-400 ring-2 ring-emerald-200' : 'border-slate-300'
                 }`}>
                   <canvas
                     ref={signatureCanvasRef}
                     width={500}
                     height={150}
-                    className="w-full cursor-crosshair touch-none bg-gray-50"
+                    className="w-full cursor-crosshair touch-none bg-white"
                     onMouseDown={(e) => startDrawing(e, 'signature')}
                     onMouseMove={(e) => draw(e, 'signature')}
                     onMouseUp={() => stopDrawing('signature')}
@@ -481,29 +482,29 @@ export default function SignDocumentPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => clearCanvas('signature')}
-                  className="w-full text-xs"
+                  className="w-full text-sm font-medium hover:bg-slate-50 border-slate-300"
                   data-testid="button-clear-signature"
                 >
-                  Clear
+                  Clear Signature
                 </Button>
               </div>
 
               {/* Initials */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-900">
-                  Your Initials <span className="text-red-500">*</span>
+              <div className="space-y-3">
+                <label className="text-base font-semibold text-slate-900 block">
+                  Your Initials <span className="text-red-600">*</span>
                 </label>
-                <p className="text-xs text-gray-600 leading-relaxed">
+                <p className="text-sm text-slate-600 leading-relaxed">
                   Draw your initials in the box below
                 </p>
-                <div className={`border-2 rounded-lg overflow-hidden transition-colors ${
-                  hasInitials ? 'border-green-400' : 'border-gray-300'
+                <div className={`border-3 rounded-xl overflow-hidden transition-all duration-300 shadow-md ${
+                  hasInitials ? 'border-emerald-400 ring-2 ring-emerald-200' : 'border-slate-300'
                 }`}>
                   <canvas
                     ref={initialsCanvasRef}
                     width={500}
                     height={120}
-                    className="w-full cursor-crosshair touch-none bg-gray-50"
+                    className="w-full cursor-crosshair touch-none bg-white"
                     onMouseDown={(e) => startDrawing(e, 'initials')}
                     onMouseMove={(e) => draw(e, 'initials')}
                     onMouseUp={() => stopDrawing('initials')}
@@ -518,33 +519,33 @@ export default function SignDocumentPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => clearCanvas('initials')}
-                  className="w-full text-xs"
+                  className="w-full text-sm font-medium hover:bg-slate-50 border-slate-300"
                   data-testid="button-clear-initials"
                 >
-                  Clear
+                  Clear Initials
                 </Button>
               </div>
 
               {/* Legal Consent */}
-              <div className="space-y-3 pt-4 border-t border-gray-200">
-                <h3 className="text-sm font-semibold text-gray-900">
+              <div className="space-y-4 pt-6 border-t border-slate-200">
+                <h3 className="text-base font-semibold text-slate-900">
                   Electronic Signature Consent
                 </h3>
-                <p className="text-xs text-gray-700 leading-relaxed" data-testid="text-consent-notice">
+                <p className="text-sm text-slate-700 leading-relaxed" data-testid="text-consent-notice">
                   By signing this document electronically, you agree that your electronic signature
                   is the legal equivalent of your manual signature under the ESIGN Act.
                 </p>
-                <div className={`flex items-start space-x-3 p-4 rounded-lg border-2 transition-colors ${
-                  consentGiven ? 'bg-green-50 border-green-300' : 'bg-gray-50 border-gray-200'
+                <div className={`flex items-start space-x-4 p-5 rounded-xl border-2 transition-all duration-300 shadow-sm ${
+                  consentGiven ? 'bg-emerald-50 border-emerald-300 ring-2 ring-emerald-200' : 'bg-slate-50 border-slate-300'
                 }`}>
                   <Checkbox
                     id="consent"
                     checked={consentGiven}
                     onCheckedChange={(checked) => setConsentGiven(checked as boolean)}
                     data-testid="checkbox-consent"
-                    className="mt-0.5"
+                    className="mt-1"
                   />
-                  <label htmlFor="consent" className="text-xs text-gray-700 cursor-pointer flex-1 leading-relaxed">
+                  <label htmlFor="consent" className="text-sm text-slate-700 cursor-pointer flex-1 leading-relaxed font-medium">
                     I consent to use electronic signatures and confirm that this document is legally binding. 
                     I have reviewed the document and my signature/initials are accurate.
                   </label>
@@ -552,31 +553,32 @@ export default function SignDocumentPage() {
               </div>
 
               {/* Submit Button */}
-              <div className="pt-6">
+              <div className="pt-8">
                 <Button
                   onClick={handleSign}
                   disabled={!hasSignature || !hasInitials || !consentGiven || signMutation.isPending}
-                  className="w-full py-6 text-base font-semibold bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed shadow-md"
+                  className="w-full py-7 text-lg font-bold bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 disabled:from-slate-300 disabled:to-slate-300 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl"
                   data-testid="button-sign-document"
                 >
                   {signMutation.isPending ? (
                     <div className="flex items-center justify-center">
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-3"></div>
                       Processing...
                     </div>
                   ) : (
                     <div className="flex items-center justify-center">
-                      <CheckCircle className="w-5 h-5 mr-2" />
+                      <CheckCircle className="w-6 h-6 mr-3" />
                       Sign Document
                     </div>
                   )}
                 </Button>
                 
                 {(!hasSignature || !hasInitials || !consentGiven) && (
-                  <p className="text-xs text-center text-gray-500 mt-3">
-                    Complete all required fields to enable signing
+                  <p className="text-sm text-center text-slate-500 mt-4 font-medium">
+                    Complete all fields to enable signing
                   </p>
                 )}
+              </div>
               </div>
             </div>
           </div>
