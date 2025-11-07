@@ -5870,6 +5870,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const description = sanitizeOptionalText(body.description);
     const isActive = body.isActive === undefined ? true : Boolean(body.isActive);
 
+    const settlementPaymentCount = parseOptionalInteger(body.settlementPaymentCount);
+    const settlementPaymentFrequency = typeof body.settlementPaymentFrequency === "string" ? body.settlementPaymentFrequency.trim() : null;
+    const settlementOfferExpiresDate = parseDateInput(body.settlementOfferExpiresDate);
+
     const candidate = {
       tenantId,
       name,
@@ -5884,7 +5888,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       payInFullAmount: null,
       payoffText: planType === "settlement" ? payoffText : null,
       payoffPercentageBasisPoints: planType === "settlement" ? payoffPercentage : null,
-      payoffDueDate: planType === "settlement" ? payoffDueDate : null,
+      payoffDueDate: null,
+      settlementPaymentCount: planType === "settlement" ? settlementPaymentCount : null,
+      settlementPaymentFrequency: planType === "settlement" ? settlementPaymentFrequency : null,
+      settlementOfferExpiresDate: planType === "settlement" ? settlementOfferExpiresDate : null,
       customTermsText: planType === "custom_terms" ? customTermsText : null,
       maxTermMonths:
         planType === "settlement" || planType === "custom_terms"

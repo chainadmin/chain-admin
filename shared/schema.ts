@@ -1344,13 +1344,22 @@ export const insertArrangementOptionSchema = createInsertSchema(arrangementOptio
           });
         }
 
-        if (!data.payoffDueDate) {
+        if (!data.settlementPaymentCount || data.settlementPaymentCount < 1) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            path: ["payoffDueDate"],
-            message: "Settlement due date is required",
+            path: ["settlementPaymentCount"],
+            message: "Number of payments is required for settlement arrangements",
           });
         }
+
+        if (!data.settlementPaymentFrequency || !['weekly', 'biweekly', 'monthly'].includes(data.settlementPaymentFrequency)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["settlementPaymentFrequency"],
+            message: "Payment frequency is required for settlement arrangements",
+          });
+        }
+
         break;
       }
       case "custom_terms": {
