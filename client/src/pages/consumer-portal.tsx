@@ -194,18 +194,6 @@ export default function ConsumerPortal() {
         return getArrangementSummary(arrangement);
       }
       
-      case 'pay_in_full': {
-        if (arrangement.calculatedPayoffAmount) {
-          return {
-            headline: `Pay ${formatCurrency(arrangement.calculatedPayoffAmount)} today`,
-            detail: arrangement.calculatedPayoffPercentage 
-              ? `${arrangement.calculatedPayoffPercentage}% of balance`
-              : 'Full payment'
-          };
-        }
-        return getArrangementSummary(arrangement);
-      }
-      
       case 'settlement': {
         if (arrangement.calculatedPayoffAmount && arrangement.calculatedPayoffPercentage) {
           return {

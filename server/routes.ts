@@ -5992,13 +5992,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       monthlyPaymentMin: planType === "range" ? monthlyPaymentMin : null,
       monthlyPaymentMax: planType === "range" ? monthlyPaymentMax : null,
       fixedMonthlyPayment: planType === "fixed_monthly" ? fixedMonthlyPayment : null,
-      payInFullAmount: planType === "pay_in_full" ? payInFullAmount : null,
-      payoffText: planType === "pay_in_full" || planType === "settlement" ? payoffText : null,
-      payoffPercentageBasisPoints: planType === "pay_in_full" || planType === "settlement" ? payoffPercentage : null,
-      payoffDueDate: planType === "pay_in_full" || planType === "settlement" ? payoffDueDate : null,
+      payInFullAmount: null,
+      payoffText: planType === "settlement" ? payoffText : null,
+      payoffPercentageBasisPoints: planType === "settlement" ? payoffPercentage : null,
+      payoffDueDate: planType === "settlement" ? payoffDueDate : null,
       customTermsText: planType === "custom_terms" ? customTermsText : null,
       maxTermMonths:
-        planType === "pay_in_full" || planType === "settlement" || planType === "custom_terms"
+        planType === "settlement" || planType === "custom_terms"
           ? null
           : planType === "range"
             ? maxTermMonths ?? 12
@@ -6865,7 +6865,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Arrangement Calculation Engine
-  const calculateArrangementDetails = (option: any, balanceCents: number, minimumMonthlyPayment: number = 5000) => {
+  const calculateArrangementDetails = (option: any, balanceCents: number) => {
     const calculated: any = {
       ...option,
       calculatedMonthlyPayment: null,
@@ -6877,15 +6877,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     switch (option.planType) {
       case "range":
-        // Use the minimum monthly payment or calculate based on max term
-        const minPayment = Math.max(option.monthlyPaymentMin || 0, minimumMonthlyPayment);
+        // Use the arrangement's configured minimum monthly payment
+        const minPayment = option.monthlyPaymentMin || 0;
         const maxPayment = option.monthlyPaymentMax || balanceCents;
         const maxTerm = option.maxTermMonths || 12;
         
         // Calculate minimum payment to pay off balance within max term
         const calculatedMinimum = Math.ceil(balanceCents / maxTerm);
         
-        // Use the greater of: configured minimum, global minimum, or calculated minimum
+        // Use the greater of: configured minimum or calculated minimum
         // But clamp to the configured maximum to respect plan constraints
         const unclamped = Math.max(minPayment, calculatedMinimum);
         calculated.calculatedMonthlyPayment = Math.min(unclamped, maxPayment);
@@ -6903,18 +6903,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         break;
 
       case "fixed_monthly":
-        // Ensure fixed monthly payment respects the tenant minimum
-        if (option.fixedMonthlyPayment && option.fixedMonthlyPayment >= minimumMonthlyPayment) {
+        // Use the arrangement's configured fixed monthly payment
+        if (option.fixedMonthlyPayment) {
           calculated.calculatedMonthlyPayment = option.fixedMonthlyPayment;
           calculated.calculatedTermMonths = Math.ceil(balanceCents / option.fixedMonthlyPayment);
         } else {
-          return null; // Fixed payment is below tenant minimum, option not viable
+          return null; // No fixed payment configured, option not viable
         }
-        break;
-
-      case "pay_in_full":
-        calculated.calculatedPayoffAmount = balanceCents;
-        calculated.calculatedTotalAmount = balanceCents;
         break;
 
       case "settlement":
@@ -6993,7 +6988,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const balanceCents = parseInt(balance as string) || 0;
       const options = await storage.getArrangementOptionsByTenant(tenant.id);
-      const minimumMonthlyPayment = settings.minimumMonthlyPayment || 5000; // Default $50
       
       const today = new Date();
       today.setHours(0, 0, 0, 0); // Set to start of day for date comparison
@@ -7019,7 +7013,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Calculate payment details for each applicable option and filter out non-viable ones
       const calculatedOptions = applicableOptions
-        .map(option => calculateArrangementDetails(option, balanceCents, minimumMonthlyPayment))
+        .map(option => calculateArrangementDetails(option, balanceCents))
         .filter(option => option !== null);
       
       // Fetch SMAX arrangements for all consumer accounts with filenumbers
@@ -7776,15 +7770,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Range: use minimum payment for recurring
           amountCents = arrangement.monthlyPaymentMin;
           console.log('✅ Range minimum amount set:', { amountCents });
-        } else if (arrangement.planType === 'pay_in_full') {
-          // Pay in full: can be percentage discount or fixed amount
-          if (arrangement.payoffPercentageBasisPoints) {
-            amountCents = Math.round(amountCents * arrangement.payoffPercentageBasisPoints / 10000);
-            console.log('✅ Pay in full (percentage) calculated:', { amountCents });
-          } else if (arrangement.payInFullAmount) {
-            amountCents = arrangement.payInFullAmount;
-            console.log('✅ Pay in full (fixed) set:', { amountCents });
-          }
         }
       }
       
@@ -8237,8 +8222,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         console.log('🔢 Calculating payments for arrangement type:', arrangement.planType);
 
-        if (arrangement.planType === 'settlement' || arrangement.planType === 'pay_in_full') {
-          // Settlement/pay-in-full is one-time
+        if (arrangement.planType === 'settlement') {
+          // Settlement is one-time
           // If it's a future payment (shouldSkipImmediateCharge), we need a schedule to track it
           // If it's immediate (not shouldSkipImmediateCharge), we already charged it, no schedule needed
           if (!shouldSkipImmediateCharge) {
@@ -8265,8 +8250,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Create schedule for:
         // 1. Recurring arrangements (fixed_monthly, range) 
-        // 2. One-time future payments (settlement/pay_in_full with future date)
-        // Skip for: one_time_payment type, or settlement/pay_in_full that already charged
+        // 2. One-time future payments (settlement with future date)
+        // Skip for: one_time_payment type, or settlement that already charged
         const shouldCreateSchedule = arrangementId && (
           (arrangement.planType !== 'one_time_payment' && shouldSkipImmediateCharge) || // Future one-time payments
           (arrangement.planType === 'fixed_monthly' || arrangement.planType === 'range') // Recurring payments
@@ -9577,10 +9562,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      // Cleanup: Mark expired payment schedules as completed
+      console.log('🧹 Cleaning up expired payment schedules...');
+      let cleanedUpCount = 0;
+      
+      for (const tenant of allTenants) {
+        const consumers = await storage.getConsumersByTenant(tenant.id);
+        
+        for (const consumer of consumers) {
+          const schedules = await storage.getPaymentSchedulesByConsumer(consumer.id, tenant.id);
+          
+          for (const schedule of schedules) {
+            // Skip if already completed or cancelled
+            if (schedule.status === 'completed' || schedule.status === 'cancelled') {
+              continue;
+            }
+            
+            let shouldComplete = false;
+            
+            // Check if endDate has passed
+            if (schedule.endDate) {
+              const endDate = new Date(schedule.endDate);
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              
+              if (endDate < today) {
+                shouldComplete = true;
+                console.log(`📅 Schedule ${schedule.id} has passed its end date (${schedule.endDate})`);
+              }
+            }
+            
+            // Check if remainingPayments is 0
+            if (schedule.remainingPayments !== null && schedule.remainingPayments <= 0) {
+              shouldComplete = true;
+              console.log(`✅ Schedule ${schedule.id} has no remaining payments`);
+            }
+            
+            if (shouldComplete) {
+              await storage.updatePaymentSchedule(schedule.id, tenant.id, {
+                status: 'completed'
+              });
+              cleanedUpCount++;
+              console.log(`🧹 Marked schedule ${schedule.id} as completed`);
+            }
+          }
+        }
+      }
+      
+      console.log(`✨ Cleanup complete: Marked ${cleanedUpCount} schedules as completed`);
+
       res.json({
         success: true,
         processed: processedPayments.length,
         failed: failedPayments.length,
+        cleanedUp: cleanedUpCount,
         details: { processedPayments, failedPayments }
       });
 

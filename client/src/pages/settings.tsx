@@ -116,7 +116,7 @@ export default function Settings() {
     name: string;
     description: string;
     balanceTier: "under_3000" | "3000_to_5000" | "5000_to_10000" | "over_10000" | "";
-    planType: "range" | "fixed_monthly" | "pay_in_full" | "settlement" | "custom_terms" | "one_time_payment";
+    planType: "range" | "fixed_monthly" | "settlement" | "custom_terms" | "one_time_payment";
     monthlyPaymentMin: string;
     monthlyPaymentMax: string;
     fixedMonthlyPayment: string;
@@ -1035,42 +1035,6 @@ export default function Settings() {
 
       payload.fixedMonthlyPayment = fixedMonthly;
       payload.maxTermMonths = maxTermMonths ?? null;
-    } else if (planType === "pay_in_full") {
-      const payoffPercentage = parsePercentageInput(arrangementForm.payoffPercentage);
-      const payoffDueDate = parseDateInput(arrangementForm.payoffDueDate);
-      const payoffText = arrangementForm.payoffText.trim();
-
-      if (payoffPercentage === null || payoffPercentage <= 0) {
-        toast({
-          title: "Payoff Percentage Required",
-          description: "Enter a valid payoff percentage greater than zero.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      if (payoffPercentage > 10000) {
-        toast({
-          title: "Invalid Percentage",
-          description: "Payoff percentage cannot exceed 100%.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      if (!payoffDueDate) {
-        toast({
-          title: "Payoff Due Date Required",
-          description: "Select a valid date for the payoff terms.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      payload.payoffPercentageBasisPoints = payoffPercentage;
-      payload.payoffDueDate = payoffDueDate;
-      payload.payoffText = payoffText || undefined;
-      payload.maxTermMonths = null;
     } else if (planType === "settlement") {
       const settlementPercentage = parsePercentageInput(arrangementForm.payoffPercentage);
       const settlementPaymentCount = parseInt(arrangementForm.settlementPaymentCount, 10);
@@ -3197,7 +3161,6 @@ export default function Settings() {
                               <SelectContent>
                                 <SelectItem value="range">Monthly range (legacy)</SelectItem>
                                 <SelectItem value="fixed_monthly">Fixed monthly amount</SelectItem>
-                                <SelectItem value="pay_in_full">Pay in full</SelectItem>
                                 <SelectItem value="settlement">Settlement (% of balance)</SelectItem>
                                 <SelectItem value="custom_terms">Custom terms copy</SelectItem>
                                 <SelectItem value="one_time_payment">One-time payment</SelectItem>
@@ -3243,45 +3206,6 @@ export default function Settings() {
                                 placeholder="150.00"
                                 className={inputClasses}
                               />
-                            </div>
-                          )}
-
-                          {arrangementForm.planType === "pay_in_full" && (
-                            <div className="space-y-4">
-                              <div>
-                                <Label className="text-white">Payoff Percentage (%) *</Label>
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
-                                  max="100"
-                                  value={arrangementForm.payoffPercentage}
-                                  onChange={(e) => setArrangementForm({ ...arrangementForm, payoffPercentage: e.target.value })}
-                                  placeholder="50"
-                                  className={inputClasses}
-                                />
-                                <p className="mt-1 text-xs text-blue-100/70">
-                                  Enter the portion of the outstanding balance the consumer must pay.
-                                </p>
-                              </div>
-                              <div>
-                                <Label className="text-white">Payoff Due Date *</Label>
-                                <Input
-                                  type="date"
-                                  value={arrangementForm.payoffDueDate}
-                                  onChange={(e) => setArrangementForm({ ...arrangementForm, payoffDueDate: e.target.value })}
-                                  className={inputClasses}
-                                />
-                              </div>
-                              <div>
-                                <Label className="text-white">Additional Notes</Label>
-                                <Textarea
-                                  value={arrangementForm.payoffText}
-                                  onChange={(e) => setArrangementForm({ ...arrangementForm, payoffText: e.target.value })}
-                                  placeholder="Describe any additional payoff instructions"
-                                  className={textareaClasses}
-                                />
-                              </div>
                             </div>
                           )}
 

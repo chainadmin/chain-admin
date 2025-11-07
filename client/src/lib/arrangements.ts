@@ -32,8 +32,6 @@ export const getPlanTypeLabel = (planType?: string | null): string => {
   switch (planType) {
     case 'fixed_monthly':
       return 'Fixed monthly';
-    case 'pay_in_full':
-      return 'Pay in full';
     case 'settlement':
       return 'Settlement';
     case 'custom_terms':
@@ -67,13 +65,6 @@ export const calculateArrangementPayment = (
     
     case 'range':
       return arrangement.monthlyPaymentMin || accountBalanceCents;
-    
-    case 'pay_in_full':
-      // Pay in full can have a percentage discount or a fixed amount
-      if (arrangement.payoffPercentageBasisPoints) {
-        return Math.round(accountBalanceCents * arrangement.payoffPercentageBasisPoints / 10000);
-      }
-      return arrangement.payInFullAmount || accountBalanceCents;
     
     case 'one_time_payment':
       return arrangement.oneTimePaymentMin || accountBalanceCents;
@@ -117,46 +108,6 @@ export const getArrangementSummary = (arrangement: ArrangementLike) => {
         : 'Fixed monthly payment';
       const detail = maxTerm ? `Up to ${maxTerm} months` : 'Until paid in full';
       return { planType, headline, detail };
-    }
-    case 'pay_in_full': {
-      const amount = typeof arrangement.payInFullAmount === 'number' ? arrangement.payInFullAmount : null;
-      const payoffText = arrangement.payoffText?.trim();
-      const percentageBasisPoints = typeof arrangement.payoffPercentageBasisPoints === 'number'
-        ? arrangement.payoffPercentageBasisPoints
-        : null;
-      const dueDate = arrangement.payoffDueDate;
-
-      const formattedPercentage = percentageBasisPoints !== null
-        ? (percentageBasisPoints / 100).toLocaleString('en-US', {
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 2,
-          }) + '%'
-        : null;
-
-      const formattedDueDate = dueDate
-        ? (() => {
-            const parsedDate = new Date(dueDate);
-            return Number.isNaN(parsedDate.getTime()) ? null : dateFormatter.format(parsedDate);
-          })()
-        : null;
-
-      const headline = formattedPercentage
-        ? `Pay ${formattedPercentage} of balance`
-        : amount !== null
-          ? `Pay ${formatCurrencyFromCents(amount)} today`
-          : payoffText || 'Pay in full';
-
-      const detailParts: string[] = [];
-      if (formattedDueDate) {
-        detailParts.push(`Due by ${formattedDueDate}`);
-      }
-
-      const supplementalText = payoffText && payoffText !== headline ? payoffText : null;
-      if (supplementalText) {
-        detailParts.push(supplementalText);
-      }
-
-      return { planType, headline, detail: detailParts.length ? detailParts.join(' • ') : undefined };
     }
     case 'settlement': {
       const settlementText = arrangement.payoffText?.trim();

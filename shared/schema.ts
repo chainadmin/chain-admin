@@ -450,7 +450,6 @@ export const documentTemplates = pgTable("document_templates", {
 export const arrangementPlanTypes = [
   "range",
   "fixed_monthly",
-  "pay_in_full",
   "settlement",
   "custom_terms",
   "one_time_payment",
@@ -1326,30 +1325,6 @@ export const insertArrangementOptionSchema = createInsertSchema(arrangementOptio
             code: z.ZodIssueCode.custom,
             path: ["fixedMonthlyPayment"],
             message: "Monthly payment amount is required",
-          });
-        }
-        break;
-      }
-      case "pay_in_full": {
-        if (data.payoffPercentageBasisPoints == null) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ["payoffPercentageBasisPoints"],
-            message: "Payoff percentage is required",
-          });
-        } else if (data.payoffPercentageBasisPoints <= 0 || data.payoffPercentageBasisPoints > 10000) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ["payoffPercentageBasisPoints"],
-            message: "Payoff percentage must be between 0 and 100",
-          });
-        }
-
-        if (!data.payoffDueDate) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ["payoffDueDate"],
-            message: "Payoff due date is required",
           });
         }
         break;

@@ -346,195 +346,240 @@ export default function SignDocumentPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-5xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="bg-white shadow-sm rounded-lg p-6 border border-gray-200">
-          <div className="flex items-start justify-between">
-            <div className="flex items-start space-x-3">
-              <div className="bg-blue-100 rounded-full p-3">
-                <FileText className="w-6 h-6 text-blue-700" />
+    <div className="min-h-screen bg-gray-100">
+      {/* Top Header Bar */}
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
+        <div className="max-w-[1800px] mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="bg-blue-600 rounded-lg p-2">
+                <FileText className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900" data-testid="heading-sign-document">
+                <h1 className="text-xl font-semibold text-gray-900 tracking-tight" data-testid="heading-sign-document">
                   {request.title || 'Document Signature Request'}
                 </h1>
-                <p className="text-sm text-gray-500 mt-1">
-                  Please review and sign the document below
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Step 1 of 2: Review and Sign
                 </p>
               </div>
             </div>
-            <div className="flex items-center text-sm text-gray-500">
-              <Clock className="w-4 h-4 mr-1" />
-              <span data-testid="text-expiration">
-                Expires {new Date(request.expiresAt).toLocaleDateString()}
-              </span>
+            <div className="flex items-center space-x-6">
+              <div className="flex items-center text-sm text-gray-600">
+                <Clock className="w-4 h-4 mr-1.5" />
+                <span data-testid="text-expiration">
+                  Expires {new Date(request.expiresAt).toLocaleDateString()}
+                </span>
+              </div>
             </div>
           </div>
-
+          
           {request.description && (
-            <div className="mt-4 p-3 bg-blue-50 border-l-4 border-blue-400 rounded">
+            <div className="mt-3 p-3 bg-blue-50 border-l-4 border-blue-500 rounded">
               <p className="text-sm text-gray-700" data-testid="text-custom-message">
                 {request.description}
               </p>
             </div>
           )}
         </div>
+      </div>
 
-        {/* Document Content */}
-        {documentUrlWithSignatures && (
-          <Card className="shadow-sm border border-gray-200">
-            <CardHeader className="bg-gray-50 border-b border-gray-200">
-              <CardTitle className="text-lg font-semibold text-gray-900">
-                Document Content
-              </CardTitle>
-              <p className="text-sm text-gray-500 mt-1" data-testid="text-document-filename">
-                {request.document?.fileName}
-              </p>
-            </CardHeader>
-            <CardContent className="p-6">
-              <div className="bg-white border-2 border-gray-200 rounded-lg overflow-hidden">
-                <iframe
-                  key={documentUrlWithSignatures}
-                  src={documentUrlWithSignatures}
-                  className="w-full h-[500px]"
-                  title="Document Content"
-                  sandbox="allow-same-origin"
-                  data-testid="iframe-document-content"
-                />
+      {/* Two-Panel Layout */}
+      <div className="max-w-[1800px] mx-auto">
+        <div className="flex flex-col lg:flex-row min-h-[calc(100vh-100px)]">
+          {/* Left Panel - Document Viewer (60-70% width) */}
+          <div className="flex-1 lg:w-[65%] p-6 bg-gray-100">
+            <div className="bg-white rounded-lg shadow-md border border-gray-200 h-full">
+              {/* Document Header */}
+              <div className="border-b border-gray-200 px-6 py-4 bg-gray-50">
+                <h2 className="text-base font-semibold text-gray-900">
+                  Document Preview
+                </h2>
+                <p className="text-xs text-gray-500 mt-1" data-testid="text-document-filename">
+                  {request.document?.fileName}
+                </p>
               </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Signature and Initials */}
-        <div className="grid md:grid-cols-2 gap-6">
-          {/* Full Signature */}
-          <Card className="shadow-sm border border-gray-200">
-            <CardHeader className="bg-gray-50 border-b border-gray-200">
-              <CardTitle className="text-lg font-semibold text-gray-900">
-                Full Signature
-              </CardTitle>
-              <p className="text-sm text-gray-500 mt-1">
-                Sign your name as you would on paper
-              </p>
-            </CardHeader>
-            <CardContent className="p-6">
-              <div className="bg-white border-2 border-blue-300 rounded-lg overflow-hidden">
-                <canvas
-                  ref={signatureCanvasRef}
-                  width={500}
-                  height={150}
-                  className="w-full cursor-crosshair touch-none bg-white"
-                  onMouseDown={(e) => startDrawing(e, 'signature')}
-                  onMouseMove={(e) => draw(e, 'signature')}
-                  onMouseUp={() => stopDrawing('signature')}
-                  onMouseLeave={() => stopDrawing('signature')}
-                  onTouchStart={(e) => startDrawing(e, 'signature')}
-                  onTouchMove={(e) => draw(e, 'signature')}
-                  onTouchEnd={() => stopDrawing('signature')}
-                  data-testid="canvas-signature"
-                />
+              
+              {/* Document Content */}
+              <div className="p-6 h-[calc(100%-80px)] overflow-auto">
+                {documentUrlWithSignatures && (
+                  <div className="bg-white border border-gray-300 rounded-md shadow-sm overflow-hidden">
+                    <iframe
+                      key={documentUrlWithSignatures}
+                      src={documentUrlWithSignatures}
+                      className="w-full h-[800px]"
+                      title="Document Content"
+                      sandbox="allow-same-origin"
+                      data-testid="iframe-document-content"
+                    />
+                  </div>
+                )}
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => clearCanvas('signature')}
-                className="mt-3 w-full"
-                data-testid="button-clear-signature"
-              >
-                Clear Signature
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Initials */}
-          <Card className="shadow-sm border border-gray-200">
-            <CardHeader className="bg-gray-50 border-b border-gray-200">
-              <CardTitle className="text-lg font-semibold text-gray-900">
-                Initials
-              </CardTitle>
-              <p className="text-sm text-gray-500 mt-1">
-                Provide your initials
-              </p>
-            </CardHeader>
-            <CardContent className="p-6">
-              <div className="bg-white border-2 border-blue-300 rounded-lg overflow-hidden">
-                <canvas
-                  ref={initialsCanvasRef}
-                  width={500}
-                  height={150}
-                  className="w-full cursor-crosshair touch-none bg-white"
-                  onMouseDown={(e) => startDrawing(e, 'initials')}
-                  onMouseMove={(e) => draw(e, 'initials')}
-                  onMouseUp={() => stopDrawing('initials')}
-                  onMouseLeave={() => stopDrawing('initials')}
-                  onTouchStart={(e) => startDrawing(e, 'initials')}
-                  onTouchMove={(e) => draw(e, 'initials')}
-                  onTouchEnd={() => stopDrawing('initials')}
-                  data-testid="canvas-initials"
-                />
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => clearCanvas('initials')}
-                className="mt-3 w-full"
-                data-testid="button-clear-initials"
-              >
-                Clear Initials
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Legal Consent */}
-        <Card className="shadow-sm border border-gray-200">
-          <CardHeader className="bg-amber-50 border-b border-amber-100">
-            <CardTitle className="text-lg font-semibold text-gray-900">
-              Electronic Signature Consent
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-6">
-            <p className="text-sm text-gray-700 mb-4" data-testid="text-consent-notice">
-              By signing this document electronically, you agree that your electronic signature
-              is the legal equivalent of your manual signature and has the same legal force and
-              effect as a manual signature under the Electronic Signatures in Global and National
-              Commerce Act (ESIGN Act).
-            </p>
-            <div className="flex items-start space-x-3 bg-white p-4 rounded-lg border border-gray-200">
-              <Checkbox
-                id="consent"
-                checked={consentGiven}
-                onCheckedChange={(checked) => setConsentGiven(checked as boolean)}
-                data-testid="checkbox-consent"
-                className="mt-1"
-              />
-              <label htmlFor="consent" className="text-sm text-gray-700 cursor-pointer flex-1">
-                I consent to use electronic signatures and agree that this document will be
-                legally binding. I have reviewed the document and my signature/initials are accurate.
-              </label>
             </div>
-          </CardContent>
-        </Card>
+          </div>
 
-        {/* Submit Button */}
-        <div className="flex justify-end space-x-3 pb-8">
-          <Button
-            onClick={handleSign}
-            disabled={!hasSignature || !hasInitials || !consentGiven || signMutation.isPending}
-            className="px-8 py-6 text-lg bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300"
-            data-testid="button-sign-document"
-          >
-            {signMutation.isPending ? (
-              <>
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                Processing...
-              </>
-            ) : (
-              "Complete Signature"
-            )}
-          </Button>
+          {/* Right Panel - Signature Panel (30-40% width) */}
+          <div className="lg:w-[35%] bg-white border-l border-gray-200 p-6 overflow-y-auto">
+            <div className="max-w-md mx-auto space-y-6">
+              {/* Sign Here Header */}
+              <div className="text-center pb-4 border-b border-gray-200">
+                <h2 className="text-2xl font-semibold text-gray-900 tracking-tight">
+                  Sign Here
+                </h2>
+                <p className="text-sm text-gray-600 mt-2 leading-normal">
+                  Complete all required fields to finish signing
+                </p>
+              </div>
+
+              {/* Progress Indicator */}
+              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium text-blue-900">Progress</span>
+                  <span className="text-xs font-medium text-blue-900">
+                    {(hasSignature && hasInitials && consentGiven) ? '100%' : 
+                     (hasSignature || hasInitials || consentGiven) ? '50%' : '0%'}
+                  </span>
+                </div>
+                <div className="w-full bg-blue-200 rounded-full h-2">
+                  <div 
+                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                    style={{
+                      width: `${(hasSignature && hasInitials && consentGiven) ? '100%' : 
+                               (hasSignature || hasInitials || consentGiven) ? '50%' : '0%'}`
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Full Signature */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-900">
+                  Your Signature <span className="text-red-500">*</span>
+                </label>
+                <p className="text-xs text-gray-600 leading-relaxed">
+                  Draw your full signature in the box below
+                </p>
+                <div className={`border-2 rounded-lg overflow-hidden transition-colors ${
+                  hasSignature ? 'border-green-400' : 'border-gray-300'
+                }`}>
+                  <canvas
+                    ref={signatureCanvasRef}
+                    width={500}
+                    height={150}
+                    className="w-full cursor-crosshair touch-none bg-gray-50"
+                    onMouseDown={(e) => startDrawing(e, 'signature')}
+                    onMouseMove={(e) => draw(e, 'signature')}
+                    onMouseUp={() => stopDrawing('signature')}
+                    onMouseLeave={() => stopDrawing('signature')}
+                    onTouchStart={(e) => startDrawing(e, 'signature')}
+                    onTouchMove={(e) => draw(e, 'signature')}
+                    onTouchEnd={() => stopDrawing('signature')}
+                    data-testid="canvas-signature"
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => clearCanvas('signature')}
+                  className="w-full text-xs"
+                  data-testid="button-clear-signature"
+                >
+                  Clear
+                </Button>
+              </div>
+
+              {/* Initials */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-900">
+                  Your Initials <span className="text-red-500">*</span>
+                </label>
+                <p className="text-xs text-gray-600 leading-relaxed">
+                  Draw your initials in the box below
+                </p>
+                <div className={`border-2 rounded-lg overflow-hidden transition-colors ${
+                  hasInitials ? 'border-green-400' : 'border-gray-300'
+                }`}>
+                  <canvas
+                    ref={initialsCanvasRef}
+                    width={500}
+                    height={120}
+                    className="w-full cursor-crosshair touch-none bg-gray-50"
+                    onMouseDown={(e) => startDrawing(e, 'initials')}
+                    onMouseMove={(e) => draw(e, 'initials')}
+                    onMouseUp={() => stopDrawing('initials')}
+                    onMouseLeave={() => stopDrawing('initials')}
+                    onTouchStart={(e) => startDrawing(e, 'initials')}
+                    onTouchMove={(e) => draw(e, 'initials')}
+                    onTouchEnd={() => stopDrawing('initials')}
+                    data-testid="canvas-initials"
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => clearCanvas('initials')}
+                  className="w-full text-xs"
+                  data-testid="button-clear-initials"
+                >
+                  Clear
+                </Button>
+              </div>
+
+              {/* Legal Consent */}
+              <div className="space-y-3 pt-4 border-t border-gray-200">
+                <h3 className="text-sm font-semibold text-gray-900">
+                  Electronic Signature Consent
+                </h3>
+                <p className="text-xs text-gray-700 leading-relaxed" data-testid="text-consent-notice">
+                  By signing this document electronically, you agree that your electronic signature
+                  is the legal equivalent of your manual signature under the ESIGN Act.
+                </p>
+                <div className={`flex items-start space-x-3 p-4 rounded-lg border-2 transition-colors ${
+                  consentGiven ? 'bg-green-50 border-green-300' : 'bg-gray-50 border-gray-200'
+                }`}>
+                  <Checkbox
+                    id="consent"
+                    checked={consentGiven}
+                    onCheckedChange={(checked) => setConsentGiven(checked as boolean)}
+                    data-testid="checkbox-consent"
+                    className="mt-0.5"
+                  />
+                  <label htmlFor="consent" className="text-xs text-gray-700 cursor-pointer flex-1 leading-relaxed">
+                    I consent to use electronic signatures and confirm that this document is legally binding. 
+                    I have reviewed the document and my signature/initials are accurate.
+                  </label>
+                </div>
+              </div>
+
+              {/* Submit Button */}
+              <div className="pt-6">
+                <Button
+                  onClick={handleSign}
+                  disabled={!hasSignature || !hasInitials || !consentGiven || signMutation.isPending}
+                  className="w-full py-6 text-base font-semibold bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed shadow-md"
+                  data-testid="button-sign-document"
+                >
+                  {signMutation.isPending ? (
+                    <div className="flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                      Processing...
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center">
+                      <CheckCircle className="w-5 h-5 mr-2" />
+                      Sign Document
+                    </div>
+                  )}
+                </Button>
+                
+                {(!hasSignature || !hasInitials || !consentGiven) && (
+                  <p className="text-xs text-center text-gray-500 mt-3">
+                    Complete all required fields to enable signing
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

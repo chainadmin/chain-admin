@@ -1665,7 +1665,6 @@ export default function ConsumerDashboardSimple() {
                         {selectedArrangement.planType === 'settlement' && 'Settlement payment - full balance will be cleared'}
                         {selectedArrangement.planType === 'fixed_monthly' && (setupRecurring ? 'Monthly installment amount (first payment on scheduled date)' : 'First installment payment')}
                         {selectedArrangement.planType === 'range' && (setupRecurring ? 'Minimum monthly payment (first payment on scheduled date)' : 'Minimum monthly payment')}
-                        {selectedArrangement.planType === 'pay_in_full' && (selectedArrangement.payoffPercentageBasisPoints ? 'Discounted payoff amount' : 'One-time payment')}
                         {selectedArrangement.planType === 'one_time_payment' && (customPaymentAmount ? 'Custom one-time payment' : 'Enter payment amount below')}
                       </p>
                     )}
