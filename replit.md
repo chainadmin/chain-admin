@@ -8,6 +8,18 @@ Preferred communication style: Simple, everyday language.
 
 # Recent Changes
 
+## Conversation Threading System (November 2025)
+- **Message History View**: New conversation timeline shows all consumer communications in chronological order
+  - Combines email and SMS messages (both sent and received) into unified view
+  - Chat-style layout with outbound messages on right, inbound on left
+  - Channel indicators (Mail/MessageSquare icons) with direction labels (Sent/Received)
+  - Relative timestamps using "2 hours ago" format
+  - Summary statistics showing total counts and sent/received breakdown
+- **Security**: Tenant verification prevents cross-tenant data leaks in conversation queries
+- **API Endpoint**: GET `/api/consumers/:id/conversation` returns chronological message array with metadata
+- **Admin Dashboard Integration**: "View History" button in Contact dialog opens conversation timeline
+- **UI Features**: Empty state messaging, loading states, scrollable timeline, email subject display
+
 ## Document Signing Variable Standardization (November 2025)
 - **Standardized Variable Names**: Document templates now use EXACT same variable naming as email templates for consistency
   - Primary format: camelCase only (accountNumber, consumerName, creditor, agencyName, agencyEmail, agencyPhone)
