@@ -2169,9 +2169,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tenant = await storage.getTenant(tenantId);
       const settings = await storage.getTenantSettings(tenantId);
 
+      // Safe diagnostic logging (no PII)
+      console.log('📄 Document Template Processing:');
+      console.log('- Template name:', template.name);
+      console.log('- Has consumer data:', !!consumer);
+      console.log('- Has account data:', !!account);
+      console.log('- Template content length:', template.content?.length || 0);
+      
+      // Show sample of template content (first 300 chars) to see variable format
+      if (template.content) {
+        console.log('- Template preview:', template.content.substring(0, 300).replace(/\s+/g, ' '));
+      }
+
       // Replace variables in template content using existing shared function
       const processedContent = replaceTemplateVariables(template.content, consumer, account, { ...tenant, ...settings }, undefined);
       const processedTitle = replaceTemplateVariables(template.title, consumer, account, { ...tenant, ...settings }, undefined);
+      
+      // Check if any replacement happened
+      const replacementOccurred = processedContent !== template.content;
+      console.log('- Variable replacement occurred:', replacementOccurred);
+      if (replacementOccurred) {
+        console.log('- Processed content preview:', processedContent.substring(0, 300).replace(/\s+/g, ' '));
+      } else {
+        console.log('⚠️ WARNING: No variables were replaced! Template might not contain valid variable placeholders.');
+      }
 
       // Create a document record (HTML content stored as data URL)
       const htmlContent = `data:text/html;charset=utf-8,${encodeURIComponent(processedContent)}`;
