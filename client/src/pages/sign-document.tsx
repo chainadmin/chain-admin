@@ -18,7 +18,7 @@ export default function SignDocumentPage() {
   const [consentGiven, setConsentGiven] = useState(false);
 
   const { data: request, isLoading } = useQuery<any>({
-    queryKey: ["/api/signature-requests", requestId, "public"],
+    queryKey: [`/api/signature-requests/${requestId}`],
     enabled: !!requestId,
   });
 
@@ -37,7 +37,7 @@ export default function SignDocumentPage() {
     },
     onSuccess: () => {
       toast({ title: "Document signed successfully!" });
-      queryClient.invalidateQueries({ queryKey: ["/api/signature-requests", requestId, "public"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/signature-requests/${requestId}`] });
     },
     onError: (error: any) => {
       toast({
