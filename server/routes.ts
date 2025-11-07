@@ -1460,6 +1460,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get consumer conversation (emails + SMS)
+  app.get('/api/consumers/:id/conversation', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = await getTenantId(req, storage);
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const conversation = await storage.getConsumerConversation(req.params.id, tenantId);
+      
+      // Combine and sort all messages chronologically
+      const allMessages = [
+        ...conversation.emails.sent.map((m: any) => ({ ...m, channel: 'email', direction: 'outbound' })),
+        ...conversation.emails.received.map((m: any) => ({ ...m, channel: 'email', direction: 'inbound' })),
+        ...conversation.sms.sent.map((m: any) => ({ ...m, channel: 'sms', direction: 'outbound' })),
+        ...conversation.sms.received.map((m: any) => ({ ...m, channel: 'sms', direction: 'inbound' })),
+      ].sort((a, b) => {
+        const timeA = new Date(a.timestamp).getTime();
+        const timeB = new Date(b.timestamp).getTime();
+        return timeB - timeA; // Most recent first
+      });
+
+      res.json({
+        messages: allMessages,
+        summary: {
+          totalEmails: conversation.emails.sent.length + conversation.emails.received.length,
+          totalSms: conversation.sms.sent.length + conversation.sms.received.length,
+          emailsSent: conversation.emails.sent.length,
+          emailsReceived: conversation.emails.received.length,
+          smsSent: conversation.sms.sent.length,
+          smsReceived: conversation.sms.received.length,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching consumer conversation:", error);
+      res.status(500).json({ message: "Failed to fetch conversation" });
+    }
+  });
+
   // Account routes
   app.get('/api/accounts', authenticateUser, async (req: any, res) => {
     try {

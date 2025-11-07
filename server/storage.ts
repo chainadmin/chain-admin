@@ -275,6 +275,12 @@ export interface IStorage {
   markSmsReplyAsRead(id: string, tenantId: string): Promise<SmsReply>;
   deleteSmsReply(id: string, tenantId: string): Promise<void>;
   
+  // Consumer conversation operations
+  getConsumerConversation(consumerId: string, tenantId: string): Promise<{
+    emails: { sent: any[]; received: any[] };
+    sms: { sent: any[]; received: any[] };
+  }>;
+  
   // SMS template operations
   getSmsTemplatesByTenant(tenantId: string): Promise<SmsTemplate[]>;
   createSmsTemplate(template: InsertSmsTemplate): Promise<SmsTemplate>;
@@ -3358,6 +3364,76 @@ export class DatabaseStorage implements IStorage {
   async createSignatureAuditEntry(data: InsertSignatureAuditTrail): Promise<SignatureAuditTrail> {
     const [entry] = await db.insert(signatureAuditTrail).values(data).returning();
     return entry;
+  }
+
+  async getConsumerConversation(consumerId: string, tenantId: string): Promise<{
+    emails: { sent: any[]; received: any[] };
+    sms: { sent: any[]; received: any[] };
+  }> {
+    // Get consumer info with tenant verification to prevent cross-tenant data leaks
+    const consumer = await this.getConsumer(consumerId);
+    if (!consumer || consumer.tenantId !== tenantId) {
+      return { emails: { sent: [], received: [] }, sms: { sent: [], received: [] } };
+    }
+
+    // Get sent emails (from email logs)
+    const sentEmails = await db
+      .select()
+      .from(emailLogs)
+      .where(
+        and(
+          eq(emailLogs.tenantId, tenantId),
+          eq(emailLogs.toEmail, consumer.email)
+        )
+      )
+      .orderBy(desc(emailLogs.sentAt));
+
+    // Get received emails (from email replies)
+    const receivedEmails = await db
+      .select()
+      .from(emailReplies)
+      .where(
+        and(
+          eq(emailReplies.tenantId, tenantId),
+          eq(emailReplies.consumerId, consumerId)
+        )
+      )
+      .orderBy(desc(emailReplies.receivedAt));
+
+    // Get sent SMS (from SMS tracking)
+    const sentSms = await db
+      .select()
+      .from(smsTracking)
+      .where(
+        and(
+          eq(smsTracking.tenantId, tenantId),
+          eq(smsTracking.consumerId, consumerId)
+        )
+      )
+      .orderBy(desc(smsTracking.sentAt));
+
+    // Get received SMS (from SMS replies)
+    const receivedSms = await db
+      .select()
+      .from(smsReplies)
+      .where(
+        and(
+          eq(smsReplies.tenantId, tenantId),
+          eq(smsReplies.consumerId, consumerId)
+        )
+      )
+      .orderBy(desc(smsReplies.receivedAt));
+
+    return {
+      emails: {
+        sent: sentEmails.map(e => ({ ...e, type: 'sent', timestamp: e.sentAt })),
+        received: receivedEmails.map(e => ({ ...e, type: 'received', timestamp: e.receivedAt })),
+      },
+      sms: {
+        sent: sentSms.map(s => ({ ...s, type: 'sent', timestamp: s.sentAt })),
+        received: receivedSms.map(s => ({ ...s, type: 'received', timestamp: s.receivedAt })),
+      },
+    };
   }
 }
 
