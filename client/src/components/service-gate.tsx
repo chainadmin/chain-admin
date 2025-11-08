@@ -53,10 +53,10 @@ export function ServiceGate({ service, children, mode = "disable", className = "
   if (!isEnabled && mode === "disable") {
     return (
       <div className={`relative ${className}`} data-testid={`service-gate-${service}`}>
-        <div className="pointer-events-none select-none opacity-40 grayscale">
+        <div className="opacity-50 grayscale">
           {children}
         </div>
-        <div className="absolute inset-0 flex items-center justify-center">
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -77,6 +77,17 @@ export function ServiceGate({ service, children, mode = "disable", className = "
             </TooltipContent>
           </Tooltip>
         </div>
+        <div 
+          className="absolute inset-0 bg-transparent cursor-default" 
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+        />
       </div>
     );
   }
