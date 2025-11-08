@@ -6077,12 +6077,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const maskedSettings = { ...combinedSettings } as typeof combinedSettings;
 
+      // Mask USAePay credentials
       if (settings?.merchantApiKey) {
         maskedSettings.merchantApiKey = `****${settings.merchantApiKey.slice(-4)}`;
       }
 
       if (settings?.merchantApiPin) {
         maskedSettings.merchantApiPin = '****';
+      }
+
+      // Mask Authorize.net credentials
+      if (settings?.authnetApiLoginId) {
+        maskedSettings.authnetApiLoginId = `****${settings.authnetApiLoginId.slice(-4)}`;
+      }
+
+      if (settings?.authnetTransactionKey) {
+        maskedSettings.authnetTransactionKey = '****';
+      }
+
+      if (settings?.authnetPublicClientKey) {
+        maskedSettings.authnetPublicClientKey = `****${settings.authnetPublicClientKey.slice(-4)}`;
       }
 
       res.json(maskedSettings);
@@ -6139,13 +6153,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         smaxApiKey: z.string().nullable().optional(),
         smaxPin: z.string().nullable().optional(),
         smaxBaseUrl: z.string().nullable().optional(),
-        // USAePay merchant configuration
+        // Payment processor configuration (USAePay and Authorize.net)
         merchantProvider: z.string().nullable().optional(),
         merchantAccountId: z.string().nullable().optional(),
         merchantApiKey: z.string().nullable().optional(),
         merchantApiPin: z.string().nullable().optional(),
         merchantName: z.string().nullable().optional(),
         merchantType: z.string().nullable().optional(),
+        // Authorize.net configuration
+        authnetApiLoginId: z.string().nullable().optional(),
+        authnetTransactionKey: z.string().nullable().optional(),
+        authnetPublicClientKey: z.string().nullable().optional(),
         useSandbox: z.boolean().optional(),
         enableOnlinePayments: z.boolean().optional(),
       });
@@ -6171,6 +6189,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         smaxPin,
         merchantApiKey,
         merchantApiPin,
+        authnetApiLoginId,
+        authnetTransactionKey,
+        authnetPublicClientKey,
         ...otherSettings
       } = validatedData;
 
@@ -6179,6 +6200,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const finalSmaxApiKey = (smaxApiKey && smaxApiKey !== '••••••••') ? smaxApiKey?.trim() : currentSettings?.smaxApiKey;
       const finalSmaxPin = (smaxPin && smaxPin !== '••••••••') ? smaxPin?.trim() : currentSettings?.smaxPin;
 
+      // Preserve USAePay credentials if they're submitted as masked values
       let finalMerchantApiKey = merchantApiKey?.trim();
       if (typeof merchantApiKey === 'string' && merchantApiKey.startsWith('****') && currentSettings?.merchantApiKey) {
         finalMerchantApiKey = currentSettings.merchantApiKey;
@@ -6187,6 +6209,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let finalMerchantApiPin = merchantApiPin?.trim();
       if (typeof merchantApiPin === 'string' && merchantApiPin === '****' && currentSettings?.merchantApiPin) {
         finalMerchantApiPin = currentSettings.merchantApiPin;
+      }
+
+      // Preserve Authorize.net credentials if they're submitted as masked values
+      let finalAuthnetApiLoginId = authnetApiLoginId?.trim();
+      if (typeof authnetApiLoginId === 'string' && authnetApiLoginId.startsWith('****') && currentSettings?.authnetApiLoginId) {
+        finalAuthnetApiLoginId = currentSettings.authnetApiLoginId;
+      }
+
+      let finalAuthnetTransactionKey = authnetTransactionKey?.trim();
+      if (typeof authnetTransactionKey === 'string' && authnetTransactionKey === '****' && currentSettings?.authnetTransactionKey) {
+        finalAuthnetTransactionKey = currentSettings.authnetTransactionKey;
+      }
+
+      let finalAuthnetPublicClientKey = authnetPublicClientKey?.trim();
+      if (typeof authnetPublicClientKey === 'string' && authnetPublicClientKey.startsWith('****') && currentSettings?.authnetPublicClientKey) {
+        finalAuthnetPublicClientKey = currentSettings.authnetPublicClientKey;
       }
 
       // Update tenant table with Twilio and email settings if any provided
@@ -6223,6 +6261,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tenantId: tenantId,
       };
 
+      // Add USAePay credentials to payload if provided
       if (merchantApiKey !== undefined) {
         tenantSettingsPayload.merchantApiKey = finalMerchantApiKey || null;
       }
@@ -6231,16 +6270,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tenantSettingsPayload.merchantApiPin = finalMerchantApiPin || null;
       }
 
+      // Add Authorize.net credentials to payload if provided
+      if (authnetApiLoginId !== undefined) {
+        tenantSettingsPayload.authnetApiLoginId = finalAuthnetApiLoginId || null;
+      }
+
+      if (authnetTransactionKey !== undefined) {
+        tenantSettingsPayload.authnetTransactionKey = finalAuthnetTransactionKey || null;
+      }
+
+      if (authnetPublicClientKey !== undefined) {
+        tenantSettingsPayload.authnetPublicClientKey = finalAuthnetPublicClientKey || null;
+      }
+
       const updatedSettings = await storage.upsertTenantSettings(tenantSettingsPayload as any);
 
       const maskedUpdatedSettings = { ...updatedSettings } as typeof updatedSettings;
 
+      // Mask USAePay credentials in response
       if (updatedSettings.merchantApiKey) {
         maskedUpdatedSettings.merchantApiKey = `****${updatedSettings.merchantApiKey.slice(-4)}`;
       }
 
       if (updatedSettings.merchantApiPin) {
         maskedUpdatedSettings.merchantApiPin = '****';
+      }
+
+      // Mask Authorize.net credentials in response
+      if (updatedSettings.authnetApiLoginId) {
+        maskedUpdatedSettings.authnetApiLoginId = `****${updatedSettings.authnetApiLoginId.slice(-4)}`;
+      }
+
+      if (updatedSettings.authnetTransactionKey) {
+        maskedUpdatedSettings.authnetTransactionKey = '****';
+      }
+
+      if (updatedSettings.authnetPublicClientKey) {
+        maskedUpdatedSettings.authnetPublicClientKey = `****${updatedSettings.authnetPublicClientKey.slice(-4)}`;
       }
 
       res.json(maskedUpdatedSettings);
