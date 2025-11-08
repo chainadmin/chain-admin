@@ -7,6 +7,7 @@ import chainLogo from "@/assets/chain-logo.png";
 import { useAgencyContext } from "@/hooks/useAgencyContext";
 import { cn } from "@/lib/utils";
 import { clearAuth } from "@/lib/cookies";
+import { useServiceAccess } from "@/hooks/useServiceAccess";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
