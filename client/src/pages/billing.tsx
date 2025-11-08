@@ -41,6 +41,12 @@ export default function Billing() {
   const [isPortalLoading, setIsPortalLoading] = useState(false);
   const [updatingPlanId, setUpdatingPlanId] = useState<string | null>(null);
 
+  // Check for tab query parameter and set active tab on mount
+  const [activeTab, setActiveTab] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('tab') || 'overview';
+  });
+
   // Fetch billing statistics
   const { data: billingStats, isLoading: statsLoading } = useQuery({
     queryKey: ["/api/billing/stats"],
@@ -320,7 +326,7 @@ export default function Billing() {
           </div>
         </section>
 
-        <Tabs defaultValue="overview" className="space-y-8">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-8">
           <TabsList className="flex w-full flex-wrap items-center gap-2 p-1 sm:w-auto">
             <TabsTrigger value="overview" data-testid="tab-overview" className="px-4 py-2">
               Overview
@@ -662,6 +668,7 @@ export default function Billing() {
                   </div>
 
                   <Button
+                    onClick={() => setActiveTab('subscription')}
                     className="w-full mt-6 rounded-xl border border-emerald-400/40 bg-emerald-500/20 py-3 text-base font-semibold text-emerald-100 transition hover:bg-emerald-500/30"
                     data-testid="button-subscribe-bundle"
                   >

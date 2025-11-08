@@ -72,7 +72,7 @@ export function ServiceUpsellBanner({
         </div>
         <div className="flex items-center gap-2">
           <Button
-            onClick={() => setLocation("/admin/billing")}
+            onClick={() => setLocation("/admin/billing?tab=services")}
             className="rounded-lg border border-amber-400/60 bg-gradient-to-br from-amber-500/80 to-orange-500/80 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:from-amber-400 hover:to-orange-400"
             data-testid={`button-upgrade-banner-${service}`}
           >

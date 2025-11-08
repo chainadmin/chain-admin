@@ -60,7 +60,7 @@ export function ServiceGate({ service, children, mode = "disable", className = "
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                onClick={() => setLocation("/admin/billing")}
+                onClick={() => setLocation("/admin/billing?tab=services")}
                 className="pointer-events-auto rounded-xl border-2 border-amber-400/60 bg-gradient-to-br from-amber-500/90 to-orange-500/90 px-6 py-3 text-sm font-semibold text-white shadow-2xl shadow-amber-900/50 transition hover:scale-105 hover:from-amber-400 hover:to-orange-400"
                 data-testid={`button-upgrade-${service}`}
               >
