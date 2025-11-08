@@ -7,21 +7,24 @@ export async function runMigrations() {
     client = await pool.connect();
     console.log('🔄 Running database migrations...');
     
-    // Add USAePay merchant configuration columns one by one
-    console.log('Adding USAePay columns...');
-    const usaepayColumns = [
+    // Add payment processor columns (USAePay and Authorize.net)
+    console.log('Adding payment processor columns...');
+    const paymentProcessorColumns = [
       { name: 'merchant_provider', type: 'TEXT' },
       { name: 'merchant_account_id', type: 'TEXT' },
       { name: 'merchant_api_key', type: 'TEXT' },
       { name: 'merchant_api_pin', type: 'TEXT' },
       { name: 'merchant_name', type: 'TEXT' },
       { name: 'merchant_type', type: 'TEXT' },
+      { name: 'authnet_api_login_id', type: 'TEXT' },
+      { name: 'authnet_transaction_key', type: 'TEXT' },
+      { name: 'authnet_public_client_key', type: 'TEXT' },
       { name: 'use_sandbox', type: 'BOOLEAN', default: 'true' },
       { name: 'enable_online_payments', type: 'BOOLEAN', default: 'false' },
       { name: 'minimum_monthly_payment', type: 'INTEGER', default: '5000' }
     ];
     
-    for (const col of usaepayColumns) {
+    for (const col of paymentProcessorColumns) {
       try {
         const defaultClause = col.default ? ` DEFAULT ${col.default}` : '';
         await client.query(`ALTER TABLE tenant_settings ADD COLUMN IF NOT EXISTS ${col.name} ${col.type}${defaultClause}`);

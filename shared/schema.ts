@@ -541,13 +541,19 @@ export const tenantSettings = pgTable("tenant_settings", {
   minimumMonthlyPayment: bigint("minimum_monthly_payment", { mode: "number" }).default(5000), // In cents - global minimum for payment arrangements
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-  // Payment processor fields (USAePay)
-  merchantProvider: text("merchant_provider"),
+  // Payment processor fields (USAePay or Authorize.net)
+  merchantProvider: text("merchant_provider"), // 'usaepay' or 'authorize_net'
+  // USAePay fields
   merchantAccountId: text("merchant_account_id"),
   merchantApiKey: text("merchant_api_key"),
   merchantApiPin: text("merchant_api_pin"),
   merchantName: text("merchant_name"),
   merchantType: text("merchant_type"),
+  // Authorize.net fields
+  authnetApiLoginId: text("authnet_api_login_id"),
+  authnetTransactionKey: text("authnet_transaction_key"),
+  authnetPublicClientKey: text("authnet_public_client_key"),
+  // Common fields
   useSandbox: boolean("use_sandbox").default(true),
   enableOnlinePayments: boolean("enable_online_payments").default(false),
   // SMAX integration fields
