@@ -554,21 +554,24 @@ export default function Billing() {
                       description: "Consumer portal & payment processing",
                       price: 125,
                       icon: <Users className="h-6 w-6" />,
-                      features: ["Custom branding", "Account access", "Payment processing", "Payment plans", "Secure tokenization"]
+                      features: ["Custom branding", "Account access", "Payment processing", "Payment plans", "Secure tokenization"],
+                      helpText: "Need a merchant? Contact Us"
                     },
                     {
                       name: "Email Service",
                       description: "Professional email communications",
                       price: 125,
                       icon: <FileText className="h-6 w-6" />,
-                      features: ["Templates", "Campaigns", "Tracking"]
+                      features: ["Templates", "Campaigns", "Tracking"],
+                      helpText: "Need help with setup? Contact Us"
                     },
                     {
                       name: "SMS Service",
                       description: "Text message communications",
                       price: 125,
                       icon: <AlertCircle className="h-6 w-6" />,
-                      features: ["Multi-number sending", "Campaigns", "Analytics"]
+                      features: ["Multi-number sending", "Campaigns", "Analytics"],
+                      helpText: "Need help with setup? Contact Us"
                     }
                   ].map((service, idx) => (
                     <div
@@ -597,12 +600,24 @@ export default function Billing() {
                           ))}
                         </ul>
                       </div>
-                      <Button
-                        className="w-full rounded-xl border border-white/20 bg-white/10 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
-                        data-testid={`button-purchase-service-${idx}`}
-                      >
-                        Purchase service
-                      </Button>
+                      <div className="space-y-3">
+                        <Button
+                          className="w-full rounded-xl border border-white/20 bg-white/10 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
+                          data-testid={`button-purchase-service-${idx}`}
+                        >
+                          Purchase service
+                        </Button>
+                        <p className="text-center text-xs text-blue-100/60">
+                          {service.helpText.split('Contact Us')[0]}
+                          <button
+                            onClick={() => window.location.href = 'mailto:support@chainplatform.com?subject=Service Inquiry'}
+                            className="text-sky-300 underline hover:text-sky-200 transition"
+                            data-testid={`button-contact-us-${idx}`}
+                          >
+                            Contact Us
+                          </button>
+                        </p>
+                      </div>
                     </div>
                   ))}
                 </div>
