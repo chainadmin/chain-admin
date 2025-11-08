@@ -547,21 +547,14 @@ export default function Billing() {
                 </p>
               </CardHeader>
               <CardContent className="space-y-6 pt-6">
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   {[
                     {
-                      name: "Consumer Portal",
-                      description: "Branded consumer self-service portal",
+                      name: "Portal + Processing",
+                      description: "Consumer portal & payment processing",
                       price: 125,
                       icon: <Users className="h-6 w-6" />,
-                      features: ["Custom branding", "Account access", "Self-service tools"]
-                    },
-                    {
-                      name: "Payment Processing",
-                      description: "Accept online payments securely",
-                      price: 125,
-                      icon: <CreditCard className="h-6 w-6" />,
-                      features: ["Multiple processors", "Payment plans", "Secure tokenization"]
+                      features: ["Custom branding", "Account access", "Payment processing", "Payment plans", "Secure tokenization"]
                     },
                     {
                       name: "Email Service",
@@ -630,15 +623,15 @@ export default function Billing() {
                   <div className="grid gap-6 md:grid-cols-2 mt-6">
                     <div className="space-y-3">
                       <p className="text-xs uppercase tracking-wide text-emerald-200/70">À la carte total</p>
-                      <p className="text-4xl font-semibold text-white line-through opacity-50">$500</p>
-                      <p className="text-sm text-blue-100/70">4 services × $125 each</p>
+                      <p className="text-4xl font-semibold text-white line-through opacity-50">$375</p>
+                      <p className="text-sm text-blue-100/70">3 services × $125 each</p>
                     </div>
                     <div className="space-y-3">
                       <p className="text-xs uppercase tracking-wide text-emerald-200/70">Subscription bundle</p>
                       <div className="flex items-baseline gap-2">
                         <p className="text-4xl font-semibold text-emerald-300">$350</p>
                         <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-semibold text-emerald-200">
-                          Save $150/mo
+                          Save $25/mo
                         </span>
                       </div>
                       <p className="text-sm text-blue-100/70">All services + messaging volume</p>
@@ -647,14 +640,10 @@ export default function Billing() {
 
                   <div className="mt-6 space-y-3">
                     <p className="text-xs uppercase tracking-wide text-emerald-200/70">Subscription includes</p>
-                    <ul className="grid grid-cols-2 gap-2 text-sm text-blue-100/90">
+                    <ul className="space-y-2 text-sm text-blue-100/90">
                       <li className="flex items-center gap-2">
                         <span className="text-emerald-400">✓</span>
-                        Consumer Portal
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <span className="text-emerald-400">✓</span>
-                        Payment Processing
+                        Portal + Processing
                       </li>
                       <li className="flex items-center gap-2">
                         <span className="text-emerald-400">✓</span>

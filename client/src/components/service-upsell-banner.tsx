@@ -36,15 +36,15 @@ export function ServiceUpsellBanner({
   const defaultTitles = {
     email: "Email Service Not Active",
     sms: "SMS Service Not Active",
-    payment: "Payment Processing Not Active",
-    portal: "Consumer Portal Not Active",
+    payment: "Portal + Processing Not Active",
+    portal: "Portal + Processing Not Active",
   };
 
   const defaultDescriptions = {
     email: "Unlock professional email communications with templates and campaigns for $125/month, or get it bundled with all services for $350/month.",
     sms: "Unlock SMS messaging with multi-number sending and analytics for $125/month, or get it bundled with all services for $350/month.",
-    payment: "Unlock secure payment processing with multiple providers for $125/month, or get it bundled with all services for $350/month.",
-    portal: "Unlock the branded consumer portal with self-service tools for $125/month, or get it bundled with all services for $350/month.",
+    payment: "Unlock the consumer portal and payment processing (combined service) for $125/month, or get it bundled with all services for $350/month.",
+    portal: "Unlock the consumer portal and payment processing (combined service) for $125/month, or get it bundled with all services for $350/month.",
   };
 
   const isEnabled = serviceMap[service];

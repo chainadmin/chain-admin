@@ -4,6 +4,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import AdminLayout from "@/components/admin-layout";
 import { ServiceUpsellBanner } from "@/components/service-upsell-banner";
+import { ServiceGate } from "@/components/service-gate";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -356,6 +357,7 @@ export default function Payments() {
     <AdminLayout>
       <div className="mx-auto flex max-w-7xl flex-col gap-10 px-4 py-10 text-blue-50 sm:px-6 lg:px-8">
         <ServiceUpsellBanner service="payment" />
+        <ServiceGate service="payment">
         <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-emerald-500/20 via-blue-600/20 to-indigo-900/20 p-8 shadow-2xl shadow-blue-900/40 backdrop-blur">
           <div className="pointer-events-none absolute -right-10 top-10 h-64 w-64 rounded-full bg-emerald-500/30 blur-3xl" />
           <div className="pointer-events-none absolute -bottom-20 left-8 h-56 w-56 rounded-full bg-blue-500/30 blur-3xl" />
@@ -1106,7 +1108,7 @@ export default function Payments() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-
+        </ServiceGate>
       </div>
     </AdminLayout>
   );

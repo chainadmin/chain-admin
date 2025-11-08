@@ -36,8 +36,8 @@ export function ServiceGate({ service, children, mode = "disable", className = "
   const serviceNames = {
     email: "Email Service",
     sms: "SMS Service",
-    payment: "Payment Processing",
-    portal: "Consumer Portal",
+    payment: "Portal + Processing",
+    portal: "Portal + Processing",
   };
 
   const isEnabled = serviceMap[service];
