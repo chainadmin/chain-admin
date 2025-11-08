@@ -709,6 +709,10 @@ export default function ConsumerDashboardSimple() {
 
       // If using Authorize.net, tokenize the card first
       if (settings?.merchantProvider === 'authorize_net') {
+        console.log('🔵 [Authorize.net] Starting payment tokenization...');
+        console.log('🔵 [Authorize.net] Merchant Provider:', settings.merchantProvider);
+        console.log('🔵 [Authorize.net] Sandbox Mode:', settings.useSandbox);
+        
         // Wait for Accept.js to be fully loaded
         const maxWaitTime = 5000; // 5 seconds
         const startTime = Date.now();
@@ -717,12 +721,22 @@ export default function ConsumerDashboardSimple() {
         }
 
         if (!(window as any).Accept) {
+          console.error('❌ [Authorize.net] Accept.js failed to load');
           throw new Error('Payment system not ready. Please refresh and try again.');
         }
+
+        console.log('✅ [Authorize.net] Accept.js loaded successfully');
 
         // Get API Login ID from settings (needed for Accept.js)
         const response = await apiCall("GET", "/api/consumer/tenant-settings", null, token);
         const tenantSettings = await response.json();
+
+        console.log('🔵 [Authorize.net] Credentials check:', {
+          hasPublicClientKey: !!settings?.authnetPublicClientKey,
+          hasApiLoginId: !!tenantSettings?.authnetApiLoginId,
+          publicKeyLength: settings?.authnetPublicClientKey?.length || 0,
+          apiLoginIdLength: tenantSettings?.authnetApiLoginId?.length || 0,
+        });
 
         const authData = {
           clientKey: settings?.authnetPublicClientKey,
@@ -736,13 +750,29 @@ export default function ConsumerDashboardSimple() {
           cardCode: paymentForm.cvv,
         };
 
+        console.log('🔵 [Authorize.net] Card data prepared:', {
+          cardNumberLength: cardData.cardNumber.length,
+          cardLast4: cardData.cardNumber.slice(-4),
+          month: cardData.month,
+          year: cardData.year,
+          hasCvv: !!cardData.cardCode,
+        });
+
         // Tokenize the card using Accept.js
+        console.log('🔵 [Authorize.net] Calling Accept.dispatchData...');
         const tokenResponse: any = await new Promise((resolve, reject) => {
           (window as any).Accept.dispatchData({ authData, cardData }, (response: any) => {
+            console.log('🔵 [Authorize.net] Accept.js response:', response);
+            
             if (response.messages.resultCode === 'Error') {
               const errorMsg = response.messages.message.map((m: any) => m.text).join(', ');
+              console.error('❌ [Authorize.net] Tokenization failed:', errorMsg);
+              console.error('❌ [Authorize.net] Full error details:', response.messages.message);
               reject(new Error(errorMsg));
             } else {
+              console.log('✅ [Authorize.net] Tokenization successful');
+              console.log('✅ [Authorize.net] Opaque data descriptor:', response.opaqueData.dataDescriptor);
+              console.log('✅ [Authorize.net] Opaque data value length:', response.opaqueData.dataValue.length);
               resolve(response);
             }
           });
@@ -751,6 +781,8 @@ export default function ConsumerDashboardSimple() {
         // Add tokenized data to payment request
         paymentData.opaqueDataDescriptor = tokenResponse.opaqueData.dataDescriptor;
         paymentData.opaqueDataValue = tokenResponse.opaqueData.dataValue;
+        
+        console.log('✅ [Authorize.net] Payment data prepared for backend submission');
       } else {
         // USAePay - send raw card data
         paymentData.cardNumber = paymentForm.cardNumber;

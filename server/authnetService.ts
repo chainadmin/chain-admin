@@ -135,11 +135,14 @@ export class AuthnetService {
         };
       }
 
-      console.log('📡 Authorize.net API Request:', {
+      console.log('🔵 [Authorize.net Service] API Request:', {
         endpoint: this.apiEndpoint,
         amount: request.amount,
+        hasOpaqueData: !!(request.opaqueDataDescriptor && request.opaqueDataValue),
         hasNonce: !!request.paymentNonce,
         hasCardData: !!request.cardNumber,
+        useSandbox: this.config.useSandbox,
+        apiLoginIdLength: this.config.apiLoginId.length,
       });
 
       const response = await fetch(this.apiEndpoint, {
@@ -152,11 +155,19 @@ export class AuthnetService {
 
       const result: any = await response.json();
 
-      console.log('📨 Authorize.net API Response:', {
+      console.log('🔵 [Authorize.net Service] API Response:', {
         resultCode: result?.messages?.resultCode,
+        responseCode: result?.transactionResponse?.responseCode,
         messageCode: result?.messages?.message?.[0]?.code,
         messageText: result?.messages?.message?.[0]?.text,
+        transId: result?.transactionResponse?.transId,
+        authCode: result?.transactionResponse?.authCode,
       });
+
+      // Log full response in sandbox for debugging
+      if (this.config.useSandbox) {
+        console.log('🔵 [Authorize.net Sandbox] Full API Response:', JSON.stringify(result, null, 2));
+      }
 
       if (result?.messages?.resultCode === 'Ok' && result?.transactionResponse?.responseCode === '1') {
         // Success - responseCode 1 means approved
