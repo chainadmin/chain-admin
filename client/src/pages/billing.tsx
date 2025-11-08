@@ -325,6 +325,9 @@ export default function Billing() {
             <TabsTrigger value="overview" data-testid="tab-overview" className="px-4 py-2">
               Overview
             </TabsTrigger>
+            <TabsTrigger value="services" data-testid="tab-services" className="px-4 py-2">
+              Services & Add-ons
+            </TabsTrigger>
             <TabsTrigger value="invoices" data-testid="tab-invoices" className="px-4 py-2">
               Invoices
             </TabsTrigger>
@@ -527,6 +530,153 @@ export default function Billing() {
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
+
+          <TabsContent value="services" className="space-y-6">
+            <Card className="rounded-3xl border-white/10 bg-[#101c3c]/70 text-blue-50 shadow-lg shadow-blue-900/20">
+              <CardHeader className="border-b border-white/10 pb-4">
+                <CardTitle className="text-lg font-semibold text-white">À la carte services</CardTitle>
+                <p className="text-sm text-blue-100/70">
+                  Purchase individual services or bundle them with a subscription for savings.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-6 pt-6">
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  {[
+                    {
+                      name: "Consumer Portal",
+                      description: "Branded consumer self-service portal",
+                      price: 125,
+                      icon: <Users className="h-6 w-6" />,
+                      features: ["Custom branding", "Account access", "Self-service tools"]
+                    },
+                    {
+                      name: "Payment Processing",
+                      description: "Accept online payments securely",
+                      price: 125,
+                      icon: <CreditCard className="h-6 w-6" />,
+                      features: ["Multiple processors", "Payment plans", "Secure tokenization"]
+                    },
+                    {
+                      name: "Email Service",
+                      description: "Professional email communications",
+                      price: 125,
+                      icon: <FileText className="h-6 w-6" />,
+                      features: ["Templates", "Campaigns", "Tracking"]
+                    },
+                    {
+                      name: "SMS Service",
+                      description: "Text message communications",
+                      price: 125,
+                      icon: <AlertCircle className="h-6 w-6" />,
+                      features: ["Multi-number sending", "Campaigns", "Analytics"]
+                    }
+                  ].map((service, idx) => (
+                    <div
+                      key={idx}
+                      className="flex flex-col justify-between gap-4 rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-blue-900/20"
+                      data-testid={`service-card-${idx}`}
+                    >
+                      <div className="space-y-4">
+                        <div className="rounded-2xl bg-sky-500/20 p-3 text-sky-200 w-fit">
+                          {service.icon}
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-semibold text-white">{service.name}</h3>
+                          <p className="text-sm text-blue-100/70 mt-1">{service.description}</p>
+                        </div>
+                        <div>
+                          <p className="text-3xl font-semibold text-white">${service.price}</p>
+                          <p className="text-xs text-blue-100/60 mt-1">per month</p>
+                        </div>
+                        <ul className="space-y-1.5 text-xs text-blue-100/70">
+                          {service.features.map((feature, featureIdx) => (
+                            <li key={featureIdx} className="flex items-start gap-2">
+                              <span className="text-emerald-400 mt-0.5">✓</span>
+                              <span>{feature}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <Button
+                        className="w-full rounded-xl border border-white/20 bg-white/10 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
+                        data-testid={`button-purchase-service-${idx}`}
+                      >
+                        Purchase service
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="rounded-2xl border-2 border-emerald-400/40 bg-gradient-to-br from-emerald-500/10 to-sky-500/10 p-6 shadow-2xl">
+                  <div className="flex items-start gap-4 mb-4">
+                    <div className="rounded-2xl bg-emerald-500/20 p-3 text-emerald-200">
+                      <TrendingUp className="h-6 w-6" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-xl font-semibold text-white">Bundle & Save</h3>
+                      <p className="text-sm text-blue-100/70 mt-1">
+                        Get all services plus messaging volume for one discounted price
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="grid gap-6 md:grid-cols-2 mt-6">
+                    <div className="space-y-3">
+                      <p className="text-xs uppercase tracking-wide text-emerald-200/70">À la carte total</p>
+                      <p className="text-4xl font-semibold text-white line-through opacity-50">$500</p>
+                      <p className="text-sm text-blue-100/70">4 services × $125 each</p>
+                    </div>
+                    <div className="space-y-3">
+                      <p className="text-xs uppercase tracking-wide text-emerald-200/70">Subscription bundle</p>
+                      <div className="flex items-baseline gap-2">
+                        <p className="text-4xl font-semibold text-emerald-300">$350</p>
+                        <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-semibold text-emerald-200">
+                          Save $150/mo
+                        </span>
+                      </div>
+                      <p className="text-sm text-blue-100/70">All services + messaging volume</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 space-y-3">
+                    <p className="text-xs uppercase tracking-wide text-emerald-200/70">Subscription includes</p>
+                    <ul className="grid grid-cols-2 gap-2 text-sm text-blue-100/90">
+                      <li className="flex items-center gap-2">
+                        <span className="text-emerald-400">✓</span>
+                        Consumer Portal
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <span className="text-emerald-400">✓</span>
+                        Payment Processing
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <span className="text-emerald-400">✓</span>
+                        Email Service + Volume
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <span className="text-emerald-400">✓</span>
+                        SMS Service + Volume
+                      </li>
+                    </ul>
+                  </div>
+
+                  <Button
+                    className="w-full mt-6 rounded-xl border border-emerald-400/40 bg-emerald-500/20 py-3 text-base font-semibold text-emerald-100 transition hover:bg-emerald-500/30"
+                    data-testid="button-subscribe-bundle"
+                  >
+                    View subscription plans
+                  </Button>
+                </div>
+
+                <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4">
+                  <p className="text-xs text-amber-200">
+                    <strong>Note:</strong> Services purchased à la carte do not include messaging volume (emails and SMS). 
+                    Volume limits and overage charges apply separately based on your subscription plan.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="invoices" className="space-y-6">
