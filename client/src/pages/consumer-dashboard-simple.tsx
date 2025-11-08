@@ -338,7 +338,7 @@ export default function ConsumerDashboardSimple() {
     retry: 1,
   });
 
-  // Fetch settings to get minimum monthly payment
+  // Fetch settings to get minimum monthly payment and merchant provider info
   const { data: settings } = useQuery({
     queryKey: ['/api/consumer/tenant-settings'],
     queryFn: async () => {
@@ -349,6 +349,40 @@ export default function ConsumerDashboardSimple() {
     },
     enabled: !!session?.tenantSlug,
   });
+
+  // Load Accept.js script for Authorize.net if using that merchant provider
+  useEffect(() => {
+    if (settings?.merchantProvider === 'authorize_net') {
+      const scriptId = 'acceptjs-script';
+      
+      // Don't load if already loaded
+      if (document.getElementById(scriptId)) {
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.id = scriptId;
+      script.type = 'text/javascript';
+      script.charset = 'utf-8';
+      
+      // Use sandbox or production URL based on settings
+      if (settings?.useSandbox) {
+        script.src = 'https://jstest.authorize.net/v1/Accept.js';
+      } else {
+        script.src = 'https://js.authorize.net/v1/Accept.js';
+      }
+      
+      document.head.appendChild(script);
+      
+      return () => {
+        // Clean up script on unmount
+        const existingScript = document.getElementById(scriptId);
+        if (existingScript) {
+          existingScript.remove();
+        }
+      };
+    }
+  }, [settings?.merchantProvider, settings?.useSandbox]);
 
   // Fetch documents and communication history
   const { data: documents } = useQuery({
@@ -650,13 +684,10 @@ export default function ConsumerDashboardSimple() {
       const shouldSetupRecurring = isSimplifiedFlow || (setupRecurring && selectedArrangement && 
         (selectedArrangement.planType === 'fixed_monthly' || selectedArrangement.planType === 'range'));
       
-      const response = await apiCall("POST", `/api/consumer/payments/process`, {
+      // Handle Authorize.net tokenization if that's the merchant provider
+      let paymentData: any = {
         accountId: selectedAccount.id,
         arrangementId: selectedArrangement?.id || null,
-        cardNumber: paymentForm.cardNumber,
-        expiryMonth: paymentForm.expiryMonth,
-        expiryYear: paymentForm.expiryYear,
-        cvv: paymentForm.cvv,
         cardName: paymentForm.cardName,
         zipCode: paymentForm.zipCode,
         saveCard: saveCard || isSimplifiedFlow,
@@ -674,7 +705,61 @@ export default function ConsumerDashboardSimple() {
           paymentFrequency,
           calculatedPaymentCents: calculatedPayment,
         } : null,
-      }, token);
+      };
+
+      // If using Authorize.net, tokenize the card first
+      if (settings?.merchantProvider === 'authorize_net') {
+        // Wait for Accept.js to be fully loaded
+        const maxWaitTime = 5000; // 5 seconds
+        const startTime = Date.now();
+        while (!(window as any).Accept && Date.now() - startTime < maxWaitTime) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        if (!(window as any).Accept) {
+          throw new Error('Payment system not ready. Please refresh and try again.');
+        }
+
+        // Get API Login ID from settings (needed for Accept.js)
+        const response = await apiCall("GET", "/api/consumer/tenant-settings", null, token);
+        const tenantSettings = await response.json();
+
+        const authData = {
+          clientKey: settings?.authnetPublicClientKey,
+          apiLoginID: tenantSettings?.authnetApiLoginId || '', // Required by Authorize.net
+        };
+
+        const cardData = {
+          cardNumber: paymentForm.cardNumber,
+          month: paymentForm.expiryMonth,
+          year: paymentForm.expiryYear,
+          cardCode: paymentForm.cvv,
+        };
+
+        // Tokenize the card using Accept.js
+        const tokenResponse: any = await new Promise((resolve, reject) => {
+          (window as any).Accept.dispatchData({ authData, cardData }, (response: any) => {
+            if (response.messages.resultCode === 'Error') {
+              const errorMsg = response.messages.message.map((m: any) => m.text).join(', ');
+              reject(new Error(errorMsg));
+            } else {
+              resolve(response);
+            }
+          });
+        });
+
+        // Add tokenized data to payment request
+        paymentData.opaqueDataDescriptor = tokenResponse.opaqueData.dataDescriptor;
+        paymentData.opaqueDataValue = tokenResponse.opaqueData.dataValue;
+      } else {
+        // USAePay - send raw card data
+        paymentData.cardNumber = paymentForm.cardNumber;
+        paymentData.expiryMonth = paymentForm.expiryMonth;
+        paymentData.expiryYear = paymentForm.expiryYear;
+        paymentData.cvv = paymentForm.cvv;
+      }
+      
+      const response = await apiCall("POST", `/api/consumer/payments/process`, paymentData, token);
 
       const result = await response.json();
 

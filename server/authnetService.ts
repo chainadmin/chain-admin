@@ -9,7 +9,9 @@ export interface AuthnetPaymentRequest {
   cardNumber?: string;
   expirationDate?: string; // MMYY format
   cvv?: string;
-  paymentNonce?: string; // From Accept.js tokenization
+  opaqueDataDescriptor?: string; // From Accept.js tokenization
+  opaqueDataValue?: string; // From Accept.js tokenization
+  paymentNonce?: string; // Legacy - use opaque data instead
   cardholderName?: string;
   billingAddress?: {
     firstName?: string;
@@ -85,8 +87,16 @@ export class AuthnetService {
         },
       };
 
-      // Use payment nonce if provided (from Accept.js), otherwise use direct card data
-      if (request.paymentNonce) {
+      // Use opaque data if provided (from Accept.js), otherwise use direct card data
+      if (request.opaqueDataDescriptor && request.opaqueDataValue) {
+        payload.createTransactionRequest.transactionRequest.payment = {
+          opaqueData: {
+            dataDescriptor: request.opaqueDataDescriptor,
+            dataValue: request.opaqueDataValue,
+          },
+        };
+      } else if (request.paymentNonce) {
+        // Legacy support for paymentNonce
         payload.createTransactionRequest.transactionRequest.payment = {
           opaqueData: {
             dataDescriptor: 'COMMON.ACCEPT.INAPP.PAYMENT',

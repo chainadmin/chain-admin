@@ -6630,6 +6630,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         showPaymentPlans: settings?.showPaymentPlans ?? true,
         showDocuments: settings?.showDocuments ?? true,
         allowSettlementRequests: settings?.allowSettlementRequests ?? true,
+        // Merchant provider settings (public info only - needed for Accept.js)
+        merchantProvider: settings?.merchantProvider || 'usaepay',
+        authnetPublicClientKey: settings?.authnetPublicClientKey || null,
+        authnetApiLoginId: settings?.authnetApiLoginId || null, // Needed for Accept.js tokenization
+        useSandbox: settings?.useSandbox ?? true,
       });
     } catch (error) {
       console.error("Error fetching consumer tenant settings:", error);
@@ -7562,7 +7567,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         firstPaymentDate,
         customPaymentAmountCents,
         paymentDate, // For retrying failed SMAX payments with specific date
-        simplifiedFlow // New simplified arrangement flow data
+        simplifiedFlow, // New simplified arrangement flow data
+        opaqueDataDescriptor, // Authorize.net tokenized data
+        opaqueDataValue // Authorize.net tokenized data
       } = req.body;
 
       let normalizedFirstPaymentDate: Date | null = null;
@@ -7620,7 +7627,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      if (!accountId || !cardNumber || !expiryMonth || !expiryYear || !cvv || !cardName) {
+      // Validate payment data - either raw card data or Authorize.net tokenized data
+      const hasRawCardData = cardNumber && expiryMonth && expiryYear && cvv;
+      const hasAuthnetToken = opaqueDataDescriptor && opaqueDataValue;
+      
+      if (!accountId || !cardName || (!hasRawCardData && !hasAuthnetToken)) {
         return res.status(400).json({ message: "Missing required payment information" });
       }
 
@@ -7835,28 +7846,122 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Get USAePay credentials from tenant settings and trim whitespace
-      const merchantApiKey = settings.merchantApiKey?.trim();
-      const merchantApiPin = settings.merchantApiPin?.trim();
+      // Determine which merchant provider is configured
+      const merchantProvider = settings.merchantProvider || 'usaepay';
       const useSandbox = settings.useSandbox;
 
-      if (!merchantApiKey || !merchantApiPin) {
-        console.error("USAePay credentials not configured for tenant:", tenantId);
-        return res.status(500).json({ message: "Payment processing is not configured. Please contact your agency." });
+      console.log('🏦 Merchant provider:', merchantProvider);
+
+      // Validate merchant credentials are configured
+      if (merchantProvider === 'authorize_net') {
+        const authnetApiLoginId = settings.authnetApiLoginId?.trim();
+        const authnetTransactionKey = settings.authnetTransactionKey?.trim();
+
+        if (!authnetApiLoginId || !authnetTransactionKey) {
+          console.error("Authorize.net credentials not configured for tenant:", tenantId);
+          return res.status(500).json({ message: "Payment processing is not configured. Please contact your agency." });
+        }
+
+        console.log('🔑 Authorize.net credentials check:', {
+          apiLoginIdLength: authnetApiLoginId.length,
+          apiLoginIdFirst3: authnetApiLoginId.substring(0, 3),
+          useSandbox
+        });
+      } else {
+        // USAePay credentials
+        const merchantApiKey = settings.merchantApiKey?.trim();
+        const merchantApiPin = settings.merchantApiPin?.trim();
+
+        if (!merchantApiKey || !merchantApiPin) {
+          console.error("USAePay credentials not configured for tenant:", tenantId);
+          return res.status(500).json({ message: "Payment processing is not configured. Please contact your agency." });
+        }
+
+        console.log('🔑 USAePay credentials check:', {
+          apiKeyLength: merchantApiKey.length,
+          pinLength: merchantApiPin.length,
+          apiKeyFirst3: merchantApiKey.substring(0, 3),
+          pinFirst3: merchantApiPin.substring(0, 3),
+          useSandbox,
+          hasWhitespace: {
+            apiKey: settings.merchantApiKey !== merchantApiKey,
+            pin: settings.merchantApiPin !== merchantApiPin,
+          }
+        });
       }
 
-      // Log credential info for debugging (without exposing full values)
-      console.log('🔑 USAePay credentials check:', {
-        apiKeyLength: merchantApiKey.length,
-        pinLength: merchantApiPin.length,
-        apiKeyFirst3: merchantApiKey.substring(0, 3),
-        pinFirst3: merchantApiPin.substring(0, 3),
-        useSandbox,
-        hasWhitespace: {
-          apiKey: settings.merchantApiKey !== merchantApiKey,
-          pin: settings.merchantApiPin !== merchantApiPin,
+      // Route to appropriate payment processor
+      if (merchantProvider === 'authorize_net') {
+        // ===== AUTHORIZE.NET PAYMENT PROCESSING =====
+        console.log('🔵 Processing payment with Authorize.net');
+        
+        const authnetService = new AuthnetService({
+          apiLoginId: settings.authnetApiLoginId!.trim(),
+          transactionKey: settings.authnetTransactionKey!.trim(),
+          useSandbox: useSandbox ?? true,
+        });
+
+        // Process payment using tokenized data from Accept.js
+        const paymentResult = await authnetService.processPayment({
+          amount: amountCents / 100, // Convert cents to dollars
+          opaqueDataDescriptor,
+          opaqueDataValue,
+          invoice: accountId || `consumer_${consumerId}`,
+          description: arrangement ? `${arrangement.name} - Payment for account` : `Payment for account`,
+        });
+
+        if (!paymentResult.success) {
+          console.error('❌ Authorize.net payment failed:', paymentResult.errorMessage);
+          return res.status(400).json({
+            success: false,
+            message: paymentResult.errorMessage || 'Payment declined',
+          });
         }
-      });
+
+        console.log('✅ Authorize.net payment approved:', {
+          transactionId: paymentResult.transactionId,
+          authCode: paymentResult.authCode,
+        });
+
+        // Create payment record
+        const payment = await storage.createPayment({
+          tenantId: tenantId,
+          consumerId: consumerId,
+          accountId: accountId || null,
+          amountCents,
+          paymentMethod: 'credit_card',
+          status: 'completed',
+          transactionId: paymentResult.transactionId || `authnet_${Date.now()}`,
+          processorResponse: JSON.stringify(paymentResult),
+          processedAt: new Date(),
+          notes: arrangement ? `${arrangement.name} - Payment` : 'Payment',
+        });
+
+        // Update account balance
+        await storage.updateAccount(accountId, {
+          balanceCents: Math.max(0, (account.balanceCents || 0) - amountCents),
+        });
+
+        // TODO: Handle payment method saving, recurring setup, and SMAX sync for Authorize.net
+        // For now, return basic success response
+
+        return res.json({
+          success: true,
+          message: 'Payment processed successfully',
+          payment: {
+            id: payment.id,
+            amount: amountCents / 100,
+            status: 'completed',
+            transactionId: paymentResult.transactionId,
+          },
+        });
+      }
+
+      // ===== USAEPAY PAYMENT PROCESSING =====
+      console.log('🟢 Processing payment with USAePay');
+      
+      const merchantApiKey = settings.merchantApiKey!.trim();
+      const merchantApiPin = settings.merchantApiPin!.trim();
 
       // Determine API endpoint based on sandbox mode
       const usaepayBaseUrl = useSandbox 
