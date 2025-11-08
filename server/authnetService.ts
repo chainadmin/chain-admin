@@ -1,0 +1,280 @@
+export interface AuthnetConfig {
+  apiLoginId: string;
+  transactionKey: string;
+  useSandbox: boolean;
+}
+
+export interface AuthnetPaymentRequest {
+  amount: number; // in dollars (e.g., 10.50)
+  cardNumber?: string;
+  expirationDate?: string; // MMYY format
+  cvv?: string;
+  paymentNonce?: string; // From Accept.js tokenization
+  cardholderName?: string;
+  billingAddress?: {
+    firstName?: string;
+    lastName?: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+  };
+  invoice?: string;
+  description?: string;
+}
+
+export interface AuthnetTokenizationRequest {
+  cardNumber: string;
+  expirationDate: string; // MMYY format
+  cardholderName?: string;
+  billingAddress?: {
+    firstName?: string;
+    lastName?: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+  };
+}
+
+export interface AuthnetPaymentResponse {
+  success: boolean;
+  transactionId?: string;
+  authCode?: string;
+  message?: string;
+  errorCode?: string;
+  errorMessage?: string;
+  cardLast4?: string;
+  cardType?: string;
+}
+
+export interface AuthnetTokenResponse {
+  success: boolean;
+  customerProfileId?: string;
+  paymentProfileId?: string;
+  errorMessage?: string;
+}
+
+export class AuthnetService {
+  private config: AuthnetConfig;
+  private apiEndpoint: string;
+
+  constructor(config: AuthnetConfig) {
+    this.config = config;
+    this.apiEndpoint = config.useSandbox
+      ? 'https://apitest.authorize.net/xml/v1/request.api'
+      : 'https://api.authorize.net/xml/v1/request.api';
+  }
+
+  private buildMerchantAuth() {
+    return {
+      name: this.config.apiLoginId,
+      transactionKey: this.config.transactionKey,
+    };
+  }
+
+  async processPayment(request: AuthnetPaymentRequest): Promise<AuthnetPaymentResponse> {
+    try {
+      const payload: any = {
+        createTransactionRequest: {
+          merchantAuthentication: this.buildMerchantAuth(),
+          transactionRequest: {
+            transactionType: 'authCaptureTransaction',
+            amount: request.amount.toFixed(2),
+          },
+        },
+      };
+
+      // Use payment nonce if provided (from Accept.js), otherwise use direct card data
+      if (request.paymentNonce) {
+        payload.createTransactionRequest.transactionRequest.payment = {
+          opaqueData: {
+            dataDescriptor: 'COMMON.ACCEPT.INAPP.PAYMENT',
+            dataValue: request.paymentNonce,
+          },
+        };
+      } else if (request.cardNumber && request.expirationDate) {
+        payload.createTransactionRequest.transactionRequest.payment = {
+          creditCard: {
+            cardNumber: request.cardNumber,
+            expirationDate: request.expirationDate,
+            ...(request.cvv && { cardCode: request.cvv }),
+          },
+        };
+      } else {
+        throw new Error('Either paymentNonce or card details must be provided');
+      }
+
+      // Add billing address if provided
+      if (request.billingAddress) {
+        payload.createTransactionRequest.transactionRequest.billTo = {
+          firstName: request.billingAddress.firstName || '',
+          lastName: request.billingAddress.lastName || '',
+          address: request.billingAddress.address || '',
+          city: request.billingAddress.city || '',
+          state: request.billingAddress.state || '',
+          zip: request.billingAddress.zip || '',
+        };
+      }
+
+      // Add order information
+      if (request.invoice || request.description) {
+        payload.createTransactionRequest.transactionRequest.order = {
+          ...(request.invoice && { invoiceNumber: request.invoice }),
+          ...(request.description && { description: request.description }),
+        };
+      }
+
+      console.log('📡 Authorize.net API Request:', {
+        endpoint: this.apiEndpoint,
+        amount: request.amount,
+        hasNonce: !!request.paymentNonce,
+        hasCardData: !!request.cardNumber,
+      });
+
+      const response = await fetch(this.apiEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const result: any = await response.json();
+
+      console.log('📨 Authorize.net API Response:', {
+        resultCode: result?.messages?.resultCode,
+        messageCode: result?.messages?.message?.[0]?.code,
+        messageText: result?.messages?.message?.[0]?.text,
+      });
+
+      if (result?.messages?.resultCode === 'Ok' && result?.transactionResponse?.responseCode === '1') {
+        // Success - responseCode 1 means approved
+        return {
+          success: true,
+          transactionId: result.transactionResponse.transId,
+          authCode: result.transactionResponse.authCode,
+          message: result.transactionResponse.messages?.[0]?.description || 'Payment approved',
+          cardLast4: result.transactionResponse.accountNumber?.slice(-4),
+          cardType: result.transactionResponse.accountType,
+        };
+      } else {
+        // Error or declined
+        const errorMessage = result?.transactionResponse?.errors?.[0]?.errorText 
+          || result?.messages?.message?.[0]?.text
+          || 'Payment declined';
+        
+        return {
+          success: false,
+          errorCode: result?.transactionResponse?.errors?.[0]?.errorCode 
+            || result?.messages?.message?.[0]?.code,
+          errorMessage,
+          message: errorMessage,
+        };
+      }
+    } catch (error: any) {
+      console.error('❌ Authorize.net payment error:', error);
+      return {
+        success: false,
+        errorMessage: error.message || 'Payment processing failed',
+        message: error.message || 'Payment processing failed',
+      };
+    }
+  }
+
+  async createCustomerProfile(request: AuthnetTokenizationRequest): Promise<AuthnetTokenResponse> {
+    try {
+      const payload = {
+        createCustomerProfileRequest: {
+          merchantAuthentication: this.buildMerchantAuth(),
+          profile: {
+            merchantCustomerId: `customer_${Date.now()}`,
+            paymentProfiles: {
+              billTo: {
+                firstName: request.billingAddress?.firstName || '',
+                lastName: request.billingAddress?.lastName || '',
+                address: request.billingAddress?.address || '',
+                city: request.billingAddress?.city || '',
+                state: request.billingAddress?.state || '',
+                zip: request.billingAddress?.zip || '',
+              },
+              payment: {
+                creditCard: {
+                  cardNumber: request.cardNumber,
+                  expirationDate: request.expirationDate,
+                },
+              },
+            },
+          },
+        },
+      };
+
+      const response = await fetch(this.apiEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const result: any = await response.json();
+
+      if (result?.messages?.resultCode === 'Ok') {
+        return {
+          success: true,
+          customerProfileId: result.customerProfileId,
+          paymentProfileId: result.customerPaymentProfileIdList?.[0],
+        };
+      } else {
+        return {
+          success: false,
+          errorMessage: result?.messages?.message?.[0]?.text || 'Tokenization failed',
+        };
+      }
+    } catch (error: any) {
+      console.error('❌ Authorize.net tokenization error:', error);
+      return {
+        success: false,
+        errorMessage: error.message || 'Tokenization failed',
+      };
+    }
+  }
+
+  async testConnection(): Promise<{ success: boolean; message: string }> {
+    try {
+      // Test connection with a simple auth validation request
+      const payload = {
+        authenticateTestRequest: {
+          merchantAuthentication: this.buildMerchantAuth(),
+        },
+      };
+
+      const response = await fetch(this.apiEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const result: any = await response.json();
+
+      if (result?.messages?.resultCode === 'Ok') {
+        return {
+          success: true,
+          message: `Successfully connected to ${this.config.useSandbox ? 'Sandbox' : 'Production'} Authorize.net`,
+        };
+      } else {
+        return {
+          success: false,
+          message: result?.messages?.message?.[0]?.text || 'Connection test failed',
+        };
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message || 'Connection test failed',
+      };
+    }
+  }
+}

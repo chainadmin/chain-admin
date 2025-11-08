@@ -40,6 +40,7 @@ import { smsService } from "./smsService";
 import { smaxService } from "./smaxService";
 import { eventService } from "./eventService";
 import { uploadLogo } from "./r2Storage";
+import { AuthnetService } from "./authnetService";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
@@ -7445,6 +7446,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: false, 
         message: "Failed to test connection. Please check your credentials and try again.",
         error: error.message 
+      });
+    }
+  });
+
+  // Test Authorize.net connection endpoint
+  app.post('/api/authorizenet/test-connection', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+
+      const settings = await storage.getTenantSettings(tenantId);
+      if (!settings) {
+        return res.status(404).json({ success: false, message: "Settings not found" });
+      }
+
+      const { authnetApiLoginId, authnetTransactionKey, useSandbox } = settings;
+
+      if (!authnetApiLoginId || !authnetTransactionKey) {
+        return res.status(400).json({
+          success: false,
+          message: "Authorize.net credentials not configured. Please add your API Login ID and Transaction Key."
+        });
+      }
+
+      console.log('🔍 Authorize.net Test - Credentials found:', {
+        apiLoginId: authnetApiLoginId.substring(0, 4) + '****',
+        mode: useSandbox ? 'sandbox' : 'production'
+      });
+
+      const authnetService = new AuthnetService({
+        apiLoginId: authnetApiLoginId,
+        transactionKey: authnetTransactionKey,
+        useSandbox: useSandbox ?? true,
+      });
+
+      const result = await authnetService.testConnection();
+
+      if (result.success) {
+        return res.json({
+          success: true,
+          message: result.message,
+          mode: useSandbox ? 'sandbox' : 'production'
+        });
+      } else {
+        return res.json({
+          success: false,
+          message: result.message
+        });
+      }
+    } catch (error: any) {
+      console.error("❌ Authorize.net test connection error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to test connection. Please check your credentials and try again.",
+        error: error.message
       });
     }
   });

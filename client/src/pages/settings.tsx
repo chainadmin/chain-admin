@@ -1824,77 +1824,147 @@ export default function Settings() {
                   {/* Merchant Account Configuration */}
                   <div className="space-y-4">
                       <div>
-                        <Label className="text-white">Merchant Provider</Label>
-                        <Input
+                        <Label className="text-white">Payment Processor</Label>
+                        <Select
                           value={localSettings?.merchantProvider || ""}
-                          onChange={(e) => handleSettingsUpdate('merchantProvider', e.target.value)}
-                          placeholder="e.g., Stripe, Square, PayPal"
-                          data-testid="input-merchant-provider"
-                          className={inputClasses}
-                        />
+                          onValueChange={(value) => handleSettingsUpdate('merchantProvider', value)}
+                        >
+                          <SelectTrigger className={inputClasses} data-testid="select-merchant-provider">
+                            <SelectValue placeholder="Select payment processor" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="usaepay">USAePay</SelectItem>
+                            <SelectItem value="authorize_net">Authorize.net</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="mt-1 text-xs text-blue-100/70">
+                          Choose your payment gateway provider
+                        </p>
                       </div>
 
-                      <div>
-                        <Label className="text-white">Merchant Account ID</Label>
-                        <Input
-                          value={localSettings?.merchantAccountId || ""}
-                          onChange={(e) => handleSettingsUpdate('merchantAccountId', e.target.value)}
-                          placeholder="Your merchant account identifier"
-                          data-testid="input-merchant-id"
-                          className={inputClasses}
-                        />
-                      </div>
+                      {localSettings?.merchantProvider === 'usaepay' && (
+                        <>
+                          <div>
+                            <Label className="text-white">Merchant Account ID</Label>
+                            <Input
+                              value={localSettings?.merchantAccountId || ""}
+                              onChange={(e) => handleSettingsUpdate('merchantAccountId', e.target.value)}
+                              placeholder="Your USAePay account identifier"
+                              data-testid="input-merchant-id"
+                              className={inputClasses}
+                            />
+                          </div>
 
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label className="text-white">API Key</Label>
-                          <Input
-                            type="password"
-                            value={localSettings?.merchantApiKey || ""}
-                            onChange={(e) => handleSettingsUpdate('merchantApiKey', e.target.value)}
-                            placeholder="Your USAePay API key"
-                            data-testid="input-merchant-key"
-                            className={inputClasses}
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-white">API PIN</Label>
-                          <Input
-                            type="password"
-                            value={localSettings?.merchantApiPin || ""}
-                            onChange={(e) => handleSettingsUpdate('merchantApiPin', e.target.value)}
-                            placeholder="Your USAePay API PIN"
-                            data-testid="input-merchant-pin"
-                            className={inputClasses}
-                          />
-                        </div>
-                      </div>
-                      <p className="mt-1 text-xs text-blue-100/70">
-                        Your credentials are encrypted and stored securely
-                      </p>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label className="text-white">API Key</Label>
+                              <Input
+                                type="password"
+                                value={localSettings?.merchantApiKey || ""}
+                                onChange={(e) => handleSettingsUpdate('merchantApiKey', e.target.value)}
+                                placeholder="Your USAePay API key"
+                                data-testid="input-merchant-key"
+                                className={inputClasses}
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-white">API PIN</Label>
+                              <Input
+                                type="password"
+                                value={localSettings?.merchantApiPin || ""}
+                                onChange={(e) => handleSettingsUpdate('merchantApiPin', e.target.value)}
+                                placeholder="Your USAePay API PIN"
+                                data-testid="input-merchant-pin"
+                                className={inputClasses}
+                              />
+                            </div>
+                          </div>
+                          <p className="mt-1 text-xs text-blue-100/70">
+                            Your credentials are encrypted and stored securely
+                          </p>
 
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label className="text-white">Merchant Name</Label>
-                          <Input
-                            value={localSettings?.merchantName || ""}
-                            onChange={(e) => handleSettingsUpdate('merchantName', e.target.value)}
-                            placeholder="Name displayed on receipts"
-                            data-testid="input-merchant-name"
-                            className={inputClasses}
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-white">Merchant Type</Label>
-                          <Input
-                            value={localSettings?.merchantType || ""}
-                            onChange={(e) => handleSettingsUpdate('merchantType', e.target.value)}
-                            placeholder="e.g., retail, services"
-                            data-testid="input-merchant-type"
-                            className={inputClasses}
-                          />
-                        </div>
-                      </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label className="text-white">Merchant Name</Label>
+                              <Input
+                                value={localSettings?.merchantName || ""}
+                                onChange={(e) => handleSettingsUpdate('merchantName', e.target.value)}
+                                placeholder="Name displayed on receipts"
+                                data-testid="input-merchant-name"
+                                className={inputClasses}
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-white">Merchant Type</Label>
+                              <Input
+                                value={localSettings?.merchantType || ""}
+                                onChange={(e) => handleSettingsUpdate('merchantType', e.target.value)}
+                                placeholder="e.g., retail, services"
+                                data-testid="input-merchant-type"
+                                className={inputClasses}
+                              />
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      {localSettings?.merchantProvider === 'authorize_net' && (
+                        <>
+                          <div>
+                            <Label className="text-white">API Login ID</Label>
+                            <Input
+                              value={localSettings?.authnetApiLoginId || ""}
+                              onChange={(e) => handleSettingsUpdate('authnetApiLoginId', e.target.value)}
+                              placeholder="Your Authorize.net API Login ID"
+                              data-testid="input-authnet-login-id"
+                              className={inputClasses}
+                            />
+                            <p className="mt-1 text-xs text-blue-100/70">
+                              Found in Account → Settings → API Credentials & Keys
+                            </p>
+                          </div>
+
+                          <div>
+                            <Label className="text-white">Transaction Key</Label>
+                            <Input
+                              type="password"
+                              value={localSettings?.authnetTransactionKey || ""}
+                              onChange={(e) => handleSettingsUpdate('authnetTransactionKey', e.target.value)}
+                              placeholder="Your Authorize.net Transaction Key"
+                              data-testid="input-authnet-transaction-key"
+                              className={inputClasses}
+                            />
+                            <p className="mt-1 text-xs text-blue-100/70">
+                              Used for server-side payment processing (keep this secret)
+                            </p>
+                          </div>
+
+                          <div>
+                            <Label className="text-white">Public Client Key</Label>
+                            <Input
+                              type="password"
+                              value={localSettings?.authnetPublicClientKey || ""}
+                              onChange={(e) => handleSettingsUpdate('authnetPublicClientKey', e.target.value)}
+                              placeholder="Your Authorize.net Public Client Key"
+                              data-testid="input-authnet-public-key"
+                              className={inputClasses}
+                            />
+                            <p className="mt-1 text-xs text-blue-100/70">
+                              Used for client-side card tokenization (safe to expose in frontend)
+                            </p>
+                          </div>
+
+                          <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-4">
+                            <div className="flex gap-3">
+                              <i className="fas fa-info-circle text-sky-300 mt-0.5"></i>
+                              <div className="text-xs text-sky-100/90">
+                                <p className="font-semibold mb-1">About the Public Client Key</p>
+                                <p>The Public Client Key is safe to use in your website's frontend code. It can only tokenize card data - it cannot charge cards or initiate transactions. Actual payments require the Transaction Key, which stays secure on your server.</p>
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      )}
 
                       <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 p-4">
                         <div className="space-y-0.5">
@@ -1910,42 +1980,83 @@ export default function Settings() {
                         />
                       </div>
 
-                      <div className="border-t border-white/10 pt-4">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={async () => {
-                            try {
-                              const response = await apiRequest("POST", "/api/usaepay/test-connection");
-                              const result = await response.json();
-                              
-                              if (result.success) {
+                      {localSettings?.merchantProvider === 'usaepay' && (
+                        <div className="border-t border-white/10 pt-4">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={async () => {
+                              try {
+                                const response = await apiRequest("POST", "/api/usaepay/test-connection");
+                                const result = await response.json();
+                                
+                                if (result.success) {
+                                  toast({
+                                    title: "Connection Successful",
+                                    description: "USAePay credentials are valid and working.",
+                                  });
+                                } else {
+                                  toast({
+                                    title: "Connection Failed",
+                                    description: result.message || "Unable to connect to USAePay. Please check your credentials.",
+                                    variant: "destructive",
+                                  });
+                                }
+                              } catch (err: any) {
                                 toast({
-                                  title: "Connection Successful",
-                                  description: "USAePay credentials are valid and working.",
-                                });
-                              } else {
-                                toast({
-                                  title: "Connection Failed",
-                                  description: result.message || "Unable to connect to USAePay. Please check your credentials.",
+                                  title: "Connection Error",
+                                  description: "Failed to test USAePay connection. Please try again.",
                                   variant: "destructive",
                                 });
                               }
-                            } catch (err: any) {
-                              toast({
-                                title: "Connection Error",
-                                description: "Failed to test USAePay connection. Please try again.",
-                                variant: "destructive",
-                              });
-                            }
-                          }}
-                          data-testid="button-test-connection"
-                          className="w-full border-white/20 bg-white/5 text-white hover:bg-white/10"
-                        >
-                          <i className="fas fa-plug mr-2"></i>
-                          Test USAePay Connection
-                        </Button>
-                      </div>
+                            }}
+                            data-testid="button-test-usaepay-connection"
+                            className="w-full border-white/20 bg-white/5 text-white hover:bg-white/10"
+                          >
+                            <i className="fas fa-plug mr-2"></i>
+                            Test USAePay Connection
+                          </Button>
+                        </div>
+                      )}
+
+                      {localSettings?.merchantProvider === 'authorize_net' && (
+                        <div className="border-t border-white/10 pt-4">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={async () => {
+                              try {
+                                const response = await apiRequest("POST", "/api/authorizenet/test-connection");
+                                const result = await response.json();
+                                
+                                if (result.success) {
+                                  toast({
+                                    title: "Connection Successful",
+                                    description: "Authorize.net credentials are valid and working.",
+                                  });
+                                } else {
+                                  toast({
+                                    title: "Connection Failed",
+                                    description: result.message || "Unable to connect to Authorize.net. Please check your credentials.",
+                                    variant: "destructive",
+                                  });
+                                }
+                              } catch (err: any) {
+                                toast({
+                                  title: "Connection Error",
+                                  description: "Failed to test Authorize.net connection. Please try again.",
+                                  variant: "destructive",
+                                });
+                              }
+                            }}
+                            data-testid="button-test-authnet-connection"
+                            className="w-full border-white/20 bg-white/5 text-white hover:bg-white/10"
+                          >
+                            <i className="fas fa-plug mr-2"></i>
+                            Test Authorize.net Connection
+                          </Button>
+                        </div>
+                      )}
 
                       <div className="flex items-center justify-between border-t border-white/10 pt-4">
                         <div className="space-y-0.5">
