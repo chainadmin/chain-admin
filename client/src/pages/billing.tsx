@@ -72,6 +72,12 @@ export default function Billing() {
     queryKey: ["/api/billing/plans"],
   });
 
+  // Fetch tenant settings to check enabled services
+  const { data: settingsData } = useQuery({
+    queryKey: ["/api/settings"],
+  });
+  const enabledAddons = (settingsData as any)?.tenantSettings?.enabledAddons || [];
+
   // Fetch service activation requests for this tenant
   const { data: serviceRequestsData } = useQuery({
     queryKey: ["/api/service-activation-requests"],
@@ -646,10 +652,15 @@ export default function Billing() {
                       "SMS Service": "sms_service",
                     };
                     const serviceType = serviceTypeMap[service.name];
+                    
+                    // Check service status
+                    const isActive = enabledAddons.includes(serviceType);
                     const pendingRequest = serviceRequests.find((req: any) => 
                       req.serviceType === serviceType && req.status === 'pending'
                     );
-                    const hasPendingRequest = !!pendingRequest;
+                    const rejectedRequest = serviceRequests.find((req: any) => 
+                      req.serviceType === serviceType && req.status === 'rejected'
+                    );
                     
                     return (
                     <div
@@ -662,7 +673,12 @@ export default function Billing() {
                           <div className="rounded-2xl bg-sky-500/20 p-3 text-sky-200 w-fit">
                             {service.icon}
                           </div>
-                          {hasPendingRequest && (
+                          {isActive && (
+                            <Badge variant="secondary" className="bg-emerald-500/20 text-emerald-200">
+                              Active
+                            </Badge>
+                          )}
+                          {!isActive && pendingRequest && (
                             <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-200">
                               Pending Approval
                             </Badge>
@@ -686,13 +702,48 @@ export default function Billing() {
                         </ul>
                       </div>
                       <div className="space-y-3">
-                        {hasPendingRequest ? (
+                        {isActive ? (
+                          <div className="text-center p-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10">
+                            <CheckCircle className="h-5 w-5 mx-auto mb-1 text-emerald-200" />
+                            <p className="text-sm font-semibold text-emerald-200">Service Active</p>
+                            <p className="text-xs text-emerald-100/70 mt-1">
+                              This service is enabled for your account
+                            </p>
+                          </div>
+                        ) : pendingRequest ? (
                           <div className="text-center p-3 rounded-xl border border-yellow-500/20 bg-yellow-500/10">
                             <Clock className="h-5 w-5 mx-auto mb-1 text-yellow-200" />
                             <p className="text-sm font-semibold text-yellow-200">Request Pending</p>
                             <p className="text-xs text-yellow-100/70 mt-1">
                               Awaiting administrator approval
                             </p>
+                          </div>
+                        ) : rejectedRequest ? (
+                          <div className="space-y-2">
+                            <div className="text-center p-3 rounded-xl border border-red-500/20 bg-red-500/10">
+                              <AlertCircle className="h-5 w-5 mx-auto mb-1 text-red-200" />
+                              <p className="text-sm font-semibold text-red-200">Request Rejected</p>
+                              {rejectedRequest.rejectionReason && (
+                                <p className="text-xs text-red-100/70 mt-1">
+                                  {rejectedRequest.rejectionReason}
+                                </p>
+                              )}
+                            </div>
+                            <Button
+                              onClick={() => handleActivateService(service.name)}
+                              disabled={activatingService === service.name}
+                              className="w-full rounded-xl border border-white/20 bg-white/10 py-2 text-sm font-semibold text-white transition hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                              data-testid={`button-retry-service-${idx}`}
+                            >
+                              {activatingService === service.name ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  Requesting...
+                                </>
+                              ) : (
+                                'Request again'
+                              )}
+                            </Button>
                           </div>
                         ) : (
                           <Button
