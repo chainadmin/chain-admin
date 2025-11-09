@@ -236,7 +236,7 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl border border-white/20 bg-[#0b1733]/95 backdrop-blur-md text-blue-50">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl border border-white/20 bg-[#0b1733]/95 backdrop-blur-md text-blue-50">
         <DialogHeader>
           <DialogTitle className="flex items-center text-xl font-semibold text-blue-50">
             <i className="fas fa-upload text-sky-400 mr-3"></i>
