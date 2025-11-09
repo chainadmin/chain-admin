@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import AdminLayout from "@/components/admin-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,6 +40,7 @@ export default function Billing() {
   const [isSavingBilling, setIsSavingBilling] = useState(false);
   const [isPortalLoading, setIsPortalLoading] = useState(false);
   const [updatingPlanId, setUpdatingPlanId] = useState<string | null>(null);
+  const [activatingService, setActivatingService] = useState<string | null>(null);
 
   // Check for tab query parameter and set active tab on mount
   const [activeTab, setActiveTab] = useState(() => {
@@ -70,6 +71,54 @@ export default function Billing() {
   const { data: planResponse, isLoading: plansLoading } = useQuery({
     queryKey: ["/api/billing/plans"],
   });
+
+  // Mutation to activate à la carte services
+  const activateServiceMutation = useMutation({
+    mutationFn: async (serviceType: string) => {
+      return await apiRequest("POST", "/api/billing/activate-service", { serviceType });
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: "Service activated!",
+        description: data.alreadyEnabled 
+          ? "This service is already activated." 
+          : "Service activated successfully. You can now use this feature.",
+      });
+      // Invalidate settings to refresh service access flags
+      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+      setActivatingService(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Activation failed",
+        description: error.message || "Failed to activate service. Please try again.",
+        variant: "destructive",
+      });
+      setActivatingService(null);
+    },
+  });
+
+  const handleActivateService = (serviceName: string) => {
+    // Map service names to backend identifiers
+    const serviceTypeMap: Record<string, string> = {
+      "Portal + Processing": "portal_processing",
+      "Email Service": "email_service",
+      "SMS Service": "sms_service",
+    };
+
+    const serviceType = serviceTypeMap[serviceName];
+    if (!serviceType) {
+      toast({
+        title: "Error",
+        description: "Invalid service type",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setActivatingService(serviceName);
+    activateServiceMutation.mutate(serviceType);
+  };
 
   const formatCurrency = (amount?: number | null) => {
     const numericAmount = Number(amount ?? 0);
@@ -602,10 +651,19 @@ export default function Billing() {
                       </div>
                       <div className="space-y-3">
                         <Button
-                          className="w-full rounded-xl border border-white/20 bg-white/10 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
+                          onClick={() => handleActivateService(service.name)}
+                          disabled={activatingService === service.name}
+                          className="w-full rounded-xl border border-white/20 bg-white/10 py-2 text-sm font-semibold text-white transition hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
                           data-testid={`button-purchase-service-${idx}`}
                         >
-                          Purchase service
+                          {activatingService === service.name ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Activating...
+                            </>
+                          ) : (
+                            'Activate service'
+                          )}
                         </Button>
                         <p className="text-center text-xs text-blue-100/60">
                           {service.helpText.split('Contact Us')[0]}
