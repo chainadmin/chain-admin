@@ -46,6 +46,12 @@ export default function GlobalAdmin() {
   const [setupFeeWaived, setSetupFeeWaived] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
 
+  // Service activation approval state
+  const [serviceApproveDialogOpen, setServiceApproveDialogOpen] = useState(false);
+  const [serviceRejectDialogOpen, setServiceRejectDialogOpen] = useState(false);
+  const [selectedServiceRequest, setSelectedServiceRequest] = useState<any>(null);
+  const [serviceRejectionReason, setServiceRejectionReason] = useState('');
+
   // Consumer management state
   const [consumerSearch, setConsumerSearch] = useState('');
   const [selectedTenantFilter, setSelectedTenantFilter] = useState('');
@@ -119,6 +125,13 @@ export default function GlobalAdmin() {
     queryKey: ['/api/admin/subscription-requests'],
     enabled: isPlatformAdmin
   });
+
+  // Fetch service activation requests
+  const { data: serviceActivationRequestsData, isLoading: serviceActivationRequestsLoading } = useQuery({
+    queryKey: ['/api/service-activation-requests'],
+    enabled: isPlatformAdmin
+  });
+  const serviceActivationRequests = (serviceActivationRequestsData as any)?.requests || [];
 
   // Fetch all consumers
   const { data: allConsumers, isLoading: consumersLoading } = useQuery({
@@ -294,6 +307,57 @@ export default function GlobalAdmin() {
       toast({
         title: "Error",
         description: "Failed to reject subscription request",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Mutation to approve service activation request
+  const approveServiceRequestMutation = useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      return apiRequest('POST', `/api/admin/service-activation-requests/${id}/review`, { action: 'approve' });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/service-activation-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants'] });
+      setServiceApproveDialogOpen(false);
+      setSelectedServiceRequest(null);
+      toast({
+        title: "Service Activated",
+        description: "The service has been activated for the agency",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to approve service request",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Mutation to reject service activation request
+  const rejectServiceRequestMutation = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      return apiRequest('POST', `/api/admin/service-activation-requests/${id}/review`, { 
+        action: 'reject',
+        rejectionReason: reason 
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/service-activation-requests'] });
+      setServiceRejectDialogOpen(false);
+      setSelectedServiceRequest(null);
+      setServiceRejectionReason('');
+      toast({
+        title: "Service Request Rejected",
+        description: "The service activation request has been declined",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to reject service request",
         variant: "destructive",
       });
     }
@@ -1012,6 +1076,212 @@ export default function GlobalAdmin() {
                     data-testid="button-confirm-reject"
                   >
                     {rejectSubscriptionMutation.isPending ? (
+                      <>
+                        <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2" />
+                        Rejecting...
+                      </>
+                    ) : (
+                      'Reject'
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Service Activation Requests */}
+        <div className="mb-8 rounded-3xl border border-white/10 bg-white/5 shadow-lg shadow-blue-900/20 backdrop-blur">
+          <div className="p-6 border-b border-white/10">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-blue-50">Service Activation Requests</h2>
+              {serviceActivationRequests.filter((r: any) => r.status === 'pending').length > 0 && (
+                <Badge variant="secondary" data-testid="badge-service-requests-count">
+                  {serviceActivationRequests.filter((r: any) => r.status === 'pending').length} pending
+                </Badge>
+              )}
+            </div>
+          </div>
+          <div className="p-6">
+            {serviceActivationRequestsLoading ? (
+              <div className="space-y-4">
+                {[...Array(2)].map((_, i) => (
+                  <div key={i} className="animate-pulse">
+                    <div className="h-20 bg-white/10 rounded"></div>
+                  </div>
+                ))}
+              </div>
+            ) : !serviceActivationRequests || serviceActivationRequests.filter((r: any) => r.status === 'pending').length === 0 ? (
+              <div className="text-center py-8 text-blue-100/60">
+                <CheckCircle className="h-12 w-12 mx-auto mb-2 text-blue-300/40" />
+                <p>No pending service activation requests</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {serviceActivationRequests.filter((r: any) => r.status === 'pending').map((request: any) => {
+                  const serviceLabels: Record<string, string> = {
+                    portal_processing: 'Portal + Processing',
+                    email_service: 'Email Service',
+                    sms_service: 'SMS Service',
+                  };
+                  
+                  return (
+                    <div key={request.id} className="border border-white/10 rounded-lg p-4 bg-white/5" data-testid={`row-service-request-${request.id}`}>
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4">
+                          <div>
+                            <p className="text-sm font-medium text-blue-50" data-testid={`text-service-tenant-${request.id}`}>
+                              {request.tenantName}
+                            </p>
+                            <p className="text-xs text-blue-100/60">{request.tenantSlug}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-blue-100/70">Requested Service</p>
+                            <p className="text-sm font-medium text-blue-50" data-testid={`text-service-type-${request.id}`}>
+                              {serviceLabels[request.serviceType] || request.serviceType}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-blue-100/70">Requested By</p>
+                            <p className="text-sm font-medium text-blue-50" data-testid={`text-service-requester-${request.id}`}>
+                              {request.requestedBy || 'Unknown'}
+                            </p>
+                            <p className="text-xs text-blue-100/60">
+                              {new Date(request.requestedAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="default"
+                            onClick={() => {
+                              setSelectedServiceRequest(request);
+                              setServiceApproveDialogOpen(true);
+                            }}
+                            data-testid={`button-approve-service-${request.id}`}
+                          >
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => {
+                              setSelectedServiceRequest(request);
+                              setServiceRejectDialogOpen(true);
+                            }}
+                            data-testid={`button-reject-service-${request.id}`}
+                          >
+                            <Ban className="h-4 w-4 mr-1" />
+                            Reject
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Service Approval Dialog */}
+        <Dialog open={serviceApproveDialogOpen} onOpenChange={setServiceApproveDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Approve Service Activation</DialogTitle>
+            </DialogHeader>
+            {selectedServiceRequest && (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-gray-600">Agency</p>
+                  <p className="font-medium">{selectedServiceRequest.tenantName}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Service</p>
+                  <p className="font-medium">
+                    {selectedServiceRequest.serviceType === 'portal_processing' && 'Portal + Processing ($125/month)'}
+                    {selectedServiceRequest.serviceType === 'email_service' && 'Email Service ($50/month)'}
+                    {selectedServiceRequest.serviceType === 'sms_service' && 'SMS Service ($50/month)'}
+                  </p>
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" onClick={() => setServiceApproveDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      approveServiceRequestMutation.mutate({
+                        id: selectedServiceRequest.id,
+                      });
+                    }}
+                    disabled={approveServiceRequestMutation.isPending}
+                    data-testid="button-confirm-approve-service"
+                  >
+                    {approveServiceRequestMutation.isPending ? (
+                      <>
+                        <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2" />
+                        Approving...
+                      </>
+                    ) : (
+                      'Approve'
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Service Rejection Dialog */}
+        <Dialog open={serviceRejectDialogOpen} onOpenChange={setServiceRejectDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Reject Service Activation Request</DialogTitle>
+            </DialogHeader>
+            {selectedServiceRequest && (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-gray-600">Agency</p>
+                  <p className="font-medium">{selectedServiceRequest.tenantName}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Requested Service</p>
+                  <p className="font-medium">
+                    {selectedServiceRequest.serviceType === 'portal_processing' && 'Portal + Processing'}
+                    {selectedServiceRequest.serviceType === 'email_service' && 'Email Service'}
+                    {selectedServiceRequest.serviceType === 'sms_service' && 'SMS Service'}
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="service-rejection-reason">Reason for rejection</Label>
+                  <textarea
+                    id="service-rejection-reason"
+                    value={serviceRejectionReason}
+                    onChange={(e) => setServiceRejectionReason(e.target.value)}
+                    className="w-full mt-1 p-2 border rounded-md"
+                    rows={3}
+                    placeholder="Please provide a reason..."
+                    data-testid="textarea-service-rejection-reason"
+                  />
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" onClick={() => setServiceRejectDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={() => {
+                      rejectServiceRequestMutation.mutate({
+                        id: selectedServiceRequest.id,
+                        reason: serviceRejectionReason || 'No reason provided',
+                      });
+                    }}
+                    disabled={rejectServiceRequestMutation.isPending || !serviceRejectionReason.trim()}
+                    data-testid="button-confirm-reject-service"
+                  >
+                    {rejectServiceRequestMutation.isPending ? (
                       <>
                         <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2" />
                         Rejecting...

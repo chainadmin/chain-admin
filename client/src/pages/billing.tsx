@@ -72,26 +72,43 @@ export default function Billing() {
     queryKey: ["/api/billing/plans"],
   });
 
-  // Mutation to activate à la carte services
+  // Fetch service activation requests for this tenant
+  const { data: serviceRequestsData } = useQuery({
+    queryKey: ["/api/service-activation-requests"],
+  });
+  const serviceRequests = (serviceRequestsData as any)?.requests || [];
+
+  // Mutation to activate à la carte services (creates pending request)
   const activateServiceMutation = useMutation({
     mutationFn: async (serviceType: string) => {
       return await apiRequest("POST", "/api/billing/activate-service", { serviceType });
     },
     onSuccess: (data: any) => {
-      toast({
-        title: "Service activated!",
-        description: data.alreadyEnabled 
-          ? "This service is already activated." 
-          : "Service activated successfully. You can now use this feature.",
-      });
-      // Invalidate settings to refresh service access flags
+      if (data.isPending) {
+        toast({
+          title: "Request submitted!",
+          description: "Your service activation request has been submitted for approval.",
+        });
+      } else if (data.alreadyEnabled) {
+        toast({
+          title: "Service already activated",
+          description: "This service is already activated for your account.",
+        });
+      } else {
+        toast({
+          title: "Service activated!",
+          description: "Service activated successfully. You can now use this feature.",
+        });
+      }
+      // Invalidate queries to refresh data
       queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/service-activation-requests"] });
       setActivatingService(null);
     },
     onError: (error: any) => {
       toast({
-        title: "Activation failed",
-        description: error.message || "Failed to activate service. Please try again.",
+        title: "Request failed",
+        description: error.message || "Failed to submit service activation request. Please try again.",
         variant: "destructive",
       });
       setActivatingService(null);
@@ -622,15 +639,34 @@ export default function Billing() {
                       features: ["Multi-number sending", "Campaigns", "Analytics"],
                       helpText: "Need help with setup? Contact Us"
                     }
-                  ].map((service, idx) => (
+                  ].map((service, idx) => {
+                    const serviceTypeMap: Record<string, string> = {
+                      "Portal + Processing": "portal_processing",
+                      "Email Service": "email_service",
+                      "SMS Service": "sms_service",
+                    };
+                    const serviceType = serviceTypeMap[service.name];
+                    const pendingRequest = serviceRequests.find((req: any) => 
+                      req.serviceType === serviceType && req.status === 'pending'
+                    );
+                    const hasPendingRequest = !!pendingRequest;
+                    
+                    return (
                     <div
                       key={idx}
                       className="flex flex-col justify-between gap-4 rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-blue-900/20"
                       data-testid={`service-card-${idx}`}
                     >
                       <div className="space-y-4">
-                        <div className="rounded-2xl bg-sky-500/20 p-3 text-sky-200 w-fit">
-                          {service.icon}
+                        <div className="flex items-start justify-between">
+                          <div className="rounded-2xl bg-sky-500/20 p-3 text-sky-200 w-fit">
+                            {service.icon}
+                          </div>
+                          {hasPendingRequest && (
+                            <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-200">
+                              Pending Approval
+                            </Badge>
+                          )}
                         </div>
                         <div>
                           <h3 className="text-lg font-semibold text-white">{service.name}</h3>
@@ -650,21 +686,31 @@ export default function Billing() {
                         </ul>
                       </div>
                       <div className="space-y-3">
-                        <Button
-                          onClick={() => handleActivateService(service.name)}
-                          disabled={activatingService === service.name}
-                          className="w-full rounded-xl border border-white/20 bg-white/10 py-2 text-sm font-semibold text-white transition hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                          data-testid={`button-purchase-service-${idx}`}
-                        >
-                          {activatingService === service.name ? (
-                            <>
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Activating...
-                            </>
-                          ) : (
-                            'Activate service'
-                          )}
-                        </Button>
+                        {hasPendingRequest ? (
+                          <div className="text-center p-3 rounded-xl border border-yellow-500/20 bg-yellow-500/10">
+                            <Clock className="h-5 w-5 mx-auto mb-1 text-yellow-200" />
+                            <p className="text-sm font-semibold text-yellow-200">Request Pending</p>
+                            <p className="text-xs text-yellow-100/70 mt-1">
+                              Awaiting administrator approval
+                            </p>
+                          </div>
+                        ) : (
+                          <Button
+                            onClick={() => handleActivateService(service.name)}
+                            disabled={activatingService === service.name}
+                            className="w-full rounded-xl border border-white/20 bg-white/10 py-2 text-sm font-semibold text-white transition hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                            data-testid={`button-purchase-service-${idx}`}
+                          >
+                            {activatingService === service.name ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Requesting...
+                              </>
+                            ) : (
+                              'Request activation'
+                            )}
+                          </Button>
+                        )}
                         <p className="text-center text-xs text-blue-100/60">
                           {service.helpText.split('Contact Us')[0]}
                           <button
@@ -677,7 +723,8 @@ export default function Billing() {
                         </p>
                       </div>
                     </div>
-                  ))}
+                  );
+                  })}
                 </div>
 
                 <div className="rounded-2xl border-2 border-emerald-400/40 bg-gradient-to-br from-emerald-500/10 to-sky-500/10 p-6 shadow-2xl">
