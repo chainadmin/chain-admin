@@ -741,6 +741,29 @@ export const invoices = pgTable("invoices", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Service activation requests (for à la carte service approvals)
+export const serviceActivationRequests = pgTable("service_activation_requests", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  serviceType: text("service_type").notNull(), // "portal_processing", "email_service", "sms_service"
+  status: text("status").notNull().default("pending"), // "pending", "approved", "rejected"
+  requestedBy: text("requested_by"), // Email/username of person who requested
+  requestedAt: timestamp("requested_at").defaultNow(),
+  approvedBy: text("approved_by"), // Admin who approved/rejected
+  approvedAt: timestamp("approved_at"),
+  rejectionReason: text("rejection_reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  // Prevent duplicate pending requests for the same service
+  uniquePendingRequest: uniqueIndex("service_activation_requests_unique_pending_idx")
+    .on(table.tenantId, table.serviceType)
+    .where(sql`status = 'pending'`),
+  // Index for querying pending requests by tenant
+  tenantStatusIdx: index("service_activation_requests_tenant_status_idx").on(table.tenantId, table.status),
+  // Index for global admin to query all pending requests
+  statusIdx: index("service_activation_requests_status_idx").on(table.status),
+}));
+
 // Messaging usage events (for billing usage tracking)
 export const messagingUsageEvents = pgTable(
   "messaging_usage_events",
@@ -1421,6 +1444,7 @@ export const insertPaymentApprovalSchema = createInsertSchema(paymentApprovals).
 export const insertSubscriptionPlanSchema = createInsertSchema(subscriptionPlans).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true, createdAt: true });
+export const insertServiceActivationRequestSchema = createInsertSchema(serviceActivationRequests).omit({ id: true, createdAt: true });
 export const insertMessagingUsageEventSchema = createInsertSchema(messagingUsageEvents).omit({ id: true, createdAt: true });
 export const insertFolderSchema = createInsertSchema(folders).omit({ id: true, createdAt: true });
 export const insertSmsTemplateSchema = createInsertSchema(smsTemplates).omit({ id: true, createdAt: true });
@@ -1490,6 +1514,8 @@ export type Subscription = typeof subscriptions.$inferSelect;
 export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
 export type Invoice = typeof invoices.$inferSelect;
 export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
+export type ServiceActivationRequest = typeof serviceActivationRequests.$inferSelect;
+export type InsertServiceActivationRequest = z.infer<typeof insertServiceActivationRequestSchema>;
 export type MessagingUsageEvent = typeof messagingUsageEvents.$inferSelect;
 export type InsertMessagingUsageEvent = z.infer<typeof insertMessagingUsageEventSchema>;
 export type Folder = typeof folders.$inferSelect;

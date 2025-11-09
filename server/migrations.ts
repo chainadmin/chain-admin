@@ -550,6 +550,61 @@ export async function runMigrations() {
       console.log('  ⚠ signature_audit_trail (already exists)');
     }
     
+    // Create service activation requests table for à la carte service approvals
+    console.log('Creating service_activation_requests table...');
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS service_activation_requests (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          service_type TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          requested_by TEXT,
+          requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          approved_by TEXT,
+          approved_at TIMESTAMP,
+          rejection_reason TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      console.log('  ✓ service_activation_requests table');
+    } catch (err) {
+      console.log('  ⚠ service_activation_requests (already exists)');
+    }
+    
+    // Create unique index to prevent duplicate pending requests
+    console.log('Creating service activation request indexes...');
+    try {
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS service_activation_requests_unique_pending_idx 
+          ON service_activation_requests(tenant_id, service_type) 
+          WHERE status = 'pending'
+      `);
+      console.log('  ✓ unique pending index');
+    } catch (err) {
+      console.log('  ⚠ unique pending index (already exists)');
+    }
+    
+    try {
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS service_activation_requests_tenant_status_idx 
+          ON service_activation_requests(tenant_id, status)
+      `);
+      console.log('  ✓ tenant status index');
+    } catch (err) {
+      console.log('  ⚠ tenant status index (already exists)');
+    }
+    
+    try {
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS service_activation_requests_status_idx 
+          ON service_activation_requests(status)
+      `);
+      console.log('  ✓ status index');
+    } catch (err) {
+      console.log('  ⚠ status index (already exists)');
+    }
+    
     // Verify columns exist
     const result = await client.query(`
       SELECT column_name 
