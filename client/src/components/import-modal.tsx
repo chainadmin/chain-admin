@@ -38,6 +38,12 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
     enabled: isOpen, // Only fetch when modal is open
   });
 
+  // Fetch tenant settings to check if SMAX is enabled
+  const { data: settings, isLoading: settingsLoading } = useQuery({
+    queryKey: ["/api/settings"],
+    enabled: isOpen, // Only fetch when modal is open
+  });
+
   const importMutation = useMutation({
     mutationFn: async (data: any) => {
       await apiRequest("POST", "/api/import/csv", {
@@ -149,8 +155,9 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
             });
           }
 
-          // Extract account data - only if we have a valid consumer email, creditor, balance, and filenumber
-          if (consumerKey && row.creditor && row.balance && (row.filenumber || row.file_number)) {
+          // Extract account data - only if we have a valid consumer email, creditor, and balance
+          // Filenumber is optional unless SMAX is enabled
+          if (consumerKey && row.creditor && row.balance) {
             // Extract additional account data (any non-standard columns)
             const additionalAccountData: any = {};
             headers.forEach(header => {
@@ -190,6 +197,9 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
         const missingNameConsumers = data.consumers.filter((c: any) => !c.firstName || !c.lastName);
         const missingFilenumberAccounts = data.accounts.filter((a: any) => !a.filenumber);
         
+        // Check if SMAX is enabled
+        const smaxEnabled = (settings as any)?.smaxEnabled ?? false;
+        
         const validationErrors = [];
         if (missingDOBConsumers.length > 0) {
           validationErrors.push(`${missingDOBConsumers.length} consumer(s) missing date of birth (required for account linking)`);
@@ -197,7 +207,8 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
         if (missingNameConsumers.length > 0) {
           validationErrors.push(`${missingNameConsumers.length} consumer(s) missing first or last name`);
         }
-        if (missingFilenumberAccounts.length > 0) {
+        // Only require filenumber if SMAX is enabled
+        if (smaxEnabled && missingFilenumberAccounts.length > 0) {
           validationErrors.push(`${missingFilenumberAccounts.length} account(s) missing filenumber (required for SMAX integration)`);
         }
         
@@ -322,26 +333,35 @@ Jane,Smith,jane.smith@email.com,1990-08-22,FILE789012,Medical Services,875.25,ME
           
           {/* File Upload Area */}
           <div className="mt-4">
-            <div className="flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-gray-400 transition-colors">
-              <div className="space-y-1 text-center">
-                <i className="fas fa-cloud-upload-alt text-gray-400 text-3xl"></i>
-                <div className="flex text-sm text-gray-600">
-                  <label htmlFor="file-upload" className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500">
-                    <span>Upload a file</span>
-                    <Input
-                      id="file-upload"
-                      name="file-upload"
-                      type="file"
-                      className="sr-only"
-                      accept=".csv"
-                      onChange={handleFileChange}
-                    />
-                  </label>
-                  <p className="pl-1">or drag and drop</p>
+            {settingsLoading ? (
+              <div className="flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+                <div className="space-y-1 text-center text-gray-500">
+                  <i className="fas fa-spinner fa-spin text-gray-400 text-3xl"></i>
+                  <p className="text-sm">Loading settings...</p>
                 </div>
-                <p className="text-xs text-gray-500">CSV files up to 10MB</p>
               </div>
-            </div>
+            ) : (
+              <div className="flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-gray-400 transition-colors">
+                <div className="space-y-1 text-center">
+                  <i className="fas fa-cloud-upload-alt text-gray-400 text-3xl"></i>
+                  <div className="flex text-sm text-gray-600">
+                    <label htmlFor="file-upload" className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500">
+                      <span>Upload a file</span>
+                      <Input
+                        id="file-upload"
+                        name="file-upload"
+                        type="file"
+                        className="sr-only"
+                        accept=".csv"
+                        onChange={handleFileChange}
+                      />
+                    </label>
+                    <p className="pl-1">or drag and drop</p>
+                  </div>
+                  <p className="text-xs text-gray-500">CSV files up to 10MB</p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* File Preview */}

@@ -1618,12 +1618,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      // Check if SMAX is enabled for this tenant
+      const tenantSettings = await storage.getTenantSettings(tenantId);
+      const smaxEnabled = tenantSettings?.smaxEnabled ?? false;
+      
       // Validate account data has required fields
       for (let i = 0; i < accountsData.length; i++) {
         const account = accountsData[i];
-        if (!account.filenumber || !account.filenumber.trim()) {
+        // Only require filenumber if SMAX is enabled
+        if (smaxEnabled && (!account.filenumber || !account.filenumber.trim())) {
           return res.status(400).json({ 
-            message: `Row ${i + 2}: Filenumber is required (needed for SMAX integration)` 
+            message: `Row ${i + 2}: Filenumber is required because SMAX integration is enabled for your account` 
           });
         }
         if (!account.creditor || !account.creditor.trim()) {
