@@ -21,6 +21,7 @@ import {
   invoices,
   emailLogs,
   emailCampaigns,
+  serviceActivationRequests,
   type Account,
   type Consumer,
   type Tenant,
@@ -12164,21 +12165,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Activate à la carte service for tenant
+  // Request à la carte service activation (creates pending request for global admin approval)
   app.post('/api/billing/activate-service', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
+      const userEmail = req.user.email;
       if (!tenantId) {
         return res.status(401).json({ success: false, message: "Unauthorized" });
-      }
-
-      // Authorization check: Only owner or platform_admin can activate services
-      const userRole = req.user.role;
-      if (userRole !== 'owner' && userRole !== 'platform_admin') {
-        return res.status(403).json({ 
-          success: false, 
-          message: "Only account owners can activate services. Please contact your account owner." 
-        });
       }
 
       const { serviceType } = req.body;
@@ -12204,32 +12197,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ 
           success: true, 
           message: "Service is already activated",
-          alreadyEnabled: true,
-          enabledAddons: currentAddons
+          alreadyEnabled: true
         });
       }
 
-      // Add service to enabledAddons
-      const updatedAddons = [...currentAddons, serviceType];
-      
-      await db.update(tenantSettings)
-        .set({ enabledAddons: updatedAddons })
-        .where(eq(tenantSettings.tenantId, tenantId));
+      // Check if there's already a pending request for this service
+      const existingRequest = await db.select()
+        .from(serviceActivationRequests)
+        .where(
+          and(
+            eq(serviceActivationRequests.tenantId, tenantId),
+            eq(serviceActivationRequests.serviceType, serviceType),
+            eq(serviceActivationRequests.status, 'pending')
+          )
+        )
+        .limit(1);
 
-      console.log(`✅ Service activated for tenant ${tenantId}: ${serviceType} (by ${userRole})`);
+      if (existingRequest.length > 0) {
+        return res.json({ 
+          success: true, 
+          message: "A request for this service is already pending approval",
+          isPending: true,
+          requestId: existingRequest[0].id
+        });
+      }
+
+      // Create a new service activation request
+      const [newRequest] = await db.insert(serviceActivationRequests)
+        .values({
+          tenantId,
+          serviceType,
+          status: 'pending',
+          requestedBy: userEmail,
+        })
+        .returning();
+
+      console.log(`📝 Service activation request created for tenant ${tenantId}: ${serviceType} (by ${userEmail})`);
 
       res.json({ 
         success: true, 
-        message: "Service activated successfully",
-        serviceType,
-        enabledAddons: updatedAddons
+        message: "Service activation request submitted. A platform administrator will review your request shortly.",
+        isPending: true,
+        requestId: newRequest.id
       });
 
     } catch (error: any) {
-      console.error("❌ Service activation error:", error);
+      console.error("❌ Service activation request error:", error);
       return res.status(500).json({
         success: false,
-        message: "Failed to activate service. Please try again.",
+        message: "Failed to submit service activation request. Please try again.",
         error: error.message
       });
     }
@@ -12356,6 +12372,112 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error updating SMS configuration:', error);
       res.status(500).json({ message: "Failed to update SMS configuration" });
+    }
+  });
+
+  // Get service activation requests (global admin sees all, tenant users see their own)
+  app.get('/api/service-activation-requests', authenticateUser, async (req: any, res) => {
+    try {
+      const isAdmin = req.user.isGlobalAdmin || req.user.role === 'platform_admin';
+      const tenantId = req.user.tenantId;
+      
+      let query = db.select({
+        request: serviceActivationRequests,
+        tenant: tenants,
+      })
+      .from(serviceActivationRequests)
+      .leftJoin(tenants, eq(serviceActivationRequests.tenantId, tenants.id));
+      
+      // Filter by tenant if not admin
+      if (!isAdmin && tenantId) {
+        query = query.where(eq(serviceActivationRequests.tenantId, tenantId)) as any;
+      }
+      
+      // Filter by status if provided
+      const { status } = req.query;
+      if (status && typeof status === 'string') {
+        query = query.where(eq(serviceActivationRequests.status, status)) as any;
+      }
+      
+      const results = await query.orderBy(desc(serviceActivationRequests.requestedAt));
+      
+      res.json({
+        success: true,
+        requests: results.map(r => ({
+          ...r.request,
+          tenantName: r.tenant?.name,
+          tenantSlug: r.tenant?.slug,
+        }))
+      });
+    } catch (error: any) {
+      console.error('Error fetching service activation requests:', error);
+      res.status(500).json({ success: false, message: 'Failed to fetch service activation requests' });
+    }
+  });
+
+  // Approve or reject a service activation request (global admin only)
+  app.post('/api/admin/service-activation-requests/:id/review', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const requestId = req.params.id;
+      const { action, rejectionReason } = req.body; // action: 'approve' or 'reject'
+      const adminEmail = req.user.email || 'admin';
+      
+      if (!['approve', 'reject'].includes(action)) {
+        return res.status(400).json({ success: false, message: 'Invalid action. Must be "approve" or "reject"' });
+      }
+      
+      // Get the request
+      const [request] = await db.select()
+        .from(serviceActivationRequests)
+        .where(eq(serviceActivationRequests.id, requestId))
+        .limit(1);
+      
+      if (!request) {
+        return res.status(404).json({ success: false, message: 'Service activation request not found' });
+      }
+      
+      if (request.status !== 'pending') {
+        return res.status(400).json({ success: false, message: `Request has already been ${request.status}` });
+      }
+      
+      const newStatus = action === 'approve' ? 'approved' : 'rejected';
+      
+      // Update request status
+      await db.update(serviceActivationRequests)
+        .set({
+          status: newStatus,
+          approvedBy: adminEmail,
+          approvedAt: new Date(),
+          rejectionReason: action === 'reject' ? rejectionReason : null,
+        })
+        .where(eq(serviceActivationRequests.id, requestId));
+      
+      // If approved, activate the service
+      if (action === 'approve') {
+        const settings = await storage.getTenantSettings(request.tenantId);
+        if (settings) {
+          const currentAddons = settings.enabledAddons || [];
+          if (!currentAddons.includes(request.serviceType)) {
+            const updatedAddons = [...currentAddons, request.serviceType];
+            await db.update(tenantSettings)
+              .set({ enabledAddons: updatedAddons })
+              .where(eq(tenantSettings.tenantId, request.tenantId));
+            
+            console.log(`✅ Service activated for tenant ${request.tenantId}: ${request.serviceType} (approved by ${adminEmail})`);
+          }
+        }
+      }
+      
+      console.log(`📝 Service activation request ${newStatus} for tenant ${request.tenantId}: ${request.serviceType} (by ${adminEmail})`);
+      
+      res.json({
+        success: true,
+        message: `Service request ${newStatus} successfully`,
+        status: newStatus
+      });
+    } catch (error: any) {
+      console.error('Error reviewing service activation request:', error);
+      res.status(500).json({ success: false, message: 'Failed to review service activation request' });
     }
   });
 
