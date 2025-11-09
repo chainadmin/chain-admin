@@ -12459,11 +12459,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const currentAddons = settings.enabledAddons || [];
           if (!currentAddons.includes(request.serviceType)) {
             const updatedAddons = [...currentAddons, request.serviceType];
+            
+            // Prepare updates for tenant settings
+            const updates: any = { enabledAddons: updatedAddons };
+            
+            // Map service types to their corresponding service flags
+            const serviceFlagMap: Record<string, string> = {
+              'portal_processing': 'both', // Special case: activates both portal and processing
+              'email_service': 'emailServiceEnabled',
+              'sms_service': 'smsServiceEnabled',
+            };
+            
+            const flagToUpdate = serviceFlagMap[request.serviceType];
+            if (flagToUpdate === 'both') {
+              updates.portalAccessEnabled = true;
+              updates.paymentProcessingEnabled = true;
+            } else if (flagToUpdate) {
+              updates[flagToUpdate] = true;
+            }
+            
             await db.update(tenantSettings)
-              .set({ enabledAddons: updatedAddons })
+              .set(updates)
               .where(eq(tenantSettings.tenantId, request.tenantId));
             
+            // Take tenant out of trial mode
+            await db.update(tenants)
+              .set({ 
+                isTrialAccount: false,
+                isPaidAccount: true
+              })
+              .where(eq(tenants.id, request.tenantId));
+            
             console.log(`✅ Service activated for tenant ${request.tenantId}: ${request.serviceType} (approved by ${adminEmail})`);
+            console.log(`✅ Tenant ${request.tenantId} moved out of trial mode`);
           }
         }
       }
