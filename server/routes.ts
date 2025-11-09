@@ -6104,7 +6104,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         maskedSettings.authnetPublicClientKey = `****${settings.authnetPublicClientKey.slice(-4)}`;
       }
 
-      res.json(maskedSettings);
+      // Add service access flags based on enabledAddons
+      const enabledAddons = settings?.enabledAddons || [];
+      const serviceFlags = {
+        emailServiceEnabled: enabledAddons.includes('email_service'),
+        smsServiceEnabled: enabledAddons.includes('sms_service'),
+        paymentProcessingEnabled: enabledAddons.includes('portal_processing'),
+        portalAccessEnabled: enabledAddons.includes('portal_processing'),
+      };
+
+      res.json({ ...maskedSettings, ...serviceFlags });
     } catch (error) {
       console.error("Error fetching settings:", error);
       res.status(500).json({ message: "Failed to fetch settings" });
@@ -12151,6 +12160,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: false,
         message: 'Failed to generate monthly invoices',
         error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
+
+  // Activate à la carte service for tenant
+  app.post('/api/billing/activate-service', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+
+      // Authorization check: Only owner or platform_admin can activate services
+      const userRole = req.user.role;
+      if (userRole !== 'owner' && userRole !== 'platform_admin') {
+        return res.status(403).json({ 
+          success: false, 
+          message: "Only account owners can activate services. Please contact your account owner." 
+        });
+      }
+
+      const { serviceType } = req.body;
+
+      // Validate service type
+      const validServices = ['portal_processing', 'email_service', 'sms_service'];
+      if (!validServices.includes(serviceType)) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Invalid service type. Must be one of: portal_processing, email_service, sms_service" 
+        });
+      }
+
+      // Get current tenant settings
+      const settings = await storage.getTenantSettings(tenantId);
+      if (!settings) {
+        return res.status(404).json({ success: false, message: "Tenant settings not found" });
+      }
+
+      // Check if service is already enabled
+      const currentAddons = settings.enabledAddons || [];
+      if (currentAddons.includes(serviceType)) {
+        return res.json({ 
+          success: true, 
+          message: "Service is already activated",
+          alreadyEnabled: true,
+          enabledAddons: currentAddons
+        });
+      }
+
+      // Add service to enabledAddons
+      const updatedAddons = [...currentAddons, serviceType];
+      
+      await db.update(tenantSettings)
+        .set({ enabledAddons: updatedAddons })
+        .where(eq(tenantSettings.tenantId, tenantId));
+
+      console.log(`✅ Service activated for tenant ${tenantId}: ${serviceType} (by ${userRole})`);
+
+      res.json({ 
+        success: true, 
+        message: "Service activated successfully",
+        serviceType,
+        enabledAddons: updatedAddons
+      });
+
+    } catch (error: any) {
+      console.error("❌ Service activation error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to activate service. Please try again.",
+        error: error.message
       });
     }
   });
