@@ -42,6 +42,15 @@ export function ServiceGate({ service, children, mode = "disable", className = "
 
   const isEnabled = serviceMap[service];
 
+  // DEBUG LOGGING
+  console.log(`[ServiceGate] service=${service}, isEnabled=${isEnabled}, flags=`, {
+    emailServiceEnabled,
+    smsServiceEnabled,
+    paymentProcessingEnabled,
+    portalAccessEnabled,
+    isLoading
+  });
+
   if (isLoading) {
     return null;
   }
