@@ -6238,9 +6238,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       let finalAuthnetPublicClientKey = authnetPublicClientKey?.trim();
+      
+      console.log('🔍 [Settings Save Debug] Authorize.net Public Client Key:', {
+        received: authnetPublicClientKey,
+        trimmed: finalAuthnetPublicClientKey,
+        currentInDb: currentSettings?.authnetPublicClientKey,
+        tenantId: tenantId,
+      });
+      
       if (typeof authnetPublicClientKey === 'string' && authnetPublicClientKey.startsWith('****') && currentSettings?.authnetPublicClientKey) {
+        console.log('🔍 [Settings Save] Preserving existing Public Client Key (masked value received)');
         finalAuthnetPublicClientKey = currentSettings.authnetPublicClientKey;
       }
+      
+      console.log('🔍 [Settings Save] Final Public Client Key to save:', finalAuthnetPublicClientKey);
 
       // Update tenant table with Twilio and email settings if any provided
       if (twilioAccountSid !== undefined || 
