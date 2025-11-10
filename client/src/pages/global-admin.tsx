@@ -1708,11 +1708,21 @@ export default function GlobalAdmin() {
                             size="sm"
                             className="border-green-300 text-green-700 hover:bg-green-50"
                             onClick={async () => {
+                              const token = sessionStorage.getItem('admin_token');
+                              if (!token) {
+                                toast({
+                                  title: "Error",
+                                  description: "Not authenticated. Please refresh and log in again.",
+                                  variant: "destructive",
+                                });
+                                return;
+                              }
+
                               try {
                                 const response = await fetch(`/api/admin/tenants/${tenant.id}/fix-services`, {
                                   method: 'POST',
                                   headers: {
-                                    'Authorization': `Bearer ${sessionStorage.getItem('admin_token')}`,
+                                    'Authorization': `Bearer ${token}`,
                                     'Content-Type': 'application/json'
                                   }
                                 });
@@ -1720,19 +1730,24 @@ export default function GlobalAdmin() {
                                 const data = await response.json();
                                 
                                 if (!response.ok) {
-                                  throw new Error(data.message || 'Failed to enable services');
+                                  toast({
+                                    title: "Error",
+                                    description: data.message || `Server error: ${response.status}`,
+                                    variant: "destructive",
+                                  });
+                                  return;
                                 }
                                 
                                 toast({
-                                  title: "Services Enabled",
-                                  description: data.message || "All services have been enabled for this subscribed tenant.",
+                                  title: "Success",
+                                  description: data.message,
                                 });
                                 
                                 queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants'] });
                               } catch (error: any) {
                                 toast({
                                   title: "Error",
-                                  description: error.message || "Failed to enable services",
+                                  description: error.message || "Network error. Check your connection.",
                                   variant: "destructive",
                                 });
                               }
