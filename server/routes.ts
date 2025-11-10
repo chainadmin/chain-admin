@@ -12523,8 +12523,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const emailCount = await storage.getEmailCountByTenant(tenant.id);
           const smsCount = await storage.getSmsCountByTenant(tenant.id);
           
+          // Get tenant settings to include enabled addons
+          const settings = await storage.getTenantSettings(tenant.id);
+          
           return {
             ...tenant,
+            enabledAddons: settings?.enabledAddons || [],
             stats: {
               consumerCount,
               accountCount,

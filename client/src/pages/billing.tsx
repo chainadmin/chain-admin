@@ -77,6 +77,7 @@ export default function Billing() {
     queryKey: ["/api/settings"],
   });
   const enabledAddons = (settingsData as any)?.tenantSettings?.enabledAddons || [];
+  const isTrialAccount = (settingsData as any)?.isTrialAccount ?? true;
 
   // Fetch service activation requests for this tenant
   const { data: serviceRequestsData } = useQuery({
@@ -369,8 +370,21 @@ export default function Billing() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-2xl border border-white/10 bg-[#101c3c]/60 p-5 shadow-lg shadow-blue-900/20">
                 <p className="text-xs uppercase tracking-wide text-blue-100/70">Current plan</p>
-                <p className="mt-2 text-lg font-semibold text-white">{currentPlanName || "Not selected"}</p>
-                <p className="mt-1 text-sm text-blue-100/70">{formatCurrency(currentPlanPrice)} per month</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <p className="text-lg font-semibold text-white">
+                    {currentPlanName || (enabledAddons.length > 0 ? "À la carte" : "Not selected")}
+                  </p>
+                  {isTrialAccount && (
+                    <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-200 text-xs">
+                      Trial
+                    </Badge>
+                  )}
+                </div>
+                <p className="mt-1 text-sm text-blue-100/70">
+                  {currentPlanName ? `${formatCurrency(currentPlanPrice)} per month` : 
+                   enabledAddons.length > 0 ? `${enabledAddons.length} service${enabledAddons.length > 1 ? 's' : ''} active` : 
+                   'No active services'}
+                </p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-[#101c3c]/60 p-5 shadow-lg shadow-blue-900/20">
                 <p className="text-xs uppercase tracking-wide text-blue-100/70">Next bill</p>

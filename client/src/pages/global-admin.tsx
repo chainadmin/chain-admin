@@ -2160,6 +2160,26 @@ export default function GlobalAdmin() {
                 </div>
               </div>
 
+              {selectedTenantForPlan.enabledAddons && selectedTenantForPlan.enabledAddons.length > 0 && (
+                <div className="bg-emerald-50 p-3 rounded-lg border border-emerald-200">
+                  <p className="text-sm text-emerald-800 font-semibold mb-2">
+                    Active À la carte Services:
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedTenantForPlan.enabledAddons.map((service: string) => (
+                      <Badge key={service} variant="default" className="bg-emerald-600">
+                        {service === 'portal_processing' ? 'Portal + Processing' :
+                         service === 'email_service' ? 'Email Service' :
+                         service === 'sms_service' ? 'SMS Service' : service}
+                      </Badge>
+                    ))}
+                  </div>
+                  <p className="text-xs text-emerald-600 mt-2">
+                    Assigning a subscription plan will complement these active services.
+                  </p>
+                </div>
+              )}
+
               <div className="flex gap-2 justify-end">
                 <Button
                   variant="outline"
