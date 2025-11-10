@@ -6255,9 +6255,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log('🔍 [Settings Save] Preserving existing Public Client Key (masked value received)');
         finalAuthnetPublicClientKey = currentSettings.authnetPublicClientKey;
       } else if (typeof authnetPublicClientKey === 'string' && authnetPublicClientKey.startsWith('****')) {
-        // If masked but current DB value is invalid, set to null so user can re-enter
-        console.log('🔍 [Settings Save] Current value contains invalid text, setting to null');
-        finalAuthnetPublicClientKey = null;
+        // If masked but current DB value is invalid, set to undefined so user can re-enter
+        console.log('🔍 [Settings Save] Current value contains invalid text, clearing it');
+        finalAuthnetPublicClientKey = undefined;
       }
       
       console.log('🔍 [Settings Save] Final Public Client Key to save:', finalAuthnetPublicClientKey);
