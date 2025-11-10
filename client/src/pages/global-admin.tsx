@@ -1702,6 +1702,34 @@ export default function GlobalAdmin() {
                           Business Services
                         </Button>
 
+                        {tenant.isPaidAccount && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="border-green-300 text-green-700 hover:bg-green-50"
+                            onClick={async () => {
+                              try {
+                                await apiRequest('POST', `/api/admin/tenants/${tenant.id}/fix-services`, {});
+                                toast({
+                                  title: "Services Enabled",
+                                  description: "All services have been enabled for this subscribed tenant.",
+                                });
+                                queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants'] });
+                              } catch (error: any) {
+                                toast({
+                                  title: "Error",
+                                  description: error.message || "Failed to enable services",
+                                  variant: "destructive",
+                                });
+                              }
+                            }}
+                            data-testid={`button-fix-services-${tenant.id}`}
+                          >
+                            <Zap className="h-4 w-4 mr-2" />
+                            Fix Services
+                          </Button>
+                        )}
+
                         <Button
                           variant="outline"
                           size="sm"

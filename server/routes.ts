@@ -12565,6 +12565,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Fix services for subscribed tenants (auto-enable all services if they have active subscription)
+  app.post('/api/admin/tenants/:id/fix-services', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const tenantId = req.params.id;
+
+      // Check if tenant has active subscription
+      const [subscription] = await db
+        .select()
+        .from(subscriptions)
+        .where(
+          and(
+            eq(subscriptions.tenantId, tenantId),
+            eq(subscriptions.status, 'active')
+          )
+        )
+        .limit(1);
+
+      if (subscription) {
+        // Enable all services for subscribed tenant
+        await db
+          .update(tenants)
+          .set({
+            isTrialAccount: false,
+            isPaidAccount: true,
+            emailServiceEnabled: true,
+            smsServiceEnabled: true,
+            paymentProcessingEnabled: true,
+            portalAccessEnabled: true,
+          })
+          .where(eq(tenants.id, tenantId));
+
+        res.json({ 
+          message: 'All services enabled for subscribed tenant',
+          servicesEnabled: true
+        });
+      } else {
+        res.status(400).json({ message: 'Tenant has no active subscription' });
+      }
+    } catch (error) {
+      console.error("Error fixing tenant services:", error);
+      res.status(500).json({ message: "Failed to fix services" });
+    }
+  });
+
   // Direct admin control: Update tenant services and trial status
   app.post('/api/admin/tenants/:id/services', isPlatformAdmin, async (req: any, res) => {
     try {
@@ -12832,12 +12876,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updatedAt: new Date(),
       });
 
-      // Update tenant to remove trial status and mark as paid
+      // Update tenant to remove trial status, mark as paid, and enable all services
       await db
         .update(tenants)
         .set({ 
           isTrialAccount: false,
-          isPaidAccount: true 
+          isPaidAccount: true,
+          emailServiceEnabled: true,
+          smsServiceEnabled: true,
+          paymentProcessingEnabled: true,
+          portalAccessEnabled: true,
         })
         .where(eq(tenants.id, subscription.tenantId));
 
