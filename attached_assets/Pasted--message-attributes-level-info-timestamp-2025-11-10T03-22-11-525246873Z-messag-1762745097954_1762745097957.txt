@@ -1,0 +1,206 @@
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.525246873Z"}
+{"message":"📤 [RESPONSE-FILE] GET / → 200 (1ms) { file: 'index.html' }","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.525251165Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.926686635Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.926700198Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.926706355Z"}
+{"message":"🔐 Consumer auth check: {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.926710716Z"}
+{"message":"  hasAuthHeader: true,","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.926715364Z"}
+{"message":"  startsWithBearer: true,","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.926720921Z"}
+{"message":"  path: '/api/consumer/accounts/wesowlife%40gmail.com'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.926725794Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.926730511Z"}
+{"message":"✅ Consumer token decoded: {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.926735155Z"}
+{"message":"  type: 'consumer',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.926741930Z"}
+{"message":"📨 [REQUEST] GET /api/public/agency/summit-recovery-group {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.926745313Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.926751532Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.926757133Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.926766714Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.926775150Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/public/agency/summit-recovery-group → 200 (5ms) { dataKeys: 'tenant, tenantSettings' }","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.926780753Z"}
+{"message":"📤 [RESPONSE] GET /api/public/agency/summit-recovery-group → 200 (5ms) {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.926789883Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.926795798Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.926800045Z"}
+{"message":"  bodyPreview: '{\"tenant\":{\"id\":\"79e5c347-ae73-4a31-bea7-8f080e53a0ba\",\"name\":\"Summit Recovery Group\",\"slug\":\"summit'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.926804283Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.926809225Z"}
+{"message":"📨 [REQUEST] GET /api/consumer/accounts/wesowlife%40gmail.com {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.926813193Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.926820140Z"}
+{"message":"  consumerId: '8d230854-3438-49c9-8248-7c37e9d7de34',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.926847468Z"}
+{"message":"  email: 'wesowlife@gmail.com',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.926859612Z"}
+{"message":"  startsWithBearer: true,","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.928032576Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.928037892Z"}
+{"message":"  path: '/api/consumer/tenant-settings'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.928044203Z"}
+{"message":"  tenantSlug: 'summit-recovery-group'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.928051511Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.928052932Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.928057156Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.928066866Z"}
+{"message":"✅ Consumer token decoded: {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.928067776Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.928069466Z"}
+{"message":"  type: 'consumer',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.928079093Z"}
+{"message":"🔐 Consumer auth check: {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.928083546Z"}
+{"message":"📨 [REQUEST] GET /api/consumer/tenant-settings {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.928084048Z"}
+{"message":"  consumerId: '8d230854-3438-49c9-8248-7c37e9d7de34',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.928089480Z"}
+{"message":"  hasAuthHeader: true,","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.928097465Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.928098472Z"}
+{"message":"  email: 'wesowlife@gmail.com',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.928101683Z"}
+{"message":"  startsWithBearer: true,","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.928111846Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.928113190Z"}
+{"message":"  tenantSlug: 'summit-recovery-group'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.928114559Z"}
+{"message":"  path: '/api/consumer/payment-schedules/wesowlife%40gmail.com'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.928123659Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.928126129Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.928131483Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.928137661Z"}
+{"message":"📨 [REQUEST] GET /api/consumer/payment-schedules/wesowlife%40gmail.com {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.928139777Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.928144128Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.928150393Z"}
+{"message":"🔐 Consumer auth check: {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.928153341Z"}
+{"message":"  hasAuthHeader: true,","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.928159425Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.929668976Z"}
+{"message":"  tenantSlug: 'summit-recovery-group'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.929671368Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/consumer/accounts/wesowlife%40gmail.com → 200 (26ms) {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.929680779Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.929682439Z"}
+{"message":"📨 [REQUEST] GET /api/public/agency-branding {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.929690796Z"}
+{"message":"  type: 'consumer',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.929697144Z"}
+{"message":"  consumerId: '8d230854-3438-49c9-8248-7c37e9d7de34',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.929705717Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.929710563Z"}
+{"message":"  path: '/api/consumer/documents/wesowlife@gmail.com'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.929711027Z"}
+{"message":"  email: 'wesowlife@gmail.com',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.929714668Z"}
+{"message":"  tenantSlug: 'summit-recovery-group'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.929722027Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.929724427Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.929728908Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.929733644Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.929735518Z"}
+{"message":"✅ Consumer token decoded: {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.929741747Z"}
+{"message":"📨 [REQUEST] GET /api/consumer/documents/wesowlife@gmail.com {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.929744154Z"}
+{"message":"  type: 'consumer',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.929750630Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.929752028Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.929759562Z"}
+{"message":"  consumerId: '8d230854-3438-49c9-8248-7c37e9d7de34',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.929760305Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.929767064Z"}
+{"message":"  email: 'wesowlife@gmail.com',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.929770028Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.929773122Z"}
+{"message":"🔐 Consumer auth check: {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.929777623Z"}
+{"message":"  hasAuthHeader: true,","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.929782404Z"}
+{"message":"  startsWithBearer: true,","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.929787052Z"}
+{"message":"✅ Consumer token decoded: {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.929836745Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.931459140Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.931468502Z"}
+{"message":"  bodyPreview: '{\"minimumMonthlyPayment\":5000,\"showPaymentPlans\":true,\"showDocuments\":true,\"allowSettlementRequests\"'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.931481656Z"}
+{"message":"  dataKeys: 'consumer, accounts, tenant, tenantSettings, paymentSchedules'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.931603151Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.931608390Z"}
+{"message":"📤 [RESPONSE] GET /api/consumer/accounts/wesowlife%40gmail.com → 200 (27ms) {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.931614868Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.931620216Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.931624844Z"}
+{"message":"  bodyPreview: '{\"consumer\":{\"id\":\"8d230854-3438-49c9-8248-7c37e9d7de34\",\"firstName\":\"test\",\"lastName\":\"test\",\"email'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.931630848Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.931635456Z"}
+{"message":"🔍 [Consumer Settings] Authorize.net Public Client Key from DB: {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.931639624Z"}
+{"message":"  tenantId: '79e5c347-ae73-4a31-bea7-8f080e53a0ba',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.931644337Z"}
+{"message":"  authnetPublicClientKey: '5knf23u4BmLf4TeczP5w73vK4kxH3XcWJ2HKjL848tpx7sE5QPLUx9E8zpW243Q',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.931648532Z"}
+{"message":"  length: 63,","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.931653271Z"}
+{"message":"  first10: '5knf23u4Bm',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.931658387Z"}
+{"message":"  containsWaypoint: false","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.931663892Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.931668017Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/consumer/tenant-settings → 200 (79ms) {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.931673020Z"}
+{"message":"  dataKeys: 'minimumMonthlyPayment, showPaymentPlans, showDocuments, allowSettlementRequests, merchantProvider, authnetPublicClientKey, authnetApiLoginId, useSandbox'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.931678377Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.931683158Z"}
+{"message":"📤 [RESPONSE] GET /api/consumer/tenant-settings → 200 (80ms) {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.931687763Z"}
+{"message":"  hasAuthHeader: true,","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.934838251Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.934840002Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.934847114Z"}
+{"message":"  bodyPreview: '[]'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.934847678Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/public/agency-branding → 200 (69ms) {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.934854830Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.934863329Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.934863416Z"}
+{"message":"  dataKeys: 'agencyName, agencySlug, businessType, logoUrl, primaryColor, secondaryColor, contactEmail, contactPhone, hasPrivacyPolicy, hasTermsOfService, privacyPolicy, termsOfService, landingPageHeadline, landingPageSubheadline, customLandingPageUrl'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.934869922Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.934870877Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.934876958Z"}
+{"message":"📨 [REQUEST] GET /api/consumer/arrangements/wesowlife@gmail.com {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.934877535Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.934880964Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.934886956Z"}
+{"message":"📤 [RESPONSE] GET /api/public/agency-branding → 200 (69ms) {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.934891087Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.934897421Z"}
+{"message":"🔐 Consumer auth check: {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.934898398Z"}
+{"message":"  bodyPreview: '{\"agencyName\":\"Summit Recovery Group\",\"agencySlug\":\"summit-recovery-group\",\"businessType\":\"call_cent'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.934907857Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.934918451Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/consumer/documents/wesowlife@gmail.com → 200 (82ms) { dataKeys: '' }","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.934924722Z"}
+{"message":"📤 [RESPONSE] GET /api/consumer/documents/wesowlife@gmail.com → 200 (82ms) {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.934931078Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.934936220Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.934943257Z"}
+{"message":"  startsWithBearer: true,","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.936578828Z"}
+{"message":"  path: '/api/consumer/arrangements/wesowlife@gmail.com'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.936585627Z"}
+{"message":"ℹ️ SMAX not configured - skipping payment arrangement fetch","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.936588631Z"}
+{"message":"  scheduleStatuses: []","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.936588929Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.936591991Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.936597463Z"}
+{"message":"✅ Consumer token decoded: {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.936599922Z"}
+{"message":"✅ Active schedules after filter: { activeCount: 0, activeScheduleIds: [] }","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.936606548Z"}
+{"message":"  email: 'wesowlife@gmail.com',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.936608291Z"}
+{"message":"  type: 'consumer',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.936611446Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/consumer/payment-schedules/wesowlife%40gmail.com → 200 (108ms) { dataKeys: '' }","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.936612472Z"}
+{"message":"  consumerId: '8d230854-3438-49c9-8248-7c37e9d7de34',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.936620562Z"}
+{"message":"📤 Returning enriched schedules to frontend: { count: 0, schedules: [] }","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.936622202Z"}
+{"message":"📤 [RESPONSE] GET /api/consumer/payment-schedules/wesowlife%40gmail.com → 200 (108ms) {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.936623452Z"}
+{"message":"  tenantSlug: 'summit-recovery-group'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.936624579Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.936631332Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.936633255Z"}
+{"message":"📅 Payment schedules found for consumer: {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.936639044Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.936639711Z"}
+{"message":"  consumerId: '8d230854-3438-49c9-8248-7c37e9d7de34',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.936646142Z"}
+{"message":"  tenantId: '79e5c347-ae73-4a31-bea7-8f080e53a0ba',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.936651830Z"}
+{"message":"  totalSchedules: 0,","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.936658922Z"}
+{"message":"  bodyPreview: '[]'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.936667690Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.936681302Z"}
+{"message":"📋 Fetching SMAX arrangement for account: 123456","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.936689539Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/consumer/arrangements/wesowlife@gmail.com → 200 (17ms) {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.937438733Z"}
+{"message":"  dataKeys: 'templateOptions, existingArrangements, hasExistingSMAXArrangement'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.937449160Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.937456526Z"}
+{"message":"📤 [RESPONSE] GET /api/consumer/arrangements/wesowlife@gmail.com → 200 (17ms) {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.937463697Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.937471985Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.937479221Z"}
+{"message":"  bodyPreview: '{\"templateOptions\":[],\"existingArrangements\":[],\"hasExistingSMAXArrangement\":false}'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.937486967Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:22:11.937494214Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.579845706Z"}
+{"message":"📨 [REQUEST] GET /api/consumer/tenant-settings {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.579957365Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.579964455Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.579972102Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.579978707Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.579992176Z"}
+{"message":"🔐 Consumer auth check: {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.580004575Z"}
+{"message":"  hasAuthHeader: true,","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.580012703Z"}
+{"message":"  startsWithBearer: true,","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.580019706Z"}
+{"message":"  path: '/api/consumer/tenant-settings'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.580026576Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.580036741Z"}
+{"message":"✅ Consumer token decoded: {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.580046130Z"}
+{"message":"  type: 'consumer',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.580053894Z"}
+{"message":"  consumerId: '8d230854-3438-49c9-8248-7c37e9d7de34',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.580061531Z"}
+{"message":"  email: 'wesowlife@gmail.com',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.580069309Z"}
+{"message":"  tenantSlug: 'summit-recovery-group'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.580076932Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.580084167Z"}
+{"message":"🔍 [Consumer Settings] Authorize.net Public Client Key from DB: {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.580091943Z"}
+{"message":"  tenantId: '79e5c347-ae73-4a31-bea7-8f080e53a0ba',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.580100272Z"}
+{"message":"  authnetPublicClientKey: '5knf23u4BmLf4TeczP5w73vK4kxH3XcWJ2HKjL848tpx7sE5QPLUx9E8zpW243Q',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.580111448Z"}
+{"message":"  length: 63,","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.580119077Z"}
+{"message":"  first10: '5knf23u4Bm',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.580125841Z"}
+{"message":"  containsWaypoint: false","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.580134686Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.580140764Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/consumer/tenant-settings → 200 (90ms) {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.580147300Z"}
+{"message":"  dataKeys: 'minimumMonthlyPayment, showPaymentPlans, showDocuments, allowSettlementRequests, merchantProvider, authnetPublicClientKey, authnetApiLoginId, useSandbox'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.580154369Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.580429604Z"}
+{"message":"📤 [RESPONSE] GET /api/consumer/tenant-settings → 200 (90ms) {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.580434113Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.580438597Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.580443394Z"}
+{"message":"  bodyPreview: '{\"minimumMonthlyPayment\":5000,\"showPaymentPlans\":true,\"showDocuments\":true,\"allowSettlementRequests\"'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:23:01.580447858Z"}
+{"message":"📨 [REQUEST] GET /.git/config {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:24:01.914220010Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:24:01.914223778Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:24:01.914229111Z"}
+{"message":"  userAgent: 'python-httpx/0.28.1'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:24:01.914233439Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:24:01.914238163Z"}
+{"message":"📤 [RESPONSE-FILE] GET / → 200 (1ms) { file: 'index.html' }","attributes":{"level":"info"},"timestamp":"2025-11-10T03:24:01.914253977Z"}
+{"message":"📨 [REQUEST] GET / {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:24:01.914258187Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:24:01.914263119Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:24:01.914267484Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/9'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:24:01.914279595Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:24:01.914283745Z"}
+{"message":"📨 [REQUEST] GET /assets/index-DXD__esA.js {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:24:01.914288123Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:24:01.914502836Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:24:01.914509085Z"}
+{"message":"  userAgent: 'python-httpx/0.28.1'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:24:01.914513335Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:24:01.914517468Z"}
