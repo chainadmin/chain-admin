@@ -6246,9 +6246,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tenantId: tenantId,
       });
       
-      if (typeof authnetPublicClientKey === 'string' && authnetPublicClientKey.startsWith('****') && currentSettings?.authnetPublicClientKey) {
+      // Only preserve existing value if it's masked AND the current value doesn't contain invalid text
+      if (typeof authnetPublicClientKey === 'string' && 
+          authnetPublicClientKey.startsWith('****') && 
+          currentSettings?.authnetPublicClientKey &&
+          !currentSettings.authnetPublicClientKey.includes('Waypoint') &&
+          !currentSettings.authnetPublicClientKey.includes('Solutions')) {
         console.log('🔍 [Settings Save] Preserving existing Public Client Key (masked value received)');
         finalAuthnetPublicClientKey = currentSettings.authnetPublicClientKey;
+      } else if (typeof authnetPublicClientKey === 'string' && authnetPublicClientKey.startsWith('****')) {
+        // If masked but current DB value is invalid, set to null so user can re-enter
+        console.log('🔍 [Settings Save] Current value contains invalid text, setting to null');
+        finalAuthnetPublicClientKey = null;
       }
       
       console.log('🔍 [Settings Save] Final Public Client Key to save:', finalAuthnetPublicClientKey);
