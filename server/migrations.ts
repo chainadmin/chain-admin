@@ -620,6 +620,27 @@ export async function runMigrations() {
     );
     console.log('✅ Verified new columns:', newColumns.map(r => r.column_name).join(', '));
     
+    // FIX: Enable services for all tenants with active subscriptions
+    console.log('🔧 Enabling services for subscribed tenants...');
+    try {
+      const fixResult = await client.query(`
+        UPDATE tenants
+        SET 
+          is_trial_account = false,
+          is_paid_account = true,
+          email_service_enabled = true,
+          sms_service_enabled = true,
+          payment_processing_enabled = true,
+          portal_access_enabled = true
+        FROM subscriptions
+        WHERE subscriptions.tenant_id = tenants.id
+          AND subscriptions.status = 'active'
+      `);
+      console.log(`  ✅ Enabled services for ${fixResult.rowCount} subscribed tenants`);
+    } catch (err) {
+      console.log('  ⚠ Could not enable services for subscribed tenants:', err);
+    }
+    
     console.log('✅ Database migrations completed successfully');
   } catch (error: any) {
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
