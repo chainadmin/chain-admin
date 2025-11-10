@@ -12583,7 +12583,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .limit(1);
 
       if (subscription) {
-        // Enable all services for subscribed tenant
+        // Enable CORE services for subscribed tenant (not add-ons)
         await db
           .update(tenants)
           .set({
@@ -12597,7 +12597,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .where(eq(tenants.id, tenantId));
 
         res.json({ 
-          message: 'All services enabled for subscribed tenant',
+          message: 'Core services enabled for subscribed tenant (add-ons require separate activation)',
           servicesEnabled: true
         });
       } else {
@@ -12628,7 +12628,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const fixedTenants = [];
       
-      // Enable services for each tenant with active subscription
+      // Enable CORE services for each tenant with active subscription (not add-ons)
       for (const subscription of activeSubscriptions) {
         await db
           .update(tenants)
@@ -12652,10 +12652,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fixedTenants.push(tenant?.name || subscription.tenantId);
       }
 
-      console.log(`✅ Bulk fixed services for ${fixedTenants.length} subscribed tenants`);
+      console.log(`✅ Bulk fixed CORE services for ${fixedTenants.length} subscribed tenants`);
 
       res.json({
-        message: `Successfully enabled services for ${fixedTenants.length} subscribed tenant(s)`,
+        message: `Successfully enabled core services for ${fixedTenants.length} subscribed tenant(s). Add-ons require separate activation.`,
         fixed: fixedTenants.length,
         tenants: fixedTenants
       });
@@ -12932,7 +12932,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updatedAt: new Date(),
       });
 
-      // Update tenant to remove trial status, mark as paid, and enable all services
+      // Update tenant to remove trial status, mark as paid, and enable CORE services only
+      // (Add-ons like document signing must be enabled separately)
       await db
         .update(tenants)
         .set({ 
@@ -13072,7 +13073,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Update tenant to remove trial status, mark as paid, and enable all services
+      // Update tenant to remove trial status, mark as paid, and enable CORE services only
+      // (Add-ons like document signing must be enabled separately)
       await db
         .update(tenants)
         .set({ 
