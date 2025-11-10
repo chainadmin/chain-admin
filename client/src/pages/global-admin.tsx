@@ -1728,7 +1728,7 @@ export default function GlobalAdmin() {
                                   description: data.message || "All services have been enabled for this subscribed tenant.",
                                 });
                                 
-                                tenantsQuery.refetch();
+                                queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants'] });
                               } catch (error: any) {
                                 toast({
                                   title: "Error",
