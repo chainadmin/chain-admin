@@ -62,15 +62,15 @@ export function ServiceGate({ service, children, mode = "disable", className = "
   if (!isEnabled && mode === "disable") {
     return (
       <div className={`relative ${className}`} data-testid={`service-gate-${service}`}>
-        <div className="opacity-50 grayscale">
+        <div className="opacity-50 grayscale pointer-events-none">
           {children}
         </div>
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="absolute inset-0 flex items-center justify-center">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 onClick={() => setLocation("/admin/billing?tab=services")}
-                className="pointer-events-auto rounded-xl border-2 border-amber-400/60 bg-gradient-to-br from-amber-500/90 to-orange-500/90 px-6 py-3 text-sm font-semibold text-white shadow-2xl shadow-amber-900/50 transition hover:scale-105 hover:from-amber-400 hover:to-orange-400"
+                className="rounded-xl border-2 border-amber-400/60 bg-gradient-to-br from-amber-500/90 to-orange-500/90 px-6 py-3 text-sm font-semibold text-white shadow-2xl shadow-amber-900/50 transition hover:scale-105 hover:from-amber-400 hover:to-orange-400"
                 data-testid={`button-upgrade-${service}`}
               >
                 <Lock className="mr-2 h-4 w-4" />
@@ -86,17 +86,6 @@ export function ServiceGate({ service, children, mode = "disable", className = "
             </TooltipContent>
           </Tooltip>
         </div>
-        <div 
-          className="absolute inset-0 bg-transparent cursor-default" 
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-          onSubmit={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-        />
       </div>
     );
   }

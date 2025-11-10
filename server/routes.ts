@@ -11872,6 +11872,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         stats.usageCharges = usageCharges;
         stats.totalBill = totalBill;
         stats.planName = currentPlan.name;
+      } else {
+        // À la carte billing - calculate based on enabled services
+        const enabledAddons = tenantSettings?.enabledAddons || [];
+        const aLaCarteBase = enabledAddons.length * 125;
+        
+        // For à la carte, no included email/SMS, so all usage is overage
+        const emailOverageCharge = Number((stats.emailUsage.used * (EMAIL_OVERAGE_RATE_PER_THOUSAND / 1000)).toFixed(2));
+        const smsOverageCharge = Number((stats.smsUsage.used * SMS_OVERAGE_RATE_PER_SEGMENT).toFixed(2));
+        const usageCharges = Number((emailOverageCharge + smsOverageCharge).toFixed(2));
+        
+        stats.monthlyBase = aLaCarteBase;
+        stats.usageCharges = usageCharges;
+        stats.totalBill = Number((aLaCarteBase + (stats.addonFees || 0) + usageCharges).toFixed(2));
+        
+        // Update usage to show zero included
+        stats.emailUsage = {
+          used: stats.emailUsage.used,
+          included: 0,
+          overage: stats.emailUsage.used,
+          overageCharge: emailOverageCharge,
+        };
+        
+        stats.smsUsage = {
+          used: stats.smsUsage.used,
+          included: 0,
+          overage: stats.smsUsage.used,
+          overageCharge: smsOverageCharge,
+        };
       }
       
       // Enhanced logging for SMS usage debugging
