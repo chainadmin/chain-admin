@@ -6110,16 +6110,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         maskedSettings.authnetPublicClientKey = `****${settings.authnetPublicClientKey.slice(-4)}`;
       }
 
-      // Add service access flags based on enabledAddons
-      const enabledAddons = settings?.enabledAddons || [];
-      const serviceFlags = {
-        emailServiceEnabled: enabledAddons.includes('email_service'),
-        smsServiceEnabled: enabledAddons.includes('sms_service'),
-        paymentProcessingEnabled: enabledAddons.includes('portal_processing'),
-        portalAccessEnabled: enabledAddons.includes('portal_processing'),
-      };
-
-      res.json({ ...maskedSettings, ...serviceFlags });
+      res.json(maskedSettings);
     } catch (error) {
       console.error("Error fetching settings:", error);
       res.status(500).json({ message: "Failed to fetch settings" });
