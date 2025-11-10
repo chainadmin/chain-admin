@@ -778,9 +778,17 @@ export default function ConsumerDashboardSimple() {
         });
 
         const authData = {
-          clientKey: settings?.authnetPublicClientKey,
-          apiLoginID: tenantSettings?.authnetApiLoginId || '', // Required by Authorize.net
+          clientKey: settings?.authnetPublicClientKey?.trim() || '',
+          apiLoginID: tenantSettings?.authnetApiLoginId?.trim() || '', // Required by Authorize.net
         };
+
+        // Debug: Log actual values being sent (first 10 chars for security)
+        console.log('🔵 [Authorize.net] Auth data being sent:', {
+          clientKeyPreview: authData.clientKey.substring(0, 10) + '...',
+          apiLoginIDPreview: authData.apiLoginID.substring(0, 10) + '...',
+          clientKeyFull: authData.clientKey,
+          apiLoginIDFull: authData.apiLoginID,
+        });
 
         const cardData = {
           cardNumber: paymentForm.cardNumber,
