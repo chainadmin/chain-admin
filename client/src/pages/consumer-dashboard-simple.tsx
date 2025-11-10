@@ -593,6 +593,9 @@ export default function ConsumerDashboardSimple() {
     ? existingSMAXArrangements.find((arr: any) => arr.accountId === selectedAccount.id)
     : null;
 
+  // Check if no payment arrangements are available
+  const noArrangementsAvailable = applicableArrangements.length === 0;
+
   // Calculate payment amount based on selected arrangement or simplified flow
   const paymentAmountCents = selectedAccount
     ? selectedArrangement
@@ -601,7 +604,9 @@ export default function ConsumerDashboardSimple() {
           : calculateArrangementPayment(selectedArrangement, selectedAccount.balanceCents || 0))
       : calculatedPayment !== null
         ? calculatedPayment
-        : selectedAccount.balanceCents || 0
+        : (noArrangementsAvailable && customPaymentAmount && !isNaN(parseFloat(customPaymentAmount)))
+          ? Math.round(parseFloat(customPaymentAmount) * 100)
+          : selectedAccount.balanceCents || 0
     : 0;
 
   const handlePaymentSubmit = async (e: React.FormEvent) => {
@@ -609,8 +614,40 @@ export default function ConsumerDashboardSimple() {
     
     if (!selectedAccount) return;
 
-    // Validate simplified flow
-    if (!selectedArrangement && calculatedPayment === null) {
+    // Validate payment selection
+    if (noArrangementsAvailable) {
+      // When no arrangements exist, require custom payment amount
+      const amount = parseFloat(customPaymentAmount);
+      const maxAmount = (selectedAccount.balanceCents || 0) / 100;
+      
+      if (!customPaymentAmount || isNaN(amount)) {
+        toast({
+          title: "Payment Amount Required",
+          description: "Please enter a payment amount",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      if (amount <= 0) {
+        toast({
+          title: "Invalid Amount",
+          description: "Payment amount must be greater than zero",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      if (amount > maxAmount) {
+        toast({
+          title: "Amount Too High",
+          description: `Maximum payment is $${maxAmount.toFixed(2)} (your balance)`,
+          variant: "destructive",
+        });
+        return;
+      }
+    } else if (!selectedArrangement && calculatedPayment === null) {
+      // When arrangements exist, require selection
       toast({
         title: "Select Payment Plan",
         description: "Please select a payment term or enter a custom amount",
@@ -693,7 +730,9 @@ export default function ConsumerDashboardSimple() {
         saveCard: saveCard || isSimplifiedFlow,
         setupRecurring: shouldSetupRecurring,
         firstPaymentDate: paymentDate,
-        customPaymentAmountCents: selectedArrangement?.planType === 'one_time_payment' && customPaymentAmount
+        customPaymentAmountCents: noArrangementsAvailable && customPaymentAmount
+          ? Math.round(parseFloat(customPaymentAmount) * 100)
+          : selectedArrangement?.planType === 'one_time_payment' && customPaymentAmount
           ? Math.round(parseFloat(customPaymentAmount) * 100)
           : (isSimplifiedFlow || isSMAXPayment)
             ? calculatedPayment
@@ -1776,6 +1815,33 @@ export default function ConsumerDashboardSimple() {
                       </span>
                     </div>
                   </div>
+
+                  {/* Custom Payment Amount Input - shown when no arrangements are available */}
+                  {noArrangementsAvailable && (
+                    <div className="rounded-lg bg-blue-500/10 p-4 border-2 border-blue-400/30 backdrop-blur">
+                      <Label htmlFor="customPaymentInput" className="text-base font-semibold text-blue-200 mb-2 block">
+                        Enter Payment Amount
+                      </Label>
+                      <Input
+                        id="customPaymentInput"
+                        type="number"
+                        min="0.01"
+                        max={(selectedAccount.balanceCents || 0) / 100}
+                        step="0.01"
+                        value={customPaymentAmount}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                          setCustomPaymentAmount(e.target.value);
+                          setSelectedArrangement(null);
+                        }}
+                        placeholder="0.00"
+                        className="bg-white/10 border-white/20 text-white placeholder:text-white/50 text-lg font-semibold"
+                        data-testid="input-payment-amount"
+                      />
+                      <p className="text-xs text-blue-100/70 mt-2">
+                        Enter any amount up to your balance of {formatCurrency(selectedAccount.balanceCents || 0)}
+                      </p>
+                    </div>
+                  )}
                   
                   <div className="rounded-lg bg-emerald-500/10 p-4 border-2 border-emerald-400/30 backdrop-blur">
                     <div className="flex justify-between items-center">

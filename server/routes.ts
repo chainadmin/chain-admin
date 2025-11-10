@@ -7904,6 +7904,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid payment amount" });
       }
 
+      // Universal balance validation for ALL payment types
+      const accountBalance = account.balanceCents || 0;
+      if (amountCents > accountBalance) {
+        console.log('❌ Payment exceeds balance:', { amountCents, accountBalance });
+        return res.status(400).json({ 
+          success: false,
+          message: `Payment amount cannot exceed your balance of $${(accountBalance / 100).toFixed(2)}` 
+        });
+      }
+
       // Check if payment processing is enabled for this tenant (trial mode restriction)
       const tenant = await storage.getTenant(tenantId);
       if (!tenant) {
