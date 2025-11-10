@@ -19,6 +19,8 @@ export function useServiceAccess(): ServiceAccessFlags {
   const { data: settings, isLoading } = useQuery<TenantSettings>({
     queryKey: ["/api/settings"],
     retry: false,
+    staleTime: 0,
+    gcTime: 0,
   });
 
   return {
