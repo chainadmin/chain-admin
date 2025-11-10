@@ -17,10 +17,12 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, Mail, MapPin, Phone, MessageSquare } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Calendar, Mail, MapPin, Phone, MessageSquare, TrendingUp, DollarSign, Send } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 export default function AdminDashboard() {
   const { toast } = useToast();
@@ -311,75 +313,109 @@ export default function AdminDashboard() {
                 />
               </div>
 
-              {/* Payment Metrics */}
+              {/* Payment Metrics Chart */}
               {(stats as any)?.paymentMetrics && (
-                <div className="mt-8">
-                  <h2 className="text-xl font-semibold text-white mb-4">Payment Metrics</h2>
-                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-5">
-                    <StatsCard
-                      title="Total Payments"
-                      value={(stats as any)?.paymentMetrics?.totalPayments?.toLocaleString() || "0"}
-                      icon="fas fa-credit-card"
-                      data-testid="stat-total-payments"
-                    />
-                    <StatsCard
-                      title="Successful"
-                      value={(stats as any)?.paymentMetrics?.successfulPayments?.toLocaleString() || "0"}
-                      icon="fas fa-check-circle"
-                      data-testid="stat-successful-payments"
-                    />
-                    <StatsCard
-                      title="Declined"
-                      value={(stats as any)?.paymentMetrics?.declinedPayments?.toLocaleString() || "0"}
-                      icon="fas fa-times-circle"
-                      data-testid="stat-declined-payments"
-                    />
-                    <StatsCard
-                      title="Total Collected"
-                      value={`$${(stats as any)?.paymentMetrics?.totalCollected?.toLocaleString() || "0"}`}
-                      icon="fas fa-dollar-sign"
-                      data-testid="stat-total-collected"
-                    />
-                    <StatsCard
-                      title="Monthly Collected"
-                      value={`$${(stats as any)?.paymentMetrics?.monthlyCollected?.toLocaleString() || "0"}`}
-                      icon="fas fa-calendar-check"
-                      data-testid="stat-monthly-collected"
-                    />
-                  </div>
-                </div>
-              )}
+                <div className="mt-8 grid gap-6 lg:grid-cols-2">
+                  <Card className="border-white/10 bg-white/5 shadow-lg shadow-blue-900/20 backdrop-blur" data-testid="card-payment-chart">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 text-white">
+                        <DollarSign className="h-5 w-5 text-emerald-400" />
+                        Payment Performance
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={[
+                          { name: 'Total', value: (stats as any)?.paymentMetrics?.totalPayments || 0 },
+                          { name: 'Successful', value: (stats as any)?.paymentMetrics?.successfulPayments || 0 },
+                          { name: 'Declined', value: (stats as any)?.paymentMetrics?.declinedPayments || 0 },
+                        ]}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />
+                          <XAxis dataKey="name" stroke="#94a3b8" />
+                          <YAxis stroke="#94a3b8" />
+                          <Tooltip 
+                            contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
+                            labelStyle={{ color: '#e2e8f0' }}
+                          />
+                          <Bar dataKey="value" fill="#3b82f6" radius={[8, 8, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                      <div className="mt-4 grid grid-cols-2 gap-4">
+                        <div className="text-center">
+                          <p className="text-xs text-blue-100/70">Total Collected</p>
+                          <p className="text-lg font-semibold text-emerald-400" data-testid="text-total-collected">
+                            ${(stats as any)?.paymentMetrics?.totalCollected?.toLocaleString() || "0"}
+                          </p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs text-blue-100/70">Monthly</p>
+                          <p className="text-lg font-semibold text-sky-400" data-testid="text-monthly-collected">
+                            ${(stats as any)?.paymentMetrics?.monthlyCollected?.toLocaleString() || "0"}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
 
-              {/* Email Metrics */}
-              {(stats as any)?.emailMetrics && (
-                <div className="mt-8">
-                  <h2 className="text-xl font-semibold text-white mb-4">Email Metrics</h2>
-                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-                    <StatsCard
-                      title="Total Sent"
-                      value={(stats as any)?.emailMetrics?.totalSent?.toLocaleString() || "0"}
-                      icon="fas fa-paper-plane"
-                      data-testid="stat-emails-sent"
-                    />
-                    <StatsCard
-                      title="Opened"
-                      value={(stats as any)?.emailMetrics?.opened?.toLocaleString() || "0"}
-                      icon="fas fa-envelope-open"
-                      data-testid="stat-emails-opened"
-                    />
-                    <StatsCard
-                      title="Open Rate"
-                      value={`${(stats as any)?.emailMetrics?.openRate || 0}%`}
-                      icon="fas fa-chart-bar"
-                      data-testid="stat-email-open-rate"
-                    />
-                    <StatsCard
-                      title="Bounced"
-                      value={(stats as any)?.emailMetrics?.bounced?.toLocaleString() || "0"}
-                      icon="fas fa-exclamation-triangle"
-                      data-testid="stat-emails-bounced"
-                    />
-                  </div>
+                  {/* Email & SMS Communication Chart */}
+                  <Card className="border-white/10 bg-white/5 shadow-lg shadow-blue-900/20 backdrop-blur" data-testid="card-communication-chart">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 text-white">
+                        <Send className="h-5 w-5 text-purple-400" />
+                        Communication Metrics
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <LineChart data={[
+                          { 
+                            name: 'Email',
+                            Sent: (stats as any)?.emailMetrics?.totalSent || 0,
+                            Opened: (stats as any)?.emailMetrics?.opened || 0,
+                            'Open Rate': (stats as any)?.emailMetrics?.openRate || 0,
+                          },
+                          { 
+                            name: 'SMS',
+                            Sent: (stats as any)?.smsMetrics?.totalSent || 0,
+                            Delivered: (stats as any)?.smsMetrics?.delivered || 0,
+                            'Click Rate': (stats as any)?.smsMetrics?.clickRate || 0,
+                          },
+                        ]}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />
+                          <XAxis dataKey="name" stroke="#94a3b8" />
+                          <YAxis stroke="#94a3b8" />
+                          <Tooltip 
+                            contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
+                            labelStyle={{ color: '#e2e8f0' }}
+                          />
+                          <Legend wrapperStyle={{ color: '#cbd5e1' }} />
+                          <Line type="monotone" dataKey="Sent" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 4 }} />
+                          <Line type="monotone" dataKey="Opened" stroke="#10b981" strokeWidth={2} dot={{ r: 4 }} />
+                          <Line type="monotone" dataKey="Open Rate" stroke="#f59e0b" strokeWidth={2} dot={{ r: 4 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                      <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                        <div>
+                          <p className="text-xs text-blue-100/70">Email Sent</p>
+                          <p className="text-sm font-semibold text-purple-400" data-testid="text-emails-sent">
+                            {(stats as any)?.emailMetrics?.totalSent?.toLocaleString() || "0"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-blue-100/70">Open Rate</p>
+                          <p className="text-sm font-semibold text-emerald-400" data-testid="text-email-open-rate">
+                            {(stats as any)?.emailMetrics?.openRate || 0}%
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-blue-100/70">Click Rate</p>
+                          <p className="text-sm font-semibold text-amber-400" data-testid="text-email-click-rate">
+                            {(stats as any)?.emailMetrics?.clickRate || 0}%
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
                 </div>
               )}
             </>

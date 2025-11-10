@@ -806,24 +806,26 @@ export default function Accounts() {
           <form onSubmit={handleCreateSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="firstName">First Name *</Label>
+                <Label htmlFor="firstName" className="text-white">First Name *</Label>
                 <Input
                   id="firstName"
                   data-testid="input-first-name"
                   value={createForm.firstName}
                   onChange={(e) => setCreateForm({ ...createForm, firstName: e.target.value })}
                   placeholder="Enter first name"
+                  className="text-white bg-white/10 border-white/20 placeholder:text-white/50"
                   required
                 />
               </div>
               <div>
-                <Label htmlFor="lastName">Last Name *</Label>
+                <Label htmlFor="lastName" className="text-white">Last Name *</Label>
                 <Input
                   id="lastName"
                   data-testid="input-last-name"
                   value={createForm.lastName}
                   onChange={(e) => setCreateForm({ ...createForm, lastName: e.target.value })}
                   placeholder="Enter last name"
+                  className="text-white bg-white/10 border-white/20 placeholder:text-white/50"
                   required
                 />
               </div>
@@ -831,7 +833,7 @@ export default function Accounts() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="email">Email *</Label>
+                <Label htmlFor="email" className="text-white">Email *</Label>
                 <Input
                   id="email"
                   type="email"
@@ -839,40 +841,44 @@ export default function Accounts() {
                   value={createForm.email}
                   onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
                   placeholder="Enter email address"
+                  className="text-white bg-white/10 border-white/20 placeholder:text-white/50"
                   required
                 />
               </div>
               <div>
-                <Label htmlFor="phone">Phone</Label>
+                <Label htmlFor="phone" className="text-white">Phone</Label>
                 <Input
                   id="phone"
                   data-testid="input-phone"
                   value={createForm.phone}
                   onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
                   placeholder="Enter phone number"
+                  className="text-white bg-white/10 border-white/20 placeholder:text-white/50"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="accountNumber">Account Number</Label>
+                <Label htmlFor="accountNumber" className="text-white">Account Number</Label>
                 <Input
                   id="accountNumber"
                   data-testid="input-account-number"
                   value={createForm.accountNumber}
                   onChange={(e) => setCreateForm({ ...createForm, accountNumber: e.target.value })}
                   placeholder="Enter account number"
+                  className="text-white bg-white/10 border-white/20 placeholder:text-white/50"
                 />
               </div>
               <div>
-                <Label htmlFor="filenumber">File Number *</Label>
+                <Label htmlFor="filenumber" className="text-white">File Number *</Label>
                 <Input
                   id="filenumber"
                   data-testid="input-filenumber"
                   value={createForm.filenumber}
                   onChange={(e) => setCreateForm({ ...createForm, filenumber: e.target.value })}
                   placeholder="Enter file number"
+                  className="text-white bg-white/10 border-white/20 placeholder:text-white/50"
                   required
                 />
               </div>
@@ -880,18 +886,19 @@ export default function Accounts() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="creditor">Creditor *</Label>
+                <Label htmlFor="creditor" className="text-white">Creditor *</Label>
                 <Input
                   id="creditor"
                   data-testid="input-creditor"
                   value={createForm.creditor}
                   onChange={(e) => setCreateForm({ ...createForm, creditor: e.target.value })}
                   placeholder="Enter creditor name"
+                  className="text-white bg-white/10 border-white/20 placeholder:text-white/50"
                   required
                 />
               </div>
               <div>
-                <Label htmlFor="balance">Balance *</Label>
+                <Label htmlFor="balance" className="text-white">Balance *</Label>
                 <Input
                   id="balance"
                   type="number"
@@ -900,6 +907,7 @@ export default function Accounts() {
                   value={createForm.balance}
                   onChange={(e) => setCreateForm({ ...createForm, balance: e.target.value })}
                   placeholder="Enter balance"
+                  className="text-white bg-white/10 border-white/20 placeholder:text-white/50"
                   required
                 />
               </div>
@@ -907,17 +915,17 @@ export default function Accounts() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="folder">Folder</Label>
+                <Label htmlFor="folder" className="text-white">Folder</Label>
                 <Select
                   value={createForm.folderId}
                   onValueChange={(value) => setCreateForm({ ...createForm, folderId: value })}
                 >
-                  <SelectTrigger data-testid="select-folder">
+                  <SelectTrigger data-testid="select-folder" className="text-white bg-white/10 border-white/20">
                     <SelectValue placeholder="Select folder" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-slate-800 border-white/20 text-white">
                     {(folders as any[])?.map((folder: any) => (
-                      <SelectItem key={folder.id} value={folder.id}>
+                      <SelectItem key={folder.id} value={folder.id} className="text-white">
                         {folder.name}
                       </SelectItem>
                     ))}
@@ -925,7 +933,7 @@ export default function Accounts() {
                 </Select>
               </div>
               <div>
-                <Label htmlFor="dateOfBirth">Date of Birth *</Label>
+                <Label htmlFor="dateOfBirth" className="text-white">Date of Birth *</Label>
                 <Input
                   id="dateOfBirth"
                   type="date"
@@ -933,6 +941,7 @@ export default function Accounts() {
                   value={createForm.dateOfBirth}
                   onChange={(e) => setCreateForm({ ...createForm, dateOfBirth: e.target.value })}
                   placeholder="Select date of birth"
+                  className="text-white bg-white/10 border-white/20 placeholder:text-white/50"
                   required
                 />
               </div>
@@ -940,46 +949,50 @@ export default function Accounts() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="address">Address</Label>
+                <Label htmlFor="address" className="text-white">Address</Label>
                 <Input
                   id="address"
                   data-testid="input-address"
                   value={createForm.address}
                   onChange={(e) => setCreateForm({ ...createForm, address: e.target.value })}
                   placeholder="Enter address"
+                  className="text-white bg-white/10 border-white/20 placeholder:text-white/50"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <Label htmlFor="city">City</Label>
+                <Label htmlFor="city" className="text-white">City</Label>
                 <Input
                   id="city"
                   data-testid="input-city"
                   value={createForm.city}
                   onChange={(e) => setCreateForm({ ...createForm, city: e.target.value })}
                   placeholder="Enter city"
+                  className="text-white bg-white/10 border-white/20 placeholder:text-white/50"
                 />
               </div>
               <div>
-                <Label htmlFor="state">State</Label>
+                <Label htmlFor="state" className="text-white">State</Label>
                 <Input
                   id="state"
                   data-testid="input-state"
                   value={createForm.state}
                   onChange={(e) => setCreateForm({ ...createForm, state: e.target.value })}
                   placeholder="Enter state"
+                  className="text-white bg-white/10 border-white/20 placeholder:text-white/50"
                 />
               </div>
               <div>
-                <Label htmlFor="zipCode">Zip Code</Label>
+                <Label htmlFor="zipCode" className="text-white">Zip Code</Label>
                 <Input
                   id="zipCode"
                   data-testid="input-zip-code"
                   value={createForm.zipCode}
                   onChange={(e) => setCreateForm({ ...createForm, zipCode: e.target.value })}
                   placeholder="Enter zip code"
+                  className="text-white bg-white/10 border-white/20 placeholder:text-white/50"
                 />
               </div>
             </div>
