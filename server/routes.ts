@@ -5919,7 +5919,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     // Parse settlementPaymentCounts as array
     const settlementPaymentCounts = Array.isArray(body.settlementPaymentCounts) 
-      ? body.settlementPaymentCounts.map((c: number | string) => parseOptionalInteger(c)).filter((c): c is number => c !== null)
+      ? body.settlementPaymentCounts.map((c: number | string) => parseOptionalInteger(c)).filter((c: number | null): c is number => c !== null)
       : [];
     const settlementPaymentFrequency = typeof body.settlementPaymentFrequency === "string" ? body.settlementPaymentFrequency.trim() : null;
     const settlementOfferExpiresDate = parseDateInput(body.settlementOfferExpiresDate);

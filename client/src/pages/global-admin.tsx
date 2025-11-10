@@ -1680,6 +1680,9 @@ export default function GlobalAdmin() {
                             setSelectedTenantForPlan(tenant);
                             setSelectedPlanId('');
                             setWaiveSetupFee(false);
+                            // Initialize service management state
+                            setTenantIsTrialAccount(tenant.isTrialAccount ?? false);
+                            setTenantEnabledServices(tenant.enabledAddons || []);
                             setPlanAssignmentDialogOpen(true);
                           }}
                           data-testid={`button-manage-plan-${tenant.id}`}
@@ -2205,6 +2208,101 @@ export default function GlobalAdmin() {
                   </p>
                 </div>
               )}
+
+              <div className="border-t border-gray-200 pt-4">
+                <p className="text-sm font-semibold text-gray-700 mb-3">Direct Service Management</p>
+                
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Trial Mode</p>
+                      <p className="text-xs text-gray-500">Account is in trial status</p>
+                    </div>
+                    <Switch
+                      checked={tenantIsTrialAccount}
+                      onCheckedChange={setTenantIsTrialAccount}
+                      data-testid="switch-trial-mode"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Portal + Processing</p>
+                      <p className="text-xs text-gray-500">Consumer portal and payment processing</p>
+                    </div>
+                    <Switch
+                      checked={tenantEnabledServices.includes('portal_processing')}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setTenantEnabledServices([...tenantEnabledServices, 'portal_processing']);
+                        } else {
+                          setTenantEnabledServices(tenantEnabledServices.filter(s => s !== 'portal_processing'));
+                        }
+                      }}
+                      data-testid="switch-portal-processing"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Email Service</p>
+                      <p className="text-xs text-gray-500">Email templates and campaigns</p>
+                    </div>
+                    <Switch
+                      checked={tenantEnabledServices.includes('email_service')}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setTenantEnabledServices([...tenantEnabledServices, 'email_service']);
+                        } else {
+                          setTenantEnabledServices(tenantEnabledServices.filter(s => s !== 'email_service'));
+                        }
+                      }}
+                      data-testid="switch-email-service"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">SMS Service</p>
+                      <p className="text-xs text-gray-500">SMS campaigns and messaging</p>
+                    </div>
+                    <Switch
+                      checked={tenantEnabledServices.includes('sms_service')}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setTenantEnabledServices([...tenantEnabledServices, 'sms_service']);
+                        } else {
+                          setTenantEnabledServices(tenantEnabledServices.filter(s => s !== 'sms_service'));
+                        }
+                      }}
+                      data-testid="switch-sms-service"
+                    />
+                  </div>
+
+                  <Button
+                    className="w-full"
+                    variant="default"
+                    onClick={() => {
+                      updateTenantServicesMutation.mutate({
+                        tenantId: selectedTenantForPlan.id,
+                        isTrialAccount: tenantIsTrialAccount,
+                        enabledServices: tenantEnabledServices,
+                      });
+                    }}
+                    disabled={updateTenantServicesMutation.isPending}
+                    data-testid="button-save-services"
+                  >
+                    {updateTenantServicesMutation.isPending ? (
+                      <>
+                        <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2" />
+                        Saving...
+                      </>
+                    ) : (
+                      'Save Service Changes'
+                    )}
+                  </Button>
+                </div>
+              </div>
 
               <div className="flex gap-2 justify-end">
                 <Button
