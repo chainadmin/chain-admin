@@ -13016,12 +13016,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Update tenant to remove trial status and mark as paid
+      // Update tenant to remove trial status, mark as paid, and enable all services
       await db
         .update(tenants)
         .set({ 
           isTrialAccount: false,
-          isPaidAccount: true 
+          isPaidAccount: true,
+          emailServiceEnabled: true,
+          smsServiceEnabled: true,
+          paymentProcessingEnabled: true,
+          portalAccessEnabled: true,
         })
         .where(eq(tenants.id, tenantId));
 
