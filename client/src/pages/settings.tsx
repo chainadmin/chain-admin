@@ -509,6 +509,16 @@ export default function Settings() {
   });
 
   const handleSettingsUpdate = (field: string, value: any) => {
+    // Debug logging for authnetPublicClientKey changes
+    if (field === 'authnetPublicClientKey') {
+      console.log('🔍 [Frontend Update] authnetPublicClientKey changed:', {
+        newValue: value,
+        length: value?.length || 0,
+        first10: value?.substring(0, 10) || '',
+        containsWaypoint: value?.includes?.('Waypoint') || false,
+      });
+    }
+    
     setLocalSettings((prev: any) => ({
       ...prev,
       [field]: value,
@@ -522,6 +532,17 @@ export default function Settings() {
     if (authUser?.role !== 'platform_admin' && settingsToSave.businessType !== undefined) {
       delete settingsToSave.businessType;
     }
+    
+    // Debug logging for Authorize.net Public Client Key
+    if (settingsToSave.authnetPublicClientKey) {
+      console.log('🔍 [Frontend Save] Authorize.net Public Client Key being sent:', {
+        value: settingsToSave.authnetPublicClientKey,
+        length: settingsToSave.authnetPublicClientKey.length,
+        first10: settingsToSave.authnetPublicClientKey.substring(0, 10),
+        containsWaypoint: settingsToSave.authnetPublicClientKey.includes('Waypoint'),
+      });
+    }
+    
     updateSettingsMutation.mutate(settingsToSave);
   };
 
