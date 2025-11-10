@@ -12609,6 +12609,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // BULK fix services for ALL subscribed tenants at once
+  app.post('/api/admin/bulk-fix-services', isPlatformAdmin, async (req: any, res) => {
+    try {
+      // Get all active subscriptions
+      const activeSubscriptions = await db
+        .select()
+        .from(subscriptions)
+        .where(eq(subscriptions.status, 'active'));
+
+      if (activeSubscriptions.length === 0) {
+        return res.json({
+          message: 'No active subscriptions found',
+          fixed: 0,
+          tenants: []
+        });
+      }
+
+      const fixedTenants = [];
+      
+      // Enable services for each tenant with active subscription
+      for (const subscription of activeSubscriptions) {
+        await db
+          .update(tenants)
+          .set({
+            isTrialAccount: false,
+            isPaidAccount: true,
+            emailServiceEnabled: true,
+            smsServiceEnabled: true,
+            paymentProcessingEnabled: true,
+            portalAccessEnabled: true,
+          })
+          .where(eq(tenants.id, subscription.tenantId));
+
+        // Get tenant name for response
+        const [tenant] = await db
+          .select({ name: tenants.name })
+          .from(tenants)
+          .where(eq(tenants.id, subscription.tenantId))
+          .limit(1);
+
+        fixedTenants.push(tenant?.name || subscription.tenantId);
+      }
+
+      console.log(`✅ Bulk fixed services for ${fixedTenants.length} subscribed tenants`);
+
+      res.json({
+        message: `Successfully enabled services for ${fixedTenants.length} subscribed tenant(s)`,
+        fixed: fixedTenants.length,
+        tenants: fixedTenants
+      });
+    } catch (error) {
+      console.error("Error bulk fixing tenant services:", error);
+      res.status(500).json({ message: "Failed to bulk fix services" });
+    }
+  });
+
   // Direct admin control: Update tenant services and trial status
   app.post('/api/admin/tenants/:id/services', isPlatformAdmin, async (req: any, res) => {
     try {
