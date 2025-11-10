@@ -6076,6 +6076,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         twilioCampaignId: tenant?.twilioCampaignId || '',
         customSenderEmail: tenant?.customSenderEmail || '',
         isTrialAccount: tenant?.isTrialAccount || false,
+        // Service access flags
+        emailServiceEnabled: tenant?.emailServiceEnabled ?? true,
+        smsServiceEnabled: tenant?.smsServiceEnabled ?? true,
+        paymentProcessingEnabled: tenant?.paymentProcessingEnabled ?? true,
+        portalAccessEnabled: tenant?.portalAccessEnabled ?? true,
         // Redact sensitive SMAX credentials in response
         smaxApiKey: settings?.smaxApiKey ? '••••••••' : '',
         smaxPin: settings?.smaxPin ? '••••••••' : '',
