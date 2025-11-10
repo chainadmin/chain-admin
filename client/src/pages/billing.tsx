@@ -76,7 +76,7 @@ export default function Billing() {
   const { data: settingsData } = useQuery({
     queryKey: ["/api/settings"],
   });
-  const enabledAddons = (settingsData as any)?.tenantSettings?.enabledAddons || [];
+  const enabledAddons = (settingsData as any)?.enabledAddons || [];
   const isTrialAccount = (settingsData as any)?.isTrialAccount ?? true;
 
   // Fetch service activation requests for this tenant
