@@ -6316,6 +6316,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (authnetPublicClientKey !== undefined) {
         tenantSettingsPayload.authnetPublicClientKey = finalAuthnetPublicClientKey || null;
+      } else {
+        // If authnetPublicClientKey is not provided in the update, check if existing value needs to be cleared
+        if (currentSettings?.authnetPublicClientKey && 
+            (currentSettings.authnetPublicClientKey.includes('Waypoint') || 
+             currentSettings.authnetPublicClientKey.includes('Solutions'))) {
+          console.log('🔍 [Settings Save] Clearing invalid existing Public Client Key even though not in payload');
+          tenantSettingsPayload.authnetPublicClientKey = null;
+        }
       }
 
       const updatedSettings = await storage.upsertTenantSettings(tenantSettingsPayload as any);
