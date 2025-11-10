@@ -1708,19 +1708,28 @@ export default function GlobalAdmin() {
                             size="sm"
                             className="border-green-300 text-green-700 hover:bg-green-50"
                             onClick={async () => {
-                              console.log('Fix Services clicked for tenant:', tenant.id);
                               try {
-                                const response = await apiRequest('POST', `/api/admin/tenants/${tenant.id}/fix-services`, {});
-                                console.log('Fix Services response:', response);
+                                const response = await fetch(`/api/admin/tenants/${tenant.id}/fix-services`, {
+                                  method: 'POST',
+                                  headers: {
+                                    'Authorization': `Bearer ${sessionStorage.getItem('admin_token')}`,
+                                    'Content-Type': 'application/json'
+                                  }
+                                });
+                                
                                 const data = await response.json();
-                                console.log('Fix Services data:', data);
+                                
+                                if (!response.ok) {
+                                  throw new Error(data.message || 'Failed to enable services');
+                                }
+                                
                                 toast({
                                   title: "Services Enabled",
                                   description: data.message || "All services have been enabled for this subscribed tenant.",
                                 });
-                                await queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants'] });
+                                
+                                tenantsQuery.refetch();
                               } catch (error: any) {
-                                console.error('Fix Services error:', error);
                                 toast({
                                   title: "Error",
                                   description: error.message || "Failed to enable services",
