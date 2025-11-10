@@ -6185,6 +6185,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const validatedData = settingsSchema.parse(req.body);
       
+      // CRITICAL DEBUG: Log exactly what's being received
+      console.log('🔍 [Settings Save] RAW REQUEST BODY authnetPublicClientKey:', {
+        rawValue: req.body.authnetPublicClientKey,
+        type: typeof req.body.authnetPublicClientKey,
+        length: req.body.authnetPublicClientKey?.length || 0,
+        containsWaypoint: req.body.authnetPublicClientKey?.includes?.('Waypoint') || false,
+        tenantId: req.user.tenantId,
+        userEmail: req.user.email,
+      });
+      
       // Authorization check: Only platform_admin can change businessType
       if (validatedData.businessType !== undefined && req.user.role !== 'platform_admin') {
         return res.status(403).json({ 
