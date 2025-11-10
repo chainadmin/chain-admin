@@ -6733,6 +6733,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const settings = await storage.getTenantSettings(tenantId);
       
+      console.log('🔍 [Consumer Settings] Authorize.net Public Client Key from DB:', {
+        tenantId,
+        authnetPublicClientKey: settings?.authnetPublicClientKey,
+        length: settings?.authnetPublicClientKey?.length || 0,
+        first10: settings?.authnetPublicClientKey?.substring(0, 10) || '',
+        containsWaypoint: settings?.authnetPublicClientKey?.includes?.('Waypoint') || false,
+      });
+      
       // Always return settings with defaults even if no record exists
       res.json({
         minimumMonthlyPayment: settings?.minimumMonthlyPayment || 5000, // Default $50

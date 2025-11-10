@@ -1,0 +1,95 @@
+Getting stored consumer token: {hasToken: true, tokenLength: 377, storageAvailable: 2}
+index-DPTzevs-.js:1053 🔵 [Authorize.net] Starting payment tokenization...
+index-DPTzevs-.js:1053 🔵 [Authorize.net] Merchant Provider: authorize_net
+index-DPTzevs-.js:1053 🔵 [Authorize.net] Sandbox Mode: false
+index-DPTzevs-.js:1053 ✅ [Authorize.net] Accept.js loaded successfully
+index-DPTzevs-.js:1053 🔑 API call with token: {endpoint: '/api/consumer/tenant-settings', hasToken: true, tokenLength: 377, platform: 'web', url: '/api/consumer/tenant-settings'}
+index-DPTzevs-.js:1053 📡 API response: {endpoint: '/api/consumer/tenant-settings', status: 200, ok: true}
+index-DPTzevs-.js:1053 🔵 [Authorize.net] Credentials check: {hasPublicClientKey: true, hasApiLoginId: true, publicKeyLength: 86, apiLoginIdLength: 9}
+index-DPTzevs-.js:1053 🔵 [Authorize.net] Credentials being sent to Accept.js: {clientKeyLength: 86, apiLoginIDLength: 9, clientKeyFirst10: '​ Waypoint', apiLoginIDFirst10: '7EYz626vK', clientKeyFull: '​ Waypoint Solutions​ 5knf23u4BmLf4TeczP5w73vVK4kxH3XcWJ2HKjL848tpx7sE5QPLUx9E8zpW243Q', …}
+index-DPTzevs-.js:1053 🔵 [Authorize.net] Card data prepared: {cardNumberLength: 16, cardLast4: '0330', month: '01', year: '2030', hasCvv: true}
+index-DPTzevs-.js:1053 🔵 [Authorize.net] Calling Accept.dispatchData...
+index-DPTzevs-.js:1053 🔵 [Authorize.net] Request payload: {authData: {…}, cardData: {…}}
+index-DPTzevs-.js:1053 🔵 [Authorize.net] Accept.js full response: {
+  "messages": {
+    "resultCode": "Error",
+    "message": [
+      {
+        "code": "E_WC_21",
+        "text": "User authentication failed due to invalid authentication values."
+      }
+    ]
+  }
+}
+index-DPTzevs-.js:1053 ❌ [Authorize.net] Tokenization failed: E_WC_21: User authentication failed due to invalid authentication values.
+(anonymous) @ index-DPTzevs-.js:1053
+u @ AcceptCore.js:1
+s @ AcceptCore.js:1
+(anonymous) @ AcceptCore.js:1
+setTimeout
+c.onload @ AcceptCore.js:1
+XMLHttpRequest.send
+t @ AcceptCore.js:1
+a.dispatchData.a.dispatchData @ AcceptCore.js:1
+Ol @ index-DPTzevs-.js:1053
+pn @ index-DPTzevs-.js:1053
+await in pn
+XM @ index-DPTzevs-.js:38
+eI @ index-DPTzevs-.js:38
+tI @ index-DPTzevs-.js:38
+sw @ index-DPTzevs-.js:38
+Vk @ index-DPTzevs-.js:38
+(anonymous) @ index-DPTzevs-.js:38
+Sb @ index-DPTzevs-.js:41
+xk @ index-DPTzevs-.js:38
+Hp @ index-DPTzevs-.js:38
+X0 @ index-DPTzevs-.js:38
+gI @ index-DPTzevs-.js:38Understand this error
+index-DPTzevs-.js:1053 ❌ [Authorize.net] Error codes: ['E_WC_21']
+(anonymous) @ index-DPTzevs-.js:1053
+u @ AcceptCore.js:1
+s @ AcceptCore.js:1
+(anonymous) @ AcceptCore.js:1
+setTimeout
+c.onload @ AcceptCore.js:1
+XMLHttpRequest.send
+t @ AcceptCore.js:1
+a.dispatchData.a.dispatchData @ AcceptCore.js:1
+Ol @ index-DPTzevs-.js:1053
+pn @ index-DPTzevs-.js:1053
+await in pn
+XM @ index-DPTzevs-.js:38
+eI @ index-DPTzevs-.js:38
+tI @ index-DPTzevs-.js:38
+sw @ index-DPTzevs-.js:38
+Vk @ index-DPTzevs-.js:38
+(anonymous) @ index-DPTzevs-.js:38
+Sb @ index-DPTzevs-.js:41
+xk @ index-DPTzevs-.js:38
+Hp @ index-DPTzevs-.js:38
+X0 @ index-DPTzevs-.js:38
+gI @ index-DPTzevs-.js:38Understand this error
+index-DPTzevs-.js:1053 ❌ [Authorize.net] Full error object: {messages: {…}}
+(anonymous) @ index-DPTzevs-.js:1053
+u @ AcceptCore.js:1
+s @ AcceptCore.js:1
+(anonymous) @ AcceptCore.js:1
+setTimeout
+c.onload @ AcceptCore.js:1
+XMLHttpRequest.send
+t @ AcceptCore.js:1
+a.dispatchData.a.dispatchData @ AcceptCore.js:1
+Ol @ index-DPTzevs-.js:1053
+pn @ index-DPTzevs-.js:1053
+await in pn
+XM @ index-DPTzevs-.js:38
+eI @ index-DPTzevs-.js:38
+tI @ index-DPTzevs-.js:38
+sw @ index-DPTzevs-.js:38
+Vk @ index-DPTzevs-.js:38
+(anonymous) @ index-DPTzevs-.js:38
+Sb @ index-DPTzevs-.js:41
+xk @ index-DPTzevs-.js:38
+Hp @ index-DPTzevs-.js:38
+X0 @ index-DPTzevs-.js:38
+gI @ index-DPTzevs-.js:38Understand this error

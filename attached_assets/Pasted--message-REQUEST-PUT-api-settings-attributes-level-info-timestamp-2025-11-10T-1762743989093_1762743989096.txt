@@ -1,0 +1,33 @@
+{"message":"📨 [REQUEST] PUT /api/settings {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.414343406Z"}
+{"message":"  origin: 'https://summit-recovery-group.chainsoftwaregroup.com',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.414355875Z"}
+{"message":"  contentType: 'application/json',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.414362226Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.414367503Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.414373977Z"}
+{"message":"🔍 [Settings Save Debug] Authorize.net Public Client Key: {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.414380827Z"}
+{"message":"  received: '5knf23u4BmLf4TeczP5w73vVK4kxH3XcWJ2HKjL848tpx7sE5QPLUx9E8zpW243Q',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.414386637Z"}
+{"message":"  trimmed: '5knf23u4BmLf4TeczP5w73vVK4kxH3XcWJ2HKjL848tpx7sE5QPLUx9E8zpW243Q',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.414393864Z"}
+{"message":"  currentInDb: '5knf23u4BmLf4TeczP5w73vVK4kxH3XcWJ2HKjL848tpx7sE5QPLUx9E8zpW243Q',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.414399991Z"}
+{"message":"  tenantId: '79e5c347-ae73-4a31-bea7-8f080e53a0ba'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.414405275Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.414409737Z"}
+{"message":"🔍 [Settings Save] Final Public Client Key to save: 5knf23u4BmLf4TeczP5w73vVK4kxH3XcWJ2HKjL848tpx7sE5QPLUx9E8zpW243Q","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.414415225Z"}
+{"message":"📤 [RESPONSE-JSON] PUT /api/settings → 200 (153ms) {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.414419945Z"}
+{"message":"  dataKeys: 'id, tenantId, businessType, privacyPolicy, termsOfService, contactEmail, contactPhone, showPaymentPlans, showDocuments, allowSettlementRequests, customBranding, consumerPortalSettings, enabledModules, enabledAddons, smsThrottleLimit, minimumMonthlyPayment, createdAt, updatedAt, merchantProvider, merchantAccountId, merchantApiKey, merchantApiPin, merchantName, merchantType, authnetApiLoginId, authnetTransactionKey, authnetPublicClientKey, useSandbox, enableOnlinePayments, smaxEnabled, smaxApiKey, smaxPin, smaxBaseUrl, blockedAccountStatuses'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.414424582Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.414429350Z"}
+{"message":"📤 [RESPONSE] PUT /api/settings → 200 (154ms) {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.414433619Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.415963754Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.415972442Z"}
+{"message":"📤 [RESPONSE] GET /api/settings → 200 (10ms) {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.415975534Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.415983885Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.415987492Z"}
+{"message":"  bodyPreview: '{\"id\":\"45c77d5b-0fa7-49ee-9b35-37edde1218d3\",\"tenantId\":\"79e5c347-ae73-4a31-bea7-8f080e53a0ba\",\"busi'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.415992329Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.415999858Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.416000975Z"}
+{"message":"  bodyPreview: '{\"id\":\"45c77d5b-0fa7-49ee-9b35-37edde1218d3\",\"tenantId\":\"79e5c347-ae73-4a31-bea7-8f080e53a0ba\",\"busi'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.416010324Z"}
+{"message":"📨 [REQUEST] GET /api/settings {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.416010597Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.416016337Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.416021118Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.416025827Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.416031113Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/settings → 200 (10ms) {","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.416036142Z"}
+{"message":"  dataKeys: 'id, tenantId, businessType, privacyPolicy, termsOfService, contactEmail, contactPhone, showPaymentPlans, showDocuments, allowSettlementRequests, customBranding, consumerPortalSettings, enabledModules, enabledAddons, smsThrottleLimit, minimumMonthlyPayment, createdAt, updatedAt, merchantProvider, merchantAccountId, merchantApiKey, merchantApiPin, merchantName, merchantType, authnetApiLoginId, authnetTransactionKey, authnetPublicClientKey, useSandbox, enableOnlinePayments, smaxEnabled, smaxApiKey, smaxPin, smaxBaseUrl, blockedAccountStatuses, twilioAccountSid, twilioAuthToken, twilioPhoneNumber, twilioBusinessName, twilioCampaignId, customSenderEmail, isTrialAccount, emailServiceEnabled, smsServiceEnabled, paymentProcessingEnabled, portalAccessEnabled'","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.416053481Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T03:05:46.417493567Z"}
