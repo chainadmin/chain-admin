@@ -89,6 +89,10 @@ export default function GlobalAdmin() {
   const [selectedTenantForPlan, setSelectedTenantForPlan] = useState<any>(null);
   const [selectedPlanId, setSelectedPlanId] = useState('');
   const [waiveSetupFee, setWaiveSetupFee] = useState(false);
+  
+  // Service management state
+  const [tenantIsTrialAccount, setTenantIsTrialAccount] = useState(false);
+  const [tenantEnabledServices, setTenantEnabledServices] = useState<string[]>([]);
 
   // Business Services configuration state
   const [businessServicesDialogOpen, setBusinessServicesDialogOpen] = useState(false);
@@ -384,6 +388,28 @@ export default function GlobalAdmin() {
       toast({
         title: "Error",
         description: "Failed to assign plan",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Mutation to update tenant services directly
+  const updateTenantServicesMutation = useMutation({
+    mutationFn: async ({ tenantId, isTrialAccount, enabledServices }: { tenantId: string; isTrialAccount: boolean; enabledServices: string[] }) => {
+      return apiRequest('POST', `/api/admin/tenants/${tenantId}/services`, { isTrialAccount, enabledServices });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/settings'] });
+      toast({
+        title: "Services Updated",
+        description: "Tenant services and trial status updated successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to update tenant services",
         variant: "destructive",
       });
     }

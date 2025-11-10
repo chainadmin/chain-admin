@@ -12509,6 +12509,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Direct admin control: Update tenant services and trial status
+  app.post('/api/admin/tenants/:id/services', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const tenantId = req.params.id;
+      const { isTrialAccount, enabledServices } = req.body; // enabledServices: ['portal_processing', 'email_service', 'sms_service']
+      
+      // Update trial status in tenants table
+      await db.update(tenants)
+        .set({ 
+          isTrialAccount: isTrialAccount,
+          isPaidAccount: !isTrialAccount,
+          emailServiceEnabled: enabledServices.includes('email_service'),
+          smsServiceEnabled: enabledServices.includes('sms_service'),
+          portalAccessEnabled: enabledServices.includes('portal_processing'),
+          paymentProcessingEnabled: enabledServices.includes('portal_processing'),
+        })
+        .where(eq(tenants.id, tenantId));
+      
+      // Update enabled addons in tenant settings
+      await db.update(tenantSettings)
+        .set({ enabledAddons: enabledServices })
+        .where(eq(tenantSettings.tenantId, tenantId));
+      
+      console.log(`✅ Admin updated tenant ${tenantId} services: ${enabledServices.join(', ')} | Trial: ${isTrialAccount}`);
+      
+      res.json({
+        success: true,
+        message: 'Tenant services updated successfully'
+      });
+    } catch (error: any) {
+      console.error('Error updating tenant services:', error);
+      res.status(500).json({ success: false, message: 'Failed to update tenant services' });
+    }
+  });
+
   // Get all tenants for platform admin overview
   app.get('/api/admin/tenants', isPlatformAdmin, async (req: any, res) => {
     try {
