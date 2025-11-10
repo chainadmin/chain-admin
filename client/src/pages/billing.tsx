@@ -372,7 +372,7 @@ export default function Billing() {
                 <p className="text-xs uppercase tracking-wide text-blue-100/70">Current plan</p>
                 <div className="mt-2 flex items-center gap-2">
                   <p className="text-lg font-semibold text-white">
-                    {currentPlanName || (enabledAddons.length > 0 ? "À la carte" : "Not selected")}
+                    {currentPlanName || (enabledAddons.length > 0 ? `À la carte (${enabledAddons.length} service${enabledAddons.length !== 1 ? 's' : ''} active)` : "Not selected")}
                   </p>
                   {isTrialAccount && (
                     <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-200 text-xs">
@@ -1071,7 +1071,7 @@ export default function Billing() {
                       <p className="text-xs uppercase tracking-wide text-blue-100/70">Plan</p>
                       <div className="mt-2 flex items-center gap-2">
                         <Badge className="border border-white/20 bg-white/10 text-blue-100 capitalize" data-testid="badge-current-plan">
-                          {currentPlanName || "Not selected"}
+                          {currentPlanName || (enabledAddons.length > 0 ? `À la carte (${enabledAddons.length} service${enabledAddons.length !== 1 ? 's' : ''})` : "Not selected")}
                         </Badge>
                         <Badge
                           className={cn("border border-white/20 bg-white/10 text-blue-100", getStatusColor((subscription as any).status))}
