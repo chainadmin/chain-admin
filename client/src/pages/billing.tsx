@@ -382,7 +382,7 @@ export default function Billing() {
                 </div>
                 <p className="mt-1 text-sm text-blue-100/70">
                   {currentPlanName ? `${formatCurrency(currentPlanPrice)} per month` : 
-                   enabledAddons.length > 0 ? `${enabledAddons.length} service${enabledAddons.length > 1 ? 's' : ''} active` : 
+                   enabledAddons.length > 0 ? `${formatCurrency(enabledAddons.length * 12500)} per month (${enabledAddons.length} × $125)` : 
                    'No active services'}
                 </p>
               </div>
