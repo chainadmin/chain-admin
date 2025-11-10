@@ -777,18 +777,34 @@ export default function ConsumerDashboardSimple() {
           apiLoginIdLength: tenantSettings?.authnetApiLoginId?.length || 0,
         });
 
-        const authData = {
-          clientKey: settings?.authnetPublicClientKey?.trim() || '',
-          apiLoginID: tenantSettings?.authnetApiLoginId?.trim() || '', // Required by Authorize.net
-        };
+        // Trim and validate credentials
+        const clientKey = (settings?.authnetPublicClientKey || '').trim();
+        const apiLoginID = (tenantSettings?.authnetApiLoginId || '').trim();
 
-        // Debug: Log actual values being sent (first 10 chars for security)
-        console.log('🔵 [Authorize.net] Auth data being sent:', {
-          clientKeyPreview: authData.clientKey.substring(0, 10) + '...',
-          apiLoginIDPreview: authData.apiLoginID.substring(0, 10) + '...',
-          clientKeyFull: authData.clientKey,
-          apiLoginIDFull: authData.apiLoginID,
+        // Check for empty credentials
+        if (!clientKey || !apiLoginID) {
+          console.error('❌ [Authorize.net] Missing credentials:', {
+            hasClientKey: !!clientKey,
+            hasApiLoginID: !!apiLoginID,
+          });
+          throw new Error('Payment system is not properly configured. Please contact your agency.');
+        }
+
+        // Debug: Log actual values being sent (full values for debugging)
+        console.log('🔵 [Authorize.net] Credentials being sent to Accept.js:', {
+          clientKeyLength: clientKey.length,
+          apiLoginIDLength: apiLoginID.length,
+          clientKeyFirst10: clientKey.substring(0, 10),
+          apiLoginIDFirst10: apiLoginID.substring(0, 10),
+          clientKeyFull: clientKey,
+          apiLoginIDFull: apiLoginID,
+          useSandbox: settings.useSandbox,
         });
+
+        const authData = {
+          clientKey,
+          apiLoginID,
+        };
 
         const cardData = {
           cardNumber: paymentForm.cardNumber,
@@ -807,15 +823,39 @@ export default function ConsumerDashboardSimple() {
 
         // Tokenize the card using Accept.js
         console.log('🔵 [Authorize.net] Calling Accept.dispatchData...');
+        console.log('🔵 [Authorize.net] Request payload:', {
+          authData: {
+            clientKey: authData.clientKey,
+            apiLoginID: authData.apiLoginID,
+          },
+          cardData: {
+            cardNumber: '****' + cardData.cardNumber.slice(-4),
+            month: cardData.month,
+            year: cardData.year,
+            hasCvv: !!cardData.cardCode,
+          },
+        });
+
         const tokenResponse: any = await new Promise((resolve, reject) => {
           (window as any).Accept.dispatchData({ authData, cardData }, (response: any) => {
-            console.log('🔵 [Authorize.net] Accept.js response:', response);
+            console.log('🔵 [Authorize.net] Accept.js full response:', JSON.stringify(response, null, 2));
             
             if (response.messages.resultCode === 'Error') {
-              const errorMsg = response.messages.message.map((m: any) => m.text).join(', ');
-              console.error('❌ [Authorize.net] Tokenization failed:', errorMsg);
-              console.error('❌ [Authorize.net] Full error details:', response.messages.message);
-              reject(new Error(errorMsg));
+              const errors = response.messages.message || [];
+              const errorDetails = errors.map((m: any) => `${m.code}: ${m.text}`).join(', ');
+              console.error('❌ [Authorize.net] Tokenization failed:', errorDetails);
+              console.error('❌ [Authorize.net] Error codes:', errors.map((m: any) => m.code));
+              console.error('❌ [Authorize.net] Full error object:', response);
+              
+              // Provide helpful error message based on error code
+              let userMessage = errorDetails;
+              if (errors.some((m: any) => m.code === 'E_WC_21')) {
+                userMessage = 'Payment system authentication failed. Please contact your agency to verify payment settings are configured correctly.';
+              } else if (errors.some((m: any) => m.code === 'E00001')) {
+                userMessage = 'Payment system configuration error. Please contact your agency.';
+              }
+              
+              reject(new Error(userMessage));
             } else {
               console.log('✅ [Authorize.net] Tokenization successful');
               console.log('✅ [Authorize.net] Opaque data descriptor:', response.opaqueData.dataDescriptor);
