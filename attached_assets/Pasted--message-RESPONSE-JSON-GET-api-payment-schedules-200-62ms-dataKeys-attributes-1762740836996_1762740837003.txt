@@ -1,0 +1,108 @@
+{"message":"📤 [RESPONSE-JSON] GET /api/payment-schedules → 200 (62ms) { dataKeys: '' }","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:55.233572781Z"}
+{"message":"📤 [RESPONSE] GET /api/payment-schedules → 200 (62ms) {","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:55.233578313Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:55.233583547Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:55.233592486Z"}
+{"message":"  bodyPreview: '[]'","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:55.233598501Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:55.233604288Z"}
+{"message":"✅ Payments fetched: { count: 0, paymentIds: [], totalShowing: 0, totalCount: 0 }","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:55.233609767Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/payments → 200 (85ms) { dataKeys: '' }","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:55.233615750Z"}
+{"message":"📤 [RESPONSE] GET /api/payments → 200 (85ms) {","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:55.233620997Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:55.233626134Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:55.233631800Z"}
+{"message":"  bodyPreview: '[]'","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:55.233637081Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:55.233641386Z"}
+{"message":"📨 [REQUEST] POST /api/payments/process-scheduled {","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:56.607585356Z"}
+{"message":"  origin: 'https://summit-recovery-group.chainsoftwaregroup.com',","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:56.607593529Z"}
+{"message":"  contentType: 'application/json',","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:56.607598550Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:56.607602878Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:56.607607345Z"}
+{"message":"⏭️ Skipping SMAX-managed payment schedule: 4d1548dc-91d2-4667-95cd-c61f2e01d0fe","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:56.647858951Z"}
+{"message":"⏭️ Skipping SMAX-managed payment schedule: e5cb9aa0-ca06-4c6f-8d2d-a85ae32f4385","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:56.667350103Z"}
+{"message":"⏭️ Skipping SMAX-managed payment schedule: 8c026fe9-8ee1-4626-81eb-e9dbf4d5d45c","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:56.670256911Z"}
+{"message":"⏭️ Skipping SMAX-managed payment schedule: 5a920137-cbd8-4ee2-ac1e-9fb65a43dacd","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:56.738950409Z"}
+{"message":"⏭️ Skipping SMAX-managed payment schedule: c58b671c-7366-4a52-b9db-dfbd5f66fa4c","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:56.799501733Z"}
+{"message":"⏭️ Skipping SMAX-managed payment schedule: 1b8ac75c-1fac-4ab0-99c0-17decfc84ef5","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:56.847202910Z"}
+{"message":"⏭️ Skipping SMAX-managed payment schedule: 59aa7e38-1f1a-461e-8123-bf52795938d2","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:57.003435451Z"}
+{"message":"⏭️ Skipping SMAX-managed payment schedule: a0f00a4b-8d32-4793-8e69-364a8836e3b3","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:57.071460013Z"}
+{"message":"⏭️ Skipping SMAX-managed payment schedule: 73ee332e-56e4-4a46-989e-58a893700cf2","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:57.223333331Z"}
+{"message":"⏭️ Skipping SMAX-managed payment schedule: b4e1e528-c32e-4497-b5fd-fe77785639d7","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:57.235792391Z"}
+{"message":"⏭️ Skipping SMAX-managed payment schedule: 76727d39-12ec-4a09-ad7b-f278aa0c6c3a","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:57.765038393Z"}
+{"message":"⏭️ Skipping SMAX-managed payment schedule: 362d7f00-3483-4e64-bf7a-3a23d6dcd2a8","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:57.847510478Z"}
+{"message":"⏭️ Skipping SMAX-managed payment schedule: 95f02564-6e4e-4c11-a075-4a01015f3693","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:57.912208819Z"}
+{"message":"⏭️ Skipping SMAX-managed payment schedule: 510459a5-7cef-4486-9b0e-d658d56295b6","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:57.915630328Z"}
+{"message":"⏭️ Skipping SMAX-managed payment schedule: ec1f5c0c-e75e-4367-a897-cca37ab024ed","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:57.915636774Z"}
+{"message":"⏭️ Skipping SMAX-managed payment schedule: 41ca5345-46cc-4593-bc52-69fd3ebdaa89","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:57.919570218Z"}
+{"message":"⏭️ Skipping SMAX-managed payment schedule: 314c45b7-aa97-40c4-b9e8-b9757a83ee45","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:57.924361870Z"}
+{"message":"⏭️ Skipping SMAX-managed payment schedule: e465eff2-875c-44c3-872a-448ef72188e5","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:57.924368813Z"}
+{"message":"⏭️ Skipping SMAX-managed payment schedule: 310bbb3e-1c3f-4e66-86bd-751d2ac764ef","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:57.932955488Z"}
+{"message":"⏭️ Skipping SMAX-managed payment schedule: 61089ddd-3d8c-4be7-9547-a829d9093502","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:57.980245692Z"}
+{"message":"⏭️ Skipping SMAX-managed payment schedule: 29d4d836-196e-494a-a569-c525278d255d","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:57.986731958Z"}
+{"message":"🧹 Cleaning up expired payment schedules...","attributes":{"level":"info"},"timestamp":"2025-11-10T02:09:58.665220260Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.270291021Z"}
+{"message":"✨ Cleanup complete: Marked 0 schedules as completed","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.270322651Z"}
+{"message":"📤 [RESPONSE-JSON] POST /api/payments/process-scheduled → 200 (3663ms) { dataKeys: 'success, processed, failed, cleanedUp, details' }","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.270327294Z"}
+{"message":"📤 [RESPONSE] POST /api/payments/process-scheduled → 200 (3663ms) {","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.270331839Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.270336845Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.270342365Z"}
+{"message":"  bodyPreview: '{\"success\":true,\"processed\":0,\"failed\":0,\"cleanedUp\":0,\"details\":{\"processedPayments\":[],\"failedPaym'","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.270347217Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.609340792Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.609352294Z"}
+{"message":"📨 [REQUEST] GET /api/payments {","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.609354211Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.609361652Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.609363680Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.609371757Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.609374563Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.609380638Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.609382068Z"}
+{"message":"📨 [REQUEST] GET /api/payments/stats {","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.609384556Z"}
+{"message":"📊 Fetching payments for tenant: 79e5c347-ae73-4a31-bea7-8f080e53a0ba","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.609392104Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/payments/stats → 200 (4ms) {","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.609398493Z"}
+{"message":"  dataKeys: 'totalProcessed, totalAmountCents, successfulPayments, failedPayments, pendingPayments'","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.609403655Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.609412725Z"}
+{"message":"📤 [RESPONSE] GET /api/payments/stats → 200 (4ms) {","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.609421616Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.609427064Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.609434822Z"}
+{"message":"  bodyPreview: '{\"totalProcessed\":0,\"totalAmountCents\":0,\"successfulPayments\":0,\"failedPayments\":0,\"pendingPayments\"'","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.609440124Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.609446256Z"}
+{"message":"✅ Payments fetched: { count: 0, paymentIds: [], totalShowing: 0, totalCount: 0 }","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.609495336Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/payments → 200 (6ms) { dataKeys: '' }","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.609501838Z"}
+{"message":"📤 [RESPONSE] GET /api/payments → 200 (6ms) {","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.609506999Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.609512671Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.609518444Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.610830038Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.610837405Z"}
+{"message":"  bodyPreview: '[]'","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.610842519Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.610843102Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.610848727Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.610851766Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/payment-schedules → 200 (3ms) { dataKeys: '' }","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.610854546Z"}
+{"message":"📤 [RESPONSE] GET /api/payment-schedules → 200 (3ms) {","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.610860348Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.610865655Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.610872938Z"}
+{"message":"  bodyPreview: '[]'","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.611083885Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.611095067Z"}
+{"message":"📨 [REQUEST] GET /api/payment-schedules {","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:00.611100511Z"}
+{"message":"📨 [REQUEST] GET /consumer-dashboard {","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:09.636823394Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:09.636829576Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:09.636836130Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:09.636843492Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:09.636850621Z"}
+{"message":"📤 [RESPONSE-FILE] GET / → 200 (1ms) { file: 'index.html' }","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:09.636857880Z"}
+{"message":"📨 [REQUEST] GET /api/public/agency/summit-recovery-group {","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:10.145926044Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:10.145933398Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:10.145939914Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:10.145947222Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:10.145953348Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/public/agency/summit-recovery-group → 200 (6ms) { dataKeys: 'tenant, tenantSettings' }","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:10.147934789Z"}
+{"message":"📤 [RESPONSE] GET /api/public/agency/summit-recovery-group → 200 (6ms) {","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:10.147942412Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:10.147947186Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:10.147952202Z"}
+{"message":"  bodyPreview: '{\"tenant\":{\"id\":\"79e5c347-ae73-4a31-bea7-8f080e53a0ba\",\"name\":\"Summit Recovery Group\",\"slug\":\"summit'","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:10.147957374Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:10.147963101Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:11.640327741Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:11.640333777Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:11.640338623Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:11.640344131Z"}
+{"message":"📨 [REQUEST] GET /api/public/agency/summit-recovery-group {","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:11.640371289Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/public/agency/summit-recovery-group → 200 (5ms) { dataKeys: 'tenant, tenantSettings' }","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:11.646027630Z"}
+{"message":"📤 [RESPONSE] GET /api/public/agency/summit-recovery-group → 200 (5ms) {","attributes":{"level":"info"},"timestamp":"2025-11-10T02:10:11.646036398Z"}
