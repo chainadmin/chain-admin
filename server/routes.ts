@@ -7696,13 +7696,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       console.log('🔍 Authorize.net Test - Credentials found:', {
-        apiLoginId: authnetApiLoginId.substring(0, 4) + '****',
+        apiLoginId: authnetApiLoginId.trim().substring(0, 4) + '****',
         mode: useSandbox ? 'sandbox' : 'production'
       });
 
       const authnetService = new AuthnetService({
-        apiLoginId: authnetApiLoginId,
-        transactionKey: authnetTransactionKey,
+        apiLoginId: authnetApiLoginId.trim(),
+        transactionKey: authnetTransactionKey.trim(),
         useSandbox: useSandbox ?? true,
       });
 
