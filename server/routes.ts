@@ -7730,6 +7730,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // DEBUG: Authorize.net credentials diagnostic endpoint
+  app.get('/api/authorizenet/debug-credentials', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+
+      const settings = await storage.getTenantSettings(tenantId);
+      if (!settings) {
+        return res.status(404).json({ success: false, message: "Settings not found" });
+      }
+
+      const { authnetApiLoginId, authnetTransactionKey, useSandbox } = settings;
+
+      // Safe credential analysis without exposing full values
+      const analysis = {
+        apiLoginId: {
+          exists: !!authnetApiLoginId,
+          length: authnetApiLoginId?.length || 0,
+          first4: authnetApiLoginId ? authnetApiLoginId.substring(0, 4) : 'N/A',
+          last4: authnetApiLoginId ? authnetApiLoginId.substring(authnetApiLoginId.length - 4) : 'N/A',
+          hasLeadingWhitespace: authnetApiLoginId ? authnetApiLoginId !== authnetApiLoginId.trimStart() : false,
+          hasTrailingWhitespace: authnetApiLoginId ? authnetApiLoginId !== authnetApiLoginId.trimEnd() : false,
+          trimmedLength: authnetApiLoginId ? authnetApiLoginId.trim().length : 0,
+        },
+        transactionKey: {
+          exists: !!authnetTransactionKey,
+          length: authnetTransactionKey?.length || 0,
+          first4: authnetTransactionKey ? authnetTransactionKey.substring(0, 4) : 'N/A',
+          last4: authnetTransactionKey ? authnetTransactionKey.substring(authnetTransactionKey.length - 4) : 'N/A',
+          hasLeadingWhitespace: authnetTransactionKey ? authnetTransactionKey !== authnetTransactionKey.trimStart() : false,
+          hasTrailingWhitespace: authnetTransactionKey ? authnetTransactionKey !== authnetTransactionKey.trimEnd() : false,
+          trimmedLength: authnetTransactionKey ? authnetTransactionKey.trim().length : 0,
+        },
+        useSandbox: useSandbox ?? null,
+        mode: useSandbox ? 'sandbox' : 'production',
+      };
+
+      return res.json({
+        success: true,
+        analysis,
+        note: "This endpoint shows credential metadata without exposing the full values. Use this to verify credentials are stored correctly."
+      });
+    } catch (error: any) {
+      console.error("❌ Debug credentials error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to retrieve credential information",
+        error: error.message
+      });
+    }
+  });
+
   // Helper function to generate USAePay API v2 authentication header
   function generateUSAePayAuthHeader(apiKey: string, apiPin: string): string {
     // Generate 16-character random seed
