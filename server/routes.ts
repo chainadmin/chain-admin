@@ -8130,11 +8130,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         // Process payment using tokenized data from Accept.js
+        // Authorize.net limits invoice number to 20 characters, so truncate UUIDs
+        const invoiceNumber = accountId ? accountId.substring(0, 20) : `c_${consumerId.substring(0, 17)}`;
         const paymentResult = await authnetService.processPayment({
           amount: amountCents / 100, // Convert cents to dollars
           opaqueDataDescriptor,
           opaqueDataValue,
-          invoice: accountId || `consumer_${consumerId}`,
+          invoice: invoiceNumber,
           description: arrangement ? `${arrangement.name} - Payment for account` : `Payment for account`,
         });
 
