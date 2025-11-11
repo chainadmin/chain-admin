@@ -1,0 +1,55 @@
+{"message":"  ✓ updated_at","attributes":{"level":"info"},"timestamp":"2025-11-11T17:01:58.443767380Z"}
+{"message":"  ✓ signed_documents table","attributes":{"level":"info"},"timestamp":"2025-11-11T17:01:58.443777727Z"}
+{"message":"Adding initials_data to signed_documents...","attributes":{"level":"info"},"timestamp":"2025-11-11T17:01:58.443793313Z"}
+{"message":"  ✓ initials_data","attributes":{"level":"info"},"timestamp":"2025-11-11T17:01:58.451459558Z"}
+{"message":"  ✓ signature_audit_trail table","attributes":{"level":"info"},"timestamp":"2025-11-11T17:01:58.451469066Z"}
+{"message":"Creating service_activation_requests table...","attributes":{"level":"info"},"timestamp":"2025-11-11T17:01:58.451479025Z"}
+{"message":"  ✓ service_activation_requests table","attributes":{"level":"info"},"timestamp":"2025-11-11T17:01:58.453856412Z"}
+{"message":"Creating service activation request indexes...","attributes":{"level":"info"},"timestamp":"2025-11-11T17:01:58.453866532Z"}
+{"message":"  ✓ unique pending index","attributes":{"level":"info"},"timestamp":"2025-11-11T17:01:58.454021333Z"}
+{"message":"  ✓ tenant status index","attributes":{"level":"info"},"timestamp":"2025-11-11T17:01:58.454031898Z"}
+{"message":"  ✓ status index","attributes":{"level":"info"},"timestamp":"2025-11-11T17:01:58.455723926Z"}
+{"message":"","attributes":{"level":"info"},"timestamp":"2025-11-11T17:01:58.470222792Z"}
+{"message":"📋 All tenant_settings columns: allow_settlement_requests, authnet_api_login_id, authnet_public_client_key, authnet_transaction_key, blocked_account_statuses, business_type, consumer_portal_settings, contact_email, contact_phone, created_at, custom_branding, enable_online_payments, enabled_addons, enabled_modules, id, merchant_account_id, merchant_api_key, merchant_api_pin, merchant_name, merchant_provider, merchant_type, minimum_monthly_payment, privacy_policy, show_documents, show_payment_plans, smax_api_key, smax_base_url, smax_enabled, smax_pin, sms_throttle_limit, tenant_id, terms_of_service, updated_at, use_sandbox","attributes":{"level":"info"},"timestamp":"2025-11-11T17:01:58.470229112Z"}
+{"message":"✅ Verified new columns: merchant_api_key, merchant_api_pin, smax_api_key, smax_enabled","attributes":{"level":"info"},"timestamp":"2025-11-11T17:01:58.470234111Z"}
+{"message":"🔧 Enabling services for subscribed tenants...","attributes":{"level":"info"},"timestamp":"2025-11-11T17:01:58.470240407Z"}
+{"message":"  ✅ Enabled services for 1 subscribed tenants","attributes":{"level":"info"},"timestamp":"2025-11-11T17:01:58.477444712Z"}
+{"message":"✅ Database migrations completed successfully","attributes":{"level":"info"},"timestamp":"2025-11-11T17:01:58.477454788Z"}
+{"message":"5:01:58 PM [express] serving on port 8080","attributes":{"level":"info"},"timestamp":"2025-11-11T17:01:58.522787473Z"}
+{"message":"⏰ Scheduled tasks configured:","attributes":{"level":"info"},"timestamp":"2025-11-11T17:01:58.522794213Z"}
+{"message":"   - Payment processor: Daily at 8:00 AM ET (America/New_York timezone)","attributes":{"level":"info"},"timestamp":"2025-11-11T17:01:58.522804292Z"}
+{"message":"   - Automation processor: Every 15 minutes","attributes":{"level":"info"},"timestamp":"2025-11-11T17:01:58.522812148Z"}
+{"message":"   - Subscription renewal processor: Daily at 12:00 AM ET (America/New_York timezone)","attributes":{"level":"info"},"timestamp":"2025-11-11T17:01:58.522819113Z"}
+{"message":"   - Monthly invoice generator: 1st of each month at 12:00 AM ET (America/New_York timezone)","attributes":{"level":"info"},"timestamp":"2025-11-11T17:01:58.522825700Z"}
+{"message":"📨 [REQUEST] POST /api/authorizenet/test-connection {","attributes":{"level":"info"},"timestamp":"2025-11-11T17:02:03.472253732Z"}
+{"message":"  origin: 'https://summit-recovery-group.chainsoftwaregroup.com',","attributes":{"level":"info"},"timestamp":"2025-11-11T17:02:03.472266054Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-11T17:02:03.472273219Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-11-11T17:02:03.472278732Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-11T17:02:03.472284599Z"}
+{"message":"🔍 Authorize.net Test - Credentials found: { apiLoginId: '********', mode: 'sandbox' }","attributes":{"level":"info"},"timestamp":"2025-11-11T17:02:03.507755107Z"}
+{"message":"📤 [RESPONSE-JSON] POST /api/authorizenet/test-connection → 200 (183ms) { dataKeys: 'success, message' }","attributes":{"level":"info"},"timestamp":"2025-11-11T17:02:03.654328282Z"}
+{"message":"📤 [RESPONSE] POST /api/authorizenet/test-connection → 200 (183ms) {","attributes":{"level":"info"},"timestamp":"2025-11-11T17:02:03.654336228Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-11-11T17:02:03.654343645Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-11-11T17:02:03.654353410Z"}
+{"message":"  bodyPreview: '{\"success\":false,\"message\":\"User authentication failed due to invalid authentication values.\"}'","attributes":{"level":"info"},"timestamp":"2025-11-11T17:02:03.654366757Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-11T17:02:03.654375752Z"}
+{"message":"Stopping Container","attributes":{"level":"info"},"timestamp":"2025-11-11T17:02:04.000000000Z"}
+{"message":"npm error path /app","attributes":{"level":"error"},"timestamp":"2025-11-11T17:02:07.353743237Z"}
+{"message":"npm error command failed","attributes":{"level":"error"},"timestamp":"2025-11-11T17:02:07.353747310Z"}
+{"message":"npm error signal SIGTERM","attributes":{"level":"error"},"timestamp":"2025-11-11T17:02:07.353751156Z"}
+{"message":"npm error command sh -c NODE_ENV=production node dist/index.js","attributes":{"level":"error"},"timestamp":"2025-11-11T17:02:07.353754718Z"}
+{"message":"npm error A complete log of this run can be found in: /root/.npm/_logs/2025-11-11T16_52_44_349Z-debug-0.log","attributes":{"level":"error"},"timestamp":"2025-11-11T17:02:07.353758293Z"}
+{"message":"2025-11-11 17:02:07.997 UTC [27] LOG:  checkpoint starting: time","attributes":{"level":"error"},"timestamp":"2025-11-11T17:02:11.250885428Z"}
+{"message":"2025-11-11 17:02:10.151 UTC [27] LOG:  checkpoint complete: wrote 21 buffers (0.1%); 0 WAL file(s) added, 0 removed, 0 recycled; write=2.032 s, sync=0.032 s, total=2.155 s; sync files=13, longest=0.030 s, average=0.003 s; distance=118 kB, estimate=170 kB; lsn=0/EA855B8, redo lsn=0/EA85560","attributes":{"level":"error"},"timestamp":"2025-11-11T17:02:11.250893958Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-11-11T17:02:23.651221229Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-11-11T17:02:23.651233877Z"}
+{"message":"  bodyPreview: '{\"success\":false,\"message\":\"User authentication failed due to invalid authentication values.\"}'","attributes":{"level":"info"},"timestamp":"2025-11-11T17:02:23.651241484Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-11T17:02:23.651247354Z"}
+{"message":"📨 [REQUEST] POST /api/authorizenet/test-connection {","attributes":{"level":"info"},"timestamp":"2025-11-11T17:02:23.651287427Z"}
+{"message":"  origin: 'https://summit-recovery-group.chainsoftwaregroup.com',","attributes":{"level":"info"},"timestamp":"2025-11-11T17:02:23.651291663Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-11T17:02:23.651296747Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-11-11T17:02:23.651301677Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-11T17:02:23.651309890Z"}
+{"message":"🔍 Authorize.net Test - Credentials found: { apiLoginId: '********', mode: 'sandbox' }","attributes":{"level":"info"},"timestamp":"2025-11-11T17:02:23.651315787Z"}
+{"message":"📤 [RESPONSE-JSON] POST /api/authorizenet/test-connection → 200 (207ms) { dataKeys: 'success, message' }","attributes":{"level":"info"},"timestamp":"2025-11-11T17:02:23.651321067Z"}
+{"message":"📤 [RESPONSE] POST /api/authorizenet/test-connection → 200 (207ms) {","attributes":{"level":"info"},"timestamp":"2025-11-11T17:02:23.651325231Z"}
