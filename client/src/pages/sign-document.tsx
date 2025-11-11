@@ -81,21 +81,27 @@ export default function SignDocumentPage() {
 
       let modifiedHtml = htmlContent;
 
-      // Replace signature line placeholders
+      // Replace signature line placeholders with inline signature images
       if (signatureDataUrl) {
-        const signatureHtml = `<div style="border-bottom: 1px solid #000; padding-bottom: 10px; margin-bottom: 5px;"><img src="${signatureDataUrl}" alt="Signature" style="max-width: 300px; height: auto; display: block;" /></div>`;
+        const signatureHtml = `<span style="display: inline-block; border-bottom: 1px solid #000; padding: 2px 5px;"><img src="${signatureDataUrl}" alt="Signature" style="max-width: 150px; max-height: 40px; height: auto; display: inline-block; vertical-align: middle;" /></span>`;
         
-        // Replace various signature line patterns
+        // Replace 14 underscores (signature placeholder from backend)
+        modifiedHtml = modifiedHtml.replace(/______________/g, signatureHtml);
+        
+        // Fallback patterns for backwards compatibility
         modifiedHtml = modifiedHtml.replace(/\{\{SIGNATURE_LINE\}\}/gi, signatureHtml);
         modifiedHtml = modifiedHtml.replace(/Signature line/gi, signatureHtml);
         modifiedHtml = modifiedHtml.replace(/_+\s*\(signature\)/gi, signatureHtml);
       }
 
-      // Replace initial placeholders
+      // Replace initial placeholders with inline initials images
       if (initialsDataUrl) {
-        const initialsHtml = `<div style="border-bottom: 1px solid #000; padding-bottom: 10px; margin-bottom: 5px;"><img src="${initialsDataUrl}" alt="Initials" style="max-width: 150px; height: auto; display: block;" /></div>`;
+        const initialsHtml = `<span style="display: inline-block; border-bottom: 1px solid #000; padding: 2px 5px;"><img src="${initialsDataUrl}" alt="Initials" style="max-width: 50px; max-height: 30px; height: auto; display: inline-block; vertical-align: middle;" /></span>`;
         
-        // Replace various initial patterns
+        // Replace 4 underscores (initials placeholder from backend)
+        modifiedHtml = modifiedHtml.replace(/____(?!_)/g, initialsHtml);
+        
+        // Fallback patterns for backwards compatibility
         modifiedHtml = modifiedHtml.replace(/\{\{INITIAL\}\}/gi, initialsHtml);
         modifiedHtml = modifiedHtml.replace(/\{\{INITIALS\}\}/gi, initialsHtml);
         modifiedHtml = modifiedHtml.replace(/Initial:/gi, initialsHtml);

@@ -229,6 +229,27 @@ function replaceTemplateVariables(
   const dueDateIso = account?.dueDate ? new Date(account.dueDate).toISOString().split('T')[0] : '';
   const todaysDate = new Date().toLocaleDateString();
 
+  // Calculate date helpers
+  const now = new Date();
+  const currentYear = now.getFullYear().toString();
+  const currentMonth = now.toLocaleDateString('en-US', { month: 'long' });
+  const currentDatetime = now.toLocaleString();
+  
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowDate = tomorrow.toLocaleDateString();
+  
+  const nextWeek = new Date(now);
+  nextWeek.setDate(nextWeek.getDate() + 7);
+  const nextWeekDate = nextWeek.toLocaleDateString();
+  
+  const nextMonth = new Date(now);
+  nextMonth.setMonth(nextMonth.getMonth() + 1);
+  const nextMonthDate = nextMonth.toLocaleDateString();
+
+  // Consumer date of birth
+  const dob = consumer?.dateOfBirth ? new Date(consumer.dateOfBirth).toLocaleDateString() : '';
+
   // Calculate balance percentages for settlement offers
   const balance50 = (balanceCents !== null && balanceCents !== undefined) ? formatCurrency(Math.round(balanceCents * 0.5)) : '';
   const balance60 = (balanceCents !== null && balanceCents !== undefined) ? formatCurrency(Math.round(balanceCents * 0.6)) : '';
@@ -259,6 +280,13 @@ function replaceTemplateVariables(
   const accountStatus = account?.status || '';
   const lastPaymentDate = accountData?.lastPaymentDate || accountData?.last_payment_date || '';
   const clientReference = accountData?.clientReference || accountData?.client_reference || account?.accountNumber || '';
+
+  // Get arrangement settings from tenant
+  const tenantSettings = (tenant as any)?.tenantSettings || (tenant as any)?.settings || {};
+  const settlementPaymentCounts = tenantSettings?.settlementPaymentCounts || [];
+  const settlementPaymentFrequency = tenantSettings?.settlementPaymentFrequency || '';
+  const minimumMonthlyPayment = tenantSettings?.minimumMonthlyPayment ? formatCurrency(tenantSettings.minimumMonthlyPayment) : '';
+  const settlementOfferExpiresDate = tenantSettings?.settlementOfferExpiresDate ? new Date(tenantSettings.settlementOfferExpiresDate).toLocaleDateString() : '';
 
   const replacements: Record<string, string> = {
     // Primary camelCase format (matching email templates exactly)
@@ -305,23 +333,90 @@ function replaceTemplateVariables(
     accountStatus,
     lastPaymentDate,
     clientReference,
-    signature: 'Signature line',
-    SIGNATURE_LINE: 'Signature line',
+    signature: '______________',
+    SIGNATURE_LINE: '______________',
     dateSigned: todaysDate,
-    initial: 'Initial',
-    initials: 'Initials',
-    INITIAL: 'Initial',
-    INITIALS: 'Initials',
+    initial: '____',
+    initials: '____',
+    INITIAL: '____',
+    INITIALS: '____',
     unsubscribeLink: unsubscribeUrl,
     unsubscribeUrl,
     unsubscribeButton: unsubscribeButtonHtml,
     todaysDate: todaysDate,
+    dateOfBirth: dob,
+    dob,
+    originalBalance: formattedBalance,
+    currentYear,
+    currentMonth,
+    currentDatetime,
+    tomorrowDate,
+    nextWeekDate,
+    nextMonthDate,
+    settlementPaymentCounts: Array.isArray(settlementPaymentCounts) ? settlementPaymentCounts.join(', ') : '',
+    settlementPaymentFrequency,
+    minimumMonthlyPayment,
+    settlementOfferExpiresDate,
     'balance50%': balance50,
     'balance60%': balance60,
     'balance70%': balance70,
     'balance80%': balance80,
     'balance90%': balance90,
     'balance100%': balance100,
+    
+    // Snake_case aliases for all variables to match email/SMS templates
+    first_name: firstName,
+    last_name: lastName,
+    full_name: fullName,
+    consumer_name: fullName,
+    consumer_email: consumerEmail,
+    consumer_phone: consumerPhone,
+    phone_number: consumerPhone,
+    consumer_id: consumer?.id || '',
+    account_id: account?.id || '',
+    account_number: account?.accountNumber || '',
+    file_number: fileNumber,
+    balance_cents: balanceCents !== undefined && balanceCents !== null ? String(balanceCents) : '',
+    due_date: formattedDueDate,
+    due_date_iso: dueDateIso,
+    consumer_address: consumerAddress,
+    consumer_city: consumerCity,
+    consumer_state: consumerState,
+    consumer_zip: consumerZip,
+    zip_code: consumerZip,
+    full_address: fullAddress,
+    consumer_portal_link: consumerPortalUrl,
+    portal_link: consumerPortalUrl,
+    app_download_link: appDownloadUrl,
+    agency_name: tenant?.name || '',
+    agency_email: (tenant as any)?.contactEmail || tenant?.email || '',
+    agency_phone: (tenant as any)?.contactPhone || tenant?.phoneNumber || tenant?.twilioPhoneNumber || '',
+    privacy_notice: (tenant as any)?.privacyPolicy || '',
+    terms_of_service: (tenant as any)?.termsOfService || '',
+    ssn_last_4: ssnLast4,
+    original_creditor: originalCreditor,
+    charge_off_date: chargeOffDate,
+    account_status: accountStatus,
+    last_payment_date: lastPaymentDate,
+    client_reference: clientReference,
+    date_signed: todaysDate,
+    unsubscribe_link: unsubscribeUrl,
+    unsubscribe_url: unsubscribeUrl,
+    unsubscribe_button: unsubscribeButtonHtml,
+    todays_date: todaysDate,
+    today_date: todaysDate,
+    date_of_birth: dob,
+    original_balance: formattedBalance,
+    current_year: currentYear,
+    current_month: currentMonth,
+    current_datetime: currentDatetime,
+    tomorrow_date: tomorrowDate,
+    next_week_date: nextWeekDate,
+    next_month_date: nextMonthDate,
+    settlement_payment_counts: Array.isArray(settlementPaymentCounts) ? settlementPaymentCounts.join(', ') : '',
+    settlement_payment_frequency: settlementPaymentFrequency,
+    minimum_monthly_payment: minimumMonthlyPayment,
+    settlement_offer_expires_date: settlementOfferExpiresDate,
   };
 
   let processedTemplate = template;
