@@ -503,7 +503,7 @@ export default function ConsumerDashboardSimple() {
     formData.append('file', selectedFile);
     formData.append('title', uploadTitle);
     if (uploadDescription) formData.append('description', uploadDescription);
-    if (uploadAccountId) formData.append('accountId', uploadAccountId);
+    if (uploadAccountId && uploadAccountId !== 'none') formData.append('accountId', uploadAccountId);
     formData.append('isPublic', 'false');
 
     uploadMutation.mutate(formData);
@@ -1333,7 +1333,7 @@ export default function ConsumerDashboardSimple() {
                                 <SelectValue placeholder="Select an account" />
                               </SelectTrigger>
                               <SelectContent className="bg-slate-900 border-white/10">
-                                <SelectItem value="" className="text-white">None</SelectItem>
+                                <SelectItem value="none" className="text-white">None</SelectItem>
                                 {accountData?.accounts?.map((account: any) => (
                                   <SelectItem key={account.id} value={account.id} className="text-white">
                                     {account.creditor} - {account.accountNumber ? `••••${account.accountNumber.slice(-4)}` : 'No account number'}
