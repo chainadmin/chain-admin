@@ -43,6 +43,58 @@ export const authenticateUser: RequestHandler = async (req: any, res, next) => {
       }
     }
     
+    // CRITICAL: Populate tenantId based on the current subdomain/agency
+    // This ensures each agency gets their own isolated tenant data
+    try {
+      const authId = user.claims?.sub || user.id;
+      
+      // If agencySlug is set from subdomainMiddleware, use it to find the tenant
+      if (req.agencySlug) {
+        const tenant = await storage.getTenantBySlug(req.agencySlug);
+        if (!tenant) {
+          return res.status(404).json({ message: "Agency not found" });
+        }
+        
+        // Verify this user has access to this tenant
+        const platformUser = await storage.getPlatformUser(authId);
+        if (!platformUser || platformUser.tenantId !== tenant.id) {
+          // User is authenticated but trying to access a different agency's portal
+          return res.status(403).json({ message: "You don't have access to this agency" });
+        }
+        
+        // Attach tenant info to request
+        req.user = {
+          ...req.user,
+          tenantId: tenant.id,
+          tenantSlug: tenant.slug,
+          role: platformUser.role,
+          id: platformUser.id
+        };
+        
+        console.log('✅ [Auth] User authenticated for tenant:', {
+          email: user.email,
+          tenantSlug: tenant.slug,
+          tenantId: tenant.id
+        });
+      } else {
+        // No agencySlug - fall back to user's primary tenant
+        const platformUser = await storage.getPlatformUser(authId);
+        if (!platformUser) {
+          return res.status(401).json({ message: "User not found" });
+        }
+        
+        req.user = {
+          ...req.user,
+          tenantId: platformUser.tenantId,
+          role: platformUser.role,
+          id: platformUser.id
+        };
+      }
+    } catch (error) {
+      console.error('❌ [Auth] Error populating tenant context:', error);
+      return res.status(500).json({ message: "Authentication error" });
+    }
+    
     return next();
   }
   
