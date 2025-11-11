@@ -2041,7 +2041,7 @@ export default function Settings() {
                       )}
 
                       {localSettings?.merchantProvider === 'authorize_net' && (
-                        <div className="border-t border-white/10 pt-4 space-y-3">
+                        <div className="border-t border-white/10 pt-4">
                           <Button
                             type="button"
                             variant="outline"
@@ -2075,61 +2075,6 @@ export default function Settings() {
                           >
                             <i className="fas fa-plug mr-2"></i>
                             Test Authorize.net Connection
-                          </Button>
-                          
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={async () => {
-                              try {
-                                const response = await apiRequest("GET", "/api/authorizenet/debug-credentials");
-                                const result = await response.json();
-                                
-                                if (result.success) {
-                                  const { analysis } = result;
-                                  const debugInfo = `
-API Login ID:
-  • Exists: ${analysis.apiLoginId.exists ? 'Yes' : 'No'}
-  • Length: ${analysis.apiLoginId.length} characters
-  • Trimmed Length: ${analysis.apiLoginId.trimmedLength} characters
-  • First 4 chars: ${analysis.apiLoginId.first4}
-  • Last 4 chars: ${analysis.apiLoginId.last4}
-  • Leading whitespace: ${analysis.apiLoginId.hasLeadingWhitespace ? 'Yes' : 'No'}
-  • Trailing whitespace: ${analysis.apiLoginId.hasTrailingWhitespace ? 'Yes' : 'No'}
-
-Transaction Key:
-  • Exists: ${analysis.transactionKey.exists ? 'Yes' : 'No'}
-  • Length: ${analysis.transactionKey.length} characters
-  • Trimmed Length: ${analysis.transactionKey.trimmedLength} characters
-  • First 4 chars: ${analysis.transactionKey.first4}
-  • Last 4 chars: ${analysis.transactionKey.last4}
-  • Leading whitespace: ${analysis.transactionKey.hasLeadingWhitespace ? 'Yes' : 'No'}
-  • Trailing whitespace: ${analysis.transactionKey.hasTrailingWhitespace ? 'Yes' : 'No'}
-
-Mode: ${analysis.mode}
-                                  `.trim();
-                                  
-                                  alert(debugInfo);
-                                } else {
-                                  toast({
-                                    title: "Debug Failed",
-                                    description: result.message || "Unable to fetch credential debug info.",
-                                    variant: "destructive",
-                                  });
-                                }
-                              } catch (err: any) {
-                                toast({
-                                  title: "Debug Error",
-                                  description: "Failed to fetch debug information. Please try again.",
-                                  variant: "destructive",
-                                });
-                              }
-                            }}
-                            data-testid="button-debug-authnet-credentials"
-                            className="w-full border-white/20 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white"
-                          >
-                            <i className="fas fa-bug mr-2"></i>
-                            Debug Credentials
                           </Button>
                         </div>
                       )}
