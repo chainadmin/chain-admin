@@ -20,6 +20,10 @@ const signatureRequestSchema = z.object({
   consumerId: z.string().min(1, "Consumer is required"),
   documentId: z.string().min(1, "Document is required"),
   accountId: z.string().optional(),
+  paymentAmount: z.string().optional(),
+  paymentFrequency: z.string().optional(),
+  numberOfPayments: z.string().optional(),
+  arrangementStartDate: z.string().optional(),
   expiresInDays: z.coerce.number().min(1).max(90),
   message: z.string().optional(),
 });
@@ -29,6 +33,8 @@ type SignatureRequestForm = z.infer<typeof signatureRequestSchema>;
 export default function DocumentsPage() {
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [hasArrangementOnFile, setHasArrangementOnFile] = useState(false);
+  const [selectedConsumerId, setSelectedConsumerId] = useState("");
 
   const form = useForm<SignatureRequestForm>({
     resolver: zodResolver(signatureRequestSchema),
@@ -36,6 +42,10 @@ export default function DocumentsPage() {
       consumerId: "",
       documentId: "",
       accountId: "",
+      paymentAmount: "",
+      paymentFrequency: "",
+      numberOfPayments: "",
+      arrangementStartDate: "",
       expiresInDays: 7,
       message: "",
     },
@@ -56,6 +66,28 @@ export default function DocumentsPage() {
   const { data: signatureRequests = [] } = useQuery<any[]>({
     queryKey: ["/api/signature-requests"],
   });
+
+  // Fetch existing arrangement when consumer is selected
+  const { data: existingArrangement } = useQuery({
+    queryKey: ["/api/payment-schedules", selectedConsumerId],
+    queryFn: async () => {
+      if (!selectedConsumerId) return null;
+      const response = await fetch(`/api/payment-schedules?consumerId=${selectedConsumerId}&status=active`);
+      if (!response.ok) return null;
+      const data = await response.json();
+      return data && data.length > 0 ? data[0] : null;
+    },
+    enabled: !!selectedConsumerId,
+  });
+
+  // Pre-fill arrangement fields when existing arrangement is loaded
+  if (existingArrangement && !hasArrangementOnFile) {
+    setHasArrangementOnFile(true);
+    form.setValue("paymentAmount", existingArrangement.amount ? (existingArrangement.amount / 100).toFixed(2) : "");
+    form.setValue("paymentFrequency", existingArrangement.frequency || "");
+    form.setValue("numberOfPayments", existingArrangement.numberOfPayments?.toString() || "");
+    form.setValue("arrangementStartDate", existingArrangement.startDate ? new Date(existingArrangement.startDate).toISOString().split('T')[0] : "");
+  }
 
   const createRequestMutation = useMutation({
     mutationFn: async (data: SignatureRequestForm) => {
@@ -152,7 +184,14 @@ export default function DocumentsPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Consumer *</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
+                      <Select 
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                          setSelectedConsumerId(value);
+                          setHasArrangementOnFile(false);
+                        }} 
+                        value={field.value}
+                      >
                         <FormControl>
                           <SelectTrigger data-testid="select-consumer">
                             <SelectValue placeholder="Select consumer" />
@@ -209,7 +248,7 @@ export default function DocumentsPage() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="">None</SelectItem>
+                          <SelectItem value="none">None</SelectItem>
                           {accounts.map((account: any) => (
                             <SelectItem key={account.id} value={account.id}>
                               {account.accountNumber} - {account.companyName}
@@ -221,6 +260,100 @@ export default function DocumentsPage() {
                     </FormItem>
                   )}
                 />
+
+                <div className="space-y-4 border-t pt-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold">Payment Arrangement (Optional)</h3>
+                    {hasArrangementOnFile && (
+                      <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-200" data-testid="badge-arrangement-on-file">
+                        Arrangement on File
+                      </Badge>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="paymentAmount"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Payment Amount</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              placeholder="0.00"
+                              {...field}
+                              data-testid="input-payment-amount"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="paymentFrequency"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Payment Frequency</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-payment-frequency">
+                                <SelectValue placeholder="Select frequency" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="weekly">Weekly</SelectItem>
+                              <SelectItem value="biweekly">Bi-Weekly</SelectItem>
+                              <SelectItem value="monthly">Monthly</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="numberOfPayments"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Number of Payments</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min="1"
+                              placeholder="12"
+                              {...field}
+                              data-testid="input-number-of-payments"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="arrangementStartDate"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Start Date</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="date"
+                              {...field}
+                              data-testid="input-arrangement-start-date"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
 
                 <FormField
                   control={form.control}
