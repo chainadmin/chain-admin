@@ -12362,10 +12362,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Get current tenant settings
-      const settings = await storage.getTenantSettings(tenantId);
+      // Get current tenant settings (create default if missing)
+      let settings = await storage.getTenantSettings(tenantId);
       if (!settings) {
-        return res.status(404).json({ success: false, message: "Tenant settings not found" });
+        // Create default settings if they don't exist
+        settings = await storage.upsertTenantSettings({
+          tenantId,
+          showPaymentPlans: true,
+          showDocuments: true,
+          allowSettlementRequests: true,
+          smsThrottleLimit: 10,
+          customBranding: {},
+          consumerPortalSettings: {},
+        });
       }
 
       // Check if service is already enabled

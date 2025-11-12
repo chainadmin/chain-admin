@@ -550,6 +550,18 @@ export class DatabaseStorage implements IStorage {
 
   async createTenant(tenant: InsertTenant): Promise<Tenant> {
     const [newTenant] = await db.insert(tenants).values(tenant).returning();
+    
+    // Automatically create default tenant_settings for complete isolation
+    await db.insert(tenantSettings).values({
+      tenantId: newTenant.id,
+      showPaymentPlans: true,
+      showDocuments: true,
+      allowSettlementRequests: true,
+      smsThrottleLimit: 10,
+      customBranding: {},
+      consumerPortalSettings: {},
+    }).onConflictDoNothing();
+    
     return newTenant;
   }
 
@@ -585,6 +597,18 @@ export class DatabaseStorage implements IStorage {
       email: data.email,
       notifiedOwners: false,
     }).returning();
+    
+    // Automatically create default tenant_settings for complete isolation
+    await db.insert(tenantSettings).values({
+      tenantId: newTenant.id,
+      showPaymentPlans: true,
+      showDocuments: true,
+      allowSettlementRequests: true,
+      smsThrottleLimit: 10,
+      customBranding: {},
+      consumerPortalSettings: {},
+    }).onConflictDoNothing();
+    
     return newTenant;
   }
 
@@ -608,6 +632,17 @@ export class DatabaseStorage implements IStorage {
       postmarkServerToken: data.postmarkServerToken,
       postmarkServerName: data.postmarkServerName,
     }).returning();
+    
+    // Automatically create default tenant_settings for complete isolation
+    await db.insert(tenantSettings).values({
+      tenantId: newTenant.id,
+      showPaymentPlans: true,
+      showDocuments: true,
+      allowSettlementRequests: true,
+      smsThrottleLimit: 10,
+      customBranding: {},
+      consumerPortalSettings: {},
+    }).onConflictDoNothing();
     
     // Ensure default folders are created
     await this.ensureDefaultFolders(newTenant.id);
