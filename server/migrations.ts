@@ -572,6 +572,41 @@ export async function runMigrations() {
       console.log('  ⚠ service_activation_requests (already exists)');
     }
     
+    // Backfill tenant_settings for any existing tenants without settings
+    console.log('Backfilling tenant_settings for existing tenants...');
+    try {
+      const backfillResult = await client.query(`
+        INSERT INTO tenant_settings (
+          tenant_id,
+          show_payment_plans,
+          show_documents,
+          allow_settlement_requests,
+          sms_throttle_limit,
+          custom_branding,
+          consumer_portal_settings
+        )
+        SELECT 
+          t.id,
+          true,
+          true,
+          true,
+          10,
+          '{}'::jsonb,
+          '{}'::jsonb
+        FROM tenants t
+        LEFT JOIN tenant_settings ts ON t.id = ts.tenant_id
+        WHERE ts.id IS NULL
+        ON CONFLICT (tenant_id) DO NOTHING
+      `);
+      if (backfillResult.rowCount && backfillResult.rowCount > 0) {
+        console.log(`  ✓ Created tenant_settings for ${backfillResult.rowCount} existing tenant(s)`);
+      } else {
+        console.log('  ✓ All tenants already have settings');
+      }
+    } catch (err) {
+      console.log('  ⚠ Could not backfill tenant_settings:', err);
+    }
+    
     // Create unique index to prevent duplicate pending requests
     console.log('Creating service activation request indexes...');
     try {
