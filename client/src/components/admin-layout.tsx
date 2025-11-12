@@ -3,6 +3,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import chainLogo from "@/assets/chain-logo.png";
 import { useAgencyContext } from "@/hooks/useAgencyContext";
 import { cn } from "@/lib/utils";
@@ -36,6 +37,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const { agencySlug, buildAgencyUrl } = useAgencyContext();
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearchResults, setShowSearchResults] = useState(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   
   const { data: userData } = useQuery({
@@ -116,6 +118,11 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       navigate(buildNavHref('/accounts'));
     }
   };
+
+  // Close mobile nav on route change
+  useEffect(() => {
+    setIsMobileNavOpen(false);
+  }, [location]);
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#111f3b] to-[#152a54] text-blue-50">
@@ -213,8 +220,11 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           <div className="relative z-10 flex h-20 flex-shrink-0 items-center border-b border-white/10 bg-white/5 px-4 backdrop-blur">
             <button
               type="button"
+              onClick={() => setIsMobileNavOpen(true)}
               aria-label="Open navigation menu"
+              aria-expanded={isMobileNavOpen}
               className="mr-4 flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-blue-100/70 transition hover:bg-white/10 md:hidden"
+              data-testid="button-mobile-menu"
             >
               <i aria-hidden="true" className="fas fa-bars text-lg"></i>
               <span className="sr-only">Open navigation menu</span>
@@ -351,6 +361,106 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           </main>
         </div>
       </div>
+
+      {/* Mobile Navigation Sheet */}
+      <Sheet open={isMobileNavOpen} onOpenChange={setIsMobileNavOpen}>
+        <SheetContent side="left" className="w-80 bg-gradient-to-br from-[#0f172a] via-[#111f3b] to-[#152a54] border-white/10 p-0">
+          <div className="flex h-full flex-col">
+            {/* Logo and Company */}
+            <SheetHeader className="border-b border-white/10 px-6 py-6">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-white/10">
+                  <img src={chainLogo} alt="Chain Logo" className="h-8 w-8 object-contain" />
+                </div>
+                <div>
+                  <SheetTitle className="text-left text-base font-semibold text-white">{tenantName}</SheetTitle>
+                  <p className="text-left text-xs uppercase tracking-wide text-blue-100/70">{tenantSlug}</p>
+                </div>
+              </div>
+            </SheetHeader>
+
+            {/* Navigation */}
+            <nav className="flex-1 overflow-y-auto px-4 py-6">
+              <ul className="space-y-1">
+                {navigationItems.map((item) => {
+                  const isActive = isActiveRoute(item.href);
+
+                  return (
+                    <li key={item.name}>
+                      <Link href={item.href}>
+                        <a
+                          onClick={() => setIsMobileNavOpen(false)}
+                          data-testid={`mobile-nav-${item.name.toLowerCase()}`}
+                          className={cn(
+                            "group flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition",
+                            isActive
+                              ? "bg-white/15 text-white shadow-lg shadow-blue-900/20"
+                              : "text-blue-100/80 hover:bg-white/10 hover:text-white",
+                          )}
+                          aria-current={isActive ? "page" : undefined}
+                        >
+                          <span
+                            aria-hidden="true"
+                            className={cn(
+                              "flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/10 text-sm transition",
+                              isActive
+                                ? "border-white/30 bg-gradient-to-br from-sky-400/30 to-indigo-500/30 text-white"
+                                : "text-blue-100/70 group-hover:border-white/20 group-hover:bg-white/10",
+                            )}
+                          >
+                            <i aria-hidden="true" className={`${item.icon} text-base`}></i>
+                          </span>
+                          <span>{item.name}</span>
+                        </a>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </nav>
+
+            {/* User Profile */}
+            <div className="border-t border-white/10 px-4 py-6">
+              <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/10 p-4">
+                <img
+                  className="h-10 w-10 rounded-full border border-white/20 object-cover"
+                  src={(user as any)?.profileImageUrl || "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"}
+                  alt="User avatar"
+                />
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-white">
+                    {(user as any)?.firstName || (user as any)?.lastName
+                      ? `${(user as any).firstName} ${(user as any).lastName}`
+                      : (user as any)?.email}
+                  </p>
+                  <p className="text-xs text-blue-100/70">
+                    {isJwtAuth
+                      ? ((user as any)?.role?.replace('_', ' ') || "User")
+                      : ((userData as any)?.platformUser?.role?.replace('_', ' ') || "User")}
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  if (isJwtAuth) {
+                    clearAuth();
+                    window.location.href = '/agency-login';
+                  } else {
+                    localStorage.removeItem('authToken');
+                    window.location.href = '/api/logout';
+                  }
+                }}
+                className="mt-4 w-full rounded-xl border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-blue-50 hover:bg-white/20"
+                data-testid="button-mobile-logout"
+              >
+                <i aria-hidden="true" className="fas fa-sign-out-alt mr-2 text-base"></i>
+                Logout
+              </Button>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
