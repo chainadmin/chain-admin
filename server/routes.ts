@@ -8153,6 +8153,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           authCode: paymentResult.authCode,
         });
 
+        // Extract card details from payment result
+        const cardLast4 = paymentResult.cardLast4 || opaqueDataValue?.slice(-4) || 'XXXX';
+        const cardBrand = paymentResult.cardType || 'unknown';
+
         // Create payment record
         const payment = await storage.createPayment({
           tenantId: tenantId,
@@ -8172,8 +8176,268 @@ export async function registerRoutes(app: Express): Promise<Server> {
           balanceCents: Math.max(0, (account.balanceCents || 0) - amountCents),
         });
 
-        // TODO: Handle payment method saving, recurring setup, and SMAX sync for Authorize.net
-        // For now, return basic success response
+        // Send notification to admins about successful payment
+        const consumer = await storage.getConsumer(consumerId);
+        if (consumer) {
+          await notifyTenantAdmins({
+            tenantId,
+            subject: 'New Payment Received',
+            eventType: 'payment_made',
+            consumer: {
+              firstName: consumer.firstName || '',
+              lastName: consumer.lastName || '',
+              email: consumer.email || '',
+            },
+            amount: amountCents,
+          }).catch(err => console.error('Failed to send payment notification:', err));
+
+          await emailService.sendPaymentNotification({
+            tenantId,
+            consumerName: `${consumer.firstName} ${consumer.lastName}`,
+            accountNumber: account.accountNumber || 'N/A',
+            amountCents,
+            paymentMethod: 'Credit Card',
+            transactionId: paymentResult.transactionId || undefined,
+            paymentType: 'one_time',
+          }).catch(err => console.error('Failed to send payment notification to contact email:', err));
+        }
+
+        // Create customer payment profile and save payment method if needed
+        let savedPaymentMethod = null;
+        const needsPaymentProfile = saveCard || setupRecurring || (normalizedFirstPaymentDate !== null && normalizedFirstPaymentDate.getTime() > today.getTime());
+
+        if (needsPaymentProfile) {
+          console.log('🔐 Creating Authorize.net customer payment profile...');
+          
+          const profileResult = await authnetService.createCustomerPaymentProfile({
+            opaqueDataDescriptor,
+            opaqueDataValue,
+            customerId: consumerId,
+            email: consumer?.email || undefined,
+            billingAddress: {
+              firstName: consumer?.firstName || '',
+              lastName: consumer?.lastName || '',
+              zip: zipCode || '',
+            },
+          });
+
+          if (profileResult.success && profileResult.customerProfileId && profileResult.paymentProfileId) {
+            console.log('✅ Authorize.net payment profile created:', {
+              customerProfileId: profileResult.customerProfileId,
+              paymentProfileId: profileResult.paymentProfileId,
+            });
+
+            // Save payment method to database with combined profile ID
+            const paymentToken = `${profileResult.customerProfileId}|${profileResult.paymentProfileId}`;
+            savedPaymentMethod = await storage.createPaymentMethod({
+              tenantId,
+              consumerId,
+              paymentToken,
+              cardLast4,
+              cardBrand,
+              cardholderName: cardName,
+              expiryMonth: expiryMonth,
+              expiryYear: expiryYear,
+              billingZip: zipCode || null,
+              isDefault: true,
+            });
+
+            console.log('✅ Payment method saved to database');
+          } else {
+            console.error('❌ Failed to create Authorize.net payment profile:', profileResult.errorMessage);
+          }
+        }
+
+        // Create payment schedule if arrangement and saved payment method exist
+        let createdSchedule: any = null;
+        if (arrangement && savedPaymentMethod) {
+          const paymentStartDate = normalizedFirstPaymentDate ? new Date(normalizedFirstPaymentDate) : new Date();
+          const nextMonth = new Date(paymentStartDate);
+          nextMonth.setMonth(nextMonth.getMonth() + 1);
+
+          let remainingPayments = null;
+          let endDate = null;
+
+          if (arrangement.planType === 'settlement') {
+            if (normalizedFirstPaymentDate && normalizedFirstPaymentDate.getTime() > today.getTime()) {
+              remainingPayments = 1;
+              endDate = new Date(paymentStartDate);
+            }
+          } else if (arrangement.planType === 'fixed_monthly' && arrangement.maxTermMonths) {
+            const maxPayments = Number(arrangement.maxTermMonths);
+            remainingPayments = maxPayments - 1;
+            endDate = new Date(paymentStartDate);
+            endDate.setMonth(endDate.getMonth() + Number(arrangement.maxTermMonths));
+          } else if (arrangement.planType === 'range') {
+            remainingPayments = null;
+            endDate = null;
+          }
+
+          const shouldCreateSchedule = arrangementId && (
+            arrangement.planType === 'fixed_monthly' || arrangement.planType === 'range'
+          );
+
+          if (shouldCreateSchedule) {
+            const existingSchedules = await storage.getActivePaymentSchedulesByConsumerAndAccount(consumerId, accountId, tenantId);
+
+            if (existingSchedules && existingSchedules.length > 0) {
+              return res.status(400).json({
+                success: false,
+                message: "You already have an active payment arrangement for this account.",
+              });
+            }
+
+            try {
+              createdSchedule = await storage.createPaymentSchedule({
+                tenantId,
+                consumerId,
+                accountId,
+                paymentMethodId: savedPaymentMethod.id,
+                arrangementType: arrangement.planType,
+                amountCents,
+                frequency: 'monthly',
+                startDate: paymentStartDate.toISOString().split('T')[0],
+                endDate: endDate ? endDate.toISOString().split('T')[0] : null,
+                nextPaymentDate: nextMonth.toISOString().split('T')[0],
+                remainingPayments,
+                status: 'active',
+                source: 'chain',
+                smaxSynced: false,
+              });
+
+              console.log('✅ Payment schedule created for Authorize.net arrangement');
+
+              // Send arrangement notification
+              if (consumer) {
+                await notifyTenantAdmins({
+                  tenantId,
+                  subject: 'New Payment Arrangement Setup',
+                  eventType: 'arrangement_setup',
+                  consumer: {
+                    firstName: consumer.firstName || '',
+                    lastName: consumer.lastName || '',
+                    email: consumer.email || '',
+                  },
+                  arrangementType: arrangement.name || arrangement.planType,
+                }).catch(err => console.error('Failed to send arrangement notification:', err));
+
+                await emailService.sendArrangementNotification({
+                  tenantId,
+                  consumerName: `${consumer.firstName} ${consumer.lastName}`,
+                  accountNumber: account.accountNumber || 'N/A',
+                  arrangementType: arrangement.name || arrangement.planType,
+                  monthlyPayment: amountCents,
+                  totalBalance: account.balanceCents || 0,
+                  startDate: paymentStartDate.toISOString().split('T')[0],
+                  endDate: endDate ? endDate.toISOString().split('T')[0] : undefined,
+                  remainingPayments: remainingPayments || undefined,
+                }).catch(err => console.error('Failed to send arrangement notification:', err));
+              }
+
+              // Update consumer status
+              await storage.updateConsumer(consumerId, { paymentStatus: 'pending_payment' });
+
+              // SMAX sync if enabled
+              if (createdSchedule && settings.smaxEnabled && account.filenumber) {
+                try {
+                  const { smaxService } = await import('./smaxService');
+                  const fileNumber = account.filenumber;
+                  const arrangementName = arrangement.name || arrangement.planType;
+                  const firstPaymentDate = paymentStartDate.toISOString().split('T')[0];
+                  const nextPaymentDate = nextMonth.toISOString().split('T')[0];
+                  const amountDollars = (amountCents / 100).toFixed(2);
+
+                  await smaxService.insertAttempt(tenantId, {
+                    filenumber: fileNumber,
+                    attempttype: 'Promise To Pay',
+                    attemptdate: firstPaymentDate,
+                    notes: `Arrangement: ${arrangementName} | Amount: $${amountDollars} | Frequency: Monthly`,
+                  });
+
+                  await smaxService.insertNote(tenantId, {
+                    filenumber: fileNumber,
+                    collectorname: consumer ? `${consumer.firstName} ${consumer.lastName}`.trim() || 'System' : 'System',
+                    logmessage: `Payment arrangement scheduled (${arrangementName}). First payment on ${firstPaymentDate} for $${amountDollars}.`,
+                  });
+
+                  const smaxArrangementSent = await smaxService.insertPaymentArrangement(tenantId, {
+                    filenumber: fileNumber,
+                    payorname: consumer ? `${consumer.firstName} ${consumer.lastName}`.trim() || 'Consumer' : 'Consumer',
+                    arrangementtype: arrangementName,
+                    monthlypayment: parseFloat(amountDollars),
+                    startdate: firstPaymentDate,
+                    enddate: endDate ? endDate.toISOString().split('T')[0] : undefined,
+                    nextpaymentdate: nextPaymentDate,
+                    remainingpayments: remainingPayments || undefined,
+                    totalbalance: (account.balanceCents || 0) / 100,
+                    cardtoken: savedPaymentMethod.paymentToken,
+                    cardlast4: savedPaymentMethod.cardLast4,
+                    cardbrand: savedPaymentMethod.cardBrand || undefined,
+                    expirymonth: savedPaymentMethod.expiryMonth || undefined,
+                    expiryyear: savedPaymentMethod.expiryYear || undefined,
+                    cardholdername: savedPaymentMethod.cardholderName || undefined,
+                    billingzip: savedPaymentMethod.billingZip || undefined,
+                  });
+
+                  if (smaxArrangementSent && createdSchedule.id) {
+                    await storage.updatePaymentSchedule(createdSchedule.id, tenantId, {
+                      smaxSynced: true,
+                      smaxLastSyncAt: new Date(),
+                    });
+                    console.log('✅ Authorize.net arrangement synced to SMAX');
+                  }
+                } catch (smaxError) {
+                  console.error('Failed to sync Authorize.net arrangement to SMAX:', smaxError);
+                }
+              }
+
+              // Move to Payments Pending folder
+              try {
+                const paymentsPendingFolder = await storage.getPaymentsPendingFolder(tenantId);
+                if (paymentsPendingFolder && accountId) {
+                  await storage.updateAccount(accountId, {
+                    folderId: paymentsPendingFolder.id
+                  });
+                }
+              } catch (folderError) {
+                console.error('Failed to move account to folder:', folderError);
+              }
+            } catch (scheduleError) {
+              console.error('Failed to create payment schedule:', scheduleError);
+            }
+          } else {
+            // One-time payment - set to current
+            await storage.updateConsumer(consumerId, { paymentStatus: 'current' });
+          }
+        } else {
+          // No arrangement - set to current after successful payment
+          await storage.updateConsumer(consumerId, { paymentStatus: 'current' });
+        }
+
+        // Sync payment to SMAX if enabled and account has filenumber
+        if (settings.smaxEnabled && account.filenumber && consumer) {
+          try {
+            const { smaxService } = await import('./smaxService');
+            
+            await smaxService.insertPayment(tenantId, {
+              filenumber: account.filenumber,
+              paymentamount: (amountCents / 100).toString(),
+              paymentdate: new Date().toISOString().split('T')[0],
+              paymentmethod: 'Credit Card',
+              cardlast4: cardLast4,
+              transactionid: paymentResult.transactionId || undefined,
+              cardtoken: savedPaymentMethod?.paymentToken || undefined,
+              cardholdername: cardName || undefined,
+              billingzip: zipCode || undefined,
+              cardexpirationmonth: expiryMonth || undefined,
+              cardexpirationyear: expiryYear || undefined,
+            });
+
+            console.log('✅ Authorize.net payment synced to SMAX');
+          } catch (smaxError) {
+            console.error('Failed to sync Authorize.net payment to SMAX:', smaxError);
+          }
+        }
 
         return res.json({
           success: true,
@@ -8184,6 +8448,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             status: 'completed',
             transactionId: paymentResult.transactionId,
           },
+          schedule: createdSchedule ? {
+            id: createdSchedule.id,
+            nextPaymentDate: createdSchedule.nextPaymentDate,
+            remainingPayments: createdSchedule.remainingPayments,
+          } : undefined,
         });
       }
 
@@ -9651,19 +9920,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   continue;
                 }
 
-                // Verify USAePay is configured
-                if (!settings?.merchantApiKey || !settings?.merchantApiPin) {
-                  console.error(`USAePay not configured for tenant ${tenant.id}`);
-                  continue;
-                }
-
-                const usaepayBaseUrl = settings.useSandbox 
-                  ? "https://sandbox.usaepay.com/api/v2"
-                  : "https://secure.usaepay.com/api/v2";
-
-                // Generate proper USAePay API v2 authentication header with hash
-                const authHeader = generateUSAePayAuthHeader(settings.merchantApiKey, settings.merchantApiPin);
-
+                // Determine payment provider
+                const merchantProvider = settings?.merchantProvider || 'usaepay';
+                
                 // Determine payment amount - use remaining balance for final payment
                 let paymentAmountCents = schedule.amountCents;
                 const isFinalPayment = schedule.remainingPayments !== null && schedule.remainingPayments === 1;
@@ -9678,34 +9937,112 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   }
                 }
 
-                // Process payment using saved token (USAePay v2 format)
-                const paymentPayload = {
-                  amount: (paymentAmountCents / 100).toFixed(2),
-                  invoice: schedule.accountId,
-                  description: `Scheduled ${schedule.arrangementType} payment`,
-                  source: {
-                    key: paymentMethod.paymentToken
-                  },
-                  billingAddress: {
-                    firstName: paymentMethod.cardholderName?.split(' ')[0] || '',
-                    lastName: paymentMethod.cardholderName?.split(' ').slice(1).join(' ') || '',
-                    zip: paymentMethod.billingZip || '',
-                    street: '',
-                    city: ''
+                let success = false;
+                let paymentResult: any = null;
+
+                // Route to appropriate payment processor
+                if (merchantProvider === 'authorize_net') {
+                  // ===== AUTHORIZE.NET SCHEDULED PAYMENT =====
+                  console.log('🔵 Processing scheduled payment with Authorize.net');
+
+                  // Verify Authorize.net is configured
+                  if (!settings?.authnetApiLoginId || !settings?.authnetTransactionKey) {
+                    console.error(`Authorize.net not configured for tenant ${tenant.id}`);
+                    failedPayments.push({
+                      scheduleId: schedule.id,
+                      accountId: schedule.accountId,
+                      reason: 'Authorize.net credentials not configured'
+                    });
+                    continue;
                   }
-                };
 
-                const paymentResponse = await fetch(`${usaepayBaseUrl}/transactions`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': authHeader
-                  },
-                  body: JSON.stringify(paymentPayload)
-                });
+                  // Initialize Authorize.net service
+                  const { AuthnetService } = await import('./authnetService');
+                  const authnetService = new AuthnetService({
+                    apiLoginId: settings.authnetApiLoginId.trim(),
+                    transactionKey: settings.authnetTransactionKey.trim(),
+                    useSandbox: settings.useSandbox ?? true,
+                  });
 
-                const paymentResult = await paymentResponse.json();
-                const success = paymentResult.result === 'Approved' || paymentResult.status === 'Approved';
+                  // Parse payment token (format: customerProfileId|paymentProfileId)
+                  const [customerProfileId, paymentProfileId] = paymentMethod.paymentToken.split('|');
+
+                  if (!customerProfileId || !paymentProfileId) {
+                    console.error(`Invalid Authorize.net payment token format for schedule ${schedule.id}`);
+                    failedPayments.push({
+                      scheduleId: schedule.id,
+                      accountId: schedule.accountId,
+                      reason: 'Invalid payment token format'
+                    });
+                    continue;
+                  }
+
+                  // Charge the saved payment profile
+                  const authnetResult = await authnetService.chargeCustomerProfile({
+                    customerProfileId,
+                    paymentProfileId,
+                    amount: paymentAmountCents / 100,
+                    invoice: schedule.accountId.substring(0, 20),
+                    description: `Scheduled ${schedule.arrangementType} payment`,
+                  });
+
+                  paymentResult = authnetResult;
+                  success = authnetResult.success;
+                  
+                  if (!success) {
+                    console.error('❌ Authorize.net scheduled payment failed:', authnetResult.errorMessage);
+                  }
+                } else {
+                  // ===== USAEPAY SCHEDULED PAYMENT =====
+                  console.log('🟢 Processing scheduled payment with USAePay');
+
+                  // Verify USAePay is configured
+                  if (!settings?.merchantApiKey || !settings?.merchantApiPin) {
+                    console.error(`USAePay not configured for tenant ${tenant.id}`);
+                    failedPayments.push({
+                      scheduleId: schedule.id,
+                      accountId: schedule.accountId,
+                      reason: 'USAePay credentials not configured'
+                    });
+                    continue;
+                  }
+
+                  const usaepayBaseUrl = settings.useSandbox 
+                    ? "https://sandbox.usaepay.com/api/v2"
+                    : "https://secure.usaepay.com/api/v2";
+
+                  // Generate proper USAePay API v2 authentication header with hash
+                  const authHeader = generateUSAePayAuthHeader(settings.merchantApiKey, settings.merchantApiPin);
+
+                  // Process payment using saved token (USAePay v2 format)
+                  const paymentPayload = {
+                    amount: (paymentAmountCents / 100).toFixed(2),
+                    invoice: schedule.accountId,
+                    description: `Scheduled ${schedule.arrangementType} payment`,
+                    source: {
+                      key: paymentMethod.paymentToken
+                    },
+                    billingAddress: {
+                      firstName: paymentMethod.cardholderName?.split(' ')[0] || '',
+                      lastName: paymentMethod.cardholderName?.split(' ').slice(1).join(' ') || '',
+                      zip: paymentMethod.billingZip || '',
+                      street: '',
+                      city: ''
+                    }
+                  };
+
+                  const paymentResponse = await fetch(`${usaepayBaseUrl}/transactions`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': authHeader
+                    },
+                    body: JSON.stringify(paymentPayload)
+                  });
+
+                  paymentResult = await paymentResponse.json();
+                  success = paymentResult.result === 'Approved' || paymentResult.status === 'Approved';
+                }
 
                 // Create payment record
                 await storage.createPayment({
