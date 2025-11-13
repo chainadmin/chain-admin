@@ -972,6 +972,7 @@ export default function GlobalAdmin() {
               </div>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         {/* Platform Stats */}
