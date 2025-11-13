@@ -10452,6 +10452,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   if (!success) {
                     console.error('❌ Authorize.net scheduled payment failed:', authnetResult.errorMessage);
                   }
+                } else if (merchantProvider === 'nmi') {
+                  // ===== NMI SCHEDULED PAYMENT =====
+                  console.log('🟣 Processing scheduled payment with NMI');
+
+                  // Verify NMI is configured
+                  if (!settings?.nmiSecurityKey) {
+                    console.error(`NMI not configured for tenant ${tenant.id}`);
+                    failedPayments.push({
+                      scheduleId: schedule.id,
+                      accountId: schedule.accountId,
+                      reason: 'NMI credentials not configured'
+                    });
+                    continue;
+                  }
+
+                  // Initialize NMI service
+                  const { NMIService } = await import('./nmiService');
+                  const nmiService = new NMIService({
+                    securityKey: settings.nmiSecurityKey.trim(),
+                  });
+
+                  // Charge the saved Customer Vault ID (normalize token by trimming whitespace)
+                  const nmiResult = await nmiService.chargeCustomerVault({
+                    customerVaultId: paymentMethod.paymentToken.trim(),
+                    amount: paymentAmountCents / 100,
+                    invoice: schedule.accountId.substring(0, 20),
+                    description: `Scheduled ${schedule.arrangementType} payment`,
+                  });
+
+                  paymentResult = nmiResult;
+                  success = nmiResult.success;
+                  
+                  if (!success) {
+                    console.error('❌ NMI scheduled payment failed:', nmiResult.errorMessage);
+                  }
                 } else {
                   // ===== USAEPAY SCHEDULED PAYMENT =====
                   console.log('🟢 Processing scheduled payment with USAePay');
