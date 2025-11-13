@@ -13761,6 +13761,91 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Mark invoice as paid (global admin)
+  app.put('/api/admin/invoices/:id/mark-paid', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { notes } = req.body;
+      
+      const [invoice] = await db
+        .select()
+        .from(invoices)
+        .where(eq(invoices.id, id))
+        .limit(1);
+      
+      if (!invoice) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      
+      // Update invoice to paid status
+      const [updatedInvoice] = await db
+        .update(invoices)
+        .set({
+          status: 'paid',
+          paidAt: new Date(),
+        })
+        .where(eq(invoices.id, id))
+        .returning();
+      
+      console.log(`✅ Invoice ${invoice.invoiceNumber} marked as paid by global admin`, notes ? `Notes: ${notes}` : '');
+      
+      res.json({
+        ...updatedInvoice,
+        message: 'Invoice marked as paid successfully'
+      });
+    } catch (error) {
+      console.error("Error marking invoice as paid:", error);
+      res.status(500).json({ message: "Failed to mark invoice as paid" });
+    }
+  });
+
+  // Update subscription billing dates (global admin)
+  app.put('/api/admin/tenants/:tenantId/billing-dates', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { tenantId } = req.params;
+      const { periodStart, periodEnd } = req.body;
+      
+      if (!periodStart || !periodEnd) {
+        return res.status(400).json({ message: "Both period start and end dates are required" });
+      }
+      
+      // Get tenant's active subscription
+      const [subscription] = await db
+        .select()
+        .from(subscriptions)
+        .where(and(
+          eq(subscriptions.tenantId, tenantId),
+          eq(subscriptions.status, 'active')
+        ))
+        .limit(1);
+      
+      if (!subscription) {
+        return res.status(404).json({ message: "No active subscription found for this tenant" });
+      }
+      
+      // Update subscription billing period
+      const [updated] = await db
+        .update(subscriptions)
+        .set({
+          currentPeriodStart: new Date(periodStart),
+          currentPeriodEnd: new Date(periodEnd),
+          updatedAt: new Date(),
+        })
+        .where(eq(subscriptions.id, subscription.id))
+        .returning();
+      
+      console.log(`✅ Billing dates updated for tenant ${tenantId}: ${periodStart} to ${periodEnd}`);
+      
+      res.json({
+        ...updated,
+        message: 'Billing dates updated successfully'
+      });
+    } catch (error) {
+      console.error("Error updating billing dates:", error);
+      res.status(500).json({ message: "Failed to update billing dates" });
+    }
+  });
+
   // Send test email to agency
   app.post('/api/admin/test-email', isPlatformAdmin, async (req: any, res) => {
     try {
