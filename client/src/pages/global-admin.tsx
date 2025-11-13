@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import AdminAuth from "@/components/admin-auth";
+import { TenantAgreementsPanel } from "@/components/global-admin/tenant-agreements-panel";
 // Simple currency formatter
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('en-US', {
@@ -110,6 +111,10 @@ export default function GlobalAdmin() {
   const [selectedTenantForBillingDate, setSelectedTenantForBillingDate] = useState<any>(null);
   const [billingPeriodStart, setBillingPeriodStart] = useState('');
   const [billingPeriodEnd, setBillingPeriodEnd] = useState('');
+
+  // Tenant agreements state
+  const [selectedTenantForAgreement, setSelectedTenantForAgreement] = useState('');
+  const [selectedAgreementTemplate, setSelectedAgreementTemplate] = useState('');
 
   // Check for admin authentication on component mount
   useEffect(() => {
@@ -2152,6 +2157,14 @@ export default function GlobalAdmin() {
           </div>
         </div>
       </div>
+
+      {/* Tenant Agreements Panel */}
+      <TenantAgreementsPanel
+        tenants={tenants as any[]}
+        isLoadingTenants={tenantsLoading}
+        toast={toast}
+        isPlatformAdmin={isPlatformAdmin}
+      />
 
       {/* Delete Agency Confirmation Dialog */}
       <Dialog open={deleteAgencyDialogOpen} onOpenChange={setDeleteAgencyDialogOpen}>

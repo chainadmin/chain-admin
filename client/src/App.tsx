@@ -39,6 +39,7 @@ import TermsOfService from "@/pages/terms-of-service";
 import SmsOptInDisclosure from "@/pages/sms-opt-in";
 import TenantSetup from "@/components/tenant-setup";
 import GlobalAdmin from "@/pages/global-admin";
+import TenantAgreement from "@/pages/tenant-agreement";
 import EmailTest from "@/pages/email-test";
 import FixDatabase from "@/pages/fix-db";
 import Documents from "@/pages/documents";
@@ -88,6 +89,8 @@ function Router() {
       );
     });
   
+  const tenantAgreementPaths = ["/tenant-agreement/:id"] as const;
+  
   // Check if we're on a public route that doesn't need auth
   const isPublicRoute = pathname === '/agency-registration' ||
                        pathname === '/agency-register' ||
@@ -99,6 +102,7 @@ function Router() {
                        pathname === '/mobile-login' ||
                        pathname === '/privacy-policy' ||
                        pathname === '/terms-of-service' ||
+                       pathname.startsWith('/tenant-agreement/') ||
                        isSmsOptInRoute ||
                        pathname === '/' && agencySlug; // Agency subdomain homepage
   
@@ -181,7 +185,8 @@ function Router() {
         <Route key="mobile-agency" path="/agency/:agencySlug" component={AgencyLanding} />,
         <Route key="mobile-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
         <Route key="mobile-terms" path="/terms-of-service" component={TermsOfService} />,
-        ...getSmsOptInRoutes("mobile-sms")
+        ...getSmsOptInRoutes("mobile-sms"),
+        ...createRouteElements(tenantAgreementPaths, TenantAgreement, "mobile")
       );
 
       mobileRoutes.push(
@@ -219,6 +224,7 @@ function Router() {
       <Route key="agency-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
       <Route key="agency-terms" path="/terms-of-service" component={TermsOfService} />,
       ...getSmsOptInRoutes("agency-sms"),
+      ...createRouteElements(tenantAgreementPaths, TenantAgreement, "agency"),
       <Route key="agency-sign" path="/sign/:requestId" component={SignDocument} />,
       <Route key="agency-landing" path="/agency/:agencySlug" component={AgencyLanding} />,
       <Route key="agency-login" path="/agency-login" component={AgencyLogin} />,
@@ -280,6 +286,7 @@ function Router() {
       <Route key="path-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
       <Route key="path-terms" path="/terms-of-service" component={TermsOfService} />,
       ...getSmsOptInRoutes("path-sms"),
+      ...createRouteElements(tenantAgreementPaths, TenantAgreement, "path"),
       <Route key="path-fallback" path="/:rest*" component={AgencyLanding} />
     ];
 
@@ -316,6 +323,7 @@ function Router() {
       <Route key="public-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
       <Route key="public-terms" path="/terms-of-service" component={TermsOfService} />,
       ...getSmsOptInRoutes("public-sms"),
+      ...createRouteElements(tenantAgreementPaths, TenantAgreement, "public"),
       <Route key="public-fix-db" path="/fix-db" component={FixDatabase} />,
       <Route key="public-sign" path="/sign/:requestId" component={SignDocument} />,
       ...createRouteElements(adminRoutePaths, GlobalAdmin, "public-admin"),
@@ -356,6 +364,7 @@ function Router() {
     <Route key="auth-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
     <Route key="auth-terms" path="/terms-of-service" component={TermsOfService} />,
     ...getSmsOptInRoutes("auth-sms"),
+    ...createRouteElements(tenantAgreementPaths, TenantAgreement, "auth"),
     <Route key="auth-fallback" path="/:rest*" component={NotFound} />
   ];
 
