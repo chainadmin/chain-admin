@@ -13870,8 +13870,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Tenant not found" });
       }
       
-      // Get tenant's active subscription
-      const [subscription] = await db
+      // Get tenant's active subscription OR create one if it doesn't exist (for à la carte tenants)
+      let [subscription] = await db
         .select()
         .from(subscriptions)
         .where(and(
@@ -13880,11 +13880,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ))
         .limit(1);
       
+      // If no subscription exists, create an à la carte subscription
       if (!subscription) {
-        return res.status(404).json({ message: "No active subscription found for this tenant" });
+        console.log(`📦 Creating à la carte subscription for tenant ${tenantId}`);
+        
+        // Get or create "À La Carte" plan
+        let [alaCartePlan] = await db
+          .select()
+          .from(subscriptionPlans)
+          .where(eq(subscriptionPlans.slug, 'a-la-carte'))
+          .limit(1);
+        
+        if (!alaCartePlan) {
+          // Create the À La Carte plan if it doesn't exist
+          [alaCartePlan] = await db
+            .insert(subscriptionPlans)
+            .values({
+              name: 'À La Carte',
+              slug: 'a-la-carte',
+              monthlyPriceCents: 0, // No base fee
+              setupFeeCents: 0,
+              includedEmails: 0,
+              includedSms: 0,
+              emailOverageRatePer1000: 250,
+              smsOverageRatePerSegment: 3,
+              features: JSON.stringify(['Pay per use', 'No monthly commitment', 'Flexible service selection']),
+              isActive: true,
+              displayOrder: 999
+            })
+            .returning();
+        }
+        
+        // Create subscription for this tenant
+        [subscription] = await db
+          .insert(subscriptions)
+          .values({
+            tenantId: tenantId,
+            planId: alaCartePlan.id,
+            status: 'active',
+            currentPeriodStart: startDate,
+            currentPeriodEnd: endDate,
+            emailsUsedThisPeriod: 0,
+            smsUsedThisPeriod: 0,
+            approvedBy: 'system',
+            approvedAt: new Date()
+          })
+          .returning();
+        
+        console.log(`✅ Created à la carte subscription ${subscription.id} for tenant ${tenantId}`);
       }
       
-      // Update subscription billing period (only for this specific subscription)
+      // Update subscription billing period
       const [updated] = await db
         .update(subscriptions)
         .set({
