@@ -7,7 +7,7 @@ export async function runMigrations() {
     client = await pool.connect();
     console.log('🔄 Running database migrations...');
     
-    // Add payment processor columns (USAePay and Authorize.net)
+    // Add payment processor columns (USAePay, Authorize.net, and NMI)
     console.log('Adding payment processor columns...');
     const paymentProcessorColumns = [
       { name: 'merchant_provider', type: 'TEXT' },
@@ -19,6 +19,7 @@ export async function runMigrations() {
       { name: 'authnet_api_login_id', type: 'TEXT' },
       { name: 'authnet_transaction_key', type: 'TEXT' },
       { name: 'authnet_public_client_key', type: 'TEXT' },
+      { name: 'nmi_security_key', type: 'TEXT' },
       { name: 'use_sandbox', type: 'BOOLEAN', default: 'true' },
       { name: 'enable_online_payments', type: 'BOOLEAN', default: 'false' },
       { name: 'minimum_monthly_payment', type: 'INTEGER', default: '5000' }

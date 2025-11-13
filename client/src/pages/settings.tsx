@@ -1856,12 +1856,42 @@ export default function Settings() {
                           <SelectContent>
                             <SelectItem value="usaepay">USAePay</SelectItem>
                             <SelectItem value="authorize_net">Authorize.net</SelectItem>
+                            <SelectItem value="nmi">NMI (Network Merchants Inc.)</SelectItem>
                           </SelectContent>
                         </Select>
                         <p className="mt-1 text-xs text-blue-100/70">
                           Choose your payment gateway provider
                         </p>
                       </div>
+
+                      {localSettings?.merchantProvider === 'nmi' && (
+                        <>
+                          <div>
+                            <Label className="text-white">Security Key</Label>
+                            <Input
+                              type="password"
+                              value={localSettings?.nmiSecurityKey || ""}
+                              onChange={(e) => handleSettingsUpdate('nmiSecurityKey', e.target.value)}
+                              placeholder="Your NMI Security Key"
+                              data-testid="input-nmi-security-key"
+                              className={inputClasses}
+                            />
+                            <p className="mt-1 text-xs text-blue-100/70">
+                              Found in Settings → Security Keys in your NMI control panel
+                            </p>
+                          </div>
+
+                          <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-4">
+                            <div className="flex gap-3">
+                              <i className="fas fa-info-circle text-sky-300 mt-0.5"></i>
+                              <div className="text-xs text-sky-100/90">
+                                <p className="font-semibold mb-1">NMI Security Key</p>
+                                <p>Your Security Key is used to authenticate all API requests. Keep this credential secure and never share it publicly.</p>
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      )}
 
                       {localSettings?.merchantProvider === 'usaepay' && (
                         <>
