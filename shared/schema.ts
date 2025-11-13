@@ -446,6 +446,44 @@ export const documentTemplates = pgTable("document_templates", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Global document templates (system-wide, not tenant-specific)
+// Used for onboarding documents like software proposals and payment authorization forms
+export const globalDocumentTemplates = pgTable("global_document_templates", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  slug: text("slug").unique().notNull(), // "software_proposal", "payment_authorization"
+  name: text("name").notNull(),
+  title: text("title").notNull(), // Document title template with variables
+  content: text("content").notNull(), // HTML content with variable placeholders
+  description: text("description"),
+  version: integer("version").default(1), // Track template versions
+  requiredTenantFields: text("required_tenant_fields").array(), // ["businessType", "subscriptionPlan", "ownerName"]
+  availableVariables: text("available_variables").array(), // List of allowed variable names
+  signaturePlacement: text("signature_placement").default("bottom"),
+  legalDisclaimer: text("legal_disclaimer"),
+  consentText: text("consent_text").default("I agree to the terms and conditions outlined in this document."),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Signature request fields (for collecting data during signing)
+// Used for payment authorization forms where payment details are entered during signing
+// SECURITY: All sensitive payment data MUST be stored encrypted in encryptedValue
+// The tokenizedValue should contain payment gateway tokens only (last4, token ID, etc.)
+export const signatureRequestFields = pgTable("signature_request_fields", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  signatureRequestId: uuid("signature_request_id").references(() => signatureRequests.id, { onDelete: "cascade" }).notNull(),
+  fieldKey: text("field_key").notNull(), // "card_number", "card_exp", "bank_routing", "payment_method_type", etc.
+  fieldType: text("field_type", { 
+    enum: ['text', 'sensitive', 'checkbox', 'date', 'tokenized'] 
+  }).notNull(), // "sensitive" requires encryption
+  displayValue: text("display_value"), // Non-sensitive display text (e.g., "Visa ending in 1234", "weekly")
+  encryptedValue: text("encrypted_value"), // Encrypted sensitive data (card numbers, routing numbers)
+  tokenizedValue: text("tokenized_value"), // Payment gateway tokens only (safe to store)
+  isSensitive: boolean("is_sensitive").default(false), // Flag for PCI-sensitive fields
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Arrangement/Settlement options (per tenant)
 export const arrangementPlanTypes = [
   "range",
@@ -1297,7 +1335,9 @@ export const insertAccountSchema = createInsertSchema(accounts).omit({ id: true,
 export const insertEmailTemplateSchema = createInsertSchema(emailTemplates).omit({ id: true, createdAt: true });
 export const insertDocumentSchema = createInsertSchema(documents).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertDocumentTemplateSchema = createInsertSchema(documentTemplates).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertGlobalDocumentTemplateSchema = createInsertSchema(globalDocumentTemplates).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertSignatureRequestSchema = createInsertSchema(signatureRequests).omit({ id: true, createdAt: true, updatedAt: true, signedAt: true, declinedAt: true, viewedAt: true });
+export const insertSignatureRequestFieldSchema = createInsertSchema(signatureRequestFields).omit({ id: true, createdAt: true });
 export const insertSignedDocumentSchema = createInsertSchema(signedDocuments).omit({ id: true, createdAt: true });
 export const insertSignatureAuditTrailSchema = createInsertSchema(signatureAuditTrail).omit({ id: true, occurredAt: true });
 export const insertArrangementOptionSchema = createInsertSchema(arrangementOptions)
@@ -1478,8 +1518,12 @@ export type Document = typeof documents.$inferSelect;
 export type InsertDocument = z.infer<typeof insertDocumentSchema>;
 export type DocumentTemplate = typeof documentTemplates.$inferSelect;
 export type InsertDocumentTemplate = z.infer<typeof insertDocumentTemplateSchema>;
+export type GlobalDocumentTemplate = typeof globalDocumentTemplates.$inferSelect;
+export type InsertGlobalDocumentTemplate = z.infer<typeof insertGlobalDocumentTemplateSchema>;
 export type SignatureRequest = typeof signatureRequests.$inferSelect;
 export type InsertSignatureRequest = z.infer<typeof insertSignatureRequestSchema>;
+export type SignatureRequestField = typeof signatureRequestFields.$inferSelect;
+export type InsertSignatureRequestField = z.infer<typeof insertSignatureRequestFieldSchema>;
 export type SignedDocument = typeof signedDocuments.$inferSelect;
 export type InsertSignedDocument = z.infer<typeof insertSignedDocumentSchema>;
 export type SignatureAuditTrail = typeof signatureAuditTrail.$inferSelect;

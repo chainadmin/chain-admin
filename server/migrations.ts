@@ -551,6 +551,54 @@ export async function runMigrations() {
       console.log('  ⚠ signature_audit_trail (already exists)');
     }
     
+    // Create global document templates table for system-wide onboarding documents
+    console.log('Creating global_document_templates table...');
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS global_document_templates (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          slug TEXT UNIQUE NOT NULL,
+          name TEXT NOT NULL,
+          title TEXT NOT NULL,
+          content TEXT NOT NULL,
+          description TEXT,
+          version INTEGER DEFAULT 1,
+          required_tenant_fields TEXT[],
+          available_variables TEXT[],
+          signature_placement TEXT DEFAULT 'bottom',
+          legal_disclaimer TEXT,
+          consent_text TEXT DEFAULT 'I agree to the terms and conditions outlined in this document.',
+          is_active BOOLEAN DEFAULT true,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      console.log('  ✓ global_document_templates table');
+    } catch (err) {
+      console.log('  ⚠ global_document_templates (already exists)');
+    }
+    
+    // Create signature request fields table for collecting sensitive data during signing
+    console.log('Creating signature_request_fields table...');
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS signature_request_fields (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          signature_request_id UUID NOT NULL REFERENCES signature_requests(id) ON DELETE CASCADE,
+          field_key TEXT NOT NULL,
+          field_type TEXT NOT NULL CHECK (field_type IN ('text', 'sensitive', 'checkbox', 'date', 'tokenized')),
+          display_value TEXT,
+          encrypted_value TEXT,
+          tokenized_value TEXT,
+          is_sensitive BOOLEAN DEFAULT false,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      console.log('  ✓ signature_request_fields table');
+    } catch (err) {
+      console.log('  ⚠ signature_request_fields (already exists)');
+    }
+    
     // Create service activation requests table for à la carte service approvals
     console.log('Creating service_activation_requests table...');
     try {

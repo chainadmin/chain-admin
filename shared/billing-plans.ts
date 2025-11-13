@@ -174,6 +174,38 @@ const billingServicePlans: Record<MessagingPlanId, MessagingPlan> = {
   },
 };
 
+// Nonprofit Organization - 30% of call center (minimal outbound communication)
+const nonprofitPlans: Record<MessagingPlanId, MessagingPlan> = {
+  launch: {
+    id: "launch",
+    name: "Foundation",
+    price: 100,
+    includedEmails: 1_500,
+    includedSmsSegments: 150,
+  },
+  growth: {
+    id: "growth",
+    name: "Community",
+    price: 175,
+    includedEmails: 7_500,
+    includedSmsSegments: 750,
+  },
+  pro: {
+    id: "pro",
+    name: "Organization",
+    price: 300,
+    includedEmails: 30_000,
+    includedSmsSegments: 3_000,
+  },
+  scale: {
+    id: "scale",
+    name: "Network",
+    price: 600,
+    includedEmails: 75_000,
+    includedSmsSegments: 7_500,
+  },
+};
+
 // Business-type-specific plan collections
 export const businessTypePlans: Record<BusinessType, Record<MessagingPlanId, MessagingPlan>> = {
   call_center: callCenterPlans,
@@ -181,6 +213,7 @@ export const businessTypePlans: Record<BusinessType, Record<MessagingPlanId, Mes
   subscription_provider: subscriptionProviderPlans,
   freelancer_consultant: freelancerPlans,
   billing_service: billingServicePlans,
+  nonprofit_organization: nonprofitPlans,
 };
 
 // Helper function to get plans for a specific business type
