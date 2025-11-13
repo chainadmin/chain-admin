@@ -13767,6 +13767,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const { notes } = req.body;
       
+      // Validate notes length
+      if (notes && typeof notes === 'string' && notes.length > 500) {
+        return res.status(400).json({ message: "Payment notes must be 500 characters or less" });
+      }
+      
       const [invoice] = await db
         .select()
         .from(invoices)
@@ -13775,6 +13780,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (!invoice) {
         return res.status(404).json({ message: "Invoice not found" });
+      }
+      
+      // Check if invoice is already paid
+      if (invoice.status === 'paid') {
+        return res.status(400).json({ message: "Invoice is already marked as paid" });
       }
       
       // Update invoice to paid status
@@ -13787,7 +13797,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(eq(invoices.id, id))
         .returning();
       
-      console.log(`✅ Invoice ${invoice.invoiceNumber} marked as paid by global admin`, notes ? `Notes: ${notes}` : '');
+      console.log(`✅ Invoice ${invoice.invoiceNumber} marked as paid by global admin`, notes ? `Notes: ${notes.substring(0, 100)}` : '');
       
       res.json({
         ...updatedInvoice,
@@ -13805,8 +13815,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { tenantId } = req.params;
       const { periodStart, periodEnd } = req.body;
       
+      // Validate required fields
       if (!periodStart || !periodEnd) {
         return res.status(400).json({ message: "Both period start and end dates are required" });
+      }
+      
+      // Validate date formats and parse
+      let startDate: Date;
+      let endDate: Date;
+      
+      try {
+        startDate = new Date(periodStart);
+        endDate = new Date(periodEnd);
+        
+        // Validate dates are valid
+        if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+          return res.status(400).json({ message: "Invalid date format. Use ISO 8601 format" });
+        }
+      } catch (err) {
+        return res.status(400).json({ message: "Invalid date format" });
+      }
+      
+      // Validate date range (start must be before end)
+      if (startDate >= endDate) {
+        return res.status(400).json({ message: "Period start date must be before period end date" });
+      }
+      
+      // Verify tenant exists
+      const [tenant] = await db
+        .select()
+        .from(tenants)
+        .where(eq(tenants.id, tenantId))
+        .limit(1);
+      
+      if (!tenant) {
+        return res.status(404).json({ message: "Tenant not found" });
       }
       
       // Get tenant's active subscription
@@ -13823,18 +13866,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "No active subscription found for this tenant" });
       }
       
-      // Update subscription billing period
+      // Update subscription billing period (only for this specific subscription)
       const [updated] = await db
         .update(subscriptions)
         .set({
-          currentPeriodStart: new Date(periodStart),
-          currentPeriodEnd: new Date(periodEnd),
+          currentPeriodStart: startDate,
+          currentPeriodEnd: endDate,
           updatedAt: new Date(),
         })
-        .where(eq(subscriptions.id, subscription.id))
+        .where(and(
+          eq(subscriptions.id, subscription.id),
+          eq(subscriptions.tenantId, tenantId)
+        ))
         .returning();
       
-      console.log(`✅ Billing dates updated for tenant ${tenantId}: ${periodStart} to ${periodEnd}`);
+      console.log(`✅ Billing dates updated for tenant ${tenant.name} (${tenantId}): ${startDate.toISOString()} to ${endDate.toISOString()}`);
       
       res.json({
         ...updated,

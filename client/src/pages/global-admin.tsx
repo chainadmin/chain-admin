@@ -100,6 +100,17 @@ export default function GlobalAdmin() {
   const [businessType, setBusinessType] = useState('call_center');
   const [enabledModules, setEnabledModules] = useState<string[]>([]);
 
+  // Invoice management state
+  const [markPaidDialogOpen, setMarkPaidDialogOpen] = useState(false);
+  const [selectedInvoiceForPayment, setSelectedInvoiceForPayment] = useState<any>(null);
+  const [paymentNotes, setPaymentNotes] = useState('');
+
+  // Billing date editor state
+  const [billingDateDialogOpen, setBillingDateDialogOpen] = useState(false);
+  const [selectedTenantForBillingDate, setSelectedTenantForBillingDate] = useState<any>(null);
+  const [billingPeriodStart, setBillingPeriodStart] = useState('');
+  const [billingPeriodEnd, setBillingPeriodEnd] = useState('');
+
   // Check for admin authentication on component mount
   useEffect(() => {
     const adminAuth = sessionStorage.getItem("admin_authenticated");
@@ -577,6 +588,71 @@ export default function GlobalAdmin() {
     }
   });
 
+  // Fetch all invoices
+  const { data: allInvoices, isLoading: invoicesLoading, error: invoicesError } = useQuery({
+    queryKey: ['/api/admin/invoices'],
+    queryFn: async () => {
+      const response = await fetch('/api/admin/invoices', {
+        headers: {
+          'Authorization': `Bearer ${sessionStorage.getItem('admin_token')}`
+        }
+      });
+      if (!response.ok) throw new Error('Failed to fetch invoices');
+      return response.json();
+    },
+    enabled: isPlatformAdmin
+  });
+
+  // Mutation to mark invoice as paid
+  const markInvoicePaidMutation = useMutation({
+    mutationFn: async ({ invoiceId, notes }: { invoiceId: string; notes?: string }) => {
+      return apiRequest('PUT', `/api/admin/invoices/${invoiceId}/mark-paid`, { notes });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants'] });
+      setMarkPaidDialogOpen(false);
+      setSelectedInvoiceForPayment(null);
+      setPaymentNotes('');
+      toast({
+        title: "Invoice Marked as Paid",
+        description: "The invoice has been successfully marked as paid",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to mark invoice as paid",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Mutation to update billing dates
+  const updateBillingDatesMutation = useMutation({
+    mutationFn: async ({ tenantId, periodStart, periodEnd }: { tenantId: string; periodStart: string; periodEnd: string }) => {
+      return apiRequest('PUT', `/api/admin/tenants/${tenantId}/billing-dates`, { periodStart, periodEnd });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants'] });
+      setBillingDateDialogOpen(false);
+      setSelectedTenantForBillingDate(null);
+      setBillingPeriodStart('');
+      setBillingPeriodEnd('');
+      toast({
+        title: "Billing Dates Updated",
+        description: "Subscription billing period has been updated successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to update billing dates",
+        variant: "destructive",
+      });
+    }
+  });
+
   const handleCreateAgency = () => {
     if (!newAgencyName.trim() || !newAgencyEmail.trim()) {
       toast({
@@ -704,6 +780,75 @@ export default function GlobalAdmin() {
       tenantId: selectedTenantForBusinessServices.id,
       businessType,
       enabledModules
+    });
+  };
+
+  const handleOpenMarkPaid = (invoice: any) => {
+    setSelectedInvoiceForPayment(invoice);
+    setPaymentNotes('');
+    setMarkPaidDialogOpen(true);
+  };
+
+  const handleMarkInvoicePaid = () => {
+    if (!selectedInvoiceForPayment) return;
+    
+    if (paymentNotes.length > 500) {
+      toast({
+        title: "Notes Too Long",
+        description: "Payment notes must be 500 characters or less",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    markInvoicePaidMutation.mutate({
+      invoiceId: selectedInvoiceForPayment.id,
+      notes: paymentNotes.trim() || undefined
+    });
+  };
+
+  const handleOpenBillingDate = (tenant: any) => {
+    setSelectedTenantForBillingDate(tenant);
+    
+    // Pre-fill with current billing period if available
+    if (tenant.currentPeriodStart) {
+      setBillingPeriodStart(new Date(tenant.currentPeriodStart).toISOString().split('T')[0]);
+    }
+    if (tenant.currentPeriodEnd) {
+      setBillingPeriodEnd(new Date(tenant.currentPeriodEnd).toISOString().split('T')[0]);
+    }
+    
+    setBillingDateDialogOpen(true);
+  };
+
+  const handleSaveBillingDates = () => {
+    if (!selectedTenantForBillingDate) return;
+    
+    if (!billingPeriodStart || !billingPeriodEnd) {
+      toast({
+        title: "Missing Dates",
+        description: "Both start and end dates are required",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const start = new Date(billingPeriodStart);
+    const end = new Date(billingPeriodEnd);
+    
+    if (start >= end) {
+      toast({
+        title: "Invalid Date Range",
+        description: "Start date must be before end date",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    updateBillingDatesMutation.mutate({
+      tenantId: selectedTenantForBillingDate.id,
+      periodStart: start.toISOString(),
+      periodEnd: end.toISOString()
     });
   };
 
@@ -1322,6 +1467,209 @@ export default function GlobalAdmin() {
           </DialogContent>
         </Dialog>
 
+        {/* Invoice Management */}
+        <div className="mb-8 rounded-3xl border border-white/10 bg-white/5 shadow-lg shadow-blue-900/20 backdrop-blur">
+          <div className="p-6 border-b border-white/10">
+            <h2 className="text-xl font-semibold text-blue-50">Invoice Management</h2>
+          </div>
+          <div className="p-6">
+            {invoicesLoading ? (
+              <div className="space-y-4">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="animate-pulse">
+                    <div className="h-20 bg-white/10 rounded"></div>
+                  </div>
+                ))}
+              </div>
+            ) : invoicesError ? (
+              <div className="text-center py-8 text-red-100/60">
+                <AlertTriangle className="h-12 w-12 mx-auto mb-2 text-red-300/40" />
+                <p>Failed to load invoices</p>
+              </div>
+            ) : !allInvoices || !Array.isArray(allInvoices) || allInvoices.length === 0 ? (
+              <div className="text-center py-8 text-blue-100/60">
+                <FileText className="h-12 w-12 mx-auto mb-2 text-blue-300/40" />
+                <p>No invoices generated yet</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {allInvoices.map((invoice: any) => (
+                  <div key={invoice.id} className="border border-white/10 rounded-lg p-4 bg-white/[0.02]" data-testid={`invoice-row-${invoice.id}`}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 grid grid-cols-1 md:grid-cols-5 gap-4">
+                        <div>
+                          <p className="text-sm text-blue-100/70">Invoice #</p>
+                          <p className="text-sm font-medium text-blue-50" data-testid={`text-invoice-number-${invoice.id}`}>
+                            {invoice.invoiceNumber}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-blue-100/70">Company</p>
+                          <p className="text-sm font-medium text-blue-50" data-testid={`text-tenant-name-${invoice.id}`}>
+                            {invoice.tenantName}
+                          </p>
+                          <p className="text-xs text-blue-100/60">{invoice.tenantSlug}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-blue-100/70">Amount</p>
+                          <p className="text-sm font-medium text-blue-50" data-testid={`text-amount-${invoice.id}`}>
+                            {formatCurrency(invoice.totalAmountCents / 100)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-blue-100/70">Billing Period</p>
+                          <p className="text-xs text-blue-100/60">
+                            {new Date(invoice.periodStart).toLocaleDateString()} - {new Date(invoice.periodEnd).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-blue-100/70">Status</p>
+                          <Badge 
+                            variant={invoice.status === 'paid' ? 'default' : invoice.status === 'overdue' ? 'destructive' : 'secondary'}
+                            data-testid={`badge-status-${invoice.id}`}
+                          >
+                            {invoice.status}
+                          </Badge>
+                          {invoice.paidAt && (
+                            <p className="text-xs text-blue-100/60 mt-1">
+                              Paid {new Date(invoice.paidAt).toLocaleDateString()}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      {invoice.status !== 'paid' && (
+                        <Button
+                          size="sm"
+                          onClick={() => handleOpenMarkPaid(invoice)}
+                          data-testid={`button-mark-paid-${invoice.id}`}
+                        >
+                          <CheckCircle className="h-4 w-4 mr-2" />
+                          Mark Paid
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Mark Invoice as Paid Dialog */}
+        <Dialog open={markPaidDialogOpen} onOpenChange={setMarkPaidDialogOpen}>
+          <DialogContent data-testid="dialog-mark-paid">
+            <DialogHeader>
+              <DialogTitle>Mark Invoice as Paid</DialogTitle>
+            </DialogHeader>
+            {selectedInvoiceForPayment && (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Invoice: <strong>{selectedInvoiceForPayment.invoiceNumber}</strong>
+                  </p>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Company: <strong>{selectedInvoiceForPayment.tenantName}</strong>
+                  </p>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Amount: <strong>{formatCurrency(selectedInvoiceForPayment.totalAmountCents / 100)}</strong>
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="payment-notes">Payment Notes (Optional)</Label>
+                  <textarea
+                    id="payment-notes"
+                    value={paymentNotes}
+                    onChange={(e) => setPaymentNotes(e.target.value)}
+                    placeholder="Add any notes about this payment (max 500 characters)"
+                    maxLength={500}
+                    className="w-full min-h-[100px] p-2 border rounded-md"
+                    data-testid="textarea-payment-notes"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {paymentNotes.length}/500 characters
+                  </p>
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" onClick={() => setMarkPaidDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleMarkInvoicePaid}
+                    disabled={markInvoicePaidMutation.isPending}
+                    data-testid="button-confirm-mark-paid"
+                  >
+                    {markInvoicePaidMutation.isPending ? (
+                      <>
+                        <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2" />
+                        Marking as Paid...
+                      </>
+                    ) : (
+                      'Mark as Paid'
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Billing Date Editor Dialog */}
+        <Dialog open={billingDateDialogOpen} onOpenChange={setBillingDateDialogOpen}>
+          <DialogContent data-testid="dialog-billing-dates">
+            <DialogHeader>
+              <DialogTitle>Update Billing Dates</DialogTitle>
+            </DialogHeader>
+            {selectedTenantForBillingDate && (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Update subscription billing period for <strong>{selectedTenantForBillingDate.name}</strong>
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="period-start">Period Start Date</Label>
+                  <Input
+                    id="period-start"
+                    type="date"
+                    value={billingPeriodStart}
+                    onChange={(e) => setBillingPeriodStart(e.target.value)}
+                    data-testid="input-period-start"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="period-end">Period End Date</Label>
+                  <Input
+                    id="period-end"
+                    type="date"
+                    value={billingPeriodEnd}
+                    onChange={(e) => setBillingPeriodEnd(e.target.value)}
+                    data-testid="input-period-end"
+                  />
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" onClick={() => setBillingDateDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleSaveBillingDates}
+                    disabled={updateBillingDatesMutation.isPending}
+                    data-testid="button-save-billing-dates"
+                  >
+                    {updateBillingDatesMutation.isPending ? (
+                      <>
+                        <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2" />
+                        Saving...
+                      </>
+                    ) : (
+                      'Save Billing Dates'
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
         {/* Global Consumer Management */}
         <div className="mb-8 rounded-3xl border border-white/10 bg-white/5 shadow-lg shadow-blue-900/20 backdrop-blur">
           <div className="p-6 border-b border-white/10">
@@ -1689,6 +2037,17 @@ export default function GlobalAdmin() {
                         >
                           <CreditCard className="h-4 w-4 mr-2" />
                           Manage Plan
+                        </Button>
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-pink-300 text-pink-700 hover:bg-pink-50"
+                          onClick={() => handleOpenBillingDate(tenant)}
+                          data-testid={`button-billing-dates-${tenant.id}`}
+                        >
+                          <Repeat className="h-4 w-4 mr-2" />
+                          Billing Dates
                         </Button>
                         
                         <Button
