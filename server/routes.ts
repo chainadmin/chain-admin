@@ -13679,9 +13679,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Get tenant settings to include enabled addons
           const settings = await storage.getTenantSettings(tenant.id);
           
+          // Get active subscription for billing dates
+          const [subscription] = await db
+            .select()
+            .from(subscriptions)
+            .where(and(
+              eq(subscriptions.tenantId, tenant.id),
+              eq(subscriptions.status, 'active')
+            ))
+            .limit(1);
+          
           return {
             ...tenant,
             enabledAddons: settings?.enabledAddons || [],
+            currentPeriodStart: subscription?.currentPeriodStart,
+            currentPeriodEnd: subscription?.currentPeriodEnd,
+            subscriptionId: subscription?.id,
+            planId: subscription?.planId,
             stats: {
               consumerCount,
               accountCount,
