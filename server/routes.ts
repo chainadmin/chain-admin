@@ -6205,6 +6205,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         maskedSettings.authnetPublicClientKey = `****${settings.authnetPublicClientKey.slice(-4)}`;
       }
 
+      // Mask NMI credentials
+      if (settings?.nmiSecurityKey) {
+        maskedSettings.nmiSecurityKey = `****${settings.nmiSecurityKey.slice(-4)}`;
+      }
+
       res.json(maskedSettings);
     } catch (error) {
       console.error("Error fetching settings:", error);
@@ -6270,6 +6275,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         authnetApiLoginId: z.string().nullable().optional(),
         authnetTransactionKey: z.string().nullable().optional(),
         authnetPublicClientKey: z.string().nullable().optional(),
+        // NMI configuration
+        nmiSecurityKey: z.string().nullable().optional(),
         useSandbox: z.boolean().optional(),
         enableOnlinePayments: z.boolean().optional(),
       });
@@ -6308,6 +6315,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         authnetApiLoginId,
         authnetTransactionKey,
         authnetPublicClientKey,
+        nmiSecurityKey,
         ...otherSettings
       } = validatedData;
 
@@ -6362,6 +6370,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       console.log('🔍 [Settings Save] Final Public Client Key to save:', finalAuthnetPublicClientKey);
+
+      // Preserve NMI credentials if they're submitted as masked values
+      let finalNmiSecurityKey = nmiSecurityKey?.trim();
+      if (typeof nmiSecurityKey === 'string' && nmiSecurityKey.startsWith('****') && currentSettings?.nmiSecurityKey) {
+        finalNmiSecurityKey = currentSettings.nmiSecurityKey;
+      }
 
       // Update tenant table with Twilio and email settings if any provided
       if (twilioAccountSid !== undefined || 
@@ -6427,6 +6441,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      // Add NMI credentials to payload if provided
+      if (nmiSecurityKey !== undefined) {
+        tenantSettingsPayload.nmiSecurityKey = finalNmiSecurityKey || null;
+      }
+
       const updatedSettings = await storage.upsertTenantSettings(tenantSettingsPayload as any);
 
       const maskedUpdatedSettings = { ...updatedSettings } as typeof updatedSettings;
@@ -6451,6 +6470,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (updatedSettings.authnetPublicClientKey) {
         maskedUpdatedSettings.authnetPublicClientKey = `****${updatedSettings.authnetPublicClientKey.slice(-4)}`;
+      }
+
+      // Mask NMI credentials in response
+      if (updatedSettings.nmiSecurityKey) {
+        maskedUpdatedSettings.nmiSecurityKey = `****${updatedSettings.nmiSecurityKey.slice(-4)}`;
       }
 
       res.json(maskedUpdatedSettings);
