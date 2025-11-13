@@ -1,0 +1,177 @@
+api-key*	api-key is obtained in the security keys section of the control panel settings.
+token-id*	Customer payment token returned during step two.
+</complete-action>
+*	Required
+Complete Transaction XML Response
+XML Element	Description
+<response>
+result	1=Transaction Approved
+2=Transaction Declined
+3=Error in transaction data or system error
+result-text	Textual response.
+transaction-id	Payment Gateway transaction ID
+result-code	Numeric mapping of processor responses. (See Result Code Table)
+authorization-code	Transaction authorization code.
+avs-result	AVS response code. (See AVS Response Codes)
+cvv-result	CVV response code. (See CVV Response Codes)
+action-type	Action type that was initially specified.
+Values: 'sale', 'auth', 'credit', 'validate', or 'offline'
+amount	Total amount charged.
+Format: x.xx
+amount-authorized	Returns the amount authorized.
+Format: x.xx
+ip-address	Cardholder's IP address.
+Format: xxx.xxx.xxx.xxx
+industry	Industry classification of transaction.
+Values: 'ecommerce', 'moto', or 'retail'
+billing-method	Billing indicators used.
+Values: 'recurring' or 'installment'
+processor-id	Processor transaction was made through.
+sec-code	ACH standard entry class codes.
+Values: 'PPD', 'WEB', 'TEL', 'CCD', 'POP', or \ARC'
+descriptor	Payment descriptor.
+descriptor-phone	Payment descriptor phone.
+descriptor-address	Set payment descriptor address on supported processors.
+descriptor-city	Set payment descriptor city on supported processors.
+descriptor-state	Set payment descriptor state on supported processors.
+descriptor-postal	Set payment descriptor postal code on supported processors.
+descriptor-country	Set payment descriptor country on supported processors.
+descriptor-mcc	Set payment descriptor mcc on supported processors.
+descriptor-merchant-id	Set payment descriptor merchant id on supported processors.
+descriptor-url	Set payment descriptor url on supported processors.
+currency	Transaction currency used. (Table 1.b)
+order-description	Order description.
+customer-id	Customer identification.
+customer-vault-id	Customer Vault id used or created during action.
+merchant-receipt-email	Merchant receipt email.
+customer-receipt	Customer email receipt sent.
+Values: 'true' or 'false'
+partial-payment-balance	Returns the payment's remaining balance.
+partial-payment-id	Numeric identifier used to submit subsequent partial payment transactions.
+merchant-defined-field-#	Merchant specified custom fields.
+Format: <merchant-defined-field-1>Value</merchant-defined-field-1>
+tracking-number	Shipping tracking number.
+shipping-carrier	Shipping carrier.
+Values: 'ups', 'fedex', 'dhl', or 'usps'
+order-id	Order id.
+po-number	Cardholder's purchase order number.
+tax-amount	The sales tax included in the transaction amount associated with the purchase. Setting tax equal to any negative value indicates an order that is exempt from sales tax.
+Default: '0.00'
+Format: x.xx
+shipping-amount	Total shipping amount.
+Format: x.xx
+ship-from-postal	Postal/ZIP code of the address from where purchased goods are being shipped.
+summary-commodity-code	A code representing the type of commodity being purchased. The acquirer or processor will provide a list of current codes.
+duty-amount	Amount included in the transaction amount associated with the import of the purchased goods.
+Format: x.xx
+discount-amount	Amount included in the transaction amount of any discount applied to the complete order by the merchant.
+Format: x.xx
+national-tax-amount	The national tax amount included in the transaction amount.
+Format: x.xx
+alternate-tax-amount	Second tax amount included in the transaction amount in countries where more than one type of tax can be applied to the purchases.
+Default: '0.00'
+Format: x.xx
+alternate-tax-id	Tax identification number of the merchant that reported the alternate tax amount.
+vat-tax-amount	Contains the amount of any value added taxes which can be associated with the purchased item.
+Format: x.xx
+vat-tax-rate	Contains the tax rate used to calculate the sales tax amount appearing. Can contain up to 2 decimal places, ie 1% = 1.00.
+Format: x.xx
+vat-invoice-reference-number	Invoice number that is associated with the VAT invoice.
+customer-vat-registration	Value added tax registration number supplied by the cardholder.
+merchant-vat-registration	Government assigned tax identification number of the merchant from whom the goods or services were purchased.
+order-date	Purchase order date.
+Format: YYMMDD
+cardholder-auth	3D Secure condition.
+Values: 'verified' or 'attempted'
+cavv	Cardholder authentication verification value.
+Format: base64 encoded
+xid	Cardholder authentication transaction id.
+Format: base64 encoded
+three-ds-version	3DSecure version.
+Examples: "2.0.0" or "2.2.0"
+directory-server-id	Directory Server Transaction ID. May be provided as part of 3DSecure 2.0 authentication.
+Format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+eci	E-commerce Indicator.
+Examples: "01", "02", "05", or "06"
+dup-seconds	Override duplicate transaction detection checking in seconds.
+avs-reject	Values are letters obtained under Settings->Address Verification in the control panel.
+cvv-reject	Values are letters obtained under Settings->Card ID Verification in the control panel.
+pinless-debit-override	Set to 'Y' if you have Pinless Debit Conversion enabled but want to opt out for this transaction. Feature applies to selected processors only.
+<billing>	The customer's billing information
+billing-id	Billing id used or created for this action.
+first-name	Cardholder's first name.
+last-name	Cardholder's last name.
+address1	Cardholder's billing address.
+city	Card billing city.
+state	Card billing state/province.
+Format: CC
+postal	Card billing postal code.
+country	Card billing country code.
+Format: CC/ISO 3166
+phone	Billing phone number.
+email	Billing email address.
+company	Cardholder's company.
+address2	Card billing address, line 2.
+fax	Billing fax number.
+social-security-number	Customer's social security number
+drivers-license-number	Driver's license number.
+drivers-license-dob	Driver's license date of birth.
+drivers-license-state	Customer's driver's license state.
+Format: CC
+cc-number	Masked credit card number.
+Format: XXXXXX********XXXX
+cc-exp	Credit card expiration
+Format: MMYY
+account-name	The name on the customer's bank account.
+account-number	Masked bank account number.
+Format: X****XXXX
+routing-number	Masked bank routing number.
+Format: X****XXXX
+account-type	The customer's ACH account type.
+Values: 'checking' or 'savings'
+entity-type	The customer's ACH account entity.
+Values: 'personal' or 'business'
+priority	Billing id priority.
+Format: Numeric, 1-255
+</billing>
+<shipping>	The customer's shipping information.
+shipping-id	Shipping id used or created for this action. Recommended when using Customer Vault hybrid action; will be ignored if no hybrid add/update-customer is done.
+first-name	Shipping first name.
+last-name	Shipping last name.
+address1	Shipping billing address.
+city	Shipping city.
+state	Shipping state/province.
+Format: CC
+postal	Shipping postal code.
+country	Shipping country code.
+Format: CC/ISO 3166
+phone	Shipping phone number.
+email	Shipping email address.
+company	Shipping company.
+address2	Shipping address, line 2.
+fax	Shipping fax number.
+priority	Shipping id priority.
+Format: Numeric, 1-255
+</shipping>
+<product>	Product line item detail. Multiple product elements are allowed.
+product-code	Merchant defined description code of the item being purchased.
+description	Description of the item(s) being supplied.
+commodity-code	International description code of the individual good or service being supplied. The acquirer or processor will provide a list of current codes.
+unit-of-measure	Code for unites of measurement as used in international trade.
+unit-cost	Unit cost of item purchased. May contain up to 4 decimal places.
+quantity	Quantity of the item(s) being purchased.
+total-amount	Purchase amount associated with the item.
+Format: x.xx
+tax-amount	Amount of sales tax on specific item. Amount should not be included in item-total-amount.
+Default: '0.00'
+Format: x.xx
+tax-rate	Percentage representing the value-added tax applied. 1% = 1.00.
+Format: x.xx
+discount-amount	Discount amount which can have been applied by the merchant on the sale of the specific item.
+Format: x.xx
+discount-rate	Discount rate for the line item. 1% = 1.00
+Format: x.xx
+tax-type	Type of value-added taxes that are being used.
+alternate-tax-id	Tax identification number of the merchant that reported the alternate tax amount.
+</product>
+</response>

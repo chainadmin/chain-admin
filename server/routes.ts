@@ -8095,6 +8095,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           apiLoginIdFirst3: authnetApiLoginId.substring(0, 3),
           useSandbox
         });
+      } else if (merchantProvider === 'nmi') {
+        // NMI credentials
+        const nmiSecurityKey = settings.nmiSecurityKey?.trim();
+
+        if (!nmiSecurityKey) {
+          console.error("NMI credentials not configured for tenant:", tenantId);
+          return res.status(500).json({ message: "Payment processing is not configured. Please contact your agency." });
+        }
+
+        console.log('🔑 NMI credentials check:', {
+          securityKeyLength: nmiSecurityKey.length,
+          securityKeyFirst3: nmiSecurityKey.substring(0, 3),
+        });
       } else {
         // USAePay credentials
         const merchantApiKey = settings.merchantApiKey?.trim();
@@ -8424,7 +8437,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               paymentamount: (amountCents / 100).toString(),
               paymentdate: new Date().toISOString().split('T')[0],
               paymentmethod: 'Credit Card',
-              cardlast4: cardLast4,
+              cardLast4: cardLast4,
               transactionid: paymentResult.transactionId || undefined,
               cardtoken: savedPaymentMethod?.paymentToken || undefined,
               cardholdername: cardName || undefined,
@@ -8448,6 +8461,401 @@ export async function registerRoutes(app: Express): Promise<Server> {
             status: 'completed',
             transactionId: paymentResult.transactionId,
           },
+          schedule: createdSchedule ? {
+            id: createdSchedule.id,
+            nextPaymentDate: createdSchedule.nextPaymentDate,
+            remainingPayments: createdSchedule.remainingPayments,
+          } : undefined,
+        });
+      } else if (merchantProvider === 'nmi') {
+        // ===== NMI PAYMENT PROCESSING =====
+        console.log('🟣 Processing payment with NMI (Network Merchants Inc.)');
+        
+        const { NMIService } = await import('./nmiService');
+        const nmiService = new NMIService({
+          securityKey: settings.nmiSecurityKey!.trim(),
+        });
+
+        let paymentToken = null;
+        let customerVaultId = null;
+        let cardLast4 = cardNumber.slice(-4);
+        let cardBrand = null;
+
+        // Tokenize card if: saving card, setting up recurring, OR has a future payment date
+        const needsTokenization = saveCard || setupRecurring || (normalizedFirstPaymentDate !== null && normalizedFirstPaymentDate.getTime() > today.getTime());
+        
+        if (needsTokenization) {
+          console.log('🔐 Adding card to NMI Customer Vault...');
+          const vaultResult = await nmiService.addCustomerToVault({
+            ccnumber: cardNumber.replace(/\s/g, ''),
+            ccexp: `${expiryMonth}${expiryYear.slice(-2)}`,
+            cvv,
+            firstName: cardName.split(' ')[0] || cardName,
+            lastName: cardName.split(' ').slice(1).join(' ') || '',
+            address: '',
+            city: '',
+            state: '',
+            zip: zipCode || '',
+          });
+
+          if (!vaultResult.success) {
+            console.error('❌ Failed to add card to NMI Customer Vault:', vaultResult.errorMessage);
+            return res.status(400).json({
+              success: false,
+              message: vaultResult.errorMessage || 'Unable to save your payment method. Please verify your card details or try again.',
+            });
+          }
+
+          customerVaultId = vaultResult.customerVaultId;
+          paymentToken = customerVaultId; // Use vault ID as token
+          cardBrand = vaultResult.cardType || null;
+          console.log('✅ Card added to NMI Customer Vault:', {
+            customerVaultId,
+            cardBrand,
+            last4: cardLast4
+          });
+        }
+
+        // Skip immediate charge ONLY if there's a future payment date
+        const shouldSkipImmediateCharge = (normalizedFirstPaymentDate !== null && normalizedFirstPaymentDate.getTime() > today.getTime());
+        
+        console.log('💰 Payment charge decision:', {
+          setupRecurring,
+          arrangementType: arrangement?.planType || 'full_balance',
+          firstPaymentDate: normalizedFirstPaymentDate?.toISOString().split('T')[0] || 'none',
+          today: today.toISOString().split('T')[0],
+          shouldSkipImmediateCharge,
+          willTokenizeCard: saveCard || setupRecurring
+        });
+
+        // Process payment (use Customer Vault if available, otherwise use card directly)
+        let success = false;
+        let paymentProcessed = false;
+        let transactionId: string | null = null;
+        let nmiResult: any = null;
+
+        let payment: any = null;
+
+        if (!shouldSkipImmediateCharge) {
+          console.log('💳 Charging NMI payment...');
+          
+          if (customerVaultId) {
+            // Charge using Customer Vault
+            nmiResult = await nmiService.chargeCustomerVault({
+              customerVaultId,
+              amount: parseFloat((amountCents / 100).toFixed(2)),
+              orderid: accountId || `consumer_${consumerId}`,
+            });
+          } else {
+            // Charge using card directly
+            nmiResult = await nmiService.processSale({
+              amount: parseFloat((amountCents / 100).toFixed(2)),
+              ccnumber: cardNumber.replace(/\s/g, ''),
+              ccexp: `${expiryMonth}${expiryYear.slice(-2)}`,
+              cvv,
+              orderid: accountId || `consumer_${consumerId}`,
+              firstName: cardName.split(' ')[0] || cardName,
+              lastName: cardName.split(' ').slice(1).join(' ') || '',
+              address: '',
+              city: '',
+              state: '',
+              zip: zipCode || '',
+            });
+          }
+
+          console.log('📥 NMI transaction response:', {
+            success: nmiResult.success,
+            responseCode: nmiResult.response_code,
+            transactionId: nmiResult.transactionid,
+            responseText: nmiResult.responsetext
+          });
+
+          // NMI response_code: 1=approved, 2=declined, 3=error
+          success = nmiResult.success && nmiResult.response_code === '1';
+          paymentProcessed = true;
+          transactionId = nmiResult.transactionid || `nmi_${Date.now()}`;
+
+          if (!success) {
+            console.error('❌ NMI payment failed:', nmiResult.responsetext);
+            return res.status(400).json({
+              success: false,
+              message: nmiResult.responsetext || 'Payment declined',
+            });
+          }
+
+          // Extract card brand if not already set
+          if (!cardBrand && nmiResult.cc_type) {
+            cardBrand = nmiResult.cc_type;
+          }
+
+          // Create payment record
+          payment = await storage.createPayment({
+            tenantId: tenantId,
+            consumerId: consumerId,
+            accountId: accountId || null,
+            amountCents,
+            paymentMethod: 'credit_card',
+            status: success ? 'completed' : 'failed',
+            transactionId: transactionId,
+            processorResponse: JSON.stringify(nmiResult),
+            processedAt: success ? new Date() : null,
+            notes: arrangement
+              ? `${arrangement.name} - ${cardName} ending in ${cardLast4}`
+              : `Online payment - ${cardName} ending in ${cardLast4}`,
+          });
+          
+          console.log('💾 Payment record created:', {
+            paymentId: payment.id,
+            amountCents: payment.amountCents,
+            status: payment.status,
+            transactionId: payment.transactionId
+          });
+
+          // Trigger payment event for sequence enrollment
+          await eventService.emitSystemEvent('payment_received', {
+            tenantId,
+            consumerId,
+            accountId: accountId || undefined,
+            metadata: { paymentId: payment.id, amountCents, transactionId }
+          });
+          
+          // Send payment to SMAX if account has a filenumber
+          if (success && account.filenumber) {
+            const consumer = await storage.getConsumer(consumerId);
+            console.log('📤 Sending payment to SMAX...');
+            
+            if (settings.smaxEnabled && consumer) {
+              try {
+                const { smaxService } = await import('./smaxService');
+                
+                await smaxService.insertPayment(tenantId, {
+                  filenumber: account.filenumber,
+                  paymentamount: (amountCents / 100).toString(),
+                  paymentdate: new Date().toISOString().split('T')[0],
+                  paymentmethod: 'Credit Card',
+                  cardLast4: cardLast4,
+                  transactionid: transactionId || undefined,
+                  cardtoken: customerVaultId || undefined,
+                  cardholdername: cardName || undefined,
+                  billingzip: zipCode || undefined,
+                });
+
+                console.log('✅ NMI payment synced to SMAX');
+              } catch (smaxError) {
+                console.error('Failed to sync NMI payment to SMAX:', smaxError);
+              }
+            }
+          }
+
+          // Update account balance
+          await storage.updateAccount(accountId, {
+            balanceCents: Math.max(0, (account.balanceCents || 0) - amountCents),
+          });
+
+          // Send notification to admins about successful payment
+          const consumer = await storage.getConsumer(consumerId);
+          if (consumer) {
+            await notifyTenantAdmins({
+              tenantId,
+              subject: 'New Payment Received',
+              eventType: 'payment_made',
+              consumer: {
+                firstName: consumer.firstName || '',
+                lastName: consumer.lastName || '',
+                email: consumer.email || '',
+              },
+              amount: amountCents,
+            }).catch(err => console.error('Failed to send payment notification:', err));
+
+            await emailService.sendPaymentNotification({
+              tenantId,
+              consumerName: `${consumer.firstName} ${consumer.lastName}`,
+              accountNumber: account.accountNumber || 'N/A',
+              amountCents,
+              paymentMethod: 'Credit Card',
+              transactionId: transactionId || undefined,
+              paymentType: 'one_time',
+            }).catch(err => console.error('Failed to send payment notification to contact email:', err));
+          }
+        }
+
+        // Save payment method if requested
+        let savedPaymentMethod = null;
+        const needsPaymentProfile = saveCard || setupRecurring || (normalizedFirstPaymentDate !== null && normalizedFirstPaymentDate.getTime() > today.getTime());
+        
+        if (needsPaymentProfile && customerVaultId) {
+          savedPaymentMethod = await storage.createPaymentMethod({
+            tenantId,
+            consumerId,
+            paymentToken: customerVaultId,
+            cardLast4,
+            cardBrand: cardBrand || 'unknown',
+            expiryMonth: expiryMonth || '',
+            expiryYear: expiryYear || '',
+            cardholderName: cardName || '',
+            billingZip: zipCode || null,
+            isDefault: true,
+          });
+          console.log('💳 Payment method saved with vault ID:', customerVaultId);
+        }
+
+        // Create payment schedule for recurring arrangements (mirrors Authorize.net pattern)
+        let createdSchedule: any = null;
+        if (arrangement && savedPaymentMethod) {
+          const paymentStartDate = normalizedFirstPaymentDate ? new Date(normalizedFirstPaymentDate) : new Date();
+          const nextMonth = new Date(paymentStartDate);
+          nextMonth.setMonth(nextMonth.getMonth() + 1);
+
+          let remainingPayments = null;
+          let endDate = null;
+
+          if (arrangement.planType === 'settlement') {
+            if (normalizedFirstPaymentDate && normalizedFirstPaymentDate.getTime() > today.getTime()) {
+              remainingPayments = 1;
+              endDate = new Date(paymentStartDate);
+            }
+          } else if (arrangement.planType === 'fixed_monthly' && arrangement.maxTermMonths) {
+            const maxPayments = Number(arrangement.maxTermMonths);
+            remainingPayments = maxPayments - 1;
+            endDate = new Date(paymentStartDate);
+            endDate.setMonth(endDate.getMonth() + Number(arrangement.maxTermMonths));
+          } else if (arrangement.planType === 'range') {
+            remainingPayments = null;
+            endDate = null;
+          }
+
+          const shouldCreateSchedule = arrangementId && (
+            arrangement.planType === 'fixed_monthly' || arrangement.planType === 'range'
+          );
+
+          if (shouldCreateSchedule) {
+            const existingSchedules = await storage.getActivePaymentSchedulesByConsumerAndAccount(consumerId, accountId, tenantId);
+
+            if (existingSchedules && existingSchedules.length > 0) {
+              return res.status(400).json({
+                success: false,
+                message: "You already have an active payment arrangement for this account.",
+              });
+            }
+
+            try {
+              createdSchedule = await storage.createPaymentSchedule({
+                tenantId,
+                consumerId,
+                accountId,
+                paymentMethodId: savedPaymentMethod.id,
+                arrangementType: arrangement.planType,
+                amountCents,
+                frequency: 'monthly',
+                startDate: paymentStartDate.toISOString().split('T')[0],
+                endDate: endDate ? endDate.toISOString().split('T')[0] : null,
+                nextPaymentDate: nextMonth.toISOString().split('T')[0],
+                remainingPayments,
+                status: 'active',
+                source: 'chain',
+                smaxSynced: false,
+              });
+
+              console.log('✅ Payment schedule created for NMI arrangement');
+
+              // Send arrangement notification
+              if (consumer) {
+                await notifyTenantAdmins({
+                  tenantId,
+                  subject: 'New Payment Arrangement Setup',
+                  eventType: 'arrangement_setup',
+                  consumer: {
+                    firstName: consumer.firstName || '',
+                    lastName: consumer.lastName || '',
+                    email: consumer.email || '',
+                  },
+                  arrangementType: arrangement.name || arrangement.planType,
+                }).catch(err => console.error('Failed to send arrangement notification:', err));
+
+                await emailService.sendArrangementNotification({
+                  tenantId,
+                  consumerName: `${consumer.firstName} ${consumer.lastName}`,
+                  accountNumber: account.accountNumber || 'N/A',
+                  arrangementType: arrangement.name || arrangement.planType,
+                  monthlyPayment: amountCents,
+                  totalBalance: account.balanceCents || 0,
+                  startDate: paymentStartDate.toISOString().split('T')[0],
+                  endDate: endDate ? endDate.toISOString().split('T')[0] : undefined,
+                  remainingPayments: remainingPayments || undefined,
+                }).catch(err => console.error('Failed to send arrangement notification:', err));
+              }
+
+              // Update consumer status
+              await storage.updateConsumer(consumerId, { paymentStatus: 'pending_payment' });
+
+              // SMAX sync if enabled
+              if (createdSchedule && settings.smaxEnabled && account.filenumber) {
+                try {
+                  const { smaxService } = await import('./smaxService');
+                  const fileNumber = account.filenumber;
+                  const arrangementName = arrangement.name || arrangement.planType;
+                  const firstPaymentDate = paymentStartDate.toISOString().split('T')[0];
+                  const nextPaymentDate = nextMonth.toISOString().split('T')[0];
+                  const amountDollars = (amountCents / 100).toFixed(2);
+
+                  await smaxService.insertAttempt(tenantId, {
+                    filenumber: fileNumber,
+                    attempttype: 'Promise To Pay',
+                    attemptdate: firstPaymentDate,
+                    notes: `Arrangement: ${arrangementName} | Amount: $${amountDollars} | Frequency: Monthly`,
+                  });
+
+                  await smaxService.insertNote(tenantId, {
+                    filenumber: fileNumber,
+                    collectorname: consumer ? `${consumer.firstName} ${consumer.lastName}`.trim() || 'System' : 'System',
+                    logmessage: `Payment arrangement scheduled (${arrangementName}). First payment on ${firstPaymentDate} for $${amountDollars}.`,
+                  });
+
+                  const smaxArrangementSent = await smaxService.insertPaymentArrangement(tenantId, {
+                    filenumber: fileNumber,
+                    payorname: consumer ? `${consumer.firstName} ${consumer.lastName}`.trim() || 'Consumer' : 'Consumer',
+                    arrangementtype: arrangementName,
+                    monthlypayment: parseFloat(amountDollars),
+                    startdate: firstPaymentDate,
+                    enddate: endDate ? endDate.toISOString().split('T')[0] : undefined,
+                    nextpaymentdate: nextPaymentDate,
+                    remainingpayments: remainingPayments || undefined,
+                    totalbalance: (account.balanceCents || 0) / 100,
+                    cardtoken: savedPaymentMethod.paymentToken,
+                    cardlast4: savedPaymentMethod.cardLast4,
+                    cardbrand: savedPaymentMethod.cardBrand || undefined,
+                    expirymonth: savedPaymentMethod.expiryMonth || undefined,
+                    expiryyear: savedPaymentMethod.expiryYear || undefined,
+                    cardholdername: savedPaymentMethod.cardholderName || undefined,
+                    billingzip: savedPaymentMethod.billingZip || undefined,
+                  });
+
+                  if (smaxArrangementSent && createdSchedule.id) {
+                    await storage.updatePaymentSchedule(createdSchedule.id, tenantId, {
+                      smaxSynced: true,
+                      smaxLastSyncAt: new Date(),
+                    });
+                    console.log('✅ NMI arrangement synced to SMAX');
+                  }
+                } catch (smaxError) {
+                  console.error('Failed to sync NMI arrangement to SMAX:', smaxError);
+                }
+              }
+            } catch (scheduleError) {
+              console.error('Failed to create payment schedule:', scheduleError);
+            }
+          }
+        }
+
+        return res.json({
+          success: true,
+          message: 'Payment processed successfully',
+          payment: payment ? {
+            id: payment.id,
+            amount: amountCents / 100,
+            status: 'completed',
+            transactionId: transactionId,
+          } : undefined,
           schedule: createdSchedule ? {
             id: createdSchedule.id,
             nextPaymentDate: createdSchedule.nextPaymentDate,
