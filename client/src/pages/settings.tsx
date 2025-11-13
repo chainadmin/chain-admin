@@ -1890,6 +1890,43 @@ export default function Settings() {
                               </div>
                             </div>
                           </div>
+
+                          <div className="border-t border-white/10 pt-4">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={async () => {
+                                try {
+                                  const response = await apiRequest("POST", "/api/nmi/test-connection");
+                                  const result = await response.json();
+                                  
+                                  if (result.success) {
+                                    toast({
+                                      title: "Connection Successful",
+                                      description: "NMI credentials are valid and working.",
+                                    });
+                                  } else {
+                                    toast({
+                                      title: "Connection Failed",
+                                      description: result.message || "Unable to connect to NMI. Please check your credentials.",
+                                      variant: "destructive",
+                                    });
+                                  }
+                                } catch (err: any) {
+                                  toast({
+                                    title: "Connection Error",
+                                    description: "Failed to test NMI connection. Please try again.",
+                                    variant: "destructive",
+                                  });
+                                }
+                              }}
+                              data-testid="button-test-nmi-connection"
+                              className="w-full border-white/20 bg-white/5 text-white hover:bg-white/10"
+                            >
+                              <i className="fas fa-plug mr-2"></i>
+                              Test NMI Connection
+                            </Button>
+                          </div>
                         </>
                       )}
 

@@ -277,6 +277,74 @@ export class NMIService {
   }
 
   /**
+   * Test NMI connection and credentials using a harmless status query
+   */
+  async testConnection(): Promise<{ success: boolean; message: string }> {
+    try {
+      // Test credentials using get_status with an invalid transaction ID
+      // This validates the security key without processing a transaction
+      // Valid credentials return response=3 (error: "Transaction not found")
+      // Invalid credentials return response=2 (declined/authentication error)
+      const params = new URLSearchParams({
+        security_key: this.securityKey,
+        type: 'get_status',
+        transactionid: '0', // Deliberately invalid to trigger validation
+      });
+
+      const response = await fetch(this.apiEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: params.toString(),
+      });
+
+      const textResponse = await response.text();
+      
+      // Handle empty/invalid responses
+      if (!textResponse || textResponse.trim() === '') {
+        return {
+          success: false,
+          message: 'No response from NMI. Please check your network connection.',
+        };
+      }
+
+      const result = this.parseResponse(textResponse);
+      
+      // Handle unparseable responses (HTML, empty object, etc.)
+      if (!result.response || typeof result.response !== 'string') {
+        return {
+          success: false,
+          message: `Unexpected response from NMI. Please verify your credentials. Response: ${textResponse.substring(0, 100)}`,
+        };
+      }
+
+      console.log('🟣 [NMI] Test connection response:', result.response);
+
+      // Only response=1 (approved) or response=3 (error but authenticated) indicate valid credentials
+      if (result.response === '1' || result.response === '3') {
+        return {
+          success: true,
+          message: 'Successfully connected to NMI. Credentials are valid.',
+        };
+      }
+
+      // All other responses (including response=2 for auth failures) are failures
+      return {
+        success: false,
+        message: `Connection test failed: ${result.responsetext || `Unexpected response code: ${result.response}`}`,
+      };
+
+    } catch (error: any) {
+      console.error('❌ [NMI] Test connection error:', error);
+      return {
+        success: false,
+        message: `Connection error: ${error.message || 'Failed to test connection'}`,
+      };
+    }
+  }
+
+  /**
    * Parse NMI's URL-encoded response into an object
    */
   private parseResponse(responseText: string): any {

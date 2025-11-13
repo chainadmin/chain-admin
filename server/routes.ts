@@ -7730,6 +7730,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Test NMI connection endpoint
+  app.post('/api/nmi/test-connection', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+
+      const settings = await storage.getTenantSettings(tenantId);
+      if (!settings) {
+        return res.status(404).json({ success: false, message: "Settings not found" });
+      }
+
+      const { nmiSecurityKey } = settings;
+
+      if (!nmiSecurityKey) {
+        return res.status(400).json({
+          success: false,
+          message: "NMI credentials not configured. Please add your Security Key."
+        });
+      }
+
+      console.log('🔍 NMI Test - Validating credentials...');
+
+      const { NMIService } = await import('./nmiService');
+      const nmiService = new NMIService({
+        securityKey: nmiSecurityKey,
+      });
+
+      const result = await nmiService.testConnection();
+
+      if (result.success) {
+        return res.json({
+          success: true,
+          message: result.message || 'Successfully connected to NMI',
+        });
+      } else {
+        return res.json({
+          success: false,
+          message: result.message || 'Failed to connect to NMI'
+        });
+      }
+    } catch (error: any) {
+      console.error("❌ NMI test connection error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to test connection. Please check your credentials and try again.",
+        error: error.message
+      });
+    }
+  });
+
   // Helper function to generate USAePay API v2 authentication header
   function generateUSAePayAuthHeader(apiKey: string, apiPin: string): string {
     // Generate 16-character random seed
