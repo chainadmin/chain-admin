@@ -636,7 +636,9 @@ export default function GlobalAdmin() {
   // Mutation to update billing dates
   const updateBillingDatesMutation = useMutation({
     mutationFn: async ({ tenantId, periodStart, periodEnd }: { tenantId: string; periodStart: string; periodEnd: string }) => {
-      return apiRequest('PUT', `/api/admin/tenants/${tenantId}/billing-dates`, { periodStart, periodEnd });
+      console.log('🔍 Billing dates mutation - checking auth token:', sessionStorage.getItem('admin_token') ? 'Token exists' : 'NO TOKEN');
+      const response = await apiRequest('PUT', `/api/admin/tenants/${tenantId}/billing-dates`, { periodStart, periodEnd });
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants'] });

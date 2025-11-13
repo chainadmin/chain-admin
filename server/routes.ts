@@ -13336,15 +13336,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const isPlatformAdmin = async (req: any, res: any, next: any) => {
     // Check for admin token first
     const authHeader = req.headers.authorization;
+    console.log('🔐 isPlatformAdmin middleware - Auth header:', authHeader ? `Bearer ${authHeader.slice(7, 20)}...` : 'NO AUTH HEADER');
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.slice(7);
       try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
+        console.log('✅ Token decoded:', decoded);
         if (decoded.isAdmin && decoded.type === 'global_admin') {
           req.user = { isGlobalAdmin: true };
           return next();
         }
       } catch (error) {
+        console.log('❌ Token verification failed:', error);
         // Token invalid, fall through to normal auth check
       }
     }
@@ -13825,6 +13828,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Update subscription billing dates (global admin)
   app.put('/api/admin/tenants/:tenantId/billing-dates', isPlatformAdmin, async (req: any, res) => {
+    console.log('📅 Billing dates endpoint hit - user:', req.user);
     try {
       const { tenantId } = req.params;
       const { periodStart, periodEnd } = req.body;
