@@ -8156,10 +8156,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(500).json({ message: "Payment processing is not configured. Please contact your agency." });
         }
 
-        console.log('🔑 NMI credentials check:', {
-          securityKeyLength: nmiSecurityKey.length,
-          securityKeyFirst3: nmiSecurityKey.substring(0, 3),
-        });
+        console.log('🔑 NMI credentials check: credentials configured');
       } else {
         // USAePay credentials
         const merchantApiKey = settings.merchantApiKey?.trim();
@@ -10540,6 +10537,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 }
 
                 // Create payment record
+                // Support all three processors: NMI (transactionid), USAePay (refnum), Authorize.net (key)
+                const extractedTransactionId = paymentResult.transactionid || paymentResult.refnum || paymentResult.key || `tx_${Date.now()}`;
+                
                 await storage.createPayment({
                   tenantId: tenant.id,
                   consumerId: consumer.id,
@@ -10547,7 +10547,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   amountCents: paymentAmountCents,
                   paymentMethod: 'credit_card',
                   status: success ? 'completed' : 'failed',
-                  transactionId: paymentResult.refnum || paymentResult.key || `tx_${Date.now()}`,
+                  transactionId: extractedTransactionId,
                   processorResponse: JSON.stringify(paymentResult),
                   processedAt: success ? new Date() : null,
                   notes: `Scheduled payment - ${paymentMethod.cardholderName} ending in ${paymentMethod.cardLast4}`,
@@ -10575,7 +10575,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                           paymentmethod: 'CREDIT CARD',
                           cardtype: paymentMethod.cardBrand || 'Unknown',
                           paymentstatus: 'COMPLETED',
-                          transactionid: paymentResult.refnum || paymentResult.key || `tx_${Date.now()}`,
+                          transactionid: extractedTransactionId,
                         };
 
                         // Create payment approval request instead of auto-updating SMAX
@@ -10588,7 +10588,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                           filenumber: account.filenumber,
                           paymentDate: schedule.nextPaymentDate,
                           amountCents: paymentAmountCents,
-                          transactionId: paymentResult.refnum || paymentResult.key || `tx_${Date.now()}`,
+                          transactionId: extractedTransactionId,
                           paymentData: smaxPaymentData,
                           status: 'pending',
                         });
@@ -10608,7 +10608,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                           paymentmethod: 'CREDIT CARD',
                           cardtype: paymentMethod.cardBrand || 'Unknown',
                           cardLast4: paymentMethod.cardLast4,
-                          transactionid: paymentResult.refnum || paymentResult.key || `tx_${Date.now()}`,
+                          transactionid: extractedTransactionId,
                         });
                         const smaxInserted = await smaxService.insertPayment(tenant.id, smaxPaymentData);
                         if (smaxInserted) {
@@ -10618,7 +10618,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                             filenumber: account.filenumber,
                             status: 'processed',
                             amount: paymentAmountCents / 100,
-                            transactionId: paymentResult.refnum || paymentResult.key || undefined
+                            transactionId: extractedTransactionId
                           });
                         }
                       }
