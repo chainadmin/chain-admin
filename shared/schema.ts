@@ -484,6 +484,30 @@ export const signatureRequestFields = pgTable("signature_request_fields", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Tenant admin agreements (global admin sends agreements to tenants)
+// Separate from consumer signature requests to avoid complexity
+export const tenantAgreements = pgTable("tenant_agreements", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  globalDocumentId: uuid("global_document_id").references(() => globalDocumentTemplates.id, { onDelete: "cascade" }).notNull(),
+  agreementType: text("agreement_type").notNull(), // 'software_proposal', 'payment_authorization'
+  agreementMetadata: jsonb("agreement_metadata").notNull(), // {companyName, module, pricing, contact, paymentDetails, etc.}
+  title: text("title").notNull(),
+  description: text("description"),
+  status: text("status", {
+    enum: ['pending', 'viewed', 'agreed', 'declined']
+  }).default("pending").notNull(),
+  viewedAt: timestamp("viewed_at"),
+  agreedAt: timestamp("agreed_at"),
+  declinedAt: timestamp("declined_at"),
+  declineReason: text("decline_reason"),
+  ipAddress: text("ip_address"), // IP when agreed
+  userAgent: text("user_agent"), // Browser info when agreed
+  adminNotified: boolean("admin_notified").default(false), // Has admin been emailed with details?
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Arrangement/Settlement options (per tenant)
 export const arrangementPlanTypes = [
   "range",
@@ -1340,6 +1364,7 @@ export const insertSignatureRequestSchema = createInsertSchema(signatureRequests
 export const insertSignatureRequestFieldSchema = createInsertSchema(signatureRequestFields).omit({ id: true, createdAt: true });
 export const insertSignedDocumentSchema = createInsertSchema(signedDocuments).omit({ id: true, createdAt: true });
 export const insertSignatureAuditTrailSchema = createInsertSchema(signatureAuditTrail).omit({ id: true, occurredAt: true });
+export const insertTenantAgreementSchema = createInsertSchema(tenantAgreements).omit({ id: true, createdAt: true, updatedAt: true, viewedAt: true, agreedAt: true, declinedAt: true });
 export const insertArrangementOptionSchema = createInsertSchema(arrangementOptions)
   .omit({ id: true, createdAt: true, updatedAt: true })
   .superRefine((data, ctx) => {
@@ -1528,6 +1553,8 @@ export type SignedDocument = typeof signedDocuments.$inferSelect;
 export type InsertSignedDocument = z.infer<typeof insertSignedDocumentSchema>;
 export type SignatureAuditTrail = typeof signatureAuditTrail.$inferSelect;
 export type InsertSignatureAuditTrail = z.infer<typeof insertSignatureAuditTrailSchema>;
+export type TenantAgreement = typeof tenantAgreements.$inferSelect;
+export type InsertTenantAgreement = z.infer<typeof insertTenantAgreementSchema>;
 export type ArrangementOption = typeof arrangementOptions.$inferSelect;
 export type InsertArrangementOption = z.infer<typeof insertArrangementOptionSchema>;
 export type TenantSettings = typeof tenantSettings.$inferSelect;

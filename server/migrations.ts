@@ -599,6 +599,78 @@ export async function runMigrations() {
       console.log('  ⚠ signature_request_fields (already exists)');
     }
     
+    // Create tenant agreements table for global admin agreement requests
+    console.log('Creating tenant_agreements table...');
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS tenant_agreements (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          global_document_id UUID NOT NULL REFERENCES global_document_templates(id) ON DELETE CASCADE,
+          agreement_type TEXT NOT NULL,
+          agreement_metadata JSONB NOT NULL,
+          title TEXT NOT NULL,
+          description TEXT,
+          status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'viewed', 'agreed', 'declined')),
+          viewed_at TIMESTAMP,
+          agreed_at TIMESTAMP,
+          declined_at TIMESTAMP,
+          decline_reason TEXT,
+          ip_address TEXT,
+          user_agent TEXT,
+          admin_notified BOOLEAN DEFAULT false,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      console.log('  ✓ tenant_agreements table');
+    } catch (err) {
+      console.log('  ⚠ tenant_agreements (already exists)');
+    }
+    
+    // Add status CHECK constraint to existing tenant_agreements tables
+    console.log('Adding status constraint to tenant_agreements...');
+    try {
+      await client.query(`
+        DO $$ 
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint 
+            WHERE conname = 'tenant_agreements_status_check'
+          ) THEN
+            ALTER TABLE tenant_agreements 
+            ADD CONSTRAINT tenant_agreements_status_check 
+            CHECK (status IN ('pending', 'viewed', 'agreed', 'declined'));
+          END IF;
+        END $$;
+      `);
+      console.log('  ✓ status CHECK constraint');
+    } catch (err) {
+      console.log('  ⚠ status CHECK constraint (already exists)');
+    }
+    
+    // Add indexes for tenant agreements
+    console.log('Creating tenant_agreements indexes...');
+    try {
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS tenant_agreements_tenant_status_idx 
+          ON tenant_agreements(tenant_id, status)
+      `);
+      console.log('  ✓ tenant_status index');
+    } catch (err) {
+      console.log('  ⚠ tenant_status index (already exists)');
+    }
+    
+    try {
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS tenant_agreements_doc_idx 
+          ON tenant_agreements(global_document_id)
+      `);
+      console.log('  ✓ global_document_id index');
+    } catch (err) {
+      console.log('  ⚠ global_document_id index (already exists)');
+    }
+    
     // Create service activation requests table for à la carte service approvals
     console.log('Creating service_activation_requests table...');
     try {
