@@ -824,26 +824,19 @@ export default function GlobalAdmin() {
   const handleSaveBillingDates = () => {
     if (!selectedTenantForBillingDate) return;
     
-    if (!billingPeriodStart || !billingPeriodEnd) {
+    if (!billingPeriodStart) {
       toast({
-        title: "Missing Dates",
-        description: "Both start and end dates are required",
+        title: "Missing Date",
+        description: "Billing period start date is required",
         variant: "destructive",
       });
       return;
     }
     
     const start = new Date(billingPeriodStart);
-    const end = new Date(billingPeriodEnd);
-    
-    if (start >= end) {
-      toast({
-        title: "Invalid Date Range",
-        description: "Start date must be before end date",
-        variant: "destructive",
-      });
-      return;
-    }
+    // Auto-calculate end date as one month after start
+    const end = new Date(start);
+    end.setMonth(end.getMonth() + 1);
     
     updateBillingDatesMutation.mutate({
       tenantId: selectedTenantForBillingDate.id,
@@ -1617,17 +1610,20 @@ export default function GlobalAdmin() {
         <Dialog open={billingDateDialogOpen} onOpenChange={setBillingDateDialogOpen}>
           <DialogContent data-testid="dialog-billing-dates">
             <DialogHeader>
-              <DialogTitle>Update Billing Dates</DialogTitle>
+              <DialogTitle>Update Billing Start Date</DialogTitle>
             </DialogHeader>
             {selectedTenantForBillingDate && (
               <div className="space-y-4">
                 <div>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Update subscription billing period for <strong>{selectedTenantForBillingDate.name}</strong>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Update subscription billing start for <strong>{selectedTenantForBillingDate.name}</strong>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Next invoice date will automatically be set to one month after the start date.
                   </p>
                 </div>
                 <div>
-                  <Label htmlFor="period-start">Period Start Date</Label>
+                  <Label htmlFor="period-start">Billing Period Start</Label>
                   <Input
                     id="period-start"
                     type="date"
@@ -1636,23 +1632,21 @@ export default function GlobalAdmin() {
                     data-testid="input-period-start"
                   />
                 </div>
-                <div>
-                  <Label htmlFor="period-end">Period End Date</Label>
-                  <Input
-                    id="period-end"
-                    type="date"
-                    value={billingPeriodEnd}
-                    onChange={(e) => setBillingPeriodEnd(e.target.value)}
-                    data-testid="input-period-end"
-                  />
-                </div>
+                {billingPeriodStart && (
+                  <div className="p-3 bg-muted rounded-md">
+                    <p className="text-sm text-muted-foreground">Next invoice date:</p>
+                    <p className="text-sm font-medium">
+                      {new Date(new Date(billingPeriodStart).setMonth(new Date(billingPeriodStart).getMonth() + 1)).toLocaleDateString()}
+                    </p>
+                  </div>
+                )}
                 <div className="flex gap-2 justify-end">
                   <Button variant="outline" onClick={() => setBillingDateDialogOpen(false)}>
                     Cancel
                   </Button>
                   <Button
                     onClick={handleSaveBillingDates}
-                    disabled={updateBillingDatesMutation.isPending}
+                    disabled={updateBillingDatesMutation.isPending || !billingPeriodStart}
                     data-testid="button-save-billing-dates"
                   >
                     {updateBillingDatesMutation.isPending ? (
