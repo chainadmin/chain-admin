@@ -797,6 +797,34 @@ export async function runMigrations() {
       console.log('  ⚠ Could not enable services for subscribed tenants:', err);
     }
     
+    // Seed global document templates for global admin agreements
+    console.log('Seeding global document templates...');
+    try {
+      const softwareProposalHtml = '<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;"><h1 style="color: #333;">Chain Software Group</h1><h2 style="color: #666;">Software Service Proposal & Agreement</h2><p>Dear {{companyName}},</p><p>This proposal outlines the software services to be provided:</p><div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;"><p><strong>Module:</strong> {{moduleName}}</p><p><strong>Description:</strong> {{moduleDescription}}</p><p><strong>Pricing Tier:</strong> {{pricingTier}}</p><p><strong>Monthly Rate:</strong> {{monthlyPrice}}</p><p><strong>Billing Start Date:</strong> {{billingStartDate}}</p></div><p><strong>Contact Information:</strong></p><p>Email: {{contactEmail}}<br>Phone: {{contactPhone}}</p><p style="margin-top: 30px;">By clicking "I Agree" below, you acknowledge that you have read and agree to the terms of this proposal.</p><div style="text-align: center; margin: 30px 0;"><a href="{{agreementLink}}" style="background: #22BC66; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">View & Agree to Proposal</a></div></div>';
+      
+      const softwareProposalVars = ['companyName', 'moduleName', 'moduleDescription', 'pricingTier', 'monthlyPrice', 'billingStartDate', 'contactEmail', 'contactPhone', 'agreementLink'];
+      
+      await client.query(
+        `INSERT INTO global_document_templates (slug, name, title, content, description, available_variables, is_active) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (slug) DO NOTHING`,
+        ['software_proposal', 'Software Service Proposal & Agreement', 'Chain Software Group - Software Proposal', softwareProposalHtml, 'Global admin template for sending software proposal agreements to tenants', softwareProposalVars, true]
+      );
+      
+      const paymentAuthHtml = '<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;"><h1 style="color: #333;">Chain Software Group</h1><h2 style="color: #666;">Payment Authorization Form</h2><p>Dear {{companyName}},</p><p>This form authorizes payment processing for your account:</p><div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;"><p><strong>Payment Amount:</strong> {{paymentAmount}}</p><p><strong>Payment Frequency:</strong> {{paymentFrequency}}</p><p><strong>Merchant Provider:</strong> {{merchantProvider}}</p><p><strong>Payment Method:</strong> {{paymentMethod}}</p></div><p style="margin-top: 30px;">By clicking "I Agree" below, you authorize Chain Software Group to charge the specified payment method according to the terms outlined above.</p><div style="text-align: center; margin: 30px 0;"><a href="{{agreementLink}}" style="background: #22BC66; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">View & Authorize Payment</a></div></div>';
+      
+      const paymentAuthVars = ['companyName', 'paymentAmount', 'paymentFrequency', 'merchantProvider', 'paymentMethod', 'agreementLink'];
+      
+      await client.query(
+        `INSERT INTO global_document_templates (slug, name, title, content, description, available_variables, is_active) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (slug) DO NOTHING`,
+        ['payment_authorization', 'Payment Authorization Form', 'Chain Software Group - Payment Authorization', paymentAuthHtml, 'Global admin template for sending payment authorization agreements to tenants', paymentAuthVars, true]
+      );
+      
+      console.log('  ✓ Global document templates seeded');
+    } catch (err) {
+      console.log('  ⚠ Could not seed templates (may already exist):', err);
+    }
+    
     console.log('✅ Database migrations completed successfully');
   } catch (error: any) {
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
