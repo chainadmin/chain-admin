@@ -27,6 +27,8 @@ import {
   signatureRequests,
   signedDocuments,
   signatureAuditTrail,
+  globalDocumentTemplates,
+  tenantAgreements,
   arrangementOptions,
   tenantSettings,
   consumerNotifications,
@@ -89,6 +91,10 @@ import {
   type InsertSignedDocument,
   type SignatureAuditTrail,
   type InsertSignatureAuditTrail,
+  type GlobalDocumentTemplate,
+  type InsertGlobalDocumentTemplate,
+  type TenantAgreement,
+  type InsertTenantAgreement,
   type ArrangementOption,
   type InsertArrangementOption,
   type TenantSettings,
@@ -513,6 +519,17 @@ export interface IStorage {
     platform: string;
   }): Promise<void>;
   removePushToken(consumerId: string, pushToken: string): Promise<void>;
+  
+  // Global document template operations (platform-wide templates)
+  getGlobalDocumentTemplates(): Promise<GlobalDocumentTemplate[]>;
+  getGlobalDocumentTemplateById(id: string): Promise<GlobalDocumentTemplate | undefined>;
+  getGlobalDocumentTemplateBySlug(slug: string): Promise<GlobalDocumentTemplate | undefined>;
+  
+  // Tenant agreement operations (global admin → tenant agreements)
+  createTenantAgreement(agreement: InsertTenantAgreement): Promise<TenantAgreement>;
+  getTenantAgreementById(id: string): Promise<TenantAgreement | undefined>;
+  getTenantAgreementsByTenant(tenantId: string): Promise<TenantAgreement[]>;
+  updateTenantAgreement(id: string, updates: Partial<TenantAgreement>): Promise<TenantAgreement>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3183,6 +3200,65 @@ export class DatabaseStorage implements IStorage {
           eq(pushDevices.pushToken, pushToken)
         )
       );
+  }
+
+  // Global document template operations
+  async getGlobalDocumentTemplates(): Promise<GlobalDocumentTemplate[]> {
+    return await db
+      .select()
+      .from(globalDocumentTemplates)
+      .where(eq(globalDocumentTemplates.isActive, true))
+      .orderBy(globalDocumentTemplates.name);
+  }
+
+  async getGlobalDocumentTemplateById(id: string): Promise<GlobalDocumentTemplate | undefined> {
+    const [template] = await db
+      .select()
+      .from(globalDocumentTemplates)
+      .where(eq(globalDocumentTemplates.id, id));
+    return template;
+  }
+
+  async getGlobalDocumentTemplateBySlug(slug: string): Promise<GlobalDocumentTemplate | undefined> {
+    const [template] = await db
+      .select()
+      .from(globalDocumentTemplates)
+      .where(eq(globalDocumentTemplates.slug, slug));
+    return template;
+  }
+
+  // Tenant agreement operations
+  async createTenantAgreement(agreement: InsertTenantAgreement): Promise<TenantAgreement> {
+    const [created] = await db
+      .insert(tenantAgreements)
+      .values(agreement)
+      .returning();
+    return created;
+  }
+
+  async getTenantAgreementById(id: string): Promise<TenantAgreement | undefined> {
+    const [agreement] = await db
+      .select()
+      .from(tenantAgreements)
+      .where(eq(tenantAgreements.id, id));
+    return agreement;
+  }
+
+  async getTenantAgreementsByTenant(tenantId: string): Promise<TenantAgreement[]> {
+    return await db
+      .select()
+      .from(tenantAgreements)
+      .where(eq(tenantAgreements.tenantId, tenantId))
+      .orderBy(desc(tenantAgreements.createdAt));
+  }
+
+  async updateTenantAgreement(id: string, updates: Partial<TenantAgreement>): Promise<TenantAgreement> {
+    const [updated] = await db
+      .update(tenantAgreements)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(tenantAgreements.id, id))
+      .returning();
+    return updated;
   }
 
   // Document signing operations

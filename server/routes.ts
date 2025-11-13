@@ -14191,6 +14191,104 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get all global document templates
+  app.get('/api/admin/global-document-templates', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const templates = await storage.getGlobalDocumentTemplates();
+      res.json(templates);
+    } catch (error) {
+      console.error("Error fetching global document templates:", error);
+      res.status(500).json({ message: "Failed to fetch templates" });
+    }
+  });
+
+  // Send agreement to tenant
+  app.post('/api/admin/tenants/:tenantId/send-agreement', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { tenantId } = req.params;
+      const { templateSlug, agreementMetadata, title, description } = req.body;
+
+      if (!templateSlug) {
+        return res.status(400).json({ message: "Template slug is required" });
+      }
+
+      if (!agreementMetadata || typeof agreementMetadata !== 'object') {
+        return res.status(400).json({ message: "Agreement metadata is required" });
+      }
+
+      const tenant = await storage.getTenant(tenantId);
+      if (!tenant) {
+        return res.status(404).json({ message: "Agency not found" });
+      }
+
+      if (!tenant.email) {
+        return res.status(400).json({ message: "Agency has no email address configured" });
+      }
+
+      const template = await storage.getGlobalDocumentTemplateBySlug(templateSlug);
+      if (!template) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+
+      const agreement = await storage.createTenantAgreement({
+        tenantId,
+        globalDocumentId: template.id,
+        agreementType: templateSlug,
+        agreementMetadata,
+        title: title || template.title,
+        description: description || template.description || '',
+        status: 'pending',
+      });
+
+      const baseUrl = ensureBaseUrl(process.env.REPLIT_DOMAINS);
+      const agreementLink = `${baseUrl}/tenant-agreement/${agreement.id}`;
+
+      const tenantSettings = await storage.getTenantSettings(tenantId);
+
+      const emailVariables = {
+        companyName: tenant.name,
+        contactEmail: tenantSettings?.contactEmail || tenant.email,
+        contactPhone: tenantSettings?.contactPhone || tenant.phoneNumber || '',
+        ...agreementMetadata,
+        agreementLink,
+      };
+
+      let emailHtml = template.content;
+      Object.keys(emailVariables).forEach((key) => {
+        const regex = new RegExp(`{{${key}}}`, 'g');
+        emailHtml = emailHtml.replace(regex, String(emailVariables[key] || ''));
+      });
+
+      await emailService.sendEmail({
+        to: tenant.email,
+        subject: title || template.title,
+        html: emailHtml,
+        tenantId: undefined,
+      });
+
+      res.json({ 
+        ...agreement, 
+        message: 'Agreement sent successfully',
+        agreementLink 
+      });
+    } catch (error) {
+      console.error("Error sending agreement:", error);
+      res.status(500).json({ message: "Failed to send agreement" });
+    }
+  });
+
+  // Get agreements for tenant (admin view)
+  app.get('/api/admin/tenants/:tenantId/agreements', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { tenantId } = req.params;
+      const agreements = await storage.getTenantAgreementsByTenant(tenantId);
+      res.json(agreements);
+    } catch (error) {
+      console.error("Error fetching tenant agreements:", error);
+      res.status(500).json({ message: "Failed to fetch agreements" });
+    }
+  });
+
   // Test Postmark connection
   app.get('/api/admin/test-postmark', isPlatformAdmin, async (req: any, res) => {
     try {
@@ -15574,6 +15672,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { id } = req.params;
+
       
       // Verify request belongs to this tenant
       const request = await storage.getSignatureRequestById(id);
@@ -15667,6 +15766,173 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error fetching dynamic content:', error);
       res.status(500).json({ message: 'Failed to fetch dynamic content' });
+    }
+  });
+
+  // PUBLIC Tenant agreement routes (no authentication required)
+  
+  // Get tenant agreement details (public link access)
+  app.get('/api/tenant-agreement/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const agreement = await storage.getTenantAgreementById(id);
+
+      if (!agreement) {
+        return res.status(404).json({ message: "Agreement not found" });
+      }
+
+      const template = await storage.getGlobalDocumentTemplateById(agreement.globalDocumentId);
+      const tenant = await storage.getTenant(agreement.tenantId);
+
+      if (!template || !tenant) {
+        return res.status(404).json({ message: "Agreement data incomplete" });
+      }
+
+      res.json({
+        id: agreement.id,
+        title: agreement.title,
+        description: agreement.description,
+        status: agreement.status,
+        agreementType: agreement.agreementType,
+        metadata: agreement.agreementMetadata,
+        content: template.content,
+        tenantName: tenant.name,
+        createdAt: agreement.createdAt,
+        viewedAt: agreement.viewedAt,
+        agreedAt: agreement.agreedAt,
+        declinedAt: agreement.declinedAt,
+        declineReason: agreement.declineReason,
+      });
+    } catch (error) {
+      console.error("Error fetching tenant agreement:", error);
+      res.status(500).json({ message: "Failed to fetch agreement" });
+    }
+  });
+
+  // Mark agreement as viewed
+  app.post('/api/tenant-agreement/:id/mark-viewed', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.ip;
+      const userAgent = req.headers['user-agent'] || '';
+
+      const agreement = await storage.getTenantAgreementById(id);
+      if (!agreement) {
+        return res.status(404).json({ message: "Agreement not found" });
+      }
+
+      if (agreement.viewedAt) {
+        return res.json(agreement);
+      }
+
+      const updated = await storage.updateTenantAgreement(id, {
+        status: 'viewed',
+        viewedAt: new Date(),
+        ipAddress,
+        userAgent,
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error marking agreement as viewed:", error);
+      res.status(500).json({ message: "Failed to mark as viewed" });
+    }
+  });
+
+  // Agree to tenant agreement
+  app.post('/api/tenant-agreement/:id/agree', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.ip;
+      const userAgent = req.headers['user-agent'] || '';
+
+      const agreement = await storage.getTenantAgreementById(id);
+      if (!agreement) {
+        return res.status(404).json({ message: "Agreement not found" });
+      }
+
+      if (agreement.status === 'agreed') {
+        return res.status(400).json({ message: "Agreement already accepted" });
+      }
+
+      if (agreement.status === 'declined') {
+        return res.status(400).json({ message: "Cannot accept a declined agreement" });
+      }
+
+      const updated = await storage.updateTenantAgreement(id, {
+        status: 'agreed',
+        agreedAt: new Date(),
+        ipAddress,
+        userAgent,
+      });
+
+      const tenant = await storage.getTenant(agreement.tenantId);
+      const template = await storage.getGlobalDocumentTemplateById(agreement.globalDocumentId);
+
+      const metadata = agreement.agreementMetadata as Record<string, any>;
+      const metadataText = Object.entries(metadata)
+        .map(([key, value]) => `${key}: ${value}`)
+        .join('\n');
+
+      await emailService.sendEmail({
+        to: process.env.ADMIN_EMAIL || 'admin@chainplatform.com',
+        subject: `Agreement Accepted: ${agreement.title}`,
+        html: `
+          <h2>Tenant Agreement Accepted</h2>
+          <p><strong>Tenant:</strong> ${tenant?.name}</p>
+          <p><strong>Email:</strong> ${tenant?.email}</p>
+          <p><strong>Agreement Type:</strong> ${agreement.agreementType}</p>
+          <p><strong>Title:</strong> ${agreement.title}</p>
+          <p><strong>Agreed At:</strong> ${updated.agreedAt?.toLocaleString()}</p>
+          <p><strong>IP Address:</strong> ${ipAddress}</p>
+          <p><strong>User Agent:</strong> ${userAgent}</p>
+          
+          <h3>Agreement Details:</h3>
+          <pre>${metadataText}</pre>
+        `,
+        tenantId: undefined,
+      });
+
+      res.json({ ...updated, message: 'Agreement accepted successfully' });
+    } catch (error) {
+      console.error("Error agreeing to agreement:", error);
+      res.status(500).json({ message: "Failed to accept agreement" });
+    }
+  });
+
+  // Decline tenant agreement
+  app.post('/api/tenant-agreement/:id/decline', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+      const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.ip;
+      const userAgent = req.headers['user-agent'] || '';
+
+      if (!reason) {
+        return res.status(400).json({ message: "Decline reason is required" });
+      }
+
+      const agreement = await storage.getTenantAgreementById(id);
+      if (!agreement) {
+        return res.status(404).json({ message: "Agreement not found" });
+      }
+
+      if (agreement.status === 'agreed') {
+        return res.status(400).json({ message: "Cannot decline an accepted agreement" });
+      }
+
+      const updated = await storage.updateTenantAgreement(id, {
+        status: 'declined',
+        declinedAt: new Date(),
+        declineReason: reason,
+        ipAddress,
+        userAgent,
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error declining agreement:", error);
+      res.status(500).json({ message: "Failed to decline agreement" });
     }
   });
 
