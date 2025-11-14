@@ -288,6 +288,22 @@ function replaceTemplateVariables(
   const minimumMonthlyPayment = tenantSettings?.minimumMonthlyPayment ? formatCurrency(tenantSettings.minimumMonthlyPayment) : '';
   const settlementOfferExpiresDate = tenantSettings?.settlementOfferExpiresDate ? new Date(tenantSettings.settlementOfferExpiresDate).toLocaleDateString() : '';
 
+  // Get active arrangement for this account (if exists)
+  const activeArrangement = account?.activeArrangement || (account as any)?.arrangement || null;
+  const monthlyPayment = activeArrangement?.monthlyPaymentCents ? formatCurrency(activeArrangement.monthlyPaymentCents) : '';
+  const numberOfPayments = activeArrangement?.numberOfPayments ? String(activeArrangement.numberOfPayments) : '';
+  const arrangementStart = activeArrangement?.startDate ? new Date(activeArrangement.startDate).toLocaleDateString() : '';
+  const arrangementStartIso = activeArrangement?.startDate ? new Date(activeArrangement.startDate).toISOString().split('T')[0] : '';
+  const arrangementNextPayment = activeArrangement?.nextPaymentDate ? new Date(activeArrangement.nextPaymentDate).toLocaleDateString() : '';
+  const arrangementPaymentFrequency = activeArrangement?.frequency || '';
+  
+  // Calculate balance divisions for flexible payment plans
+  const balanceDiv2 = (balanceCents !== null && balanceCents !== undefined) ? formatCurrency(Math.round(balanceCents / 2)) : '';
+  const balanceDiv3 = (balanceCents !== null && balanceCents !== undefined) ? formatCurrency(Math.round(balanceCents / 3)) : '';
+  const balanceDiv4 = (balanceCents !== null && balanceCents !== undefined) ? formatCurrency(Math.round(balanceCents / 4)) : '';
+  const balanceDiv6 = (balanceCents !== null && balanceCents !== undefined) ? formatCurrency(Math.round(balanceCents / 6)) : '';
+  const balanceDiv12 = (balanceCents !== null && balanceCents !== undefined) ? formatCurrency(Math.round(balanceCents / 12)) : '';
+
   const replacements: Record<string, string> = {
     // Primary camelCase format (matching email templates exactly)
     firstName,
@@ -363,6 +379,17 @@ function replaceTemplateVariables(
     'balance80%': balance80,
     'balance90%': balance90,
     'balance100%': balance100,
+    'balance/2': balanceDiv2,
+    'balance/3': balanceDiv3,
+    'balance/4': balanceDiv4,
+    'balance/6': balanceDiv6,
+    'balance/12': balanceDiv12,
+    monthlyPayment,
+    numberOfPayments,
+    arrangementStart,
+    arrangementStartIso,
+    arrangementNextPayment,
+    arrangementPaymentFrequency,
     
     // Snake_case aliases for all variables to match email/SMS templates
     first_name: firstName,
@@ -417,6 +444,12 @@ function replaceTemplateVariables(
     settlement_payment_frequency: settlementPaymentFrequency,
     minimum_monthly_payment: minimumMonthlyPayment,
     settlement_offer_expires_date: settlementOfferExpiresDate,
+    monthly_payment: monthlyPayment,
+    number_of_payments: numberOfPayments,
+    arrangement_start: arrangementStart,
+    arrangement_start_iso: arrangementStartIso,
+    arrangement_next_payment: arrangementNextPayment,
+    arrangement_payment_frequency: arrangementPaymentFrequency,
   };
 
   let processedTemplate = template;

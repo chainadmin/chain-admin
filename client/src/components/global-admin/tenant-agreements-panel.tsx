@@ -28,7 +28,17 @@ export function TenantAgreementsPanel({ tenants, isLoadingTenants, toast, isPlat
 
   const sendAgreementMutation = useMutation({
     mutationFn: async ({ tenantId, templateSlug }: { tenantId: string; templateSlug: string }) => {
-      return apiRequest('POST', `/api/admin/tenants/${tenantId}/send-agreement`, { templateSlug });
+      // Create basic agreement metadata
+      const agreementMetadata = {
+        sentBy: 'Platform Administrator',
+        sentAt: new Date().toISOString(),
+        templateType: templateSlug,
+      };
+      
+      return apiRequest('POST', `/api/admin/tenants/${tenantId}/send-agreement`, { 
+        templateSlug,
+        agreementMetadata 
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants', selectedTenantForAgreement, 'agreements'] });

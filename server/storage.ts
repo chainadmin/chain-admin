@@ -1090,12 +1090,19 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(accounts).where(eq(accounts.consumerId, consumerId));
   }
 
-  async getAccount(id: string): Promise<(Account & { consumer?: Consumer; folder?: Folder }) | undefined> {
+  async getAccount(id: string): Promise<(Account & { consumer?: Consumer; folder?: Folder; activeArrangement?: PaymentSchedule }) | undefined> {
     const [result] = await db
       .select()
       .from(accounts)
       .leftJoin(consumers, eq(accounts.consumerId, consumers.id))
       .leftJoin(folders, eq(accounts.folderId, folders.id))
+      .leftJoin(
+        paymentSchedules,
+        and(
+          eq(paymentSchedules.accountId, accounts.id),
+          eq(paymentSchedules.status, 'active')
+        )
+      )
       .where(eq(accounts.id, id));
 
     if (!result) {
@@ -1106,6 +1113,7 @@ export class DatabaseStorage implements IStorage {
       ...result.accounts,
       consumer: result.consumers || undefined,
       folder: result.folders || undefined,
+      activeArrangement: result.payment_schedules || undefined,
     };
   }
 
