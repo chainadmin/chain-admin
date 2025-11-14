@@ -1229,7 +1229,7 @@ export default function Settings() {
           <Tabs defaultValue="general" className="space-y-8">
             <TabsList className={cn(
               "grid w-full grid-cols-1 gap-2 p-2 text-blue-100",
-              localSettings?.businessType === 'call_center' ? "sm:grid-cols-7" : "sm:grid-cols-6"
+              localSettings?.businessType === 'call_center' ? "sm:grid-cols-6" : "sm:grid-cols-5"
             )}>
               <TabsTrigger value="general" className="px-4 py-2">
                 General
@@ -1247,9 +1247,6 @@ export default function Settings() {
               </TabsTrigger>
               <TabsTrigger value="arrangements" className="px-4 py-2">
                 Payment Plans
-              </TabsTrigger>
-              <TabsTrigger value="addons" className="px-4 py-2">
-                Add-ons
               </TabsTrigger>
               <TabsTrigger value="privacy" className="px-4 py-2">
                 Privacy & Legal
@@ -2619,19 +2616,15 @@ export default function Settings() {
                       <FileText className="h-16 w-16 mx-auto mb-4 text-blue-400/60" />
                       <h3 className="text-lg font-semibold text-blue-100 mb-2">Document Signing Not Enabled</h3>
                       <p className="text-sm text-blue-200/70 mb-6 max-w-md mx-auto">
-                        Enable document signing in the Add-ons tab to create professional document templates for e-signatures, payment agreements, service contracts, and authorization forms.
+                        Enable document signing in Billing → Services to create professional document templates for e-signatures, payment agreements, service contracts, and authorization forms.
                       </p>
                       <Button
                         onClick={() => {
-                          const tabsList = document.querySelector('[role="tablist"]');
-                          const addonsTab = tabsList?.querySelector('[value="addons"]') as HTMLElement;
-                          if (addonsTab) {
-                            addonsTab.click();
-                          }
+                          window.location.href = '/billing?tab=services';
                         }}
                         className="rounded-xl bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 transition hover:from-sky-400/80 hover:to-indigo-400/80"
                       >
-                        Go to Add-ons
+                        Go to Billing Services
                       </Button>
                     </div>
                   ) : (
@@ -3618,127 +3611,6 @@ export default function Settings() {
                     </div>
                   )}
                 </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="addons" className="space-y-6">
-              <Card className={cardBaseClasses}>
-                <CardHeader className="space-y-1 text-white">
-                  <CardTitle className="text-xl font-semibold text-white">Optional Add-ons</CardTitle>
-                  <p className="text-sm text-blue-100/70">
-                    Enable premium features for your organization. These add-ons may incur additional costs.
-                  </p>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="space-y-4">
-                    <div className="flex items-start justify-between rounded-lg border border-white/10 bg-white/5 p-4">
-                      <div className="flex-1 space-y-2">
-                        <div className="flex items-center gap-2">
-                          <FileText className="h-5 w-5 text-sky-400" />
-                          <h3 className="text-base font-semibold text-white">Document Signing</h3>
-                          <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-200 border border-amber-400/30">
-                            +$40/mo
-                          </span>
-                        </div>
-                        <p className="text-sm text-blue-100/70">
-                          Send documents for electronic signature with full ESIGN Act compliance. Perfect for contracts, agreements, and legal documents.
-                        </p>
-                        <div className="flex flex-wrap gap-2 text-xs text-blue-100/60">
-                          <span className="rounded-full bg-white/10 px-2 py-1">Legally Binding</span>
-                          <span className="rounded-full bg-white/10 px-2 py-1">Full Audit Trail</span>
-                          <span className="rounded-full bg-white/10 px-2 py-1">Custom Templates</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <Switch
-                          checked={localSettings?.enabledAddons?.includes('document_signing') || false}
-                          onCheckedChange={(checked) => {
-                            // If enabling, show confirmation dialog
-                            if (checked) {
-                              setShowAddonConfirmDialog(true);
-                            } else {
-                              // If disabling, just update directly
-                              const current = localSettings?.enabledAddons || [];
-                              const updated = current.filter((a: string) => a !== 'document_signing');
-                              handleSettingsUpdate('enabledAddons', updated);
-                            }
-                          }}
-                          data-testid="switch-document-signing"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Addon Pricing Confirmation Dialog */}
-                    <AlertDialog open={showAddonConfirmDialog} onOpenChange={setShowAddonConfirmDialog}>
-                      <AlertDialogContent className="border-white/10 bg-gradient-to-br from-slate-900 to-slate-800 text-white">
-                        <AlertDialogHeader>
-                          <AlertDialogTitle className="flex items-center gap-2 text-xl">
-                            <DollarSign className="h-5 w-5 text-amber-400" />
-                            Enable Document Signing Add-on
-                          </AlertDialogTitle>
-                          <AlertDialogDescription className="space-y-3 text-blue-100/80">
-                            <p>
-                              By enabling the Document Signing add-on, your subscription will increase by <strong className="text-amber-300">$40.00 per month</strong>.
-                            </p>
-                            <p>
-                              This premium feature includes:
-                            </p>
-                            <ul className="ml-4 space-y-1 list-disc text-sm">
-                              <li>Unlimited document templates</li>
-                              <li>Electronic signature requests with full ESIGN Act compliance</li>
-                              <li>Complete audit trail for legal protection</li>
-                              <li>Integration with communication sequences</li>
-                            </ul>
-                            <p className="text-xs text-blue-200/70">
-                              The addon fee will be reflected on your next invoice and visible in your billing page.
-                            </p>
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel 
-                            className="border-white/20 bg-white/10 text-white hover:bg-white/20"
-                            data-testid="button-cancel-addon"
-                          >
-                            Cancel
-                          </AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => {
-                              const current = localSettings?.enabledAddons || [];
-                              const updated = [...current, 'document_signing'];
-                              handleSettingsUpdate('enabledAddons', updated);
-                              setShowAddonConfirmDialog(false);
-                            }}
-                            className="bg-gradient-to-r from-sky-500 to-indigo-500 text-white hover:from-sky-400 hover:to-indigo-400"
-                            data-testid="button-confirm-addon"
-                          >
-                            Enable for $40/month
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-
-                    <div className="rounded-lg border border-blue-400/30 bg-blue-500/10 p-3">
-                      <p className="text-xs text-blue-200">
-                        <strong>Note:</strong> More add-ons will be available soon. Contact support to request specific features for your business.
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-                {hasUnsavedChanges && (
-                  <CardFooter className="border-t border-white/10 pt-6">
-                    <Button
-                      onClick={handleSaveSettings}
-                      disabled={updateSettingsMutation.isPending}
-                      className={cn(
-                        "ml-auto rounded-xl bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-6 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 transition hover:from-sky-400/80 hover:to-indigo-400/80",
-                        updateSettingsMutation.isPending && "opacity-60",
-                      )}
-                      data-testid="button-save-addons"
-                    >
-                      {updateSettingsMutation.isPending ? "Saving..." : "Save Changes"}
-                    </Button>
-                  </CardFooter>
-                )}
               </Card>
             </TabsContent>
 

@@ -13,9 +13,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
@@ -41,6 +52,7 @@ export default function Billing() {
   const [isPortalLoading, setIsPortalLoading] = useState(false);
   const [updatingPlanId, setUpdatingPlanId] = useState<string | null>(null);
   const [activatingService, setActivatingService] = useState<string | null>(null);
+  const [showAddonConfirmDialog, setShowAddonConfirmDialog] = useState(false);
 
   // Check for tab query parameter and set active tab on mount
   const [activeTab, setActiveTab] = useState(() => {
@@ -143,6 +155,28 @@ export default function Billing() {
     setActivatingService(serviceName);
     activateServiceMutation.mutate(serviceType);
   };
+
+  // Mutation to update enabledAddons
+  const updateAddonsMutation = useMutation({
+    mutationFn: async (updatedAddons: string[]) => {
+      return await apiRequest("PATCH", "/api/settings", { enabledAddons: updatedAddons });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Add-on updated",
+        description: "Your add-on settings have been saved successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/billing/stats"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Update failed",
+        description: error.message || "Failed to update add-on settings. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
 
   const formatCurrency = (amount?: number | null) => {
     const numericAmount = Number(amount ?? 0);
@@ -858,6 +892,103 @@ export default function Billing() {
                 </div>
               </CardContent>
             </Card>
+
+            <Card className="rounded-3xl border-white/10 bg-[#101c3c]/70 text-blue-50 shadow-lg shadow-blue-900/20">
+              <CardHeader className="border-b border-white/10 pb-4">
+                <CardTitle className="text-lg font-semibold text-white">Optional Add-ons</CardTitle>
+                <p className="text-sm text-blue-100/70">
+                  Enable premium features for your organization. Add-ons are billed monthly and auto-renew.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-6 pt-6">
+                <div className="flex items-start justify-between rounded-2xl border border-white/10 bg-white/5 p-6">
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-5 w-5 text-sky-400" />
+                      <h3 className="text-base font-semibold text-white">Document Signing</h3>
+                      <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-200 border border-amber-400/30">
+                        +$40/mo
+                      </span>
+                    </div>
+                    <p className="text-sm text-blue-100/70">
+                      Send documents for electronic signature with full ESIGN Act compliance. Perfect for contracts, agreements, and legal documents.
+                    </p>
+                    <div className="flex flex-wrap gap-2 text-xs text-blue-100/60">
+                      <span className="rounded-full bg-white/10 px-2 py-1">Legally Binding</span>
+                      <span className="rounded-full bg-white/10 px-2 py-1">Full Audit Trail</span>
+                      <span className="rounded-full bg-white/10 px-2 py-1">Custom Templates</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Switch
+                      checked={enabledAddons.includes('document_signing') || false}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setShowAddonConfirmDialog(true);
+                        } else {
+                          const updated = enabledAddons.filter((a: string) => a !== 'document_signing');
+                          updateAddonsMutation.mutate(updated);
+                        }
+                      }}
+                      data-testid="switch-document-signing"
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-blue-400/30 bg-blue-500/10 p-4">
+                  <p className="text-xs text-blue-200">
+                    <strong>Note:</strong> Add-ons are billed monthly and will auto-renew until you disable them. Changes are reflected on your next invoice.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <AlertDialog open={showAddonConfirmDialog} onOpenChange={setShowAddonConfirmDialog}>
+              <AlertDialogContent className="border-white/10 bg-gradient-to-br from-slate-900 to-slate-800 text-white">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="flex items-center gap-2 text-xl">
+                    <DollarSign className="h-5 w-5 text-amber-400" />
+                    Enable Document Signing Add-on
+                  </AlertDialogTitle>
+                  <AlertDialogDescription className="space-y-3 text-blue-100/80">
+                    <p>
+                      By enabling the Document Signing add-on, your subscription will increase by <strong className="text-amber-300">$40.00 per month</strong>.
+                    </p>
+                    <p>
+                      This premium feature includes:
+                    </p>
+                    <ul className="ml-4 space-y-1 list-disc text-sm">
+                      <li>Unlimited document templates</li>
+                      <li>Electronic signature requests with full ESIGN Act compliance</li>
+                      <li>Complete audit trail for legal protection</li>
+                      <li>Integration with communication sequences</li>
+                    </ul>
+                    <p className="text-xs text-blue-200/70">
+                      The add-on fee will be reflected on your next invoice and will auto-renew monthly until you disable it.
+                    </p>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel 
+                    className="border-white/20 bg-white/10 text-white hover:bg-white/20"
+                    data-testid="button-cancel-addon"
+                  >
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => {
+                      const updated = [...enabledAddons, 'document_signing'];
+                      updateAddonsMutation.mutate(updated);
+                      setShowAddonConfirmDialog(false);
+                    }}
+                    className="bg-gradient-to-r from-sky-500 to-indigo-500 text-white hover:from-sky-400 hover:to-indigo-400"
+                    data-testid="button-confirm-addon"
+                  >
+                    Enable for $40/month
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </TabsContent>
 
           <TabsContent value="invoices" className="space-y-6">
