@@ -1056,12 +1056,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Account operations
-  async getAccountsByTenant(tenantId: string): Promise<(Account & { consumer: Consumer; folder?: Folder })[]> {
+  async getAccountsByTenant(tenantId: string): Promise<(Account & { consumer: Consumer; folder?: Folder; activeArrangement?: PaymentSchedule })[]> {
     const result = await db
       .select()
       .from(accounts)
       .leftJoin(consumers, eq(accounts.consumerId, consumers.id))
       .leftJoin(folders, eq(accounts.folderId, folders.id))
+      .leftJoin(
+        paymentSchedules,
+        and(
+          eq(paymentSchedules.accountId, accounts.id),
+          eq(paymentSchedules.status, 'active')
+        )
+      )
       .where(eq(accounts.tenantId, tenantId))
       .orderBy(desc(accounts.createdAt));
     
@@ -1069,20 +1076,29 @@ export class DatabaseStorage implements IStorage {
       ...row.accounts,
       consumer: row.consumers!,
       folder: row.folders || undefined,
+      activeArrangement: row.payment_schedules || undefined,
     }));
   }
 
-  async getAccountsByFolder(folderId: string): Promise<(Account & { consumer: Consumer })[]> {
+  async getAccountsByFolder(folderId: string): Promise<(Account & { consumer: Consumer; activeArrangement?: PaymentSchedule })[]> {
     const result = await db
       .select()
       .from(accounts)
       .leftJoin(consumers, eq(accounts.consumerId, consumers.id))
+      .leftJoin(
+        paymentSchedules,
+        and(
+          eq(paymentSchedules.accountId, accounts.id),
+          eq(paymentSchedules.status, 'active')
+        )
+      )
       .where(eq(accounts.folderId, folderId))
       .orderBy(desc(accounts.createdAt));
     
     return result.map(row => ({
       ...row.accounts,
       consumer: row.consumers!,
+      activeArrangement: row.payment_schedules || undefined,
     }));
   }
 
