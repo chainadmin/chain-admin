@@ -1,0 +1,68 @@
+{"message":"📤 [RESPONSE-JSON] POST /api/consumer/payments/process → 400 (1505ms) { dataKeys: 'success, message' }","attributes":{"level":"info"},"timestamp":"2025-11-14T02:37:56.805081825Z"}
+{"message":"  bodyPreview: '{\"success\":false,\"message\":\"Payment declined\"}'","attributes":{"level":"info"},"timestamp":"2025-11-14T02:37:56.805082428Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-14T02:37:56.805088616Z"}
+{"message":"❌ [NMI] Sale failed: User 'Jacobbi2025' is not allowed to process sale transactions. REFID:608413288","attributes":{"level":"error"},"timestamp":"2025-11-14T02:37:56.805094342Z"}
+{"message":"❌ NMI payment failed: undefined","attributes":{"level":"error"},"timestamp":"2025-11-14T02:37:56.805099581Z"}
+{"message":"📨 [REQUEST] GET / {","attributes":{"level":"info"},"timestamp":"2025-11-14T02:37:58.321071220Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-14T02:37:58.321078636Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-14T02:37:58.321084265Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_1) Ap'","attributes":{"level":"info"},"timestamp":"2025-11-14T02:37:58.321089548Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-14T02:37:58.321096349Z"}
+{"message":"2025-11-14 02:38:15.442 UTC [27] LOG:  checkpoint starting: time","attributes":{"level":"error"},"timestamp":"2025-11-14T02:38:24.983557990Z"}
+{"message":"2025-11-14 02:38:15.699 UTC [27] LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.208 s, sync=0.015 s, total=0.258 s; sync files=3, longest=0.009 s, average=0.005 s; distance=12 kB, estimate=116 kB; lsn=0/EE39AD8, redo lsn=0/EE39A80","attributes":{"level":"error"},"timestamp":"2025-11-14T02:38:24.983569423Z"}
+{"message":"📨 [REQUEST] POST /api/webhooks/postmark {","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838479600Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838483614Z"}
+{"message":"  contentType: 'application/json',","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838487510Z"}
+{"message":"  userAgent: 'Postmark'","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838491319Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838495669Z"}
+{"message":"Received Postmark webhook: {","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838499214Z"}
+{"message":"  \"RecordType\": \"Open\",","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838658947Z"}
+{"message":"  \"FirstOpen\": false,","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838664997Z"}
+{"message":"  \"Client\": {","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838669447Z"}
+{"message":"    \"Name\": \"Safari mobile \",","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838675719Z"}
+{"message":"    \"Company\": \"Apple Inc.\",","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838681530Z"}
+{"message":"    \"Family\": \"Safari mobile\"","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838686859Z"}
+{"message":"  },","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838693753Z"}
+{"message":"  \"OS\": {","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838698586Z"}
+{"message":"    \"Name\": \"iOS\",","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838703734Z"}
+{"message":"    \"Company\": \"Apple Inc.\",","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838709308Z"}
+{"message":"    \"Family\": \"iOS\"","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838715002Z"}
+{"message":"  },","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838719870Z"}
+{"message":"  \"Platform\": \"Mobile\",","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838725269Z"}
+{"message":"  \"UserAgent\": \"Mozilla/5.0 (iPhone; CPU iPhone OS 18_6_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148\",","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838731227Z"}
+{"message":"  \"ReadSeconds\": 0,","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838738007Z"}
+{"message":"  \"Geo\": {","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838744020Z"}
+{"message":"    \"CountryISOCode\": \"US\",","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838749385Z"}
+{"message":"    \"Country\": \"United States\",","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838754435Z"}
+{"message":"    \"Coords\": \"37.751,-97.822\",","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838759445Z"}
+{"message":"    \"IP\": \"76.37.196.141\"","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838764809Z"}
+{"message":"  },","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838772109Z"}
+{"message":"  \"MessageID\": \"9c42ad1e-8acd-4baf-bce9-e3d3b0567219\",","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838777096Z"}
+{"message":"  \"ReceivedAt\": \"2025-11-14T02:40:14Z\",","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838782854Z"}
+{"message":"  \"Tag\": \"\",","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838952306Z"}
+{"message":"  \"Recipient\": \"info@waypointsolutionsco.com\",","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838956322Z"}
+{"message":"  \"MessageStream\": \"outbound\",","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838960485Z"}
+{"message":"  \"Metadata\": {}","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838964625Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838969473Z"}
+{"message":"📧 Postmark Event Details:","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838974760Z"}
+{"message":"  - RecordType: Open","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838979542Z"}
+{"message":"  - MessageID: 9c42ad1e-8acd-4baf-bce9-e3d3b0567219","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838983869Z"}
+{"message":"  - Tag: ","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838988685Z"}
+{"message":"  - Metadata received: {}","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838992406Z"}
+{"message":"  - Extracted campaignId: undefined","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.838996882Z"}
+{"message":"  - Extracted tenantId: undefined","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.839000931Z"}
+{"message":"Email tracking event: {","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.839004885Z"}
+{"message":"  messageId: '9c42ad1e-8acd-4baf-bce9-e3d3b0567219',","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.839044866Z"}
+{"message":"  recipient: 'info@waypointsolutionsco.com',","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.839049672Z"}
+{"message":"  campaignId: undefined,","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.839054167Z"}
+{"message":"  eventType: 'Open',","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.839059693Z"}
+{"message":"  timestamp: 2025-11-14T02:40:17.171Z,","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.839064820Z"}
+{"message":"  metadata: {}","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.839069549Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.839074046Z"}
+{"message":"ℹ️ Skipping SMAX email tracking - no tenantId available","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.839079438Z"}
+{"message":"📤 [RESPONSE-JSON] POST /api/webhooks/postmark → 200 (94ms) { dataKeys: 'message' }","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.839084739Z"}
+{"message":"📤 [RESPONSE] POST /api/webhooks/postmark → 200 (94ms) {","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.839089461Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.839093700Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.839099065Z"}
+{"message":"  bodyPreview: '{\"message\":\"Webhook processed successfully\"}'","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.839103677Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-14T02:40:18.839108784Z"}
