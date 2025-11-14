@@ -8649,17 +8649,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else if (merchantProvider === 'nmi') {
         // ===== NMI PAYMENT PROCESSING =====
         console.log('🟣 Processing payment with NMI (Network Merchants Inc.)');
-        console.log('💡 Using direct sale (bypassing Customer Vault - cards stored in SMAX)');
         
-        // CRITICAL: NMI requires SMAX for saved cards and future-dated payments
         const hasFuturePaymentDate = normalizedFirstPaymentDate !== null && normalizedFirstPaymentDate.getTime() > today.getTime();
         const needsCardStorage = saveCard || setupRecurring || hasFuturePaymentDate;
+        const useSMAXForCards = settings.smaxEnabled && account.filenumber;
         
-        if (needsCardStorage && (!settings.smaxEnabled || !account.filenumber)) {
-          return res.status(400).json({
-            success: false,
-            message: 'SMAX integration is required for NMI recurring payments, saved cards, and future-dated payments. Please contact support.',
-          });
+        // Determine payment flow based on SMAX availability
+        if (useSMAXForCards) {
+          console.log('💡 Using SMAX for card storage, NMI for direct sale processing');
+        } else if (needsCardStorage) {
+          console.log('💡 Using NMI Customer Vault for card storage and recurring payments');
+        } else {
+          console.log('💡 Using NMI direct sale for one-time payment');
         }
         
         const { NMIService } = await import('./nmiService');
@@ -8669,11 +8670,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         let cardLast4 = cardNumber.slice(-4);
         let cardBrand = null;
-        
-        // For NMI: We don't use Customer Vault at all
-        // - One-time payments: Direct sale
-        // - Saved cards/recurring: Store card details in SMAX, process via direct sale each time
-        console.log('💳 NMI payment flow: Direct sale (no vault tokenization)');
+        let customerVaultId: string | null = null;
 
         // Skip immediate charge ONLY if there's a future payment date
         const shouldSkipImmediateCharge = (normalizedFirstPaymentDate !== null && normalizedFirstPaymentDate.getTime() > today.getTime());
