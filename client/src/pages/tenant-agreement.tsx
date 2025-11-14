@@ -45,8 +45,11 @@ export default function TenantAgreement() {
 
   const agreeMutation = useMutation({
     mutationFn: async () => {
+      const body = agreement?.interactiveFields ? { interactiveFieldValues: formData } : {};
       const response = await fetch(`/api/tenant-agreement/${agreementId}/agree`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
       });
       if (!response.ok) {
         const error = await response.json();
@@ -127,15 +130,60 @@ export default function TenantAgreement() {
   const isPlainObject = (val: any): val is Record<string, any> => 
     typeof val === 'object' && val !== null && !Array.isArray(val) && Object.getPrototypeOf(val) === Object.prototype;
 
+  // Check if agreement has interactive fields that need to be filled
+  const hasInteractiveFields = agreement.interactiveFields && Array.isArray(agreement.interactiveFields) && agreement.interactiveFields.length > 0;
+  const needsFormCompletion = hasInteractiveFields && showForm;
+
+  // Merge form data with metadata for rendering
+  const mergedMetadata = isPlainObject(agreement.metadata) 
+    ? { ...agreement.metadata, ...formData } 
+    : formData;
+
   const renderedContent = replaceGlobalDocumentVariables(
     agreement.content, 
-    isPlainObject(agreement.metadata) ? agreement.metadata : {}
+    mergedMetadata
   );
 
   const canTakeAction = (agreement.status === 'pending' || agreement.status === 'viewed') && 
                         !agreeMutation.isPending && 
                         !declineMutation.isPending &&
                         !isSubmitting;
+
+  // Handle form submission
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Validate required fields
+    const errors: Record<string, string> = {};
+    const fields = agreement.interactiveFields as Array<{ name: string; type: string; required?: boolean; label?: string }>;
+    
+    fields.forEach((field) => {
+      if (field.required && !formData[field.name]) {
+        errors[field.name] = `${field.label || field.name} is required`;
+      }
+    });
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      return;
+    }
+
+    // Clear errors and hide form
+    setFormErrors({});
+    setShowForm(false);
+  };
+
+  const handleFieldChange = (name: string, value: any) => {
+    setFormData(prev => ({ ...prev, [name]: value }));
+    // Clear error for this field
+    if (formErrors[name]) {
+      setFormErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[name];
+        return newErrors;
+      });
+    }
+  };
 
   if (hasAgreed || agreement.status === 'agreed') {
     return (
@@ -215,19 +263,93 @@ export default function TenantAgreement() {
           </div>
         </div>
 
+        {/* Interactive Form (if needed) */}
+        {needsFormCompletion && (
+          <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
+            <div className="mb-6">
+              <AlertCircle className="h-12 w-12 text-blue-600 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold text-gray-900 text-center mb-2">Complete Payment Authorization</h2>
+              <p className="text-gray-600 text-center">Please fill out the form below to customize your payment authorization.</p>
+            </div>
+
+            <form onSubmit={handleFormSubmit} className="space-y-6">
+              {agreement.interactiveFields.map((field: any) => (
+                <div key={field.name} className="space-y-2">
+                  <Label htmlFor={field.name} className="text-sm font-medium">
+                    {field.label || field.name}
+                    {field.required && <span className="text-red-500 ml-1">*</span>}
+                  </Label>
+                  
+                  {field.type === 'select' ? (
+                    <Select
+                      value={formData[field.name] || ''}
+                      onValueChange={(value) => handleFieldChange(field.name, value)}
+                    >
+                      <SelectTrigger id={field.name} className="w-full" data-testid={`input-${field.name}`}>
+                        <SelectValue placeholder={field.placeholder || `Select ${field.label || field.name}`} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {field.options?.map((option: string) => (
+                          <SelectItem key={option} value={option}>{option}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : field.type === 'number' ? (
+                    <Input
+                      id={field.name}
+                      type="number"
+                      min={field.min}
+                      value={formData[field.name] || ''}
+                      onChange={(e) => handleFieldChange(field.name, e.target.value)}
+                      placeholder={field.placeholder || ''}
+                      className="w-full"
+                      data-testid={`input-${field.name}`}
+                    />
+                  ) : (
+                    <Input
+                      id={field.name}
+                      type="text"
+                      value={formData[field.name] || ''}
+                      onChange={(e) => handleFieldChange(field.name, e.target.value)}
+                      placeholder={field.placeholder || ''}
+                      className="w-full"
+                      data-testid={`input-${field.name}`}
+                    />
+                  )}
+
+                  {formErrors[field.name] && (
+                    <p className="text-red-500 text-sm">{formErrors[field.name]}</p>
+                  )}
+                </div>
+              ))}
+
+              <Button
+                type="submit"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-6 text-lg font-semibold"
+                data-testid="button-submit-form"
+              >
+                Continue to Review
+              </Button>
+            </form>
+          </div>
+        )}
+
         {/* Agreement Content */}
-        <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
-          <div 
-            className="prose max-w-none prose-headings:text-gray-900 prose-p:text-gray-700"
-            dangerouslySetInnerHTML={{ __html: renderedContent }}
-          />
-        </div>
+        {!needsFormCompletion && (
+          <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
+            <div 
+              className="prose max-w-none prose-headings:text-gray-900 prose-p:text-gray-700"
+              dangerouslySetInnerHTML={{ __html: renderedContent }}
+            />
+          </div>
+        )}
 
         {/* Actions */}
-        <div className="bg-white rounded-2xl shadow-xl p-8">
-          {!showDeclineForm ? (
-            <div className="space-y-4">
-              {!canTakeAction ? (
+        {!needsFormCompletion && (
+          <div className="bg-white rounded-2xl shadow-xl p-8">
+            {!showDeclineForm ? (
+              <div className="space-y-4">
+                {!canTakeAction ? (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
                   <p className="text-yellow-800 text-sm">
                     This agreement has already been {agreement.status}. No further action can be taken.
@@ -237,12 +359,12 @@ export default function TenantAgreement() {
                 <div className="flex items-center justify-center space-x-4">
                   <Button
                     onClick={() => {
-                      if (!isSubmitting && canTakeAction) {
+                      if (!isSubmitting && canTakeAction && !needsFormCompletion) {
                         setIsSubmitting(true);
                         agreeMutation.mutate();
                       }
                     }}
-                    disabled={!canTakeAction || agreeMutation.isPending || isSubmitting}
+                    disabled={!canTakeAction || agreeMutation.isPending || isSubmitting || needsFormCompletion}
                     className="bg-green-600 hover:bg-green-700 text-white px-8 py-6 text-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                     data-testid="button-agree"
                   >
@@ -344,7 +466,8 @@ export default function TenantAgreement() {
               )}
             </div>
           )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

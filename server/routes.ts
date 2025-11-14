@@ -16093,48 +16093,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Agreement template not found" });
       }
 
-      // Validate and merge interactive field values if template has interactive fields
+      // Validate and sanitize interactive field values if template has interactive fields
       let updatedMetadata = agreement.agreementMetadata as Record<string, any> || {};
       
-      if (template.interactiveFields && Array.isArray(template.interactiveFields)) {
-        const fields = template.interactiveFields as Array<{ name: string; type: string; required?: boolean; min?: number; options?: string[] }>;
+      if (template.interactiveFields && Array.isArray(template.interactiveFields) && template.interactiveFields.length > 0) {
+        const fields = template.interactiveFields as Array<{ name: string; type: string; required?: boolean; min?: number; options?: string[]; placeholder?: string; label?: string }>;
         
-        if (!interactiveFieldValues) {
+        // Enforce interactive fields requirement - cannot accept agreement without providing values
+        if (!interactiveFieldValues || typeof interactiveFieldValues !== 'object' || Object.keys(interactiveFieldValues).length === 0) {
           return res.status(400).json({ message: "Interactive field values are required for this agreement" });
         }
 
-        // Validate each required field
-        for (const field of fields) {
-          if (field.required && !interactiveFieldValues[field.name]) {
-            return res.status(400).json({ message: `Field "${field.name}" is required` });
-          }
+        // Build validated payload - only allow declared fields
+        const validatedValues: Record<string, any> = {};
+        const declaredFieldNames = new Set(fields.map(f => f.name));
 
-          const value = interactiveFieldValues[field.name];
-          
-          // Type-specific validation
-          if (value !== undefined && value !== null && value !== '') {
-            if (field.type === 'number') {
-              const numValue = Number(value);
-              if (isNaN(numValue)) {
-                return res.status(400).json({ message: `Field "${field.name}" must be a number` });
-              }
-              if (field.min !== undefined && numValue < field.min) {
-                return res.status(400).json({ message: `Field "${field.name}" must be at least ${field.min}` });
-              }
-            }
-            
-            if (field.type === 'select' && field.options) {
-              if (!field.options.includes(String(value))) {
-                return res.status(400).json({ message: `Field "${field.name}" must be one of: ${field.options.join(', ')}` });
-              }
-            }
+        // Reject unexpected keys
+        for (const key of Object.keys(interactiveFieldValues)) {
+          if (!declaredFieldNames.has(key)) {
+            return res.status(400).json({ message: `Unexpected field "${key}" provided` });
           }
         }
 
-        // Merge interactive field values into metadata
+        // Validate and sanitize each declared field
+        for (const field of fields) {
+          const rawValue = interactiveFieldValues[field.name];
+          
+          // Check required fields
+          if (field.required && (rawValue === undefined || rawValue === null || rawValue === '')) {
+            return res.status(400).json({ message: `Field "${field.name}" is required` });
+          }
+
+          // Skip validation for empty optional fields
+          if (rawValue === undefined || rawValue === null || rawValue === '') {
+            continue;
+          }
+          
+          // Type-specific validation and coercion
+          if (field.type === 'number') {
+            const numValue = Number(rawValue);
+            if (isNaN(numValue)) {
+              return res.status(400).json({ message: `Field "${field.name}" must be a number` });
+            }
+            if (field.min !== undefined && numValue < field.min) {
+              return res.status(400).json({ message: `Field "${field.name}" must be at least ${field.min}` });
+            }
+            validatedValues[field.name] = numValue;
+          } else if (field.type === 'select') {
+            const strValue = String(rawValue).trim();
+            if (field.options && !field.options.includes(strValue)) {
+              return res.status(400).json({ message: `Field "${field.name}" must be one of: ${field.options.join(', ')}` });
+            }
+            // Sanitize by ensuring exact match from allowed options
+            validatedValues[field.name] = strValue;
+          } else {
+            // For text and other types, sanitize by converting to string and trimming
+            const sanitized = String(rawValue).trim();
+            validatedValues[field.name] = sanitized;
+          }
+        }
+
+        // Store validated values under dedicated key for auditing
         updatedMetadata = {
           ...updatedMetadata,
-          ...interactiveFieldValues
+          ...validatedValues,
+          _interactiveFieldValues: validatedValues, // Keep a copy of validated fields
         };
       }
 
@@ -16147,28 +16170,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       const tenant = await storage.getTenant(agreement.tenantId);
-      const template = await storage.getGlobalDocumentTemplateById(agreement.globalDocumentId);
 
-      const metadata = agreement.agreementMetadata as Record<string, any>;
-      const metadataText = Object.entries(metadata)
-        .map(([key, value]) => `${key}: ${value}`)
+      // HTML escape function to prevent XSS in email
+      const escapeHtml = (unsafe: any): string => {
+        if (unsafe === null || unsafe === undefined) return '';
+        return String(unsafe)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      };
+
+      const metadata = updatedMetadata;
+      const metadataEntries = Object.entries(metadata)
+        .filter(([key]) => !key.startsWith('_')) // Skip internal keys like _interactiveFieldValues
+        .map(([key, value]) => `${escapeHtml(key)}: ${escapeHtml(value)}`)
         .join('\n');
 
       await emailService.sendEmail({
         to: process.env.ADMIN_EMAIL || 'admin@chainplatform.com',
-        subject: `Agreement Accepted: ${agreement.title}`,
+        subject: `Agreement Accepted: ${escapeHtml(agreement.title)}`,
         html: `
           <h2>Tenant Agreement Accepted</h2>
-          <p><strong>Tenant:</strong> ${tenant?.name}</p>
-          <p><strong>Email:</strong> ${tenant?.email}</p>
-          <p><strong>Agreement Type:</strong> ${agreement.agreementType}</p>
-          <p><strong>Title:</strong> ${agreement.title}</p>
-          <p><strong>Agreed At:</strong> ${updated.agreedAt?.toLocaleString()}</p>
-          <p><strong>IP Address:</strong> ${ipAddress}</p>
-          <p><strong>User Agent:</strong> ${userAgent}</p>
+          <p><strong>Tenant:</strong> ${escapeHtml(tenant?.name)}</p>
+          <p><strong>Email:</strong> ${escapeHtml(tenant?.email)}</p>
+          <p><strong>Agreement Type:</strong> ${escapeHtml(agreement.agreementType)}</p>
+          <p><strong>Title:</strong> ${escapeHtml(agreement.title)}</p>
+          <p><strong>Agreed At:</strong> ${escapeHtml(updated.agreedAt?.toLocaleString())}</p>
+          <p><strong>IP Address:</strong> ${escapeHtml(ipAddress)}</p>
+          <p><strong>User Agent:</strong> ${escapeHtml(userAgent)}</p>
           
           <h3>Agreement Details:</h3>
-          <pre>${metadataText}</pre>
+          <pre>${metadataEntries}</pre>
         `,
         tenantId: undefined,
       });
