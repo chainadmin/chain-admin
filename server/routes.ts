@@ -58,6 +58,12 @@ import { resolveConsumerPortalUrl } from "@shared/utils/consumerPortal";
 import { finalizeEmailHtml } from "@shared/utils/emailTemplate";
 import { ensureBaseUrl, getKnownDomainOrigins } from "@shared/utils/baseUrl";
 import { isOriginOnKnownDomain } from "@shared/utils/domains";
+import { 
+  getModuleNameForBusinessType, 
+  getModuleDescriptionForBusinessType, 
+  getPlanPricingForTenant,
+  formatDollarAmount 
+} from "@shared/globalDocumentHelpers";
 
 const csvUploadSchema = z.object({
   consumers: z.array(z.object({
@@ -968,6 +974,73 @@ async function getTenantId(req: any, storage: IStorage): Promise<string | null> 
   }
 
   return null;
+}
+
+// Chain Software Group contact information (hardcoded)
+const CHAIN_CONTACT_EMAIL = 'support@chainsoftware.com';
+const CHAIN_CONTACT_PHONE = '1-800-CHAIN-SW';
+
+// Build complete agreement variables from tenant and subscription data
+async function buildAgreementVariables(
+  tenant: any,
+  tenantId: string,
+  storage: IStorage,
+  baseUrl: string
+): Promise<Record<string, any>> {
+  // Get tenant settings and subscription
+  const tenantSettings = await storage.getTenantSettings(tenantId);
+  const subscription = await storage.getSubscriptionByTenant(tenantId);
+  
+  // Get business type and determine module info
+  const businessType = tenantSettings?.businessType || 'call_center';
+  const moduleName = getModuleNameForBusinessType(businessType as any);
+  const moduleDescription = getModuleDescriptionForBusinessType(businessType as any);
+  
+  // Get actual plan details from subscription or fallback to defaults
+  let monthlyPrice: string;
+  let pricingTier: string;
+  let billingStartDate: string;
+  
+  if (subscription && subscription.planId) {
+    // Use actual subscription pricing if available, otherwise use plan defaults
+    const plan = getPlanPricingForTenant(businessType as any, subscription.planId as MessagingPlanId);
+    
+    // Prefer subscription.priceCents for negotiated/custom rates, fallback to plan price
+    if (subscription.priceCents !== undefined && subscription.priceCents !== null) {
+      monthlyPrice = formatCurrency(subscription.priceCents);
+    } else {
+      monthlyPrice = formatDollarAmount(plan.price);
+    }
+    pricingTier = plan.name;
+    
+    // Use real billing dates from subscription (currentPeriodStart is the start of current billing cycle)
+    if (subscription.currentPeriodStart) {
+      billingStartDate = new Date(subscription.currentPeriodStart).toLocaleDateString();
+    } else if (subscription.createdAt) {
+      billingStartDate = new Date(subscription.createdAt).toLocaleDateString();
+    } else {
+      billingStartDate = new Date().toLocaleDateString();
+    }
+  } else {
+    // No subscription - use Launch plan defaults
+    const launchPlan = getPlanPricingForTenant(businessType as any, 'launch');
+    monthlyPrice = formatDollarAmount(launchPlan.price);
+    pricingTier = launchPlan.name;
+    billingStartDate = new Date().toLocaleDateString();
+  }
+  
+  return {
+    companyName: tenant.name,
+    moduleName,
+    moduleDescription,
+    pricingTier,
+    monthlyPrice,
+    billingStartDate,
+    contactEmail: CHAIN_CONTACT_EMAIL,
+    contactPhone: CHAIN_CONTACT_PHONE,
+    sentBy: 'Platform Administrator',
+    sentAt: new Date().toISOString(),
+  };
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -14352,14 +14425,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/admin/tenants/:tenantId/send-agreement', isPlatformAdmin, async (req: any, res) => {
     try {
       const { tenantId } = req.params;
-      const { templateSlug, agreementMetadata, title, description } = req.body;
+      const { templateSlug, title, description } = req.body;
 
       if (!templateSlug) {
         return res.status(400).json({ message: "Template slug is required" });
-      }
-
-      if (!agreementMetadata || typeof agreementMetadata !== 'object') {
-        return res.status(400).json({ message: "Agreement metadata is required" });
       }
 
       const tenant = await storage.getTenant(tenantId);
@@ -14376,6 +14445,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Template not found" });
       }
 
+      const baseUrl = ensureBaseUrl(process.env.REPLIT_DOMAINS);
+      
+      // Build complete agreement metadata from tenant and subscription data
+      const agreementMetadata = await buildAgreementVariables(tenant, tenantId, storage, baseUrl);
+
+      // Create agreement with complete metadata
       const agreement = await storage.createTenantAgreement({
         tenantId,
         globalDocumentId: template.id,
@@ -14386,23 +14461,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: 'pending',
       });
 
-      const baseUrl = ensureBaseUrl(process.env.REPLIT_DOMAINS);
+      // Add agreementLink to variables
       const agreementLink = `${baseUrl}/tenant-agreement/${agreement.id}`;
-
-      const tenantSettings = await storage.getTenantSettings(tenantId);
-
       const emailVariables = {
-        companyName: tenant.name,
-        contactEmail: tenantSettings?.contactEmail || tenant.email,
-        contactPhone: tenantSettings?.contactPhone || tenant.phoneNumber || '',
         ...agreementMetadata,
         agreementLink,
       };
 
+      // Replace variables in template
       let emailHtml = template.content;
-      Object.keys(emailVariables).forEach((key) => {
+      Object.keys(emailVariables).forEach((key: string) => {
+        const value = (emailVariables as any)[key];
         const regex = new RegExp(`{{${key}}}`, 'g');
-        emailHtml = emailHtml.replace(regex, String(emailVariables[key] || ''));
+        emailHtml = emailHtml.replace(regex, String(value || ''));
       });
 
       await emailService.sendEmail({
@@ -15934,13 +16005,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Agreement data incomplete" });
       }
 
+      // Generate agreementLink for the View & Agree button
+      const baseUrl = ensureBaseUrl(process.env.REPLIT_DOMAINS);
+      const agreementLink = `${baseUrl}/tenant-agreement/${agreement.id}`;
+
+      // Merge metadata with agreementLink for template rendering
+      const metadata = typeof agreement.agreementMetadata === 'object' && agreement.agreementMetadata !== null
+        ? { ...agreement.agreementMetadata as Record<string, any>, agreementLink }
+        : { agreementLink };
+
       res.json({
         id: agreement.id,
         title: agreement.title,
         description: agreement.description,
         status: agreement.status,
         agreementType: agreement.agreementType,
-        metadata: agreement.agreementMetadata,
+        metadata,
         content: template.content,
         tenantName: tenant.name,
         createdAt: agreement.createdAt,
