@@ -12456,8 +12456,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Determine which merchant provider is configured
-      const merchantProvider = settings?.merchantProvider || 'usaepay';
+      const merchantProvider = settings?.merchantProvider;
       const useSandbox = settings?.useSandbox;
+
+      if (!merchantProvider) {
+        console.error("No merchant provider configured for tenant:", tenantId);
+        return res.status(500).json({ 
+          success: false,
+          message: "Payment processing is not configured. Please contact support." 
+        });
+      }
 
       console.log('🏦 Admin payment - merchant provider:', merchantProvider);
 
