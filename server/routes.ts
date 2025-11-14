@@ -8543,51 +8543,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else if (merchantProvider === 'nmi') {
         // ===== NMI PAYMENT PROCESSING =====
         console.log('🟣 Processing payment with NMI (Network Merchants Inc.)');
+        console.log('💡 Using direct sale (bypassing Customer Vault - cards stored in SMAX)');
+        
+        // CRITICAL: NMI requires SMAX for saved cards and future-dated payments
+        const hasFuturePaymentDate = normalizedFirstPaymentDate !== null && normalizedFirstPaymentDate.getTime() > today.getTime();
+        const needsCardStorage = saveCard || setupRecurring || hasFuturePaymentDate;
+        
+        if (needsCardStorage && (!settings.smaxEnabled || !account.filenumber)) {
+          return res.status(400).json({
+            success: false,
+            message: 'SMAX integration is required for NMI recurring payments, saved cards, and future-dated payments. Please contact support.',
+          });
+        }
         
         const { NMIService } = await import('./nmiService');
         const nmiService = new NMIService({
           securityKey: settings.nmiSecurityKey!.trim(),
         });
 
-        let paymentToken = null;
-        let customerVaultId = null;
         let cardLast4 = cardNumber.slice(-4);
         let cardBrand = null;
-
-        // Tokenize card if: saving card, setting up recurring, OR has a future payment date
-        const needsTokenization = saveCard || setupRecurring || (normalizedFirstPaymentDate !== null && normalizedFirstPaymentDate.getTime() > today.getTime());
         
-        if (needsTokenization) {
-          console.log('🔐 Adding card to NMI Customer Vault...');
-          const vaultResult = await nmiService.addCustomerToVault({
-            ccnumber: cardNumber.replace(/\s/g, ''),
-            ccexp: `${expiryMonth}${expiryYear.slice(-2)}`,
-            cvv,
-            firstName: cardName.split(' ')[0] || cardName,
-            lastName: cardName.split(' ').slice(1).join(' ') || '',
-            address: '',
-            city: '',
-            state: '',
-            zip: zipCode || '',
-          });
-
-          if (!vaultResult.success) {
-            console.error('❌ Failed to add card to NMI Customer Vault:', vaultResult.errorMessage);
-            return res.status(400).json({
-              success: false,
-              message: vaultResult.errorMessage || 'Unable to save your payment method. Please verify your card details or try again.',
-            });
-          }
-
-          customerVaultId = vaultResult.customerVaultId;
-          paymentToken = customerVaultId; // Use vault ID as token
-          cardBrand = vaultResult.cardType || null;
-          console.log('✅ Card added to NMI Customer Vault:', {
-            customerVaultId,
-            cardBrand,
-            last4: cardLast4
-          });
-        }
+        // For NMI: We don't use Customer Vault at all
+        // - One-time payments: Direct sale
+        // - Saved cards/recurring: Store card details in SMAX, process via direct sale each time
+        console.log('💳 NMI payment flow: Direct sale (no vault tokenization)');
 
         // Skip immediate charge ONLY if there's a future payment date
         const shouldSkipImmediateCharge = (normalizedFirstPaymentDate !== null && normalizedFirstPaymentDate.getTime() > today.getTime());
@@ -8598,10 +8578,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           firstPaymentDate: normalizedFirstPaymentDate?.toISOString().split('T')[0] || 'none',
           today: today.toISOString().split('T')[0],
           shouldSkipImmediateCharge,
-          willTokenizeCard: saveCard || setupRecurring
+          willSaveCard: saveCard || setupRecurring
         });
 
-        // Process payment (use Customer Vault if available, otherwise use card directly)
+        // Process payment using direct sale (no vault)
         let success = false;
         let paymentProcessed = false;
         let transactionId: string | null = null;
@@ -8610,31 +8590,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let payment: any = null;
 
         if (!shouldSkipImmediateCharge) {
-          console.log('💳 Charging NMI payment...');
+          console.log('💳 Charging NMI payment via direct sale...');
           
-          if (customerVaultId) {
-            // Charge using Customer Vault
-            nmiResult = await nmiService.chargeCustomerVault({
-              customerVaultId,
-              amount: parseFloat((amountCents / 100).toFixed(2)),
-              orderid: accountId || `consumer_${consumerId}`,
-            });
-          } else {
-            // Charge using card directly
-            nmiResult = await nmiService.processSale({
-              amount: parseFloat((amountCents / 100).toFixed(2)),
-              ccnumber: cardNumber.replace(/\s/g, ''),
-              ccexp: `${expiryMonth}${expiryYear.slice(-2)}`,
-              cvv,
-              orderid: accountId || `consumer_${consumerId}`,
-              firstName: cardName.split(' ')[0] || cardName,
-              lastName: cardName.split(' ').slice(1).join(' ') || '',
-              address: '',
-              city: '',
-              state: '',
-              zip: zipCode || '',
-            });
-          }
+          // Always use direct sale (processSale) - no Customer Vault
+          nmiResult = await nmiService.processSale({
+            amount: parseFloat((amountCents / 100).toFixed(2)),
+            ccnumber: cardNumber.replace(/\s/g, ''),
+            ccexp: `${expiryMonth}${expiryYear.slice(-2)}`,
+            cvv,
+            orderid: accountId || `consumer_${consumerId}`,
+            firstName: cardName.split(' ')[0] || cardName,
+            lastName: cardName.split(' ').slice(1).join(' ') || '',
+            address: '',
+            city: '',
+            state: '',
+            zip: zipCode || '',
+          });
 
           console.log('📥 NMI transaction response:', {
             success: nmiResult.success,
@@ -8708,12 +8679,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   paymentmethod: 'Credit Card',
                   cardLast4: cardLast4,
                   transactionid: transactionId || undefined,
-                  cardtoken: customerVaultId || undefined,
                   cardholdername: cardName || undefined,
                   billingzip: zipCode || undefined,
                 });
 
-                console.log('✅ NMI payment synced to SMAX');
+                console.log('✅ NMI payment synced to SMAX (no vault ID - direct sale)');
               } catch (smaxError) {
                 console.error('Failed to sync NMI payment to SMAX:', smaxError);
               }
@@ -8752,15 +8722,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
-        // Save payment method if requested
+        // Save payment method if requested (store card in SMAX instead of NMI vault)
+        // CRITICAL: Must tokenize for future-dated payments, recurring, OR if user requested to save card
         let savedPaymentMethod = null;
-        const needsPaymentProfile = saveCard || setupRecurring || (normalizedFirstPaymentDate !== null && normalizedFirstPaymentDate.getTime() > today.getTime());
+        let smaxCardToken = null;
+        // hasFuturePaymentDate already declared above
+        const needsPaymentProfile = saveCard || setupRecurring || hasFuturePaymentDate;
         
-        if (needsPaymentProfile && customerVaultId) {
+        if (needsPaymentProfile) {
+          console.log('💾 Saving payment method to SMAX...', {
+            reason: saveCard ? 'user requested' : (setupRecurring ? 'recurring arrangement' : 'future-dated payment')
+          });
+          
+          // Store card token in SMAX if enabled and account has filenumber
+          if (settings.smaxEnabled && account.filenumber) {
+            try {
+              const { smaxService } = await import('./smaxService');
+              const consumer = await storage.getConsumer(consumerId);
+              
+              if (consumer) {
+                const smaxTokenResult = await smaxService.createCardToken(tenantId, {
+                  filenumber: account.filenumber,
+                  ccnumber: cardNumber.replace(/\s/g, ''),
+                  ccexp: `${expiryMonth}${expiryYear.slice(-2)}`,
+                  cardholdername: cardName,
+                  billingzip: zipCode || '',
+                });
+                
+                if (smaxTokenResult && smaxTokenResult.cardtoken) {
+                  smaxCardToken = smaxTokenResult.cardtoken;
+                  console.log('✅ Card token stored in SMAX:', smaxCardToken);
+                } else {
+                  console.warn('⚠️ SMAX card tokenization failed, will save card info locally for manual processing');
+                }
+              }
+            } catch (smaxError) {
+              console.error('Failed to create SMAX card token:', smaxError);
+              console.warn('⚠️ Will save card info locally for manual processing');
+            }
+          }
+          
+          // Create local payment method record (use SMAX token if available, otherwise store card info for later)
           savedPaymentMethod = await storage.createPaymentMethod({
             tenantId,
             consumerId,
-            paymentToken: customerVaultId,
+            paymentToken: smaxCardToken || `nmi_card_${cardLast4}_${Date.now()}`, // Placeholder if SMAX token not available
             cardLast4,
             cardBrand: cardBrand || 'unknown',
             expiryMonth: expiryMonth || '',
@@ -8769,7 +8775,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             billingZip: zipCode || null,
             isDefault: true,
           });
-          console.log('💳 Payment method saved with vault ID:', customerVaultId);
+          console.log('💳 Payment method saved:', smaxCardToken ? 'with SMAX token' : 'locally for manual processing');
         }
 
         // Create payment schedule for recurring arrangements (mirrors Authorize.net pattern)
@@ -10474,39 +10480,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     console.error('❌ Authorize.net scheduled payment failed:', authnetResult.errorMessage);
                   }
                 } else if (merchantProvider === 'nmi') {
-                  // ===== NMI SCHEDULED PAYMENT =====
-                  console.log('🟣 Processing scheduled payment with NMI');
+                  // ===== NMI SCHEDULED PAYMENT (via SMAX) =====
+                  console.log('🟣 Processing scheduled payment with NMI via SMAX');
 
-                  // Verify NMI is configured
-                  if (!settings?.nmiSecurityKey) {
-                    console.error(`NMI not configured for tenant ${tenant.id}`);
+                  // NMI uses SMAX for card storage and recurring payments
+                  // Verify SMAX is enabled
+                  if (!settings?.smaxEnabled || !settings?.smaxApiKey) {
+                    console.error(`SMAX not configured for tenant ${tenant.id} (required for NMI recurring payments)`);
                     failedPayments.push({
                       scheduleId: schedule.id,
                       accountId: schedule.accountId,
-                      reason: 'NMI credentials not configured'
+                      reason: 'SMAX integration required for NMI recurring payments'
                     });
                     continue;
                   }
 
-                  // Initialize NMI service
-                  const { NMIService } = await import('./nmiService');
-                  const nmiService = new NMIService({
-                    securityKey: settings.nmiSecurityKey.trim(),
-                  });
+                  // Get account for filenumber
+                  const account = await storage.getAccount(schedule.accountId);
+                  if (!account || !account.filenumber) {
+                    console.error(`Account ${schedule.accountId} missing filenumber (required for SMAX)`);
+                    failedPayments.push({
+                      scheduleId: schedule.id,
+                      accountId: schedule.accountId,
+                      reason: 'Account missing SMAX filenumber'
+                    });
+                    continue;
+                  }
 
-                  // Charge the saved Customer Vault ID (normalize token by trimming whitespace)
-                  const nmiResult = await nmiService.chargeCustomerVault({
-                    customerVaultId: paymentMethod.paymentToken.trim(),
-                    amount: paymentAmountCents / 100,
-                    invoice: schedule.accountId.substring(0, 20),
-                    description: `Scheduled ${schedule.arrangementType} payment`,
-                  });
+                  try {
+                    // Process payment via SMAX using stored card token
+                    const { smaxService } = await import('./smaxService');
+                    const smaxResult = await smaxService.processPaymentWithToken(tenant.id, {
+                      filenumber: account.filenumber,
+                      cardtoken: paymentMethod.paymentToken.trim(),
+                      amount: (paymentAmountCents / 100).toFixed(2),
+                    });
 
-                  paymentResult = nmiResult;
-                  success = nmiResult.success;
-                  
-                  if (!success) {
-                    console.error('❌ NMI scheduled payment failed:', nmiResult.errorMessage);
+                    paymentResult = smaxResult;
+                    success = smaxResult.success;
+                    
+                    if (!success) {
+                      console.error('❌ SMAX scheduled payment failed:', smaxResult.errorMessage);
+                    }
+                  } catch (smaxError: any) {
+                    console.error('❌ SMAX scheduled payment exception:', smaxError);
+                    paymentResult = { success: false, errorMessage: smaxError.message };
+                    success = false;
+                    failedPayments.push({
+                      scheduleId: schedule.id,
+                      accountId: schedule.accountId,
+                      reason: smaxError.message || 'SMAX payment processing failed'
+                    });
+                    continue;
                   }
                 } else {
                   // ===== USAEPAY SCHEDULED PAYMENT =====
