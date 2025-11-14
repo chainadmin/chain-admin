@@ -10703,14 +10703,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       });
 
                       paymentResult = nmiResult;
-                      success = nmiResult.success && nmiResult.response_code === '1';
+                      success = nmiResult.success;
                       
                       if (!success) {
-                        console.error('❌ NMI vault scheduled payment failed:', nmiResult.responsetext);
+                        console.error('❌ NMI vault scheduled payment failed:', nmiResult.responseText);
                         failedPayments.push({
                           scheduleId: schedule.id,
                           accountId: schedule.accountId,
-                          reason: nmiResult.responsetext || 'NMI vault payment declined'
+                          reason: nmiResult.errorMessage || nmiResult.responseText || 'NMI vault payment declined'
                         });
                         continue;
                       } else {
@@ -12434,7 +12434,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Consumer not found" });
       }
       
-      // Get tenant settings for blocked statuses and USAePay credentials
+      // Get tenant settings for merchant provider and credentials
       const settings = await storage.getTenantSettings(tenantId);
       
       // Check if consumer has any active accounts before processing payment
@@ -12454,36 +12454,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
       }
-      const merchantApiKey = settings?.merchantApiKey?.trim();
-      const merchantApiPin = settings?.merchantApiPin?.trim();
+      
+      // Determine which merchant provider is configured
+      const merchantProvider = settings?.merchantProvider || 'usaepay';
       const useSandbox = settings?.useSandbox;
 
-      if (!merchantApiKey || !merchantApiPin) {
-        console.error("USAePay credentials not configured for tenant:", tenantId);
-        return res.status(500).json({ 
-          success: false,
-          message: "Payment processing is not configured. Please contact support." 
-        });
-      }
-
-      // Determine API endpoint based on sandbox mode
-      const usaepayBaseUrl = useSandbox 
-        ? "https://sandbox.usaepay.com/api/v2"
-        : "https://secure.usaepay.com/api/v2";
-
-      // Generate authentication header (same as consumer endpoint)
-      const generateAuthHeader = (apiKey: string, apiPin: string): string => {
-        const seed = Array.from({ length: 16 }, () => 
-          Math.random().toString(36).charAt(2)
-        ).join('');
-        const prehash = apiKey + seed + apiPin;
-        const hash = crypto.createHash('sha256').update(prehash).digest('hex');
-        const apihash = `s2/${seed}/${hash}`;
-        const authKey = Buffer.from(`${apiKey}:${apihash}`).toString('base64');
-        return `Basic ${authKey}`;
-      };
-
-      const authHeader = generateAuthHeader(merchantApiKey, merchantApiPin);
+      console.log('🏦 Admin payment - merchant provider:', merchantProvider);
 
       // Parse expiry date (MM/YY format)
       const expiryParts = expiryDate.split('/');
@@ -12497,66 +12473,173 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Process payment through USAePay
-      const usaepayPayload = {
-        command: "sale",
-        amount: (amountCents / 100).toFixed(2),
-        invoice: `admin_payment_${Date.now()}`,
-        description: `Admin-initiated payment for ${consumer.firstName} ${consumer.lastName}`,
-        creditcard: {
-          number: cardNumber.replace(/\s/g, ''),
-          expiration: `${expiryMonth}${expiryYear}`,
-          cvc: cvv,
-          cardholder: cardName,
-          avs_street: "",
-          avs_zip: zipCode || ""
+      let success = false;
+      let transactionId: string;
+      let cardLast4 = cardNumber.slice(-4);
+      let paymentResult: any;
+
+      // Route to appropriate payment processor
+      if (merchantProvider === 'nmi') {
+        // ===== NMI ADMIN PAYMENT =====
+        console.log('🟣 Processing admin payment with NMI');
+
+        if (!settings?.nmiSecurityKey) {
+          console.error("NMI credentials not configured for tenant:", tenantId);
+          return res.status(500).json({ 
+            success: false,
+            message: "Payment processing is not configured. Please contact support." 
+          });
         }
-      };
 
-      console.log('💳 Processing admin payment through USAePay:', {
-        endpoint: `${usaepayBaseUrl}/transactions`,
-        amount: usaepayPayload.amount,
-        consumerEmail,
-        last4: cardNumber.slice(-4)
-      });
-
-      const usaepayResponse = await fetch(`${usaepayBaseUrl}/transactions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': authHeader
-        },
-        body: JSON.stringify(usaepayPayload)
-      });
-
-      const usaepayResult = await usaepayResponse.json();
-
-      console.log('📥 USAePay response:', {
-        status: usaepayResponse.status,
-        ok: usaepayResponse.ok,
-        result: usaepayResult.result,
-        hasError: !!usaepayResult.error
-      });
-
-      // Check if payment was successful
-      const success = usaepayResult.result === 'Approved' || usaepayResult.status === 'Approved';
-      
-      if (!success) {
-        console.error('❌ USAePay payment failed:', {
-          error: usaepayResult.error,
-          errorcode: usaepayResult.errorcode,
-          result: usaepayResult.result
+        const { NMIService } = await import('./nmiService');
+        const nmiService = new NMIService({
+          securityKey: settings.nmiSecurityKey.trim(),
         });
 
-        return res.status(400).json({
-          success: false,
-          message: usaepayResult.error || usaepayResult.result || 'Payment declined',
-          debug: process.env.NODE_ENV === 'development' ? usaepayResult : undefined
+        // Admin payments use direct sale (no vault)
+        const nmiResult = await nmiService.processSale({
+          amount: parseFloat((amountCents / 100).toFixed(2)),
+          ccnumber: cardNumber.replace(/\s/g, ''),
+          ccexp: `${expiryMonth}${expiryYear.slice(-2)}`,
+          cvv,
+          orderid: `admin_${Date.now()}`,
+          firstName: cardName.split(' ')[0] || cardName,
+          lastName: cardName.split(' ').slice(1).join(' ') || '',
+          address: '',
+          city: '',
+          state: '',
+          zip: zipCode || '',
         });
+
+        paymentResult = nmiResult;
+        success = nmiResult.success;
+        transactionId = nmiResult.transactionId || `nmi_${Date.now()}`;
+
+        if (!success) {
+          console.error('❌ NMI admin payment failed:', nmiResult.responseText);
+          return res.status(400).json({
+            success: false,
+            message: nmiResult.errorMessage || nmiResult.responseText || 'Payment declined',
+          });
+        }
+
+      } else if (merchantProvider === 'authorize_net') {
+        // ===== AUTHORIZE.NET ADMIN PAYMENT =====
+        console.log('🔵 Processing admin payment with Authorize.net');
+
+        if (!settings?.authnetApiLoginId || !settings?.authnetTransactionKey) {
+          console.error("Authorize.net credentials not configured for tenant:", tenantId);
+          return res.status(500).json({ 
+            success: false,
+            message: "Payment processing is not configured. Please contact support." 
+          });
+        }
+
+        const { AuthnetService } = await import('./authnetService');
+        const authnetService = new AuthnetService({
+          apiLoginId: settings.authnetApiLoginId.trim(),
+          transactionKey: settings.authnetTransactionKey.trim(),
+          useSandbox: useSandbox ?? true,
+        });
+
+        // Admin payments use direct charge (no profile)
+        const authnetResult = await authnetService.processPayment({
+          amount: (amountCents / 100).toString(),
+          cardNumber: cardNumber.replace(/\s/g, ''),
+          expirationDate: `${expiryYear}-${expiryMonth}`,
+          cardCode: cvv,
+          invoice: `admin_${Date.now()}`,
+          description: `Admin payment for ${consumer.firstName} ${consumer.lastName}`,
+        });
+
+        paymentResult = authnetResult;
+        success = authnetResult.success;
+        transactionId = authnetResult.transactionId || `authnet_${Date.now()}`;
+
+        if (!success) {
+          console.error('❌ Authorize.net admin payment failed:', authnetResult.errorMessage);
+          return res.status(400).json({
+            success: false,
+            message: authnetResult.errorMessage || 'Payment declined',
+          });
+        }
+
+      } else {
+        // ===== USAEPAY ADMIN PAYMENT =====
+        console.log('🟢 Processing admin payment with USAePay');
+
+        const merchantApiKey = settings?.merchantApiKey?.trim();
+        const merchantApiPin = settings?.merchantApiPin?.trim();
+
+        if (!merchantApiKey || !merchantApiPin) {
+          console.error("USAePay credentials not configured for tenant:", tenantId);
+          return res.status(500).json({ 
+            success: false,
+            message: "Payment processing is not configured. Please contact support." 
+          });
+        }
+
+        const usaepayBaseUrl = useSandbox 
+          ? "https://sandbox.usaepay.com/api/v2"
+          : "https://secure.usaepay.com/api/v2";
+
+        // Generate authentication header
+        const generateAuthHeader = (apiKey: string, apiPin: string): string => {
+          const seed = Array.from({ length: 16 }, () => 
+            Math.random().toString(36).charAt(2)
+          ).join('');
+          const prehash = apiKey + seed + apiPin;
+          const hash = crypto.createHash('sha256').update(prehash).digest('hex');
+          const apihash = `s2/${seed}/${hash}`;
+          const authKey = Buffer.from(`${apiKey}:${apihash}`).toString('base64');
+          return `Basic ${authKey}`;
+        };
+
+        const authHeader = generateAuthHeader(merchantApiKey, merchantApiPin);
+
+        const usaepayPayload = {
+          command: "sale",
+          amount: (amountCents / 100).toFixed(2),
+          invoice: `admin_payment_${Date.now()}`,
+          description: `Admin-initiated payment for ${consumer.firstName} ${consumer.lastName}`,
+          creditcard: {
+            number: cardNumber.replace(/\s/g, ''),
+            expiration: `${expiryMonth}${expiryYear}`,
+            cvc: cvv,
+            cardholder: cardName,
+            avs_street: "",
+            avs_zip: zipCode || ""
+          }
+        };
+
+        const usaepayResponse = await fetch(`${usaepayBaseUrl}/transactions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': authHeader
+          },
+          body: JSON.stringify(usaepayPayload)
+        });
+
+        const usaepayResult = await usaepayResponse.json();
+        paymentResult = usaepayResult;
+
+        success = usaepayResult.result === 'Approved' || usaepayResult.status === 'Approved';
+        transactionId = usaepayResult.refnum || usaepayResult.key || `tx_${Date.now()}`;
+        
+        if (!success) {
+          console.error('❌ USAePay admin payment failed:', {
+            error: usaepayResult.error,
+            errorcode: usaepayResult.errorcode,
+            result: usaepayResult.result
+          });
+
+          return res.status(400).json({
+            success: false,
+            message: usaepayResult.error || usaepayResult.result || 'Payment declined',
+          });
+        }
       }
-
-      const transactionId = usaepayResult.refnum || usaepayResult.key || `tx_${Date.now()}`;
-      const cardLast4 = cardNumber.slice(-4);
 
       // Create payment record
       const payment = await storage.createPayment({
