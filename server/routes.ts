@@ -8671,6 +8671,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let cardLast4 = cardNumber.slice(-4);
         let cardBrand = null;
         let customerVaultId: string | null = null;
+        let savedPaymentMethod: any = null;
+        let smaxCardToken: string | null = null;
 
         // Skip immediate charge ONLY if there's a future payment date
         const shouldSkipImmediateCharge = (normalizedFirstPaymentDate !== null && normalizedFirstPaymentDate.getTime() > today.getTime());
@@ -8684,18 +8686,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
           willSaveCard: saveCard || setupRecurring
         });
 
-        // Process payment using direct sale (no vault)
+        // Determine payment processing method
         let success = false;
         let paymentProcessed = false;
         let transactionId: string | null = null;
         let nmiResult: any = null;
-
         let payment: any = null;
 
-        if (!shouldSkipImmediateCharge) {
+        // Branch 1: Use NMI Customer Vault if card storage needed and SMAX unavailable
+        if (needsCardStorage && !useSMAXForCards) {
+          console.log('💳 Using NMI Customer Vault for recurring payments...');
+          
+          // Check if consumer already has a vault ID
+          let existingVaultId: string | null = null;
+          const savedPaymentMethods = await storage.getPaymentMethods(consumerId);
+          const nmiVaultMethod = savedPaymentMethods.find(pm => 
+            pm.paymentType === 'credit_card' && pm.paymentToken?.startsWith('nmi_vault_')
+          );
+          
+          if (nmiVaultMethod) {
+            existingVaultId = nmiVaultMethod.paymentToken.replace('nmi_vault_', '');
+            console.log('📋 Found existing NMI vault ID:', existingVaultId);
+          }
+
+          // Add/update customer in vault
+          const vaultResult = await nmiService.addCustomerToVault({
+            customerVaultId: existingVaultId || undefined,
+            ccnumber: cardNumber.replace(/\s/g, ''),
+            ccexp: `${expiryMonth}${expiryYear.slice(-2)}`,
+            firstName: cardName.split(' ')[0] || cardName,
+            lastName: cardName.split(' ').slice(1).join(' ') || '',
+            address: '',
+            city: '',
+            state: '',
+            zip: zipCode || '',
+          });
+
+          if (!vaultResult.success || !vaultResult.customerVaultId) {
+            console.error('❌ Failed to add customer to NMI vault:', vaultResult.message);
+            return res.status(400).json({
+              success: false,
+              message: 'Unable to set up recurring payments. Please try again or contact support.',
+            });
+          }
+
+          customerVaultId = vaultResult.customerVaultId;
+          console.log('✅ Customer added to NMI vault:', customerVaultId);
+
+          // Save payment method for recurring, future-dated, or user-requested
+          // CRITICAL: Must save for ALL card storage scenarios (not just when user requests)
+          savedPaymentMethod = await storage.createPaymentMethod({
+            consumerId,
+            tenantId,
+            paymentType: 'credit_card',
+            paymentToken: `nmi_vault_${customerVaultId}`,
+            last4: cardLast4,
+            cardBrand: cardBrand || 'unknown',
+            expiryMonth,
+            expiryYear,
+            isDefault: false,
+          });
+          console.log('💾 Saved NMI vault payment method (ID:', savedPaymentMethod.id, ')');
+          
+          // Set vault token for downstream use
+          smaxCardToken = `nmi_vault_${customerVaultId}`;
+
+          // Charge via vault if not skipping immediate charge
+          if (!shouldSkipImmediateCharge) {
+            nmiResult = await nmiService.chargeCustomerVault({
+              customerVaultId,
+              amount: parseFloat((amountCents / 100).toFixed(2)),
+              orderid: accountId || `consumer_${consumerId}`,
+            });
+          }
+
+        } else if (!shouldSkipImmediateCharge) {
+          // Branch 2: Direct sale for one-time payments or when using SMAX
           console.log('💳 Charging NMI payment via direct sale...');
           
-          // Always use direct sale (processSale) - no Customer Vault
           nmiResult = await nmiService.processSale({
             amount: parseFloat((amountCents / 100).toFixed(2)),
             ccnumber: cardNumber.replace(/\s/g, ''),
@@ -8709,6 +8777,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             state: '',
             zip: zipCode || '',
           });
+        }
+
+        // Process result if payment was charged
+        if (!shouldSkipImmediateCharge && nmiResult) {
 
           console.log('📥 NMI transaction response:', {
             success: nmiResult.success,
@@ -8825,14 +8897,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
-        // Save payment method if requested (store card in SMAX instead of NMI vault)
-        // CRITICAL: Must tokenize for future-dated payments, recurring, OR if user requested to save card
-        let savedPaymentMethod = null;
-        let smaxCardToken = null;
+        // Save payment method to SMAX (only if not using NMI vault)
+        // Note: savedPaymentMethod and smaxCardToken already declared at top of NMI section
+        
         // hasFuturePaymentDate already declared above
         const needsPaymentProfile = saveCard || setupRecurring || hasFuturePaymentDate;
         
-        if (needsPaymentProfile) {
+        // Only use SMAX card storage if we're not using NMI vault AND card storage is needed
+        if (needsPaymentProfile && useSMAXForCards) {
           console.log('💾 Saving payment method to SMAX...', {
             reason: saveCard ? 'user requested' : (setupRecurring ? 'recurring arrangement' : 'future-dated payment')
           });
