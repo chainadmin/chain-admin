@@ -797,6 +797,18 @@ export async function runMigrations() {
       console.log('  ⚠ Could not enable services for subscribed tenants:', err);
     }
     
+    // Add interactive_fields column to global_document_templates
+    console.log('Adding interactive_fields column to global_document_templates...');
+    try {
+      await client.query(`
+        ALTER TABLE global_document_templates
+        ADD COLUMN IF NOT EXISTS interactive_fields JSONB
+      `);
+      console.log('  ✓ interactive_fields column added');
+    } catch (err) {
+      console.log('  ⚠ interactive_fields column (already exists or error):', err);
+    }
+    
     // Seed global document templates for global admin agreements
     console.log('Seeding global document templates...');
     try {
@@ -814,10 +826,44 @@ export async function runMigrations() {
       
       const paymentAuthVars = ['companyName', 'paymentAmount', 'paymentFrequency', 'merchantProvider', 'paymentMethod', 'agreementLink'];
       
+      // Define interactive fields for payment authorization form
+      const paymentAuthFields = [
+        {
+          name: 'paymentAmount',
+          type: 'number',
+          label: 'Payment Amount ($)',
+          required: true,
+          min: 1,
+          placeholder: 'Enter amount'
+        },
+        {
+          name: 'paymentFrequency',
+          type: 'select',
+          label: 'Payment Frequency',
+          required: true,
+          options: ['Monthly', 'Weekly', 'Bi-Weekly', 'Quarterly', 'Annually']
+        },
+        {
+          name: 'merchantProvider',
+          type: 'select',
+          label: 'Merchant Provider',
+          required: true,
+          options: ['USAePay', 'Authorize.net', 'NMI', 'Stripe']
+        },
+        {
+          name: 'paymentMethod',
+          type: 'select',
+          label: 'Payment Method',
+          required: true,
+          options: ['Credit Card', 'Debit Card', 'ACH/Bank Account']
+        }
+      ];
+      
       await client.query(
-        `INSERT INTO global_document_templates (slug, name, title, content, description, available_variables, is_active) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (slug) DO NOTHING`,
-        ['payment_authorization', 'Payment Authorization Form', 'Chain Software Group - Payment Authorization', paymentAuthHtml, 'Global admin template for sending payment authorization agreements to tenants', paymentAuthVars, true]
+        `INSERT INTO global_document_templates (slug, name, title, content, description, available_variables, interactive_fields, is_active) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
+         ON CONFLICT (slug) DO UPDATE SET interactive_fields = EXCLUDED.interactive_fields`,
+        ['payment_authorization', 'Payment Authorization Form', 'Chain Software Group - Payment Authorization', paymentAuthHtml, 'Global admin template for sending payment authorization agreements to tenants', paymentAuthVars, JSON.stringify(paymentAuthFields), true]
       );
       
       console.log('  ✓ Global document templates seeded');

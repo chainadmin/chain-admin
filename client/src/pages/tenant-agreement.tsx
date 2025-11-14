@@ -3,7 +3,10 @@ import { useRoute } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { CheckCircle2, XCircle, FileText, Clock, Eye } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { CheckCircle2, XCircle, FileText, Clock, Eye, AlertCircle } from 'lucide-react';
 import { queryClient } from '@/lib/queryClient';
 import { replaceGlobalDocumentVariables } from '@shared/globalDocumentHelpers';
 
@@ -16,6 +19,9 @@ export default function TenantAgreement() {
   const [hasAgreed, setHasAgreed] = useState(false);
   const [hasDeclined, setHasDeclined] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formData, setFormData] = useState<Record<string, any>>({});
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [showForm, setShowForm] = useState(true);
 
   const { data: agreement, isLoading } = useQuery({
     queryKey: ['/api/tenant-agreement', agreementId],

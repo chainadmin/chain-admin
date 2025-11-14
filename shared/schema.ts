@@ -458,6 +458,7 @@ export const globalDocumentTemplates = pgTable("global_document_templates", {
   version: integer("version").default(1), // Track template versions
   requiredTenantFields: text("required_tenant_fields").array(), // ["businessType", "subscriptionPlan", "ownerName"]
   availableVariables: text("available_variables").array(), // List of allowed variable names
+  interactiveFields: jsonb("interactive_fields"), // User-fillable fields: [{name: "paymentAmount", type: "select", label: "Payment Amount", options: [...], required: true}]
   signaturePlacement: text("signature_placement").default("bottom"),
   legalDisclaimer: text("legal_disclaimer"),
   consentText: text("consent_text").default("I agree to the terms and conditions outlined in this document."),
