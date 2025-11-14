@@ -16022,6 +16022,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         agreementType: agreement.agreementType,
         metadata,
         content: template.content,
+        interactiveFields: template.interactiveFields || null,
         tenantName: tenant.name,
         createdAt: agreement.createdAt,
         viewedAt: agreement.viewedAt,
@@ -16069,6 +16070,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/tenant-agreement/:id/agree', async (req, res) => {
     try {
       const { id } = req.params;
+      const { interactiveFieldValues } = req.body;
       const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.ip;
       const userAgent = req.headers['user-agent'] || '';
 
@@ -16085,11 +16087,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Cannot accept a declined agreement" });
       }
 
+      // Fetch template to validate interactive fields
+      const template = await storage.getGlobalDocumentTemplateById(agreement.globalDocumentId);
+      if (!template) {
+        return res.status(404).json({ message: "Agreement template not found" });
+      }
+
+      // Validate and merge interactive field values if template has interactive fields
+      let updatedMetadata = agreement.agreementMetadata as Record<string, any> || {};
+      
+      if (template.interactiveFields && Array.isArray(template.interactiveFields)) {
+        const fields = template.interactiveFields as Array<{ name: string; type: string; required?: boolean; min?: number; options?: string[] }>;
+        
+        if (!interactiveFieldValues) {
+          return res.status(400).json({ message: "Interactive field values are required for this agreement" });
+        }
+
+        // Validate each required field
+        for (const field of fields) {
+          if (field.required && !interactiveFieldValues[field.name]) {
+            return res.status(400).json({ message: `Field "${field.name}" is required` });
+          }
+
+          const value = interactiveFieldValues[field.name];
+          
+          // Type-specific validation
+          if (value !== undefined && value !== null && value !== '') {
+            if (field.type === 'number') {
+              const numValue = Number(value);
+              if (isNaN(numValue)) {
+                return res.status(400).json({ message: `Field "${field.name}" must be a number` });
+              }
+              if (field.min !== undefined && numValue < field.min) {
+                return res.status(400).json({ message: `Field "${field.name}" must be at least ${field.min}` });
+              }
+            }
+            
+            if (field.type === 'select' && field.options) {
+              if (!field.options.includes(String(value))) {
+                return res.status(400).json({ message: `Field "${field.name}" must be one of: ${field.options.join(', ')}` });
+              }
+            }
+          }
+        }
+
+        // Merge interactive field values into metadata
+        updatedMetadata = {
+          ...updatedMetadata,
+          ...interactiveFieldValues
+        };
+      }
+
       const updated = await storage.updateTenantAgreement(id, {
         status: 'agreed',
         agreedAt: new Date(),
         ipAddress,
         userAgent,
+        agreementMetadata: updatedMetadata,
       });
 
       const tenant = await storage.getTenant(agreement.tenantId);
