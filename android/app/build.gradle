@@ -1,10 +1,10 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace "com.chaincomms.platform"
+    namespace "com.chainsoftware.platform"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.chaincomms.platform"
+        applicationId "com.chainsoftware.platform"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
