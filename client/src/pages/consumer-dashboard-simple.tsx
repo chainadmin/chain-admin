@@ -522,6 +522,11 @@ export default function ConsumerDashboardSimple() {
   // Calculation helper functions for simplified payment flow
   const calculatePaymentAmount = (balanceCents: number, term: number, minimumCents: number = 0) => {
     const monthlyAmount = Math.ceil(balanceCents / term);
+    // Only enforce minimum if balance is actually higher than minimum
+    // Don't force someone with a $30 balance to pay $50
+    if (balanceCents < minimumCents) {
+      return monthlyAmount; // Use the calculated amount based on their actual balance
+    }
     return monthlyAmount < minimumCents ? minimumCents : monthlyAmount;
   };
 
