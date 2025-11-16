@@ -15971,6 +15971,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       console.log('✅ Email reply stored successfully');
+      
+      // Check if auto-response is enabled for this tenant
+      const [autoResponseCfg] = await db
+        .select()
+        .from(autoResponseConfig)
+        .where(eq(autoResponseConfig.tenantId, matchedTenant.id))
+        .limit(1);
+      
+      if (autoResponseCfg?.enabled && autoResponseCfg?.enableEmailAutoResponse && autoResponseCfg?.openaiApiKey && !autoResponseCfg?.testMode) {
+        console.log('🤖 Auto-response is enabled, generating AI response...');
+        
+        try {
+          const { AutoResponseService } = await import('./autoResponseService');
+          const service = new AutoResponseService(matchedTenant.id);
+          
+          // Generate auto-response
+          const autoResponse = await service.generateResponse(
+            'email',
+            TextBody || HtmlBody || '',
+            consumer?.id
+          );
+          
+          if (autoResponse) {
+            // Send auto-response via email
+            await emailService.sendEmail({
+              to: fromEmail,
+              subject: `Re: ${Subject || '(No Subject)'}`,
+              html: `<p>${autoResponse.replace(/\n/g, '<br>')}</p>`,
+              tenantId: matchedTenant.id,
+            });
+            
+            console.log('✅ Auto-response sent successfully');
+          }
+        } catch (error) {
+          console.error('❌ Auto-response generation failed:', error);
+          // Don't fail the webhook - just log the error
+        }
+      }
+      
       res.status(200).json({ message: 'Reply stored successfully' });
     } catch (error) {
       console.error('❌ Inbound email webhook error:', error);
