@@ -22,6 +22,8 @@ import {
   emailLogs,
   emailCampaigns,
   serviceActivationRequests,
+  autoResponseConfig,
+  autoResponseUsage,
   type Account,
   type Consumer,
   type Tenant,
@@ -6629,6 +6631,162 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: error instanceof z.ZodError 
           ? "Invalid module names provided" 
           : "Failed to update enabled modules" 
+      });
+    }
+  });
+
+  // Auto-response configuration endpoints
+  app.get('/api/auto-response/config', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const [config] = await db
+        .select()
+        .from(autoResponseConfig)
+        .where(eq(autoResponseConfig.tenantId, tenantId))
+        .limit(1);
+      
+      // Mask API key in response
+      const maskedConfig = config ? {
+        ...config,
+        openaiApiKey: config.openaiApiKey ? `****${config.openaiApiKey.slice(-4)}` : null,
+      } : null;
+
+      res.json(maskedConfig);
+    } catch (error) {
+      console.error("Error fetching auto-response config:", error);
+      res.status(500).json({ message: "Failed to fetch configuration" });
+    }
+  });
+
+  app.put('/api/auto-response/config', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const configSchema = z.object({
+        enabled: z.boolean().optional(),
+        testMode: z.boolean().optional(),
+        openaiApiKey: z.string().nullable().optional(),
+        model: z.string().optional(),
+        responseTone: z.enum(['professional', 'friendly', 'empathetic', 'concise']).optional(),
+        customInstructions: z.string().nullable().optional(),
+        enableEmailAutoResponse: z.boolean().optional(),
+        enableSmsAutoResponse: z.boolean().optional(),
+        maxResponseLength: z.number().optional(),
+      });
+
+      const validatedData = configSchema.parse(req.body);
+      
+      // Check if config exists
+      const [existingConfig] = await db
+        .select()
+        .from(autoResponseConfig)
+        .where(eq(autoResponseConfig.tenantId, tenantId))
+        .limit(1);
+      
+      // Preserve API key if submitted as masked value
+      let finalApiKey = validatedData.openaiApiKey;
+      if (typeof validatedData.openaiApiKey === 'string' && validatedData.openaiApiKey.startsWith('****') && existingConfig?.openaiApiKey) {
+        finalApiKey = existingConfig.openaiApiKey;
+      }
+
+      if (existingConfig) {
+        // Update existing config
+        const [updated] = await db
+          .update(autoResponseConfig)
+          .set({
+            ...validatedData,
+            openaiApiKey: finalApiKey,
+            updatedAt: new Date(),
+          })
+          .where(eq(autoResponseConfig.id, existingConfig.id))
+          .returning();
+        
+        // Mask API key in response
+        const maskedUpdated = {
+          ...updated,
+          openaiApiKey: updated.openaiApiKey ? `****${updated.openaiApiKey.slice(-4)}` : null,
+        };
+
+        res.json(maskedUpdated);
+      } else {
+        // Create new config
+        const [created] = await db
+          .insert(autoResponseConfig)
+          .values({
+            tenantId,
+            ...validatedData,
+            openaiApiKey: finalApiKey,
+          })
+          .returning();
+        
+        // Mask API key in response
+        const maskedCreated = {
+          ...created,
+          openaiApiKey: created.openaiApiKey ? `****${created.openaiApiKey.slice(-4)}` : null,
+        };
+
+        res.json(maskedCreated);
+      }
+    } catch (error) {
+      console.error("Error updating auto-response config:", error);
+      res.status(500).json({ message: "Failed to update configuration" });
+    }
+  });
+
+  // Get auto-response usage statistics
+  app.get('/api/auto-response/usage', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { AutoResponseService } = await import('./autoResponseService');
+      const service = new AutoResponseService(tenantId);
+      const usage = await service.checkUsageLimit();
+
+      res.json(usage);
+    } catch (error) {
+      console.error("Error fetching auto-response usage:", error);
+      res.status(500).json({ message: "Failed to fetch usage statistics" });
+    }
+  });
+
+  // Test auto-response (playground)
+  app.post('/api/auto-response/test', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const testSchema = z.object({
+        messageType: z.enum(['email', 'sms']),
+        message: z.string().min(1),
+        consumerId: z.string().optional(),
+      });
+
+      const { messageType, message, consumerId } = testSchema.parse(req.body);
+
+      const { testAutoResponse } = await import('./autoResponseService');
+      const result = await testAutoResponse(tenantId, messageType, message, consumerId);
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error testing auto-response:", error);
+      res.status(500).json({ 
+        message: error instanceof Error ? error.message : "Failed to generate test response" 
       });
     }
   });

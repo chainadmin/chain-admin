@@ -304,9 +304,9 @@ export async function testAutoResponse(
     consumerFirstName: consumerData?.firstName || undefined,
     consumerLastName: consumerData?.lastName || undefined,
     accountBalance: accountData?.balanceCents || undefined,
-    creditorName: accountData?.creditorName || undefined,
+    creditorName: accountData?.creditor || undefined,
     accountNumber: accountData?.accountNumber || undefined,
-    businessType: config.businessType as BusinessType || 'call_center',
+    businessType: 'call_center', // Will be fetched from tenant settings
     messageType,
     inboundMessage: message,
     tenantId,
