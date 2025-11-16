@@ -42,6 +42,7 @@ import {
   CheckCircle,
   AlertCircle,
   Loader2,
+  Bot,
 } from "lucide-react";
 
 export default function Billing() {
@@ -53,6 +54,7 @@ export default function Billing() {
   const [updatingPlanId, setUpdatingPlanId] = useState<string | null>(null);
   const [activatingService, setActivatingService] = useState<string | null>(null);
   const [showAddonConfirmDialog, setShowAddonConfirmDialog] = useState(false);
+  const [showAutoResponseConfirmDialog, setShowAutoResponseConfirmDialog] = useState(false);
 
   // Check for tab query parameter and set active tab on mount
   const [activeTab, setActiveTab] = useState(() => {
@@ -935,6 +937,47 @@ export default function Billing() {
                   </div>
                 </div>
 
+                <div className="flex items-start justify-between rounded-2xl border border-white/10 bg-white/5 p-6">
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Bot className="h-5 w-5 text-purple-400" />
+                      <h3 className="text-base font-semibold text-white">AI Auto-Response</h3>
+                      <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-xs font-semibold text-purple-200 border border-purple-400/30">
+                        Plan-Based Pricing
+                      </span>
+                    </div>
+                    <p className="text-sm text-blue-100/70">
+                      Automatically respond to consumer emails and SMS using AI powered by your OpenAI API key. Responses adapt to your business type and include account context.
+                    </p>
+                    <div className="flex flex-wrap gap-2 text-xs text-blue-100/60">
+                      <span className="rounded-full bg-white/10 px-2 py-1">Context-Aware</span>
+                      <span className="rounded-full bg-white/10 px-2 py-1">Business-Type Adapted</span>
+                      <span className="rounded-full bg-white/10 px-2 py-1">Test Mode</span>
+                    </div>
+                    <div className="mt-3 space-y-1 text-xs text-blue-100/70">
+                      <p><strong className="text-white">Launch:</strong> 1,000 responses/mo included</p>
+                      <p><strong className="text-white">Growth:</strong> 5,000 responses/mo included</p>
+                      <p><strong className="text-white">Pro:</strong> 15,000 responses/mo included</p>
+                      <p><strong className="text-white">Scale:</strong> 30,000 responses/mo included</p>
+                      <p className="text-blue-100/50">Overage: $0.08 per additional response</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Switch
+                      checked={enabledAddons.includes('ai_auto_response') || false}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setShowAutoResponseConfirmDialog(true);
+                        } else {
+                          const updated = enabledAddons.filter((a: string) => a !== 'ai_auto_response');
+                          updateAddonsMutation.mutate(updated);
+                        }
+                      }}
+                      data-testid="switch-ai-auto-response"
+                    />
+                  </div>
+                </div>
+
                 <div className="rounded-2xl border border-blue-400/30 bg-blue-500/10 p-4">
                   <p className="text-xs text-blue-200">
                     <strong>Note:</strong> Add-ons are billed monthly and will auto-renew until you disable them. Changes are reflected on your next invoice.
@@ -985,6 +1028,56 @@ export default function Billing() {
                     data-testid="button-confirm-addon"
                   >
                     Enable for $40/month
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog open={showAutoResponseConfirmDialog} onOpenChange={setShowAutoResponseConfirmDialog}>
+              <AlertDialogContent className="border-white/10 bg-gradient-to-br from-slate-900 to-slate-800 text-white">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="flex items-center gap-2 text-xl">
+                    <Bot className="h-5 w-5 text-purple-400" />
+                    Enable AI Auto-Response Add-on
+                  </AlertDialogTitle>
+                  <AlertDialogDescription className="space-y-3 text-blue-100/80">
+                    <p>
+                      By enabling the AI Auto-Response add-on, you'll get plan-based response quotas included in your subscription.
+                    </p>
+                    <p className="font-semibold text-white">
+                      Response Quotas by Plan:
+                    </p>
+                    <ul className="ml-4 space-y-1 list-disc text-sm">
+                      <li>Launch Plan: 1,000 responses/month</li>
+                      <li>Growth Plan: 5,000 responses/month</li>
+                      <li>Pro Plan: 15,000 responses/month</li>
+                      <li>Scale Plan: 30,000 responses/month</li>
+                    </ul>
+                    <p className="text-sm">
+                      Additional responses beyond your quota are billed at <strong className="text-amber-300">$0.08 each</strong>.
+                    </p>
+                    <p className="text-xs text-blue-200/70">
+                      You'll need to provide your own OpenAI API key in Settings. The add-on will auto-renew monthly until you disable it.
+                    </p>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel 
+                    className="border-white/20 bg-white/10 text-white hover:bg-white/20"
+                    data-testid="button-cancel-auto-response-addon"
+                  >
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => {
+                      const updated = [...enabledAddons, 'ai_auto_response'];
+                      updateAddonsMutation.mutate(updated);
+                      setShowAutoResponseConfirmDialog(false);
+                    }}
+                    className="bg-gradient-to-r from-purple-500 to-indigo-500 text-white hover:from-purple-400 hover:to-indigo-400"
+                    data-testid="button-confirm-auto-response-addon"
+                  >
+                    Enable AI Auto-Response
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
