@@ -58,7 +58,13 @@ export const calculateArrangementPayment = (
 
   switch (planType) {
     case 'settlement':
-      if (arrangement.payoffPercentageBasisPoints) {
+      if (arrangement.payoffPercentageBasisPoints && arrangement.settlementPaymentCount) {
+        // Calculate total settlement amount
+        const totalSettlement = Math.round(accountBalanceCents * arrangement.payoffPercentageBasisPoints / 10000);
+        // Divide by number of payments (e.g., 60% over 5 months = 5 payments)
+        return Math.round(totalSettlement / arrangement.settlementPaymentCount);
+      } else if (arrangement.payoffPercentageBasisPoints) {
+        // Fallback: single payment of settlement percentage
         return Math.round(accountBalanceCents * arrangement.payoffPercentageBasisPoints / 10000);
       }
       return accountBalanceCents;
