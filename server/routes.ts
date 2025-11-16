@@ -7982,6 +7982,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
         parsedDate.setHours(0, 0, 0, 0);
+        
+        // Validate first payment date is not more than 1 month out
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const oneMonthFromNow = new Date(today);
+        oneMonthFromNow.setMonth(oneMonthFromNow.getMonth() + 1);
+        
+        if (parsedDate > oneMonthFromNow) {
+          return res.status(400).json({
+            success: false,
+            message: "First payment date cannot be more than one month in the future",
+          });
+        }
+        
         normalizedFirstPaymentDate = parsedDate;
       } else if (setupRecurring && arrangementId) {
         // If setting up recurring but no date provided, default to today
