@@ -45,6 +45,7 @@ import { cn } from "@/lib/utils";
 import { balanceTiers, getBalanceRangeFromTier, getBalanceTierLabel, type BalanceTier } from "@shared/schema";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import AutoResponseSettings from "@/components/auto-response-settings";
 
 export default function Settings() {
   const [showDocumentModal, setShowDocumentModal] = useState(false);
@@ -1229,7 +1230,7 @@ export default function Settings() {
           <Tabs defaultValue="general" className="space-y-8">
             <TabsList className={cn(
               "grid w-full grid-cols-1 gap-2 p-2 text-blue-100",
-              localSettings?.businessType === 'call_center' ? "sm:grid-cols-6" : "sm:grid-cols-5"
+              localSettings?.businessType === 'call_center' ? "sm:grid-cols-7" : "sm:grid-cols-6"
             )}>
               <TabsTrigger value="general" className="px-4 py-2">
                 General
@@ -1250,6 +1251,9 @@ export default function Settings() {
               </TabsTrigger>
               <TabsTrigger value="privacy" className="px-4 py-2">
                 Privacy & Legal
+              </TabsTrigger>
+              <TabsTrigger value="auto-response" className="px-4 py-2">
+                AI Auto-Response
               </TabsTrigger>
             </TabsList>
 
@@ -3712,6 +3716,10 @@ export default function Settings() {
                   </CardFooter>
                 )}
               </Card>
+            </TabsContent>
+
+            <TabsContent value="auto-response" className="space-y-6">
+              <AutoResponseSettings />
             </TabsContent>
 
           </Tabs>
