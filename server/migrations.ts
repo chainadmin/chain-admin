@@ -871,6 +871,56 @@ export async function runMigrations() {
       console.log('  ⚠ Could not seed templates (may already exist):', err);
     }
     
+    // Create auto-response configuration tables
+    console.log('Creating auto-response tables...');
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS auto_response_config (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID UNIQUE NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          enabled BOOLEAN DEFAULT false,
+          test_mode BOOLEAN DEFAULT true,
+          openai_api_key TEXT,
+          model TEXT DEFAULT 'gpt-5-nano',
+          response_tone TEXT DEFAULT 'professional',
+          custom_instructions TEXT,
+          enable_email_auto_response BOOLEAN DEFAULT true,
+          enable_sms_auto_response BOOLEAN DEFAULT true,
+          max_response_length INTEGER DEFAULT 500,
+          included_responses_per_month INTEGER DEFAULT 1000,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      console.log('  ✓ auto_response_config table created');
+    } catch (err) {
+      console.log('  ⚠ auto_response_config table (already exists or error)');
+    }
+    
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS auto_response_usage (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          message_type TEXT NOT NULL,
+          inbound_message_id UUID,
+          consumer_id UUID REFERENCES consumers(id) ON DELETE SET NULL,
+          account_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
+          prompt TEXT NOT NULL,
+          response TEXT NOT NULL,
+          tokens_used INTEGER DEFAULT 0,
+          model TEXT NOT NULL,
+          response_sent BOOLEAN DEFAULT false,
+          test_mode BOOLEAN DEFAULT false,
+          error_message TEXT,
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      console.log('  ✓ auto_response_usage table created');
+    } catch (err) {
+      console.log('  ⚠ auto_response_usage table (already exists or error)');
+    }
+    
     console.log('✅ Database migrations completed successfully');
   } catch (error: any) {
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {

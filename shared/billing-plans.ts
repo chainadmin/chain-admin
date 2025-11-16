@@ -14,6 +14,19 @@ export const EMAIL_OVERAGE_RATE_PER_THOUSAND = 2.5;
 export const EMAIL_OVERAGE_RATE_PER_EMAIL = EMAIL_OVERAGE_RATE_PER_THOUSAND / 1000;
 export const SMS_OVERAGE_RATE_PER_SEGMENT = 0.03;
 
+// Add-on pricing
+export const DOCUMENT_SIGNING_ADDON_PRICE = 40; // $40/month
+export const AUTO_RESPONSE_ADDON_PRICE = 75; // $75/month base (includes 1000 responses/month)
+export const AUTO_RESPONSE_OVERAGE_PER_100 = 5; // $5 per 100 responses over included amount
+
+// Auto-response included responses by plan tier
+export const AUTO_RESPONSE_INCLUDED_RESPONSES: Record<MessagingPlanId, number> = {
+  launch: 1_000,   // 1,000 AI responses/month
+  growth: 2_500,   // 2,500 AI responses/month
+  pro: 5_000,      // 5,000 AI responses/month
+  scale: 10_000,   // 10,000 AI responses/month
+};
+
 // Base plans (Call Center) - Full communication volume
 const callCenterPlans: Record<MessagingPlanId, MessagingPlan> = {
   launch: {
