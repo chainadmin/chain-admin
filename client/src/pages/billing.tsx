@@ -955,10 +955,10 @@ export default function Billing() {
                       <span className="rounded-full bg-white/10 px-2 py-1">Test Mode</span>
                     </div>
                     <div className="mt-3 space-y-1 text-xs text-blue-100/70">
-                      <p><strong className="text-white">Launch:</strong> 1,000 responses/mo included</p>
-                      <p><strong className="text-white">Growth:</strong> 5,000 responses/mo included</p>
-                      <p><strong className="text-white">Pro:</strong> 15,000 responses/mo included</p>
-                      <p><strong className="text-white">Scale:</strong> 30,000 responses/mo included</p>
+                      <p><strong className="text-white">Launch:</strong> 1,000 responses/month included</p>
+                      <p><strong className="text-white">Growth:</strong> 5,000 responses/month included</p>
+                      <p><strong className="text-white">Pro:</strong> 15,000 responses/month included</p>
+                      <p><strong className="text-white">Scale:</strong> 30,000 responses/month included</p>
                       <p className="text-blue-100/50">Overage: $0.08 per additional response</p>
                     </div>
                   </div>

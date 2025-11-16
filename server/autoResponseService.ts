@@ -204,9 +204,11 @@ Remember: You're representing the ${terms.creditor} in communications with ${ter
    * Check if tenant has remaining responses this month
    */
   async checkUsageLimit(): Promise<{
-    remainingResponses: number;
-    totalUsed: number;
-    includedResponses: number;
+    responsesThisMonth: number;
+    includedQuota: number;
+    overageResponses: number;
+    estimatedCost: number;
+    resetDate: string;
   }> {
     const [config] = await db
       .select()
@@ -215,7 +217,18 @@ Remember: You're representing the ${terms.creditor} in communications with ${ter
       .limit(1);
     
     if (!config) {
-      return { remainingResponses: 0, totalUsed: 0, includedResponses: 0 };
+      const nextMonth = new Date();
+      nextMonth.setMonth(nextMonth.getMonth() + 1);
+      nextMonth.setDate(1);
+      nextMonth.setHours(0, 0, 0, 0);
+      
+      return { 
+        responsesThisMonth: 0, 
+        includedQuota: 0, 
+        overageResponses: 0,
+        estimatedCost: 0,
+        resetDate: nextMonth.toISOString()
+      };
     }
     
     // Get usage for current month (exclude test mode)
@@ -234,14 +247,23 @@ Remember: You're representing the ${terms.creditor} in communications with ${ter
         )
       );
     
-    const totalUsed = usageResult[0]?.count || 0;
-    const includedResponses = config.includedResponsesPerMonth || 1000;
-    const remainingResponses = Math.max(0, includedResponses - totalUsed);
+    const responsesThisMonth = usageResult[0]?.count || 0;
+    const includedQuota = config.includedResponsesPerMonth || 1000;
+    const overageResponses = Math.max(0, responsesThisMonth - includedQuota);
+    const estimatedCost = overageResponses * 0.08; // $0.08 per additional response
+    
+    // Calculate next reset date (first day of next month)
+    const resetDate = new Date();
+    resetDate.setMonth(resetDate.getMonth() + 1);
+    resetDate.setDate(1);
+    resetDate.setHours(0, 0, 0, 0);
     
     return {
-      remainingResponses,
-      totalUsed,
-      includedResponses,
+      responsesThisMonth,
+      includedQuota,
+      overageResponses,
+      estimatedCost,
+      resetDate: resetDate.toISOString(),
     };
   }
 }
