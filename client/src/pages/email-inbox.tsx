@@ -896,9 +896,18 @@ export default function CommunicationsInbox() {
                             </div>
                           )}
 
-                          <div className="text-sm text-blue-100/90 whitespace-pre-wrap">
-                            {message.body || message.message || message.messageContent || message.messageBody || message.textBody || 'No content'}
-                          </div>
+                          {isEmail && (message.htmlBody || message.body?.includes('<')) ? (
+                            <div 
+                              className="text-sm text-blue-100/90 prose prose-invert prose-sm max-w-none"
+                              dangerouslySetInnerHTML={{
+                                __html: message.htmlBody || message.body || message.textBody || 'No content'
+                              }}
+                            />
+                          ) : (
+                            <div className="text-sm text-blue-100/90 whitespace-pre-wrap">
+                              {message.body || message.message || message.messageContent || message.messageBody || message.textBody || 'No content'}
+                            </div>
+                          )}
 
                           {isEmail && (isOutbound ? message.toEmail : message.fromEmail) && (
                             <div className="text-xs text-blue-100/50 mt-2 pt-2 border-t border-white/10">

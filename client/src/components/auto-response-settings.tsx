@@ -153,8 +153,8 @@ export default function AutoResponseSettings() {
             <Bot className="h-5 w-5 text-sky-400" />
             <CardTitle className="text-xl font-semibold text-white">AI Auto-Response Configuration</CardTitle>
           </div>
-          <CardDescription className="text-blue-100/70">
-            Configure AI-powered automatic responses to consumer emails and SMS messages using your OpenAI API key.
+          <CardDescription className="text-blue-100">
+            Configure AI-powered automatic responses to consumer emails and SMS messages.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6 text-sm text-blue-100/80">
@@ -162,7 +162,7 @@ export default function AutoResponseSettings() {
             <div className="flex items-center justify-between">
               <div>
                 <Label className="text-base font-medium text-white">Enable Auto-Response</Label>
-                <p className="text-sm text-blue-100/70">
+                <p className="text-sm text-blue-100">
                   Automatically respond to incoming emails and SMS messages
                 </p>
               </div>
@@ -176,7 +176,7 @@ export default function AutoResponseSettings() {
             <div className="flex items-center justify-between">
               <div>
                 <Label className="text-base font-medium text-white">Test Mode</Label>
-                <p className="text-sm text-blue-100/70">
+                <p className="text-sm text-blue-100">
                   Generate responses without sending them or using quota
                 </p>
               </div>
@@ -187,40 +187,6 @@ export default function AutoResponseSettings() {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label className="text-white">OpenAI API Key</Label>
-              <Input
-                type="password"
-                placeholder="sk-..."
-                value={localConfig.openaiApiKey || ""}
-                onChange={(e) => handleUpdate('openaiApiKey', e.target.value)}
-                className={inputClasses}
-                data-testid="input-openai-api-key"
-              />
-              <p className="text-xs text-blue-100/60">
-                Your OpenAI API key is encrypted and never shared. Get one at{" "}
-                <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-sky-400 hover:underline">
-                  platform.openai.com
-                </a>
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-white">AI Model</Label>
-              <Select
-                value={localConfig.model || 'gpt-4o-mini'}
-                onValueChange={(value) => handleUpdate('model', value)}
-              >
-                <SelectTrigger className={selectTriggerClasses} data-testid="select-model">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="border-white/10 bg-[#0f172a] text-blue-50">
-                  <SelectItem value="gpt-4o-mini">GPT-4o Mini (Recommended - Fast & Economical)</SelectItem>
-                  <SelectItem value="gpt-4o">GPT-4o (Advanced)</SelectItem>
-                  <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo (Budget)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
 
             <div className="space-y-2">
               <Label className="text-white">Response Tone</Label>
@@ -254,7 +220,7 @@ export default function AutoResponseSettings() {
             <div className="flex items-center justify-between border-t border-white/10 pt-4">
               <div>
                 <Label className="text-base font-medium text-white">Email Auto-Response</Label>
-                <p className="text-sm text-blue-100/70">
+                <p className="text-sm text-blue-100">
                   Respond to inbound email replies
                 </p>
               </div>
@@ -269,14 +235,14 @@ export default function AutoResponseSettings() {
             <div className="flex items-center justify-between">
               <div>
                 <Label className="text-base font-medium text-white">SMS Auto-Response</Label>
-                <p className="text-sm text-blue-100/70">
-                  Respond to inbound SMS messages (Coming Soon)
+                <p className="text-sm text-blue-100">
+                  Respond to inbound SMS messages (requires Twilio configuration in Settings)
                 </p>
               </div>
               <Switch
                 checked={localConfig.enableSmsAutoResponse || false}
                 onCheckedChange={(checked) => handleUpdate('enableSmsAutoResponse', checked)}
-                disabled={true}
+                disabled={!localConfig.enabled}
                 data-testid="switch-sms-auto-response"
               />
             </div>
@@ -380,7 +346,7 @@ export default function AutoResponseSettings() {
 
           <Button
             onClick={handleTest}
-            disabled={isTesting || !testMessage.trim() || !localConfig.openaiApiKey}
+            disabled={isTesting || !testMessage.trim()}
             className="w-full bg-emerald-500/80 hover:bg-emerald-400/80"
             data-testid="button-test-response"
           >
@@ -407,16 +373,6 @@ export default function AutoResponseSettings() {
             </div>
           )}
 
-          {!localConfig.openaiApiKey && (
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
-              <div className="flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 text-amber-400" />
-                <p className="text-amber-200 text-sm">
-                  Please add your OpenAI API key above to test auto-responses
-                </p>
-              </div>
-            </div>
-          )}
         </CardContent>
       </Card>
     </div>

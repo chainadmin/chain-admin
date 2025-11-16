@@ -1250,7 +1250,6 @@ export const automationExecutions = pgTable("automation_executions", {
 export const communicationSequences = pgTable("communication_sequences", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
-  planId: text("plan_id", { enum: ['launch', 'growth', 'pro', 'scale'] }).notNull(),
   name: text("name").notNull(),
   description: text("description"),
   isActive: boolean("is_active").default(true),

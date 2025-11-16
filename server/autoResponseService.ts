@@ -320,7 +320,8 @@ export async function testAutoResponse(
     }
   }
   
-  const service = new AutoResponseService(tenantId, config.openaiApiKey || undefined);
+  // Always use platform-wide OPENAI_API_KEY environment variable
+  const service = new AutoResponseService(tenantId, undefined);
   
   const context: AutoResponseContext = {
     consumerFirstName: consumerData?.firstName || undefined,

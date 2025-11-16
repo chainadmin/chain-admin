@@ -479,7 +479,6 @@ export default function Communications() {
   const [viewingEnrollmentsSequenceId, setViewingEnrollmentsSequenceId] = useState<number | null>(null);
   const [sequenceSteps, setSequenceSteps] = useState<any[]>([]);
   const [sequenceForm, setSequenceForm] = useState({
-    planId: 'launch' as 'launch' | 'growth' | 'pro' | 'scale',
     name: '',
     description: '',
     triggerType: 'immediate' as 'immediate' | 'scheduled' | 'event',
@@ -1347,6 +1346,29 @@ export default function Communications() {
     },
   });
 
+  const updateSequenceMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const res = await apiRequest("PUT", `/api/sequences/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sequences"] });
+      setShowSequenceModal(false);
+      resetSequenceForm();
+      toast({
+        title: "Success",
+        description: "Sequence updated successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update sequence",
+        variant: "destructive",
+      });
+    },
+  });
+
   const toggleSequenceMutation = useMutation({
     mutationFn: ({ id, isActive }: { id: number; isActive: boolean }) =>
       apiRequest("PUT", `/api/sequences/${id}`, { isActive }),
@@ -1538,7 +1560,6 @@ export default function Communications() {
 
   const resetSequenceForm = () => {
     setSequenceForm({
-      planId: 'launch',
       name: '',
       description: '',
       triggerType: 'immediate',
@@ -1571,25 +1592,17 @@ export default function Communications() {
       return;
     }
 
-    if (sequenceSteps.length === 0) {
-      toast({
-        title: "Error",
-        description: "Please add at least one step to the sequence",
-        variant: "destructive",
-      });
-      return;
-    }
-
     try {
-      const sequence = await createSequenceMutation.mutateAsync({
-        ...sequenceForm,
-        steps: sequenceSteps.map((step, index) => ({
-          ...step,
-          stepOrder: index + 1,
-        })),
-      });
+      if (editingSequence) {
+        await updateSequenceMutation.mutateAsync({
+          id: editingSequence.id,
+          data: sequenceForm,
+        });
+      } else {
+        await createSequenceMutation.mutateAsync(sequenceForm);
+      }
     } catch (error) {
-      console.error('Failed to create sequence:', error);
+      console.error('Failed to save sequence:', error);
     }
   };
 
@@ -4268,7 +4281,7 @@ export default function Communications() {
                 </DialogTrigger>
                 <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-slate-900 text-white border-white/20">
                   <DialogHeader>
-                    <DialogTitle className="text-blue-50">Create Communication Sequence</DialogTitle>
+                    <DialogTitle className="text-blue-50">{editingSequence ? 'Edit' : 'Create'} Communication Sequence</DialogTitle>
                   </DialogHeader>
                   <div className="space-y-6">
                     <div className="space-y-4">
@@ -4291,25 +4304,6 @@ export default function Communications() {
                           className="mt-2 bg-white/10 border-white/20 text-white"
                           rows={2}
                         />
-                      </div>
-
-                      <div>
-                        <label className="text-sm font-semibold text-blue-100">Messaging Plan</label>
-                        <Select
-                          value={sequenceForm.planId}
-                          onValueChange={(value: any) => setSequenceForm({ ...sequenceForm, planId: value })}
-                        >
-                          <SelectTrigger className="mt-2 bg-white/10 border-white/20 text-white">
-                            <SelectValue placeholder="Select plan" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="launch">Launch</SelectItem>
-                            <SelectItem value="growth">Growth</SelectItem>
-                            <SelectItem value="pro">Pro</SelectItem>
-                            <SelectItem value="scale">Scale</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <p className="mt-1 text-xs text-blue-100/60">Organize sequences by your messaging plan tier</p>
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
@@ -4552,11 +4546,11 @@ export default function Communications() {
                       <Button
                         type="button"
                         onClick={handleCreateSequence}
-                        disabled={createSequenceMutation.isPending}
+                        disabled={createSequenceMutation.isPending || updateSequenceMutation.isPending}
                         className="bg-blue-600 hover:bg-blue-700"
                         data-testid="button-save-sequence"
                       >
-                        {createSequenceMutation.isPending ? "Creating..." : "Create Sequence"}
+                        {(createSequenceMutation.isPending || updateSequenceMutation.isPending) ? (editingSequence ? "Updating..." : "Creating...") : (editingSequence ? "Update Sequence" : "Create Sequence")}
                       </Button>
                     </div>
                   </div>
@@ -4585,9 +4579,6 @@ export default function Communications() {
                               <Badge variant={sequence.isActive ? "default" : "secondary"} className={sequence.isActive ? "bg-green-600" : "bg-gray-600"}>
                                 {sequence.isActive ? "Active" : "Inactive"}
                               </Badge>
-                              <Badge variant="outline" className="border-purple-400 text-purple-300 bg-purple-500/10">
-                                {sequence.planId?.charAt(0).toUpperCase() + sequence.planId?.slice(1) || 'Launch'}
-                              </Badge>
                               {sequence.triggerType === 'event' && (
                                 <Badge variant="outline" className="border-blue-400 text-blue-300">
                                   Event: {sequence.triggerEvent?.replace('_', ' ')}
@@ -4608,6 +4599,29 @@ export default function Communications() {
                             >
                               <Eye className="mr-1 h-3 w-3" />
                               View Enrollments
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setEditingSequence(sequence);
+                                setSequenceForm({
+                                  name: sequence.name,
+                                  description: sequence.description || '',
+                                  triggerType: sequence.triggerType,
+                                  triggerEvent: sequence.triggerEvent || '',
+                                  triggerDelay: sequence.triggerDelay || 0,
+                                  targetType: sequence.targetType,
+                                  targetFolderIds: sequence.targetFolderIds || [],
+                                  isActive: sequence.isActive,
+                                });
+                                setShowSequenceModal(true);
+                              }}
+                              className="border-white/20 text-white hover:bg-white/10"
+                              data-testid={`button-edit-sequence-${sequence.id}`}
+                            >
+                              <Pencil className="mr-1 h-3 w-3" />
+                              Edit
                             </Button>
                             <Button
                               size="sm"
