@@ -201,6 +201,15 @@ export async function runMigrations() {
       console.log(`  ⚠ communication_sequences table (already exists or error)`);
     }
     
+    // Add plan_id column to communication_sequences for plan-based sequence organization
+    console.log('Adding plan_id to communication_sequences...');
+    try {
+      await client.query(`ALTER TABLE communication_sequences ADD COLUMN IF NOT EXISTS plan_id TEXT NOT NULL DEFAULT 'launch'`);
+      console.log(`  ✓ plan_id column added to communication_sequences`);
+    } catch (err) {
+      console.log(`  ⚠ plan_id (already exists or error)`);
+    }
+    
     // Add missing tenants table columns for trial and service controls
     console.log('Adding tenants table service control columns...');
     const tenantColumns = [

@@ -479,6 +479,7 @@ export default function Communications() {
   const [viewingEnrollmentsSequenceId, setViewingEnrollmentsSequenceId] = useState<number | null>(null);
   const [sequenceSteps, setSequenceSteps] = useState<any[]>([]);
   const [sequenceForm, setSequenceForm] = useState({
+    planId: 'launch' as 'launch' | 'growth' | 'pro' | 'scale',
     name: '',
     description: '',
     triggerType: 'immediate' as 'immediate' | 'scheduled' | 'event',
@@ -1537,6 +1538,7 @@ export default function Communications() {
 
   const resetSequenceForm = () => {
     setSequenceForm({
+      planId: 'launch',
       name: '',
       description: '',
       triggerType: 'immediate',
@@ -4291,6 +4293,25 @@ export default function Communications() {
                         />
                       </div>
 
+                      <div>
+                        <label className="text-sm font-semibold text-blue-100">Messaging Plan</label>
+                        <Select
+                          value={sequenceForm.planId}
+                          onValueChange={(value: any) => setSequenceForm({ ...sequenceForm, planId: value })}
+                        >
+                          <SelectTrigger className="mt-2 bg-white/10 border-white/20 text-white">
+                            <SelectValue placeholder="Select plan" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="launch">Launch</SelectItem>
+                            <SelectItem value="growth">Growth</SelectItem>
+                            <SelectItem value="pro">Pro</SelectItem>
+                            <SelectItem value="scale">Scale</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="mt-1 text-xs text-blue-100/60">Organize sequences by your messaging plan tier</p>
+                      </div>
+
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <label className="text-sm font-semibold text-blue-100">Trigger Type</label>
@@ -4563,6 +4584,9 @@ export default function Communications() {
                               <h3 className="text-lg font-semibold text-blue-50">{sequence.name}</h3>
                               <Badge variant={sequence.isActive ? "default" : "secondary"} className={sequence.isActive ? "bg-green-600" : "bg-gray-600"}>
                                 {sequence.isActive ? "Active" : "Inactive"}
+                              </Badge>
+                              <Badge variant="outline" className="border-purple-400 text-purple-300 bg-purple-500/10">
+                                {sequence.planId?.charAt(0).toUpperCase() + sequence.planId?.slice(1) || 'Launch'}
                               </Badge>
                               {sequence.triggerType === 'event' && (
                                 <Badge variant="outline" className="border-blue-400 text-blue-300">

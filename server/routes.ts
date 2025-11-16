@@ -4020,6 +4020,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const sequenceSchema = z.object({
+        planId: z.enum(['launch', 'growth', 'pro', 'scale']),
         name: z.string().min(1),
         description: z.string().optional(),
         triggerType: z.enum(['immediate', 'scheduled', 'event']).default('immediate'),
@@ -4041,6 +4042,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('✅ Communication sequence created:', {
         id: newSequence.id,
         name: newSequence.name,
+        planId: newSequence.planId,
         triggerType: newSequence.triggerType,
       });
 
@@ -4062,6 +4064,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const updateSchema = z.object({
+        planId: z.enum(['launch', 'growth', 'pro', 'scale']).optional(),
         name: z.string().min(1).optional(),
         description: z.string().optional(),
         triggerType: z.enum(['immediate', 'scheduled', 'event']).optional(),
