@@ -662,15 +662,7 @@ export default function ConsumerDashboardSimple() {
     const willSetupRecurring = isSimplifiedFlow || (setupRecurring && selectedArrangement && 
       (selectedArrangement.planType === 'fixed_monthly' || selectedArrangement.planType === 'range'));
 
-    // Validate first payment date for recurring payments (skip for SMAX one-time payments)
-    if (willSetupRecurring && !firstPaymentDate && !isSMAXPayment) {
-      toast({
-        title: "Payment Date Required",
-        description: "Please select a first payment date for your payment plan",
-        variant: "destructive",
-      });
-      return;
-    }
+    // No validation needed - if no date selected, default to today
 
     // Validate one-time payment amount
     if (selectedArrangement?.planType === 'one_time_payment') {
@@ -710,10 +702,10 @@ export default function ConsumerDashboardSimple() {
 
     try {
       const token = getStoredConsumerToken();
-      // For one-time payments, use today's date automatically
-      const paymentDate = selectedArrangement?.planType === 'one_time_payment' 
-        ? new Date().toISOString().split('T')[0]
-        : firstPaymentDate ? firstPaymentDate.toISOString().split('T')[0] : null;
+      // Default to today if no date selected
+      const paymentDate = firstPaymentDate 
+        ? firstPaymentDate.toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0];
       
       // Determine if using simplified flow (exclude SMAX one-time payments)
       const isSMAXPayment = paymentMethod === 'smax';
