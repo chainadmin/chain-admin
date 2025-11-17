@@ -31,6 +31,7 @@ interface AutoResponseConfig {
   model: string;
   responseTone: 'professional' | 'friendly' | 'empathetic' | 'concise';
   customInstructions: string | null;
+  businessResponseTemplate: string | null;
   enableEmailAutoResponse: boolean;
   enableSmsAutoResponse: boolean;
   maxResponseLength: number;
@@ -215,6 +216,20 @@ export default function AutoResponseSettings() {
                 className={cn(inputClasses, "min-h-[100px]")}
                 data-testid="textarea-custom-instructions"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-white">Business Response Templates (Optional)</Label>
+              <Textarea
+                placeholder="Provide sample responses and templates for the AI to reference. Example:&#10;&#10;When asked about payment plans: We offer flexible payment arrangements from 3-12 months with no setup fee. Please call us at [phone] to discuss options.&#10;&#10;When asked about balance: Your current balance is [amount] as of [date]. This includes all fees and interest."
+                value={localConfig.businessResponseTemplate || ""}
+                onChange={(e) => handleUpdate('businessResponseTemplate', e.target.value)}
+                className={cn(inputClasses, "min-h-[150px]")}
+                data-testid="textarea-business-response-template"
+              />
+              <p className="text-xs text-blue-100/60">
+                Provide example responses or standard replies that the AI should reference when generating responses. This helps maintain consistency with your business policies and procedures.
+              </p>
             </div>
 
             <div className="flex items-center justify-between border-t border-white/10 pt-4">

@@ -906,6 +906,15 @@ export async function runMigrations() {
       console.log('  ⚠ auto_response_config table (already exists or error)');
     }
     
+    // Add business_response_template column to auto_response_config
+    console.log('Adding business_response_template column...');
+    try {
+      await client.query(`ALTER TABLE auto_response_config ADD COLUMN IF NOT EXISTS business_response_template TEXT`);
+      console.log('  ✓ business_response_template');
+    } catch (err) {
+      console.log('  ⚠ business_response_template (already exists or error)');
+    }
+    
     try {
       await client.query(`
         CREATE TABLE IF NOT EXISTS auto_response_usage (

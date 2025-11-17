@@ -103,6 +103,7 @@ export class AutoResponseService {
     
     const tone = toneInstructions[config.responseTone || 'professional'];
     const customInstructions = config.customInstructions ? `\n\nAdditional Instructions: ${config.customInstructions}` : '';
+    const businessTemplates = config.businessResponseTemplate ? `\n\nBusiness Response Templates:\n${config.businessResponseTemplate}\n\nUse these templates as examples when generating responses. Adapt them to the specific inquiry while maintaining the style and information provided.` : '';
     
     return `You are an AI assistant helping a ${terms.creditor} respond to ${terms.consumer.toLowerCase()} inquiries.
 
@@ -122,7 +123,7 @@ RULES:
 3. Direct complex issues to contact the organization directly
 4. Be helpful and guide them to self-service options when possible
 5. Keep responses under ${config.maxResponseLength || 500} characters
-6. Never use terms like "debt collection" - use the terminology above${customInstructions}
+6. Never use terms like "debt collection" - use the terminology above${customInstructions}${businessTemplates}
 
 Remember: You're representing the ${terms.creditor} in communications with ${terms.consumerPlural.toLowerCase()}.`;
   }

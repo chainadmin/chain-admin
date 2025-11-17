@@ -6678,6 +6678,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         model: z.string().optional(),
         responseTone: z.enum(['professional', 'friendly', 'empathetic', 'concise']).optional(),
         customInstructions: z.string().nullable().optional(),
+        businessResponseTemplate: z.string().nullable().optional(),
         enableEmailAutoResponse: z.boolean().optional(),
         enableSmsAutoResponse: z.boolean().optional(),
         maxResponseLength: z.number().optional(),

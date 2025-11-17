@@ -313,6 +313,7 @@ export const autoResponseConfig = pgTable("auto_response_config", {
   model: text("model").default("gpt-5-nano"), // OpenAI model to use
   responseTone: text("response_tone").default("professional"), // "professional", "friendly", "empathetic", "concise"
   customInstructions: text("custom_instructions"), // Additional instructions for AI
+  businessResponseTemplate: text("business_response_template"), // Sample responses and templates for AI to reference
   enableEmailAutoResponse: boolean("enable_email_auto_response").default(true),
   enableSmsAutoResponse: boolean("enable_sms_auto_response").default(true),
   maxResponseLength: integer("max_response_length").default(500), // Max characters in response
