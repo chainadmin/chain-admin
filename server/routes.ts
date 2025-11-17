@@ -2068,6 +2068,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         accountUpdates.dueDate = dueDate || null;
       }
 
+      // Auto-change status when account is moved to "Returned" folder
+      if (folderId !== undefined && folderId) {
+        const returnedFolder = await storage.getReturnedFolder(tenantId);
+        if (returnedFolder && folderId === returnedFolder.id) {
+          // Only auto-change if status isn't already terminal (recalled/closed)
+          const currentStatus = account.status?.toLowerCase();
+          if (currentStatus !== 'recalled' && currentStatus !== 'closed') {
+            accountUpdates.status = "recalled";
+            console.log(`🔄 Auto-changing account ${id} status to "recalled" (moved to Returned folder)`);
+          }
+        }
+      }
+
       if (Object.keys(accountUpdates).length > 0) {
         await storage.updateAccount(id, accountUpdates);
       }
@@ -8507,6 +8520,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         if (!paymentResult.success) {
           console.error('❌ Authorize.net payment failed:', paymentResult.errorMessage);
+          
+          // Auto-change account status to "recalled" when payment fails
+          if (accountId && account.tenantId === tenantId) {
+            try {
+              const currentStatus = account.status?.toLowerCase();
+              // Only change if not already terminal status
+              if (currentStatus !== 'recalled' && currentStatus !== 'closed') {
+                await storage.updateAccount(accountId, { status: "recalled" });
+                console.log(`🔄 Auto-changed account ${accountId} status to "recalled" (payment declined)`);
+              }
+            } catch (statusError) {
+              console.error('Failed to auto-update account status on payment decline:', statusError);
+            }
+          }
+          
           return res.status(400).json({
             success: false,
             message: paymentResult.errorMessage || 'Payment declined',
@@ -8969,6 +8997,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           if (!success) {
             console.error('❌ NMI payment failed:', nmiResult.responsetext);
+            
+            // Auto-change account status to "recalled" when payment fails
+            if (accountId && account.tenantId === tenantId) {
+              try {
+                const currentStatus = account.status?.toLowerCase();
+                // Only change if not already terminal status
+                if (currentStatus !== 'recalled' && currentStatus !== 'closed') {
+                  await storage.updateAccount(accountId, { status: "recalled" });
+                  console.log(`🔄 Auto-changed account ${accountId} status to "recalled" (payment declined)`);
+                }
+              } catch (statusError) {
+                console.error('Failed to auto-update account status on payment decline:', statusError);
+              }
+            }
+            
             return res.status(400).json({
               success: false,
               message: nmiResult.responsetext || 'Payment declined',
@@ -9551,6 +9594,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             accountId: accountId || undefined,
             metadata: { paymentId: payment.id, amountCents, error: usaepayResult.error || usaepayResult.errorcode }
           });
+          
+          // Auto-change account status to "recalled" when payment fails
+          if (accountId && account.tenantId === tenantId) {
+            try {
+              const currentStatus = account.status?.toLowerCase();
+              // Only change if not already terminal status
+              if (currentStatus !== 'recalled' && currentStatus !== 'closed') {
+                await storage.updateAccount(accountId, { status: "recalled" });
+                console.log(`🔄 Auto-changed account ${accountId} status to "recalled" (payment declined)`);
+              }
+            } catch (statusError) {
+              console.error('Failed to auto-update account status on payment decline:', statusError);
+            }
+          }
         }
         
         // Send payment to SMAX if account has a filenumber
@@ -10826,6 +10883,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   
                   if (!success) {
                     console.error('❌ Authorize.net scheduled payment failed:', authnetResult.errorMessage);
+                    
+                    // Auto-change account status to "recalled" when scheduled payment fails
+                    try {
+                      const account = await storage.getAccount(schedule.accountId);
+                      if (account && account.tenantId === tenant.id) {
+                        const currentStatus = account.status?.toLowerCase();
+                        if (currentStatus !== 'recalled' && currentStatus !== 'closed') {
+                          await storage.updateAccount(schedule.accountId, { status: "recalled" });
+                          console.log(`🔄 Auto-changed account ${schedule.accountId} status to "recalled" (scheduled payment declined)`);
+                        }
+                      }
+                    } catch (statusError) {
+                      console.error('Failed to auto-update account status on scheduled payment decline:', statusError);
+                    }
                   }
                 } else if (merchantProvider === 'nmi') {
                   // ===== NMI SCHEDULED PAYMENT =====
@@ -10880,6 +10951,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       
                       if (!success) {
                         console.error('❌ NMI vault scheduled payment failed:', nmiResult.responseText);
+                        
+                        // Auto-change account status to "recalled" when scheduled payment fails
+                        try {
+                          const account = await storage.getAccount(schedule.accountId);
+                          if (account && account.tenantId === tenant.id) {
+                            const currentStatus = account.status?.toLowerCase();
+                            if (currentStatus !== 'recalled' && currentStatus !== 'closed') {
+                              await storage.updateAccount(schedule.accountId, { status: "recalled" });
+                              console.log(`🔄 Auto-changed account ${schedule.accountId} status to "recalled" (scheduled payment declined)`);
+                            }
+                          }
+                        } catch (statusError) {
+                          console.error('Failed to auto-update account status on scheduled payment decline:', statusError);
+                        }
+                        
                         failedPayments.push({
                           scheduleId: schedule.id,
                           accountId: schedule.accountId,
@@ -11204,6 +11290,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
                   // Update consumer status to payment_failed
                   await storage.updateConsumer(consumer.id, { paymentStatus: 'payment_failed' });
+
+                  // Auto-change account status to "recalled" when scheduled payment fails
+                  if (failedAccount && failedAccount.tenantId === tenant.id) {
+                    try {
+                      const currentStatus = failedAccount.status?.toLowerCase();
+                      if (currentStatus !== 'recalled' && currentStatus !== 'closed') {
+                        await storage.updateAccount(schedule.accountId, { status: "recalled" });
+                        console.log(`🔄 Auto-changed account ${schedule.accountId} status to "recalled" (scheduled payment declined)`);
+                      }
+                    } catch (statusError) {
+                      console.error('Failed to auto-update account status on scheduled payment decline:', statusError);
+                    }
+                  }
 
                   // Send note to SMAX about failed scheduled payment
                   if (failedAccount?.filenumber) {
