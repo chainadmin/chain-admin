@@ -252,7 +252,7 @@ class SmsService {
       // Create SMAX note if accountId is provided
       if (accountId) {
         try {
-          const account = await storage.getAccountById(accountId);
+          const account = await storage.getAccount(accountId);
           if (account && account.filenumber) {
             const messagePreview = message.length > 100 ? message.substring(0, 100) + '...' : message;
             await smaxService.insertNote(tenantId, {
