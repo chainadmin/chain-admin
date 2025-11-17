@@ -1,0 +1,123 @@
+
+✅ Twilio webhook processed successfully - 1 SMS segments recorded to database for tenant bc63d182-9691-455a-b372-10dfcad9c11e
+================================================================================
+📤 [RESPONSE-JSON] POST /api/webhooks/twilio → 200 (29ms) { dataKeys: 'message' }
+📤 [RESPONSE] POST /api/webhooks/twilio → 200 (30ms) {
+  contentType: 'application/json; charset=utf-8',
+  bodyType: 'string',
+  bodyPreview: '{"message":"Webhook processed"}'
+}
+📨 [REQUEST] POST /api/webhooks/twilio {
+  "ErrorCode": "30005",
+  origin: 'none',
+  "To": "+12562954170",
+  contentType: 'application/x-www-form-urlencoded; charset=utf-8',
+  "From": "+18666893302",
+  "MessageSid": "SM5ea860afa9c9902d384f30168a2718a1",
+  userAgent: 'TwilioProxy/1.1'
+  "AccountSid": "AC2888c26dc553ff2926a3f8328d2b11ef"
+}
+}
+📊 Parsed values:
+   MessageSid: SM5ea860afa9c9902d384f30168a2718a1
+================================================================================
+   Status: undelivered
+📱 TWILIO DELIVERY WEBHOOK RECEIVED - 2025-11-17T15:05:39.045Z
+📊 SMS Segments detected: 1 (raw: 1)
+✅ Found tracking record: ID=7ea40896-f069-4ff8-a9bc-83e290fc1d05
+================================================================================
+Full webhook body: {
+  "ApiVersion": "2010-04-01",
+  "MessageStatus": "undelivered",
+  "RawDlrDoneDate": "2511171505",
+  "SmsSid": "SM5ea860afa9c9902d384f30168a2718a1",
+  "SmsStatus": "undelivered",
+❌ Marking as FAILED: 30005
+💾 Updating tracking record with 1 segments: { status: 'failed', segments: 1, errorMessage: '30005' }
+✅ Tracking record updated successfully
+🔄 Updating SMS campaign b5fcd89b-e6fa-46ff-ac69-f0bd0a003591 metrics from tracking records
+✅ SMS campaign b5fcd89b-e6fa-46ff-ac69-f0bd0a003591 metrics updated: {
+  totalSent: 267,
+  totalDelivered: 242,
+  totalErrors: 55,
+  totalOptOuts: 0
+}
+✅ Recording SMS usage: tenant=bc63d182-9691-455a-b372-10dfcad9c11e, segments=1, sid=SM5ea860afa9c9902d384f30168a2718a1
+📊 SMS Usage Event Details: {
+  "tenantId": "bc63d182-9691-455a-b372-10dfcad9c11e",
+  "segments": 1,
+  "messageSid": "SM5ea860afa9c9902d384f30168a2718a1",
+  "status": "undelivered",
+  "timestamp": "2025-11-17T15:05:39.068Z"
+}
+✅ Twilio webhook processed successfully - 1 SMS segments recorded to database for tenant bc63d182-9691-455a-b372-10dfcad9c11e
+================================================================================
+📤 [RESPONSE-JSON] POST /api/webhooks/twilio → 200 (25ms) { dataKeys: 'message' }
+📤 [RESPONSE] POST /api/webhooks/twilio → 200 (25ms) {
+  contentType: 'application/json; charset=utf-8',
+  bodyType: 'string',
+  bodyPreview: '{"message":"Webhook processed"}'
+}
+📡 SMS Status Callback URL: https://chain-admin-production.up.railway.app/api/webhooks/twilio
+   APP_URL: https://chain-admin-production.up.railway.app
+   RAILWAY_PUBLIC_DOMAIN: *.chainsoftwaregroup.com
+  "SmsSid": "SM93d8e50038485f99d0ade4411e15b154",
+  "SmsStatus": "sent",
+  "To": "+19188524454",
+📱 SMS tracking created: tenant=bc63d182-9691-455a-b372-10dfcad9c11e, sid=SM93d8e50038485f99d0ade4411e15b154, campaign=b5fcd89b-e6fa-46ff-ac69-f0bd0a003591
+Error creating SMAX note for SMS: TypeError: storage.getAccountById is not a function
+    at SmsService.sendImmediately (file:///app/dist/index.js:5160:45)
+================================================================================
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async SmsService.sendBulkSmsCampaign (file:///app/dist/index.js:5264:28)
+    at async file:///app/dist/index.js:10430:32
+Full webhook body: {
+📊 Progress: 323/528 (323 sent, 0 failed)
+  "ApiVersion": "2010-04-01",
+📨 [REQUEST] POST /api/webhooks/twilio {
+  "MessageStatus": "sent",
+  origin: 'none',
+  contentType: 'application/x-www-form-urlencoded; charset=utf-8',
+  userAgent: 'TwilioProxy/1.1'
+}
+================================================================================
+📱 TWILIO DELIVERY WEBHOOK RECEIVED - 2025-11-17T15:05:43.551Z
+  "From": "+18666893302",
+  "MessageSid": "SM93d8e50038485f99d0ade4411e15b154",
+  "AccountSid": "AC2888c26dc553ff2926a3f8328d2b11ef"
+}
+📊 Parsed values:
+   MessageSid: SM93d8e50038485f99d0ade4411e15b154
+   Status: sent
+📊 SMS Segments detected: 1 (raw: 1)
+✅ Found tracking record: ID=117032d9-70f5-4f0a-8cf8-4c03436607a1
+💾 Updating tracking record with 1 segments: { status: 'sent', segments: 1 }
+✅ Tracking record updated successfully
+🔄 Updating SMS campaign b5fcd89b-e6fa-46ff-ac69-f0bd0a003591 metrics from tracking records
+✅ SMS campaign b5fcd89b-e6fa-46ff-ac69-f0bd0a003591 metrics updated: {
+  totalSent: 268,
+  totalDelivered: 242,
+  totalErrors: 55,
+  totalOptOuts: 0
+}
+✅ Recording SMS usage: tenant=bc63d182-9691-455a-b372-10dfcad9c11e, segments=1, sid=SM93d8e50038485f99d0ade4411e15b154
+📊 SMS Usage Event Details: {
+  "tenantId": "bc63d182-9691-455a-b372-10dfcad9c11e",
+  "segments": 1,
+  "messageSid": "SM93d8e50038485f99d0ade4411e15b154",
+  "status": "sent",
+  "timestamp": "2025-11-17T15:05:43.585Z"
+}
+✅ Twilio webhook processed successfully - 1 SMS segments recorded to database for tenant bc63d182-9691-455a-b372-10dfcad9c11e
+================================================================================
+📤 [RESPONSE-JSON] POST /api/webhooks/twilio → 200 (62ms) { dataKeys: 'message' }
+📤 [RESPONSE] POST /api/webhooks/twilio → 200 (62ms) {
+  contentType: 'application/json; charset=utf-8',
+  bodyType: 'string',
+  bodyPreview: '{"message":"Webhook processed"}'
+}
+  "SmsSid": "SM93d8e50038485f99d0ade4411e15b154",
+}
+  "SmsStatus": "delivered",
+📊 Parsed values:
+  "To": "+19188524454",
