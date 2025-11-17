@@ -264,7 +264,7 @@ export default function AutoResponseSettings() {
           </div>
 
           {usage && (
-            <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-4">
+            <div className="rounded-lg border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02] shadow-lg shadow-blue-900/10 backdrop-blur p-4">
               <div className="flex items-center gap-2 mb-3">
                 <Sparkles className="h-4 w-4 text-sky-400" />
                 <h4 className="font-semibold text-white">Usage This Month</h4>
