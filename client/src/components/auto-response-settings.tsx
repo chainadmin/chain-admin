@@ -18,9 +18,9 @@ import {
 import { Loader2, Bot, Sparkles, TestTube, AlertCircle, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const cardBaseClasses = "border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02] shadow-lg shadow-blue-900/10 backdrop-blur";
-const inputClasses = "border-white/20 bg-white/5 text-white placeholder:text-blue-100/40 focus:border-sky-500/50 focus:ring-sky-500/30";
-const selectTriggerClasses = "border-white/20 bg-white/5 text-white focus:border-sky-500/50 focus:ring-sky-500/30";
+const cardBaseClasses = "border border-white/10 bg-white/5 text-blue-50 shadow-lg shadow-blue-900/20 backdrop-blur";
+const inputClasses = "border-white/20 bg-white/10 text-white placeholder:text-blue-100/60 focus:border-sky-400/60 focus-visible:ring-sky-400/40";
+const selectTriggerClasses = "border-white/20 bg-white/10 text-white placeholder:text-blue-100/60 focus:border-sky-400/60 focus:ring-0 focus-visible:ring-0";
 
 interface AutoResponseConfig {
   id: string;
@@ -264,7 +264,7 @@ export default function AutoResponseSettings() {
           </div>
 
           {usage && (
-            <div className="rounded-lg border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02] shadow-lg shadow-blue-900/10 backdrop-blur p-4">
+            <div className="rounded-lg border border-white/10 bg-white/5 shadow-sm p-4">
               <div className="flex items-center gap-2 mb-3">
                 <Sparkles className="h-4 w-4 text-sky-400" />
                 <h4 className="font-semibold text-white">Usage This Month</h4>
