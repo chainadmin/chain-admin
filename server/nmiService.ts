@@ -44,6 +44,8 @@ export interface NMIChargeVaultRequest {
   customerVaultId: string;
   amount: number;
   orderid?: string;
+  firstName?: string;
+  lastName?: string;
 }
 
 export interface NMITransactionResponse {
@@ -227,9 +229,11 @@ export class NMIService {
         customer_vault_id: request.customerVaultId,
         amount: request.amount.toFixed(2),
         ...(request.orderid && { orderid: request.orderid }),
+        ...(request.firstName && { first_name: request.firstName }),
+        ...(request.lastName && { last_name: request.lastName }),
       });
 
-      console.log('🟣 [NMI] Charging customer vault:', request.customerVaultId);
+      console.log('🟣 [NMI] Charging customer vault:', request.customerVaultId, request.firstName, request.lastName);
 
       const response = await fetch(this.apiEndpoint, {
         method: 'POST',
