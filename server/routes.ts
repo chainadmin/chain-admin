@@ -9149,6 +9149,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               customerVaultId,
               amount: parseFloat((amountCents / 100).toFixed(2)),
               orderid: accountId || `consumer_${consumerId}`,
+              firstName: cardName.split(' ')[0] || cardName,
+              lastName: cardName.split(' ').slice(1).join(' ') || '',
             });
           }
 
