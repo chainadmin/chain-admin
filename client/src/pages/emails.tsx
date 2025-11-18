@@ -160,7 +160,9 @@ export default function Emails() {
     { label: "Balance", value: "{{balance}}", category: "account" },
     { label: "Due Date", value: "{{dueDate}}", category: "account" },
     { label: "Consumer Portal Link", value: "{{consumerPortalLink}}", category: "links" },
-    { label: "App Download Link", value: "{{appDownloadLink}}", category: "links" },
+    { label: "Universal App Link", value: "{{universalAppLink}}", category: "links" },
+    { label: "Android Download", value: "{{androidDownload}}", category: "links" },
+    { label: "iOS Download", value: "{{iosDownload}}", category: "links" },
     { label: "Agency Name", value: "{{agencyName}}", category: "agency" },
     { label: "Agency Email", value: "{{agencyEmail}}", category: "agency" },
     { label: "Agency Phone", value: "{{agencyPhone}}", category: "agency" },
@@ -257,7 +259,19 @@ export default function Emails() {
     const resolvedConsumerPortalUrl =
       consumerPortalUrl || fallbackAgencyUrl || "https://your-agency.chainsoftwaregroup.com";
     preview = preview.replace(/\{\{consumerPortalLink\}\}/g, resolvedConsumerPortalUrl);
-    preview = preview.replace(/\{\{appDownloadLink\}\}/g, "#");
+    
+    // App download links
+    const universalAppLink = `${resolvedConsumerPortalUrl}/app`;
+    const androidDownloadLink = "https://play.google.com/store/apps/details?id=com.chainsoftware.platform";
+    const iosDownloadLink = "#"; // Not available yet
+    
+    preview = preview.replace(/\{\{universalAppLink\}\}/g, universalAppLink);
+    preview = preview.replace(/\{\{androidDownload\}\}/g, androidDownloadLink);
+    preview = preview.replace(/\{\{iosDownload\}\}/g, iosDownloadLink);
+    
+    // Legacy support for old variable name
+    preview = preview.replace(/\{\{appDownloadLink\}\}/g, androidDownloadLink);
+    
     preview = preview.replace(/\{\{agencyName\}\}/g, (settings as any)?.agencyName || "Your Agency");
     preview = preview.replace(/\{\{agencyEmail\}\}/g, (settings as any)?.agencyEmail || "info@agency.com");
     preview = preview.replace(/\{\{agencyPhone\}\}/g, (settings as any)?.agencyPhone || "(555) 000-0000");
