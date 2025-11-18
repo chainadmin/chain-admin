@@ -156,6 +156,13 @@ function applyTemplateReplacement(template: string, key: string, value: string):
   return patterns.reduce((result, pattern) => result.replace(pattern, sanitizedValue), template);
 }
 
+// Legal disclaimer constants for document templates
+const FDCPA_DISCLAIMER = `This is an attempt to collect a debt and any information obtained will be used for that purpose. This communication is from a debt collector.`;
+
+const VALIDATION_NOTICE = `Unless you notify this office within 30 days after receiving this notice that you dispute the validity of this debt or any portion thereof, this office will assume this debt is valid. If you notify this office in writing within 30 days from receiving this notice that you dispute the validity of this debt or any portion thereof, this office will obtain verification of the debt or obtain a copy of a judgment and mail you a copy of such judgment or verification. If you request this office in writing within 30 days after receiving this notice, this office will provide you with the name and address of the original creditor, if different from the current creditor.`;
+
+const ESIGN_CONSENT = `By clicking "I Agree" and signing this document electronically, you consent to conduct this transaction by electronic means. You acknowledge that your electronic signature is the legal equivalent of your manual signature and that you intend to be legally bound by the terms of this agreement. You have the right to request a paper copy of this document.`;
+
 // Helper function to replace template variables for both email and SMS content
 function replaceTemplateVariables(
   template: string,
@@ -373,6 +380,10 @@ function replaceTemplateVariables(
     initials: '____',
     INITIAL: '____',
     INITIALS: '____',
+    // Legal disclaimers
+    fdcpaDisclaimer: FDCPA_DISCLAIMER,
+    validationNotice: VALIDATION_NOTICE,
+    esignConsent: ESIGN_CONSENT,
     unsubscribeLink: unsubscribeUrl,
     unsubscribeUrl,
     unsubscribeButton: unsubscribeButtonHtml,
@@ -448,6 +459,10 @@ function replaceTemplateVariables(
     last_payment_date: lastPaymentDate,
     client_reference: clientReference,
     date_signed: todaysDate,
+    // Legal disclaimers (snake_case aliases)
+    fdcpa_disclaimer: FDCPA_DISCLAIMER,
+    validation_notice: VALIDATION_NOTICE,
+    esign_consent: ESIGN_CONSENT,
     unsubscribe_link: unsubscribeUrl,
     unsubscribe_url: unsubscribeUrl,
     unsubscribe_button: unsubscribeButtonHtml,
@@ -16641,6 +16656,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching signed documents:", error);
       res.status(500).json({ message: "Failed to fetch signed documents" });
+    }
+  });
+
+  // Get individual signed document with signatures embedded (HTML response)
+  app.get('/api/signed-documents/:id', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { id } = req.params;
+      
+      // Get the signed document
+      const signedDoc = await storage.getSignedDocumentById(id);
+      if (!signedDoc) {
+        return res.status(404).json({ message: "Signed document not found" });
+      }
+
+      // Verify document belongs to this tenant
+      if (signedDoc.tenantId !== tenantId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      // Get the original signature request to access the document template
+      const signatureRequest = await storage.getSignatureRequestById(signedDoc.signatureRequestId);
+      if (!signatureRequest || !signatureRequest.document) {
+        return res.status(404).json({ message: "Original document not found" });
+      }
+
+      // Verify signature request also belongs to this tenant (double-check for security)
+      if (signatureRequest.tenantId !== tenantId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      // Get the document HTML content
+      let htmlContent = '';
+      const fileUrl = signatureRequest.document.fileUrl;
+      
+      // Decode the data URL to get HTML content
+      const urlEncodedMatch = fileUrl.match(/^data:text\/html;charset=utf-8,(.+)$/);
+      const base64Match = fileUrl.match(/^data:text\/html;base64,(.+)$/);
+      
+      if (urlEncodedMatch) {
+        htmlContent = decodeURIComponent(urlEncodedMatch[1]);
+      } else if (base64Match) {
+        htmlContent = Buffer.from(base64Match[1], 'base64').toString('utf-8');
+      } else {
+        return res.status(500).json({ message: "Invalid document format" });
+      }
+
+      // Replace signature placeholders with actual signature images
+      let modifiedHtml = htmlContent;
+
+      if (signedDoc.signatureData) {
+        const signatureHtml = `<span style="display: inline-block; border-bottom: 1px solid #000; padding: 2px 5px;"><img src="${signedDoc.signatureData}" alt="Signature" style="max-width: 150px; max-height: 40px; height: auto; display: inline-block; vertical-align: middle;" /></span>`;
+        
+        // Replace all signature placeholders
+        modifiedHtml = modifiedHtml.replace(/______________/g, signatureHtml);
+        modifiedHtml = modifiedHtml.replace(/\{\{signature\}\}/gi, signatureHtml);
+        modifiedHtml = modifiedHtml.replace(/\{\{SIGNATURE_LINE\}\}/gi, signatureHtml);
+      }
+
+      if (signedDoc.initialsData) {
+        const initialsHtml = `<span style="display: inline-block; border-bottom: 1px solid #000; padding: 2px 5px;"><img src="${signedDoc.initialsData}" alt="Initials" style="max-width: 50px; max-height: 30px; height: auto; display: inline-block; vertical-align: middle;" /></span>`;
+        
+        // Replace all initials placeholders
+        modifiedHtml = modifiedHtml.replace(/____(?!_)/g, initialsHtml);
+        modifiedHtml = modifiedHtml.replace(/\{\{initials\}\}/gi, initialsHtml);
+        modifiedHtml = modifiedHtml.replace(/\{\{INITIAL\}\}/gi, initialsHtml);
+        modifiedHtml = modifiedHtml.replace(/\{\{INITIALS\}\}/gi, initialsHtml);
+      }
+
+      // Return the HTML directly
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.send(modifiedHtml);
+    } catch (error) {
+      console.error("Error fetching signed document:", error);
+      res.status(500).json({ message: "Failed to fetch signed document" });
     }
   });
 

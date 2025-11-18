@@ -3489,6 +3489,14 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(signedDocuments.signedAt));
   }
 
+  async getSignedDocumentById(id: string): Promise<SignedDocument | undefined> {
+    const [doc] = await db
+      .select()
+      .from(signedDocuments)
+      .where(eq(signedDocuments.id, id));
+    return doc;
+  }
+
   async getSignedDocumentsByConsumer(consumerId: string): Promise<SignedDocument[]> {
     return await db
       .select()
