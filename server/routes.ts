@@ -8521,14 +8521,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!paymentResult.success) {
           console.error('❌ Authorize.net payment failed:', paymentResult.errorMessage);
           
-          // Auto-change account status to "recalled" when payment fails
+          // Auto-change account status to "declined" when payment fails
           if (accountId && account.tenantId === tenantId) {
             try {
               const currentStatus = account.status?.toLowerCase();
-              // Only change if not already terminal status
+              // Only change if not already terminal status (recalled/closed)
               if (currentStatus !== 'recalled' && currentStatus !== 'closed') {
-                await storage.updateAccount(accountId, { status: "recalled" });
-                console.log(`🔄 Auto-changed account ${accountId} status to "recalled" (payment declined)`);
+                await storage.updateAccount(accountId, { status: "declined" });
+                console.log(`🔄 Auto-changed account ${accountId} status to "declined" (payment declined)`);
               }
             } catch (statusError) {
               console.error('Failed to auto-update account status on payment decline:', statusError);
@@ -8998,14 +8998,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (!success) {
             console.error('❌ NMI payment failed:', nmiResult.responsetext);
             
-            // Auto-change account status to "recalled" when payment fails
+            // Auto-change account status to "declined" when payment fails
             if (accountId && account.tenantId === tenantId) {
               try {
                 const currentStatus = account.status?.toLowerCase();
-                // Only change if not already terminal status
+                // Only change if not already terminal status (recalled/closed)
                 if (currentStatus !== 'recalled' && currentStatus !== 'closed') {
-                  await storage.updateAccount(accountId, { status: "recalled" });
-                  console.log(`🔄 Auto-changed account ${accountId} status to "recalled" (payment declined)`);
+                  await storage.updateAccount(accountId, { status: "declined" });
+                  console.log(`🔄 Auto-changed account ${accountId} status to "declined" (payment declined)`);
                 }
               } catch (statusError) {
                 console.error('Failed to auto-update account status on payment decline:', statusError);
@@ -9595,14 +9595,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             metadata: { paymentId: payment.id, amountCents, error: usaepayResult.error || usaepayResult.errorcode }
           });
           
-          // Auto-change account status to "recalled" when payment fails
+          // Auto-change account status to "declined" when payment fails
           if (accountId && account.tenantId === tenantId) {
             try {
               const currentStatus = account.status?.toLowerCase();
-              // Only change if not already terminal status
+              // Only change if not already terminal status (recalled/closed)
               if (currentStatus !== 'recalled' && currentStatus !== 'closed') {
-                await storage.updateAccount(accountId, { status: "recalled" });
-                console.log(`🔄 Auto-changed account ${accountId} status to "recalled" (payment declined)`);
+                await storage.updateAccount(accountId, { status: "declined" });
+                console.log(`🔄 Auto-changed account ${accountId} status to "declined" (payment declined)`);
               }
             } catch (statusError) {
               console.error('Failed to auto-update account status on payment decline:', statusError);
@@ -10884,14 +10884,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   if (!success) {
                     console.error('❌ Authorize.net scheduled payment failed:', authnetResult.errorMessage);
                     
-                    // Auto-change account status to "recalled" when scheduled payment fails
+                    // Auto-change account status to "declined" when scheduled payment fails
                     try {
                       const account = await storage.getAccount(schedule.accountId);
                       if (account && account.tenantId === tenant.id) {
                         const currentStatus = account.status?.toLowerCase();
+                        // Only change if not already terminal status (recalled/closed)
                         if (currentStatus !== 'recalled' && currentStatus !== 'closed') {
-                          await storage.updateAccount(schedule.accountId, { status: "recalled" });
-                          console.log(`🔄 Auto-changed account ${schedule.accountId} status to "recalled" (scheduled payment declined)`);
+                          await storage.updateAccount(schedule.accountId, { status: "declined" });
+                          console.log(`🔄 Auto-changed account ${schedule.accountId} status to "declined" (scheduled payment declined)`);
                         }
                       }
                     } catch (statusError) {
@@ -10952,14 +10953,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       if (!success) {
                         console.error('❌ NMI vault scheduled payment failed:', nmiResult.responseText);
                         
-                        // Auto-change account status to "recalled" when scheduled payment fails
+                        // Auto-change account status to "declined" when scheduled payment fails
                         try {
                           const account = await storage.getAccount(schedule.accountId);
                           if (account && account.tenantId === tenant.id) {
                             const currentStatus = account.status?.toLowerCase();
+                            // Only change if not already terminal status (recalled/closed)
                             if (currentStatus !== 'recalled' && currentStatus !== 'closed') {
-                              await storage.updateAccount(schedule.accountId, { status: "recalled" });
-                              console.log(`🔄 Auto-changed account ${schedule.accountId} status to "recalled" (scheduled payment declined)`);
+                              await storage.updateAccount(schedule.accountId, { status: "declined" });
+                              console.log(`🔄 Auto-changed account ${schedule.accountId} status to "declined" (scheduled payment declined)`);
                             }
                           }
                         } catch (statusError) {
@@ -11291,13 +11293,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   // Update consumer status to payment_failed
                   await storage.updateConsumer(consumer.id, { paymentStatus: 'payment_failed' });
 
-                  // Auto-change account status to "recalled" when scheduled payment fails
+                  // Auto-change account status to "declined" when scheduled payment fails
                   if (failedAccount && failedAccount.tenantId === tenant.id) {
                     try {
                       const currentStatus = failedAccount.status?.toLowerCase();
+                      // Only change if not already terminal status (recalled/closed)
                       if (currentStatus !== 'recalled' && currentStatus !== 'closed') {
-                        await storage.updateAccount(schedule.accountId, { status: "recalled" });
-                        console.log(`🔄 Auto-changed account ${schedule.accountId} status to "recalled" (scheduled payment declined)`);
+                        await storage.updateAccount(schedule.accountId, { status: "declined" });
+                        console.log(`🔄 Auto-changed account ${schedule.accountId} status to "declined" (scheduled payment declined)`);
                       }
                     } catch (statusError) {
                       console.error('Failed to auto-update account status on scheduled payment decline:', statusError);
