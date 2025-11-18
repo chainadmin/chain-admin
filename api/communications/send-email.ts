@@ -174,6 +174,12 @@ function replaceTemplateVariables(
     'balance80%': balance80,
     'balance90%': balance90,
     'balance100%': balance100,
+    
+    // Snake_case aliases for app download variables
+    universal_app_link: universalAppLink,
+    android_download: ANDROID_APP_URL,
+    ios_download: IOS_APP_URL || '#',
+    app_download_link: ANDROID_APP_URL,
   };
 
   let processedTemplate = template;

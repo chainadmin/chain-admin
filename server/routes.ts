@@ -183,7 +183,11 @@ function replaceTemplateVariables(
     baseUrl: normalizedBaseUrl,
   });
 
-  const appDownloadUrl = sanitizedBaseUrl ? `${baseProtocol}${sanitizedBaseUrl}/download` : '';
+  // App download URLs - platform-wide
+  const ANDROID_APP_URL = 'https://play.google.com/store/apps/details?id=com.chainsoftware.platform';
+  const IOS_APP_URL = ''; // Will be added when iOS app is ready
+  const universalAppLink = sanitizedBaseUrl ? `${baseProtocol}${sanitizedBaseUrl}/app` : '';
+  
   const unsubscribeBase = sanitizedBaseUrl ? `${baseProtocol}${sanitizedBaseUrl}/unsubscribe` : '';
 
   const firstName = consumer?.firstName || '';
@@ -344,7 +348,12 @@ function replaceTemplateVariables(
     fullAddress,
     consumerPortalLink: consumerPortalUrl,
     portalLink: consumerPortalUrl,
-    appDownloadLink: appDownloadUrl,
+    // App download variables
+    universalAppLink,
+    androidDownload: ANDROID_APP_URL,
+    iosDownload: IOS_APP_URL || '#',
+    // Legacy support for old variable name
+    appDownloadLink: ANDROID_APP_URL,
     agencyName: tenant?.name || '',
     agencyEmail: (tenant as any)?.contactEmail || tenant?.email || '',
     agencyPhone: (tenant as any)?.contactPhone || tenant?.phoneNumber || tenant?.twilioPhoneNumber || '',
@@ -422,7 +431,11 @@ function replaceTemplateVariables(
     full_address: fullAddress,
     consumer_portal_link: consumerPortalUrl,
     portal_link: consumerPortalUrl,
-    app_download_link: appDownloadUrl,
+    // App download variables (snake_case aliases)
+    universal_app_link: universalAppLink,
+    android_download: ANDROID_APP_URL,
+    ios_download: IOS_APP_URL || '#',
+    app_download_link: ANDROID_APP_URL, // Legacy
     agency_name: tenant?.name || '',
     agency_email: (tenant as any)?.contactEmail || tenant?.email || '',
     agency_phone: (tenant as any)?.contactPhone || tenant?.phoneNumber || tenant?.twilioPhoneNumber || '',
