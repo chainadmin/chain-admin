@@ -2,16 +2,69 @@
 export const POSTMARK_TEMPLATES = {
   'postmark-invoice': {
     name: 'Invoice/Statement',
-    description: 'Professional invoice layout with payment button',
+    description: 'Professional invoice layout with account details table',
     thumbnail: '📄',
     html: `
 {{COMPANY_LOGO}}
 <h1>{{CUSTOM_GREETING}}</h1>
 <p>{{CUSTOM_MESSAGE}}</p>
+<table class="attributes" width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td class="attributes_content">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td class="attributes_item">
+            <strong>Amount Due:</strong> {{balance}}
+          </td>
+        </tr>
+        <tr>
+          <td class="attributes_item">
+            <strong>Account Number:</strong> {{accountNumber}}
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
 {{ACCOUNT_SUMMARY_BLOCK}}
+<table class="purchase" width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td>
+      <h3>Account Statement</h3>
+    </td>
+    <td>
+      <h3 class="align-right">{{date}}</h3>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2">
+      <table class="purchase_content" width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <th class="purchase_heading" align="left">
+            <p>Description</p>
+          </th>
+          <th class="purchase_heading" align="right">
+            <p>Amount</p>
+          </th>
+        </tr>
+        <tr>
+          <td width="80%" class="purchase_item">Original Balance - {{creditor}}</td>
+          <td class="align-right" width="20%" class="purchase_item">{{balance}}</td>
+        </tr>
+        <tr>
+          <td width="80%" class="purchase_footer" valign="middle">
+            <p class="purchase_total purchase_total--label">Total Balance</p>
+          </td>
+          <td width="20%" class="purchase_footer" valign="middle">
+            <p class="purchase_total">{{balance}}</p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
 <p>{{CUSTOM_CLOSING_MESSAGE}}</p>
 <p>{{CUSTOM_SIGNOFF}}</p>
-<!-- Sub copy -->
 <table class="body-sub">
   <tr>
     <td>
@@ -22,7 +75,6 @@ export const POSTMARK_TEMPLATES = {
 </table>`,
     styles: `
 <style>
-  /* Base */
   body {
     width: 100% !important;
     height: 100%;
@@ -40,6 +92,29 @@ export const POSTMARK_TEMPLATES = {
   
   td {
     word-break: break-word;
+  }
+  
+  h1 {
+    margin-top: 0;
+    color: #333333;
+    font-size: 22px;
+    font-weight: bold;
+    text-align: left;
+  }
+  
+  h3 {
+    margin-top: 0;
+    color: #333333;
+    font-size: 14px;
+    font-weight: bold;
+    text-align: left;
+  }
+  
+  p {
+    margin: .4em 0 1.1875em;
+    font-size: 16px;
+    line-height: 1.625;
+    color: #51545E;
   }
   
   .button {
@@ -65,17 +140,16 @@ export const POSTMARK_TEMPLATES = {
     border-left: 18px solid #22BC66;
   }
   
-  .attribute-list {
-    font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif;
+  .attributes {
     margin: 0 0 21px;
   }
   
-  .attribute-list-container {
+  .attributes_content {
     background-color: #F4F4F7;
     padding: 16px;
   }
   
-  .attribute-list-item {
+  .attributes_item {
     padding: 0;
   }
   
@@ -90,8 +164,6 @@ export const POSTMARK_TEMPLATES = {
     width: 100%;
     margin: 0;
     padding: 35px 0;
-    border-top: 1px solid #EAEAEC;
-    border-bottom: 1px solid #EAEAEC;
   }
   
   .purchase_content {
@@ -115,7 +187,7 @@ export const POSTMARK_TEMPLATES = {
     padding: 10px 0;
     color: #51545E;
     font-size: 15px;
-    border-bottom: 1px solid #EAEAEC;
+    line-height: 18px;
   }
   
   .purchase_footer {
@@ -153,13 +225,32 @@ export const POSTMARK_TEMPLATES = {
   
   'postmark-welcome': {
     name: 'Welcome Message',
-    description: 'Clean welcome message with call-to-action',
+    description: 'Welcome message with portal information and action button',
     thumbnail: '👋',
     html: `
 {{COMPANY_LOGO}}
 <h1>{{CUSTOM_GREETING}}</h1>
 <p>{{CUSTOM_MESSAGE}}</p>
 {{ACCOUNT_SUMMARY_BLOCK}}
+<p>For reference, here's your account information:</p>
+<table class="attributes" width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td class="attributes_content">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td class="attributes_item">
+            <strong>Portal Link:</strong> {{consumerPortalLink}}
+          </td>
+        </tr>
+        <tr>
+          <td class="attributes_item">
+            <strong>Account Number:</strong> {{accountNumber}}
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
 <p>{{CUSTOM_CLOSING_MESSAGE}}</p>
 <p>{{CUSTOM_SIGNOFF}}</p>`,
     styles: `
@@ -173,6 +264,29 @@ export const POSTMARK_TEMPLATES = {
   
   a {
     color: #3869D4;
+  }
+  
+  a img {
+    border: none;
+  }
+  
+  td {
+    word-break: break-word;
+  }
+  
+  h1 {
+    margin-top: 0;
+    color: #333333;
+    font-size: 22px;
+    font-weight: bold;
+    text-align: left;
+  }
+  
+  p {
+    margin: .4em 0 1.1875em;
+    font-size: 16px;
+    line-height: 1.625;
+    color: #51545E;
   }
   
   .button {
@@ -198,18 +312,17 @@ export const POSTMARK_TEMPLATES = {
     border-left: 18px solid #22BC66;
   }
   
-  .attribute-list {
-    font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif;
+  .attributes {
     margin: 0 0 21px;
   }
   
-  .attribute-list-container {
+  .attributes_content {
     background-color: #F4F4F7;
     padding: 16px;
   }
   
-  .attribute-list-item {
-    padding: 8px 0;
+  .attributes_item {
+    padding: 0;
   }
   
   .body-action {
@@ -223,7 +336,7 @@ export const POSTMARK_TEMPLATES = {
   
   'postmark-access': {
     name: 'Portal Access',
-    description: 'Account portal access notification with action button',
+    description: 'Simple portal access notification with single action button',
     thumbnail: '🔑',
     html: `
 {{COMPANY_LOGO}}
@@ -232,7 +345,6 @@ export const POSTMARK_TEMPLATES = {
 {{ACCOUNT_SUMMARY_BLOCK}}
 <p>{{CUSTOM_CLOSING_MESSAGE}}</p>
 <p>{{CUSTOM_SIGNOFF}}</p>
-<!-- Sub copy -->
 <table class="body-sub">
   <tr>
     <td>
@@ -254,6 +366,33 @@ export const POSTMARK_TEMPLATES = {
     color: #3869D4;
   }
   
+  a img {
+    border: none;
+  }
+  
+  td {
+    word-break: break-word;
+  }
+  
+  h1 {
+    margin-top: 0;
+    color: #333333;
+    font-size: 22px;
+    font-weight: bold;
+    text-align: left;
+  }
+  
+  p {
+    margin: .4em 0 1.1875em;
+    font-size: 16px;
+    line-height: 1.625;
+    color: #51545E;
+  }
+  
+  p.sub {
+    font-size: 13px;
+  }
+  
   .button {
     background-color: #3869D4;
     border-top: 10px solid #3869D4;
@@ -275,20 +414,6 @@ export const POSTMARK_TEMPLATES = {
     border-right: 18px solid #22BC66;
     border-bottom: 10px solid #22BC66;
     border-left: 18px solid #22BC66;
-  }
-  
-  .attribute-list {
-    font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif;
-    margin: 0 0 21px;
-  }
-  
-  .attribute-list-container {
-    background-color: #F4F4F7;
-    padding: 16px;
-  }
-  
-  .attribute-list-item {
-    padding: 8px 0;
   }
   
   .body-action {
@@ -313,12 +438,30 @@ export const POSTMARK_TEMPLATES = {
   
   'postmark-reminder': {
     name: 'Payment Reminder',
-    description: 'Friendly payment reminder with action button',
+    description: 'Payment reminder with balance highlight and action button',
     thumbnail: '⏰',
     html: `
 {{COMPANY_LOGO}}
 <h1>{{CUSTOM_GREETING}}</h1>
 <p>{{CUSTOM_MESSAGE}}</p>
+<table class="attributes" width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td class="attributes_content">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td class="attributes_item">
+            <strong>Current Balance:</strong> {{balance}}
+          </td>
+        </tr>
+        <tr>
+          <td class="attributes_item">
+            <strong>Account Number:</strong> {{accountNumber}}
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
 {{ACCOUNT_SUMMARY_BLOCK}}
 <p>{{CUSTOM_CLOSING_MESSAGE}}</p>
 <p>{{CUSTOM_SIGNOFF}}</p>
@@ -341,6 +484,29 @@ export const POSTMARK_TEMPLATES = {
   
   a {
     color: #3869D4;
+  }
+  
+  a img {
+    border: none;
+  }
+  
+  td {
+    word-break: break-word;
+  }
+  
+  h1 {
+    margin-top: 0;
+    color: #333333;
+    font-size: 22px;
+    font-weight: bold;
+    text-align: left;
+  }
+  
+  p {
+    margin: .4em 0 1.1875em;
+    font-size: 16px;
+    line-height: 1.625;
+    color: #51545E;
   }
   
   .button {
@@ -366,18 +532,17 @@ export const POSTMARK_TEMPLATES = {
     border-left: 18px solid #22BC66;
   }
   
-  .attribute-list {
-    font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif;
+  .attributes {
     margin: 0 0 21px;
   }
   
-  .attribute-list-container {
+  .attributes_content {
     background-color: #F4F4F7;
     padding: 16px;
   }
   
-  .attribute-list-item {
-    padding: 8px 0;
+  .attributes_item {
+    padding: 0;
   }
   
   .body-action {
