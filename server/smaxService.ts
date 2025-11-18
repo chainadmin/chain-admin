@@ -655,7 +655,7 @@ class SmaxService {
 
       const result = await this.makeSmaxRequest(
         config,
-        `/getaccountdetails/${fileNumber}`,
+        `/getaccount/${fileNumber}`,
         'GET'
       );
 
@@ -671,7 +671,7 @@ class SmaxService {
     } catch (error) {
       // Check if this is a 404 - the endpoint may not exist in this SMAX version
       if (error instanceof Error && error.message.includes('404')) {
-        console.warn(`⚠️ SMAX /getaccountdetails endpoint not available (404) - this is expected for some SMAX versions`);
+        console.warn(`⚠️ SMAX /getaccount endpoint not available (404) - this is expected for some SMAX versions`);
         return null;
       }
       console.error('Error getting account from SMAX:', error);
