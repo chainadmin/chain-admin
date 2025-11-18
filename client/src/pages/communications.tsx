@@ -359,10 +359,38 @@ const extractAccountSummaryOptionsFromHtml = (html: string): AccountSummaryOptio
 
   return fallback;
 };
-const DEFAULT_GREETING_HTML = "<p>Hi {{firstName}},</p>";
-const DEFAULT_MESSAGE_HTML = "<p>This is a friendly reminder about your account. Your current balance is {{balance}} for account {{accountNumber}}.</p>";
-const DEFAULT_CLOSING_HTML = "<p>If you have any questions, please don't hesitate to contact us.</p>";
-const DEFAULT_SIGNOFF_HTML = "<p>Thanks,<br>The {{agencyName}} Team</p>";
+
+// Template-specific default content
+const TEMPLATE_DEFAULTS = {
+  'postmark-invoice': {
+    subject: 'Account Statement - {{accountNumber}}',
+    greeting: '<p>Dear {{firstName}} {{lastName}},</p>',
+    message: '<p>Please find your current account statement below. Your account balance is {{balance}} for account {{accountNumber}}.</p>',
+    closing: '<p>To make a payment or view your account details, please use the button below.</p>',
+    signoff: '<p>Best regards,<br>{{agencyName}}</p>',
+  },
+  'postmark-welcome': {
+    subject: 'Welcome to {{agencyName}}!',
+    greeting: '<p>Welcome {{firstName}}!</p>',
+    message: '<p>We\'re excited to have you here. Your account has been set up and you now have access to our online portal where you can view your account details, make payments, and manage your preferences.</p>',
+    closing: '<p>To get started, click the button below to access your account portal.</p>',
+    signoff: '<p>Welcome aboard,<br>The {{agencyName}} Team</p>',
+  },
+  'postmark-access': {
+    subject: 'Your Account Portal is Ready',
+    greeting: '<p>Hello {{firstName}},</p>',
+    message: '<p>Your online account portal is now ready! You can view your account information, make payments, update your contact details, and more - all from one convenient location.</p>',
+    closing: '<p>Click the button below to access your portal and manage your account securely.</p>',
+    signoff: '<p>Best regards,<br>{{agencyName}}</p>',
+  },
+  'postmark-reminder': {
+    subject: 'Payment Reminder - Account {{accountNumber}}',
+    greeting: '<p>Hi {{firstName}},</p>',
+    message: '<p>This is a friendly reminder about your account. Your current balance is {{balance}} for account {{accountNumber}}. We wanted to reach out to help you stay on top of your account.</p>',
+    closing: '<p>You can make a payment quickly and securely using the button below. If you have any questions or need assistance, please don\'t hesitate to contact us.</p>',
+    signoff: '<p>Thank you,<br>The {{agencyName}} Team</p>',
+  },
+};
 
 const createEmptyEmailTemplateForm = () => ({
   name: "",
@@ -890,11 +918,24 @@ export default function Communications() {
   // Function to handle design selection
   const handleDesignSelect = (designType: PostmarkTemplateType) => {
     const template = POSTMARK_TEMPLATES[designType] as any;
+    const defaults = TEMPLATE_DEFAULTS[designType];
+    
+    // Safety guard: If defaults are missing for this template type, use generic fallback
+    if (!defaults) {
+      console.warn(`No default content found for template type: ${designType}`);
+      toast({
+        title: "Template Selection Error",
+        description: "Unable to load default content for this template type.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     let contentHtml = template.html || "";
-    contentHtml = contentHtml.replace("{{CUSTOM_GREETING}}", DEFAULT_GREETING_HTML);
-    contentHtml = contentHtml.replace("{{CUSTOM_MESSAGE}}", DEFAULT_MESSAGE_HTML);
-    contentHtml = contentHtml.replace("{{CUSTOM_CLOSING_MESSAGE}}", DEFAULT_CLOSING_HTML);
-    contentHtml = contentHtml.replace("{{CUSTOM_SIGNOFF}}", DEFAULT_SIGNOFF_HTML);
+    contentHtml = contentHtml.replace("{{CUSTOM_GREETING}}", defaults.greeting);
+    contentHtml = contentHtml.replace("{{CUSTOM_MESSAGE}}", defaults.message);
+    contentHtml = contentHtml.replace("{{CUSTOM_CLOSING_MESSAGE}}", defaults.closing);
+    contentHtml = contentHtml.replace("{{CUSTOM_SIGNOFF}}", defaults.signoff);
     contentHtml = replaceAccountSummaryBlock(contentHtml, createDefaultAccountSummaryOptions());
     const fullHtml = template.styles ? `${template.styles}\n${contentHtml}` : contentHtml;
 
@@ -903,6 +944,7 @@ export default function Communications() {
     setEmailTemplateForm((prev) => ({
       ...prev,
       designType,
+      subject: defaults.subject,
       html: fullHtml,
     }));
 
