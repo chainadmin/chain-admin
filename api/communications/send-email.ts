@@ -116,7 +116,10 @@ function replaceTemplateVariables(
     baseUrl: normalizedBaseUrl,
   });
 
-  const appDownloadUrl = sanitizedBaseUrl ? `${baseProtocol}${sanitizedBaseUrl}/download` : '';
+  // App download URLs - platform-wide
+  const ANDROID_APP_URL = 'https://play.google.com/store/apps/details?id=com.chainsoftware.platform';
+  const IOS_APP_URL = ''; // Will be added when iOS app is ready
+  const universalAppLink = sanitizedBaseUrl ? `${baseProtocol}${sanitizedBaseUrl}/app` : '';
 
   const firstName = consumer?.firstName || '';
   const lastName = consumer?.lastName || '';
@@ -154,7 +157,12 @@ function replaceTemplateVariables(
     dueDate: formattedDueDate,
     dueDateIso,
     consumerPortalLink: consumerPortalUrl,
-    appDownloadLink: appDownloadUrl,
+    // App download variables
+    universalAppLink,
+    androidDownload: ANDROID_APP_URL,
+    iosDownload: IOS_APP_URL || '#', // Use # placeholder when iOS not ready
+    // Legacy support for old variable name
+    appDownloadLink: ANDROID_APP_URL,
     agencyName: tenant?.name || '',
     agencyEmail: tenant?.email || '',
     agencyPhone: tenant?.phoneNumber || tenant?.twilioPhoneNumber || '',
