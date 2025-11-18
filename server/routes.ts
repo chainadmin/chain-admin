@@ -9342,94 +9342,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
             cardBrand = nmiResult.cc_type;
           }
 
-          // Create payment record
-          payment = await storage.createPayment({
-            tenantId: tenantId,
-            consumerId: consumerId,
-            accountId: accountId || null,
-            amountCents,
-            paymentMethod: 'credit_card',
-            status: success ? 'completed' : 'failed',
-            transactionId: transactionId,
-            processorResponse: JSON.stringify(nmiResult),
-            processedAt: success ? new Date() : null,
-            notes: arrangement
-              ? `${arrangement.name} - ${cardName} ending in ${cardLast4}`
-              : `Online payment - ${cardName} ending in ${cardLast4}`,
-          });
-          
-          console.log('💾 Payment record created:', {
-            paymentId: payment.id,
-            amountCents: payment.amountCents,
-            status: payment.status,
-            transactionId: payment.transactionId
-          });
-
-          // Trigger payment event for sequence enrollment
-          await eventService.emitSystemEvent('payment_received', {
+          // Use unified payment processing helper
+          payment = await processSuccessfulPayment({
             tenantId,
             consumerId,
-            accountId: accountId || undefined,
-            metadata: { paymentId: payment.id, amountCents, transactionId }
+            accountId,
+            account,
+            amountCents,
+            transactionId,
+            processorResponse: nmiResult,
+            cardLast4,
+            cardName,
+            zipCode,
+            arrangement,
+            settings,
           });
-          
-          // Send payment to SMAX if account has a filenumber
-          if (success && account.filenumber) {
-            const consumer = await storage.getConsumer(consumerId);
-            console.log('📤 Sending payment to SMAX...');
-            
-            if (settings.smaxEnabled && consumer) {
-              try {
-                const { smaxService } = await import('./smaxService');
-                
-                await smaxService.insertPayment(tenantId, {
-                  filenumber: account.filenumber,
-                  paymentamount: (amountCents / 100).toString(),
-                  paymentdate: new Date().toISOString().split('T')[0],
-                  paymentmethod: 'Credit Card',
-                  cardLast4: cardLast4,
-                  transactionid: transactionId || undefined,
-                  cardholdername: cardName || undefined,
-                  billingzip: zipCode || undefined,
-                });
-
-                console.log('✅ NMI payment synced to SMAX (no vault ID - direct sale)');
-              } catch (smaxError) {
-                console.error('Failed to sync NMI payment to SMAX:', smaxError);
-              }
-            }
-          }
-
-          // Update account balance
-          await storage.updateAccount(accountId, {
-            balanceCents: Math.max(0, (account.balanceCents || 0) - amountCents),
-          });
-
-          // Send notification to admins about successful payment
-          const consumer = await storage.getConsumer(consumerId);
-          if (consumer) {
-            await notifyTenantAdmins({
-              tenantId,
-              subject: 'New Payment Received',
-              eventType: 'payment_made',
-              consumer: {
-                firstName: consumer.firstName || '',
-                lastName: consumer.lastName || '',
-                email: consumer.email || '',
-              },
-              amount: amountCents,
-            }).catch(err => console.error('Failed to send payment notification:', err));
-
-            await emailService.sendPaymentNotification({
-              tenantId,
-              consumerName: `${consumer.firstName} ${consumer.lastName}`,
-              accountNumber: account.accountNumber || 'N/A',
-              amountCents,
-              paymentMethod: 'Credit Card',
-              transactionId: transactionId || undefined,
-              paymentType: 'one_time',
-            }).catch(err => console.error('Failed to send payment notification to contact email:', err));
-          }
         }
 
         // Save payment method to SMAX (only if not using NMI vault)
