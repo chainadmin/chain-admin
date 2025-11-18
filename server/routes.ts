@@ -15998,6 +15998,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       console.log('✅ SMS reply stored successfully');
+
+      // Send SMS reply to SMAX as a note
+      try {
+        // Get tenant settings to check if SMAX is enabled
+        const settings = await storage.getSettings(matchedTenant.id);
+        
+        if (settings?.smaxEnabled) {
+          let accountWithFilenumber = null;
+          let senderName = fromPhone;
+          
+          if (consumer?.id) {
+            // Consumer matched - get their accounts
+            const accounts = await storage.getAccountsByConsumer(consumer.id);
+            accountWithFilenumber = accounts.find(acc => acc.filenumber);
+            senderName = `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim() || fromPhone;
+          } else {
+            // No consumer match - try to find account by phone number
+            console.log('⚠️ Consumer not matched, attempting to find account by phone number');
+            const allAccounts = await storage.getAccountsByTenant(matchedTenant.id);
+            accountWithFilenumber = allAccounts.find(acc => 
+              acc.filenumber && acc.consumer?.phone && fromPhone.includes(acc.consumer.phone.replace(/\D/g, ''))
+            );
+            
+            if (accountWithFilenumber?.consumer) {
+              senderName = `${accountWithFilenumber.consumer.firstName || ''} ${accountWithFilenumber.consumer.lastName || ''}`.trim() || fromPhone;
+            }
+          }
+          
+          if (accountWithFilenumber?.filenumber) {
+            const mediaNote = numMedia > 0 ? ` [${numMedia} media attachment(s)]` : '';
+            
+            await smaxService.insertNote(matchedTenant.id, {
+              filenumber: accountWithFilenumber.filenumber,
+              collectorname: 'System',
+              logmessage: `SMS Reply from ${senderName}: ${messageBody}${mediaNote}`,
+            });
+            
+            console.log(`📝 SMS reply logged to SMAX for filenumber: ${accountWithFilenumber.filenumber}`);
+          } else {
+            console.warn(`⚠️ No account with filenumber found for phone ${fromPhone} - skipping SMAX note`);
+          }
+        }
+      } catch (smaxError) {
+        console.error('❌ Failed to log SMS reply to SMAX:', smaxError);
+        // Non-blocking - don't fail the webhook if SMAX sync fails
+      }
       
       // Respond with TwiML (empty response means no auto-reply)
       res.set('Content-Type', 'text/xml');
