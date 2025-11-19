@@ -2052,7 +2052,7 @@ export default function ConsumerDashboardSimple() {
                     {/* Quick Term Buttons */}
                     <div>
                       <Label className="text-sm text-blue-100/70 mb-2 block">Choose Payment Term</Label>
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="grid grid-cols-3 gap-2">
                         {([3, 6, 12] as const).map((term) => {
                           const minimumMonthly = settings?.minimumMonthlyPayment ?? 5000;
                           const monthlyPayment = calculatePaymentAmount(selectedAccount?.balanceCents || 0, term, minimumMonthly);
@@ -2069,7 +2069,7 @@ export default function ConsumerDashboardSimple() {
                                 setCalculatedPayment(biweeklyPayment);
                                 setSelectedArrangement(null);
                               }}
-                              className={`p-4 rounded-lg border-2 transition-all text-left backdrop-blur ${
+                              className={`p-3 rounded-lg border-2 transition-all text-left backdrop-blur ${
                                 paymentMethod === 'term' && selectedTerm === term
                                   ? 'border-blue-400 bg-blue-500/20'
                                   : 'border-white/20 bg-white/5 hover:border-blue-400/50 hover:bg-white/10'

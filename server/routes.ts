@@ -9970,14 +9970,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         shouldSkipImmediateCharge,
         setupRecurring,
         hasArrangement: !!arrangement,
+        hasSimplifiedArrangementData: !!simplifiedArrangementData,
         hasSavedPaymentMethod: !!savedPaymentMethod,
         arrangementType: arrangement?.planType,
         condition1: success || shouldSkipImmediateCharge,
         condition2: setupRecurring || shouldSkipImmediateCharge,
-        allConditionsMet: (success || shouldSkipImmediateCharge) && (setupRecurring || shouldSkipImmediateCharge) && arrangement && savedPaymentMethod
+        allConditionsMet: (success || shouldSkipImmediateCharge) && (setupRecurring || shouldSkipImmediateCharge) && (arrangement || simplifiedArrangementData) && savedPaymentMethod
       });
       
-      if ((success || shouldSkipImmediateCharge) && (setupRecurring || shouldSkipImmediateCharge) && arrangement && savedPaymentMethod) {
+      if ((success || shouldSkipImmediateCharge) && (setupRecurring || shouldSkipImmediateCharge) && (arrangement || simplifiedArrangementData) && savedPaymentMethod) {
         console.log('⚡ Entered schedule creation block');
         
         // Use firstPaymentDate if provided, otherwise use today
@@ -9987,36 +9988,105 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const nextMonth = new Date(paymentStartDate);
         nextMonth.setMonth(nextMonth.getMonth() + 1);
 
-        // Determine number of payments based on arrangement
+        // Determine number of payments based on arrangement or simplified flow
         let remainingPayments = null;
         let endDate = null;
         
-        console.log('🔢 Calculating payments for arrangement type:', arrangement.planType);
-
-        if (arrangement.planType === 'settlement') {
-          // Settlement is one-time
-          // If it's a future payment (shouldSkipImmediateCharge), we need a schedule to track it
-          // If it's immediate (not shouldSkipImmediateCharge), we already charged it, no schedule needed
-          if (!shouldSkipImmediateCharge) {
-            // Already charged immediately, don't create schedule
+        if (simplifiedArrangementData) {
+          // Simplified flow calculation
+          console.log('✨ Calculating payments for simplified flow');
+          const { selectedTerm, paymentFrequency, amountCents: paymentAmountCents } = simplifiedArrangementData;
+          const accountBalance = account.balanceCents || 0;
+          
+          // Validate inputs to prevent invalid schedules
+          if (paymentAmountCents <= 0 || accountBalance <= 0) {
+            console.error('⚠️ VALIDATION FAILED: Cannot create payment schedule', {
+              paymentAmountCents,
+              accountBalance,
+              tenantId: tenant.id,
+              accountId: account.id,
+              reason: paymentAmountCents <= 0 ? 'Invalid payment amount' : 'Zero or negative balance'
+            });
+            // Don't create schedule - exit early by not setting remainingPayments
           } else {
-            // Future one-time payment, create schedule with 1 payment
-            remainingPayments = 1;
-            endDate = new Date(paymentStartDate);
+            // Use actual payment amount if payment was processed, otherwise use requested amount
+            const actualPaymentAmount = payment?.amountCents || paymentAmountCents;
+            
+            // Calculate the remaining balance after the immediate payment (if any)
+            // If shouldSkipImmediateCharge is false, an immediate payment has already been processed
+            const balanceAfterImmediate = shouldSkipImmediateCharge 
+              ? accountBalance 
+              : Math.max(0, accountBalance - actualPaymentAmount);
+            
+            // Calculate how many FUTURE payments are needed to pay off the remaining balance
+            // Use ceiling to ensure we always cover the full balance
+            const paymentsNeeded = balanceAfterImmediate > 0 
+              ? Math.max(1, Math.ceil(balanceAfterImmediate / paymentAmountCents))
+              : 0;
+            
+            // Set remainingPayments to paymentsNeeded - this represents future scheduled payments
+            // We don't subtract 1 because paymentsNeeded already accounts for the immediate payment
+            remainingPayments = Math.max(0, paymentsNeeded);
+            
+            // Set end date based on actual number of scheduled payments and payment frequency
+            if (remainingPayments > 0) {
+              endDate = new Date(paymentStartDate);
+              
+              // Calculate end date based on payment frequency
+              if (paymentFrequency === 'weekly') {
+                endDate.setDate(endDate.getDate() + (remainingPayments * 7));
+              } else if (paymentFrequency === 'biweekly') {
+                endDate.setDate(endDate.getDate() + (remainingPayments * 14));
+              } else {
+                // Monthly or default
+                endDate.setMonth(endDate.getMonth() + remainingPayments);
+              }
+            }
+            
+            console.log('💳 Simplified flow payment calculation:', {
+              originalBalance: accountBalance,
+              immediatePayment: shouldSkipImmediateCharge ? 0 : actualPaymentAmount,
+              balanceAfterImmediate,
+              paymentAmount: paymentAmountCents,
+              actualPaymentAmount,
+              paymentsNeeded,
+              selectedTerm,
+              paymentFrequency,
+              finalRemainingPayments: remainingPayments,
+              totalScheduled: paymentAmountCents * remainingPayments,
+              totalAllPayments: (shouldSkipImmediateCharge ? 0 : actualPaymentAmount) + (paymentAmountCents * remainingPayments),
+              endDate: endDate?.toISOString(),
+              note: 'Final payment will be adjusted to remaining balance by automated processor'
+            });
           }
-        } else if (arrangement.planType === 'fixed_monthly' && arrangement.maxTermMonths) {
-          console.log('💵 Fixed monthly arrangement detected, maxTermMonths:', arrangement.maxTermMonths);
-          const maxPayments = Number(arrangement.maxTermMonths);
-          remainingPayments = shouldSkipImmediateCharge ? maxPayments : maxPayments - 1; // Minus the one we just made
-          endDate = new Date(paymentStartDate);
-          endDate.setMonth(endDate.getMonth() + Number(arrangement.maxTermMonths));
-          console.log('✓ Calculated:', { remainingPayments, endDate: endDate.toISOString() });
-        } else if (arrangement.planType === 'range') {
-          // Range plans continue until balance is paid (no fixed end date or payment count)
-          // This allows payments to continue automatically until the full balance is collected
-          remainingPayments = null; // null = unlimited/continue until balance paid
-          endDate = null; // No fixed end date
-          console.log('💳 Creating range payment plan - will continue until balance is paid');
+        } else if (arrangement) {
+          console.log('🔢 Calculating payments for arrangement type:', arrangement.planType);
+
+          if (arrangement.planType === 'settlement') {
+            // Settlement is one-time
+            // If it's a future payment (shouldSkipImmediateCharge), we need a schedule to track it
+            // If it's immediate (not shouldSkipImmediateCharge), we already charged it, no schedule needed
+            if (!shouldSkipImmediateCharge) {
+              // Already charged immediately, don't create schedule
+            } else {
+              // Future one-time payment, create schedule with 1 payment
+              remainingPayments = 1;
+              endDate = new Date(paymentStartDate);
+            }
+          } else if (arrangement.planType === 'fixed_monthly' && arrangement.maxTermMonths) {
+            console.log('💵 Fixed monthly arrangement detected, maxTermMonths:', arrangement.maxTermMonths);
+            const maxPayments = Number(arrangement.maxTermMonths);
+            remainingPayments = shouldSkipImmediateCharge ? maxPayments : maxPayments - 1; // Minus the one we just made
+            endDate = new Date(paymentStartDate);
+            endDate.setMonth(endDate.getMonth() + Number(arrangement.maxTermMonths));
+            console.log('✓ Calculated:', { remainingPayments, endDate: endDate.toISOString() });
+          } else if (arrangement.planType === 'range') {
+            // Range plans continue until balance is paid (no fixed end date or payment count)
+            // This allows payments to continue automatically until the full balance is collected
+            remainingPayments = null; // null = unlimited/continue until balance paid
+            endDate = null; // No fixed end date
+            console.log('💳 Creating range payment plan - will continue until balance is paid');
+          }
         }
 
         // Create schedule for:
