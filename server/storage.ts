@@ -116,7 +116,7 @@ import {
   type Invoice,
   type InsertInvoice,
 } from "@shared/schema";
-import { messagingPlans, EMAIL_OVERAGE_RATE_PER_EMAIL, SMS_OVERAGE_RATE_PER_SEGMENT, type MessagingPlanId } from "@shared/billing-plans";
+import { messagingPlans, EMAIL_OVERAGE_RATE_PER_EMAIL, SMS_OVERAGE_RATE_PER_SEGMENT, DOCUMENT_SIGNING_ADDON_PRICE, MOBILE_APP_BRANDING_MONTHLY, type MessagingPlanId } from "@shared/billing-plans";
 import { db } from "./db";
 import { eq, and, desc, sql, inArray, gte, lte } from "drizzle-orm";
 import {
@@ -2928,8 +2928,14 @@ export class DatabaseStorage implements IStorage {
     // Check for enabled addons
     const enabledAddons = await this.getEnabledAddons(tenantId);
     const hasDocumentSigning = enabledAddons.includes('document_signing');
-    const documentSigningFee = hasDocumentSigning ? 40 : 0;
-    const addonFees = documentSigningFee;
+    const hasMobileAppBranding = enabledAddons.includes('mobile_app_branding');
+    
+    // Mobile App Branding is FREE for Enterprise (scale) plans
+    // Note: Requires valid subscription with slug='scale' in subscriptionPlans table
+    const isEnterprisePlan = dbPlan?.slug === 'scale';
+    const documentSigningFee = hasDocumentSigning ? DOCUMENT_SIGNING_ADDON_PRICE : 0;
+    const mobileAppBrandingFee = (hasMobileAppBranding && !isEnterprisePlan) ? MOBILE_APP_BRANDING_MONTHLY : 0;
+    const addonFees = documentSigningFee + mobileAppBrandingFee;
 
     let emailUsage = { used: 0, included: dbPlan?.includedEmails ?? 0, overage: 0, overageCharge: 0 };
     let smsUsage = { used: 0, included: dbPlan?.includedSms ?? 0, overage: 0, overageCharge: 0 };

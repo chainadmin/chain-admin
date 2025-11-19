@@ -43,6 +43,7 @@ import {
   AlertCircle,
   Loader2,
   Bot,
+  Smartphone,
 } from "lucide-react";
 
 export default function Billing() {
@@ -55,6 +56,7 @@ export default function Billing() {
   const [activatingService, setActivatingService] = useState<string | null>(null);
   const [showAddonConfirmDialog, setShowAddonConfirmDialog] = useState(false);
   const [showAutoResponseConfirmDialog, setShowAutoResponseConfirmDialog] = useState(false);
+  const [showMobileAppBrandingConfirmDialog, setShowMobileAppBrandingConfirmDialog] = useState(false);
 
   // Check for tab query parameter and set active tab on mount
   const [activeTab, setActiveTab] = useState(() => {
@@ -828,63 +830,6 @@ export default function Billing() {
                   })}
                 </div>
 
-                <div className="rounded-2xl border-2 border-emerald-400/40 bg-gradient-to-br from-emerald-500/10 to-sky-500/10 p-6 shadow-2xl">
-                  <div className="flex items-start gap-4 mb-4">
-                    <div className="rounded-2xl bg-emerald-500/20 p-3 text-emerald-200">
-                      <TrendingUp className="h-6 w-6" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-xl font-semibold text-white">Bundle & Save</h3>
-                      <p className="text-sm text-blue-100/70 mt-1">
-                        Get all services plus messaging volume for one discounted price
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="grid gap-6 md:grid-cols-2 mt-6">
-                    <div className="space-y-3">
-                      <p className="text-xs uppercase tracking-wide text-emerald-200/70">À la carte total</p>
-                      <p className="text-4xl font-semibold text-white line-through opacity-50">$375</p>
-                      <p className="text-sm text-blue-100/70">3 services × $125 each</p>
-                    </div>
-                    <div className="space-y-3">
-                      <p className="text-xs uppercase tracking-wide text-emerald-200/70">Subscription bundle</p>
-                      <div className="flex items-baseline gap-2">
-                        <p className="text-4xl font-semibold text-emerald-300">$350</p>
-                        <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-semibold text-emerald-200">
-                          Save $25/mo
-                        </span>
-                      </div>
-                      <p className="text-sm text-blue-100/70">All services + messaging volume</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-6 space-y-3">
-                    <p className="text-xs uppercase tracking-wide text-emerald-200/70">Subscription includes</p>
-                    <ul className="space-y-2 text-sm text-blue-100/90">
-                      <li className="flex items-center gap-2">
-                        <span className="text-emerald-400">✓</span>
-                        Portal + Processing
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <span className="text-emerald-400">✓</span>
-                        Email Service + Volume
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <span className="text-emerald-400">✓</span>
-                        SMS Service + Volume
-                      </li>
-                    </ul>
-                  </div>
-
-                  <Button
-                    onClick={() => setActiveTab('subscription')}
-                    className="w-full mt-6 rounded-xl border border-emerald-400/40 bg-emerald-500/20 py-3 text-base font-semibold text-emerald-100 transition hover:bg-emerald-500/30"
-                    data-testid="button-subscribe-bundle"
-                  >
-                    View subscription plans
-                  </Button>
-                </div>
 
                 <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4">
                   <p className="text-xs text-amber-200">
@@ -903,6 +848,33 @@ export default function Billing() {
                 </p>
               </CardHeader>
               <CardContent className="space-y-6 pt-6">
+                <div className="rounded-xl border-2 border-emerald-400/40 bg-gradient-to-r from-emerald-500/10 to-sky-500/10 p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-lg bg-emerald-500/20 p-2 text-emerald-200">
+                        <TrendingUp className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-semibold text-white">Bundle & Save</h3>
+                        <p className="text-xs text-blue-100/70">Get all services plus messaging volume for one discounted price</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <p className="text-sm text-blue-100/60 line-through">$375/mo</p>
+                        <p className="text-lg font-semibold text-emerald-300">From $350/mo</p>
+                      </div>
+                      <Button
+                        onClick={() => setActiveTab('subscription')}
+                        className="rounded-lg border border-emerald-400/40 bg-emerald-500/20 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-500/30"
+                        data-testid="button-subscribe-bundle"
+                      >
+                        View Plans
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="flex items-start justify-between rounded-2xl border border-white/10 bg-white/5 p-6">
                   <div className="flex-1 space-y-2">
                     <div className="flex items-center gap-2">
@@ -943,7 +915,7 @@ export default function Billing() {
                       <Bot className="h-5 w-5 text-purple-400" />
                       <h3 className="text-base font-semibold text-white">AI Auto-Response</h3>
                       <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-xs font-semibold text-purple-200 border border-purple-400/30">
-                        Plan-Based Pricing
+                        $0.08/response after quota
                       </span>
                     </div>
                     <p className="text-sm text-blue-100/70">
@@ -974,6 +946,45 @@ export default function Billing() {
                         }
                       }}
                       data-testid="switch-ai-auto-response"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-start justify-between rounded-2xl border border-white/10 bg-white/5 p-6">
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Smartphone className="h-5 w-5 text-blue-400" />
+                      <h3 className="text-base font-semibold text-white">Mobile App Branding</h3>
+                      <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-xs font-semibold text-blue-200 border border-blue-400/30">
+                        $150 setup + $50/mo
+                      </span>
+                    </div>
+                    <p className="text-sm text-blue-100/70">
+                      Brand the Android mobile app with your logo and company name in the Google Play Store. Includes setup and ongoing maintenance.
+                    </p>
+                    <div className="flex flex-wrap gap-2 text-xs text-blue-100/60">
+                      <span className="rounded-full bg-white/10 px-2 py-1">Custom Logo</span>
+                      <span className="rounded-full bg-white/10 px-2 py-1">Play Store Listing</span>
+                      <span className="rounded-full bg-white/10 px-2 py-1">Monthly Updates</span>
+                    </div>
+                    <div className="mt-3 space-y-1 text-xs text-blue-100/70">
+                      <p><strong className="text-white">One-time setup:</strong> $150</p>
+                      <p><strong className="text-white">Monthly maintenance:</strong> $50/month</p>
+                      <p className="text-emerald-300"><strong>Included FREE</strong> with Enterprise (Scale) plan</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Switch
+                      checked={enabledAddons.includes('mobile_app_branding') || false}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setShowMobileAppBrandingConfirmDialog(true);
+                        } else {
+                          const updated = enabledAddons.filter((a: string) => a !== 'mobile_app_branding');
+                          updateAddonsMutation.mutate(updated);
+                        }
+                      }}
+                      data-testid="switch-mobile-app-branding"
                     />
                   </div>
                 </div>
@@ -1078,6 +1089,54 @@ export default function Billing() {
                     data-testid="button-confirm-auto-response-addon"
                   >
                     Enable AI Auto-Response
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog open={showMobileAppBrandingConfirmDialog} onOpenChange={setShowMobileAppBrandingConfirmDialog}>
+              <AlertDialogContent className="border-white/10 bg-gradient-to-br from-slate-900 to-slate-800 text-white">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="flex items-center gap-2 text-xl">
+                    <Smartphone className="h-5 w-5 text-blue-400" />
+                    Enable Mobile App Branding Add-on
+                  </AlertDialogTitle>
+                  <AlertDialogDescription className="space-y-3 text-blue-100/80">
+                    <p>
+                      By enabling the Mobile App Branding add-on, you'll pay a one-time setup fee and recurring monthly maintenance.
+                    </p>
+                    <p className="font-semibold text-white">
+                      Pricing:
+                    </p>
+                    <ul className="ml-4 space-y-1 list-disc text-sm">
+                      <li><strong className="text-amber-300">$150</strong> one-time setup fee (charged immediately)</li>
+                      <li><strong className="text-amber-300">$50/month</strong> ongoing maintenance (auto-renews monthly)</li>
+                    </ul>
+                    <p className="text-sm">
+                      This includes custom branding for the Android mobile app in the Google Play Store with your logo and company name.
+                    </p>
+                    <p className="text-xs text-emerald-300">
+                      <strong>Note:</strong> Mobile App Branding is included FREE with Enterprise (Scale) subscriptions.
+                    </p>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel 
+                    className="border-white/20 bg-white/10 text-white hover:bg-white/20"
+                    data-testid="button-cancel-mobile-app-branding-addon"
+                  >
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => {
+                      const updated = [...enabledAddons, 'mobile_app_branding'];
+                      updateAddonsMutation.mutate(updated);
+                      setShowMobileAppBrandingConfirmDialog(false);
+                    }}
+                    className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:from-blue-400 hover:to-cyan-400"
+                    data-testid="button-confirm-mobile-app-branding-addon"
+                  >
+                    Enable ($150 + $50/mo)
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -1238,6 +1297,15 @@ export default function Billing() {
                                     <span className="text-emerald-400">✓</span>
                                     {plan.includedSmsSegments.toLocaleString()} SMS segments/month
                                   </li>
+                                  {plan.id === 'scale' && (
+                                    <li className="flex items-center gap-2">
+                                      <span className="text-emerald-400">✓</span>
+                                      <span className="flex items-center gap-1">
+                                        Mobile App Branding
+                                        <span className="text-xs text-emerald-300">(FREE)</span>
+                                      </span>
+                                    </li>
+                                  )}
                                 </ul>
                               </div>
                               {plan.features && plan.features.length > 0 && (

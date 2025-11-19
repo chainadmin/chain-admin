@@ -17,6 +17,8 @@ export const SMS_OVERAGE_RATE_PER_SEGMENT = 0.03;
 // Add-on pricing
 export const DOCUMENT_SIGNING_ADDON_PRICE = 40; // $40/month
 export const AUTO_RESPONSE_OVERAGE_PER_RESPONSE = 0.08; // $0.08 per response over included amount
+export const MOBILE_APP_BRANDING_SETUP_FEE = 150; // $150 one-time setup fee
+export const MOBILE_APP_BRANDING_MONTHLY = 50; // $50/month maintenance
 
 // Auto-response included responses by plan tier
 export const AUTO_RESPONSE_INCLUDED_RESPONSES: Record<MessagingPlanId, number> = {
