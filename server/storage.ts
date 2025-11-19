@@ -510,6 +510,12 @@ export interface IStorage {
       openRate: number;
       bounced: number;
     };
+    smsMetrics?: {
+      totalSent: number;
+      delivered: number;
+      clickRate: number;
+      failed: number;
+    };
   }>;
   
   // Push notification operations
@@ -3020,6 +3026,12 @@ export class DatabaseStorage implements IStorage {
       openRate: number;
       bounced: number;
     };
+    smsMetrics?: {
+      totalSent: number;
+      delivered: number;
+      clickRate: number;
+      failed: number;
+    };
   }> {
     const tenantConsumers = await db.select().from(consumers).where(eq(consumers.tenantId, tenantId));
     const tenantAccounts = await db.select().from(accounts).where(eq(accounts.tenantId, tenantId));
@@ -3065,6 +3077,17 @@ export class DatabaseStorage implements IStorage {
     const bounced = emailLogsData.filter(e => e.bouncedAt !== null).length;
     const openRate = totalSent > 0 ? Math.round((opened / totalSent) * 100) : 0;
     
+    // SMS metrics from sms_tracking table
+    const smsTrackingData = await db
+      .select()
+      .from(smsTracking)
+      .where(eq(smsTracking.tenantId, tenantId));
+    
+    const smsTotalSent = smsTrackingData.length;
+    const smsDelivered = smsTrackingData.filter(s => s.status === 'delivered').length;
+    const smsFailed = smsTrackingData.filter(s => s.status === 'failed').length;
+    const smsClickRate = smsTotalSent > 0 ? Math.round((smsDelivered / smsTotalSent) * 100) : 0;
+    
     return {
       totalConsumers,
       activeAccounts,
@@ -3082,6 +3105,12 @@ export class DatabaseStorage implements IStorage {
         opened,
         openRate,
         bounced,
+      },
+      smsMetrics: {
+        totalSent: smsTotalSent,
+        delivered: smsDelivered,
+        clickRate: smsClickRate,
+        failed: smsFailed,
       },
     };
   }
