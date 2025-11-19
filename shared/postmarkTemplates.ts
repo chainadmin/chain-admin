@@ -49,7 +49,7 @@ export const POSTMARK_TEMPLATES = {
         </tr>
         <tr>
           <td width="80%" class="purchase_item">Original Balance - {{creditor}}</td>
-          <td class="align-right" width="20%" class="purchase_item">{{balance}}</td>
+          <td width="20%" class="purchase_item align-right">{{balance}}</td>
         </tr>
         <tr>
           <td width="80%" class="purchase_footer" valign="middle">
@@ -231,7 +231,19 @@ export const POSTMARK_TEMPLATES = {
 {{COMPANY_LOGO}}
 <h1>{{CUSTOM_GREETING}}</h1>
 <p>{{CUSTOM_MESSAGE}}</p>
-{{ACCOUNT_SUMMARY_BLOCK}}
+<table class="body-action" align="center" width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td align="center">
+      <table width="100%" border="0" cellspacing="0" cellpadding="0">
+        <tr>
+          <td align="center">
+            <a href="{{consumerPortalLink}}" class="button" target="_blank">Get Started</a>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
 <p>For reference, here's your account information:</p>
 <table class="attributes" width="100%" cellpadding="0" cellspacing="0">
   <tr>
@@ -245,6 +257,24 @@ export const POSTMARK_TEMPLATES = {
         <tr>
           <td class="attributes_item">
             <strong>Account Number:</strong> {{accountNumber}}
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+<table class="attributes" width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td class="attributes_content">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td class="attributes_item">
+            <strong>Current Balance:</strong> {{balance}}
+          </td>
+        </tr>
+        <tr>
+          <td class="attributes_item">
+            <strong>Creditor:</strong> {{creditor}}
           </td>
         </tr>
       </table>
@@ -342,7 +372,19 @@ export const POSTMARK_TEMPLATES = {
 {{COMPANY_LOGO}}
 <h1>{{CUSTOM_GREETING}}</h1>
 <p>{{CUSTOM_MESSAGE}}</p>
-{{ACCOUNT_SUMMARY_BLOCK}}
+<table class="body-action" align="center" width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td align="center">
+      <table width="100%" border="0" cellspacing="0" cellpadding="0">
+        <tr>
+          <td align="center">
+            <a href="{{consumerPortalLink}}" class="button button--green" target="_blank">Access Portal</a>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
 <p>{{CUSTOM_CLOSING_MESSAGE}}</p>
 <p>{{CUSTOM_SIGNOFF}}</p>
 <table class="body-sub">
@@ -444,21 +486,11 @@ export const POSTMARK_TEMPLATES = {
 {{COMPANY_LOGO}}
 <h1>{{CUSTOM_GREETING}}</h1>
 <p>{{CUSTOM_MESSAGE}}</p>
-<table class="attributes" width="100%" cellpadding="0" cellspacing="0">
+<table class="discount" align="center" width="100%" cellpadding="0" cellspacing="0">
   <tr>
-    <td class="attributes_content">
-      <table width="100%" cellpadding="0" cellspacing="0">
-        <tr>
-          <td class="attributes_item">
-            <strong>Current Balance:</strong> {{balance}}
-          </td>
-        </tr>
-        <tr>
-          <td class="attributes_item">
-            <strong>Account Number:</strong> {{accountNumber}}
-          </td>
-        </tr>
-      </table>
+    <td align="center">
+      <h2 class="discount_heading">Balance Due</h2>
+      <p class="discount_body"><strong>{{balance}}</strong> on Account #{{accountNumber}}</p>
     </td>
   </tr>
 </table>
@@ -502,11 +534,36 @@ export const POSTMARK_TEMPLATES = {
     text-align: left;
   }
   
+  h2 {
+    margin-top: 0;
+    color: #333333;
+    font-size: 16px;
+    font-weight: bold;
+    text-align: center;
+  }
+  
   p {
     margin: .4em 0 1.1875em;
     font-size: 16px;
     line-height: 1.625;
     color: #51545E;
+  }
+  
+  .discount {
+    width: 100%;
+    margin: 0;
+    padding: 24px;
+    background-color: #F4F4F7;
+    border: 2px dashed #CBCCCF;
+  }
+  
+  .discount_heading {
+    text-align: center;
+  }
+  
+  .discount_body {
+    text-align: center;
+    font-size: 15px;
   }
   
   .button {
