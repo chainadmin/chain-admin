@@ -248,54 +248,53 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl border border-white/20 bg-[#0b1733]/95 backdrop-blur-md text-blue-50">
-        <DialogHeader>
-          <DialogTitle className="flex items-center text-xl font-semibold text-blue-50">
-            <i className="fas fa-upload text-sky-400 mr-3"></i>
+        <DialogHeader className="pb-2">
+          <DialogTitle className="flex items-center text-lg font-semibold text-blue-50">
+            <i className="fas fa-upload text-sky-400 mr-2"></i>
             Import Account Data
           </DialogTitle>
-          <p className="text-sm text-blue-100/70">
+          <p className="text-xs text-blue-100/70">
             Upload a CSV file containing account information to import multiple accounts at once.
           </p>
         </DialogHeader>
         
-        <div className="space-y-4">
-          <div className="rounded-xl border border-sky-400/30 bg-sky-500/10 p-4">
-            <h4 className="font-medium text-sky-100 mb-2">Required CSV Columns</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        <div className="space-y-2">
+          <div className="rounded-lg border border-sky-400/30 bg-sky-500/10 p-2.5">
+            <h4 className="text-sm font-medium text-sky-100 mb-1.5">Required CSV Columns</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
               <div>
-                <h5 className="font-medium text-sky-100 mb-1">Consumer Information</h5>
-                <ul className="text-sky-50/90 space-y-1">
-                  <li className="break-words">• <code className="bg-white/10 px-1 rounded text-xs text-sky-100">consumer_first_name</code> or <code className="bg-white/10 px-1 rounded text-xs text-sky-100">first_name</code></li>
-                  <li className="break-words">• <code className="bg-white/10 px-1 rounded text-xs text-sky-100">consumer_last_name</code> or <code className="bg-white/10 px-1 rounded text-xs text-sky-100">last_name</code></li>
-                  <li className="break-words">• <code className="bg-white/10 px-1 rounded text-xs text-sky-100">consumer_email</code> or <code className="bg-white/10 px-1 rounded text-xs text-sky-100">email</code></li>
-                  <li className="break-words">• <code className="bg-white/10 px-1 rounded text-xs text-sky-100">consumer_phone</code> or <code className="bg-white/10 px-1 rounded text-xs text-sky-100">phone</code> (optional)</li>
-                  <li className="break-words">• <code className="bg-white/10 px-1 rounded text-xs text-sky-100">date_of_birth</code> or <code className="bg-white/10 px-1 rounded text-xs text-sky-100">dob</code> (optional)</li>
-                  <li className="break-words">• <code className="bg-white/10 px-1 rounded text-xs text-sky-100">address</code> (optional)</li>
-                  <li className="break-words">• <code className="bg-white/10 px-1 rounded text-xs text-sky-100">city</code>, <code className="bg-white/10 px-1 rounded text-xs text-sky-100">state</code>, <code className="bg-white/10 px-1 rounded text-xs text-sky-100">zip_code</code> (optional)</li>
+                <h5 className="text-xs font-medium text-sky-100 mb-0.5">Consumer Information</h5>
+                <ul className="text-sky-50/90 space-y-0.5 leading-snug">
+                  <li className="break-words">• <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">consumer_first_name</code> or <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">first_name</code></li>
+                  <li className="break-words">• <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">consumer_last_name</code> or <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">last_name</code></li>
+                  <li className="break-words">• <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">consumer_email</code> or <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">email</code></li>
+                  <li className="break-words">• <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">consumer_phone</code> or <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">phone</code> (optional)</li>
+                  <li className="break-words">• <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">date_of_birth</code> or <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">dob</code> (optional)</li>
+                  <li className="break-words">• <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">address</code>, <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">city</code>, <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">state</code>, <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">zip_code</code> (optional)</li>
                 </ul>
               </div>
               <div>
-                <h5 className="font-medium text-sky-100 mb-1">Account Information</h5>
-                <ul className="text-sky-50/90 space-y-1">
-                  <li className="break-words">• <code className="bg-white/10 px-1 rounded text-xs text-sky-100">filenumber</code> or <code className="bg-white/10 px-1 rounded text-xs text-sky-100">file_number</code> (required for SMAX)</li>
-                  <li className="break-words">• <code className="bg-white/10 px-1 rounded text-xs text-sky-100">creditor</code> (required)</li>
-                  <li className="break-words">• <code className="bg-white/10 px-1 rounded text-xs text-sky-100">balance</code> (required, in dollars)</li>
-                  <li className="break-words">• <code className="bg-white/10 px-1 rounded text-xs text-sky-100">account_number</code> or <code className="bg-white/10 px-1 rounded text-xs text-sky-100">account</code> (optional)</li>
-                  <li className="break-words">• <code className="bg-white/10 px-1 rounded text-xs text-sky-100">due_date</code> (optional)</li>
+                <h5 className="text-xs font-medium text-sky-100 mb-0.5">Account Information</h5>
+                <ul className="text-sky-50/90 space-y-0.5 leading-snug">
+                  <li className="break-words">• <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">filenumber</code> or <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">file_number</code> (required for SMAX)</li>
+                  <li className="break-words">• <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">creditor</code> (required)</li>
+                  <li className="break-words">• <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">balance</code> (required, in dollars)</li>
+                  <li className="break-words">• <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">account_number</code> or <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">account</code> (optional)</li>
+                  <li className="break-words">• <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">due_date</code> (optional)</li>
                 </ul>
               </div>
             </div>
-            <div className="mt-3 pt-3 border-t border-sky-400/20">
-              <p className="text-xs text-sky-100/90">
+            <div className="mt-1.5 pt-1.5 border-t border-sky-400/20">
+              <p className="text-xs text-sky-100/90 leading-snug">
                 <strong>Note:</strong> Any additional columns in your CSV will be automatically captured as custom data. 
                 The balance should be in dollar format (e.g., 1250.50, not cents).
               </p>
             </div>
           </div>
           
-          <div className="rounded-xl border border-white/20 bg-white/5 p-3">
-            <h5 className="font-medium text-blue-100 mb-2">Example CSV Format</h5>
-            <pre className="text-xs text-blue-100/80 bg-white/5 p-2 rounded border border-white/10 overflow-x-auto">
+          <div className="rounded-lg border border-white/20 bg-white/5 p-2">
+            <h5 className="text-xs font-medium text-blue-100 mb-1">Example CSV Format</h5>
+            <pre className="text-xs text-blue-100/80 bg-white/5 p-1.5 rounded border border-white/10 overflow-x-auto leading-snug">
 consumer_first_name,consumer_last_name,consumer_email,date_of_birth,filenumber,creditor,balance,account_number
 John,Doe,john.doe@email.com,1985-05-15,FILE123456,Credit Card Co,1250.50,ACC123456
 Jane,Smith,jane.smith@email.com,1990-08-22,FILE789012,Medical Services,875.25,MED789012
@@ -303,10 +302,10 @@ Jane,Smith,jane.smith@email.com,1990-08-22,FILE789012,Medical Services,875.25,ME
           </div>
 
           {/* Folder Selection */}
-          <div className="space-y-2">
-            <Label htmlFor="folder-select">Destination Folder</Label>
+          <div className="space-y-1">
+            <Label htmlFor="folder-select" className="text-xs">Destination Folder</Label>
             <Select value={selectedFolderId} onValueChange={setSelectedFolderId}>
-              <SelectTrigger data-testid="select-folder">
+              <SelectTrigger data-testid="select-folder" className="h-8 text-xs">
                 <SelectValue placeholder="Select a folder (optional)" />
               </SelectTrigger>
               <SelectContent>
@@ -314,37 +313,37 @@ Jane,Smith,jane.smith@email.com,1990-08-22,FILE789012,Medical Services,875.25,ME
                   <SelectItem key={folder.id} value={folder.id}>
                     <div className="flex items-center">
                       <div 
-                        className="w-3 h-3 rounded-full mr-2" 
+                        className="w-2.5 h-2.5 rounded-full mr-1.5" 
                         style={{ backgroundColor: folder.color }}
                       />
                       {folder.name}
                       {folder.isDefault && (
-                        <span className="ml-2 text-xs text-gray-500">(Default)</span>
+                        <span className="ml-1.5 text-[10px] text-gray-500">(Default)</span>
                       )}
                     </div>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-gray-500">
-              Choose which folder to organize these accounts in. If no folder is selected, accounts will be placed in the default folder.
+            <p className="text-xs text-gray-500 leading-snug">
+              Choose which folder to organize these accounts in.
             </p>
           </div>
           
           {/* File Upload Area */}
-          <div className="mt-4">
+          <div className="mt-1">
             {settingsLoading ? (
-              <div className="flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
-                <div className="space-y-1 text-center text-gray-500">
-                  <i className="fas fa-spinner fa-spin text-gray-400 text-3xl"></i>
-                  <p className="text-sm">Loading settings...</p>
+              <div className="flex justify-center px-4 py-3 border-2 border-gray-300 border-dashed rounded-md">
+                <div className="space-y-0.5 text-center text-gray-500">
+                  <i className="fas fa-spinner fa-spin text-gray-400 text-xl"></i>
+                  <p className="text-xs">Loading settings...</p>
                 </div>
               </div>
             ) : (
-              <div className="flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-gray-400 transition-colors">
-                <div className="space-y-1 text-center">
-                  <i className="fas fa-cloud-upload-alt text-gray-400 text-3xl"></i>
-                  <div className="flex text-sm text-gray-600">
+              <div className="flex justify-center px-4 py-3 border-2 border-gray-300 border-dashed rounded-md hover:border-gray-400 transition-colors">
+                <div className="space-y-0.5 text-center">
+                  <i className="fas fa-cloud-upload-alt text-gray-400 text-2xl"></i>
+                  <div className="flex text-xs text-gray-600">
                     <label htmlFor="file-upload" className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500">
                       <span>Upload a file</span>
                       <Input
@@ -366,12 +365,12 @@ Jane,Smith,jane.smith@email.com,1990-08-22,FILE789012,Medical Services,875.25,ME
 
           {/* File Preview */}
           {file && (
-            <div className="bg-gray-50 rounded-lg p-4">
+            <div className="bg-gray-50 rounded-lg p-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
-                  <i className="fas fa-file-csv text-green-500 text-lg"></i>
-                  <div className="ml-3">
-                    <p className="text-sm font-medium text-gray-900">{file.name}</p>
+                  <i className="fas fa-file-csv text-green-500 text-sm"></i>
+                  <div className="ml-2">
+                    <p className="text-xs font-medium text-gray-900">{file.name}</p>
                     <p className="text-xs text-gray-500">
                       {(file.size / 1024).toFixed(1)} KB
                       {validationResults && ` • ${validationResults.accountsCount} records detected`}
@@ -382,9 +381,9 @@ Jane,Smith,jane.smith@email.com,1990-08-22,FILE789012,Medical Services,875.25,ME
                   variant="ghost" 
                   size="sm" 
                   onClick={() => resetForm()}
-                  className="text-red-500 hover:text-red-700"
+                  className="text-red-500 hover:text-red-700 h-6 w-6 p-0"
                 >
-                  <i className="fas fa-times"></i>
+                  <i className="fas fa-times text-xs"></i>
                 </Button>
               </div>
             </div>
@@ -392,24 +391,24 @@ Jane,Smith,jane.smith@email.com,1990-08-22,FILE789012,Medical Services,875.25,ME
 
           {/* Validation Results */}
           {validationResults && (
-            <div className={`border rounded-md p-4 ${
+            <div className={`border rounded-md p-2 ${
               validationResults.isValid 
                 ? 'bg-green-50 border-green-200' 
                 : 'bg-red-50 border-red-200'
             }`}>
               <div className="flex">
                 <div className="flex-shrink-0">
-                  <i className={`fas ${
+                  <i className={`fas text-sm ${
                     validationResults.isValid ? 'fa-check-circle text-green-400' : 'fa-exclamation-circle text-red-400'
                   }`}></i>
                 </div>
-                <div className="ml-3">
-                  <h3 className={`text-sm font-medium ${
+                <div className="ml-2">
+                  <h3 className={`text-xs font-medium ${
                     validationResults.isValid ? 'text-green-800' : 'text-red-800'
                   }`}>
                     {validationResults.isValid ? 'File validated successfully' : 'Validation failed'}
                   </h3>
-                  <div className={`mt-2 text-sm ${
+                  <div className={`mt-1 text-xs leading-snug ${
                     validationResults.isValid ? 'text-green-700' : 'text-red-700'
                   }`}>
                     {validationResults.isValid ? (
@@ -418,20 +417,20 @@ Jane,Smith,jane.smith@email.com,1990-08-22,FILE789012,Medical Services,875.25,ME
                           Ready to import {validationResults.accountsCount} accounts for {validationResults.consumersCount} consumers
                         </p>
                         {validationResults.additionalColumns && validationResults.additionalColumns.length > 0 && (
-                          <p className="mt-1">
-                            Additional fields detected: {validationResults.additionalColumns.join(', ')}
+                          <p className="mt-0.5">
+                            Additional fields: {validationResults.additionalColumns.join(', ')}
                           </p>
                         )}
                       </>
                     ) : (
                       <>
                         <p className="font-medium">Validation errors found:</p>
-                        <ul className="mt-1 list-disc list-inside space-y-1">
+                        <ul className="mt-0.5 list-disc list-inside space-y-0.5">
                           {validationResults.validationErrors?.map((error: string, index: number) => (
                             <li key={index}>{error}</li>
                           ))}
                         </ul>
-                        <p className="mt-2 text-xs">
+                        <p className="mt-1 text-xs">
                           Please ensure your CSV includes: first_name, last_name, email, date_of_birth (YYYY-MM-DD format), filenumber
                         </p>
                       </>
@@ -443,22 +442,23 @@ Jane,Smith,jane.smith@email.com,1990-08-22,FILE789012,Medical Services,875.25,ME
           )}
         </div>
 
-        <div className="flex justify-end space-x-3 pt-4">
-          <Button variant="outline" onClick={handleClose}>
+        <div className="flex justify-end space-x-2 pt-2">
+          <Button variant="outline" onClick={handleClose} className="h-8 text-xs">
             Cancel
           </Button>
           <Button 
             onClick={handleImport}
             disabled={!validationResults?.isValid || importMutation.isPending}
+            className="h-8 text-xs"
           >
             {importMutation.isPending ? (
               <>
-                <i className="fas fa-spinner fa-spin mr-2"></i>
+                <i className="fas fa-spinner fa-spin mr-1.5"></i>
                 Importing...
               </>
             ) : (
               <>
-                <i className="fas fa-upload mr-2"></i>
+                <i className="fas fa-upload mr-1.5"></i>
                 Import Accounts
               </>
             )}
