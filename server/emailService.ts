@@ -8,6 +8,11 @@ import { smaxService } from './smaxService';
 // This allows Docker build to succeed without runtime env vars
 const postmarkClient = new Client(process.env.POSTMARK_SERVER_TOKEN || 'will-be-validated-at-startup');
 
+// Get broadcast stream ID from environment or use default
+const getBroadcastStreamId = (): string => {
+  return process.env.POSTMARK_BROADCAST_STREAM || 'broadcasts';
+};
+
 type MetadataValue = string | number | boolean | null | undefined;
 
 export interface EmailOptions {
@@ -107,48 +112,132 @@ export class EmailService {
     let successful = 0;
     let failed = 0;
 
-    // Send emails in batches to avoid rate limits
-    const batchSize = 10;
+    // Use Postmark's batch API with broadcast stream for bulk sends (up to 500 per batch)
+    const batchSize = 500;
+    
     for (let i = 0; i < emails.length; i += batchSize) {
       const batch = emails.slice(i, i + batchSize);
       
-      const batchResults = await Promise.all(
-        batch.map(async (email) => {
-          const result = await this.sendEmail(email);
-          if (result.success) {
-            successful++;
+      try {
+        // Prepare batch messages for Postmark
+        const batchMessages = await Promise.all(
+          batch.map(async (email) => {
+            let fromEmail = email.from || DEFAULT_FROM_EMAIL;
             
-            // Create SMAX note if filenumber and tenantId are available
-            // Skip internal notifications (payment_notification, arrangement_notification, etc.)
-            const isInternalNotification = typeof email.metadata?.type === 'string' && email.metadata.type.includes('notification');
-            if (email.metadata?.filenumber && email.tenantId && !isInternalNotification) {
-              try {
-                await smaxService.insertNote(email.tenantId, {
-                  filenumber: String(email.metadata.filenumber),
-                  collectorname: 'System',
-                  logmessage: `Email sent: ${email.subject}`
-                });
-                console.log(`📝 SMAX note created for email to account ${email.metadata.filenumber}`);
-              } catch (noteError) {
-                console.error('Error creating SMAX note for email:', noteError);
-                // Don't fail the email send if note creation fails
+            // Get tenant-specific sender email if tenantId is provided
+            if (email.tenantId) {
+              const [tenant] = await db
+                .select({ customSenderEmail: tenants.customSenderEmail, slug: tenants.slug, name: tenants.name })
+                .from(tenants)
+                .where(eq(tenants.id, email.tenantId))
+                .limit(1);
+              
+              if (tenant) {
+                if (tenant.customSenderEmail) {
+                  fromEmail = tenant.customSenderEmail;
+                } else {
+                  fromEmail = `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>`;
+                }
               }
             }
+            
+            const textBody = email.text || this.htmlToText(email.html);
+            const normalizedMetadata = this.normalizeMetadata(email.metadata);
+            const replyToEmail = email.replyTo || fromEmail;
+            
+            return {
+              From: fromEmail,
+              To: email.to,
+              ReplyTo: replyToEmail,
+              Subject: email.subject,
+              HtmlBody: email.html,
+              TextBody: textBody,
+              Tag: email.tag,
+              Metadata: normalizedMetadata,
+              TrackOpens: true,
+              MessageStream: getBroadcastStreamId(), // Use broadcast stream for bulk sends
+            };
+          })
+        );
+
+        // Send batch via Postmark's batch API
+        console.log(`📧 Sending batch of ${batchMessages.length} emails via broadcast stream...`);
+        const batchResult = await postmarkClient.sendEmailBatch(batchMessages);
+        
+        // Process batch results
+        for (let j = 0; j < batchResult.length; j++) {
+          const result = batchResult[j];
+          const originalEmail = batch[j];
+          
+          if (result.ErrorCode === 0) {
+            successful++;
+            
+            // Log email to database if tenantId is provided
+            if (originalEmail.tenantId) {
+              await db.insert(emailLogs).values({
+                tenantId: originalEmail.tenantId,
+                messageId: result.MessageID,
+                fromEmail: batchMessages[j].From,
+                toEmail: originalEmail.to,
+                subject: originalEmail.subject,
+                htmlBody: originalEmail.html,
+                textBody: batchMessages[j].TextBody,
+                status: 'sent',
+                tag: originalEmail.tag,
+                metadata: this.normalizeMetadata(originalEmail.metadata) || {},
+              });
+            }
+            
+            // Create SMAX note if filenumber and tenantId are available
+            const isInternalNotification = typeof originalEmail.metadata?.type === 'string' && originalEmail.metadata.type.includes('notification');
+            if (originalEmail.metadata?.filenumber && originalEmail.tenantId && !isInternalNotification) {
+              try {
+                await smaxService.insertNote(originalEmail.tenantId, {
+                  filenumber: String(originalEmail.metadata.filenumber),
+                  collectorname: 'System',
+                  logmessage: `Email sent: ${originalEmail.subject}`
+                });
+                console.log(`📝 SMAX note created for email to account ${originalEmail.metadata.filenumber}`);
+              } catch (noteError) {
+                console.error('Error creating SMAX note for email:', noteError);
+              }
+            }
+            
+            results.push({
+              messageId: result.MessageID,
+              success: true,
+              to: originalEmail.to,
+            });
           } else {
             failed++;
+            results.push({
+              messageId: '',
+              success: false,
+              to: originalEmail.to,
+              error: result.Message || 'Unknown error',
+            });
           }
-          return {
-            ...result,
+        }
+        
+        console.log(`✅ Batch sent: ${successful} successful, ${failed} failed`);
+        
+      } catch (error: any) {
+        console.error('❌ Batch send error:', error);
+        // Mark all emails in this batch as failed
+        batch.forEach((email) => {
+          failed++;
+          results.push({
+            messageId: '',
+            success: false,
             to: email.to,
-          };
-        })
-      );
-
-      results.push(...batchResults);
+            error: error.message || 'Batch send failed',
+          });
+        });
+      }
       
-      // Small delay between batches to be respectful to the API
+      // Small delay between batches
       if (i + batchSize < emails.length) {
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
 
