@@ -2038,6 +2038,61 @@ export default function ConsumerDashboardSimple() {
                                   </div>
                                   <Badge className="bg-emerald-500 text-white border-emerald-400/30">Save Money</Badge>
                                 </div>
+                                
+                                {/* Show payment schedule breakdown for multi-payment settlements when selected */}
+                                {isSelected && arrangement.settlementPaymentCount && arrangement.settlementPaymentCount > 1 && (
+                                  <div className="mt-3 pt-3 border-t border-emerald-400/20">
+                                    <div className="text-xs text-emerald-100/70 mb-2 font-medium">Payment Schedule:</div>
+                                    <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                                      {(() => {
+                                        const paymentAmount = calculateArrangementPayment(arrangement, selectedAccount?.balanceCents || 0);
+                                        const frequency = arrangement.settlementPaymentFrequency || 'monthly';
+                                        const paymentCount = arrangement.settlementPaymentCount;
+                                        const payments = [];
+                                        
+                                        // Use the selected first payment date or default to today
+                                        const startDate = firstPaymentDate || new Date();
+                                        
+                                        for (let i = 0; i < paymentCount; i++) {
+                                          const paymentDate = new Date(startDate);
+                                          
+                                          // Calculate payment date based on frequency
+                                          if (frequency === 'weekly') {
+                                            paymentDate.setDate(paymentDate.getDate() + (i * 7));
+                                          } else if (frequency === 'biweekly') {
+                                            paymentDate.setDate(paymentDate.getDate() + (i * 14));
+                                          } else {
+                                            // Monthly
+                                            paymentDate.setMonth(paymentDate.getMonth() + i);
+                                          }
+                                          
+                                          payments.push({
+                                            number: i + 1,
+                                            date: paymentDate,
+                                            amount: paymentAmount,
+                                          });
+                                        }
+                                        
+                                        return payments.map((payment) => (
+                                          <div 
+                                            key={payment.number}
+                                            className="flex items-center justify-between rounded bg-emerald-500/10 px-2 py-1.5"
+                                          >
+                                            <span className="text-xs text-emerald-100/80">
+                                              Payment {payment.number} - {payment.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                            </span>
+                                            <span className="text-xs text-emerald-200 font-semibold">
+                                              {formatCurrency(payment.amount)}
+                                            </span>
+                                          </div>
+                                        ));
+                                      })()}
+                                    </div>
+                                    <div className="mt-2 text-xs text-emerald-100/60 italic">
+                                      {firstPaymentDate ? `First payment on ${firstPaymentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : 'First payment due today'}, remaining payments auto-scheduled
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             );
                           })}

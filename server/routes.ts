@@ -9085,12 +9085,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const paymentStartDate = normalizedFirstPaymentDate ? new Date(normalizedFirstPaymentDate) : new Date();
           const nextMonth = new Date(paymentStartDate);
           nextMonth.setMonth(nextMonth.getMonth() + 1);
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
 
           let remainingPayments = null;
           let endDate = null;
 
+          // Check if this is a multi-payment settlement (hoist for later use)
+          const isMultiPaymentSettlement = arrangement.planType === 'settlement' && arrangement.settlementPaymentCount && arrangement.settlementPaymentCount > 1;
+
           if (arrangement.planType === 'settlement') {
-            if (normalizedFirstPaymentDate && normalizedFirstPaymentDate.getTime() > today.getTime()) {
+            
+            if (isMultiPaymentSettlement) {
+              // Multi-payment settlement - create a payment schedule
+              const settlementPaymentCount = Number(arrangement.settlementPaymentCount);
+              const isImmediatePayment = !normalizedFirstPaymentDate || normalizedFirstPaymentDate.getTime() <= today.getTime();
+              remainingPayments = isImmediatePayment ? settlementPaymentCount - 1 : settlementPaymentCount;
+              endDate = new Date(paymentStartDate);
+              
+              // Calculate end date - last payment is always (count-1) periods from start
+              const frequency = arrangement.settlementPaymentFrequency || 'monthly';
+              const periodsUntilLastPayment = settlementPaymentCount - 1;
+              
+              if (frequency === 'weekly') {
+                endDate.setDate(endDate.getDate() + (periodsUntilLastPayment * 7));
+              } else if (frequency === 'biweekly') {
+                endDate.setDate(endDate.getDate() + (periodsUntilLastPayment * 14));
+              } else {
+                endDate.setMonth(endDate.getMonth() + periodsUntilLastPayment);
+              }
+            } else if (normalizedFirstPaymentDate && normalizedFirstPaymentDate.getTime() > today.getTime()) {
+              // Single-payment settlement with future date
               remainingPayments = 1;
               endDate = new Date(paymentStartDate);
             }
@@ -9105,7 +9130,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           const shouldCreateSchedule = arrangementId && (
-            arrangement.planType === 'fixed_monthly' || arrangement.planType === 'range'
+            arrangement.planType === 'fixed_monthly' || arrangement.planType === 'range' || isMultiPaymentSettlement
           );
 
           if (shouldCreateSchedule) {
@@ -9547,7 +9572,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
           let endDate = null;
 
           if (arrangement.planType === 'settlement') {
-            if (normalizedFirstPaymentDate && normalizedFirstPaymentDate.getTime() > today.getTime()) {
+            // Check if this is a multi-payment settlement
+            const isMultiPaymentSettlement = arrangement.settlementPaymentCount && arrangement.settlementPaymentCount > 1;
+            
+            if (isMultiPaymentSettlement) {
+              // Multi-payment settlement - create a payment schedule
+              const settlementPaymentCount = Number(arrangement.settlementPaymentCount);
+              const isImmediatePayment = !normalizedFirstPaymentDate || normalizedFirstPaymentDate.getTime() <= today.getTime();
+              remainingPayments = isImmediatePayment ? settlementPaymentCount - 1 : settlementPaymentCount;
+              endDate = new Date(paymentStartDate);
+              
+              // Calculate end date - last payment is always (count-1) periods from start
+              const frequency = arrangement.settlementPaymentFrequency || 'monthly';
+              const periodsUntilLastPayment = settlementPaymentCount - 1;
+              
+              if (frequency === 'weekly') {
+                endDate.setDate(endDate.getDate() + (periodsUntilLastPayment * 7));
+              } else if (frequency === 'biweekly') {
+                endDate.setDate(endDate.getDate() + (periodsUntilLastPayment * 14));
+              } else {
+                endDate.setMonth(endDate.getMonth() + periodsUntilLastPayment);
+              }
+            } else if (normalizedFirstPaymentDate && normalizedFirstPaymentDate.getTime() > today.getTime()) {
+              // Single-payment settlement with future date
               remainingPayments = 1;
               endDate = new Date(paymentStartDate);
             }
@@ -9562,7 +9609,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           const shouldCreateSchedule = arrangementId && (
-            arrangement.planType === 'fixed_monthly' || arrangement.planType === 'range'
+            arrangement.planType === 'fixed_monthly' || arrangement.planType === 'range' || isMultiPaymentSettlement
           );
 
           if (shouldCreateSchedule) {
@@ -10108,6 +10155,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         const nextMonth = new Date(paymentStartDate);
         nextMonth.setMonth(nextMonth.getMonth() + 1);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Check if this is a multi-payment settlement (hoist for later use)
+        const isMultiPaymentSettlement = arrangement?.planType === 'settlement' && arrangement.settlementPaymentCount && arrangement.settlementPaymentCount > 1;
 
         // Determine number of payments based on arrangement or simplified flow
         let remainingPayments = null;
@@ -10184,15 +10236,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log('🔢 Calculating payments for arrangement type:', arrangement.planType);
 
           if (arrangement.planType === 'settlement') {
-            // Settlement is one-time
-            // If it's a future payment (shouldSkipImmediateCharge), we need a schedule to track it
-            // If it's immediate (not shouldSkipImmediateCharge), we already charged it, no schedule needed
-            if (!shouldSkipImmediateCharge) {
-              // Already charged immediately, don't create schedule
-            } else {
-              // Future one-time payment, create schedule with 1 payment
-              remainingPayments = 1;
+            if (isMultiPaymentSettlement) {
+              // Multi-payment settlement - create a payment schedule
+              console.log('💰 Multi-payment settlement detected, count:', arrangement.settlementPaymentCount);
+              const settlementPaymentCount = Number(arrangement.settlementPaymentCount);
+              remainingPayments = shouldSkipImmediateCharge ? settlementPaymentCount : settlementPaymentCount - 1; // Minus the one we just made
               endDate = new Date(paymentStartDate);
+              
+              // Calculate end date based on frequency
+              // Last payment is always (count-1) periods from the start date
+              // because the first payment happens at the start date (period 0)
+              const frequency = arrangement.settlementPaymentFrequency || 'monthly';
+              const periodsUntilLastPayment = settlementPaymentCount - 1;
+              
+              if (frequency === 'weekly') {
+                endDate.setDate(endDate.getDate() + (periodsUntilLastPayment * 7));
+              } else if (frequency === 'biweekly') {
+                endDate.setDate(endDate.getDate() + (periodsUntilLastPayment * 14));
+              } else {
+                // Monthly or default
+                endDate.setMonth(endDate.getMonth() + periodsUntilLastPayment);
+              }
+              console.log('✓ Multi-payment settlement calculated:', { remainingPayments, endDate: endDate.toISOString(), frequency, shouldSkipImmediateCharge, periodsUntilLastPayment });
+            } else {
+              // Single-payment settlement
+              // If it's a future payment (shouldSkipImmediateCharge), we need a schedule to track it
+              // If it's immediate (not shouldSkipImmediateCharge), we already charged it, no schedule needed
+              if (!shouldSkipImmediateCharge) {
+                // Already charged immediately, don't create schedule
+              } else {
+                // Future one-time payment, create schedule with 1 payment
+                remainingPayments = 1;
+                endDate = new Date(paymentStartDate);
+              }
             }
           } else if (arrangement.planType === 'fixed_monthly' && arrangement.maxTermMonths) {
             console.log('💵 Fixed monthly arrangement detected, maxTermMonths:', arrangement.maxTermMonths);
@@ -10212,11 +10288,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Create schedule for:
         // 1. Recurring arrangements (fixed_monthly, range) 
-        // 2. One-time future payments (settlement with future date)
-        // Skip for: one_time_payment type, or settlement that already charged
+        // 2. Multi-payment settlements (even with immediate first payment)
+        // 3. One-time future payments (settlement with future date)
+        // Skip for: one_time_payment type, or single-payment settlement that already charged
         const shouldCreateSchedule = arrangementId && (
           (arrangement.planType !== 'one_time_payment' && shouldSkipImmediateCharge) || // Future one-time payments
-          (arrangement.planType === 'fixed_monthly' || arrangement.planType === 'range') // Recurring payments
+          (arrangement.planType === 'fixed_monthly' || arrangement.planType === 'range') || // Recurring payments
+          isMultiPaymentSettlement // Multi-payment settlements (added to OR expression)
         );
         
         console.log('📅 Should create schedule?', {
@@ -10525,8 +10603,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           }
         } else if (arrangement.planType === 'settlement' || arrangement.planType === 'one_time_payment') {
-          // For one-time or settlement payments, set to current after successful payment
-          if (success) {
+          // For single-payment settlements and one-time payments, set to current after successful payment
+          // For multi-payment settlements, status is handled by the schedule creation above
+          const isMultiPaymentSettlement = arrangement.planType === 'settlement' && arrangement.settlementPaymentCount && arrangement.settlementPaymentCount > 1;
+          if (success && !isMultiPaymentSettlement) {
             await storage.updateConsumer(consumerId, { paymentStatus: 'current' });
           }
         } else if (shouldSkipImmediateCharge && !shouldCreateSchedule) {
@@ -10547,10 +10627,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (account) {
           let newBalance = (account.balanceCents || 0) - amountCents;
 
-          // For settlement, pay off the full balance
-          if (arrangement && arrangement.planType === 'settlement') {
+          // For single-payment settlement, pay off the full balance
+          // For multi-payment settlement, deduct only the payment made
+          const isMultiPaymentSettlement = arrangement?.planType === 'settlement' && arrangement.settlementPaymentCount && arrangement.settlementPaymentCount > 1;
+          if (arrangement && arrangement.planType === 'settlement' && !isMultiPaymentSettlement) {
+            // Single payment settlement - zero out balance
             newBalance = 0;
           }
+          // Multi-payment settlement: just deduct the payment made (already calculated above)
           
           await storage.updateAccount(accountId, {
             balanceCents: Math.max(0, newBalance)
