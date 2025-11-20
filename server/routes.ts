@@ -2797,6 +2797,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const tenant = await storage.getTenant(tenantId);
       
+      // Get tenant branding for email template
+      const tenantBranding = (tenant as any)?.brand || {};
+      
       // Use custom sender email if configured, otherwise use branded slug email
       let fromEmail;
       if (tenant?.customSenderEmail) {
@@ -2805,13 +2808,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fromEmail = tenant ? `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>` : 'support@chainsoftwaregroup.com';
       }
 
+      // Build unsubscribe URL for compliance
+      const baseUrl = ensureBaseUrl();
+      const sanitizedBaseUrl = baseUrl ? baseUrl.replace(/^https?:\/\//, '') : '';
+      const baseProtocol = baseUrl && baseUrl.startsWith('https') ? 'https://' : 'http://';
+      const unsubscribeBase = sanitizedBaseUrl ? `${baseProtocol}${sanitizedBaseUrl}/unsubscribe` : '';
+      const unsubscribeUrl = unsubscribeBase
+        ? `${unsubscribeBase}?email=${encodeURIComponent(to)}&tenant=${encodeURIComponent(tenant.id)}`
+        : '';
+      
+      // Build message with compliance footer
+      const unsubscribeFooter = unsubscribeUrl
+        ? `<hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
+           <p style="color: #999; font-size: 12px; text-align: center;">
+             <a href="${unsubscribeUrl}" style="color: #999;">Unsubscribe</a> from future emails
+           </p>`
+        : '';
+      
+      const messageWithFooter = `<p>${message}</p>${unsubscribeFooter}`;
+
+      // Wrap message with professional email template using finalizeEmailHtml
+      const finalizedHtml = finalizeEmailHtml(
+        messageWithFooter,
+        {
+          logoUrl: tenantBranding?.logoUrl,
+          agencyName: tenant?.name,
+          primaryColor: tenantBranding?.primaryColor || tenantBranding?.buttonColor,
+          accentColor: tenantBranding?.secondaryColor || tenantBranding?.linkColor,
+          backgroundColor: tenantBranding?.emailBackgroundColor || tenantBranding?.backgroundColor,
+          contentBackgroundColor: tenantBranding?.emailContentBackgroundColor || tenantBranding?.cardBackgroundColor || tenantBranding?.panelBackgroundColor,
+          textColor: tenantBranding?.textColor,
+          previewText: subject, // Use subject as preview text
+        }
+      );
+
       const result = await emailService.sendEmail({
         to,
         from: fromEmail,
         subject,
-        html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <p>${message}</p>
-        </div>`,
+        html: finalizedHtml,
         tag: 'individual-email',
         metadata: {
           type: 'individual',
