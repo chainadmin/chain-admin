@@ -8410,8 +8410,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     console.log('💾 Processing successful payment...');
 
-    // Create payment record
-    const payment = await storage.createPayment({
+    // Create payment record with enhanced error logging
+    const paymentData = {
       tenantId,
       consumerId,
       accountId: accountId || null,
@@ -8424,14 +8424,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
       notes: arrangement
         ? `${arrangement.name} - ${cardName} ending in ${cardLast4}`
         : `Online payment - ${cardName} ending in ${cardLast4}`,
+    };
+
+    console.log('💾 Attempting to create payment record in database:', {
+      tenantId,
+      consumerId,
+      accountId,
+      amountCents,
+      transactionId,
+      cardLast4,
+      timestamp: new Date().toISOString()
     });
-    
-    console.log('💾 Payment record created:', {
-      paymentId: payment.id,
-      amountCents: payment.amountCents,
-      status: payment.status,
-      transactionId: payment.transactionId
-    });
+
+    let payment;
+    try {
+      payment = await storage.createPayment(paymentData);
+      
+      console.log('✅ Payment record created successfully:', {
+        paymentId: payment.id,
+        amountCents: payment.amountCents,
+        status: payment.status,
+        transactionId: payment.transactionId
+      });
+    } catch (dbError: any) {
+      console.error('❌❌❌ CRITICAL: Database payment insert failed! ❌❌❌');
+      console.error('Payment data that failed to save:', {
+        tenantId,
+        consumerId,
+        accountId,
+        amountCents: amountCents / 100, // Show dollars
+        transactionId,
+        cardLast4,
+        processorName: settings?.merchantProvider || 'unknown',
+        timestamp: new Date().toISOString()
+      });
+      console.error('Database error details:', {
+        name: dbError.name,
+        message: dbError.message,
+        code: dbError.code,
+        constraint: dbError.constraint,
+        detail: dbError.detail,
+        stack: dbError.stack
+      });
+      console.error('⚠️ PROCESSOR CHARGED BUT DATABASE FAILED - MANUAL RECONCILIATION REQUIRED');
+      
+      // Rethrow original error to preserve stack trace
+      // Outer error handler will return generic message to client
+      throw dbError;
+    }
 
     // Trigger payment event for sequence enrollment
     await eventService.emitSystemEvent('payment_received', {
