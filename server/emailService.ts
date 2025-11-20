@@ -10,7 +10,7 @@ const postmarkClient = new Client(process.env.POSTMARK_SERVER_TOKEN || 'will-be-
 
 // Get broadcast stream ID from environment or use default
 const getBroadcastStreamId = (): string => {
-  return process.env.POSTMARK_BROADCAST_STREAM || 'broadcasts';
+  return process.env.POSTMARK_BROADCAST_STREAM || 'broadcast';
 };
 
 type MetadataValue = string | number | boolean | null | undefined;
@@ -210,6 +210,12 @@ export class EmailService {
             });
           } else {
             failed++;
+            console.error(`❌ Email failed for ${originalEmail.to}:`, {
+              errorCode: result.ErrorCode,
+              message: result.Message,
+              to: originalEmail.to,
+              subject: originalEmail.subject
+            });
             results.push({
               messageId: '',
               success: false,
