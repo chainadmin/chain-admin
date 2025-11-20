@@ -1457,7 +1457,7 @@ export default function Communications() {
   // Send individual email mutation
   const sendIndividualEmailMutation = useMutation({
     mutationFn: async (data: any) => {
-      return apiRequest("POST", "/api/test-email", {
+      return apiRequest("POST", "/api/send-email", {
         to: data.to,
         subject: data.subject,
         message: data.message,

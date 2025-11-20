@@ -157,7 +157,7 @@ export default function Consumers() {
   const sendMessageMutation = useMutation({
     mutationFn: async ({ method, to, message }: { method: string; to: string; message: string }) => {
       if (method === "email") {
-        return apiRequest("POST", "/api/test-email", {
+        return apiRequest("POST", "/api/send-email", {
           to,
           subject: `Message from ${(selectedConsumer?.firstName || '')} ${(selectedConsumer?.lastName || '')}`,
           message,

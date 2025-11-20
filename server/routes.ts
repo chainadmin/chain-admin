@@ -2781,7 +2781,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Test email route
+  // Production email sending route (for individual emails to consumers)
+  app.post('/api/send-email', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { to, subject, message } = req.body;
+      
+      if (!to || !subject || !message) {
+        return res.status(400).json({ message: "To, subject, and message are required" });
+      }
+
+      const tenant = await storage.getTenant(tenantId);
+      
+      // Use custom sender email if configured, otherwise use branded slug email
+      let fromEmail;
+      if (tenant?.customSenderEmail) {
+        fromEmail = `${tenant.name} <${tenant.customSenderEmail}>`;
+      } else {
+        fromEmail = tenant ? `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>` : 'support@chainsoftwaregroup.com';
+      }
+
+      const result = await emailService.sendEmail({
+        to,
+        from: fromEmail,
+        subject,
+        html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <p>${message}</p>
+        </div>`,
+        tag: 'individual-email',
+        metadata: {
+          type: 'individual',
+          tenantId: tenantId,
+        },
+        tenantId: tenantId, // Track email usage by tenant
+      });
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error sending email:", error);
+      res.status(500).json({ message: "Failed to send email" });
+    }
+  });
+
+  // Test email route (for testing only - adds test tags)
   app.post('/api/test-email', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
