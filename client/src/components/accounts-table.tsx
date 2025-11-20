@@ -275,6 +275,14 @@ export default function AccountsTable({
                             {account.consumer?.firstName} {account.consumer?.lastName}
                           </p>
                           <p className="text-xs text-blue-100/70">{account.consumer?.email}</p>
+                          {account.activeArrangement && (
+                            <p className="mt-0.5 text-xs text-emerald-400/90 font-medium">
+                              {account.activeArrangement.frequency === 'monthly' && '📅 Monthly'}
+                              {account.activeArrangement.frequency === 'weekly' && '📅 Weekly'}
+                              {account.activeArrangement.frequency === 'biweekly' && '📅 Bi-weekly'}
+                              {' '}${((account.activeArrangement.amountCents || 0) / 100).toFixed(2)} payment plan
+                            </p>
+                          )}
                         </div>
                       </div>
                     </td>

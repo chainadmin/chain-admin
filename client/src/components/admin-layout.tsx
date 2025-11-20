@@ -114,9 +114,13 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const handleResultClick = (type: string, id: string) => {
     setSearchQuery("");
     setShowSearchResults(false);
-    if (type === 'consumer' || type === 'account') {
-      navigate(buildNavHref('/accounts'));
-    }
+    
+    // Build the base path first, then append query parameters
+    const basePath = buildNavHref('/accounts');
+    const queryParam = type === 'consumer' ? `?consumerId=${id}` : `?accountId=${id}`;
+    
+    // Navigate using the complete path
+    navigate(`${basePath}${queryParam}`);
   };
 
   // Close mobile nav on route change

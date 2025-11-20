@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -138,6 +138,37 @@ export default function Accounts() {
     queryKey: ["/api/payment-methods/consumer", selectedAccount?.consumerId],
     enabled: !!selectedAccount?.consumerId && showViewModal,
   });
+
+  // Handle URL parameters to automatically open consumer/account view
+  useEffect(() => {
+    if (!accounts || accountsLoading) return;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const consumerId = urlParams.get('consumerId');
+    const accountId = urlParams.get('accountId');
+
+    if (consumerId && !showViewModal && !selectedAccount) {
+      // Find first account for this consumer
+      const consumerAccount = (accounts as any[])?.find(
+        (acc: any) => acc.consumerId === consumerId
+      );
+      if (consumerAccount) {
+        setSelectedAccount(consumerAccount);
+        setShowViewModal(true);
+        // Clear URL parameter after opening
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    } else if (accountId && !showViewModal && !selectedAccount) {
+      // Find specific account
+      const account = (accounts as any[])?.find((acc: any) => acc.id === accountId);
+      if (account) {
+        setSelectedAccount(account);
+        setShowViewModal(true);
+        // Clear URL parameter after opening
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    }
+  }, [accounts, accountsLoading, showViewModal, selectedAccount]);
 
   // Mutations
   const createAccountMutation = useMutation({
