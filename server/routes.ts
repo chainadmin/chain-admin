@@ -16021,10 +16021,124 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Process inbound email from consumer
+  async function processInboundEmail(event: any) {
+    console.log('📨 Processing inbound email from Postmark');
+    
+    const {
+      From,
+      FromFull,
+      To,
+      Subject,
+      HtmlBody,
+      TextBody,
+      MessageID,
+      Date: receivedDate,
+      Headers,
+    } = event;
+
+    // Extract sender email and name
+    const fromEmail = (From || '').toLowerCase().trim();
+    const fromName = FromFull?.Name || fromEmail.split('@')[0];
+    
+    // Extract the To address to determine which tenant this belongs to
+    const toEmail = (To || '').toLowerCase().trim();
+    
+    console.log('📧 Email details:', {
+      from: fromEmail,
+      to: toEmail,
+      subject: Subject,
+    });
+
+    // Find the tenant by matching the To address with tenant slug or custom sender email
+    const allTenants = await storage.getAllTenants();
+    let matchedTenant = null;
+    
+    for (const tenant of allTenants) {
+      const tenantEmail = `${tenant.slug}@chainsoftwaregroup.com`;
+      if (toEmail.includes(tenantEmail) || (tenant.customSenderEmail && toEmail.includes(tenant.customSenderEmail))) {
+        matchedTenant = tenant;
+        break;
+      }
+    }
+
+    if (!matchedTenant) {
+      console.warn('⚠️ Could not match inbound email to any tenant:', toEmail);
+      return;
+    }
+
+    console.log('✅ Matched tenant:', matchedTenant.name);
+
+    // Try to find the consumer by email
+    const consumer = await storage.getConsumerByEmailAndTenant(fromEmail, matchedTenant.slug);
+    
+    // Store the reply
+    await storage.createEmailReply({
+      tenantId: matchedTenant.id,
+      consumerId: consumer?.id || null,
+      fromEmail,
+      toEmail,
+      subject: Subject || '(No Subject)',
+      textBody: TextBody || '',
+      htmlBody: HtmlBody || '',
+      messageId: MessageID,
+      isRead: false,
+    });
+
+    console.log('✅ Email reply stored successfully');
+    
+    // Check if auto-response is enabled for this tenant
+    const [autoResponseCfg] = await db
+      .select()
+      .from(autoResponseConfig)
+      .where(eq(autoResponseConfig.tenantId, matchedTenant.id))
+      .limit(1);
+    
+    if (autoResponseCfg?.enabled && autoResponseCfg?.enableEmailAutoResponse && autoResponseCfg?.openaiApiKey && !autoResponseCfg?.testMode) {
+      console.log('🤖 Auto-response is enabled, generating AI response...');
+      
+      try {
+        const { AutoResponseService } = await import('./autoResponseService');
+        const service = new AutoResponseService(matchedTenant.id);
+        
+        // Generate auto-response
+        const autoResponse = await service.generateResponse(
+          'email',
+          TextBody || HtmlBody || '',
+          consumer?.id
+        );
+        
+        if (autoResponse) {
+          // Send auto-response via email
+          await emailService.sendEmail({
+            to: fromEmail,
+            subject: `Re: ${Subject || '(No Subject)'}`,
+            html: `<p>${autoResponse.replace(/\n/g, '<br>')}</p>`,
+            tenantId: matchedTenant.id,
+          });
+          
+          console.log('✅ Auto-response sent successfully');
+        }
+      } catch (error) {
+        console.error('❌ Auto-response generation failed:', error);
+        // Don't fail the webhook - just log the error
+      }
+    }
+  }
+
   // Process individual Postmark webhook events
   async function processPostmarkWebhook(event: any) {
-    const { RecordType, MessageID, Recipient, Tag, Metadata } = event;
+    const { RecordType, MessageID, Recipient, Tag, Metadata, From, To, Subject, TextBody, HtmlBody } = event;
 
+    // Detect inbound email (consumer replies)
+    const isInboundEmail = RecordType === 'Inbound' || (From && To && (TextBody || HtmlBody));
+    
+    if (isInboundEmail) {
+      console.log('📨 Detected inbound email, routing to inbound handler...');
+      return await processInboundEmail(event);
+    }
+
+    // Handle tracking events (delivery, bounce, open, etc.)
     const campaignId = Metadata?.campaignId;
     const tenantId = Metadata?.tenantId as string | undefined;
     
