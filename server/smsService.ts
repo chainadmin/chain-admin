@@ -242,6 +242,7 @@ class SmsService {
         campaignId: campaignId || null,
         consumerId: consumerId || null,
         phoneNumber: to,
+        messageBody: message,
         status: result.status || 'queued', // Use Twilio's actual status (queued, accepted, etc.)
         sentAt: new Date(),
         trackingData: { twilioSid: result.sid },
@@ -278,6 +279,7 @@ class SmsService {
         campaignId: campaignId || null,
         consumerId: consumerId || null,
         phoneNumber: to,
+        messageBody: message,
         status: 'failed',
         sentAt: new Date(),
         errorMessage: error.message,

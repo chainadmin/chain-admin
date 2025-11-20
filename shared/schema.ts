@@ -376,6 +376,7 @@ export const smsTracking = pgTable("sms_tracking", {
   campaignId: uuid("campaign_id").references(() => smsCampaigns.id, { onDelete: "cascade" }), // Nullable - not all SMS belong to campaigns
   consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "cascade" }), // Nullable - allows tracking non-consumer SMS
   phoneNumber: text("phone_number").notNull(),
+  messageBody: text("message_body"), // SMS message content
   status: text("status").notNull(), // "sent", "delivered", "failed", "opted_out"
   segments: integer("segments").default(1), // Number of SMS segments (updated from Twilio webhook)
   sentAt: timestamp("sent_at"),

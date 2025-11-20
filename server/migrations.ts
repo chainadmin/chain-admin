@@ -939,6 +939,15 @@ export async function runMigrations() {
       console.log('  ⚠ auto_response_usage table (already exists or error)');
     }
     
+    // Add messageBody column to sms_tracking for conversation history
+    console.log('Adding messageBody column to sms_tracking...');
+    try {
+      await client.query(`ALTER TABLE sms_tracking ADD COLUMN IF NOT EXISTS message_body TEXT`);
+      console.log('  ✓ message_body');
+    } catch (err) {
+      console.log('  ⚠ message_body (already exists or error)');
+    }
+    
     console.log('✅ Database migrations completed successfully');
   } catch (error: any) {
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
