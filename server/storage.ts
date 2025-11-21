@@ -40,6 +40,7 @@ import {
   subscriptions,
   subscriptionPlans,
   invoices,
+  autoResponseUsage,
   type User,
   type UpsertUser,
   type Tenant,
@@ -116,7 +117,7 @@ import {
   type Invoice,
   type InsertInvoice,
 } from "@shared/schema";
-import { messagingPlans, EMAIL_OVERAGE_RATE_PER_EMAIL, SMS_OVERAGE_RATE_PER_SEGMENT, DOCUMENT_SIGNING_ADDON_PRICE, MOBILE_APP_BRANDING_MONTHLY, type MessagingPlanId } from "@shared/billing-plans";
+import { messagingPlans, EMAIL_OVERAGE_RATE_PER_EMAIL, SMS_OVERAGE_RATE_PER_SEGMENT, DOCUMENT_SIGNING_ADDON_PRICE, MOBILE_APP_BRANDING_MONTHLY, AI_AUTO_RESPONSE_ADDON_PRICE, AUTO_RESPONSE_INCLUDED_RESPONSES, AUTO_RESPONSE_OVERAGE_PER_RESPONSE, type MessagingPlanId } from "@shared/billing-plans";
 import { db } from "./db";
 import { eq, and, desc, sql, inArray, gte, lte } from "drizzle-orm";
 import {
@@ -2902,9 +2903,17 @@ export class DatabaseStorage implements IStorage {
       overage: number;
       overageCharge: number;
     };
+    aiAutoResponseUsage: {
+      used: number;
+      included: number;
+      overage: number;
+      overageCharge: number;
+    };
     addons: {
       documentSigning: boolean;
       documentSigningFee: number;
+      aiAutoResponse: boolean;
+      aiAutoResponseFee: number;
     };
     billingPeriod: { start: string; end: string } | null;
   }> {
@@ -2929,16 +2938,24 @@ export class DatabaseStorage implements IStorage {
     const enabledAddons = await this.getEnabledAddons(tenantId);
     const hasDocumentSigning = enabledAddons.includes('document_signing');
     const hasMobileAppBranding = enabledAddons.includes('mobile_app_branding');
+    const hasAiAutoResponse = enabledAddons.includes('ai_auto_response');
     
     // Mobile App Branding is FREE for Enterprise (scale) plans
     // Note: Requires valid subscription with slug='scale' in subscriptionPlans table
     const isEnterprisePlan = dbPlan?.slug === 'scale';
     const documentSigningFee = hasDocumentSigning ? DOCUMENT_SIGNING_ADDON_PRICE : 0;
     const mobileAppBrandingFee = (hasMobileAppBranding && !isEnterprisePlan) ? MOBILE_APP_BRANDING_MONTHLY : 0;
-    const addonFees = documentSigningFee + mobileAppBrandingFee;
+    const aiAutoResponseFee = hasAiAutoResponse ? AI_AUTO_RESPONSE_ADDON_PRICE : 0;
+    const addonFees = documentSigningFee + mobileAppBrandingFee + aiAutoResponseFee;
 
     let emailUsage = { used: 0, included: dbPlan?.includedEmails ?? 0, overage: 0, overageCharge: 0 };
     let smsUsage = { used: 0, included: dbPlan?.includedSms ?? 0, overage: 0, overageCharge: 0 };
+    
+    // AI auto-response quota based on plan tier
+    const planSlug = (dbPlan?.slug as MessagingPlanId) ?? 'launch';
+    const aiIncludedResponses = AUTO_RESPONSE_INCLUDED_RESPONSES[planSlug] ?? 1000;
+    let aiAutoResponseUsage = { used: 0, included: aiIncludedResponses, overage: 0, overageCharge: 0 };
+    
     let usageCharges = 0;
     let totalBill = monthlyBase + addonFees;
     let nextBillDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString();
@@ -2975,7 +2992,36 @@ export class DatabaseStorage implements IStorage {
         overageCharge: smsOverageCharge,
       };
 
-      usageCharges = Number((emailOverageCharge + smsOverageCharge).toFixed(2));
+      // Calculate AI auto-response usage (only if add-on is enabled)
+      if (hasAiAutoResponse) {
+        const aiUsageResult = await db
+          .select({ count: sql<number>`COUNT(*)::int` })
+          .from(autoResponseUsage)
+          .where(
+            and(
+              eq(autoResponseUsage.tenantId, tenantId),
+              eq(autoResponseUsage.testMode, false),
+              gte(autoResponseUsage.createdAt, periodStart),
+              lte(autoResponseUsage.createdAt, periodEnd)
+            )
+          );
+        
+        const aiResponseCount = aiUsageResult[0]?.count || 0;
+        const aiOverage = Math.max(0, aiResponseCount - aiIncludedResponses);
+        const aiOverageCharge = Number((aiOverage * AUTO_RESPONSE_OVERAGE_PER_RESPONSE).toFixed(2));
+        
+        aiAutoResponseUsage = {
+          used: aiResponseCount,
+          included: aiIncludedResponses,
+          overage: aiOverage,
+          overageCharge: aiOverageCharge,
+        };
+        
+        usageCharges = Number((emailOverageCharge + smsOverageCharge + aiOverageCharge).toFixed(2));
+      } else {
+        usageCharges = Number((emailOverageCharge + smsOverageCharge).toFixed(2));
+      }
+      
       totalBill = Number((monthlyBase + addonFees + usageCharges).toFixed(2));
     }
 
@@ -2990,9 +3036,12 @@ export class DatabaseStorage implements IStorage {
       planName: dbPlan?.name ?? null,
       emailUsage,
       smsUsage,
+      aiAutoResponseUsage,
       addons: {
         documentSigning: hasDocumentSigning,
         documentSigningFee,
+        aiAutoResponse: hasAiAutoResponse,
+        aiAutoResponseFee,
       },
       billingPeriod,
     };

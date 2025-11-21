@@ -14309,11 +14309,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 ${stats.addonFees > 0 ? `
                   <p><strong>Add-on Fees:</strong> $${stats.addonFees.toFixed(2)}</p>
                   ${stats.addons.documentSigning ? `<p style="margin-left: 20px; color: #666;">• Document Signing: $${stats.addons.documentSigningFee.toFixed(2)}</p>` : ''}
+                  ${stats.addons.aiAutoResponse ? `<p style="margin-left: 20px; color: #666;">• AI Auto-Response: $${stats.addons.aiAutoResponseFee.toFixed(2)}</p>` : ''}
                 ` : ''}
                 ${stats.usageCharges > 0 ? `
                   <p><strong>Usage Overage Charges:</strong> $${stats.usageCharges.toFixed(2)}</p>
                   ${stats.emailUsage.overage > 0 ? `<p style="margin-left: 20px; color: #666;">• Email Overage: ${stats.emailUsage.overage} emails - $${stats.emailUsage.overageCharge.toFixed(2)}</p>` : ''}
                   ${stats.smsUsage.overage > 0 ? `<p style="margin-left: 20px; color: #666;">• SMS Overage: ${stats.smsUsage.overage} segments - $${stats.smsUsage.overageCharge.toFixed(2)}</p>` : ''}
+                  ${stats.aiAutoResponseUsage.overage > 0 ? `<p style="margin-left: 20px; color: #666;">• AI Response Overage: ${stats.aiAutoResponseUsage.overage} responses - $${stats.aiAutoResponseUsage.overageCharge.toFixed(2)}</p>` : ''}
                 ` : ''}
                 <hr style="border: 0; border-top: 2px solid #333; margin: 15px 0;">
                 <p style="font-size: 18px;"><strong>Total Due:</strong> $${stats.totalBill.toFixed(2)}</p>

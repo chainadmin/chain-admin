@@ -2,8 +2,9 @@ import OpenAI from 'openai';
 import type { BusinessType, TerminologyMap } from '../shared/terminology';
 import { getTerminology } from '../shared/terminology';
 import { db } from './db';
-import { autoResponseConfig, autoResponseUsage, consumers, accounts } from '../shared/schema';
+import { autoResponseConfig, autoResponseUsage, consumers, accounts, subscriptions, subscriptionPlans, tenantSettings } from '../shared/schema';
 import { eq, and, gte, sql } from 'drizzle-orm';
+import { AUTO_RESPONSE_INCLUDED_RESPONSES, AUTO_RESPONSE_OVERAGE_PER_RESPONSE } from '../shared/billing-plans';
 
 interface AutoResponseContext {
   consumerFirstName?: string;
@@ -118,13 +119,14 @@ TONE: ${tone}
 
 RULES:
 1. Never promise specific outcomes or waive fees without authorization
-2. Never disclose sensitive payment information or account details unless the inquiry specifically asks about them
-3. Direct complex issues to contact the organization directly
-4. Be helpful and guide them to self-service options when possible
-5. Keep responses under ${config.maxResponseLength || 500} characters
-6. Never use terms like "debt collection" - use the terminology above${customInstructions}${businessTemplates}
+2. NEVER mention the ${terms.creditor} name, company name, or any other person's name in your response
+3. NEVER disclose specific account numbers, payment amounts, or balance details in your response
+4. Direct complex issues to contact the organization directly
+5. Be helpful and guide them to self-service options when possible
+6. Keep responses under ${config.maxResponseLength || 500} characters
+7. Never use terms like "debt collection" - use the terminology above${customInstructions}${businessTemplates}
 
-Remember: You're representing the ${terms.creditor} in communications with ${terms.consumerPlural.toLowerCase()}.`;
+Remember: You're providing general assistance. Do NOT reference specific company names, individual names, or account details in your response.`;
   }
   
   /**
@@ -133,24 +135,7 @@ Remember: You're representing the ${terms.creditor} in communications with ${ter
   private buildPrompt(context: AutoResponseContext, terms: TerminologyMap, config: any): string {
     let prompt = `A ${terms.consumer.toLowerCase()} sent the following ${context.messageType}:\n\n"${context.inboundMessage}"\n\n`;
     
-    if (context.consumerFirstName || context.consumerLastName) {
-      const name = [context.consumerFirstName, context.consumerLastName].filter(Boolean).join(' ');
-      prompt += `${terms.consumer} Name: ${name}\n`;
-    }
-    
-    if (context.accountNumber) {
-      prompt += `${terms.account} Number: ${context.accountNumber}\n`;
-    }
-    
-    if (context.creditorName) {
-      prompt += `${terms.creditor}: ${context.creditorName}\n`;
-    }
-    
-    if (context.accountBalance !== undefined) {
-      prompt += `Current ${terms.balance}: $${(context.accountBalance / 100).toFixed(2)}\n`;
-    }
-    
-    prompt += `\nGenerate a helpful response addressing their inquiry. Keep it under ${config.maxResponseLength || 500} characters.`;
+    prompt += `Generate a helpful response addressing their inquiry. Keep it under ${config.maxResponseLength || 500} characters. DO NOT include any specific names, account numbers, or dollar amounts in your response.`;
     
     return prompt;
   }
@@ -210,25 +195,52 @@ Remember: You're representing the ${terms.creditor} in communications with ${ter
     estimatedCost: number;
     resetDate: string;
   }> {
-    const [config] = await db
+    // Check if AI auto-response add-on is enabled
+    const [settings] = await db
       .select()
-      .from(autoResponseConfig)
-      .where(eq(autoResponseConfig.tenantId, this.tenantId))
+      .from(tenantSettings)
+      .where(eq(tenantSettings.tenantId, this.tenantId))
       .limit(1);
     
-    if (!config) {
-      const nextMonth = new Date();
-      nextMonth.setMonth(nextMonth.getMonth() + 1);
-      nextMonth.setDate(1);
-      nextMonth.setHours(0, 0, 0, 0);
-      
-      return { 
-        responsesThisMonth: 0, 
-        includedQuota: 0, 
+    const enabledAddons = settings?.enabledAddons || [];
+    const hasAiAutoResponse = enabledAddons.includes('ai_auto_response');
+    
+    // Get subscription to determine plan tier and quota
+    const [subscription] = await db
+      .select()
+      .from(subscriptions)
+      .where(eq(subscriptions.tenantId, this.tenantId))
+      .limit(1);
+    
+    // Calculate next reset date (first day of next month)
+    const resetDate = new Date();
+    resetDate.setMonth(resetDate.getMonth() + 1);
+    resetDate.setDate(1);
+    resetDate.setHours(0, 0, 0, 0);
+    
+    // If add-on is not enabled or no subscription, return zero quota
+    if (!hasAiAutoResponse || !subscription) {
+      return {
+        responsesThisMonth: 0,
+        includedQuota: 0,
         overageResponses: 0,
         estimatedCost: 0,
-        resetDate: nextMonth.toISOString()
+        resetDate: resetDate.toISOString(),
       };
+    }
+    
+    // Get plan from subscription to determine AI quota
+    let includedQuota = 1000; // Default Launch tier quota
+    if (subscription.planId) {
+      const [plan] = await db
+        .select()
+        .from(subscriptionPlans)
+        .where(eq(subscriptionPlans.id, subscription.planId))
+        .limit(1);
+      
+      if (plan?.slug) {
+        includedQuota = AUTO_RESPONSE_INCLUDED_RESPONSES[plan.slug as 'launch' | 'growth' | 'pro' | 'scale'] ?? 1000;
+      }
     }
     
     // Get usage for current month (exclude test mode)
@@ -248,15 +260,8 @@ Remember: You're representing the ${terms.creditor} in communications with ${ter
       );
     
     const responsesThisMonth = usageResult[0]?.count || 0;
-    const includedQuota = config.includedResponsesPerMonth || 1000;
     const overageResponses = Math.max(0, responsesThisMonth - includedQuota);
-    const estimatedCost = overageResponses * 0.08; // $0.08 per additional response
-    
-    // Calculate next reset date (first day of next month)
-    const resetDate = new Date();
-    resetDate.setMonth(resetDate.getMonth() + 1);
-    resetDate.setDate(1);
-    resetDate.setHours(0, 0, 0, 0);
+    const estimatedCost = overageResponses * AUTO_RESPONSE_OVERAGE_PER_RESPONSE;
     
     return {
       responsesThisMonth,
