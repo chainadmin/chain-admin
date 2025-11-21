@@ -76,7 +76,6 @@ export class AutoResponseService {
           content: prompt,
         },
       ],
-      max_tokens: config.maxResponseLength || 500,
       temperature: this.getToneTemperature(config.responseTone || 'professional'),
     });
     
