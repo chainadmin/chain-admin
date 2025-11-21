@@ -77,7 +77,6 @@ export class AutoResponseService {
           content: prompt,
         },
       ],
-      temperature: this.getToneTemperature(config.responseTone || 'professional'),
     });
     
     const response = completion.choices[0]?.message?.content || '';
