@@ -222,7 +222,7 @@ export default function AgencyRegistration() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <div className="max-w-2xl mx-auto py-8">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">Start Your Free Trial</h1>
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">Register Your Agency</h1>
           <p className="text-lg text-gray-600">
             Register your agency to explore our platform with full dashboard access. 
             Our team will contact you to set up your custom plan.
@@ -537,7 +537,7 @@ export default function AgencyRegistration() {
                   disabled={registrationMutation.isPending}
                   data-testid="button-submit"
                 >
-                  {registrationMutation.isPending ? "Creating Account..." : "Start Free Trial"}
+                  {registrationMutation.isPending ? "Creating Account..." : "Register Now"}
                 </Button>
               </form>
             </Form>

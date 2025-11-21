@@ -264,7 +264,7 @@ export default function Landing() {
 
           <section className="mx-auto mt-20 max-w-6xl border-t border-white/10 pt-10 text-sm text-blue-100/60">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <p>Agencies looking for software? <button className="text-blue-200 hover:text-blue-100" onClick={() => window.location.href = '/agency-register'} data-testid="button-agency-register">Start a free trial</button></p>
+              <p>Agencies looking for software? <button className="text-blue-200 hover:text-blue-100" onClick={() => window.location.href = '/agency-register'} data-testid="button-agency-register">Register now</button></p>
               <div className="flex gap-4">
                 <a href="/terms-of-service" className="hover:text-blue-100 hover:underline">
                   Terms of Service
