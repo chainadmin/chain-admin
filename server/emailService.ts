@@ -58,8 +58,9 @@ export class EmailService {
       
       const normalizedMetadata = this.normalizeMetadata(options.metadata);
 
-      // Use the tenant's inbound email as reply-to if available, otherwise use from email
-      const replyToEmail = options.replyTo || fromEmail;
+      // Use Postmark's inbound address for all replies so they route to our webhook
+      const POSTMARK_INBOUND_EMAIL = '0f090c8f2b6c0860ffa1c36028828ba0@inbound.postmarkapp.com';
+      const replyToEmail = options.replyTo || POSTMARK_INBOUND_EMAIL;
 
       const result = await postmarkClient.sendEmail({
         From: fromEmail,
