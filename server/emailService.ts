@@ -144,7 +144,9 @@ export class EmailService {
             
             const textBody = email.text || this.htmlToText(email.html);
             const normalizedMetadata = this.normalizeMetadata(email.metadata);
-            const replyToEmail = email.replyTo || fromEmail;
+            // Use Postmark's inbound address for all replies so they route to our webhook
+            const POSTMARK_INBOUND_EMAIL = '0f090c8f2b6c0860ffa1c36028828ba0@inbound.postmarkapp.com';
+            const replyToEmail = email.replyTo || POSTMARK_INBOUND_EMAIL;
             
             return {
               From: fromEmail,

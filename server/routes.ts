@@ -16712,33 +16712,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const fromEmail = (From || '').toLowerCase().trim();
       const fromName = FromFull?.Name || fromEmail.split('@')[0];
       
-      // Extract the To address to determine which tenant this belongs to
-      const toEmail = (To || '').toLowerCase().trim();
-      
       console.log('📧 Email details:', {
         from: fromEmail,
-        to: toEmail,
+        to: To,
         subject: Subject,
       });
 
-      // Find the tenant by matching the To address with tenant slug or custom sender email
-      const allTenants = await storage.getAllTenants();
+      // Find the original email by looking at In-Reply-To header to determine which tenant this belongs to
       let matchedTenant = null;
+      let inReplyToMessageId = null;
       
-      for (const tenant of allTenants) {
-        const tenantEmail = `${tenant.slug}@chainsoftwaregroup.com`;
-        if (toEmail.includes(tenantEmail) || (tenant.customSenderEmail && toEmail.includes(tenant.customSenderEmail))) {
-          matchedTenant = tenant;
-          break;
+      // Extract In-Reply-To header from Headers array
+      if (Headers && Array.isArray(Headers)) {
+        const inReplyToHeader = Headers.find(h => h.Name === 'In-Reply-To');
+        if (inReplyToHeader) {
+          // Normalize the MessageID: remove angle brackets and extract the GUID
+          // Postmark sends: <guid@pm.mtasv.net> but we store just the GUID
+          const rawValue = inReplyToHeader.Value || '';
+          inReplyToMessageId = rawValue.replace(/[<>]/g, '').split('@')[0];
+          console.log('📎 In-Reply-To (normalized):', inReplyToMessageId);
+          
+          // Look up the original email in emailLogs to find the tenant
+          const [originalEmail] = await db
+            .select({ tenantId: emailLogs.tenantId })
+            .from(emailLogs)
+            .where(eq(emailLogs.messageId, inReplyToMessageId))
+            .limit(1);
+          
+          if (originalEmail) {
+            const tenant = await storage.getTenant(originalEmail.tenantId);
+            if (tenant) {
+              matchedTenant = tenant;
+              console.log('✅ Matched tenant via In-Reply-To:', matchedTenant.name);
+            }
+          }
+        }
+      }
+
+      // Fallback: try to match by To address (for older emails or direct sends)
+      if (!matchedTenant) {
+        const toEmail = (To || '').toLowerCase().trim();
+        const allTenants = await storage.getAllTenants();
+        
+        for (const tenant of allTenants) {
+          const tenantEmail = `${tenant.slug}@chainsoftwaregroup.com`;
+          if (toEmail.includes(tenantEmail) || (tenant.customSenderEmail && toEmail.includes(tenant.customSenderEmail))) {
+            matchedTenant = tenant;
+            console.log('✅ Matched tenant via To address:', matchedTenant.name);
+            break;
+          }
         }
       }
 
       if (!matchedTenant) {
-        console.warn('⚠️ Could not match inbound email to any tenant:', toEmail);
+        console.warn('⚠️ Could not match inbound email to any tenant');
         return res.status(200).json({ message: 'Email received but no tenant matched' });
       }
-
-      console.log('✅ Matched tenant:', matchedTenant.name);
 
       // Try to find the consumer by email
       const consumer = await storage.getConsumerByEmailAndTenant(fromEmail, matchedTenant.slug);
