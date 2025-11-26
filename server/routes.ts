@@ -4990,8 +4990,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isActive: true,
       });
 
-      // TODO: Add notification system to alert platform owners about new trial registration
+      // Send notification email to support about new registration
       console.log(`New trial agency registered: ${data.businessName} (${data.email})`);
+      try {
+        const { emailService } = await import('./emailService');
+        await emailService.sendEmail({
+          to: 'support@chainsoftwaregroup.com',
+          subject: `New Company Registration: ${data.businessName}`,
+          html: `
+            <h2>New Company Registration</h2>
+            <p>A new company has registered on the Chain platform:</p>
+            <table style="border-collapse: collapse; margin: 20px 0;">
+              <tr><td style="padding: 8px; font-weight: bold;">Company Name:</td><td style="padding: 8px;">${data.businessName}</td></tr>
+              <tr><td style="padding: 8px; font-weight: bold;">Owner:</td><td style="padding: 8px;">${data.ownerFirstName} ${data.ownerLastName}</td></tr>
+              <tr><td style="padding: 8px; font-weight: bold;">Email:</td><td style="padding: 8px;">${data.email}</td></tr>
+              <tr><td style="padding: 8px; font-weight: bold;">Phone:</td><td style="padding: 8px;">${data.phoneNumber || 'Not provided'}</td></tr>
+              <tr><td style="padding: 8px; font-weight: bold;">Business Type:</td><td style="padding: 8px;">${data.businessType || 'call_center'}</td></tr>
+              <tr><td style="padding: 8px; font-weight: bold;">Account Status:</td><td style="padding: 8px;"><strong style="color: #f59e0b;">Trial Account - Awaiting Plan Selection</strong></td></tr>
+              <tr><td style="padding: 8px; font-weight: bold;">Username:</td><td style="padding: 8px;">${data.username}</td></tr>
+              <tr><td style="padding: 8px; font-weight: bold;">Slug:</td><td style="padding: 8px;">${slug}</td></tr>
+              <tr><td style="padding: 8px; font-weight: bold;">Registered:</td><td style="padding: 8px;">${new Date().toLocaleString()}</td></tr>
+            </table>
+            <p><strong>Action Required:</strong> Contact this company to discuss their needs and set up the appropriate plan.</p>
+          `,
+          tag: 'new-registration-notification',
+        });
+        console.log('✅ Registration notification email sent to support@chainsoftwaregroup.com');
+      } catch (emailError) {
+        console.error('Failed to send registration notification email:', emailError);
+        // Don't fail the registration if email fails
+      }
 
       res.status(201).json({
         message: "Trial account created successfully! You can now log in with your username and password.",

@@ -117,15 +117,18 @@ export default function AutoResponseSettings() {
     setTestResponse("");
 
     try {
-      const result: any = await apiRequest('POST', '/api/auto-response/test', {
+      const startTime = Date.now();
+      const res = await apiRequest('POST', '/api/auto-response/test', {
         messageType: testMessageType,
         message: testMessage,
       });
+      const result = await res.json();
+      const responseTime = Date.now() - startTime;
 
       setTestResponse(result.response);
       toast({
         title: "Test successful",
-        description: `Generated response in ${result.responseTime}ms using ${result.tokensUsed} tokens`,
+        description: `Generated response in ${responseTime}ms using ${result.tokensUsed} tokens`,
       });
     } catch (error: any) {
       toast({
