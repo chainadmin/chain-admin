@@ -17,6 +17,12 @@ import {
   BarChart3,
   Sparkles,
   CheckCircle2,
+  Headphones,
+  Receipt,
+  RefreshCw,
+  Briefcase,
+  Building2,
+  Heart,
 } from "lucide-react";
 
 export default function Info() {
@@ -25,7 +31,6 @@ export default function Info() {
       icon: Bot,
       title: "AI Auto-Response",
       description: "Intelligent responses to consumer inquiries 24/7. Your AI assistant never sleeps.",
-      highlight: true,
     },
     {
       icon: Mail,
@@ -51,6 +56,39 @@ export default function Info() {
       icon: Smartphone,
       title: "Consumer Portal & Mobile App",
       description: "Self-service portal where consumers manage everything without calling.",
+    },
+  ];
+
+  const businessTypes = [
+    {
+      icon: Headphones,
+      title: "Call Centers",
+      description: "Automate follow-ups and payment reminders across thousands of accounts.",
+    },
+    {
+      icon: Receipt,
+      title: "Billing & Service Companies",
+      description: "Streamline invoicing, collections, and customer communications.",
+    },
+    {
+      icon: RefreshCw,
+      title: "Subscription Providers",
+      description: "Manage recurring payments and reduce churn with smart automation.",
+    },
+    {
+      icon: Briefcase,
+      title: "Freelancers & Consultants",
+      description: "Professional invoicing and payment collection without the hassle.",
+    },
+    {
+      icon: Building2,
+      title: "Property Management",
+      description: "Automate rent collection, tenant communications, and maintenance billing.",
+    },
+    {
+      icon: Heart,
+      title: "Non-Profit Organizations",
+      description: "Manage donations, pledges, and donor communications efficiently.",
     },
   ];
 
@@ -183,24 +221,12 @@ export default function Info() {
               {modules.map((module) => (
                 <Card 
                   key={module.title} 
-                  className={`border-white/10 backdrop-blur transition-all hover:border-blue-400/30 ${
-                    module.highlight 
-                      ? 'bg-gradient-to-br from-blue-500/20 to-indigo-500/20 ring-1 ring-blue-400/30' 
-                      : 'bg-white/5'
-                  }`}
+                  className="border-white/10 bg-white/5 backdrop-blur transition-all hover:border-blue-400/30"
                 >
                   <CardContent className="p-6">
-                    <div className={`mb-4 inline-flex rounded-xl p-3 ${
-                      module.highlight ? 'bg-blue-400/30' : 'bg-white/10'
-                    }`}>
-                      <module.icon className={`h-6 w-6 ${module.highlight ? 'text-blue-300' : 'text-blue-400'}`} />
+                    <div className="mb-4 inline-flex rounded-xl bg-white/10 p-3">
+                      <module.icon className="h-6 w-6 text-blue-400" />
                     </div>
-                    {module.highlight && (
-                      <Badge className="mb-2 bg-blue-500/30 text-blue-200 border-0">
-                        <Sparkles className="mr-1 h-3 w-3" />
-                        AI-Powered
-                      </Badge>
-                    )}
                     <h3 className="text-lg font-semibold text-white">{module.title}</h3>
                     <p className="mt-2 text-sm text-blue-100/70">{module.description}</p>
                   </CardContent>
@@ -209,11 +235,43 @@ export default function Info() {
             </div>
           </section>
 
+          <section className="mx-auto mt-24 max-w-6xl">
+            <div className="text-center">
+              <Badge variant="outline" className="border-emerald-400/50 bg-emerald-500/10 text-emerald-100">
+                <Users className="mr-1 h-3 w-3" />
+                Multi-Industry Solution
+              </Badge>
+              <h2 className="mt-4 text-3xl font-bold text-white sm:text-4xl">
+                Perfect For
+              </h2>
+              <p className="mx-auto mt-4 max-w-2xl text-blue-100/70">
+                Chain adapts to your industry with customizable terminology and workflows.
+              </p>
+            </div>
+
+            <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {businessTypes.map((business) => (
+                <Card 
+                  key={business.title} 
+                  className="border-white/10 bg-white/5 backdrop-blur transition-all hover:border-blue-400/30"
+                >
+                  <CardContent className="p-6">
+                    <div className="mb-4 inline-flex rounded-xl bg-white/10 p-3">
+                      <business.icon className="h-6 w-6 text-blue-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-white">{business.title}</h3>
+                    <p className="mt-2 text-sm text-blue-100/70">{business.description}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </section>
+
           <section className="mx-auto mt-24 max-w-4xl">
-            <Card className="border-white/10 bg-gradient-to-br from-blue-500/20 to-indigo-500/20 backdrop-blur">
+            <Card className="border-white/10 bg-white/5 backdrop-blur">
               <CardContent className="p-8 sm:p-12 text-center">
-                <div className="mx-auto mb-6 inline-flex rounded-full bg-blue-500/30 p-4">
-                  <Zap className="h-8 w-8 text-blue-300" />
+                <div className="mx-auto mb-6 inline-flex rounded-full bg-white/10 p-4">
+                  <Zap className="h-8 w-8 text-blue-400" />
                 </div>
                 <h2 className="text-3xl font-bold text-white sm:text-4xl">
                   Ready to Automate?
@@ -225,7 +283,7 @@ export default function Info() {
                 <div className="mt-8 flex flex-col items-center gap-4">
                   <Button
                     size="lg"
-                    className="h-14 rounded-full bg-white px-10 text-lg font-semibold text-slate-900 hover:bg-blue-50"
+                    className="h-14 rounded-full bg-blue-500 px-10 text-lg font-semibold text-white hover:bg-blue-400"
                     onClick={() => window.location.href = '/agency-registration'}
                     data-testid="button-register-cta"
                   >
