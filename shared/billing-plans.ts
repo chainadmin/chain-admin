@@ -34,30 +34,30 @@ const callCenterPlans: Record<MessagingPlanId, MessagingPlan> = {
   launch: {
     id: "launch",
     name: "Starter",
-    price: 325,
+    price: 350,
     includedEmails: 10_000,
-    includedSmsSegments: 1_000,
+    includedSmsSegments: 5_000,
   },
   growth: {
     id: "growth",
     name: "Growth",
-    price: 525,
+    price: 550,
     includedEmails: 25_000,
-    includedSmsSegments: 3_000,
+    includedSmsSegments: 20_000,
   },
   pro: {
     id: "pro",
     name: "Professional",
-    price: 1_000,
+    price: 1_025,
     includedEmails: 75_000,
-    includedSmsSegments: 10_000,
+    includedSmsSegments: 40_000,
   },
   scale: {
     id: "scale",
     name: "Enterprise",
-    price: 2_000,
+    price: 2_025,
     includedEmails: 200_000,
-    includedSmsSegments: 30_000,
+    includedSmsSegments: 100_000,
   },
 };
 
