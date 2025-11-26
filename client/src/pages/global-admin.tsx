@@ -6,7 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Building2, Users, DollarSign, TrendingUp, Eye, Ban, CheckCircle, AlertTriangle, Plus, Mail, MessageSquare, Phone, Trash2, Search, Shield, CreditCard, Send, Settings, Repeat, FileText, MessagesSquare, Zap, LogOut } from "lucide-react";
+import { Building2, Users, DollarSign, TrendingUp, Eye, Ban, CheckCircle, AlertTriangle, Plus, Mail, MessageSquare, Phone, Trash2, Search, Shield, CreditCard, Send, Settings, Repeat, FileText, MessagesSquare, Zap, LogOut, QrCode, Download } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
@@ -1060,6 +1061,95 @@ export default function GlobalAdmin() {
             </div>
           </div>
         )}
+
+        {/* Marketing QR Code Section */}
+        <div className="mb-8 rounded-3xl border border-white/10 bg-white/5 shadow-lg shadow-blue-900/20 backdrop-blur">
+          <div className="p-6 border-b border-white/10">
+            <div className="flex items-center gap-3">
+              <QrCode className="h-5 w-5 text-blue-300" />
+              <h2 className="text-xl font-semibold text-blue-50">Marketing QR Code</h2>
+            </div>
+            <p className="text-sm text-blue-100/60 mt-1">Download QR code for business cards and marketing materials</p>
+          </div>
+          <div className="p-6">
+            <div className="flex flex-col md:flex-row items-center gap-8">
+              <div className="bg-white p-4 rounded-2xl shadow-lg">
+                <QRCodeSVG
+                  id="marketing-qr-code"
+                  value={`${window.location.origin}/info`}
+                  size={180}
+                  level="H"
+                  includeMargin={false}
+                />
+              </div>
+              <div className="flex-1 space-y-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-blue-50">Chain Info Page</h3>
+                  <p className="text-sm text-blue-100/70 mt-1">
+                    This QR code links to the Chain information page showcasing all modules, 
+                    AI automation features, and a registration button.
+                  </p>
+                  <p className="text-xs text-blue-100/50 mt-2 font-mono">
+                    {window.location.origin}/info
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <Button
+                    onClick={() => {
+                      const svg = document.getElementById('marketing-qr-code');
+                      if (svg) {
+                        const svgData = new XMLSerializer().serializeToString(svg);
+                        const canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
+                        const img = new Image();
+                        const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+                        const svgUrl = URL.createObjectURL(svgBlob);
+                        
+                        img.onload = () => {
+                          canvas.width = 400;
+                          canvas.height = 400;
+                          if (ctx) {
+                            ctx.fillStyle = 'white';
+                            ctx.fillRect(0, 0, 400, 400);
+                            ctx.drawImage(img, 10, 10, 380, 380);
+                          }
+                          URL.revokeObjectURL(svgUrl);
+                          canvas.toBlob((pngBlob) => {
+                            if (pngBlob) {
+                              const pngUrl = URL.createObjectURL(pngBlob);
+                              const downloadLink = document.createElement('a');
+                              downloadLink.href = pngUrl;
+                              downloadLink.download = 'chain-qr-code.png';
+                              document.body.appendChild(downloadLink);
+                              downloadLink.click();
+                              document.body.removeChild(downloadLink);
+                              URL.revokeObjectURL(pngUrl);
+                            }
+                          }, 'image/png');
+                        };
+                        img.src = svgUrl;
+                      }
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700"
+                    data-testid="button-download-qr-png"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Download PNG
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => window.open('/info', '_blank')}
+                    className="border-white/20 text-blue-100 hover:bg-white/10"
+                    data-testid="button-preview-info-page"
+                  >
+                    <Eye className="h-4 w-4 mr-2" />
+                    Preview Page
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* Subscription Requests */}
         <div className="mb-8 rounded-3xl border border-white/10 bg-white/5 shadow-lg shadow-blue-900/20 backdrop-blur">

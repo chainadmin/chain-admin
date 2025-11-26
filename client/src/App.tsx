@@ -44,6 +44,7 @@ import EmailTest from "@/pages/email-test";
 import FixDatabase from "@/pages/fix-db";
 import Documents from "@/pages/documents";
 import SignDocument from "@/pages/sign-document";
+import Info from "@/pages/info";
 
 function Router() {
   const { isAuthenticated, isLoading, user, isJwtAuth } = useAuth();
@@ -102,6 +103,7 @@ function Router() {
                        pathname === '/mobile-login' ||
                        pathname === '/privacy-policy' ||
                        pathname === '/terms-of-service' ||
+                       pathname === '/info' ||
                        pathname.startsWith('/tenant-agreement/') ||
                        isSmsOptInRoute ||
                        pathname === '/' && agencySlug; // Agency subdomain homepage
@@ -318,6 +320,7 @@ function Router() {
       />,
       <Route key="public-agency-register" path="/agency-register" component={AgencyRegistration} />,
       <Route key="public-agency-registration" path="/agency-registration" component={AgencyRegistration} />,
+      <Route key="public-info" path="/info" component={Info} />,
       <Route key="public-agency-login" path="/agency-login" component={AgencyLogin} />,
       <Route key="public-agency" path="/agency/:agencySlug" component={AgencyLanding} />,
       <Route key="public-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
@@ -359,6 +362,7 @@ function Router() {
     <Route key="auth-agency-login" path="/agency-login" component={AgencyLogin} />,
     <Route key="auth-agency-register" path="/agency-register" component={AgencyRegistration} />,
     <Route key="auth-agency-registration" path="/agency-registration" component={AgencyRegistration} />,
+    <Route key="auth-info" path="/info" component={Info} />,
     <Route key="auth-email-test" path="/email-test" component={EmailTest} />,
     <Route key="auth-agency" path="/agency/:agencySlug" component={AgencyLanding} />,
     <Route key="auth-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
