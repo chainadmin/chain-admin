@@ -1564,8 +1564,64 @@ export default function ConsumerDashboardSimple() {
                           </div>
                         )}
 
-                        {/* Cancel button */}
+                        {/* Pay Off Remaining Balance button */}
                         <div className="mt-4 pt-4 border-t border-white/10">
+                          <Button
+                            size="sm"
+                            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white mb-3"
+                            onClick={async () => {
+                              const remainingAmount = schedule.remainingPayments 
+                                ? (schedule.amountCents * schedule.remainingPayments) / 100 
+                                : schedule.amountCents / 100;
+                              
+                              if (!window.confirm(`Pay off your remaining balance now?\n\nThis will charge approximately $${remainingAmount.toFixed(2)} to your card ending in ${schedule.cardLast4 || '****'}.\n\nNote: The actual amount charged will be your current account balance.`)) {
+                                return;
+                              }
+                              
+                              try {
+                                const token = localStorage.getItem('consumerToken');
+                                const response = await apiCall(
+                                  "POST",
+                                  `/api/consumer/payment-schedule/${schedule.id}/payoff`,
+                                  {},
+                                  token
+                                );
+                                
+                                const data = await response.json();
+                                
+                                if (!response.ok) {
+                                  throw new Error(data.message || 'Payment failed');
+                                }
+                                
+                                toast({
+                                  title: "Payment Successful!",
+                                  description: data.amountCharged 
+                                    ? `$${(data.amountCharged / 100).toFixed(2)} has been charged. Your account is now paid in full!`
+                                    : "Your account is now paid in full!",
+                                });
+                                
+                                // Refresh the schedules list and account data
+                                queryClient.invalidateQueries({ 
+                                  queryKey: [`/api/consumer/payment-schedules/${session?.email}?tenantSlug=${session?.tenantSlug}`] 
+                                });
+                                queryClient.invalidateQueries({ 
+                                  queryKey: [`/api/consumer/account/${session?.email}`] 
+                                });
+                              } catch (error: any) {
+                                console.error('Error processing payoff:', error);
+                                toast({
+                                  title: "Payment Failed",
+                                  description: error.message || "Failed to process payment. Please try again.",
+                                  variant: "destructive",
+                                });
+                              }
+                            }}
+                            data-testid={`button-payoff-schedule-${schedule.id}`}
+                          >
+                            Pay Off Remaining Balance
+                          </Button>
+                          
+                          {/* Cancel button */}
                           <Button
                             variant="outline"
                             size="sm"

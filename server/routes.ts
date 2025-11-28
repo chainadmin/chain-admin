@@ -8039,6 +8039,237 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Pay off remaining balance on a payment schedule (early payoff)
+  app.post('/api/consumer/payment-schedule/:scheduleId/payoff', authenticateConsumer, async (req: any, res) => {
+    console.log('💰 === EARLY PAYOFF REQUEST RECEIVED ===');
+    try {
+      const { scheduleId } = req.params;
+      const { id: consumerId, tenantId } = req.consumer || {};
+
+      if (!consumerId || !tenantId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Get the schedule to verify ownership
+      const schedules = await storage.getPaymentSchedulesByConsumer(consumerId, tenantId);
+      const schedule = schedules.find(s => s.id === scheduleId);
+
+      if (!schedule) {
+        return res.status(404).json({ message: "Payment schedule not found" });
+      }
+
+      if (schedule.status !== 'active') {
+        return res.status(400).json({ message: `Cannot pay off a ${schedule.status} payment schedule` });
+      }
+
+      if (!schedule.remainingPayments || schedule.remainingPayments <= 0) {
+        return res.status(400).json({ message: "No remaining payments on this schedule" });
+      }
+
+      // Get the account to calculate remaining balance
+      const account = await storage.getAccount(schedule.accountId);
+      if (!account) {
+        return res.status(404).json({ message: "Account not found" });
+      }
+
+      // Get payment method
+      const paymentMethods = await storage.getPaymentMethodsByConsumer(consumerId, tenantId);
+      const paymentMethod = paymentMethods.find(pm => pm.id === schedule.paymentMethodId);
+
+      if (!paymentMethod) {
+        return res.status(400).json({ message: "Payment method not found. Please update your payment method first." });
+      }
+
+      // Get tenant settings for payment processor
+      const tenant = await storage.getTenant(tenantId);
+      if (!tenant) {
+        return res.status(404).json({ message: "Tenant not found" });
+      }
+
+      const settings = await storage.getTenantSettings(tenantId);
+      if (!settings) {
+        return res.status(400).json({ message: "Payment processing not configured" });
+      }
+
+      // Calculate remaining amount - use account balance (what's actually left to pay)
+      const remainingAmountCents = account.balanceCents;
+      
+      if (remainingAmountCents <= 0) {
+        // Balance is already zero, just complete the schedule
+        await storage.updatePaymentSchedule(scheduleId, { 
+          status: 'completed',
+          remainingPayments: 0
+        });
+        return res.json({ 
+          success: true, 
+          message: "Account already paid in full",
+          amountCharged: 0
+        });
+      }
+
+      console.log('💳 Processing early payoff:', {
+        scheduleId,
+        remainingPayments: schedule.remainingPayments,
+        scheduledPerPayment: schedule.amountCents,
+        actualRemainingBalance: remainingAmountCents,
+        paymentMethodId: paymentMethod.id,
+        cardLast4: paymentMethod.cardLast4
+      });
+
+      const merchantProvider = settings?.merchantProvider || 'usaepay';
+      let success = false;
+      let paymentResult: any = null;
+      let transactionId: string | null = null;
+
+      // Route to appropriate payment processor
+      if (merchantProvider === 'authorize_net') {
+        // ===== AUTHORIZE.NET PAYOFF =====
+        if (!settings?.authnetApiLoginId || !settings?.authnetTransactionKey) {
+          return res.status(400).json({ message: "Payment processor not configured" });
+        }
+
+        const { AuthnetService } = await import('./authnetService');
+        const authnetService = new AuthnetService({
+          apiLoginId: settings.authnetApiLoginId.trim(),
+          transactionKey: settings.authnetTransactionKey.trim(),
+          useSandbox: settings.useSandbox ?? true,
+        });
+
+        const [customerProfileId, paymentProfileId] = paymentMethod.paymentToken.split('|');
+
+        if (!customerProfileId || !paymentProfileId) {
+          return res.status(400).json({ message: "Invalid payment method" });
+        }
+
+        const authnetResult = await authnetService.chargeCustomerProfile({
+          customerProfileId,
+          paymentProfileId,
+          amount: remainingAmountCents / 100,
+          invoice: schedule.accountId.substring(0, 20),
+          description: `Early payoff - ${schedule.arrangementType}`,
+        });
+
+        paymentResult = authnetResult;
+        success = authnetResult.success;
+        transactionId = authnetResult.transactionId || null;
+
+      } else if (merchantProvider === 'nmi') {
+        // ===== NMI PAYOFF =====
+        const isNMIVaultToken = paymentMethod.paymentToken.startsWith('nmi_vault_');
+        
+        if (isNMIVaultToken) {
+          if (!settings?.nmiSecurityKey) {
+            return res.status(400).json({ message: "Payment processor not configured" });
+          }
+
+          const vaultId = paymentMethod.paymentToken.replace('nmi_vault_', '').trim();
+
+          const { NMIService } = await import('./nmiService');
+          const nmiService = new NMIService({
+            securityKey: settings.nmiSecurityKey.trim(),
+          });
+
+          const nmiResult = await nmiService.chargeCustomerVault({
+            customerVaultId: vaultId,
+            amount: parseFloat((remainingAmountCents / 100).toFixed(2)),
+            orderid: schedule.accountId || `payoff_${schedule.id}`,
+          });
+
+          paymentResult = nmiResult;
+          success = nmiResult.success;
+          transactionId = nmiResult.transactionId || null;
+        } else {
+          return res.status(400).json({ message: "This payment method requires SMAX integration for processing" });
+        }
+
+      } else {
+        // ===== USAEPAY PAYOFF =====
+        if (!settings?.merchantAccountId || !settings?.merchantApiKey) {
+          return res.status(400).json({ message: "Payment processor not configured" });
+        }
+
+        const useSandbox = settings.useSandbox ?? true;
+        const baseUrl = useSandbox
+          ? 'https://sandbox.usaepay.com/api/v2'
+          : 'https://secure.usaepay.com/api/v2';
+
+        const authString = Buffer.from(`${settings.merchantApiKey}:${settings.merchantApiPin || ''}`).toString('base64');
+
+        const chargeResponse = await fetch(`${baseUrl}/transactions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Basic ${authString}`,
+          },
+          body: JSON.stringify({
+            command: 'sale',
+            amount: (remainingAmountCents / 100).toFixed(2),
+            creditcard: {
+              token: paymentMethod.paymentToken,
+            },
+            description: `Early payoff - ${schedule.arrangementType}`,
+            invoice: schedule.accountId?.substring(0, 20) || schedule.id.substring(0, 20),
+          }),
+        });
+
+        const chargeResult = await chargeResponse.json() as any;
+        
+        success = chargeResult?.result_code === 'A' || chargeResult?.result === 'Approved';
+        paymentResult = chargeResult;
+        transactionId = chargeResult?.key || chargeResult?.refnum || null;
+      }
+
+      if (!success) {
+        console.error('❌ Early payoff payment failed:', paymentResult);
+        return res.status(400).json({ 
+          success: false, 
+          message: paymentResult?.errorMessage || paymentResult?.error || 'Payment declined. Please try again or use a different payment method.' 
+        });
+      }
+
+      console.log('✅ Early payoff payment succeeded:', { transactionId, amount: remainingAmountCents / 100 });
+
+      // Create payment record
+      await storage.createPayment({
+        tenantId,
+        consumerId,
+        accountId: schedule.accountId,
+        amountCents: remainingAmountCents,
+        paymentMethod: 'credit_card',
+        status: 'completed',
+        transactionId: transactionId || undefined,
+        processorResponse: JSON.stringify(paymentResult),
+        processedAt: new Date(),
+        notes: `Early payoff - ${paymentMethod.cardholderName || 'Card'} ending in ${paymentMethod.cardLast4}`,
+      });
+
+      // Update account balance
+      await storage.updateAccount(schedule.accountId, {
+        balanceCents: 0,
+        status: 'paid'
+      });
+
+      // Complete the payment schedule
+      await storage.updatePaymentSchedule(scheduleId, { 
+        status: 'completed',
+        remainingPayments: 0
+      });
+
+      console.log(`✅ Payment schedule ${scheduleId} completed via early payoff by consumer ${consumerId}`);
+
+      res.json({ 
+        success: true, 
+        message: "Payment successful! Your account has been paid in full.",
+        amountCharged: remainingAmountCents,
+        transactionId
+      });
+
+    } catch (error) {
+      console.error("Error processing early payoff:", error);
+      res.status(500).json({ message: "Failed to process payment. Please try again." });
+    }
+  });
+
   // Consumer callback request endpoint
   app.post('/api/consumer/callback-request', authenticateConsumer, async (req: any, res) => {
     try {
