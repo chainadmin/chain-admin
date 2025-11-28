@@ -609,9 +609,11 @@ export default function ConsumerDashboardSimple() {
           : calculateArrangementPayment(selectedArrangement, selectedAccount.balanceCents || 0))
       : calculatedPayment !== null
         ? calculatedPayment
-        : (noArrangementsAvailable && customPaymentAmount && !isNaN(parseFloat(customPaymentAmount)))
+        : (paymentMethod === 'custom' && customPaymentAmount && !isNaN(parseFloat(customPaymentAmount)))
           ? Math.round(parseFloat(customPaymentAmount) * 100)
-          : selectedAccount.balanceCents || 0
+          : (noArrangementsAvailable && customPaymentAmount && !isNaN(parseFloat(customPaymentAmount)))
+            ? Math.round(parseFloat(customPaymentAmount) * 100)
+            : selectedAccount.balanceCents || 0
     : 0;
 
   const handlePaymentSubmit = async (e: React.FormEvent) => {
@@ -651,8 +653,40 @@ export default function ConsumerDashboardSimple() {
         });
         return;
       }
-    } else if (!selectedArrangement && calculatedPayment === null) {
-      // When arrangements exist, require selection
+    } else if (paymentMethod === 'custom' && customPaymentAmount) {
+      // Custom payment amount validation (for existing SMAX arrangements or other custom payments)
+      const amount = parseFloat(customPaymentAmount);
+      const minAmount = (settings?.minimumMonthlyPayment || 100) / 100;
+      const maxAmount = (selectedAccount.balanceCents || 0) / 100;
+      
+      if (isNaN(amount) || amount <= 0) {
+        toast({
+          title: "Invalid Amount",
+          description: "Please enter a valid payment amount",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      if (amount < minAmount) {
+        toast({
+          title: "Amount Too Low",
+          description: `Minimum payment is $${minAmount.toFixed(2)}`,
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      if (amount > maxAmount) {
+        toast({
+          title: "Amount Too High",
+          description: `Maximum payment is $${maxAmount.toFixed(2)} (your balance)`,
+          variant: "destructive",
+        });
+        return;
+      }
+    } else if (!selectedArrangement && calculatedPayment === null && paymentMethod !== 'smax') {
+      // When arrangements exist, require selection (but allow SMAX payments)
       toast({
         title: "Select Payment Plan",
         description: "Please select a payment term or enter a custom amount",
@@ -727,7 +761,9 @@ export default function ConsumerDashboardSimple() {
         saveCard: saveCard || isSimplifiedFlow,
         setupRecurring: shouldSetupRecurring,
         firstPaymentDate: paymentDate,
-        customPaymentAmountCents: noArrangementsAvailable && customPaymentAmount
+        customPaymentAmountCents: (paymentMethod === 'custom' && customPaymentAmount && !isNaN(parseFloat(customPaymentAmount)))
+          ? Math.round(parseFloat(customPaymentAmount) * 100)
+          : noArrangementsAvailable && customPaymentAmount
           ? Math.round(parseFloat(customPaymentAmount) * 100)
           : selectedArrangement?.planType === 'one_time_payment' && customPaymentAmount
           ? Math.round(parseFloat(customPaymentAmount) * 100)
@@ -2054,6 +2090,62 @@ export default function ConsumerDashboardSimple() {
                     <p className="text-xs text-blue-100/50 mt-2">
                       Click to make a payment on your payment arrangement. To modify your arrangement terms, please contact us.
                     </p>
+                  </div>
+
+                  {/* Custom Payment Amount Option for Existing Arrangements */}
+                  <div className="rounded-lg bg-gradient-to-r from-purple-500/10 to-indigo-500/10 border-2 border-purple-400/30 p-4 backdrop-blur">
+                    <div className="flex items-center gap-2 mb-3">
+                      <DollarSign className="h-5 w-5 text-purple-400" />
+                      <Label className="text-base font-semibold text-purple-200">Pay a Different Amount</Label>
+                    </div>
+                    <p className="text-sm text-purple-100/70 mb-3">
+                      Enter any amount from minimum payment up to your full remaining balance
+                    </p>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-purple-300">$</span>
+                      <Input
+                        type="number"
+                        id="smaxCustomAmount"
+                        value={customPaymentAmount}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setCustomPaymentAmount(value);
+                          if (value && !isNaN(parseFloat(value))) {
+                            const amountCents = Math.round(parseFloat(value) * 100);
+                            setCalculatedPayment(amountCents);
+                            setMonthlyBaseAmount(amountCents);
+                            setPaymentMethod('custom');
+                            setSelectedArrangement(null);
+                          }
+                        }}
+                        onFocus={() => {
+                          setPaymentMethod('custom');
+                          setSelectedArrangement(null);
+                        }}
+                        min={settings?.minimumMonthlyPayment ? (settings.minimumMonthlyPayment / 100) : 1}
+                        max={(selectedAccount?.balanceCents || 0) / 100}
+                        step="0.01"
+                        placeholder="0.00"
+                        className={`pl-8 bg-white/5 border-white/20 text-white placeholder:text-purple-100/30 ${
+                          paymentMethod === 'custom' && customPaymentAmount ? 'border-purple-400 ring-1 ring-purple-400' : ''
+                        }`}
+                        data-testid="input-smax-custom-payment-amount"
+                      />
+                    </div>
+                    <p className="text-xs text-purple-100/50 mt-2">
+                      Min: ${((settings?.minimumMonthlyPayment || 100) / 100).toFixed(2)} | 
+                      Max: ${((selectedAccount?.balanceCents || 0) / 100).toFixed(2)} (Full Balance)
+                    </p>
+                    {paymentMethod === 'custom' && customPaymentAmount && !isNaN(parseFloat(customPaymentAmount)) && (
+                      <div className="mt-3 p-2 rounded bg-purple-500/20 border border-purple-400/30">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-purple-200">Your payment:</span>
+                          <span className="text-lg font-bold text-purple-300">
+                            ${parseFloat(customPaymentAmount).toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (
