@@ -8740,32 +8740,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       metadata: { paymentId: payment.id, amountCents, transactionId }
     });
     
-    // Send payment to SMAX if account has a filenumber
-    if (account?.filenumber) {
-      const consumer = await storage.getConsumer(consumerId);
-      console.log('📤 Sending payment to SMAX...');
-      
-      if (settings.smaxEnabled && consumer) {
-        try {
-          const { smaxService } = await import('./smaxService');
-          
-          await smaxService.insertPayment(tenantId, {
-            filenumber: account.filenumber,
-            paymentamount: (amountCents / 100).toString(),
-            paymentdate: new Date().toISOString().split('T')[0],
-            paymentmethod: 'Credit Card',
-            cardLast4: cardLast4,
-            transactionid: transactionId || undefined,
-            cardholdername: cardName || undefined,
-            billingzip: zipCode || undefined,
-          });
-
-          console.log('✅ Payment synced to SMAX');
-        } catch (smaxError) {
-          console.error('Failed to sync payment to SMAX:', smaxError);
-        }
-      }
-    }
+    // NOTE: SMAX payment sync is handled by each processor section (NMI, Authorize.net, USAePay)
+    // after calling this helper, because they have access to card expiry, token, and other details
+    // that this helper doesn't receive.
 
     // Update account balance if accountId exists
     if (accountId) {
@@ -9709,18 +9686,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           console.log('📥 NMI transaction response:', {
             success: nmiResult.success,
-            responseCode: nmiResult.response_code,
-            transactionId: nmiResult.transactionid,
-            responseText: nmiResult.responsetext
+            transactionId: nmiResult.transactionId,
+            responseText: nmiResult.responseText
           });
 
-          // NMI response_code: 1=approved, 2=declined, 3=error
-          success = nmiResult.success && nmiResult.response_code === '1';
+          // NMI service already checks response === '1' and sets success accordingly
+          success = nmiResult.success;
           paymentProcessed = true;
-          transactionId = nmiResult.transactionid || `nmi_${Date.now()}`;
+          transactionId = nmiResult.transactionId || `nmi_${Date.now()}`;
 
           if (!success) {
-            console.error('❌ NMI payment failed:', nmiResult.responsetext);
+            console.error('❌ NMI payment failed:', nmiResult.responseText || nmiResult.errorMessage);
             
             // Auto-change account status to "declined" when payment fails
             if (accountId && account.tenantId === tenantId) {
@@ -9738,7 +9714,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
             return res.status(400).json({
               success: false,
-              message: nmiResult.responsetext || 'Payment declined',
+              message: nmiResult.responseText || nmiResult.errorMessage || 'Payment declined',
             });
           }
 
@@ -9762,6 +9738,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
             arrangement,
             settings,
           });
+
+          // Sync payment to SMAX if enabled and account has filenumber
+          // (matches Authorize.net pattern - each processor handles its own SMAX sync)
+          if (settings.smaxEnabled && account.filenumber && consumer) {
+            try {
+              const { smaxService } = await import('./smaxService');
+              const payorName = `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim() || 'Consumer';
+              
+              await smaxService.insertPayment(tenantId, {
+                filenumber: account.filenumber,
+                paymentdate: new Date().toISOString().split('T')[0],
+                payorname: payorName,
+                paymentmethod: 'CREDIT CARD',
+                paymentstatus: 'PROCESSED',
+                typeofpayment: 'Online',
+                checkaccountnumber: '',
+                checkroutingnumber: '',
+                checkaccounttype: '',
+                checkaddress: '',
+                checkcity: '',
+                checkstate: '',
+                checkzip: '',
+                cardtype: cardBrand || '',
+                cardnumber: cardLast4 ? `****${cardLast4}` : '',
+                threedigitnumber: '',
+                cardexpirationmonth: expiryMonth || '',
+                cardexpirationyear: expiryYear || '',
+                cardexpirationdate: expiryMonth && expiryYear ? `${expiryMonth}/${expiryYear.slice(-2)}` : '',
+                paymentamount: (amountCents / 100).toFixed(2),
+                acceptedfees: '0.00',
+                printed: 'No',
+                invoice: transactionId || '',
+                cardLast4: cardLast4,
+                transactionid: transactionId || undefined,
+                cardtoken: customerVaultId ? `nmi_vault_${customerVaultId}` : undefined,
+                cardholdername: cardName || undefined,
+                billingzip: zipCode || undefined,
+              });
+
+              console.log('✅ NMI payment synced to SMAX');
+            } catch (smaxError) {
+              console.error('Failed to sync NMI payment to SMAX:', smaxError);
+            }
+          }
         }
 
         // Save payment method to SMAX (only if not using NMI vault)
