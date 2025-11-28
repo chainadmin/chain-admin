@@ -8753,7 +8753,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     // Send notification to admins about successful payment
     const consumer = await storage.getConsumer(consumerId);
+    console.log('📧 Payment Email Notification Check:', {
+      hasConsumer: !!consumer,
+      consumerName: consumer ? `${consumer.firstName} ${consumer.lastName}` : 'N/A',
+      accountNumber: account?.accountNumber || 'N/A',
+      amountCents,
+      amountDollars: (amountCents / 100).toFixed(2),
+      transactionId
+    });
+    
     if (consumer) {
+      console.log('📧 Sending payment notification to tenant admins...');
       await notifyTenantAdmins({
         tenantId,
         subject: 'New Payment Received',
@@ -8764,8 +8774,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           email: consumer.email || '',
         },
         amount: amountCents,
-      }).catch(err => console.error('Failed to send payment notification:', err));
+      }).catch(err => console.error('❌ Failed to send payment notification to admins:', err));
 
+      console.log('📧 Sending payment notification to contact email...');
       await emailService.sendPaymentNotification({
         tenantId,
         consumerName: `${consumer.firstName} ${consumer.lastName}`,
@@ -8774,7 +8785,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         paymentMethod: 'Credit Card',
         transactionId: transactionId || undefined,
         paymentType: 'one_time',
-      }).catch(err => console.error('Failed to send payment notification to contact email:', err));
+      }).catch(err => console.error('❌ Failed to send payment notification to contact email:', err));
+      
+      console.log('✅ Payment notifications sent successfully');
+    } else {
+      console.warn('⚠️ Consumer not found - skipping payment notifications');
     }
 
     return payment;
@@ -9741,10 +9756,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           // Sync payment to SMAX if enabled and account has filenumber
           // (matches Authorize.net pattern - each processor handles its own SMAX sync)
-          if (settings.smaxEnabled && account.filenumber && consumer) {
+          // Fetch consumer for SMAX sync
+          const consumerForSmax = await storage.getConsumer(consumerId);
+          console.log('📤 NMI SMAX Sync Check:', {
+            smaxEnabled: settings.smaxEnabled,
+            hasFilenumber: !!account.filenumber,
+            filenumber: account.filenumber,
+            hasConsumer: !!consumerForSmax,
+            amountCents,
+            transactionId
+          });
+          
+          if (settings.smaxEnabled && account.filenumber && consumerForSmax) {
             try {
               const { smaxService } = await import('./smaxService');
-              const payorName = `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim() || 'Consumer';
+              const payorName = `${consumerForSmax.firstName || ''} ${consumerForSmax.lastName || ''}`.trim() || 'Consumer';
+              
+              console.log('📤 Sending payment to SMAX:', {
+                filenumber: account.filenumber,
+                payorName,
+                amount: (amountCents / 100).toFixed(2),
+                transactionId,
+                status: 'PROCESSED'
+              });
               
               await smaxService.insertPayment(tenantId, {
                 filenumber: account.filenumber,
