@@ -821,58 +821,195 @@ export async function runMigrations() {
     // Seed global document templates for global admin agreements
     console.log('Seeding global document templates...');
     try {
-      const softwareProposalHtml = '<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;"><h1 style="color: #333;">Chain Software Group</h1><h2 style="color: #666;">Software Service Proposal & Agreement</h2><p>Dear {{companyName}},</p><p>This proposal outlines the software services to be provided:</p><div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;"><p><strong>Module:</strong> {{moduleName}}</p><p><strong>Description:</strong> {{moduleDescription}}</p><p><strong>Pricing Tier:</strong> {{pricingTier}}</p><p><strong>Monthly Rate:</strong> {{monthlyPrice}}</p><p><strong>Billing Start Date:</strong> {{billingStartDate}}</p></div><p><strong>Contact Information:</strong></p><p>Email: {{contactEmail}}<br>Phone: {{contactPhone}}</p><p style="margin-top: 30px;">By clicking "I Agree" below, you acknowledge that you have read and agree to the terms of this proposal.</p><div style="text-align: center; margin: 30px 0;"><a href="{{agreementLink}}" style="background: #22BC66; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">View & Agree to Proposal</a></div></div>';
+      // Full Agency SaaS Agreement with Terms of Service and Pricing Addendum
+      const softwareProposalHtml = `
+<div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 30px; color: #333;">
+  <div style="text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #2563eb;">
+    <h1 style="color: #1e40af; margin: 0; font-size: 28px;">Chain Software Group</h1>
+    <p style="color: #64748b; margin: 5px 0 0;">Agency SaaS Agreement</p>
+  </div>
+  
+  <div style="background: linear-gradient(135deg, #eff6ff 0%, #f0f9ff 100%); padding: 20px; border-radius: 10px; margin-bottom: 25px; border-left: 4px solid #2563eb;">
+    <h3 style="margin: 0 0 10px; color: #1e40af;">Your Subscription Details</h3>
+    <table style="width: 100%; border-collapse: collapse;">
+      <tr><td style="padding: 8px 0; color: #64748b;">Company:</td><td style="padding: 8px 0; font-weight: 600;">{{companyName}}</td></tr>
+      <tr><td style="padding: 8px 0; color: #64748b;">Plan:</td><td style="padding: 8px 0; font-weight: 600;">{{pricingTier}}</td></tr>
+      <tr><td style="padding: 8px 0; color: #64748b;">Base Monthly Rate:</td><td style="padding: 8px 0; font-weight: 600;">{{monthlyPrice}}</td></tr>
+      <tr><td style="padding: 8px 0; color: #64748b;">Add-ons:</td><td style="padding: 8px 0;">{{addonsList}}</td></tr>
+      <tr><td style="padding: 8px 0; color: #64748b;"><strong>Total Monthly:</strong></td><td style="padding: 8px 0; font-weight: 700; color: #059669;">{{totalMonthlyPrice}}</td></tr>
+      <tr><td style="padding: 8px 0; color: #64748b;">Billing Start:</td><td style="padding: 8px 0;">{{billingStartDate}}</td></tr>
+    </table>
+    <p style="font-size: 12px; color: #f59e0b; margin: 15px 0 0; font-style: italic;">* Amount subject to change based on overage usage</p>
+  </div>
+
+  <h2 style="color: #1e40af; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">Agency SaaS Agreement</h2>
+  <p><strong>Parties:</strong> Chain Software Group ("Provider") and the subscribing agency ("Customer").</p>
+  <p><strong>Scope:</strong> Access to the multi-tenant platform for uploading account data, communicating with consumers, and optional payment facilitation via third parties.</p>
+
+  <h3 style="color: #334155;">Key Terms</h3>
+  <ul style="line-height: 1.8;">
+    <li><strong>Subscription & Fees:</strong> Customer pays the fees set in the Order (e.g., per-seat, per-account, messaging usage). Invoices due net 15. Late amounts may accrue interest at the lesser of 1.5%/mo or the maximum allowed by law.</li>
+    <li><strong>Term & Renewal:</strong> Initial term 12 months; auto-renews for 12-month periods unless either party gives 30 days' notice.</li>
+    <li><strong>Customer Data:</strong> Customer is the controller of its Consumer Data. Chain processes it solely to provide the Service, under the Data Processing Addendum (DPA).</li>
+    <li><strong>Acceptable Use & Compliance:</strong> Customer agrees to comply with applicable law (e.g., FDCPA/Reg F, TCPA, state laws) and to only send lawful, consented communications via the Service. Customer is responsible for A2P 10DLC brand/campaign registration where required.</li>
+    <li><strong>Security:</strong> Chain implements administrative, technical, and physical safeguards appropriate to the risk. Customer must secure its credentials and restrict access to authorized personnel.</li>
+    <li><strong>Messaging & Payments:</strong> Messaging is provided via third-party carriers/providers; delivery is not guaranteed. Payments are processed via third-party processors under their terms. Chain is not a debt collector and does not decide settlement terms or lawful contact windows.</li>
+    <li><strong>Confidentiality; IP:</strong> Each party will protect the other's Confidential Information. Chain retains all rights to the Service and underlying IP.</li>
+    <li><strong>Warranties; Disclaimers:</strong> The Service is provided "AS IS." Chain disclaims implied warranties. No legal, compliance, or collection advice is provided.</li>
+    <li><strong>Indemnity:</strong> Customer will indemnify Chain for claims arising from Customer's data, instructions, or unlawful communications. Chain will indemnify Customer for third-party IP claims alleging the Service infringes IP rights.</li>
+    <li><strong>Liability Cap:</strong> Each party's aggregate liability is capped at the fees paid in the 12 months preceding the claim; no indirect or consequential damages.</li>
+    <li><strong>Termination:</strong> Either party may terminate for material breach uncured within 30 days. Upon termination, Customer may export its data for 30 days.</li>
+    <li><strong>Governing Law; Venue:</strong> New York law; exclusive venue Erie County, NY.</li>
+  </ul>
+
+  <h3 style="color: #334155;">Data Processing Addendum (Summary)</h3>
+  <ul style="line-height: 1.8;">
+    <li><strong>Roles:</strong> Customer = Controller; Chain = Processor/Service Provider.</li>
+    <li><strong>Instructions:</strong> Process Consumer Data only per Customer's documented instructions and the Agreement.</li>
+    <li><strong>Sub-processors:</strong> Chain may use vetted sub-processors (hosting, messaging, analytics, payment); list available upon request.</li>
+    <li><strong>Security:</strong> Appropriate technical/organizational measures (encryption in transit, access controls, logging, backups).</li>
+    <li><strong>Breach Notice:</strong> Notify Customer without undue delay of a confirmed personal data breach.</li>
+    <li><strong>Deletion/Return:</strong> On termination, delete or return Consumer Data after the export window, unless retention is required by law.</li>
+  </ul>
+
+  <h2 style="color: #1e40af; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; margin-top: 30px;">Pricing & Messaging Addendum</h2>
+  
+  <h3 style="color: #334155;">A. Onboarding & First-Month Charges</h3>
+  <p>Upon selecting a plan, Agency will pay: (a) the first monthly Service Fee for the chosen tier in advance, plus (b) a one-time $100 startup fee (non-refundable once onboarding begins).</p>
+
+  <h3 style="color: #334155;">B. SMS Program Requirements</h3>
+  <ul style="line-height: 1.8;">
+    <li>Agency must collect, store, and produce proof of consent for each recipient upon request.</li>
+    <li>Service is subject to Agency's messaging brand and campaign approval by the carrier ecosystem (e.g., A2P 10DLC).</li>
+    <li>Agency is responsible for content compliance with FDCPA/Reg F, TCPA, and state laws.</li>
+  </ul>
+
+  <h3 style="color: #334155;">C. Plans & Monthly Service Fees</h3>
+  <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+    <thead>
+      <tr style="background: #f1f5f9;">
+        <th style="padding: 12px; text-align: left; border: 1px solid #e2e8f0;">Tier</th>
+        <th style="padding: 12px; text-align: left; border: 1px solid #e2e8f0;">Monthly Fee</th>
+        <th style="padding: 12px; text-align: left; border: 1px solid #e2e8f0;">Emails/mo</th>
+        <th style="padding: 12px; text-align: left; border: 1px solid #e2e8f0;">SMS/mo</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td style="padding: 10px; border: 1px solid #e2e8f0;">Launch</td><td style="padding: 10px; border: 1px solid #e2e8f0;">$325</td><td style="padding: 10px; border: 1px solid #e2e8f0;">10,000</td><td style="padding: 10px; border: 1px solid #e2e8f0;">1,000</td></tr>
+      <tr><td style="padding: 10px; border: 1px solid #e2e8f0;">Growth</td><td style="padding: 10px; border: 1px solid #e2e8f0;">$500</td><td style="padding: 10px; border: 1px solid #e2e8f0;">25,000</td><td style="padding: 10px; border: 1px solid #e2e8f0;">2,500</td></tr>
+      <tr><td style="padding: 10px; border: 1px solid #e2e8f0;">Pro</td><td style="padding: 10px; border: 1px solid #e2e8f0;">$950</td><td style="padding: 10px; border: 1px solid #e2e8f0;">100,000</td><td style="padding: 10px; border: 1px solid #e2e8f0;">10,000</td></tr>
+      <tr><td style="padding: 10px; border: 1px solid #e2e8f0;">Scale</td><td style="padding: 10px; border: 1px solid #e2e8f0;">$1,800</td><td style="padding: 10px; border: 1px solid #e2e8f0;">250,000</td><td style="padding: 10px; border: 1px solid #e2e8f0;">25,000</td></tr>
+    </tbody>
+  </table>
+  <p><strong>Overages:</strong> Email: $2.50 per 1,000 beyond allotment. SMS: $0.02 per segment beyond allotment.</p>
+
+  <h3 style="color: #334155;">D. Billing & Invoices</h3>
+  <p>Monthly in advance for Service Fee; overages billed in arrears. Invoices due net 15 days. Late balances may accrue interest at 1.5%/mo and may trigger suspension.</p>
+
+  <h3 style="color: #334155;">E. Compliance & Indemnity</h3>
+  <p>Agency will comply with FDCPA/Reg F, TCPA, state telemarketing/messaging laws, carrier policies, and applicable email anti-spam laws. Agency will indemnify Chain for claims arising from Agency's messaging content or unlawful contact practices.</p>
+
+  <div style="background: #fef3c7; padding: 15px; border-radius: 8px; margin: 25px 0; border-left: 4px solid #f59e0b;">
+    <p style="margin: 0; font-size: 13px;"><strong>Contact Information:</strong><br>
+    Email: {{contactEmail}}<br>
+    Phone: {{contactPhone}}</p>
+  </div>
+
+  <div style="text-align: center; margin-top: 30px; padding: 20px; background: #f8fafc; border-radius: 10px;">
+    <p style="margin: 0 0 15px; color: #64748b;">By clicking "I Agree" below, you acknowledge that you have read and agree to the terms of this Agreement.</p>
+  </div>
+</div>`;
       
-      const softwareProposalVars = ['companyName', 'moduleName', 'moduleDescription', 'pricingTier', 'monthlyPrice', 'billingStartDate', 'contactEmail', 'contactPhone', 'agreementLink'];
+      const softwareProposalVars = ['companyName', 'moduleName', 'moduleDescription', 'pricingTier', 'monthlyPrice', 'totalMonthlyPrice', 'addonsTotal', 'addonsList', 'billingStartDate', 'contactEmail', 'contactPhone', 'agreementLink'];
       
       await client.query(
         `INSERT INTO global_document_templates (slug, name, title, content, description, available_variables, is_active) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (slug) DO NOTHING`,
-        ['software_proposal', 'Software Service Proposal & Agreement', 'Chain Software Group - Software Proposal', softwareProposalHtml, 'Global admin template for sending software proposal agreements to tenants', softwareProposalVars, true]
+         VALUES ($1, $2, $3, $4, $5, $6, $7) 
+         ON CONFLICT (slug) DO UPDATE SET content = EXCLUDED.content, available_variables = EXCLUDED.available_variables`,
+        ['software_proposal', 'Agency SaaS Agreement', 'Chain Software Group - Agency Agreement', softwareProposalHtml, 'Full Agency SaaS Agreement with Terms of Service and Pricing Addendum', softwareProposalVars, true]
       );
       
-      const paymentAuthHtml = '<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;"><h1 style="color: #333;">Chain Software Group</h1><h2 style="color: #666;">Payment Authorization Form</h2><p>Dear {{companyName}},</p><p>This form authorizes payment processing for your account:</p><div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;"><p><strong>Payment Amount:</strong> {{paymentAmount}}</p><p><strong>Payment Frequency:</strong> {{paymentFrequency}}</p><p><strong>Merchant Provider:</strong> {{merchantProvider}}</p><p><strong>Payment Method:</strong> {{paymentMethod}}</p></div><p style="margin-top: 30px;">By clicking "I Agree" below, you authorize Chain Software Group to charge the specified payment method according to the terms outlined above.</p><div style="text-align: center; margin: 30px 0;"><a href="{{agreementLink}}" style="background: #22BC66; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">View & Authorize Payment</a></div></div>';
+      // Updated Payment Authorization Form
+      const paymentAuthHtml = `
+<div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 700px; margin: 0 auto; padding: 30px; color: #333;">
+  <div style="text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #2563eb;">
+    <h1 style="color: #1e40af; margin: 0; font-size: 24px;">Chain Software Group</h1>
+    <p style="color: #64748b; margin: 5px 0 0;">Payment Authorization Form</p>
+  </div>
+  
+  <p>Dear {{companyName}},</p>
+  
+  <p>Please complete this form to authorize payment for your subscription. You are selecting your preferred payment method for ongoing billing.</p>
+  
+  <div style="background: linear-gradient(135deg, #eff6ff 0%, #f0f9ff 100%); padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #2563eb;">
+    <h3 style="margin: 0 0 15px; color: #1e40af;">Billing Summary</h3>
+    <table style="width: 100%; border-collapse: collapse;">
+      <tr><td style="padding: 8px 0; color: #64748b;">Plan:</td><td style="padding: 8px 0; font-weight: 600;">{{pricingTier}}</td></tr>
+      <tr><td style="padding: 8px 0; color: #64748b;">Base Monthly:</td><td style="padding: 8px 0;">{{monthlyPrice}}</td></tr>
+      <tr><td style="padding: 8px 0; color: #64748b;">Add-ons:</td><td style="padding: 8px 0;">{{addonsList}}</td></tr>
+      <tr style="border-top: 1px solid #cbd5e1;"><td style="padding: 12px 0; color: #1e40af; font-weight: 600;">Total Monthly:</td><td style="padding: 12px 0; font-weight: 700; font-size: 18px; color: #059669;">{{totalMonthlyPrice}}</td></tr>
+    </table>
+    <p style="font-size: 12px; color: #f59e0b; margin: 15px 0 0; font-style: italic;">* This amount is subject to change based on overage usage (email/SMS beyond plan limits).</p>
+  </div>
+
+  <div style="background: #fef2f2; padding: 20px; border-radius: 10px; margin: 25px 0; border: 1px solid #fecaca;">
+    <h3 style="margin: 0 0 15px; color: #b91c1c;">Payment Authorization Terms</h3>
+    <p style="font-size: 14px; line-height: 1.7; margin: 0;">
+      I authorize Chain Software Group and its payment processor to debit the account/card I provide for the amounts and schedule I selected. I understand I can cancel a future payment by contacting Chain Software Group at least 3 business days before the scheduled debit.
+    </p>
+    <ul style="font-size: 14px; line-height: 1.7; margin: 15px 0 0; padding-left: 20px;">
+      <li>Any declined ACH transactions are subject to a <strong>$50 returned check fee</strong>.</li>
+      <li>Non-payment will result in termination of services until payment is made.</li>
+      <li>I attest I am an authorized user of the payment method.</li>
+    </ul>
+    <p style="font-size: 12px; color: #64748b; margin: 15px 0 0;">
+      <strong>Disclosures:</strong> Payments are processed by third-party processors. Returned payments may incur fees allowed by law.
+    </p>
+  </div>
+
+  <div style="background: #f0fdf4; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #bbf7d0;">
+    <p style="margin: 0; font-size: 14px; color: #166534;">
+      <strong>Note:</strong> After you complete this authorization, our team will contact you to securely collect your full payment information.
+    </p>
+  </div>
+
+  <div style="background: #fef3c7; padding: 15px; border-radius: 8px; margin: 25px 0; border-left: 4px solid #f59e0b;">
+    <p style="margin: 0; font-size: 13px;"><strong>Contact:</strong> {{contactEmail}} | {{contactPhone}}</p>
+  </div>
+</div>`;
       
-      const paymentAuthVars = ['companyName', 'paymentAmount', 'paymentFrequency', 'merchantProvider', 'paymentMethod', 'agreementLink'];
+      const paymentAuthVars = ['companyName', 'pricingTier', 'monthlyPrice', 'totalMonthlyPrice', 'addonsList', 'contactEmail', 'contactPhone', 'agreementLink'];
       
-      // Define interactive fields for payment authorization form
+      // Updated interactive fields - removed merchantProvider, added last4 and paymentMethod
       const paymentAuthFields = [
         {
-          name: 'paymentAmount',
-          type: 'number',
-          label: 'Payment Amount ($)',
+          name: 'paymentMethod',
+          type: 'select',
+          label: 'Preferred Payment Method',
           required: true,
-          min: 1,
-          placeholder: 'Enter amount'
+          options: ['Credit Card', 'Debit Card', 'ACH/Bank Account']
+        },
+        {
+          name: 'last4Digits',
+          type: 'text',
+          label: 'Last 4 Digits of Card/Account',
+          required: true,
+          placeholder: 'Enter last 4 digits'
         },
         {
           name: 'paymentFrequency',
           type: 'select',
           label: 'Payment Frequency',
           required: true,
-          options: ['Monthly', 'Weekly', 'Bi-Weekly', 'Quarterly', 'Annually']
-        },
-        {
-          name: 'merchantProvider',
-          type: 'select',
-          label: 'Merchant Provider',
-          required: true,
-          options: ['USAePay', 'Authorize.net', 'NMI', 'Stripe']
-        },
-        {
-          name: 'paymentMethod',
-          type: 'select',
-          label: 'Payment Method',
-          required: true,
-          options: ['Credit Card', 'Debit Card', 'ACH/Bank Account']
+          options: ['Monthly']
         }
       ];
       
       await client.query(
         `INSERT INTO global_document_templates (slug, name, title, content, description, available_variables, interactive_fields, is_active) 
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
-         ON CONFLICT (slug) DO UPDATE SET interactive_fields = EXCLUDED.interactive_fields`,
-        ['payment_authorization', 'Payment Authorization Form', 'Chain Software Group - Payment Authorization', paymentAuthHtml, 'Global admin template for sending payment authorization agreements to tenants', paymentAuthVars, JSON.stringify(paymentAuthFields), true]
+         ON CONFLICT (slug) DO UPDATE SET content = EXCLUDED.content, available_variables = EXCLUDED.available_variables, interactive_fields = EXCLUDED.interactive_fields`,
+        ['payment_authorization', 'Payment Authorization Form', 'Chain Software Group - Payment Authorization', paymentAuthHtml, 'Payment authorization with terms, last 4 digits collection, and contact notice', paymentAuthVars, JSON.stringify(paymentAuthFields), true]
       );
       
       console.log('  ✓ Global document templates seeded');

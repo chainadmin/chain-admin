@@ -1,0 +1,187 @@
+Agency SaaS Agreement 
+Parties: Chain (Provider) and the subscribing agency (Customer).
+ Scope: Access to the multi‑tenant platform for uploading account data, communicating with consumers, and optional payment facilitation via third parties.
+Key Terms
+Subscription & Fees: Customer pays the fees set in the Order (e.g., per‑seat, per‑account, messaging usage). Invoices due net {{NET TERMS}}. Late amounts may accrue interest at the lesser of 1.5%/mo or the maximum allowed by law.
+
+
+Term & Renewal: Initial term {{TERM}}; auto‑renews for {{RENEWAL TERM}} unless either party gives {{NOTICE}}’ notice.
+
+
+Customer Data: Customer is the controller of its Consumer Data. Chain processes it solely to provide the Service, under the Data Processing Addendum (DPA).
+
+
+Acceptable Use & Compliance: Customer agrees to comply with applicable law (e.g., FDCPA/Reg F, TCPA, state laws) and to only send lawful, consented communications via the Service. Customer is responsible for A2P 10DLC brand/campaign registration where required.
+
+
+Security: Chain implements administrative, technical, and physical safeguards appropriate to the risk. Customer must secure its credentials and restrict access to authorized personnel.
+
+
+Messaging & Payments: Messaging is provided via third‑party carriers/providers; delivery is not guaranteed. Payments are processed via third‑party processors under their terms. Chain is not a debt collector and does not decide settlement terms or lawful contact windows.
+
+
+Confidentiality; IP: Each party will protect the other’s Confidential Information. Chain retains all rights to the Service and underlying IP.
+
+
+Warranties; Disclaimers: The Service is provided “AS IS.” Chain disclaims implied warranties. No legal, compliance, or collection advice is provided.
+
+
+Indemnity: Customer will indemnify Chain for claims arising from Customer’s data, instructions, or unlawful communications. Chain will indemnify Customer for third‑party IP claims alleging the Service (as provided by Chain) infringes IP rights.
+
+
+Liability Cap: Each party’s aggregate liability is capped at the fees paid in the 12 months preceding the claim; no indirect or consequential damages.
+
+
+Termination: Either party may terminate for material breach uncured within {{CURE PERIOD}} days. Upon termination, Customer may export its data for 30 days.
+
+
+Governing Law; Venue: {{STATE}} law; exclusive venue {{COUNTY/STATE}}.
+
+
+Data Processing Addendum (Summary)
+Roles: Customer = Controller; Chain = Processor/Service Provider.
+
+
+Instructions: Process Consumer Data only per Customer’s documented instructions and the Agreement.
+
+
+Sub‑processors: Chain may use vetted sub‑processors (hosting, messaging, analytics, payment); list available upon request; notice of changes with a right to object.
+
+
+Security: Appropriate technical/organizational measures (encryption in transit, access controls, logging, backups).
+
+
+Breach Notice: Notify Customer without undue delay of a confirmed personal data breach.
+
+
+Assistance: Reasonable assistance with data subject requests and regulatory inquiries, at Customer’s expense if burdensome.
+
+
+Deletion/Return: On termination, delete or return Consumer Data after the export window, unless retention is required by law.
+
+
+Cross‑border: If applicable, incorporate SCCs/approved mechanisms for international transfers.
+
+
+
+
+
+
+
+ Agency Terms of Service + Pricing & Messaging Addendum
+Purpose. This Addendum supplements the Agency SaaS Agreement (Section 2) and governs pricing, billing, messaging compliance, and approval requirements for agencies using Chain. Capitalized terms have the meanings in the Agreement.
+A. Onboarding & First-Month Charges
+Plan Selection & Upfront Payment. Upon selecting a plan, Agency will pay: (a) the first monthly Service Fee for the chosen tier in advance, plus (b) a one‑time $100 startup fee (non‑refundable once onboarding begins). Access may be suspended until payment clears.
+
+
+What “Startup” Covers. Account provisioning, role/permissions setup, sender identity verification (email), initial messaging template review, and registration on A2P 10DLC.
+
+
+B. SMS Program Requirements (Consent & Approval)
+Consent Form. Agency must collect, store, and produce proof of consent for each recipient upon request (including opt‑in text, timestamp, number, source, and opt‑outs).
+
+
+Brand & Campaign Approval. Service is subject to Agency’s messaging brand and campaign approval by the carrier ecosystem (e.g., A2P 10DLC brand/campaign). Until approved, throughput/deliverability may be limited or blocked.
+
+
+Registration Costs. Any brand/campaign fees, vetting fees, monthly phone‑number rental (10DLC/TFN), and carrier/provider per‑message fees are pass‑through to Agency. Agency must keep registration current. Agency must keep registration current.
+
+
+Template Compliance. Agency is responsible for the content it sends (truthful, non‑deceptive, compliant with FDCPA/Reg F, TCPA,STATE LAWS, ETC.). Chain may require edits or suspend templates that present elevated risk.
+
+
+
+
+
+C. Plans & Monthly Service Fees
+Base Service Fee: $250/month for the Launch tier. Higher tiers include more monthly messaging capacity and features. Email/SMS overages are billed as described below. Seat limits refer to named staff users.
+Tier
+Monthly Service Fee
+Included EMAIL sends/mo
+Included SMS segments/mo inbound and outbound*
+
+
+Launch
+$325
+10,000
+1000
+
+
+Growth
+$500
+25,000
+2,500
+
+
+Pro
+$950
+100,000
+10,000
+
+
+Scale
+$1,800
+250,000
+25,000
+
+
+
+*One SMS “segment” is typically 160 GSM characters (or less with Unicode); MMS counts as multiple segments.
+Notes
+Overages (Email): $2.50 per 1,000 emails (= $0.0025 per email) beyond the plan allotment.
+
+
+Overages (SMS): $0.02 per SMS segment beyond the plan allotment. (MMS counts as multiple segments.)
+
+
+Dedicated numbers:  brand/campaign registration and vetting fee are INCLUDED. Additional numbers are billed per number per month at $25.
+
+
+Fair Use: Chain may rate‑limit abnormally high bursts to protect deliverability.
+
+
+D. Automatic Tier Adjustments
+Auto‑Upgrade. If Agency exceeds included email or SMS volume by >20% in two consecutive months, Agency will automatically move to the next tier effective the next billing cycle.
+
+
+Downgrade. Agency may request a downgrade once usage remains below the lower tier’s limits for two consecutive months; downgrades take effect the following billing cycle.
+
+
+E. Billing, Invoices & Taxes
+Billing Cycle. Monthly in advance for the Service Fee; overages and pass‑through costs billed in arrears.
+
+
+Invoices. Due net 15 days unless otherwise stated. Late balances may accrue interest at 1.5%/mo (or the maximum permitted by law) and may trigger suspension.
+
+
+Taxes. Fees are exclusive of taxes; Agency is responsible for applicable taxes.
+
+
+F. Messaging Deliverability & Throughput
+No Guarantee. Delivery and throughput depend on third‑party networks and brand/campaign ratings; Chain cannot guarantee delivery speed or inbox placement.
+
+
+Spam/Abuse Controls. Chain and providers may throttle or block traffic that appears abusive, unlawful, or harmful to deliverability.
+
+
+G. Compliance & Indemnity (Messaging)
+Compliance. Agency will comply with FDCPA/Reg F, TCPA, state telemarketing/messaging laws, carrier policies, and any applicable email anti‑spam laws (e.g., CAN‑SPAM).
+
+
+Audit & Logs. On request, Agency will produce consent logs and campaign records. Failure may result in suspension.
+
+
+Indemnity. Agency will indemnify Chain for claims, fines, or losses arising from Agency’s messaging content, lack of valid consent, or unlawful contact practices.
+
+
+H. Suspension; Termination
+Cause. Chain may suspend messaging or account access for non‑payment, excessive spam/complaints, failed vetting, or legal/operational risk.
+
+
+Termination. For persistent breach uncured within 15 days after notice. Upon termination, Agency may export its data for 30 days; continued retention may be required by law.
+
+
+I. Price Changes
+Chain may update fees or overage rates with 30 days’ notice (email or in‑app). Updated fees apply at the next renewal unless Agency terminates before renewal.
+J. Order of Precedence
+If there is a conflict between this Addendum and the Agreement, this Addendum controls for pricing, messaging, and approval matters.

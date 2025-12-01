@@ -1215,7 +1215,30 @@ export default function GlobalAdmin() {
                           </p>
                         </div>
                       </div>
-                      <div className="flex gap-2">
+                      {/* Add-ons section */}
+                      {request.enabledAddons && request.enabledAddons.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-white/10">
+                          <p className="text-sm text-blue-100/70 mb-1">Selected Add-ons:</p>
+                          <div className="flex flex-wrap gap-2">
+                            {request.enabledAddons.includes('document_signing') && (
+                              <Badge variant="outline" className="text-xs border-sky-400/50 text-sky-200">
+                                Document Signing (+$40/mo)
+                              </Badge>
+                            )}
+                            {request.enabledAddons.includes('ai_auto_response') && (
+                              <Badge variant="outline" className="text-xs border-purple-400/50 text-purple-200">
+                                AI Auto-Response (+$50/mo)
+                              </Badge>
+                            )}
+                            {request.enabledAddons.includes('mobile_app_branding') && (
+                              <Badge variant="outline" className="text-xs border-blue-400/50 text-blue-200">
+                                Mobile App Branding (+$50/mo)
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      <div className="flex gap-2 mt-3">
                         <Button
                           size="sm"
                           variant="default"

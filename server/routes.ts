@@ -1007,8 +1007,15 @@ async function getTenantId(req: any, storage: IStorage): Promise<string | null> 
 }
 
 // Chain Software Group contact information (hardcoded)
-const CHAIN_CONTACT_EMAIL = 'support@chainsoftware.com';
-const CHAIN_CONTACT_PHONE = '1-800-CHAIN-SW';
+const CHAIN_CONTACT_EMAIL = 'support@chainsoftwaregroup.com';
+const CHAIN_CONTACT_PHONE = '(716) 534-3086';
+
+// Add-on pricing constants
+const ADDON_PRICES: Record<string, { name: string; monthly: number }> = {
+  'document_signing': { name: 'Document Signing', monthly: 40 },
+  'ai_auto_response': { name: 'AI Auto-Response', monthly: 50 },
+  'mobile_app_branding': { name: 'Mobile App Branding', monthly: 50 },
+};
 
 // Build complete agreement variables from tenant and subscription data
 async function buildAgreementVariables(
@@ -1018,15 +1025,29 @@ async function buildAgreementVariables(
   baseUrl: string
 ): Promise<Record<string, any>> {
   // Get tenant settings and subscription
-  const tenantSettings = await storage.getTenantSettings(tenantId);
+  const settings = await storage.getTenantSettings(tenantId);
   const subscription = await storage.getSubscriptionByTenant(tenantId);
   
   // Get business type and determine module info
-  const businessType = tenantSettings?.businessType || 'call_center';
+  const businessType = settings?.businessType || 'call_center';
   const moduleName = getModuleNameForBusinessType(businessType as any);
   const moduleDescription = getModuleDescriptionForBusinessType(businessType as any);
   
+  // Get enabled add-ons and calculate add-on costs
+  const enabledAddons = settings?.enabledAddons || [];
+  let addonsTotal = 0;
+  const addonsList: string[] = [];
+  
+  for (const addonKey of enabledAddons) {
+    const addon = ADDON_PRICES[addonKey];
+    if (addon) {
+      addonsTotal += addon.monthly;
+      addonsList.push(`${addon.name} ($${addon.monthly}/mo)`);
+    }
+  }
+  
   // Get actual plan details from subscription or fallback to defaults
+  let basePriceCents: number;
   let monthlyPrice: string;
   let pricingTier: string;
   let billingStartDate: string;
@@ -1037,9 +1058,9 @@ async function buildAgreementVariables(
     
     // Prefer subscription.priceCents for negotiated/custom rates, fallback to plan price
     if (subscription.priceCents !== undefined && subscription.priceCents !== null) {
-      monthlyPrice = formatCurrency(subscription.priceCents);
+      basePriceCents = subscription.priceCents;
     } else {
-      monthlyPrice = formatDollarAmount(plan.price);
+      basePriceCents = plan.price * 100;
     }
     pricingTier = plan.name;
     
@@ -1054,10 +1075,15 @@ async function buildAgreementVariables(
   } else {
     // No subscription - use Launch plan defaults
     const launchPlan = getPlanPricingForTenant(businessType as any, 'launch');
-    monthlyPrice = formatDollarAmount(launchPlan.price);
+    basePriceCents = launchPlan.price * 100;
     pricingTier = launchPlan.name;
     billingStartDate = new Date().toLocaleDateString();
   }
+  
+  // Calculate total monthly amount (base plan + add-ons)
+  const totalMonthlyCents = basePriceCents + (addonsTotal * 100);
+  monthlyPrice = formatCurrency(basePriceCents);
+  const totalMonthlyPrice = formatCurrency(totalMonthlyCents);
   
   return {
     companyName: tenant.name,
@@ -1065,6 +1091,10 @@ async function buildAgreementVariables(
     moduleDescription,
     pricingTier,
     monthlyPrice,
+    totalMonthlyPrice,
+    addonsTotal: addonsTotal > 0 ? `$${addonsTotal}` : '$0',
+    addonsList: addonsList.length > 0 ? addonsList.join(', ') : 'None',
+    enabledAddons: enabledAddons,
     billingStartDate,
     contactEmail: CHAIN_CONTACT_EMAIL,
     contactPhone: CHAIN_CONTACT_PHONE,
@@ -15538,14 +15568,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           subscription: subscriptions,
           tenant: tenants,
           plan: subscriptionPlans,
+          settings: tenantSettings,
         })
         .from(subscriptions)
         .innerJoin(tenants, eq(subscriptions.tenantId, tenants.id))
         .innerJoin(subscriptionPlans, eq(subscriptions.planId, subscriptionPlans.id))
+        .leftJoin(tenantSettings, eq(tenantSettings.tenantId, tenants.id))
         .where(eq(subscriptions.status, 'pending_approval'))
         .orderBy(subscriptions.requestedAt);
 
-      const formattedRequests = pendingSubscriptions.map(({ subscription, tenant, plan }) => ({
+      const formattedRequests = pendingSubscriptions.map(({ subscription, tenant, plan, settings }) => ({
         id: subscription.id,
         tenantId: tenant.id,
         tenantName: tenant.name,
@@ -15559,6 +15591,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         requestedBy: subscription.requestedBy,
         requestedAt: subscription.requestedAt,
         billingEmail: subscription.billingEmail,
+        enabledAddons: settings?.enabledAddons || [],
       }));
 
       res.json(formattedRequests);
