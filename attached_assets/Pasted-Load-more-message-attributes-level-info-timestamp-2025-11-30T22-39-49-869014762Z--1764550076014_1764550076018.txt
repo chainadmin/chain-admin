@@ -1,0 +1,121 @@
+Load more
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:49.869014762Z"}
+{"message":"📋 Arrangement check: {","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:50.241348312Z"}
+{"message":"  hasArrangementId: false,","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:50.241360465Z"}
+{"message":"  hasSimplifiedFlow: false,","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:50.241367218Z"}
+{"message":"  arrangementId: null,","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:50.241372673Z"}
+{"message":"  accountBalance: 216100","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:50.241377641Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:50.241383714Z"}
+{"message":"💰 Using custom payment amount (SMAX arrangement): {","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:50.241388967Z"}
+{"message":"  customPaymentAmountCents: 13000,","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:50.241395492Z"}
+{"message":"  amountDollars: '130.00',","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:50.241402117Z"}
+{"message":"  originalBalance: 216100","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:50.241409418Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:50.241415470Z"}
+{"message":"💵 Final payment amount: { amountCents: 13000, amountDollars: '130.00' }","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:50.241422222Z"}
+{"message":"🏦 Merchant provider: nmi","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:50.246805835Z"}
+{"message":"🔑 NMI credentials check: credentials configured","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:50.246818640Z"}
+{"message":"🟣 Processing payment with NMI (Network Merchants Inc.)","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:50.246826914Z"}
+{"message":"💡 Using SMAX for card storage, NMI for direct sale processing","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:50.246834752Z"}
+{"message":"💰 Payment charge decision: {","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:50.246846119Z"}
+{"message":"  setupRecurring: false,","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:50.246854032Z"}
+{"message":"  arrangementType: 'full_balance',","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:50.246861832Z"}
+{"message":"  firstPaymentDate: '2025-11-30',","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:50.246871947Z"}
+{"message":"  today: '2025-11-30',","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:50.246879394Z"}
+{"message":"  shouldSkipImmediateCharge: false,","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:50.246886331Z"}
+{"message":"  willSaveCard: false","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:50.246893257Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:50.246903138Z"}
+{"message":"💳 Charging NMI payment via direct sale...","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:50.246910957Z"}
+{"message":"🟣 [NMI] Processing sale transaction...","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:50.246918589Z"}
+{"message":"🟣 [NMI] Sale response: { response: '1', responseCode: '100', transactionId: '11420530403' }","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:51.831483339Z"}
+{"message":"📥 NMI transaction response: {","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:51.831495368Z"}
+{"message":"  success: true,","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:51.831503862Z"}
+{"message":"  transactionId: '11420530403',","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:51.831511404Z"}
+{"message":"  responseText: 'Approved'","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:51.831518438Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:51.831526449Z"}
+{"message":"💾 Processing successful payment...","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:51.831534922Z"}
+{"message":"💾 Attempting to create payment record in database: {","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:51.831542155Z"}
+{"message":"  tenantId: 'bc63d182-9691-455a-b372-10dfcad9c11e',","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:51.831549256Z"}
+{"message":"  consumerId: 'ba2a768e-5d05-4347-a3c1-a3844a90689d',","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:51.831556295Z"}
+{"message":"  accountId: '0a83e1fb-3020-464e-b647-5e527aa66552',","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:51.831564426Z"}
+{"message":"  amountCents: 13000,","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:51.831571721Z"}
+{"message":"  transactionId: '11420530403',","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:51.831577298Z"}
+{"message":"  cardLast4: '8678',","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:51.831582709Z"}
+{"message":"  timestamp: '2025-11-30T22:39:51.826Z'","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:51.831587752Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:51.831592894Z"}
+{"message":"  accountId: '0a83e1fb-3020-464e-b647-5e527aa66552'","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.132687611Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.132697364Z"}
+{"message":"  status: 'completed',","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.132700506Z"}
+{"message":"  transactionId: '11420530403'","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.132710756Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.132720361Z"}
+{"message":"✅ Automatically organized account 0a83e1fb-3020-464e-b647-5e527aa66552 into folder \"Payments - November 2025\"","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.132727021Z"}
+{"message":"🔔 System event emitted: payment_received {","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.132727658Z"}
+{"message":"  tenantId: 'bc63d182-9691-455a-b372-10dfcad9c11e',","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.132735313Z"}
+{"message":"✅ Payment record created successfully: {","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.132740150Z"}
+{"message":"  consumerId: 'ba2a768e-5d05-4347-a3c1-a3844a90689d',","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.132744151Z"}
+{"message":"  paymentId: '729fbc27-5a6e-4c12-9845-608b7b68d86c',","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.132747735Z"}
+{"message":"  amountCents: 13000,","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.132754304Z"}
+{"message":"No active sequences found for event: payment_received","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.134842520Z"}
+{"message":"📧 Payment Email Notification Check: {","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.703294516Z"}
+{"message":"  status: 'PROCESSED'","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.703297722Z"}
+{"message":"  hasConsumer: true,","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.703311985Z"}
+{"message":"  consumerName: 'Jeremy Umphrey',","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.703321990Z"}
+{"message":"  accountNumber: '19716755',","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.703329110Z"}
+{"message":"  amountCents: 13000,","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.703339080Z"}
+{"message":"  amountDollars: '130.00',","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.703349533Z"}
+{"message":"  transactionId: '11420530403'","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.703358625Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.703367002Z"}
+{"message":"📧 Sending payment notification to tenant admins...","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.703375691Z"}
+{"message":"[Notification] No admin users found for tenant Waypoint Solutions","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.703385108Z"}
+{"message":"📧 Sending payment notification to contact email...","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.703393842Z"}
+{"message":"⚠️ No contact email configured for tenant bc63d182-9691-455a-b372-10dfcad9c11e - skipping payment notification","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.703401185Z"}
+{"message":"✅ Payment notifications sent successfully","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.703415136Z"}
+{"message":"📤 NMI SMAX Sync Check: {","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.703425992Z"}
+{"message":"  smaxEnabled: true,","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.703433077Z"}
+{"message":"  hasFilenumber: true,","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.703445647Z"}
+{"message":"  filenumber: '739332',","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.703452771Z"}
+{"message":"  hasConsumer: true,","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.703461066Z"}
+{"message":"  amountCents: 13000,","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.703471076Z"}
+{"message":"  transactionId: '11420530403'","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.703478892Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.703485807Z"}
+{"message":"📤 Sending payment to SMAX: {","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.703492381Z"}
+{"message":"  filenumber: '739332',","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.703499528Z"}
+{"message":"  payorName: 'Jeremy Umphrey',","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.703506769Z"}
+{"message":"  amount: '130.00',","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.703514204Z"}
+{"message":"  transactionId: '11420530403',","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.703521032Z"}
+{"message":"    '  \"checkzip\": \"\",\\n' +","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.705546398Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.706076160Z"}
+{"message":"📤 Sending payment to SMAX: {","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.706082864Z"}
+{"message":"  filenumber: '739332',","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.706093384Z"}
+{"message":"  amount: '130.00',","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.706100354Z"}
+{"message":"  method: 'CREDIT CARD',","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.706106366Z"}
+{"message":"  baseUrl: 'https://api.smaxcollectionsoftware.com:8000',","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.706112678Z"}
+{"message":"  paymentData: '{\\n' +","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.706119035Z"}
+{"message":"    '  \"filenumber\": \"739332\",\\n' +","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.706124826Z"}
+{"message":"    '  \"paymentdate\": \"2025-11-30\",\\n' +","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.706132234Z"}
+{"message":"    '  \"payorname\": \"Jeremy Umphrey\",\\n' +","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.706138066Z"}
+{"message":"    '  \"paymentmethod\": \"CREDIT CARD\",\\n' +","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.706144099Z"}
+{"message":"    '  \"paymentstatus\": \"PROCESSED\",\\n' +","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.706149918Z"}
+{"message":"    '  \"typeofpayment\": \"Online\",\\n' +","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.706155820Z"}
+{"message":"    '  \"checkaccountnumber\": \"\",\\n' +","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.706161499Z"}
+{"message":"    '  \"checkroutingnumber\": \"\",\\n' +","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.706168154Z"}
+{"message":"    '  \"cardtype\": \"\",\\n' +","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.706177027Z"}
+{"message":"    '  \"cardnumber\": \"****8678\",\\n' +","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.706183253Z"}
+{"message":"    '  \"threedigitnumber\": \"\",\\n' +","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.706189364Z"}
+{"message":"    '  \"cardexpirationmonth\": \"10\",\\n' +","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.706195712Z"}
+{"message":"    '  \"cardexpirationyear\": \"2030\",\\n' +","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.706202184Z"}
+{"message":"    '  \"cardexpirationdate\": \"10/30\",\\n' +","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.706208102Z"}
+{"message":"    '  \"paymentamount\": \"130.00\",\\n' +","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.706214036Z"}
+{"message":"    '  \"checkaccounttype\": \"\",\\n' +","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.706219838Z"}
+{"message":"    '  \"checkaddress\": \"\",\\n' +","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.706227602Z"}
+{"message":"    '  \"checkcity\": \"\",\\n' +","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.706233425Z"}
+{"message":"    '  \"checkstate\": \"\",\\n' +","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.706239937Z"}
+{"message":"    '  \"acceptedfees\": \"0.00\",\\n' +","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.707611017Z"}
+{"message":"    '  \"printed\": \"No\",\\n' +","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.707618926Z"}
+{"message":"    '  \"invoice\": \"11420530403\"\\n' +","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.707624578Z"}
+{"message":"    '}'","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.707630225Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:52.707636344Z"}
+{"message":"✅ SMAX payment inserted successfully: {","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:53.710687421Z"}
+{"message":"  result: { success: 'Payment Inserted Successfully' },","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:53.710694965Z"}
+{"message":"  state: 'SUCCESS'","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:53.710701564Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:53.710717457Z"}
+{"message":"✅ NMI payment synced to SMAX","attributes":{"level":"info"},"timestamp":"2025-11-30T22:39:53.710727300Z"}
