@@ -915,7 +915,7 @@ export default function Billing() {
                       <Bot className="h-5 w-5 text-purple-400" />
                       <h3 className="text-base font-semibold text-white">AI Auto-Response</h3>
                       <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-xs font-semibold text-purple-200 border border-purple-400/30">
-                        $0.08/response after quota
+                        $50/mo
                       </span>
                     </div>
                     <p className="text-sm text-blue-100/70">
@@ -1053,7 +1053,7 @@ export default function Billing() {
                   </AlertDialogTitle>
                   <AlertDialogDescription className="space-y-3 text-blue-100/80">
                     <p>
-                      By enabling the AI Auto-Response add-on, you'll get plan-based response quotas included in your subscription.
+                      By enabling the AI Auto-Response add-on for <strong className="text-amber-300">$50/month</strong>, you'll get plan-based response quotas included in your subscription.
                     </p>
                     <p className="font-semibold text-white">
                       Response Quotas by Plan:
@@ -1088,7 +1088,7 @@ export default function Billing() {
                     className="bg-gradient-to-r from-purple-500 to-indigo-500 text-white hover:from-purple-400 hover:to-indigo-400"
                     data-testid="button-confirm-auto-response-addon"
                   >
-                    Enable AI Auto-Response
+                    Enable for $50/month
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
