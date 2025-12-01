@@ -246,6 +246,7 @@ export const emailTracking = pgTable("email_tracking", {
 export const emailLogs = pgTable("email_logs", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "set null" }), // Link to consumer for conversation tracking
   messageId: text("message_id"), // Postmark message ID
   fromEmail: text("from_email").notNull(),
   toEmail: text("to_email").notNull(),

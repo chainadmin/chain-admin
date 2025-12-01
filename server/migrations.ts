@@ -948,6 +948,15 @@ export async function runMigrations() {
       console.log('  ⚠ message_body (already exists or error)');
     }
     
+    // Add consumer_id column to email_logs for conversation tracking
+    console.log('Adding consumer_id column to email_logs...');
+    try {
+      await client.query(`ALTER TABLE email_logs ADD COLUMN IF NOT EXISTS consumer_id UUID REFERENCES consumers(id) ON DELETE SET NULL`);
+      console.log('  ✓ consumer_id');
+    } catch (err) {
+      console.log('  ⚠ consumer_id (already exists or error)');
+    }
+    
     console.log('✅ Database migrations completed successfully');
   } catch (error: any) {
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {

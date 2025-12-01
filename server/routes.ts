@@ -3081,14 +3081,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           type: 'reply-response',
           tenantId: tenantId,
           originalEmailId: id,
-          consumerId: originalEmail.consumerId,
         },
         tenantId: tenantId,
+        consumerId: originalEmail.consumerId || undefined, // Link reply to consumer for conversation tracking
+      });
+
+      console.log('📧 Email reply sent:', {
+        to: originalEmail.fromEmail,
+        subject,
+        consumerId: originalEmail.consumerId,
+        messageId: result.messageId,
+        success: result.success
       });
 
       res.json({ 
         message: 'Response sent successfully',
-        result 
+        success: result.success
       });
     } catch (error) {
       console.error("Error sending email response:", error);

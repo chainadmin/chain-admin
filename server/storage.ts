@@ -119,7 +119,7 @@ import {
 } from "@shared/schema";
 import { messagingPlans, EMAIL_OVERAGE_RATE_PER_EMAIL, SMS_OVERAGE_RATE_PER_SEGMENT, DOCUMENT_SIGNING_ADDON_PRICE, MOBILE_APP_BRANDING_MONTHLY, AI_AUTO_RESPONSE_ADDON_PRICE, AUTO_RESPONSE_INCLUDED_RESPONSES, AUTO_RESPONSE_OVERAGE_PER_RESPONSE, type MessagingPlanId } from "@shared/billing-plans";
 import { db } from "./db";
-import { eq, and, desc, sql, inArray, gte, lte } from "drizzle-orm";
+import { eq, and, or, desc, sql, inArray, gte, lte } from "drizzle-orm";
 import {
   ensureArrangementOptionsSchema,
   ensureDocumentsSchema,
@@ -3612,14 +3612,20 @@ export class DatabaseStorage implements IStorage {
       return { emails: { sent: [], received: [] }, sms: { sent: [], received: [] } };
     }
 
-    // Get sent emails (from email logs)
+    // Get sent emails (from email logs) - match by consumerId OR toEmail for backward compatibility
+    // Build conditions array to avoid passing undefined to or()
+    const emailConditions = [eq(emailLogs.consumerId, consumerId)];
+    if (consumer.email) {
+      emailConditions.push(eq(emailLogs.toEmail, consumer.email));
+    }
+    
     const sentEmails = await db
       .select()
       .from(emailLogs)
       .where(
         and(
           eq(emailLogs.tenantId, tenantId),
-          eq(emailLogs.toEmail, consumer.email)
+          or(...emailConditions)
         )
       )
       .orderBy(desc(emailLogs.sentAt));

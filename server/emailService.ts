@@ -25,6 +25,7 @@ export interface EmailOptions {
   tag?: string;
   metadata?: Record<string, MetadataValue>;
   tenantId?: string; // For usage tracking
+  consumerId?: string; // For conversation tracking - link email to consumer
 }
 
 // Default sender address - verified in Postmark
@@ -78,6 +79,7 @@ export class EmailService {
       if (options.tenantId) {
         await db.insert(emailLogs).values({
           tenantId: options.tenantId,
+          consumerId: options.consumerId || null, // Link to consumer for conversation tracking
           messageId: result.MessageID,
           fromEmail: fromEmail,
           toEmail: options.to,
