@@ -59,9 +59,27 @@ export class EmailService {
       
       const normalizedMetadata = this.normalizeMetadata(options.metadata);
 
-      // Use Postmark's inbound address for all replies so they route to our webhook
-      const POSTMARK_INBOUND_EMAIL = '0f090c8f2b6c0860ffa1c36028828ba0@inbound.postmarkapp.com';
-      const replyToEmail = options.replyTo || POSTMARK_INBOUND_EMAIL;
+      // Determine Reply-To address:
+      // - Use provided replyTo if set
+      // - Use tenant's slug-based email (slug@chainsoftwaregroup.com) for clean, branded replies
+      // - Fall back to Postmark inbound address only if no tenant info available
+      // Replies to chainsoftwaregroup.com domain are routed to our webhook via Postmark inbound processing
+      let replyToEmail = options.replyTo;
+      if (!replyToEmail && options.tenantId) {
+        // Get tenant slug for branded reply-to
+        const [tenantInfo] = await db
+          .select({ slug: tenants.slug })
+          .from(tenants)
+          .where(eq(tenants.id, options.tenantId))
+          .limit(1);
+        if (tenantInfo?.slug) {
+          replyToEmail = `${tenantInfo.slug}@chainsoftwaregroup.com`;
+        }
+      }
+      // Final fallback to Postmark inbound address
+      if (!replyToEmail) {
+        replyToEmail = '0f090c8f2b6c0860ffa1c36028828ba0@inbound.postmarkapp.com';
+      }
 
       const result = await postmarkClient.sendEmail({
         From: fromEmail,
@@ -128,6 +146,7 @@ export class EmailService {
             let fromEmail = email.from || DEFAULT_FROM_EMAIL;
             
             // Get tenant-specific sender email if tenantId is provided
+            let tenantSlug: string | null = null;
             if (email.tenantId) {
               const [tenant] = await db
                 .select({ customSenderEmail: tenants.customSenderEmail, slug: tenants.slug, name: tenants.name })
@@ -136,6 +155,7 @@ export class EmailService {
                 .limit(1);
               
               if (tenant) {
+                tenantSlug = tenant.slug;
                 if (tenant.customSenderEmail) {
                   fromEmail = tenant.customSenderEmail;
                 } else {
@@ -146,9 +166,14 @@ export class EmailService {
             
             const textBody = email.text || this.htmlToText(email.html);
             const normalizedMetadata = this.normalizeMetadata(email.metadata);
-            // Use Postmark's inbound address for all replies so they route to our webhook
-            const POSTMARK_INBOUND_EMAIL = '0f090c8f2b6c0860ffa1c36028828ba0@inbound.postmarkapp.com';
-            const replyToEmail = email.replyTo || POSTMARK_INBOUND_EMAIL;
+            // Use tenant's slug-based email for branded replies, fall back to Postmark inbound
+            let replyToEmail = email.replyTo;
+            if (!replyToEmail && tenantSlug) {
+              replyToEmail = `${tenantSlug}@chainsoftwaregroup.com`;
+            }
+            if (!replyToEmail) {
+              replyToEmail = '0f090c8f2b6c0860ffa1c36028828ba0@inbound.postmarkapp.com';
+            }
             
             return {
               From: fromEmail,

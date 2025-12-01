@@ -17032,10 +17032,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Extract sender email and name
       const fromEmail = (From || '').toLowerCase().trim();
       const fromName = FromFull?.Name || fromEmail.split('@')[0];
+      // Declare toEmail at top level so it's available for createEmailReply
+      const toEmail = (To || '').toLowerCase().trim();
       
       console.log('📧 Email details:', {
         from: fromEmail,
-        to: To,
+        to: toEmail,
         subject: Subject,
       });
 
@@ -17072,7 +17074,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Fallback: try to match by To address (for older emails or direct sends)
       if (!matchedTenant) {
-        const toEmail = (To || '').toLowerCase().trim();
         const allTenants = await storage.getAllTenants();
         
         for (const tenant of allTenants) {
@@ -17093,20 +17094,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Try to find the consumer by email
       const consumer = await storage.getConsumerByEmailAndTenant(fromEmail, matchedTenant.slug);
       
-      // Store the reply
-      await storage.createEmailReply({
-        tenantId: matchedTenant.id,
-        consumerId: consumer?.id || null,
-        fromEmail,
-        toEmail,
-        subject: Subject || '(No Subject)',
-        textBody: TextBody || '',
-        htmlBody: HtmlBody || '',
-        messageId: MessageID,
-        isRead: false,
-      });
+      // Store the reply with error logging
+      try {
+        console.log('📝 Storing email reply:', {
+          tenantId: matchedTenant.id,
+          consumerId: consumer?.id || null,
+          fromEmail,
+          toEmail,
+          subject: Subject || '(No Subject)',
+          messageId: MessageID,
+        });
+        
+        await storage.createEmailReply({
+          tenantId: matchedTenant.id,
+          consumerId: consumer?.id || null,
+          fromEmail,
+          toEmail,
+          subject: Subject || '(No Subject)',
+          textBody: TextBody || '',
+          htmlBody: HtmlBody || '',
+          messageId: MessageID,
+          isRead: false,
+        });
 
-      console.log('✅ Email reply stored successfully');
+        console.log('✅ Email reply stored successfully');
+      } catch (storeError) {
+        console.error('❌ Failed to store email reply:', storeError);
+        throw storeError;
+      }
       
       // Check if auto-response is enabled for this tenant
       const [autoResponseCfg] = await db
