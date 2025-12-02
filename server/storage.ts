@@ -911,6 +911,10 @@ export class DatabaseStorage implements IStorage {
       if (!existingConsumerWithTenant.phone && consumerData.phone) {
         updates.phone = consumerData.phone;
       }
+      // Always update ssnLast4 if provided (CSV is source of truth for this secure field)
+      if (consumerData.ssnLast4 && consumerData.ssnLast4 !== existingConsumerWithTenant.ssnLast4) {
+        updates.ssnLast4 = consumerData.ssnLast4;
+      }
       
       if (Object.keys(updates).length > 0) {
         const [updatedConsumer] = await db.update(consumers)

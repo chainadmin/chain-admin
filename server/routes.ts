@@ -74,6 +74,12 @@ const csvUploadSchema = z.object({
     lastName: z.string(),
     email: z.string().email(),
     phone: z.string().optional(),
+    dateOfBirth: z.string().optional(),
+    address: z.string().optional(),
+    city: z.string().optional(),
+    state: z.string().optional(),
+    zipCode: z.string().optional(),
+    ssnLast4: z.string().optional(),
     additionalData: z.record(z.any()).optional(),
   })),
   accounts: z.array(z.object({
@@ -82,7 +88,8 @@ const csvUploadSchema = z.object({
     balanceCents: z.number(),
     dueDate: z.string().optional(),
     consumerEmail: z.string().email(),
-    status: z.string().optional(), // Account status (for blocked status checking)
+    filenumber: z.string().optional(),
+    status: z.string().optional(),
     additionalData: z.record(z.any()).optional(),
   })),
 });
@@ -280,17 +287,28 @@ function replaceTemplateVariables(
 
   // Get additional account fields from additionalData
   const accountData = account?.additionalData || {};
+  const consumerData = consumer?.additionalData || {};
   
-  // Smart SSN extraction - check multiple field names and auto-extract last 4 if full SSN provided
+  // Smart SSN extraction - check consumer.ssnLast4 first, then additionalData fields
   let ssnLast4 = '';
-  const ssnFieldNames = ['ssnLast4', 'ssn_last_4', 'ssn', 'socialSecurityNumber', 'social_security_number'];
-  for (const fieldName of ssnFieldNames) {
-    const ssnValue = accountData?.[fieldName];
-    if (ssnValue && String(ssnValue).trim()) {
-      const ssnStr = String(ssnValue).replace(/\D/g, ''); // Remove non-digits
-      if (ssnStr.length >= 4) {
-        ssnLast4 = ssnStr.slice(-4); // Get last 4 digits
-        break;
+  // First check the consumer's direct ssnLast4 field
+  if (consumer?.ssnLast4 && String(consumer.ssnLast4).trim()) {
+    const ssnStr = String(consumer.ssnLast4).replace(/\D/g, '');
+    if (ssnStr.length >= 4) {
+      ssnLast4 = ssnStr.slice(-4);
+    }
+  }
+  // If not found, check additionalData fields in consumer and account
+  if (!ssnLast4) {
+    const ssnFieldNames = ['ssnLast4', 'ssn_last_4', 'ssn', 'socialSecurityNumber', 'social_security_number', 'socialsecuritynumber'];
+    for (const fieldName of ssnFieldNames) {
+      const ssnValue = consumerData?.[fieldName] || accountData?.[fieldName];
+      if (ssnValue && String(ssnValue).trim()) {
+        const ssnStr = String(ssnValue).replace(/\D/g, ''); // Remove non-digits
+        if (ssnStr.length >= 4) {
+          ssnLast4 = ssnStr.slice(-4); // Get last 4 digits
+          break;
+        }
       }
     }
   }
@@ -1844,7 +1862,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { consumers: consumersData, accounts: accountsData, folderId } = req.body;
       
-      // Validate input data
+      // Validate input data with schema
+      try {
+        csvUploadSchema.parse({ consumers: consumersData, accounts: accountsData });
+      } catch (parseError: any) {
+        console.error("CSV upload validation error:", parseError.errors);
+        return res.status(400).json({ message: "Invalid CSV data format", errors: parseError.errors });
+      }
+      
+      // Additional array validation
       if (!consumersData || !Array.isArray(consumersData)) {
         return res.status(400).json({ message: "Invalid consumer data format" });
       }

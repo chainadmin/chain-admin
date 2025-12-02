@@ -645,6 +645,7 @@ export default function Communications() {
     { label: "State", value: "{{state}}", category: "consumer" },
     { label: "Zip Code", value: "{{zipCode}}", category: "consumer" },
     { label: "Full Address", value: "{{fullAddress}}", category: "consumer" },
+    { label: "SSN Last 4", value: "{{ssnLast4}}", category: "consumer" },
     { label: "Account Number", value: "{{accountNumber}}", category: "account" },
     { label: "File Number", value: "{{filenumber}}", category: "account" },
     { label: "Account ID", value: "{{accountId}}", category: "account" },
@@ -1009,6 +1010,7 @@ export default function Communications() {
     output = output.replace(/\{\{\s*zipCode\s*\}\}/gi, italic("ZIP auto-fills for each recipient"));
     output = output.replace(/\{\{\s*fullAddress\s*\}\}/gi, italic("Full address auto-fills for each recipient"));
     output = output.replace(/\{\{\s*consumerFullAddress\s*\}\}/gi, italic("Full address auto-fills for each recipient"));
+    output = output.replace(/\{\{\s*ssnLast4\s*\}\}/gi, italic("Last 4 of SSN auto-fills for each recipient"));
     output = output.replace(/\{\{\s*unsubscribeLink\s*\}\}/gi, context.sampleUnsubscribeUrl);
     output = output.replace(/\{\{\s*unsubscribeUrl\s*\}\}/gi, context.sampleUnsubscribeUrl);
     return output;

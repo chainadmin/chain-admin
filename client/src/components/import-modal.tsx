@@ -97,17 +97,18 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
 
         // Define standard column mappings
         const standardConsumerFields = [
-          'consumer_first_name', 'first_name', 
-          'consumer_last_name', 'last_name', 
-          'consumer_email', 'email', 
-          'consumer_phone', 'phone',
-          'date_of_birth', 'dob', 'dateofbirth', 'consumer_dob', 'consumer_date_of_birth',
+          'consumer_first_name', 'first_name', 'firstname',
+          'consumer_last_name', 'last_name', 'lastname',
+          'consumer_email', 'email', 'emailaddress',
+          'consumer_phone', 'phone', 'primaryphone',
+          'date_of_birth', 'dob', 'dateofbirth', 'consumer_dob', 'consumer_date_of_birth', 'birthdate',
           'address', 'consumer_address',
           'city', 'consumer_city',
           'state', 'consumer_state',
-          'zip_code', 'zipcode', 'zip', 'consumer_zip', 'consumer_zip_code'
+          'zip_code', 'zipcode', 'zip', 'consumer_zip', 'consumer_zip_code',
+          'socialsecuritynumber', 'ssn', 'social_security_number', 'ssn_last4', 'ssnlast4'
         ];
-        const standardAccountFields = ['account_number', 'account', 'filenumber', 'file_number', 'creditor', 'balance', 'due_date'];
+        const standardAccountFields = ['account_number', 'account', 'accountnumber', 'filenumber', 'file_number', 'creditor', 'originalcreditor', 'balance', 'due_date', 'status', 'statusname'];
         
         for (let i = 1; i < lines.length; i++) {
           const values = lines[i].split(',').map(v => v.trim());
@@ -118,11 +119,11 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
           });
 
           // Extract consumer data
-          const consumerKey = row.consumer_email || row.email;
+          const consumerKey = row.consumer_email || row.email || row.emailaddress;
           if (consumerKey && !consumers.has(consumerKey)) {
             // Extract date of birth from various possible column names
             const dobValue = row.date_of_birth || row.dob || row.dateofbirth || 
-                           row.consumer_dob || row.consumer_date_of_birth || '';
+                           row.consumer_dob || row.consumer_date_of_birth || row.birthdate || '';
             
             // Extract address fields
             const addressValue = row.address || row.consumer_address || '';
@@ -130,6 +131,11 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
             const stateValue = row.state || row.consumer_state || '';
             const zipValue = row.zip_code || row.zipcode || row.zip || 
                            row.consumer_zip || row.consumer_zip_code || '';
+            
+            // Extract SSN last 4 digits (from full SSN or just last 4)
+            const ssnRaw = row.socialsecuritynumber || row.ssn || row.social_security_number || 
+                          row.ssn_last4 || row.ssnlast4 || '';
+            const ssnLast4 = ssnRaw ? ssnRaw.replace(/\D/g, '').slice(-4) : '';
             
             // Extract additional consumer data (any non-standard columns)
             const additionalConsumerData: any = {};
@@ -142,22 +148,25 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
             });
 
             consumers.set(consumerKey, {
-              firstName: row.consumer_first_name || row.first_name || '',
-              lastName: row.consumer_last_name || row.last_name || '',
+              firstName: row.consumer_first_name || row.first_name || row.firstname || '',
+              lastName: row.consumer_last_name || row.last_name || row.lastname || '',
               email: consumerKey,
-              phone: row.consumer_phone || row.phone || '',
+              phone: row.consumer_phone || row.phone || row.primaryphone || '',
               dateOfBirth: dobValue,
               address: addressValue,
               city: cityValue,
               state: stateValue,
               zipCode: zipValue,
+              ssnLast4: ssnLast4,
               additionalData: additionalConsumerData,
             });
           }
 
           // Extract account data - only if we have a valid consumer email, creditor, and balance
           // Filenumber is optional unless SMAX is enabled
-          if (consumerKey && row.creditor && row.balance) {
+          const creditorValue = row.creditor || row.originalcreditor || '';
+          const balanceValue = row.balance || '';
+          if (consumerKey && creditorValue && balanceValue) {
             // Extract additional account data (any non-standard columns)
             const additionalAccountData: any = {};
             headers.forEach(header => {
@@ -169,11 +178,12 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
             });
 
             accounts.push({
-              accountNumber: row.account_number || row.account || '',
+              accountNumber: row.account_number || row.account || row.accountnumber || '',
               filenumber: row.filenumber || row.file_number || '',
-              creditor: row.creditor,
-              balanceCents: Math.round(parseFloat(row.balance.replace(/[^0-9.-]/g, '')) * 100),
+              creditor: creditorValue,
+              balanceCents: Math.round(parseFloat(balanceValue.replace(/[^0-9.-]/g, '')) * 100),
               dueDate: row.due_date || '',
+              status: row.status || row.statusname || '',
               consumerEmail: consumerKey,
               additionalData: additionalAccountData,
             });
