@@ -241,7 +241,7 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
           !standardConsumerFields.includes(h) && !standardAccountFields.includes(h)
         );
         
-        // Validate that all consumers have required fields including dateOfBirth
+        // Validate that all consumers have required fields
         const missingDOBConsumers = data.consumers.filter((c: any) => !c.dateOfBirth);
         const missingNameConsumers = data.consumers.filter((c: any) => !c.firstName || !c.lastName);
         const missingFilenumberAccounts = data.accounts.filter((a: any) => !a.filenumber);
@@ -250,8 +250,11 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
         const smaxEnabled = (settings as any)?.smaxEnabled ?? false;
         
         const validationErrors = [];
+        const validationWarnings = [];
+        
+        // DOB is now a warning, not a blocking error
         if (missingDOBConsumers.length > 0) {
-          validationErrors.push(`${missingDOBConsumers.length} consumer(s) missing date of birth (required for account linking)`);
+          validationWarnings.push(`${missingDOBConsumers.length} consumer(s) missing date of birth (mobile login may not work for these consumers)`);
         }
         if (missingNameConsumers.length > 0) {
           validationErrors.push(`${missingNameConsumers.length} consumer(s) missing first or last name`);
@@ -269,6 +272,7 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
           missingNameCount: missingNameConsumers.length,
           missingFilenumberCount: missingFilenumberAccounts.length,
           validationErrors: validationErrors,
+          validationWarnings: validationWarnings,
           isValid: data.consumers.length > 0 && data.accounts.length > 0 && validationErrors.length === 0,
         });
       } catch (error) {
@@ -440,28 +444,61 @@ Jane,Smith,jane.smith@email.com,1990-08-22,FILE789012,Medical Services,875.25,ME
 
           {/* Validation Results */}
           {validationResults && (
-            <div className={`border rounded-md p-2 ${
-              validationResults.isValid 
-                ? 'bg-green-50 border-green-200' 
-                : 'bg-red-50 border-red-200'
-            }`}>
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <i className={`fas text-sm ${
-                    validationResults.isValid ? 'fa-check-circle text-green-400' : 'fa-exclamation-circle text-red-400'
-                  }`}></i>
+            <>
+              {/* Errors (blocking) */}
+              {validationResults.validationErrors?.length > 0 && (
+                <div className="border rounded-md p-2 bg-red-50 border-red-200">
+                  <div className="flex">
+                    <div className="flex-shrink-0">
+                      <i className="fas fa-exclamation-circle text-red-400 text-sm"></i>
+                    </div>
+                    <div className="ml-2">
+                      <h3 className="text-xs font-medium text-red-800">Validation errors found:</h3>
+                      <ul className="mt-0.5 text-xs text-red-700 list-disc list-inside space-y-0.5">
+                        {validationResults.validationErrors.map((error: string, index: number) => (
+                          <li key={index}>{error}</li>
+                        ))}
+                      </ul>
+                      <p className="mt-1 text-xs text-red-600">
+                        Please fix these errors before importing.
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                <div className="ml-2">
-                  <h3 className={`text-xs font-medium ${
-                    validationResults.isValid ? 'text-green-800' : 'text-red-800'
-                  }`}>
-                    {validationResults.isValid ? 'File validated successfully' : 'Validation failed'}
-                  </h3>
-                  <div className={`mt-1 text-xs leading-snug ${
-                    validationResults.isValid ? 'text-green-700' : 'text-red-700'
-                  }`}>
-                    {validationResults.isValid ? (
-                      <>
+              )}
+              
+              {/* Warnings (non-blocking) */}
+              {validationResults.validationWarnings?.length > 0 && (
+                <div className="border rounded-md p-2 bg-yellow-50 border-yellow-200">
+                  <div className="flex">
+                    <div className="flex-shrink-0">
+                      <i className="fas fa-exclamation-triangle text-yellow-500 text-sm"></i>
+                    </div>
+                    <div className="ml-2">
+                      <h3 className="text-xs font-medium text-yellow-800">Warnings:</h3>
+                      <ul className="mt-0.5 text-xs text-yellow-700 list-disc list-inside space-y-0.5">
+                        {validationResults.validationWarnings.map((warning: string, index: number) => (
+                          <li key={index}>{warning}</li>
+                        ))}
+                      </ul>
+                      <p className="mt-1 text-xs text-yellow-600">
+                        You can still import, but some features may be limited.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Success state */}
+              {validationResults.isValid && (
+                <div className="border rounded-md p-2 bg-green-50 border-green-200">
+                  <div className="flex">
+                    <div className="flex-shrink-0">
+                      <i className="fas fa-check-circle text-green-400 text-sm"></i>
+                    </div>
+                    <div className="ml-2">
+                      <h3 className="text-xs font-medium text-green-800">File validated successfully</h3>
+                      <div className="mt-1 text-xs text-green-700 leading-snug">
                         <p>
                           Ready to import {validationResults.accountsCount} accounts for {validationResults.consumersCount} consumers
                         </p>
@@ -470,24 +507,48 @@ Jane,Smith,jane.smith@email.com,1990-08-22,FILE789012,Medical Services,875.25,ME
                             Additional fields: {validationResults.additionalColumns.join(', ')}
                           </p>
                         )}
-                      </>
-                    ) : (
-                      <>
-                        <p className="font-medium">Validation errors found:</p>
-                        <ul className="mt-0.5 list-disc list-inside space-y-0.5">
-                          {validationResults.validationErrors?.map((error: string, index: number) => (
-                            <li key={index}>{error}</li>
-                          ))}
-                        </ul>
-                        <p className="mt-1 text-xs">
-                          Please ensure your CSV includes: first_name, last_name, email, date_of_birth (YYYY-MM-DD format), filenumber
-                        </p>
-                      </>
-                    )}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
+              )}
+              
+              {/* Accounts Preview with scrolling */}
+              {parsedData && parsedData.accounts.length > 0 && (
+                <div className="border rounded-md border-white/20 bg-white/5 p-2">
+                  <h4 className="text-xs font-medium text-blue-100 mb-1.5">
+                    Preview ({Math.min(parsedData.accounts.length, 5)} of {parsedData.accounts.length} accounts)
+                  </h4>
+                  <div className="max-h-40 overflow-y-auto">
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-0 bg-[#0b1733]">
+                        <tr className="text-left text-blue-200/70 border-b border-white/10">
+                          <th className="pb-1 pr-2">Consumer</th>
+                          <th className="pb-1 pr-2">Creditor</th>
+                          <th className="pb-1 pr-2">Balance</th>
+                          <th className="pb-1">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-blue-100/90">
+                        {parsedData.accounts.slice(0, 5).map((account: any, index: number) => {
+                          const consumer = parsedData.consumers.find((c: any) => c.email === account.consumerEmail);
+                          return (
+                            <tr key={index} className="border-b border-white/5">
+                              <td className="py-1 pr-2 truncate max-w-[120px]">
+                                {consumer ? `${consumer.firstName} ${consumer.lastName}` : account.consumerEmail}
+                              </td>
+                              <td className="py-1 pr-2 truncate max-w-[100px]">{account.creditor}</td>
+                              <td className="py-1 pr-2">${(account.balanceCents / 100).toFixed(2)}</td>
+                              <td className="py-1 truncate max-w-[80px]">{account.status || '-'}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
 
