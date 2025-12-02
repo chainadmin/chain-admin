@@ -195,15 +195,8 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
           // Extract consumer data using flexible column matching
           const consumerKey = getColumnValue(row, 'consumer_email', 'email', 'emailaddress', 'email_address');
           if (consumerKey && !consumers.has(consumerKey)) {
-            // Extract date of birth from various possible column names
-            const dobValue = getColumnValue(row, 'date_of_birth', 'dob', 'dateofbirth', 'consumer_dob', 
-                           'consumer_date_of_birth', 'birthdate', 'birth_date');
-            
-            // Debug: log first consumer's DOB value
-            if (consumers.size === 0) {
-              console.log('First row data:', row);
-              console.log('DOB value extracted:', dobValue);
-            }
+            // Extract date of birth - use special helper that finds birthdate column
+            const dobValue = getDOBValue(row);
             
             // Extract phone from various possible column names (prefer primary, then cell, then others)
             const phoneValue = getColumnValue(row, 'consumer_phone', 'phone', 'primaryphone', 'primary_phone',
