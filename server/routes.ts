@@ -14807,6 +14807,165 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================
+  // Platform-Level Payment Processing (Chain's Own Authorize.net)
+  // This is separate from tenant consumer payment processing
+  // Uses CHAIN_AUTHNET_API_LOGIN_ID and CHAIN_AUTHNET_TRANSACTION_KEY
+  // ============================================
+  
+  app.post('/api/billing/platform-payment', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+
+      // Get Chain's platform Authorize.net credentials from environment variables
+      const chainApiLoginId = process.env.CHAIN_AUTHNET_API_LOGIN_ID;
+      const chainTransactionKey = process.env.CHAIN_AUTHNET_TRANSACTION_KEY;
+      const chainUseSandbox = process.env.CHAIN_AUTHNET_SANDBOX !== 'false'; // Default to sandbox
+
+      if (!chainApiLoginId || !chainTransactionKey) {
+        console.log('⚠️ Platform payment credentials not configured');
+        return res.status(503).json({
+          success: false,
+          message: "Payment processing is not yet configured. Please contact Chain Software Group at (716) 534-3086.",
+        });
+      }
+
+      const {
+        paymentMethod,
+        amount,
+        // Card fields
+        cardholderName,
+        cardNumber,
+        expiryMonth,
+        expiryYear,
+        cvv,
+        billingAddress,
+        billingCity,
+        billingState,
+        billingZip,
+        // ACH fields
+        accountHolderName,
+        routingNumber,
+        accountNumber,
+        // Invoice reference
+        invoiceId,
+      } = req.body;
+
+      // Validate payment amount
+      if (!amount || amount <= 0) {
+        return res.status(400).json({ success: false, message: "Invalid payment amount" });
+      }
+
+      // Get tenant info for logging
+      const tenant = await storage.getTenant(tenantId);
+      const tenantName = tenant?.name || 'Unknown';
+
+      console.log(`💳 Platform payment request from ${tenantName}:`, {
+        paymentMethod,
+        amount,
+        invoiceId: invoiceId || 'none',
+      });
+
+      const authnetService = new AuthnetService({
+        apiLoginId: chainApiLoginId,
+        transactionKey: chainTransactionKey,
+        useSandbox: chainUseSandbox,
+      });
+
+      let paymentResult;
+
+      if (paymentMethod === 'card') {
+        // Validate card fields
+        if (!cardholderName || !cardNumber || !expiryMonth || !expiryYear || !cvv) {
+          return res.status(400).json({ success: false, message: "Missing required card information" });
+        }
+
+        // Format expiration date (MMYY)
+        const expirationDate = `${expiryMonth.padStart(2, '0')}${expiryYear.padStart(2, '0')}`;
+        
+        // Remove spaces from card number
+        const cleanCardNumber = cardNumber.replace(/\s/g, '');
+
+        // Process card payment directly
+        paymentResult = await authnetService.processPayment({
+          amount: amount,
+          cardNumber: cleanCardNumber,
+          expirationDate: expirationDate,
+          cvv: cvv,
+          cardholderName: cardholderName,
+          billingAddress: {
+            firstName: cardholderName.split(' ')[0] || '',
+            lastName: cardholderName.split(' ').slice(1).join(' ') || '',
+            address: billingAddress || '',
+            city: billingCity || '',
+            state: billingState || '',
+            zip: billingZip || '',
+          },
+          invoice: invoiceId || undefined,
+          description: `Chain Software Group - Subscription Payment for ${tenantName}`,
+        });
+      } else if (paymentMethod === 'ach') {
+        // ACH payments require a different API approach
+        // For now, return that ACH is coming soon
+        return res.status(400).json({
+          success: false,
+          message: "ACH payments are coming soon. Please use a credit or debit card, or contact us at (716) 534-3086.",
+        });
+      } else {
+        return res.status(400).json({ success: false, message: "Invalid payment method" });
+      }
+
+      if (paymentResult.success) {
+        console.log(`✅ Platform payment successful for ${tenantName}:`, {
+          transactionId: paymentResult.transactionId,
+          amount: amount,
+          cardLast4: paymentResult.cardLast4,
+        });
+
+        // If invoiceId was provided, mark it as paid
+        if (invoiceId) {
+          try {
+            await db.update(invoices)
+              .set({
+                status: 'paid',
+                paidAt: new Date(),
+                paidAmountCents: Math.round(amount * 100),
+                paymentReference: paymentResult.transactionId,
+              })
+              .where(eq(invoices.id, invoiceId));
+            console.log(`📄 Invoice ${invoiceId} marked as paid`);
+          } catch (invErr) {
+            console.error('⚠️ Could not update invoice status:', invErr);
+          }
+        }
+
+        return res.json({
+          success: true,
+          message: "Payment processed successfully! Thank you.",
+          transactionId: paymentResult.transactionId,
+          authCode: paymentResult.authCode,
+          cardLast4: paymentResult.cardLast4,
+        });
+      } else {
+        console.error(`❌ Platform payment failed for ${tenantName}:`, paymentResult.errorMessage);
+        return res.status(400).json({
+          success: false,
+          message: paymentResult.errorMessage || "Payment could not be processed. Please verify your payment information and try again.",
+        });
+      }
+    } catch (error: any) {
+      console.error("❌ Platform payment error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Payment processing error. Please try again or contact support.",
+        error: error.message,
+      });
+    }
+  });
+
   // Global Admin Routes (Platform Owner Only)
   
   // Seed subscription plans endpoint (no auth required - safe to call multiple times)
