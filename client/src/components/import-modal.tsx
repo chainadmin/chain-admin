@@ -118,7 +118,25 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
       try {
         const csv = event.target?.result as string;
         const lines = csv.split('\n').filter(line => line.trim());
-        const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().replace(/['"]/g, ''));
+        // Normalize headers: lowercase, remove quotes, remove spaces and underscores for matching
+        const rawHeaders = parseCSVLine(lines[0]);
+        const headers = rawHeaders.map(h => h.toLowerCase().replace(/['"]/g, '').trim());
+        
+        // Debug: log headers to console
+        console.log('CSV Headers (raw):', rawHeaders);
+        console.log('CSV Headers (normalized):', headers);
+        
+        // Helper function to get value from row with flexible column matching
+        const getColumnValue = (row: any, ...possibleNames: string[]): string => {
+          for (const name of possibleNames) {
+            // Try exact match first
+            if (row[name] !== undefined && row[name] !== '') return row[name];
+            // Try without underscores/spaces
+            const normalized = name.replace(/[_\s]/g, '');
+            if (row[normalized] !== undefined && row[normalized] !== '') return row[normalized];
+          }
+          return '';
+        };
         
         const consumers = new Map();
         const accounts = [];
@@ -153,27 +171,33 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
             row[header] = values[index] || '';
           });
 
-          // Extract consumer data
-          const consumerKey = row.consumer_email || row.email || row.emailaddress || row.email_address;
+          // Extract consumer data using flexible column matching
+          const consumerKey = getColumnValue(row, 'consumer_email', 'email', 'emailaddress', 'email_address');
           if (consumerKey && !consumers.has(consumerKey)) {
             // Extract date of birth from various possible column names
-            const dobValue = row.date_of_birth || row.dob || row.dateofbirth || 
-                           row.consumer_dob || row.consumer_date_of_birth || row.birthdate || row.birth_date || '';
+            const dobValue = getColumnValue(row, 'date_of_birth', 'dob', 'dateofbirth', 'consumer_dob', 
+                           'consumer_date_of_birth', 'birthdate', 'birth_date');
+            
+            // Debug: log first consumer's DOB value
+            if (consumers.size === 0) {
+              console.log('First row data:', row);
+              console.log('DOB value extracted:', dobValue);
+            }
             
             // Extract phone from various possible column names (prefer primary, then cell, then others)
-            const phoneValue = row.consumer_phone || row.phone || row.primaryphone || row.primary_phone ||
-                             row.cellphone || row.cell_phone || row.workphone || row.alternatephone || '';
+            const phoneValue = getColumnValue(row, 'consumer_phone', 'phone', 'primaryphone', 'primary_phone',
+                             'cellphone', 'cell_phone', 'workphone', 'alternatephone');
             
             // Extract address fields
-            const addressValue = row.address || row.consumer_address || row.street || row.street_address || '';
-            const cityValue = row.city || row.consumer_city || '';
-            const stateValue = row.state || row.consumer_state || '';
-            const zipValue = row.zip_code || row.zipcode || row.zip || 
-                           row.consumer_zip || row.consumer_zip_code || row.postalcode || row.postal_code || '';
+            const addressValue = getColumnValue(row, 'address', 'consumer_address', 'street', 'street_address');
+            const cityValue = getColumnValue(row, 'city', 'consumer_city');
+            const stateValue = getColumnValue(row, 'state', 'consumer_state');
+            const zipValue = getColumnValue(row, 'zip_code', 'zipcode', 'zip', 
+                           'consumer_zip', 'consumer_zip_code', 'postalcode', 'postal_code');
             
             // Extract SSN last 4 digits (from full SSN or just last 4)
-            const ssnRaw = row.socialsecuritynumber || row.ssn || row.social_security_number || 
-                          row.ssn_last4 || row.ssnlast4 || '';
+            const ssnRaw = getColumnValue(row, 'socialsecuritynumber', 'ssn', 'social_security_number', 
+                          'ssn_last4', 'ssnlast4');
             const ssnLast4 = ssnRaw ? ssnRaw.replace(/\D/g, '').slice(-4) : '';
             
             // Extract additional consumer data (any non-standard columns)
@@ -186,9 +210,13 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
               }
             });
 
+            // Extract first and last name
+            const firstName = getColumnValue(row, 'consumer_first_name', 'first_name', 'firstname', 'fname');
+            const lastName = getColumnValue(row, 'consumer_last_name', 'last_name', 'lastname', 'lname');
+
             consumers.set(consumerKey, {
-              firstName: row.consumer_first_name || row.first_name || row.firstname || row.fname || '',
-              lastName: row.consumer_last_name || row.last_name || row.lastname || row.lname || '',
+              firstName,
+              lastName,
               email: consumerKey,
               phone: phoneValue,
               dateOfBirth: dobValue,
@@ -203,8 +231,8 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
 
           // Extract account data - only if we have a valid consumer email, creditor, and balance
           // Filenumber is optional unless SMAX is enabled
-          const creditorValue = row.creditor || row.originalcreditor || row.original_creditor || row.client || row.clientname || '';
-          const balanceValue = row.balance || row.amount || row.amount_due || row.balancedue || row.balance_due || row.totaldue || row.total_due || '';
+          const creditorValue = getColumnValue(row, 'creditor', 'originalcreditor', 'original_creditor', 'client', 'clientname');
+          const balanceValue = getColumnValue(row, 'balance', 'amount', 'amount_due', 'balancedue', 'balance_due', 'totaldue', 'total_due');
           if (consumerKey && creditorValue && balanceValue) {
             // Extract additional account data (any non-standard columns)
             const additionalAccountData: any = {};
@@ -217,12 +245,12 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
             });
 
             accounts.push({
-              accountNumber: row.account_number || row.account || row.accountnumber || '',
-              filenumber: row.filenumber || row.file_number || row.fileno || '',
+              accountNumber: getColumnValue(row, 'account_number', 'account', 'accountnumber'),
+              filenumber: getColumnValue(row, 'filenumber', 'file_number', 'fileno'),
               creditor: creditorValue,
               balanceCents: Math.round(parseFloat(balanceValue.replace(/[^0-9.-]/g, '')) * 100),
-              dueDate: row.due_date || row.duedate || '',
-              status: row.status || row.statusname || row.status_name || row.accountstatus || row.account_status || '',
+              dueDate: getColumnValue(row, 'due_date', 'duedate'),
+              status: getColumnValue(row, 'status', 'statusname', 'status_name', 'accountstatus', 'account_status'),
               consumerEmail: consumerKey,
               additionalData: additionalAccountData,
             });
