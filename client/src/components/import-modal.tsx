@@ -78,6 +78,34 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
     setSelectedFolderId("");
   };
 
+  // Helper function to properly parse CSV lines with quoted fields
+  const parseCSVLine = (line: string): string[] => {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      const nextChar = line[i + 1];
+      
+      if (char === '"') {
+        if (inQuotes && nextChar === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        result.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    result.push(current.trim());
+    return result;
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) return;
@@ -90,28 +118,35 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
       try {
         const csv = event.target?.result as string;
         const lines = csv.split('\n').filter(line => line.trim());
-        const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+        const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().replace(/['"]/g, ''));
         
         const consumers = new Map();
         const accounts = [];
 
-        // Define standard column mappings
+        // Define standard column mappings (including alternate names from various systems)
         const standardConsumerFields = [
-          'consumer_first_name', 'first_name', 'firstname',
-          'consumer_last_name', 'last_name', 'lastname',
-          'consumer_email', 'email', 'emailaddress',
-          'consumer_phone', 'phone', 'primaryphone',
-          'date_of_birth', 'dob', 'dateofbirth', 'consumer_dob', 'consumer_date_of_birth', 'birthdate',
-          'address', 'consumer_address',
+          'consumer_first_name', 'first_name', 'firstname', 'fname',
+          'consumer_last_name', 'last_name', 'lastname', 'lname', 'fullname',
+          'consumer_email', 'email', 'emailaddress', 'email_address',
+          'consumer_phone', 'phone', 'primaryphone', 'primary_phone', 'cellphone', 'cell_phone', 'workphone', 'alternatephone',
+          'date_of_birth', 'dob', 'dateofbirth', 'consumer_dob', 'consumer_date_of_birth', 'birthdate', 'birth_date',
+          'address', 'consumer_address', 'street', 'street_address',
           'city', 'consumer_city',
           'state', 'consumer_state',
-          'zip_code', 'zipcode', 'zip', 'consumer_zip', 'consumer_zip_code',
+          'zip_code', 'zipcode', 'zip', 'consumer_zip', 'consumer_zip_code', 'postalcode', 'postal_code',
           'socialsecuritynumber', 'ssn', 'social_security_number', 'ssn_last4', 'ssnlast4'
         ];
-        const standardAccountFields = ['account_number', 'account', 'accountnumber', 'filenumber', 'file_number', 'creditor', 'originalcreditor', 'balance', 'due_date', 'status', 'statusname'];
+        const standardAccountFields = [
+          'account_number', 'account', 'accountnumber', 
+          'filenumber', 'file_number', 'fileno',
+          'creditor', 'originalcreditor', 'original_creditor', 'client', 'clientname',
+          'balance', 'amount', 'amount_due', 'balancedue', 'balance_due', 'totaldue', 'total_due',
+          'due_date', 'duedate',
+          'status', 'statusname', 'status_name', 'accountstatus', 'account_status'
+        ];
         
         for (let i = 1; i < lines.length; i++) {
-          const values = lines[i].split(',').map(v => v.trim());
+          const values = parseCSVLine(lines[i]);
           const row: any = {};
           
           headers.forEach((header, index) => {
@@ -119,18 +154,22 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
           });
 
           // Extract consumer data
-          const consumerKey = row.consumer_email || row.email || row.emailaddress;
+          const consumerKey = row.consumer_email || row.email || row.emailaddress || row.email_address;
           if (consumerKey && !consumers.has(consumerKey)) {
             // Extract date of birth from various possible column names
             const dobValue = row.date_of_birth || row.dob || row.dateofbirth || 
-                           row.consumer_dob || row.consumer_date_of_birth || row.birthdate || '';
+                           row.consumer_dob || row.consumer_date_of_birth || row.birthdate || row.birth_date || '';
+            
+            // Extract phone from various possible column names (prefer primary, then cell, then others)
+            const phoneValue = row.consumer_phone || row.phone || row.primaryphone || row.primary_phone ||
+                             row.cellphone || row.cell_phone || row.workphone || row.alternatephone || '';
             
             // Extract address fields
-            const addressValue = row.address || row.consumer_address || '';
+            const addressValue = row.address || row.consumer_address || row.street || row.street_address || '';
             const cityValue = row.city || row.consumer_city || '';
             const stateValue = row.state || row.consumer_state || '';
             const zipValue = row.zip_code || row.zipcode || row.zip || 
-                           row.consumer_zip || row.consumer_zip_code || '';
+                           row.consumer_zip || row.consumer_zip_code || row.postalcode || row.postal_code || '';
             
             // Extract SSN last 4 digits (from full SSN or just last 4)
             const ssnRaw = row.socialsecuritynumber || row.ssn || row.social_security_number || 
@@ -148,10 +187,10 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
             });
 
             consumers.set(consumerKey, {
-              firstName: row.consumer_first_name || row.first_name || row.firstname || '',
-              lastName: row.consumer_last_name || row.last_name || row.lastname || '',
+              firstName: row.consumer_first_name || row.first_name || row.firstname || row.fname || '',
+              lastName: row.consumer_last_name || row.last_name || row.lastname || row.lname || '',
               email: consumerKey,
-              phone: row.consumer_phone || row.phone || row.primaryphone || '',
+              phone: phoneValue,
               dateOfBirth: dobValue,
               address: addressValue,
               city: cityValue,
@@ -164,8 +203,8 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
 
           // Extract account data - only if we have a valid consumer email, creditor, and balance
           // Filenumber is optional unless SMAX is enabled
-          const creditorValue = row.creditor || row.originalcreditor || '';
-          const balanceValue = row.balance || '';
+          const creditorValue = row.creditor || row.originalcreditor || row.original_creditor || row.client || row.clientname || '';
+          const balanceValue = row.balance || row.amount || row.amount_due || row.balancedue || row.balance_due || row.totaldue || row.total_due || '';
           if (consumerKey && creditorValue && balanceValue) {
             // Extract additional account data (any non-standard columns)
             const additionalAccountData: any = {};
@@ -179,11 +218,11 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
 
             accounts.push({
               accountNumber: row.account_number || row.account || row.accountnumber || '',
-              filenumber: row.filenumber || row.file_number || '',
+              filenumber: row.filenumber || row.file_number || row.fileno || '',
               creditor: creditorValue,
               balanceCents: Math.round(parseFloat(balanceValue.replace(/[^0-9.-]/g, '')) * 100),
-              dueDate: row.due_date || '',
-              status: row.status || row.statusname || '',
+              dueDate: row.due_date || row.duedate || '',
+              status: row.status || row.statusname || row.status_name || row.accountstatus || row.account_status || '',
               consumerEmail: consumerKey,
               additionalData: additionalAccountData,
             });
