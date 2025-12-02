@@ -15066,6 +15066,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     next();
   };
 
+  // Impersonate tenant (Global Admin only) - generates a JWT token to log in as any tenant
+  app.post('/api/admin/impersonate-tenant/:tenantId', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { tenantId } = req.params;
+      
+      // Get tenant info
+      const tenant = await storage.getTenant(tenantId);
+      if (!tenant) {
+        return res.status(404).json({ success: false, message: "Tenant not found" });
+      }
+      
+      // Get or create an agency credential for this tenant to use as the user
+      const [credential] = await db.select()
+        .from(agencyCredentials)
+        .where(eq(agencyCredentials.tenantId, tenantId))
+        .limit(1);
+      
+      // Generate a JWT token for impersonation
+      const impersonationToken = jwt.sign(
+        {
+          userId: credential?.id || `admin-impersonate-${tenantId}`,
+          tenantId: tenantId,
+          tenantSlug: tenant.slug,
+          tenantName: tenant.name,
+          isImpersonation: true, // Mark this as an impersonation session
+          role: 'owner', // Give full access
+        },
+        process.env.JWT_SECRET || 'your-secret-key',
+        { expiresIn: '4h' } // Shorter expiry for impersonation sessions
+      );
+      
+      console.log(`🔐 Global Admin impersonating tenant: ${tenant.name} (${tenant.slug})`);
+      
+      res.json({
+        success: true,
+        token: impersonationToken,
+        tenant: {
+          id: tenant.id,
+          name: tenant.name,
+          slug: tenant.slug,
+        },
+        message: `Now logged in as ${tenant.name}`,
+      });
+    } catch (error: any) {
+      console.error('Impersonation error:', error);
+      res.status(500).json({ success: false, message: "Failed to impersonate tenant" });
+    }
+  });
+
   // Update tenant SMS configuration (platform admin only)
   app.put('/api/admin/tenants/:id/sms-config', isPlatformAdmin, async (req: any, res) => {
     try {

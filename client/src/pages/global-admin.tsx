@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Building2, Users, DollarSign, TrendingUp, Eye, Ban, CheckCircle, AlertTriangle, Plus, Mail, MessageSquare, Phone, Trash2, Search, Shield, CreditCard, Send, Settings, Repeat, FileText, MessagesSquare, Zap, LogOut, QrCode, Download } from "lucide-react";
+import { Building2, Users, DollarSign, TrendingUp, Eye, Ban, CheckCircle, AlertTriangle, Plus, Mail, MessageSquare, Phone, Trash2, Search, Shield, CreditCard, Send, Settings, Repeat, FileText, MessagesSquare, Zap, LogOut, LogIn, QrCode, Download } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -2178,6 +2178,64 @@ export default function GlobalAdmin() {
                         >
                           <Repeat className="h-4 w-4 mr-2" />
                           Billing Dates
+                        </Button>
+                        
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-orange-300 text-orange-700 hover:bg-orange-50"
+                          onClick={async () => {
+                            const token = sessionStorage.getItem('admin_token');
+                            if (!token) {
+                              toast({
+                                title: "Error",
+                                description: "Not authenticated. Please refresh and log in again.",
+                                variant: "destructive",
+                              });
+                              return;
+                            }
+
+                            try {
+                              const response = await fetch(`/api/admin/impersonate-tenant/${tenant.id}`, {
+                                method: 'POST',
+                                headers: {
+                                  'Authorization': `Bearer ${token}`,
+                                  'Content-Type': 'application/json'
+                                }
+                              });
+                              
+                              const data = await response.json();
+                              
+                              if (!response.ok) {
+                                toast({
+                                  title: "Error",
+                                  description: data.message || `Failed to login as tenant`,
+                                  variant: "destructive",
+                                });
+                                return;
+                              }
+                              
+                              toast({
+                                title: "Success",
+                                description: `Opening ${data.tenant.name} dashboard...`,
+                              });
+                              
+                              // Open dashboard in new tab with token in URL
+                              // The tenant app will read the token from the URL and store it
+                              const dashboardUrl = `https://${data.tenant.slug}.chainsoftwaregroup.com/dashboard?impersonate_token=${encodeURIComponent(data.token)}`;
+                              window.open(dashboardUrl, '_blank');
+                            } catch (error: any) {
+                              toast({
+                                title: "Error",
+                                description: error.message || "Network error. Check your connection.",
+                                variant: "destructive",
+                              });
+                            }
+                          }}
+                          data-testid={`button-login-as-${tenant.id}`}
+                        >
+                          <LogIn className="h-4 w-4 mr-2" />
+                          Login as Tenant
                         </Button>
                         
                         <Button

@@ -19,6 +19,19 @@ export function useAuth() {
   // Check for JWT token on mount and when localStorage/cookies change
   useEffect(() => {
     const checkJwtToken = () => {
+      // First, check for impersonation token in URL (from Global Admin)
+      const urlParams = new URLSearchParams(window.location.search);
+      const impersonateToken = urlParams.get('impersonate_token');
+      
+      if (impersonateToken) {
+        // Store the impersonation token and clean up the URL
+        localStorage.setItem('authToken', impersonateToken);
+        // Remove the token from URL to prevent sharing/leaking
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
+        console.log('🔐 Impersonation token received and stored');
+      }
+      
       const token = getAuthToken(); // Checks cookies first, then localStorage
       if (token) {
         // Parse the JWT payload (not secure, but fine for client-side auth check)
