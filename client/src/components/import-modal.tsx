@@ -46,15 +46,27 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
 
   const importMutation = useMutation({
     mutationFn: async (data: any) => {
-      await apiRequest("POST", "/api/import/csv", {
+      const response = await apiRequest("POST", "/api/import/csv", {
         ...data,
         folderId: selectedFolderId || undefined
       });
+      return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (result: any) => {
+      // Handle missing or malformed response gracefully
+      const consumersCreated = result?.consumersCreated ?? 0;
+      const accountsCreated = result?.accountsCreated ?? 0;
+      const totalSkipped = result?.totalSkipped ?? 0;
+      
+      // Build description with summary
+      let description = `Imported ${consumersCreated} consumer(s) and ${accountsCreated} account(s).`;
+      if (totalSkipped > 0) {
+        description += ` ${totalSkipped} row(s) were skipped due to missing/invalid data.`;
+      }
+      
       toast({
-        title: "Import Successful",
-        description: "Account data has been imported successfully.",
+        title: totalSkipped > 0 ? "Import Completed with Warnings" : "Import Successful",
+        description,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/consumers"] });
@@ -62,10 +74,10 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
       onClose();
       resetForm();
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({
         title: "Import Failed",
-        description: error.message,
+        description: error?.message || "An unexpected error occurred during import.",
         variant: "destructive",
       });
     },

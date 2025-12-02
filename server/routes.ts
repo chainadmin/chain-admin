@@ -68,11 +68,12 @@ import {
   formatDollarAmount 
 } from "@shared/globalDocumentHelpers";
 
+// Lenient CSV schema - allows any string for email, we filter invalid ones later
 const csvUploadSchema = z.object({
   consumers: z.array(z.object({
     firstName: z.string(),
     lastName: z.string(),
-    email: z.string().email(),
+    email: z.string(), // Accept any string, we'll filter invalid emails
     phone: z.string().optional(),
     dateOfBirth: z.string().optional(),
     address: z.string().optional(),
@@ -83,16 +84,23 @@ const csvUploadSchema = z.object({
     additionalData: z.record(z.any()).optional(),
   })),
   accounts: z.array(z.object({
-    accountNumber: z.string(),
+    accountNumber: z.string().optional(), // Allow missing account numbers
     creditor: z.string(),
     balanceCents: z.number(),
     dueDate: z.string().optional(),
-    consumerEmail: z.string().email(),
+    consumerEmail: z.string(), // Accept any string, we'll filter invalid emails
     filenumber: z.string().optional(),
     status: z.string().optional(),
     additionalData: z.record(z.any()).optional(),
   })),
 });
+
+// Helper function to validate email format
+function isValidEmail(email: string): boolean {
+  if (!email || !email.trim()) return false;
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email.trim());
+}
 
 // Multer configuration for image uploads - using memory storage
 const upload = multer({ 
@@ -1862,15 +1870,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { consumers: consumersData, accounts: accountsData, folderId } = req.body;
       
-      // Validate input data with schema
-      try {
-        csvUploadSchema.parse({ consumers: consumersData, accounts: accountsData });
-      } catch (parseError: any) {
-        console.error("CSV upload validation error:", parseError.errors);
-        return res.status(400).json({ message: "Invalid CSV data format", errors: parseError.errors });
-      }
-      
-      // Additional array validation
+      // Basic array validation
       if (!consumersData || !Array.isArray(consumersData)) {
         return res.status(400).json({ message: "Invalid consumer data format" });
       }
@@ -1887,50 +1887,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No account data found in CSV" });
       }
       
-      // Validate consumer data has required fields
-      for (let i = 0; i < consumersData.length; i++) {
-        const consumer = consumersData[i];
-        if (!consumer.email || !consumer.email.trim()) {
-          return res.status(400).json({ 
-            message: `Row ${i + 2}: Consumer email is required` 
-          });
-        }
-        if (!consumer.firstName || !consumer.firstName.trim()) {
-          return res.status(400).json({ 
-            message: `Row ${i + 2}: Consumer first name is required for ${consumer.email}` 
-          });
-        }
-        if (!consumer.lastName || !consumer.lastName.trim()) {
-          return res.status(400).json({ 
-            message: `Row ${i + 2}: Consumer last name is required for ${consumer.email}` 
-          });
-        }
-      }
-      
       // Check if SMAX is enabled for this tenant
       const tenantSettings = await storage.getTenantSettings(tenantId);
       const smaxEnabled = tenantSettings?.smaxEnabled ?? false;
       
-      // Validate account data has required fields
-      for (let i = 0; i < accountsData.length; i++) {
-        const account = accountsData[i];
-        // Only require filenumber if SMAX is enabled
+      // Track skipped rows
+      const skippedRows: { row: number; reason: string }[] = [];
+      
+      // Filter consumers - skip invalid ones instead of failing
+      const validConsumers = consumersData.filter((consumer: any, index: number) => {
+        // Check for valid email
+        if (!isValidEmail(consumer.email)) {
+          skippedRows.push({ row: index + 2, reason: `Invalid or missing email: "${consumer.email || ''}"` });
+          return false;
+        }
+        // Check for required name fields
+        if (!consumer.firstName || !consumer.firstName.trim()) {
+          skippedRows.push({ row: index + 2, reason: `Missing first name for ${consumer.email}` });
+          return false;
+        }
+        if (!consumer.lastName || !consumer.lastName.trim()) {
+          skippedRows.push({ row: index + 2, reason: `Missing last name for ${consumer.email}` });
+          return false;
+        }
+        return true;
+      });
+      
+      // Get emails of valid consumers for filtering accounts
+      const validEmailsSet = new Set(validConsumers.map((c: any) => c.email.toLowerCase()));
+      
+      // Filter accounts - skip ones with invalid consumer emails or missing required fields
+      const validAccounts = accountsData.filter((account: any, index: number) => {
+        // Skip accounts for consumers that were filtered out
+        if (!account.consumerEmail || !validEmailsSet.has(account.consumerEmail.toLowerCase())) {
+          // Only add to skipped if it wasn't already skipped due to consumer validation
+          if (account.consumerEmail && !skippedRows.some(s => s.row === index + 2)) {
+            skippedRows.push({ row: index + 2, reason: `Consumer with email "${account.consumerEmail}" was skipped` });
+          }
+          return false;
+        }
+        // Check filenumber if SMAX is enabled
         if (smaxEnabled && (!account.filenumber || !account.filenumber.trim())) {
-          return res.status(400).json({ 
-            message: `Row ${i + 2}: Filenumber is required because SMAX integration is enabled for your account` 
-          });
+          skippedRows.push({ row: index + 2, reason: `Missing filenumber (required for SMAX)` });
+          return false;
         }
+        // Check creditor
         if (!account.creditor || !account.creditor.trim()) {
-          return res.status(400).json({ 
-            message: `Row ${i + 2}: Creditor is required` 
-          });
+          skippedRows.push({ row: index + 2, reason: `Missing creditor` });
+          return false;
         }
+        // Check balance
         if (account.balanceCents === undefined || account.balanceCents === null || isNaN(account.balanceCents)) {
-          return res.status(400).json({ 
-            message: `Row ${i + 2}: Valid balance is required for ${account.creditor}` 
-          });
+          skippedRows.push({ row: index + 2, reason: `Invalid or missing balance` });
+          return false;
         }
+        return true;
+      });
+      
+      // If all rows were skipped, return an error
+      if (validConsumers.length === 0) {
+        return res.status(400).json({ 
+          message: "No valid records to import. All rows were skipped.",
+          skippedRows: skippedRows.slice(0, 10), // Show first 10 skipped rows
+          totalSkipped: skippedRows.length
+        });
       }
+      
+      console.log(`[CSV Import] Processing ${validConsumers.length} valid consumers, ${validAccounts.length} valid accounts. Skipped ${skippedRows.length} rows.`);
       
       // Get default folder if no folder is specified
       let targetFolderId = folderId;
@@ -1940,9 +1963,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         targetFolderId = defaultFolder?.id;
       }
       
-      // Find or create consumers
+      // Find or create consumers (using filtered valid consumers)
       const createdConsumers = new Map();
-      for (const consumerData of consumersData) {
+      const consumerErrors: string[] = [];
+      for (const consumerData of validConsumers) {
         try {
           // Normalize dateOfBirth to YYYY-MM-DD format before saving
           const normalizedDOB = consumerData.dateOfBirth 
@@ -1960,54 +1984,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         } catch (consumerError: any) {
           console.error(`Error creating consumer ${consumerData.email}:`, consumerError);
-          return res.status(500).json({ 
-            message: `Failed to create consumer ${consumerData.email}: ${consumerError.message}` 
-          });
+          consumerErrors.push(`${consumerData.email}: ${consumerError.message}`);
+          // Continue processing other consumers instead of failing
         }
       }
 
-      // Create or update accounts (with deduplication)
+      // Create or update accounts (with deduplication, using filtered valid accounts)
       const createdAccounts = [];
-      for (let index = 0; index < accountsData.length; index++) {
-        const accountData = accountsData[index];
+      const accountErrors: string[] = [];
+      for (let index = 0; index < validAccounts.length; index++) {
+        const accountData = validAccounts[index];
         
+        // Skip if no consumer email
         if (!accountData.consumerEmail) {
-          throw new Error(`Row ${index + 2}: Missing consumer email for account`);
+          accountErrors.push(`Row ${index + 2}: Missing consumer email`);
+          continue;
         }
         
         const consumerEmailLower = accountData.consumerEmail.toLowerCase();
         const consumer = createdConsumers.get(consumerEmailLower);
         if (!consumer) {
-          throw new Error(`Row ${index + 2}: Consumer not found for email: ${accountData.consumerEmail}`);
+          // Skip accounts for consumers that failed to create
+          accountErrors.push(`Row ${index + 2}: Consumer not found for ${accountData.consumerEmail}`);
+          continue;
         }
 
-        const accountToCreate = {
-          tenantId: tenantId,
-          consumerId: consumer.id,
-          folderId: targetFolderId,
-          accountNumber: accountData.accountNumber || null,
-          filenumber: accountData.filenumber,
-          creditor: accountData.creditor,
-          balanceCents: accountData.balanceCents,
-          dueDate: accountData.dueDate || null,
-          status: accountData.status || null, // Use status from CSV if provided, otherwise null
-          additionalData: accountData.additionalData || {},
-        };
-        
-        console.log(`[CSV Import] Row ${index + 2}: Creating/updating account with filenumber: ${accountData.filenumber}, additionalData keys: ${Object.keys(accountData.additionalData || {}).join(', ')}`);
-        
-        // Use findOrCreateAccount to prevent duplicates
-        const account = await storage.findOrCreateAccount(accountToCreate);
-        
-        console.log(`[CSV Import] Row ${index + 2}: Account saved with ID ${account.id}, filenumber in DB: ${account.filenumber}, additionalData keys: ${Object.keys(account.additionalData || {}).join(', ')}`);
-        
-        createdAccounts.push(account);
+        try {
+          const accountToCreate = {
+            tenantId: tenantId,
+            consumerId: consumer.id,
+            folderId: targetFolderId,
+            accountNumber: accountData.accountNumber || null,
+            filenumber: accountData.filenumber,
+            creditor: accountData.creditor,
+            balanceCents: accountData.balanceCents,
+            dueDate: accountData.dueDate || null,
+            status: accountData.status || null,
+            additionalData: accountData.additionalData || {},
+          };
+          
+          console.log(`[CSV Import] Row ${index + 2}: Creating/updating account with filenumber: ${accountData.filenumber}`);
+          
+          // Use findOrCreateAccount to prevent duplicates
+          const account = await storage.findOrCreateAccount(accountToCreate);
+          
+          console.log(`[CSV Import] Row ${index + 2}: Account saved with ID ${account.id}`);
+          
+          createdAccounts.push(account);
+        } catch (accountError: any) {
+          console.error(`Error creating account for ${accountData.consumerEmail}:`, accountError);
+          accountErrors.push(`Row ${index + 2}: ${accountError.message}`);
+          // Continue processing other accounts
+        }
+      }
+      
+      // Calculate total issues (skipped + errors)
+      const totalIssues = skippedRows.length + consumerErrors.length + accountErrors.length;
+      
+      // Build success message with skipped info
+      let message = "Import successful";
+      if (totalIssues > 0) {
+        message = `Import completed. ${totalIssues} row(s) had issues and were skipped.`;
       }
       
       res.json({
-        message: "Import successful",
+        message,
         consumersCreated: createdConsumers.size,
         accountsCreated: createdAccounts.length,
+        skippedRows: skippedRows.length > 0 ? skippedRows.slice(0, 10) : undefined,
+        totalSkipped: totalIssues > 0 ? totalIssues : undefined,
+        consumerErrors: consumerErrors.length > 0 ? consumerErrors.slice(0, 5) : undefined,
+        accountErrors: accountErrors.length > 0 ? accountErrors.slice(0, 5) : undefined,
       });
     } catch (error: any) {
       console.error("Error importing CSV:", error);
