@@ -146,7 +146,7 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
           'account_number', 'account', 'accountnumber', 
           'filenumber', 'file_number', 'fileno',
           'creditor', 'originalcreditor', 'original_creditor', 'client', 'clientname',
-          'balance', 'amount', 'amount_due', 'balancedue', 'balance_due', 'totaldue', 'total_due',
+          'balance', 'currentbalance', 'current_balance', 'amount', 'amount_due', 'balancedue', 'balance_due', 'totaldue', 'total_due',
           'due_date', 'duedate',
           'status', 'statusname', 'status_name', 'accountstatus', 'account_status'
         ];
@@ -215,7 +215,7 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
           // Extract account data - only if we have a valid consumer email, creditor, and balance
           // Filenumber is optional unless SMAX is enabled
           const creditorValue = row.creditor || row.originalcreditor || row.original_creditor || row.client || row.clientname || '';
-          const balanceValue = row.balance || row.amount || row.amount_due || row.balancedue || row.balance_due || row.totaldue || row.total_due || '';
+          const balanceValue = row.balance || row.currentbalance || row.current_balance || row.amount || row.amount_due || row.balancedue || row.balance_due || row.totaldue || row.total_due || '';
           if (consumerKey && creditorValue && balanceValue) {
             // Extract additional account data (any non-standard columns)
             const additionalAccountData: any = {};
