@@ -16378,6 +16378,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update tenant name and slug (platform admin only)
+  app.put('/api/admin/tenants/:id/name', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Validate input
+      const nameSchema = z.object({
+        name: z.string().min(1, "Name is required").max(100, "Name too long"),
+        slug: z.string().min(1, "Slug is required").max(50, "Slug too long")
+          .regex(/^[a-z0-9-]+$/, "Slug can only contain lowercase letters, numbers, and hyphens")
+      });
+      
+      const validation = nameSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: "Invalid name data", 
+          errors: validation.error.errors 
+        });
+      }
+      
+      const { name, slug } = validation.data;
+      
+      // Check if slug is already in use by another tenant
+      const existingTenant = await db
+        .select()
+        .from(tenants)
+        .where(eq(tenants.slug, slug))
+        .limit(1);
+      
+      if (existingTenant.length > 0 && existingTenant[0].id !== id) {
+        return res.status(400).json({ message: "This URL slug is already in use by another agency" });
+      }
+      
+      const updatedTenant = await db
+        .update(tenants)
+        .set({ name, slug })
+        .where(eq(tenants.id, id))
+        .returning();
+      
+      if (!updatedTenant || updatedTenant.length === 0) {
+        return res.status(404).json({ message: "Tenant not found" });
+      }
+      
+      res.json(updatedTenant[0]);
+    } catch (error) {
+      console.error("Error updating tenant name:", error);
+      res.status(500).json({ message: "Failed to update tenant name" });
+    }
+  });
+
   // Update tenant payment method (platform admin only)
   // SECURITY: This endpoint only accepts Stripe tokens, never raw payment data
   app.put('/api/admin/tenants/:id/payment-method', isPlatformAdmin, async (req: any, res) => {

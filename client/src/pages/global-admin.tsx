@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Building2, Users, DollarSign, TrendingUp, Eye, Ban, CheckCircle, AlertTriangle, Plus, Mail, MessageSquare, Phone, Trash2, Search, Shield, CreditCard, Send, Settings, Repeat, FileText, MessagesSquare, Zap, LogOut, LogIn, QrCode, Download } from "lucide-react";
+import { Building2, Users, DollarSign, TrendingUp, Eye, Ban, CheckCircle, AlertTriangle, Plus, Mail, MessageSquare, Phone, Trash2, Search, Shield, CreditCard, Send, Settings, Repeat, FileText, MessagesSquare, Zap, LogOut, LogIn, QrCode, Download, Pencil } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -68,6 +68,11 @@ export default function GlobalAdmin() {
   const [editContactDialogOpen, setEditContactDialogOpen] = useState(false);
   const [selectedTenantForContactEdit, setSelectedTenantForContactEdit] = useState<any>(null);
   const [contactInfo, setContactInfo] = useState({ email: '', phoneNumber: '' });
+
+  // Tenant name edit state
+  const [editNameDialogOpen, setEditNameDialogOpen] = useState(false);
+  const [selectedTenantForNameEdit, setSelectedTenantForNameEdit] = useState<any>(null);
+  const [tenantNameInfo, setTenantNameInfo] = useState({ name: '', slug: '' });
 
   // Test email state
   const [testEmailDialogOpen, setTestEmailDialogOpen] = useState(false);
@@ -548,6 +553,29 @@ export default function GlobalAdmin() {
     }
   });
 
+  // Mutation to update tenant name
+  const updateTenantNameMutation = useMutation({
+    mutationFn: async ({ tenantId, name, slug }: { tenantId: string; name: string; slug: string }) => {
+      return apiRequest('PUT', `/api/admin/tenants/${tenantId}/name`, { name, slug });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants'] });
+      setEditNameDialogOpen(false);
+      setSelectedTenantForNameEdit(null);
+      toast({
+        title: "Tenant Name Updated",
+        description: "Agency name and slug have been updated successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to update tenant name",
+        variant: "destructive",
+      });
+    }
+  });
+
   // Mutation to update payment method
   const updatePaymentMethodMutation = useMutation({
     mutationFn: async ({ tenantId, paymentMethod }: { tenantId: string; paymentMethod: any }) => {
@@ -713,6 +741,25 @@ export default function GlobalAdmin() {
     updateContactMutation.mutate({
       tenantId: selectedTenantForContactEdit.id,
       contactInfo
+    });
+  };
+
+  const handleOpenEditName = (tenant: any) => {
+    setSelectedTenantForNameEdit(tenant);
+    setTenantNameInfo({
+      name: tenant.name || '',
+      slug: tenant.slug || ''
+    });
+    setEditNameDialogOpen(true);
+  };
+
+  const handleSaveTenantName = () => {
+    if (!selectedTenantForNameEdit) return;
+    
+    updateTenantNameMutation.mutate({
+      tenantId: selectedTenantForNameEdit.id,
+      name: tenantNameInfo.name,
+      slug: tenantNameInfo.slug
     });
   };
 
@@ -2121,7 +2168,18 @@ export default function GlobalAdmin() {
                           data-testid={`button-edit-contact-${tenant.id}`}
                         >
                           <Mail className="h-4 w-4 mr-2" />
-                          Edit
+                          Contact
+                        </Button>
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-purple-300 text-purple-700 hover:bg-purple-50"
+                          onClick={() => handleOpenEditName(tenant)}
+                          data-testid={`button-edit-name-${tenant.id}`}
+                        >
+                          <Pencil className="h-4 w-4 mr-2" />
+                          Rename
                         </Button>
 
                         <Button
@@ -2592,6 +2650,75 @@ export default function GlobalAdmin() {
                 ) : (
                   <>
                     <Mail className="h-4 w-4 mr-2" />
+                    Save Changes
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Tenant Name Dialog */}
+      <Dialog open={editNameDialogOpen} onOpenChange={setEditNameDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <Pencil className="h-5 w-5 mr-2" />
+              Edit Agency Name
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-tenant-name">Agency Name</Label>
+              <Input
+                id="edit-tenant-name"
+                type="text"
+                value={tenantNameInfo.name}
+                onChange={(e) => setTenantNameInfo({ ...tenantNameInfo, name: e.target.value })}
+                placeholder="Agency Name"
+                data-testid="input-edit-tenant-name"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="edit-tenant-slug">URL Slug</Label>
+              <Input
+                id="edit-tenant-slug"
+                type="text"
+                value={tenantNameInfo.slug}
+                onChange={(e) => setTenantNameInfo({ ...tenantNameInfo, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
+                placeholder="agency-slug"
+                data-testid="input-edit-tenant-slug"
+              />
+              <p className="text-xs text-gray-500">
+                This appears in the URL: <strong>{tenantNameInfo.slug || 'agency-slug'}.chainsoftwaregroup.com</strong>
+              </p>
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setEditNameDialogOpen(false);
+                  setSelectedTenantForNameEdit(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveTenantName}
+                disabled={updateTenantNameMutation.isPending || !tenantNameInfo.name.trim() || !tenantNameInfo.slug.trim()}
+                data-testid="button-save-tenant-name"
+              >
+                {updateTenantNameMutation.isPending ? (
+                  <>
+                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Pencil className="h-4 w-4 mr-2" />
                     Save Changes
                   </>
                 )}
