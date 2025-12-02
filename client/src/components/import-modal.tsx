@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -29,6 +30,7 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
   const [parsedData, setParsedData] = useState<any>(null);
   const [validationResults, setValidationResults] = useState<any>(null);
   const [selectedFolderId, setSelectedFolderId] = useState<string>("");
+  const [clearExistingPhones, setClearExistingPhones] = useState<boolean>(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -48,7 +50,8 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
     mutationFn: async (data: any) => {
       const response = await apiRequest("POST", "/api/import/csv", {
         ...data,
-        folderId: selectedFolderId || undefined
+        folderId: selectedFolderId || undefined,
+        clearExistingPhones: clearExistingPhones,
       });
       return response.json();
     },
@@ -88,6 +91,7 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
     setParsedData(null);
     setValidationResults(null);
     setSelectedFolderId("");
+    setClearExistingPhones(false);
   };
 
   // Helper function to properly parse CSV lines with quoted fields
@@ -335,76 +339,66 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
         </DialogHeader>
         
         <div className="space-y-2">
-          <div className="rounded-lg border border-sky-400/30 bg-sky-500/10 p-2.5">
-            <h4 className="text-sm font-medium text-sky-100 mb-1.5">Required CSV Columns</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-              <div>
-                <h5 className="text-xs font-medium text-sky-100 mb-0.5">Consumer Information</h5>
-                <ul className="text-sky-50/90 space-y-0.5 leading-snug">
-                  <li className="break-words">• <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">consumer_first_name</code> or <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">first_name</code></li>
-                  <li className="break-words">• <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">consumer_last_name</code> or <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">last_name</code></li>
-                  <li className="break-words">• <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">consumer_email</code> or <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">email</code></li>
-                  <li className="break-words">• <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">consumer_phone</code> or <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">phone</code> (optional)</li>
-                  <li className="break-words">• <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">date_of_birth</code> or <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">dob</code> (optional)</li>
-                  <li className="break-words">• <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">address</code>, <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">city</code>, <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">state</code>, <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">zip_code</code> (optional)</li>
-                </ul>
-              </div>
-              <div>
-                <h5 className="text-xs font-medium text-sky-100 mb-0.5">Account Information</h5>
-                <ul className="text-sky-50/90 space-y-0.5 leading-snug">
-                  <li className="break-words">• <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">filenumber</code> or <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">file_number</code> (required for SMAX)</li>
-                  <li className="break-words">• <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">creditor</code> (required)</li>
-                  <li className="break-words">• <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">balance</code> (required, in dollars)</li>
-                  <li className="break-words">• <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">account_number</code> or <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">account</code> (optional)</li>
-                  <li className="break-words">• <code className="bg-white/10 px-0.5 rounded text-xs text-sky-100">due_date</code> (optional)</li>
-                </ul>
-              </div>
+          {/* Compact CSV info - collapsible */}
+          <details className="rounded-lg border border-sky-400/30 bg-sky-500/10">
+            <summary className="p-2 cursor-pointer text-xs font-medium text-sky-100 hover:bg-sky-500/20">
+              <i className="fas fa-info-circle mr-1.5"></i>
+              View Required CSV Columns
+            </summary>
+            <div className="px-2 pb-2 text-xs text-sky-50/90 space-y-1">
+              <p><strong>Consumer:</strong> first_name, last_name, email, phone (opt), dob (opt)</p>
+              <p><strong>Account:</strong> creditor, balance, filenumber (SMAX), account_number (opt)</p>
+              <p className="text-sky-100/70">Additional columns are saved as custom data. Balance in dollars (e.g., 1250.50).</p>
             </div>
-            <div className="mt-1.5 pt-1.5 border-t border-sky-400/20">
-              <p className="text-xs text-sky-100/90 leading-snug">
-                <strong>Note:</strong> Any additional columns in your CSV will be automatically captured as custom data. 
-                The balance should be in dollar format (e.g., 1250.50, not cents).
-              </p>
+          </details>
+
+          {/* Folder Selection + Import Options in a row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label htmlFor="folder-select" className="text-xs">Destination Folder</Label>
+              <Select value={selectedFolderId} onValueChange={setSelectedFolderId}>
+                <SelectTrigger data-testid="select-folder" className="h-8 text-xs">
+                  <SelectValue placeholder="Select folder (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(folders as any[])?.map((folder) => (
+                    <SelectItem key={folder.id} value={folder.id}>
+                      <div className="flex items-center">
+                        <div 
+                          className="w-2.5 h-2.5 rounded-full mr-1.5" 
+                          style={{ backgroundColor: folder.color }}
+                        />
+                        {folder.name}
+                        {folder.isDefault && (
+                          <span className="ml-1.5 text-[10px] text-gray-500">(Default)</span>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {/* Clear existing phones option */}
+            <div className="flex items-center space-x-2 pt-5">
+              <Checkbox
+                id="clear-phones"
+                checked={clearExistingPhones}
+                onCheckedChange={(checked) => setClearExistingPhones(checked === true)}
+                data-testid="checkbox-clear-phones"
+              />
+              <Label htmlFor="clear-phones" className="text-xs text-blue-100 cursor-pointer">
+                Clear existing phone numbers before import
+              </Label>
             </div>
           </div>
           
-          <div className="rounded-lg border border-white/20 bg-white/5 p-2">
-            <h5 className="text-xs font-medium text-blue-100 mb-1">Example CSV Format</h5>
-            <pre className="text-xs text-blue-100/80 bg-white/5 p-1.5 rounded border border-white/10 overflow-x-auto leading-snug">
-consumer_first_name,consumer_last_name,consumer_email,date_of_birth,filenumber,creditor,balance,account_number
-John,Doe,john.doe@email.com,1985-05-15,FILE123456,Credit Card Co,1250.50,ACC123456
-Jane,Smith,jane.smith@email.com,1990-08-22,FILE789012,Medical Services,875.25,MED789012
-            </pre>
-          </div>
-
-          {/* Folder Selection */}
-          <div className="space-y-1">
-            <Label htmlFor="folder-select" className="text-xs">Destination Folder</Label>
-            <Select value={selectedFolderId} onValueChange={setSelectedFolderId}>
-              <SelectTrigger data-testid="select-folder" className="h-8 text-xs">
-                <SelectValue placeholder="Select a folder (optional)" />
-              </SelectTrigger>
-              <SelectContent>
-                {(folders as any[])?.map((folder) => (
-                  <SelectItem key={folder.id} value={folder.id}>
-                    <div className="flex items-center">
-                      <div 
-                        className="w-2.5 h-2.5 rounded-full mr-1.5" 
-                        style={{ backgroundColor: folder.color }}
-                      />
-                      {folder.name}
-                      {folder.isDefault && (
-                        <span className="ml-1.5 text-[10px] text-gray-500">(Default)</span>
-                      )}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-gray-500 leading-snug">
-              Choose which folder to organize these accounts in.
+          {clearExistingPhones && (
+            <p className="text-xs text-yellow-400/80 bg-yellow-500/10 p-1.5 rounded border border-yellow-500/20">
+              <i className="fas fa-exclamation-triangle mr-1"></i>
+              Old phone numbers in additional data will be replaced with new ones from this CSV.
             </p>
-          </div>
+          )}
           
           {/* File Upload Area */}
           <div className="mt-1">

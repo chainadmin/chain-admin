@@ -230,7 +230,7 @@ export interface IStorage {
   findConsumersByEmailAndDob(email: string, dateOfBirth: string): Promise<(Consumer & { tenant: Tenant })[]>;
   createConsumer(consumer: InsertConsumer): Promise<Consumer>;
   updateConsumer(id: string, updates: Partial<Consumer>): Promise<Consumer>;
-  findOrCreateConsumer(consumerData: InsertConsumer): Promise<Consumer>;
+  findOrCreateConsumer(consumerData: InsertConsumer, options?: { clearExistingPhones?: boolean }): Promise<Consumer>;
   findAccountsByConsumerEmail(email: string): Promise<(Account & { consumer: Consumer })[]>;
   deleteConsumer(id: string, tenantId: string): Promise<void>;
   
@@ -842,7 +842,7 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async findOrCreateConsumer(consumerData: InsertConsumer): Promise<Consumer> {
+  async findOrCreateConsumer(consumerData: InsertConsumer, options?: { clearExistingPhones?: boolean }): Promise<Consumer> {
     const hasEmailField = Object.prototype.hasOwnProperty.call(consumerData, "email");
     const normalizedEmail = normalizeEmailValue(hasEmailField ? consumerData.email ?? undefined : undefined);
 
@@ -876,9 +876,30 @@ export class DatabaseStorage implements IStorage {
         updates.folderId = consumerData.folderId;
       }
       
-      // Always update additionalData if provided (includes folder/status info)
+      // Handle additionalData update with optional phone clearing
       if (consumerData.additionalData !== undefined) {
-        updates.additionalData = consumerData.additionalData;
+        let newAdditionalData = consumerData.additionalData as Record<string, any>;
+        
+        // If clearExistingPhones is enabled, start fresh without old phone fields
+        if (options?.clearExistingPhones) {
+          // Only keep the new additionalData (which has new phone fields from CSV)
+          updates.additionalData = newAdditionalData;
+        } else {
+          // Default behavior: merge old additional data with new (new overwrites same keys)
+          const existingAdditionalData = (existingConsumerWithTenant.additionalData as Record<string, any>) || {};
+          updates.additionalData = { ...existingAdditionalData, ...newAdditionalData };
+        }
+      } else if (options?.clearExistingPhones && existingConsumerWithTenant.additionalData) {
+        // Clear phone fields from existing data even if no new additionalData is provided
+        const existingAdditionalData = (existingConsumerWithTenant.additionalData as Record<string, any>) || {};
+        const cleanedData: Record<string, any> = {};
+        for (const [key, value] of Object.entries(existingAdditionalData)) {
+          // Skip any field containing 'phone' (case-insensitive)
+          if (!key.toLowerCase().includes('phone')) {
+            cleanedData[key] = value;
+          }
+        }
+        updates.additionalData = cleanedData;
       }
       
       // Update name fields if provided (even if existing has values - allows corrections)

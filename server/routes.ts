@@ -93,6 +93,8 @@ const csvUploadSchema = z.object({
     status: z.string().optional(),
     additionalData: z.record(z.any()).optional(),
   })),
+  folderId: z.string().optional(),
+  clearExistingPhones: z.boolean().optional(),
 });
 
 // Helper function to validate email format
@@ -1868,7 +1870,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const { consumers: consumersData, accounts: accountsData, folderId } = req.body;
+      const { consumers: consumersData, accounts: accountsData, folderId, clearExistingPhones } = req.body;
       
       // Basic array validation
       if (!consumersData || !Array.isArray(consumersData)) {
@@ -1978,7 +1980,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             dateOfBirth: normalizedDOB,
             tenantId: tenantId,
             folderId: targetFolderId,
-          });
+          }, { clearExistingPhones: clearExistingPhones === true });
           if (consumer.email) {
             createdConsumers.set(consumer.email.toLowerCase(), consumer);
           }
