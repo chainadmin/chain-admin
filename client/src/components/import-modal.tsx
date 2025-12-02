@@ -128,12 +128,33 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
         
         // Helper function to get value from row with flexible column matching
         const getColumnValue = (row: any, ...possibleNames: string[]): string => {
+          // First, try exact matches
           for (const name of possibleNames) {
-            // Try exact match first
             if (row[name] !== undefined && row[name] !== '') return row[name];
-            // Try without underscores/spaces
-            const normalized = name.replace(/[_\s]/g, '');
-            if (row[normalized] !== undefined && row[normalized] !== '') return row[normalized];
+          }
+          // Then try matching against all row keys (for partial matches)
+          const rowKeys = Object.keys(row);
+          for (const name of possibleNames) {
+            const normalizedName = name.replace(/[_\s]/g, '');
+            for (const key of rowKeys) {
+              const normalizedKey = key.replace(/[_\s]/g, '');
+              if (normalizedKey === normalizedName && row[key] !== undefined && row[key] !== '') {
+                return row[key];
+              }
+            }
+          }
+          return '';
+        };
+        
+        // Special helper for date of birth - looks for any column containing 'birth' or 'dob'
+        const getDOBValue = (row: any): string => {
+          const rowKeys = Object.keys(row);
+          for (const key of rowKeys) {
+            const lowerKey = key.toLowerCase();
+            if ((lowerKey.includes('birth') || lowerKey === 'dob' || lowerKey.includes('dateofbirth')) 
+                && row[key] !== undefined && row[key] !== '') {
+              return row[key];
+            }
           }
           return '';
         };
