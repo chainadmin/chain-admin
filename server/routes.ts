@@ -24,6 +24,7 @@ import {
   serviceActivationRequests,
   autoResponseConfig,
   autoResponseUsage,
+  messagingUsageEvents,
   type Account,
   type Consumer,
   type Tenant,
@@ -31,7 +32,7 @@ import {
   type SmsTracking,
 } from "@shared/schema";
 import { db } from "./db";
-import { and, eq, sql, desc } from "drizzle-orm";
+import { and, eq, sql, desc, gte, lte } from "drizzle-orm";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
@@ -15901,14 +15902,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get all subscription plans for admin
-  app.get('/api/admin/subscription-plans', isPlatformAdmin, async (_req: any, res) => {
+  // Get all subscription plans for admin - uses billing-plans.ts for accurate pricing
+  app.get('/api/admin/subscription-plans', isPlatformAdmin, async (req: any, res) => {
     try {
-      const plans = await db
-        .select()
-        .from(subscriptionPlans)
-        .where(eq(subscriptionPlans.isActive, true))
-        .orderBy(subscriptionPlans.displayOrder);
+      const { getPlanListForBusinessType, DOCUMENT_SIGNING_ADDON_PRICE, AI_AUTO_RESPONSE_ADDON_PRICE } = await import('../shared/billing-plans');
+      
+      // Get businessType from query param, default to call_center
+      const businessType = (req.query.businessType as string) || 'call_center';
+      
+      // Get plans for this business type from billing-plans.ts
+      const billingPlans = getPlanListForBusinessType(businessType as any);
+      
+      // Convert to the expected format (matching subscriptionPlans table structure)
+      const plans = billingPlans.map((plan, index) => ({
+        id: plan.id,
+        name: plan.name,
+        monthlyPriceCents: plan.price * 100, // Convert dollars to cents
+        setupFeeCents: 0, // No setup fee for base plans
+        includedEmails: plan.includedEmails,
+        includedSmsSegments: plan.includedSmsSegments,
+        displayOrder: index,
+        isActive: true,
+        // Include add-on pricing info
+        addons: {
+          document_signing: DOCUMENT_SIGNING_ADDON_PRICE * 100,
+          ai_auto_response: AI_AUTO_RESPONSE_ADDON_PRICE * 100
+        }
+      }));
 
       res.json(plans);
     } catch (error) {
@@ -16425,6 +16445,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating tenant name:", error);
       res.status(500).json({ message: "Failed to update tenant name" });
+    }
+  });
+
+  // Reset tenant usage counters (platform admin only)
+  app.put('/api/admin/tenants/:id/reset-usage', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Verify tenant exists
+      const tenant = await storage.getTenant(id);
+      if (!tenant) {
+        return res.status(404).json({ message: "Tenant not found" });
+      }
+
+      // Get active subscription to determine billing period
+      const [subscription] = await db
+        .select()
+        .from(subscriptions)
+        .where(and(
+          eq(subscriptions.tenantId, id),
+          eq(subscriptions.status, 'active')
+        ))
+        .limit(1);
+
+      let deletedEmailSms = 0;
+      let deletedAiResponses = 0;
+
+      // Check if subscription has valid billing period dates
+      const hasValidBillingPeriod = subscription && subscription.currentPeriodStart && subscription.currentPeriodEnd;
+
+      if (hasValidBillingPeriod) {
+        // Delete usage for the current billing period only
+        const periodStart = new Date(subscription.currentPeriodStart);
+        const periodEnd = new Date(subscription.currentPeriodEnd);
+        
+        // Delete email/SMS usage events for the billing period
+        const messagingResult = await db
+          .delete(messagingUsageEvents)
+          .where(and(
+            eq(messagingUsageEvents.tenantId, id),
+            gte(messagingUsageEvents.occurredAt, periodStart),
+            lte(messagingUsageEvents.occurredAt, periodEnd)
+          ))
+          .returning();
+        deletedEmailSms = messagingResult.length;
+
+        // Delete AI auto-response usage for the billing period
+        const aiResult = await db
+          .delete(autoResponseUsage)
+          .where(and(
+            eq(autoResponseUsage.tenantId, id),
+            gte(autoResponseUsage.createdAt, periodStart),
+            lte(autoResponseUsage.createdAt, periodEnd)
+          ))
+          .returning();
+        deletedAiResponses = aiResult.length;
+      } else {
+        // No subscription OR no valid billing period - delete ALL usage for this tenant
+        const messagingResult = await db
+          .delete(messagingUsageEvents)
+          .where(eq(messagingUsageEvents.tenantId, id))
+          .returning();
+        deletedEmailSms = messagingResult.length;
+
+        const aiResult = await db
+          .delete(autoResponseUsage)
+          .where(eq(autoResponseUsage.tenantId, id))
+          .returning();
+        deletedAiResponses = aiResult.length;
+      }
+
+      console.log(`Reset usage for tenant ${id}: ${deletedEmailSms} messaging events, ${deletedAiResponses} AI responses`);
+
+      res.json({
+        success: true,
+        message: "Usage counters reset successfully",
+        deleted: {
+          messagingEvents: deletedEmailSms,
+          aiResponses: deletedAiResponses
+        }
+      });
+    } catch (error) {
+      console.error("Error resetting usage:", error);
+      res.status(500).json({ message: "Failed to reset usage counters" });
     }
   });
 

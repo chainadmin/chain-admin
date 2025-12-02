@@ -6,13 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Building2, Users, DollarSign, TrendingUp, Eye, Ban, CheckCircle, AlertTriangle, Plus, Mail, MessageSquare, Phone, Trash2, Search, Shield, CreditCard, Send, Settings, Repeat, FileText, MessagesSquare, Zap, LogOut, LogIn, QrCode, Download, Pencil } from "lucide-react";
+import { Building2, Users, DollarSign, TrendingUp, Eye, Ban, CheckCircle, AlertTriangle, Plus, Mail, MessageSquare, Phone, Trash2, Search, Shield, CreditCard, Send, Settings, Repeat, FileText, MessagesSquare, Zap, LogOut, LogIn, QrCode, Download, Pencil, RotateCcw, Bot } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import AdminAuth from "@/components/admin-auth";
 import { TenantAgreementsPanel } from "@/components/global-admin/tenant-agreements-panel";
+import { DOCUMENT_SIGNING_ADDON_PRICE, AI_AUTO_RESPONSE_ADDON_PRICE } from "@shared/billing-plans";
 // Simple currency formatter
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('en-US', {
@@ -178,11 +179,12 @@ export default function GlobalAdmin() {
     enabled: isPlatformAdmin
   });
 
-  // Fetch subscription plans
+  // Fetch subscription plans - refetches when selected tenant changes to get business-type-specific pricing
   const { data: subscriptionPlans, isLoading: plansLoading } = useQuery({
-    queryKey: ['/api/admin/subscription-plans'],
+    queryKey: ['/api/admin/subscription-plans', selectedTenantForPlan?.businessType],
     queryFn: async () => {
-      const response = await fetch('/api/admin/subscription-plans', {
+      const businessType = selectedTenantForPlan?.businessType || 'call_center';
+      const response = await fetch(`/api/admin/subscription-plans?businessType=${businessType}`, {
         headers: {
           'Authorization': `Bearer ${sessionStorage.getItem('admin_token')}`
         }
@@ -571,6 +573,27 @@ export default function GlobalAdmin() {
       toast({
         title: "Error",
         description: "Failed to update tenant name",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Mutation to reset tenant usage counters
+  const resetUsageMutation = useMutation({
+    mutationFn: async (tenantId: string) => {
+      return apiRequest('PUT', `/api/admin/tenants/${tenantId}/reset-usage`, {});
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants'] });
+      toast({
+        title: "Usage Reset",
+        description: `Cleared ${data.deleted?.messagingEvents || 0} messaging events and ${data.deleted?.aiResponses || 0} AI responses`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to reset usage counters",
         variant: "destructive",
       });
     }
@@ -3018,6 +3041,52 @@ export default function GlobalAdmin() {
                     />
                   </div>
 
+                  <div className="border-t border-gray-200 pt-3 mt-3">
+                    <p className="text-sm font-semibold text-gray-700 mb-3">Add-on Services</p>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 bg-emerald-50 rounded-lg">
+                    <div>
+                      <p className="text-sm font-medium text-gray-700 flex items-center">
+                        <FileText className="h-4 w-4 mr-2 text-emerald-600" />
+                        Document Signing
+                      </p>
+                      <p className="text-xs text-gray-500">${DOCUMENT_SIGNING_ADDON_PRICE}/month - E-signature with audit trails</p>
+                    </div>
+                    <Switch
+                      checked={tenantEnabledServices.includes('document_signing')}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setTenantEnabledServices([...tenantEnabledServices, 'document_signing']);
+                        } else {
+                          setTenantEnabledServices(tenantEnabledServices.filter(s => s !== 'document_signing'));
+                        }
+                      }}
+                      data-testid="switch-document-signing"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
+                    <div>
+                      <p className="text-sm font-medium text-gray-700 flex items-center">
+                        <Bot className="h-4 w-4 mr-2 text-purple-600" />
+                        AI Auto-Response
+                      </p>
+                      <p className="text-xs text-gray-500">${AI_AUTO_RESPONSE_ADDON_PRICE}/month - Automated email responses</p>
+                    </div>
+                    <Switch
+                      checked={tenantEnabledServices.includes('ai_auto_response')}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setTenantEnabledServices([...tenantEnabledServices, 'ai_auto_response']);
+                        } else {
+                          setTenantEnabledServices(tenantEnabledServices.filter(s => s !== 'ai_auto_response'));
+                        }
+                      }}
+                      data-testid="switch-ai-auto-response"
+                    />
+                  </div>
+
                   <Button
                     className="w-full"
                     variant="default"
@@ -3041,6 +3110,39 @@ export default function GlobalAdmin() {
                     )}
                   </Button>
                 </div>
+              </div>
+
+              <div className="border-t border-gray-200 pt-4">
+                <p className="text-sm font-semibold text-gray-700 mb-3">Usage Management</p>
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3">
+                  <p className="text-sm text-amber-800">
+                    <AlertTriangle className="h-4 w-4 inline mr-1" />
+                    Reset will clear all email, SMS, and AI response usage for the current billing period.
+                  </p>
+                </div>
+                <Button
+                  className="w-full"
+                  variant="outline"
+                  onClick={() => {
+                    if (confirm('Are you sure you want to reset all usage counters for this agency? This action cannot be undone.')) {
+                      resetUsageMutation.mutate(selectedTenantForPlan.id);
+                    }
+                  }}
+                  disabled={resetUsageMutation.isPending}
+                  data-testid="button-reset-usage"
+                >
+                  {resetUsageMutation.isPending ? (
+                    <>
+                      <div className="animate-spin w-4 h-4 border-2 border-gray-600 border-t-transparent rounded-full mr-2" />
+                      Resetting...
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw className="h-4 w-4 mr-2" />
+                      Reset Usage Counters
+                    </>
+                  )}
+                </Button>
               </div>
 
               <div className="flex gap-2 justify-end">
