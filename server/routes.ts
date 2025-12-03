@@ -3486,6 +3486,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`      Folders: ${JSON.stringify(c.folderIds)} (isArray: ${Array.isArray(c.folderIds)})`);
         console.log(`      Template: "${c.templateName}"`);
         console.log(`      Recipients: ${c.totalRecipients}`);
+        console.log(`      PhonesToSend: "${c.phonesToSend}"`);
       });
       
       // Log the EXACT JSON being sent to frontend
@@ -3596,7 +3597,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`   Status: "${campaign.status}"`);
       console.log(`   Target Group: "${campaign.targetGroup}"`);
       console.log(`   Folder IDs: ${JSON.stringify(campaign.folderIds)}`);
-      console.log(`   Phones To Send: "${phonesToSend}"`);
+      console.log(`   Phones To Send (from input): "${phonesToSend}"`);
+      console.log(`   Phones To Send (from saved campaign): "${campaign.phonesToSend}"`);
       console.log(`   Total Recipients: ${totalRecipients}`);
       console.log(`   Campaign ID: ${campaign.id}`);
 
