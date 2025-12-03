@@ -1057,7 +1057,7 @@ export default function SMS() {
                             )}
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                           <div>
                             <span className="text-gray-600">Template:</span>
                             <div className="font-medium">{campaign.templateName}</div>
@@ -1065,6 +1065,10 @@ export default function SMS() {
                           <div>
                             <span className="text-gray-600">Target:</span>
                             <div className="font-medium">{getTargetGroupLabel(campaign.targetGroup, campaign)}</div>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Phones/Consumer:</span>
+                            <div className="font-medium">{campaign.phonesToSend === 'all' ? 'All' : campaign.phonesToSend || '1'}</div>
                           </div>
                           <div>
                             <span className="text-gray-600">Recipients:</span>

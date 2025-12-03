@@ -3486,6 +3486,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`      Folders: ${JSON.stringify(c.folderIds)} (isArray: ${Array.isArray(c.folderIds)})`);
         console.log(`      Template: "${c.templateName}"`);
         console.log(`      Recipients: ${c.totalRecipients}`);
+        console.log(`      📱 Phones To Send: "${c.phonesToSend}" (type: ${typeof c.phonesToSend})`);
       });
       
       // Log the EXACT JSON being sent to frontend
