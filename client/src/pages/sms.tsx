@@ -66,6 +66,7 @@ export default function SMS() {
 
   const { data: campaigns, isLoading: campaignsLoading } = useQuery({
     queryKey: ["/api/sms-campaigns"],
+    refetchInterval: 3000, // Refresh every 3 seconds to catch status changes
   });
 
   const { data: smsMetrics, isLoading: metricsLoading } = useQuery({
@@ -279,7 +280,9 @@ export default function SMS() {
   useEffect(() => {
     if (campaigns && Array.isArray(campaigns)) {
       campaigns.forEach((campaign: any) => {
-        if (campaign.status === 'sending' && !pollingIntervals.current.has(campaign.id)) {
+        const status = (campaign.status || '').toLowerCase();
+        if (status === 'sending' && !pollingIntervals.current.has(campaign.id)) {
+          console.log(`🔄 Starting polling for sending campaign: ${campaign.id}`);
           startPollingCampaign(campaign.id);
         }
       });
@@ -905,15 +908,19 @@ export default function SMS() {
                   <div className="text-center py-4">Loading campaigns...</div>
                 ) : (campaigns as any)?.length > 0 ? (
                   <div className="space-y-4">
+                    {/* Debug: Log all campaign statuses */}
+                    {console.log('📊 Campaign statuses:', (campaigns as any).map((c: any) => ({ id: c.id, name: c.name, status: c.status })))}
                     {(campaigns as any).map((campaign: any) => (
                       <div key={campaign.id} className="border rounded-lg p-4">
                         <div className="flex items-start justify-between gap-4 mb-2">
                           <h3 className="font-medium">{campaign.name}</h3>
                           <div className="flex items-center gap-2">
+                            {/* Debug: Show raw status for troubleshooting */}
+                            <span className="text-xs text-gray-400">[{campaign.status}]</span>
                             <Badge className={getStatusColor(campaign.status)}>
                               {campaign.status}
                             </Badge>
-                            {(campaign.status === "pending" || campaign.status === "pending_approval") && (
+                            {((campaign.status || '').toLowerCase() === "pending" || (campaign.status || '').toLowerCase() === "pending_approval") && (
                               <>
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
@@ -977,7 +984,7 @@ export default function SMS() {
                                 </AlertDialog>
                               </>
                             )}
-                            {campaign.status === "sending" && (
+                            {(campaign.status || '').toLowerCase() === "sending" && (
                               <AlertDialog>
                                 <AlertDialogTrigger asChild>
                                   <Button
