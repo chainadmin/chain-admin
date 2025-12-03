@@ -3972,11 +3972,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const normalizedStatus = (campaign.status || '').toLowerCase();
-      if (!['pending', 'pending_approval', 'cancelled'].includes(normalizedStatus)) {
-        return res.status(400).json({ message: "Only pending or cancelled campaigns can be deleted" });
+      
+      // If campaign is currently sending, cancel it first
+      if (normalizedStatus === 'sending') {
+        cancelledCampaigns.add(id);
+        console.log(`🛑 Campaign ${id} marked for cancellation before deletion`);
+        await storage.updateSmsCampaign(id, {
+          status: 'cancelled',
+          completedAt: new Date(),
+        });
       }
 
+      // Allow deleting campaigns in any status
       await storage.deleteSmsCampaign(id, tenantId);
+      console.log(`🗑️ Campaign ${id} deleted (was in status: ${campaign.status})`);
 
       res.status(204).send();
     } catch (error) {

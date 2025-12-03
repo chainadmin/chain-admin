@@ -1016,6 +1016,45 @@ export default function SMS() {
                                 </AlertDialogContent>
                               </AlertDialog>
                             )}
+                            {/* Delete button for any campaign status */}
+                            {!((campaign.status || '').toLowerCase() === "pending" || (campaign.status || '').toLowerCase() === "pending_approval") && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="text-red-600 hover:text-red-700"
+                                    aria-label="Delete campaign"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Delete Campaign</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      This will remove this campaign from your list. If the campaign is still sending, it will be cancelled first. This action cannot be undone.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      className="bg-red-600 hover:bg-red-700"
+                                      onClick={() => {
+                                        // If sending, cancel first then delete
+                                        if ((campaign.status || '').toLowerCase() === "sending") {
+                                          cancelCampaignMutation.mutate(campaign.id);
+                                        }
+                                        deleteCampaignMutation.mutate(campaign.id);
+                                      }}
+                                      disabled={deleteCampaignMutation.isPending || cancelCampaignMutation.isPending}
+                                    >
+                                      {deleteCampaignMutation.isPending ? "Deleting..." : "Delete"}
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
                           </div>
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
