@@ -1,0 +1,43 @@
+2025-09-07T01:21:56.217Z [error] Registration error: NeonDbError: Error connecting to database: fetch failed
+    at execute (file:///var/task/node_modules/@neondatabase/serverless/index.mjs:1549:24)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async NeonHttpPreparedQuery.execute (file:///var/task/node_modules/drizzle-orm/neon-http/session.js:40:20)
+    at async Object.handler (/vercel/path0/api/agencies/register.ts:31:28)
+    at async r (/opt/rust/nodejs.js:2:15384)
+    at async Server.<anonymous> (/opt/rust/nodejs.js:2:11409)
+    at async Server.<anonymous> (/opt/rust/nodejs.js:16:7281) {
+  severity: undefined,
+  code: undefined,
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: undefined,
+  line: undefined,
+  routine: undefined,
+  sourceError: TypeError: fetch failed
+      at node:internal/deps/undici/undici:13510:13
+      at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+      at async execute (file:///var/task/node_modules/@neondatabase/serverless/index.mjs:1548:15)
+      at async NeonHttpPreparedQuery.execute (file:///var/task/node_modules/drizzle-orm/neon-http/session.js:40:20)
+      at async Object.handler (/vercel/path0/api/agencies/register.ts:31:28)
+      at async r (/opt/rust/nodejs.js:2:15384)
+      at async Server.<anonymous> (/opt/rust/nodejs.js:2:11409)
+      at async Server.<anonymous> (/opt/rust/nodejs.js:16:7281) {
+    [cause]: Error: getaddrinfo ENOTFOUND api.pooler.supabase.com
+        at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26)
+        at GetAddrInfoReqWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+      errno: -3008,
+      code: 'ENOTFOUND',
+      syscall: 'getaddrinfo',
+      hostname: 'api.pooler.supabase.com'
+    }
+  }
+}

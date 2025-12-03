@@ -1,0 +1,36 @@
+{"message":"Error fetching throttle config: error: column \"business_type\" does not exist","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:34.441665189Z"}
+{"message":"    at /app/node_modules/pg-pool/index.js:45:11","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:34.441678952Z"}
+{"message":"    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:34.441688641Z"}
+{"message":"    at async file:///app/node_modules/drizzle-orm/node-postgres/session.js:83:22","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:34.441697659Z"}
+{"message":"    at async DatabaseStorage.getTenantSettings (file:///app/dist/index.js:2733:28)","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:34.441705738Z"}
+{"message":"    at async SmsService.getThrottleConfig (file:///app/dist/index.js:3666:35)","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:34.441712959Z"}
+{"message":"    at async SmsService.getRateLimitStatus (file:///app/dist/index.js:3909:32)","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:34.441720041Z"}
+{"message":"    at async file:///app/dist/index.js:7867:31 {","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:34.441728283Z"}
+{"message":"  length: 113,","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:34.441735194Z"}
+{"message":"  severity: 'ERROR',","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:34.441758921Z"}
+{"message":"  code: '42703',","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:34.441772028Z"}
+{"message":"  detail: undefined,","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:34.441777776Z"}
+{"message":"  hint: undefined,","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:34.441784838Z"}
+{"message":"  position: '27',","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:34.441790203Z"}
+{"message":"  internalPosition: undefined,","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:34.441798417Z"}
+{"message":"  internalQuery: undefined,","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:34.441803955Z"}
+{"message":"  where: undefined,","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:34.441808906Z"}
+{"message":"  schema: undefined,","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:34.441815408Z"}
+{"message":"  table: undefined,","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:34.441821122Z"}
+{"message":"  column: undefined,","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:34.441828511Z"}
+{"message":"  dataType: undefined,","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:34.441839793Z"}
+{"message":"  constraint: undefined,","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:34.441849006Z"}
+{"message":"  file: 'parse_relation.c',","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:34.441856599Z"}
+{"message":"  line: '3716',","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:34.441864983Z"}
+{"message":"  routine: 'errorMissingColumn'","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:34.441871803Z"}
+{"message":"}","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:34.443342649Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/sms-rate-limit-status → 200 (78ms) { dataKeys: 'used, limit, resetTime, canSend' }","attributes":{"level":"info"},"timestamp":"2025-10-31T04:18:34.443358482Z"}
+{"message":"📤 [RESPONSE] GET /api/sms-rate-limit-status → 200 (78ms) {","attributes":{"level":"info"},"timestamp":"2025-10-31T04:18:34.443368348Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-10-31T04:18:34.443377539Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-10-31T04:18:34.443385987Z"}
+{"message":"  bodyPreview: '{\"used\":0,\"limit\":10,\"resetTime\":1761884374421,\"canSend\":true}'","attributes":{"level":"info"},"timestamp":"2025-10-31T04:18:34.443396213Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-10-31T04:18:34.443405739Z"}
+{"message":"2025-10-31 04:18:29.148 UTC [75959] ERROR:  column \"business_type\" does not exist at character 27","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:38.969716672Z"}
+{"message":"2025-10-31 04:18:29.148 UTC [75959] STATEMENT:  select \"id\", \"tenant_id\", \"business_type\", \"privacy_policy\", \"terms_of_service\", \"contact_email\", \"contact_phone\", \"show_payment_plans\", \"show_documents\", \"allow_settlement_requests\", \"custom_branding\", \"consumer_portal_settings\", \"enabled_modules\", \"sms_throttle_limit\", \"minimum_monthly_payment\", \"created_at\", \"updated_at\", \"merchant_provider\", \"merchant_account_id\", \"merchant_api_key\", \"merchant_api_pin\", \"merchant_name\", \"merchant_type\", \"use_sandbox\", \"enable_online_payments\", \"smax_enabled\", \"smax_api_key\", \"smax_pin\", \"smax_base_url\" from \"tenant_settings\" where \"tenant_settings\".\"tenant_id\" = $1","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:38.969725473Z"}
+{"message":"2025-10-31 04:18:34.419 UTC [75960] ERROR:  column \"business_type\" does not exist at character 27","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:38.969735237Z"}
+{"message":"2025-10-31 04:18:34.419 UTC [75960] STATEMENT:  select \"id\", \"tenant_id\", \"business_type\", \"privacy_policy\", \"terms_of_service\", \"contact_email\", \"contact_phone\", \"show_payment_plans\", \"show_documents\", \"allow_settlement_requests\", \"custom_branding\", \"consumer_portal_settings\", \"enabled_modules\", \"sms_throttle_limit\", \"minimum_monthly_payment\", \"created_at\", \"updated_at\", \"merchant_provider\", \"merchant_account_id\", \"merchant_api_key\", \"merchant_api_pin\", \"merchant_name\", \"merchant_type\", \"use_sandbox\", \"enable_online_payments\", \"smax_enabled\", \"smax_api_key\", \"smax_pin\", \"smax_base_url\" from \"tenant_settings\" where \"tenant_settings\".\"tenant_id\" = $1","attributes":{"level":"error"},"timestamp":"2025-10-31T04:18:38.969741600Z"}

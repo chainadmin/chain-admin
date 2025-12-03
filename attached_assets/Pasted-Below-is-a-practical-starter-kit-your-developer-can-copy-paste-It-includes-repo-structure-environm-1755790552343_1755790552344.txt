@@ -1,0 +1,301 @@
+Below is a practical starter kit your developer can copy/paste. It includes repo structure, environment variables, Supabase schema + RLS, and minimal app code for Next.js Admin + React Native (Expo) Consumer app.
+
+A) Tech Stack (confirmed)
+
+Admin Web: Next.js 14 (App Router) + TypeScript + shadcn/ui
+
+Mobile: React Native (Expo) + TypeScript
+
+Backend/DB/Auth: Supabase (Postgres + RLS + Auth + Storage)
+
+Email: Postmark (per‑tenant servers); webhooks to admin
+
+Push: Expo Notifications (FCM/APNs)
+
+B) Monorepo structure
+chain/
+  apps/
+    admin-web/         # Next.js (Vercel)
+    consumer-mobile/   # React Native (Expo)
+  packages/
+    ui/                # shared UI components (optional)
+    db/                # shared types & queries
+  infra/
+    supabase/          # schema.sql, policies.sql, seed.sql
+  .env                 # root env (local only)
+  README.md
+C) Environment variables (local examples)
+
+Create .env.local in each app with your own values.
+
+admin-web/.env.local
+
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR_SUPABASE_PROJECT.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_KEY
+POSTMARK_SERVER_TOKEN=pm_xxx
+WEBHOOK_SECRET=whsec_xxx
+
+consumer-mobile/app.config.js (Expo config)
+
+export default {
+  expo: {
+    name: "Chain",
+    slug: "chain",
+    extra: {
+      supabaseUrl: "https://YOUR_SUPABASE_PROJECT.supabase.co",
+      supabaseAnonKey: "YOUR_ANON_KEY"
+    }
+  }
+}
+D) Supabase: core schema (minimal v1)
+
+Place in infra/supabase/schema.sql and apply via Supabase SQL editor or CLI.
+
+-- Tenants (agencies)
+create table if not exists tenants (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  slug text unique not null,
+  brand jsonb default '{}'::jsonb,
+  created_at timestamptz default now()
+);
+
+
+-- Users (platform + agency users)
+create table if not exists users (
+  id uuid primary key default gen_random_uuid(),
+  auth_id uuid not null,
+  tenant_id uuid references tenants(id) on delete cascade,
+  role text check (role in ('platform_admin','owner','manager','agent','consumer')) not null,
+  email text not null,
+  created_at timestamptz default now()
+);
+
+
+-- Consumers (end users)
+create table if not exists consumers (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid references tenants(id) on delete cascade,
+  first_name text,
+  last_name text,
+  email text,
+  phone text,
+  contact_prefs jsonb default '{}'::jsonb,
+  created_at timestamptz default now()
+);
+
+
+-- Accounts (debts)
+create table if not exists accounts (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid references tenants(id) on delete cascade,
+  consumer_id uuid references consumers(id) on delete cascade,
+  account_number text,
+  creditor text,
+  balance_cents bigint not null,
+  status text default 'active',
+  due_date date,
+  created_at timestamptz default now()
+);
+
+
+-- Push device tokens
+create table if not exists push_devices (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid references tenants(id) on delete cascade,
+  consumer_id uuid references consumers(id) on delete cascade,
+  expo_token text not null,
+  created_at timestamptz default now()
+);
+
+
+-- Email templates (per tenant)
+create table if not exists email_templates (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid references tenants(id) on delete cascade,
+  name text not null,
+  subject text not null,
+  html text not null,
+  status text default 'draft'
+);
+
+
+-- Sender identities (per tenant)
+create table if not exists sender_identities (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid references tenants(id) on delete cascade,
+  from_name text,
+  from_email text,
+  domain text,
+  provider text default 'postmark',
+  verified boolean default false
+);
+Row‑Level Security (RLS) policies (policies.sql)
+alter table tenants enable row level security;
+alter table users enable row level security;
+alter table consumers enable row level security;
+alter table accounts enable row level security;
+alter table push_devices enable row level security;
+alter table email_templates enable row level security;
+alter table sender_identities enable row level security;
+
+
+-- Helper: get current user's tenant via users.auth_id = auth.uid()
+create or replace function current_tenant() returns uuid as $$
+  select tenant_id from users where auth_id = auth.uid() limit 1;
+$$ language sql stable;
+
+
+-- Generic tenant policy template
+create policy tenant_isolation on consumers
+  using (tenant_id = current_tenant());
+create policy tenant_isolation_accounts on accounts
+  using (tenant_id = current_tenant());
+create policy tenant_isolation_templates on email_templates
+  using (tenant_id = current_tenant());
+-- Repeat for other tables...
+
+
+-- Users table: a user can see themself; platform_admin can see all via RPC (optional)
+create policy users_self on users
+  using (auth_id = auth.uid());
+
+Note: You’ll also add insert/update policies per table (e.g., allow agents/managers for their tenant). Keep roles simple for MVP.
+
+E) Admin Web (Next.js) – minimal starter code
+
+Install
+
+cd apps/admin-web
+npm create next-app@latest . -- --ts --use-npm
+npm i @supabase/supabase-js zod @tanstack/react-table
+
+lib/supabase.ts
+
+import { createClient } from '@supabase/supabase-js';
+export const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+app/page.tsx (dashboard placeholder)
+
+export default function Page(){
+  return (
+    <main className="p-8">
+      <h1 className="text-2xl font-semibold">Chain Admin</h1>
+      <p className="text-sm text-gray-500">Upload accounts, manage templates, and send notifications.</p>
+    </main>
+  );
+}
+
+app/upload/page.tsx (CSV upload stub)
+
+'use client';
+import { useState } from 'react';
+export default function Upload(){
+  const [file,setFile]=useState<File|null>(null);
+  return (
+    <main className="p-8">
+      <h2 className="text-xl mb-4">Upload Accounts (CSV)</h2>
+      <input type="file" accept=".csv" onChange={e=>setFile(e.target.files?.[0]||null)} />
+      <button className="mt-4 px-4 py-2 border rounded">Parse & Import</button>
+    </main>
+  );
+}
+F) Consumer Mobile (Expo) – minimal starter code
+
+Install
+
+cd apps/consumer-mobile
+npx create-expo-app@latest . --template
+npm i @supabase/supabase-js expo-notifications
+
+supabase.ts
+
+import { createClient } from '@supabase/supabase-js';
+import Constants from 'expo-constants';
+const { supabaseUrl, supabaseAnonKey } = Constants.expoConfig!.extra as any;
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+App.tsx (OTP sign-in + dashboard stub)
+
+import { useState } from 'react';
+import { View, Text, TextInput, Button } from 'react-native';
+import { supabase } from './supabase';
+
+
+export default function App(){
+  const [email,setEmail]=useState('');
+  const [session,setSession]=useState<any>(null);
+
+
+  const signIn = async()=>{
+    await supabase.auth.signInWithOtp({ email });
+    alert('Check your email for a magic link.');
+  };
+
+
+  if(!session){
+    return (
+      <View style={{ padding:24, marginTop:60 }}>
+        <Text style={{ fontSize:24, fontWeight:'600' }}>Chain</Text>
+        <TextInput placeholder="you@example.com" value={email} onChangeText={setEmail} style={{ borderWidth:1, padding:12, marginVertical:12 }} />
+        <Button title="Send magic link" onPress={signIn} />
+      </View>
+    );
+  }
+
+
+  return (
+    <View style={{ padding:24, marginTop:60 }}>
+      <Text style={{ fontSize:20 }}>Hello!</Text>
+      <Text>Your accounts and updates will appear here.</Text>
+    </View>
+  );
+}
+G) Push Notifications (Expo) – basics
+
+Configure FCM/APNs in Expo; request permissions on first launch.
+
+Store device token in push_devices (with tenant_id + consumer_id).
+
+Server route to broadcast a push for an account update.
+
+Token registration snippet (mobile)
+
+import * as Notifications from 'expo-notifications';
+const token = (await Notifications.getExpoPushTokenAsync()).data;
+// POST token to admin API with consumer_id
+H) Email (Postmark) – basics
+
+Create a Server per tenant; store token securely (server‑side).
+
+Add Sender Identity: verify domain via DNS.
+
+Create Template with variables; send via server token.
+
+Sending (server‑side Next.js route handler)
+
+// app/api/email/send/route.ts
+import { NextRequest, NextResponse } from 'next/server';
+export async function POST(req: NextRequest){
+  const { to, from, subject, html } = await req.json();
+  // call Postmark API with tenant's server token (from your DB)
+  return NextResponse.json({ ok: true });
+}
+I) First boot checklist (local)
+
+Create Supabase project → run schema.sql + RLS policies.
+
+Configure Auth (email OTP).
+
+Create initial tenant + a test user in users tied to your Supabase auth user (same auth_id).
+
+Run admin web & mobile apps; confirm sign‑in.
+
+Import a tiny CSV (2–3 rows) → confirm accounts appear.
+
+Register one device for push; trigger a test notification.
+
+Connect Postmark sandbox; send a test template.

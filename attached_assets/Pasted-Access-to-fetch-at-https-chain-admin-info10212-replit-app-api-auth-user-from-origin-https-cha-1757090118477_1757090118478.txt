@@ -1,0 +1,84 @@
+Access to fetch at 'https://chain-admin-info10212.replit.app/api/auth/user' from origin 'https://chain-admin-psi.vercel.app' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.Understand this error
+index-Bb5_wtuN.js:233  GET https://chain-admin-info10212.replit.app/api/auth/user net::ERR_FAILED 404 (Not Found)
+(anonymous) @ index-Bb5_wtuN.js:233
+m @ index-Bb5_wtuN.js:212
+S @ index-Bb5_wtuN.js:212
+start @ index-Bb5_wtuN.js:212
+fetch @ index-Bb5_wtuN.js:212
+Of @ index-Bb5_wtuN.js:212
+onSubscribe @ index-Bb5_wtuN.js:212
+subscribe @ index-Bb5_wtuN.js:212
+(anonymous) @ index-Bb5_wtuN.js:233
+RV @ index-Bb5_wtuN.js:143
+ec @ index-Bb5_wtuN.js:161
+OU @ index-Bb5_wtuN.js:174
+MU @ index-Bb5_wtuN.js:174
+kU @ index-Bb5_wtuN.js:174
+AU @ index-Bb5_wtuN.js:174
+N$ @ index-Bb5_wtuN.js:174
+dl @ index-Bb5_wtuN.js:174
+tS @ index-Bb5_wtuN.js:174
+Wl @ index-Bb5_wtuN.js:91
+p$ @ index-Bb5_wtuN.js:174
+uo @ index-Bb5_wtuN.js:174
+a$ @ index-Bb5_wtuN.js:174
+Jw @ index-Bb5_wtuN.js:174
+tn @ index-Bb5_wtuN.js:62
+Ft @ index-Bb5_wtuN.js:62
+B @ index-Bb5_wtuN.js:62Understand this error
+consumer-register:1 Access to fetch at 'https://chain-admin-info10212.replit.app/api/consumer-registration' from origin 'https://chain-admin-psi.vercel.app' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource.Understand this error
+index-Bb5_wtuN.js:233  POST https://chain-admin-info10212.replit.app/api/consumer-registration net::ERR_FAILED
+Jt @ index-Bb5_wtuN.js:233
+mutationFn @ index-Bb5_wtuN.js:549
+fn @ index-Bb5_wtuN.js:212
+S @ index-Bb5_wtuN.js:212
+start @ index-Bb5_wtuN.js:212
+execute @ index-Bb5_wtuN.js:212
+await in execute
+mutate @ index-Bb5_wtuN.js:212
+(anonymous) @ index-Bb5_wtuN.js:233
+m @ index-Bb5_wtuN.js:551
+ft @ index-Bb5_wtuN.js:78
+fD @ index-Bb5_wtuN.js:78
+kg @ index-Bb5_wtuN.js:78
+a7 @ index-Bb5_wtuN.js:78
+Sj @ index-Bb5_wtuN.js:90
+XL @ index-Bb5_wtuN.js:90
+Cj @ index-Bb5_wtuN.js:90
+JL @ index-Bb5_wtuN.js:90
+(anonymous) @ index-Bb5_wtuN.js:90
+W0 @ index-Bb5_wtuN.js:174
+mD @ index-Bb5_wtuN.js:78
+Mb @ index-Bb5_wtuN.js:90
+S6 @ index-Bb5_wtuN.js:78
+bb @ index-Bb5_wtuN.js:78
+V6 @ index-Bb5_wtuN.js:78Understand this error
+consumer-register:1 Access to fetch at 'https://chain-admin-info10212.replit.app/api/consumer-registration' from origin 'https://chain-admin-psi.vercel.app' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource.Understand this error
+index-Bb5_wtuN.js:233  POST https://chain-admin-info10212.replit.app/api/consumer-registration net::ERR_FAILED
+Jt @ index-Bb5_wtuN.js:233
+mutationFn @ index-Bb5_wtuN.js:549
+fn @ index-Bb5_wtuN.js:212
+S @ index-Bb5_wtuN.js:212
+start @ index-Bb5_wtuN.js:212
+execute @ index-Bb5_wtuN.js:212
+await in execute
+mutate @ index-Bb5_wtuN.js:212
+(anonymous) @ index-Bb5_wtuN.js:233
+m @ index-Bb5_wtuN.js:551
+ft @ index-Bb5_wtuN.js:78
+fD @ index-Bb5_wtuN.js:78
+kg @ index-Bb5_wtuN.js:78
+a7 @ index-Bb5_wtuN.js:78
+Sj @ index-Bb5_wtuN.js:90
+XL @ index-Bb5_wtuN.js:90
+Cj @ index-Bb5_wtuN.js:90
+JL @ index-Bb5_wtuN.js:90
+(anonymous) @ index-Bb5_wtuN.js:90
+W0 @ index-Bb5_wtuN.js:174
+mD @ index-Bb5_wtuN.js:78
+Mb @ index-Bb5_wtuN.js:90
+S6 @ index-Bb5_wtuN.js:78
+bb @ index-Bb5_wtuN.js:78
+V6 @ index-Bb5_wtuN.js:78Understand this error
+consumer-register:1 Access to fetch at 'https://chain-admin-info10212.replit.app/api/consumer-registration' from origin 'https://chain-admin-psi.vercel.app' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource.Understand this error
+index-Bb5_wtuN.js:233  POST https://chain-admin-info10212.replit.app/api/consumer-registration net::ERR_FAILED

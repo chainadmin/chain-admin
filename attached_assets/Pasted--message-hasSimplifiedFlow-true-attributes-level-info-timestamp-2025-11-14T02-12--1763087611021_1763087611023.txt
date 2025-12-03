@@ -1,0 +1,29 @@
+{"message":"  hasSimplifiedFlow: true,","attributes":{"level":"info"},"timestamp":"2025-11-14T02:12:52.836843547Z"}
+{"message":"  arrangementId: null,","attributes":{"level":"info"},"timestamp":"2025-11-14T02:12:52.836847538Z"}
+{"message":"  accountBalance: 31400","attributes":{"level":"info"},"timestamp":"2025-11-14T02:12:52.836851718Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-14T02:12:52.836855654Z"}
+{"message":"✨ Processing simplified flow: {","attributes":{"level":"info"},"timestamp":"2025-11-14T02:12:52.836859297Z"}
+{"message":"  paymentMethod: 'custom',","attributes":{"level":"info"},"timestamp":"2025-11-14T02:12:52.836862915Z"}
+{"message":"  selectedTerm: null,","attributes":{"level":"info"},"timestamp":"2025-11-14T02:12:52.836868720Z"}
+{"message":"  paymentFrequency: 'biweekly',","attributes":{"level":"info"},"timestamp":"2025-11-14T02:12:52.836874192Z"}
+{"message":"  calculatedPaymentCents: 2500","attributes":{"level":"info"},"timestamp":"2025-11-14T02:12:52.836879421Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-14T02:12:52.836885156Z"}
+{"message":"✅ Simplified flow validated: {","attributes":{"level":"info"},"timestamp":"2025-11-14T02:12:52.836890515Z"}
+{"message":"  paymentMethod: 'custom',","attributes":{"level":"info"},"timestamp":"2025-11-14T02:12:52.836897081Z"}
+{"message":"  selectedTerm: null,","attributes":{"level":"info"},"timestamp":"2025-11-14T02:12:52.836903229Z"}
+{"message":"  paymentFrequency: 'biweekly',","attributes":{"level":"info"},"timestamp":"2025-11-14T02:12:52.836907340Z"}
+{"message":"📤 [RESPONSE-JSON] POST /api/consumer/payments/process → 400 (121ms) { dataKeys: 'success, message' }","attributes":{"level":"info"},"timestamp":"2025-11-14T02:12:52.840297297Z"}
+{"message":"📤 [RESPONSE] POST /api/consumer/payments/process → 400 (121ms) {","attributes":{"level":"info"},"timestamp":"2025-11-14T02:12:52.840312578Z"}
+{"message":"  amountCents: 2500","attributes":{"level":"info"},"timestamp":"2025-11-14T02:12:52.840315552Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-11-14T02:12:52.840322790Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-14T02:12:52.840328655Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-11-14T02:12:52.840332530Z"}
+{"message":"💵 Final payment amount: { amountCents: 2500, amountDollars: '25.00' }","attributes":{"level":"info"},"timestamp":"2025-11-14T02:12:52.840339592Z"}
+{"message":"  bodyPreview: '{\"success\":false,\"message\":\"SMAX integration is required for NMI recurring payments, saved cards, an'","attributes":{"level":"info"},"timestamp":"2025-11-14T02:12:52.840341027Z"}
+{"message":"🏦 Merchant provider: nmi","attributes":{"level":"info"},"timestamp":"2025-11-14T02:12:52.840348405Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-14T02:12:52.840350244Z"}
+{"message":"🔑 NMI credentials check: credentials configured","attributes":{"level":"info"},"timestamp":"2025-11-14T02:12:52.840355497Z"}
+{"message":"🟣 Processing payment with NMI (Network Merchants Inc.)","attributes":{"level":"info"},"timestamp":"2025-11-14T02:12:52.840361219Z"}
+{"message":"💡 Using direct sale (bypassing Customer Vault - cards stored in SMAX)","attributes":{"level":"info"},"timestamp":"2025-11-14T02:12:52.840367479Z"}
+{"message":"2025-11-14 02:13:14.326 UTC [27] LOG:  checkpoint starting: time","attributes":{"level":"error"},"timestamp":"2025-11-14T02:13:19.637411737Z"}
+{"message":"2025-11-14 02:13:15.949 UTC [27] LOG:  checkpoint complete: wrote 17 buffers (0.1%); 0 WAL file(s) added, 0 removed, 0 recycled; write=1.523 s, sync=0.044 s, total=1.624 s; sync files=14, longest=0.034 s, average=0.004 s; distance=63 kB, estimate=128 kB; lsn=0/EE36900, redo lsn=0/EE36870","attributes":{"level":"error"},"timestamp":"20

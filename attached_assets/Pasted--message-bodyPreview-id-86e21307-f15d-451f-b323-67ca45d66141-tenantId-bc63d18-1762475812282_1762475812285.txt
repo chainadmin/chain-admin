@@ -1,0 +1,54 @@
+{"message":"  bodyPreview: '[{\"id\":\"86e21307-f15d-451f-b323-67ca45d66141\",\"tenantId\":\"bc63d182-9691-455a-b372-10dfcad9c11e\",\"con'","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.794035015Z"}
+{"message":"  totalSchedules: 0,","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.794041407Z"}
+{"message":"  scheduleStatuses: []","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.794046677Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.794051296Z"}
+{"message":"✅ Active schedules after filter: { activeCount: 0, activeScheduleIds: [] }","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.794073750Z"}
+{"message":"📤 Returning enriched schedules to frontend: { count: 0, schedules: [] }","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.794079879Z"}
+{"message":"  hasAuthHeader: true,","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.796138668Z"}
+{"message":"  startsWithBearer: true,","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.796148318Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.796249639Z"}
+{"message":"  bodyPreview: '{\"templateOptions\":[{\"id\":\"b0d50038-d9ab-44e9-9713-1fd68a6b38a2\",\"tenantId\":\"bc63d182-9691-455a-b372'","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.796258921Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.796273177Z"}
+{"message":"  path: '/api/consumer/arrangements/jacobbimccant@gmail.com'","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.796276287Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.796284369Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.796286986Z"}
+{"message":"✅ Consumer token decoded: {","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.796294906Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.796297494Z"}
+{"message":"  type: 'consumer',","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.796303341Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.796305818Z"}
+{"message":"  consumerId: '027268e9-7646-475f-8e5e-0444b5c299db',","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.796310765Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.796314714Z"}
+{"message":"  email: 'jacobbimccant@gmail.com',","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.796317543Z"}
+{"message":"🔐 Consumer auth check: {","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.796323946Z"}
+{"message":"  tenantSlug: 'waypoint-solutions'","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.796328819Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.796334195Z"}
+{"message":"📋 Fetching SMAX arrangement for account: 123456","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.796342171Z"}
+{"message":"📋 No future payments found for file: 123456","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.796349601Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/consumer/arrangements/jacobbimccant@gmail.com → 200 (1085ms) {","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.796356053Z"}
+{"message":"  dataKeys: 'templateOptions, existingArrangements, hasExistingSMAXArrangement'","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.796661932Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.796672815Z"}
+{"message":"📤 [RESPONSE] GET /api/consumer/arrangements/jacobbimccant@gmail.com → 200 (1086ms) {","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.796680283Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:41.796691936Z"}
+{"message":"📨 [REQUEST] GET /sign/86e21307-f15d-451f-b323-67ca45d66141 {","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:45.200815397Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:45.200823610Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:45.200831112Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:45.200838695Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:45.200846100Z"}
+{"message":"📤 [RESPONSE-FILE] GET / → 200 (1ms) { file: 'index.html' }","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:45.200853352Z"}
+{"message":"📨 [REQUEST] GET /api/public/agency/waypoint-solutions {","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:45.200861336Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:45.200869489Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:45.200876912Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:45.200884328Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:45.200891717Z"}
+{"message":"📨 [REQUEST] GET /api/signature-requests/86e21307-f15d-451f-b323-67ca45d66141/public {","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:45.200898702Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:45.200913705Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:45.200921874Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:45.201921288Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:45.201937412Z"}
+{"message":"📤 [RESPONSE-FILE] GET / → 200 (3ms) { file: 'index.html' }","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:45.201945536Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/public/agency/waypoint-solutions → 200 (10ms) { dataKeys: 'tenant, tenantSettings' }","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:45.201951881Z"}
+{"message":"📤 [RESPONSE] GET /api/public/agency/waypoint-solutions → 200 (10ms) {","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:45.201957978Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:45.201964380Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:45.201971077Z"}
+{"message":"  bodyPreview: '{\"tenant\":{\"id\":\"bc63d182-9691-455a-b372-10dfcad9c11e\",\"name\":\"Waypoint Solutions\",\"slug\":\"waypoint-'","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:45.201977724Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-07T00:35:45.201984599Z"}

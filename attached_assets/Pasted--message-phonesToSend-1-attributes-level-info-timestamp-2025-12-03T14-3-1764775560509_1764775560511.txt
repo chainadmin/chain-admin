@@ -1,0 +1,16 @@
+{"message":"    \"phonesToSend\": \"1\",","attributes":{"level":"info"},"timestamp":"2025-12-03T14:34:00.889458803Z"}
+{"message":"  \"phonesToSend\": \"3\",","attributes":{"level":"info"},"timestamp":"2025-12-03T14:39:19.559286250Z"}
+{"message":"  dataKeys: 'id, tenantId, templateId, name, targetGroup, folderIds, sendToAllNumbers, phonesToSend, status, totalRecipients, totalSent, totalDelivered, totalErrors, totalOptOuts, createdAt, completedAt, message'","attributes":{"level":"info"},"timestamp":"2025-12-03T14:39:19.765064663Z"}
+{"message":"    \"phonesToSend\": \"1\",","attributes":{"level":"info"},"timestamp":"2025-12-03T14:39:19.836289246Z"}
+{"message":"  dataKeys: 'id, tenantId, templateId, name, targetGroup, folderIds, sendToAllNumbers, phonesToSend, status, totalRecipients, totalSent, totalDelivered, totalErrors, totalOptOuts, createdAt, completedAt, message'","attributes":{"level":"info"},"timestamp":"2025-12-03T14:41:15.186671523Z"}
+{"message":"    \"phonesToSend\": \"1\",","attributes":{"level":"info"},"timestamp":"2025-12-03T14:41:15.189532435Z"}
+{"message":"    \"phonesToSend\": \"1\",","attributes":{"level":"info"},"timestamp":"2025-12-03T14:44:55.435314337Z"}
+{"message":"    \"phonesToSend\": \"1\",","attributes":{"level":"info"},"timestamp":"2025-12-03T14:45:16.371583784Z"}
+{"message":"    \"phonesToSend\": \"1\",","attributes":{"level":"info"},"timestamp":"2025-12-03T14:54:51.804086861Z"}
+{"message":"    \"phonesToSend\": \"1\",","attributes":{"level":"info"},"timestamp":"2025-12-03T15:04:55.075526817Z"}
+{"message":"    \"phonesToSend\": \"1\",","attributes":{"level":"info"},"timestamp":"2025-12-03T15:08:34.796919379Z"}
+{"message":"    \"phonesToSend\": \"1\",","attributes":{"level":"info"},"timestamp":"2025-12-03T15:09:15.926365504Z"}
+{"message":"    \"phonesToSend\": \"1\",","attributes":{"level":"info"},"timestamp":"2025-12-03T15:16:31.207665409Z"}
+{"message":"    \"phonesToSend\": \"1\",","attributes":{"level":"info"},"timestamp":"2025-12-03T15:22:04.989855724Z"}
+{"message":"    \"phonesToSend\": \"1\",","attributes":{"level":"info"},"timestamp":"2025-12-03T15:23:01.634237851Z"}
+{"message":"    \"phonesToSend\": \"1\",","attributes":{"level":"info"},"timestamp":"2025-12-03T15:23:05.578768349Z"}

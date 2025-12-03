@@ -1,0 +1,48 @@
+{"message":"2025-11-03 01:55:15.668 UTC [86188] ERROR:  foreign key constraint \"signature_requests_tenant_id_fkey\" cannot be implemented","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.765396492Z"}
+{"message":"2025-11-03 01:55:15.668 UTC [86188] DETAIL:  Key columns \"tenant_id\" and \"id\" are of incompatible types: character varying and uuid.","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.765413137Z"}
+{"message":"2025-11-03 01:55:15.668 UTC [86188] STATEMENT:  ","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.765424711Z"}
+{"message":"\t        CREATE TABLE IF NOT EXISTS signature_requests (","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.765432956Z"}
+{"message":"\t          id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.765441580Z"}
+{"message":"\t          tenant_id VARCHAR NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.765458930Z"}
+{"message":"\t          message TEXT,","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.765471120Z"}
+{"message":"\t          consumer_id VARCHAR NOT NULL REFERENCES consumers(id) ON DELETE CASCADE,","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.765476356Z"}
+{"message":"\t          consent_text TEXT,","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.765485040Z"}
+{"message":"\t          document_id VARCHAR NOT NULL REFERENCES documents(id) ON DELETE CASCADE,","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.765487339Z"}
+{"message":"\t          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.765495028Z"}
+{"message":"\t          account_id VARCHAR REFERENCES accounts(id) ON DELETE SET NULL,","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.765500539Z"}
+{"message":"\t          signed_at TIMESTAMP","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.765507659Z"}
+{"message":"\t          status VARCHAR NOT NULL DEFAULT 'pending',","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.765512380Z"}
+{"message":"\t        )","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.765517114Z"}
+{"message":"\t      ","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.765526405Z"}
+{"message":"\t          expires_at TIMESTAMP NOT NULL,","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.765527125Z"}
+{"message":"2025-11-03 01:55:15.671 UTC [86188] ERROR:  relation \"signature_requests\" does not exist","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.765533434Z"}
+{"message":"2025-11-03 01:55:15.671 UTC [86188] STATEMENT:  ","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.765538614Z"}
+{"message":"\t        CREATE TABLE IF NOT EXISTS signed_documents (","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.765543664Z"}
+{"message":"\t          id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.766774530Z"}
+{"message":"\t          signature_request_id VARCHAR NOT NULL REFERENCES signature_requests(id) ON DELETE CASCADE,","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.766809348Z"}
+{"message":"\t          consumer_id VARCHAR NOT NULL REFERENCES consumers(id) ON DELETE CASCADE,","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.766818905Z"}
+{"message":"\t          signature_data TEXT NOT NULL,","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.766826286Z"}
+{"message":"\t          ip_address VARCHAR,","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.766834731Z"}
+{"message":"\t          user_agent TEXT,","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.766842158Z"}
+{"message":"\t          signed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.766850714Z"}
+{"message":"\t        )","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.766857000Z"}
+{"message":"\t      ","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.766869929Z"}
+{"message":"2025-11-03 01:55:15.673 UTC [86188] ERROR:  relation \"signature_requests\" does not exist","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.766878545Z"}
+{"message":"2025-11-03 01:55:15.673 UTC [86188] STATEMENT:  ","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.766889839Z"}
+{"message":"\t        CREATE TABLE IF NOT EXISTS signature_audit_trail (","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.766897834Z"}
+{"message":"\t          id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.766906868Z"}
+{"message":"\t          signature_request_id VARCHAR NOT NULL REFERENCES signature_requests(id) ON DELETE CASCADE,","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.766913890Z"}
+{"message":"\t          event_type VARCHAR NOT NULL,","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.766921211Z"}
+{"message":"\t          event_data JSONB,","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.766934691Z"}
+{"message":"\t          ip_address VARCHAR,","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.766942771Z"}
+{"message":"\t          user_agent TEXT,","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.766949796Z"}
+{"message":"\t          occurred_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.766957962Z"}
+{"message":"\t        )","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.766965265Z"}
+{"message":"\t      ","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:21.766972648Z"}
+{"message":"npm error path /app","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:22.411420761Z"}
+{"message":"npm error command failed","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:22.411434377Z"}
+{"message":"npm error signal SIGTERM","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:22.411442089Z"}
+{"message":"npm error command sh -c NODE_ENV=production node dist/index.js","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:22.411464183Z"}
+{"message":"npm error A complete log of this run can be found in: /root/.npm/_logs/2025-11-02T20_15_02_578Z-debug-0.log","attributes":{"level":"error"},"timestamp":"2025-11-03T01:55:22.411472930Z"}
+{"message":"2025-11-03 01:58:11.039 UTC [27] LOG:  checkpoint starting: time","attributes":{"level":"error"},"timestamp":"2025-11-03T01:58:12.033666799Z"}
+{"message":"2025-11-03 01:58:14.580 UTC [27] LOG:  checkpoint complete: wrote 36 buffers (0.2%); 0 WAL file(s) added, 0 removed, 0 recycled; write=3.511 s, sync=0.013 s, total=3.542 s; sync files=38, longest=0.007 s, average=0.001 s; distance=226 kB, estimate=226 kB; lsn=0/B2601E0, redo lsn=0/B260188","attributes":{"level":"error"},"timestamp":"2025-11-03T01:58:14.586672854Z"}

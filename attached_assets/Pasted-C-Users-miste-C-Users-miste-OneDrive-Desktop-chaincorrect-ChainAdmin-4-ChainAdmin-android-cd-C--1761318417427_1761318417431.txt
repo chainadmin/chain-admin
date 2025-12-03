@@ -1,0 +1,39 @@
+C:\Users\miste>"C:\Users\miste\OneDrive\Desktop\chaincorrect\ChainAdmin (4)\ChainAdmin\android"cd"C:\Users\miste\OneDrive\Desktop\chaincorrect\ChainAdmin (4)\ChainAdmin"
+The filename, directory name, or volume label syntax is incorrect.
+
+C:\Users\miste>cd"C:\Users\miste\OneDrive\Desktop\chaincorrect\ChainAdmin (4)"
+The filename, directory name, or volume label syntax is incorrect.
+
+C:\Users\miste>cdC:\Users\miste\OneDrive\Desktop\chaincorrect\ChainAdmin (4)
+The filename, directory name, or volume label syntax is incorrect.
+
+C:\Users\miste>cd C:\Users\miste\OneDrive\Desktop\chaincorrect\ChainAdmin
+
+C:\Users\miste\OneDrive\Desktop\chaincorrect\ChainAdmin>
+C:\Users\miste\OneDrive\Desktop\chaincorrect\ChainAdmin>cd C:\Users\miste\OneDrive\Desktop\chaincorrect\ChainAdmin (4)
+
+C:\Users\miste\OneDrive\Desktop\chaincorrect\ChainAdmin (4)>npm install
+npm error code ENOENT
+npm error syscall open
+npm error path C:\Users\miste\OneDrive\Desktop\chaincorrect\ChainAdmin (4)\package.json
+npm error errno -4058
+npm error enoent Could not read package.json: Error: ENOENT: no such file or directory, open 'C:\Users\miste\OneDrive\Desktop\chaincorrect\ChainAdmin (4)\package.json'
+npm error enoent This is related to npm not being able to find a file.
+npm error enoent
+npm error A complete log of this run can be found in: C:\Users\miste\AppData\Local\npm-cache\_logs\2025-10-24T15_06_38_956Z-debug-0.log
+
+C:\Users\miste\OneDrive\Desktop\chaincorrect\ChainAdmin (4)>npm run build
+npm error code ENOENT
+npm error syscall open
+npm error path C:\Users\miste\OneDrive\Desktop\chaincorrect\ChainAdmin (4)\package.json
+npm error errno -4058
+npm error enoent Could not read package.json: Error: ENOENT: no such file or directory, open 'C:\Users\miste\OneDrive\Desktop\chaincorrect\ChainAdmin (4)\package.json'
+npm error enoent This is related to npm not being able to find a file.
+npm error enoent
+npm error A complete log of this run can be found in: C:\Users\miste\AppData\Local\npm-cache\_logs\2025-10-24T15_06_42_462Z-debug-0.log
+
+C:\Users\miste\OneDrive\Desktop\chaincorrect\ChainAdmin (4)>npx cap open android
+npm error could not determine executable to run
+npm error A complete log of this run can be found in: C:\Users\miste\AppData\Local\npm-cache\_logs\2025-10-24T15_06_44_242Z-debug-0.log
+
+C:\Users\miste\OneDrive\Desktop\chaincorrect\ChainAdmin (4)>

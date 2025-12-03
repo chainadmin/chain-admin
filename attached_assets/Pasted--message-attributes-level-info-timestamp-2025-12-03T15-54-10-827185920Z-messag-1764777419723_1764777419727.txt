@@ -1,0 +1,216 @@
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:10.827185920Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/sms-queue-status → 200 (2ms) { dataKeys: 'queueLength, estimatedWaitTime' }","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:10.827192981Z"}
+{"message":"📤 [RESPONSE] GET /api/sms-queue-status → 200 (2ms) {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:10.827200728Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:10.827212514Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:10.827218083Z"}
+{"message":"  bodyPreview: '{\"queueLength\":0,\"estimatedWaitTime\":0}'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:10.827226445Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:10.827232590Z"}
+{"message":"📨 [REQUEST] GET /api/sms-rate-limit-status {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:15.480739097Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:15.480744739Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:15.480750797Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:15.480756257Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:15.480763247Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/sms-rate-limit-status → 200 (9ms) { dataKeys: 'used, limit, resetTime, canSend' }","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:15.480770856Z"}
+{"message":"📤 [RESPONSE] GET /api/sms-rate-limit-status → 200 (9ms) {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:15.480776718Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:15.480782547Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:15.480788190Z"}
+{"message":"  bodyPreview: '{\"used\":0,\"limit\":20,\"resetTime\":1764777315026,\"canSend\":true}'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:15.480793821Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:15.480800976Z"}
+{"message":"📨 [REQUEST] GET /api/sms-queue-status {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:16.843326943Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:16.843334092Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:16.843341127Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/sms-queue-status → 200 (3ms) { dataKeys: 'queueLength, estimatedWaitTime' }","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:16.843406385Z"}
+{"message":"📤 [RESPONSE] GET /api/sms-queue-status → 200 (3ms) {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:16.843418124Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:16.843425570Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:16.843432413Z"}
+{"message":"  bodyPreview: '{\"queueLength\":0,\"estimatedWaitTime\":0}'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:16.843441262Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:16.843442479Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:16.843449437Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:16.843458918Z"}
+{"message":"📨 [REQUEST] GET /api/sms-rate-limit-status {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:20.751921928Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:20.751927904Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:20.751934074Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:20.751939925Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:20.751946507Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/sms-rate-limit-status → 200 (10ms) { dataKeys: 'used, limit, resetTime, canSend' }","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:20.751954485Z"}
+{"message":"📤 [RESPONSE] GET /api/sms-rate-limit-status → 200 (10ms) {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:20.751960102Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:20.751967256Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:20.751973949Z"}
+{"message":"  bodyPreview: '{\"used\":0,\"limit\":20,\"resetTime\":1764777320262,\"canSend\":true}'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:20.751980006Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:20.752028236Z"}
+{"message":"📤 [RESPONSE] GET /api/sms-queue-status → 200 (2ms) {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:21.910656830Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:21.910665541Z"}
+{"message":"📨 [REQUEST] GET /api/sms-queue-status {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:21.910667234Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:21.910672414Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:21.910674277Z"}
+{"message":"  bodyPreview: '{\"queueLength\":0,\"estimatedWaitTime\":0}'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:21.910679608Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:21.910681362Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:21.910686733Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:21.910689287Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:21.910695949Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/sms-queue-status → 200 (2ms) { dataKeys: 'queueLength, estimatedWaitTime' }","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:21.910702014Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:26.346688336Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:26.346697420Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:26.346703260Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/sms-queue-status → 200 (2ms) { dataKeys: 'queueLength, estimatedWaitTime' }","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:26.346709107Z"}
+{"message":"📤 [RESPONSE] GET /api/sms-queue-status → 200 (2ms) {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:26.346714755Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:26.346720480Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:26.346725783Z"}
+{"message":"  bodyPreview: '{\"queueLength\":0,\"estimatedWaitTime\":0}'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:26.346731126Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:26.346736577Z"}
+{"message":"📨 [REQUEST] GET /api/sms-rate-limit-status {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:26.347265159Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:26.347273046Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:26.347280008Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:26.347286625Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:26.347292919Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/sms-rate-limit-status → 200 (4ms) { dataKeys: 'used, limit, resetTime, canSend' }","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:26.347299615Z"}
+{"message":"📤 [RESPONSE] GET /api/sms-rate-limit-status → 200 (4ms) {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:26.347306883Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:26.347313573Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:26.347320057Z"}
+{"message":"  bodyPreview: '{\"used\":0,\"limit\":20,\"resetTime\":1764777325509,\"canSend\":true}'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:26.347326424Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:26.347332924Z"}
+{"message":"📨 [REQUEST] GET /api/sms-queue-status {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:26.347340261Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:26.347347658Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:32.236157967Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:32.236158980Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:32.236169397Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:32.236176453Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/sms-queue-status → 200 (2ms) { dataKeys: 'queueLength, estimatedWaitTime' }","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:32.236184096Z"}
+{"message":"📤 [RESPONSE] GET /api/sms-queue-status → 200 (2ms) {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:32.236191438Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:32.236199860Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:32.236208757Z"}
+{"message":"  bodyPreview: '{\"queueLength\":0,\"estimatedWaitTime\":0}'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:32.236214584Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:32.236220604Z"}
+{"message":"📨 [REQUEST] GET /api/sms-queue-status {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:32.236804073Z"}
+{"message":"📨 [REQUEST] GET /api/sms-rate-limit-status {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:36.028826355Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:36.028833411Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:36.028840310Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:36.028847205Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:36.028854577Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/sms-rate-limit-status → 200 (97ms) { dataKeys: 'used, limit, resetTime, canSend' }","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:36.108221854Z"}
+{"message":"📤 [RESPONSE] GET /api/sms-rate-limit-status → 200 (97ms) {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:36.108238453Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:36.108248318Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:36.108256838Z"}
+{"message":"  bodyPreview: '{\"used\":0,\"limit\":20,\"resetTime\":1764777336105,\"canSend\":true}'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:36.108266361Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:36.108274856Z"}
+{"message":"📨 [REQUEST] GET /api/sms-queue-status {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:37.271077322Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:37.271084995Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:37.271093827Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:37.271102257Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:37.271110123Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/sms-queue-status → 200 (2ms) { dataKeys: 'queueLength, estimatedWaitTime' }","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:37.271117870Z"}
+{"message":"📤 [RESPONSE] GET /api/sms-queue-status → 200 (2ms) {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:37.271126577Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:37.271136107Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:37.271144626Z"}
+{"message":"  bodyPreview: '{\"queueLength\":0,\"estimatedWaitTime\":0}'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:37.271153007Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:37.271162635Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:42.210509479Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:42.210523393Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:42.210532369Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:42.210568791Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/sms-rate-limit-status → 200 (5ms) { dataKeys: 'used, limit, resetTime, canSend' }","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:42.210577062Z"}
+{"message":"📤 [RESPONSE] GET /api/sms-rate-limit-status → 200 (5ms) {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:42.210585264Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:42.210592878Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:42.210604029Z"}
+{"message":"  bodyPreview: '{\"used\":0,\"limit\":20,\"resetTime\":1764777341353,\"canSend\":true}'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:42.210615240Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:42.210623234Z"}
+{"message":"📨 [REQUEST] GET /api/sms-queue-status {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:42.210631477Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:42.210639056Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:42.210646539Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:42.210656469Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:42.210663486Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/sms-queue-status → 200 (1ms) { dataKeys: 'queueLength, estimatedWaitTime' }","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:42.210678520Z"}
+{"message":"📤 [RESPONSE] GET /api/sms-queue-status → 200 (1ms) {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:42.210686910Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:42.210694361Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:42.210702064Z"}
+{"message":"  bodyPreview: '{\"queueLength\":0,\"estimatedWaitTime\":0}'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:42.210709710Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:42.210717258Z"}
+{"message":"📨 [REQUEST] GET /api/sms-rate-limit-status {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:42.210721179Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:46.962573062Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/sms-rate-limit-status → 200 (4ms) { dataKeys: 'used, limit, resetTime, canSend' }","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:46.962587331Z"}
+{"message":"📤 [RESPONSE] GET /api/sms-rate-limit-status → 200 (5ms) {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:46.962595642Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:46.962602197Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:46.962609294Z"}
+{"message":"📨 [REQUEST] GET /api/sms-rate-limit-status {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:46.962612656Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:46.962618298Z"}
+{"message":"  bodyPreview: '{\"used\":0,\"limit\":20,\"resetTime\":1764777346577,\"canSend\":true}'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:46.962619705Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:46.962624435Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:46.962629258Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:46.962632194Z"}
+{"message":"📨 [REQUEST] GET /api/sms-queue-status {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:47.249341977Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:47.249349007Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:47.249354683Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:47.249360655Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:47.249369817Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/sms-queue-status → 200 (1ms) { dataKeys: 'queueLength, estimatedWaitTime' }","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:47.249375266Z"}
+{"message":"📤 [RESPONSE] GET /api/sms-queue-status → 200 (1ms) {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:47.249381301Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:47.249387274Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:47.249442639Z"}
+{"message":"  bodyPreview: '{\"queueLength\":0,\"estimatedWaitTime\":0}'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:47.249448689Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:47.249454186Z"}
+{"message":"📨 [REQUEST] GET /api/sms-rate-limit-status {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:52.078351790Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:52.078358653Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:52.078366142Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:52.078373646Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:52.078380627Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/sms-rate-limit-status → 200 (5ms) { dataKeys: 'used, limit, resetTime, canSend' }","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:52.078387467Z"}
+{"message":"📤 [RESPONSE] GET /api/sms-rate-limit-status → 200 (5ms) {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:52.078394326Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:52.078400654Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:52.078407399Z"}
+{"message":"  bodyPreview: '{\"used\":0,\"limit\":20,\"resetTime\":1764777351806,\"canSend\":true}'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:52.078412218Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:52.078417371Z"}
+{"message":"📨 [REQUEST] GET /api/sms-queue-status {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:52.990458576Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:52.990465637Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:52.990476493Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:52.990482353Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:52.990488373Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/sms-queue-status → 200 (1ms) { dataKeys: 'queueLength, estimatedWaitTime' }","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:52.990496034Z"}
+{"message":"📤 [RESPONSE] GET /api/sms-queue-status → 200 (1ms) {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:52.990503010Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:52.990508954Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:52.990515092Z"}
+{"message":"  bodyPreview: '{\"queueLength\":0,\"estimatedWaitTime\":0}'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:52.990521757Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:52.990527784Z"}
+{"message":"📨 [REQUEST] GET /api/sms-rate-limit-status {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:57.103320553Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:57.103325426Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:57.103330252Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:57.103335002Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:57.103339743Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/sms-rate-limit-status → 200 (5ms) { dataKeys: 'used, limit, resetTime, canSend' }","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:57.103344645Z"}
+{"message":"📤 [RESPONSE] GET /api/sms-rate-limit-status → 200 (5ms) {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:57.103376674Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:57.103382101Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:57.103387062Z"}
+{"message":"  bodyPreview: '{\"used\":0,\"limit\":20,\"resetTime\":1764777357032,\"canSend\":true}'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:57.103391932Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:57.103396902Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:58.080768874Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:58.080779155Z"}
+{"message":"  bodyPreview: '{\"queueLength\":0,\"estimatedWaitTime\":0}'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:58.080786699Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:58.080794620Z"}
+{"message":"📨 [REQUEST] GET /api/sms-queue-status {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:58.080808191Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:58.080813567Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:58.080828709Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:58.080833515Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:58.080838165Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/sms-queue-status → 200 (1ms) { dataKeys: 'queueLength, estimatedWaitTime' }","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:58.080843534Z"}
+{"message":"📤 [RESPONSE] GET /api/sms-queue-status → 200 (1ms) {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:54:58.080847963Z"}
+{"message":"📨 [REQUEST] GET /api/sms-rate-limit-status {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:55:02.441460974Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:55:02.441466625Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:55:02.441671211Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:55:02.441677689Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:55:02.441683348Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/sms-rate-limit-status → 200 (7ms) { dataKeys: 'used, limit, resetTime, canSend' }","attributes":{"level":"info"},"timestamp":"2025-12-03T15:55:02.441690227Z"}
+{"message":"📤 [RESPONSE] GET /api/sms-rate-limit-status → 200 (7ms) {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:55:02.441695431Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:55:02.441701156Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:55:02.441707233Z"}
+{"message":"  bodyPreview: '{\"used\":0,\"limit\":20,\"resetTime\":1764777362291,\"canSend\":true}'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:55:02.441719183Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:55:02.441724662Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:55:03.139727589Z"}
+{"message":"📨 [REQUEST] GET /api/sms-queue-status {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:55:03.139915631Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:55:03.139921874Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:55:03.139929770Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:55:03.139936826Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T15:55:03.139944352Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/sms-queue-status → 200 (1ms) { dataKeys: 'queueLength, estimatedWaitTime' }","attributes":{"level":"info"},"timestamp":"2025-12-03T15:55:03.139951396Z"}
+{"message":"📤 [RESPONSE] GET /api/sms-queue-status → 200 (3ms) {","attributes":{"level":"info"},"timestamp":"2025-12-03T15:55:03.139959205Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:55:03.139966064Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-12-03T15:55:03.139972890Z"}
+{"message":"  bodyPreview: '{\"queueLength\":0,\"estimatedWaitTime\":0}'","attributes":{"level":"info"},"timestamp":"2025-12-03T15:55:03.139980049Z"}

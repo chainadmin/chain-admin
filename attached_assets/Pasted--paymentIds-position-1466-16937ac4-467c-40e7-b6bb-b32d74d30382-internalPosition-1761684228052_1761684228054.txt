@@ -1,0 +1,74 @@
+ paymentIds: [
+  position: '1466',
+    '16937ac4-467c-40e7-b6bb-b32d74d30382',
+  internalPosition: undefined,
+    '658c41c5-126c-4745-b5a1-99afa305f239',
+    at async DatabaseStorage.getPendingPaymentApprovals (file:///app/dist/index.js:2808:24)
+  internalQuery: undefined,
+    '66a8f988-c472-49fd-958e-0db607956613'
+    at async file:///app/dist/index.js:11847:25 {
+  where: undefined,
+  length: 118,
+  ],
+  severity: 'ERROR',
+  code: '42P01',
+  totalShowing: 3,
+Error fetching payment approvals: error: relation "payment_approvals" does not exist
+  detail: undefined,
+  totalCount: 3
+  hint: undefined,
+    at /app/node_modules/pg-pool/index.js:45:11
+}
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async file:///app/node_modules/drizzle-orm/node-postgres/session.js:83:22
+📊 Fetching payments for tenant: bc63d182-9691-455a-b372-10dfcad9c11e
+✅ Payments fetched: {
+  count: 3,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'parse_relation.c',
+  line: '1449',
+  routine: 'parserOpenTable'
+}
+2025-10-28 20:34:32.529 UTC [68404] ERROR:  relation "payment_approvals" does not exist at character 1466
+2025-10-28 20:34:32.529 UTC [68404] STATEMENT:  select "payment_approvals"."id", "payment_approvals"."tenant_id", "payment_approvals"."approval_type", "payment_approvals"."schedule_id", "payment_approvals"."account_id", "payment_approvals"."consumer_id", "payment_approvals"."filenumber", "payment_approvals"."payment_date", "payment_approvals"."amount_cents", "payment_approvals"."transaction_id", "payment_approvals"."old_payment_method_id", "payment_approvals"."new_payment_method_id", "payment_approvals"."payment_data", "payment_approvals"."status", "payment_approvals"."approved_by", "payment_approvals"."approved_at", "payment_approvals"."rejection_reason", "payment_approvals"."created_at", "consumers"."id", "consumers"."tenant_id", "consumers"."folder_id", "consumers"."first_name", "consumers"."last_name", "consumers"."email", "consumers"."phone", "consumers"."date_of_birth", "consumers"."ssn_last4", "consumers"."address", "consumers"."city", "consumers"."state", "consumers"."zip_code", "consumers"."is_registered", "consumers"."registration_token", "consumers"."registration_date", "consumers"."contact_prefs", "consumers"."additional_data", "consumers"."payment_status", "consumers"."created_at", "accounts"."id", "accounts"."tenant_id", "accounts"."consumer_id", "accounts"."folder_id", "accounts"."account_number", "accounts"."filenumber", "accounts"."creditor", "accounts"."balance_cents", "accounts"."status", "accounts"."due_date", "accounts"."additional_data", "accounts"."created_at" from "payment_approvals" left join "consumers" on "payment_approvals"."consumer_id" = "consumers"."id" left join "accounts" on "payment_approvals"."account_id" = "accounts"."id" where ("payment_approvals"."tenant_id" = $1 and "payment_approvals"."status" = $2) order by "payment_approvals"."created_at" desc
+📊 Fetching payments for tenant: bc63d182-9691-455a-b372-10dfcad9c11e
+Error fetching payment approvals: error: relation "payment_approvals" does not exist
+    at /app/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async file:///app/node_modules/drizzle-orm/node-postgres/session.js:83:22
+    at async DatabaseStorage.getPendingPaymentApprovals (file:///app/dist/index.js:2808:24)
+    at async file:///app/dist/index.js:11847:25 {
+  length: 118,
+  severity: 'ERROR',
+  code: '42P01',
+  column: undefined,
+  detail: undefined,
+  hint: undefined,
+  position: '1466',
+  dataType: undefined,
+  internalPosition: undefined,
+  constraint: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  file: 'parse_relation.c',
+  schema: undefined,
+  table: undefined,
+  line: '1449',
+  routine: 'parserOpenTable'
+}
+✅ Payments fetched: {
+  count: 3,
+  paymentIds: [
+    '16937ac4-467c-40e7-b6bb-b32d74d30382',
+    '658c41c5-126c-4745-b5a1-99afa305f239',
+    '66a8f988-c472-49fd-958e-0db607956613'
+  ],
+  totalShowing: 3,
+  totalCount: 3
+}
+2025-10-28 20:34:42.906 UTC [68414] ERROR:  relation "payment_approvals" does not exist at character 1466
+2025-10-28 20:34:42.906 UTC [68414] STATEMENT:  select "payment_approvals"."id", "payment_approvals"."tenant_id", "payment_approvals"."approval_type", "payment_approvals"."schedule_id", "payment_approvals"."account_id", "payment_approvals"."consumer_id", "payment_approvals"."filenumber", "payment_approvals"."payment_date", "payment_approvals"."amount_cents", "payment_approvals"."transaction_id", "payment_approvals"."old_payment_method_id", "payment_approvals"."new_payment_method_id", "payment_approvals"."payment_data", "payment_approvals"."status", "payment_approvals"."approved_by", "payment_approvals"."approved_at", "payment_approvals"."rejection_reason", "payment_approvals"."created_at", "consumers"."id", "consumers"."tenant_id", "consumers"."folder_id", "consumers"."first_name", "consumers"."last_name", "consumers"."email", "consumers"."phone", "consumers"."date_of_birth", "consumers"."ssn_last4", "consumers"."address", "consumers"."city", "consumers"."state", "consumers"."zip_code", "consumers"."is_registered", "consumers"."registration_token", "consumers"."registration_date", "consumers"."contact_prefs", "consumers"."additional_data", "consumers"."payment_status", "consumers"."created_at", "accounts"."id", "accounts"."tenant_id", "accounts"."consumer_id", "accounts"."folder_id", "accounts"."account_number", "accounts"."filenumber", "accounts"."creditor", "accounts"."balance_cents", "accounts"."status", "accounts"."due_date", "accounts"."additional_data", "accounts"."created_at" from "payment_approvals" left join "consumers" on "payment_approvals"."consumer_id" = "consumers"."id" left join "accounts" on "payment_approvals"."account_id" = "accounts"."id" where ("payment_approvals"."tenant_id" = $1 and "payment_approvals"."status" = $2) order by "payment_approvals"."created_at" desc

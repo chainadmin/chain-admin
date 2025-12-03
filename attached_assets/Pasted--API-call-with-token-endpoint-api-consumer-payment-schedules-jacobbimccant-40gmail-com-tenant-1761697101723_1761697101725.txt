@@ -1,0 +1,110 @@
+🔑 API call with token: {endpoint: '/api/consumer/payment-schedules/jacobbimccant%40gmail.com?tenantSlug=waypoint-solutions', hasToken: true, tokenLength: 379, platform: 'web', url: '/api/consumer/payment-schedules/jacobbimccant%40gmail.com?tenantSlug=waypoint-solutions'}
+index-C0knWsSV.js:947  GET https://waypoint-solutions.chainsoftwaregroup.com/api/settings 500 (Internal Server Error)
+sn @ index-C0knWsSV.js:947
+queryFn @ index-C0knWsSV.js:947
+i @ index-C0knWsSV.js:49
+v @ index-C0knWsSV.js:49
+start @ index-C0knWsSV.js:49
+fetch @ index-C0knWsSV.js:49
+qc @ index-C0knWsSV.js:49
+setOptions @ index-C0knWsSV.js:49
+(anonymous) @ index-C0knWsSV.js:49
+Ph @ index-C0knWsSV.js:41
+fo @ index-C0knWsSV.js:41
+hy @ index-C0knWsSV.js:41
+qi @ index-C0knWsSV.js:39
+wD @ index-C0knWsSV.js:41
+Xi @ index-C0knWsSV.js:41
+xC @ index-C0knWsSV.js:41
+T @ index-C0knWsSV.js:26
+E @ index-C0knWsSV.js:26Understand this error
+index-C0knWsSV.js:947 📡 API response: {endpoint: '/api/settings', status: 500, ok: false}
+index-C0knWsSV.js:947 📡 API response: {endpoint: '/api/consumer/payment-schedules/jacobbimccant%40gmail.com?tenantSlug=waypoint-solutions', status: 200, ok: true}
+index-C0knWsSV.js:947  GET https://waypoint-solutions.chainsoftwaregroup.com/api/consumer/documents/jacobbimccant@gmail.com?tenantSlug=waypoint-solutions 500 (Internal Server Error)
+sn @ index-C0knWsSV.js:947
+queryFn @ index-C0knWsSV.js:947
+i @ index-C0knWsSV.js:49
+v @ index-C0knWsSV.js:49
+start @ index-C0knWsSV.js:49
+fetch @ index-C0knWsSV.js:49
+qc @ index-C0knWsSV.js:49
+setOptions @ index-C0knWsSV.js:49
+(anonymous) @ index-C0knWsSV.js:49
+Ph @ index-C0knWsSV.js:41
+fo @ index-C0knWsSV.js:41
+hy @ index-C0knWsSV.js:41
+qi @ index-C0knWsSV.js:39
+wD @ index-C0knWsSV.js:41
+Xi @ index-C0knWsSV.js:41
+xC @ index-C0knWsSV.js:41
+T @ index-C0knWsSV.js:26
+E @ index-C0knWsSV.js:26Understand this error
+index-C0knWsSV.js:947 📡 API response: {endpoint: '/api/consumer/documents/jacobbimccant@gmail.com?tenantSlug=waypoint-solutions', status: 500, ok: false}
+index-C0knWsSV.js:49  GET https://waypoint-solutions.chainsoftwaregroup.com/api/public/agency-branding?slug=waypoint-solutions 500 (Internal Server Error)
+(anonymous) @ index-C0knWsSV.js:49
+i @ index-C0knWsSV.js:49
+v @ index-C0knWsSV.js:49
+start @ index-C0knWsSV.js:49
+fetch @ index-C0knWsSV.js:49
+qc @ index-C0knWsSV.js:49
+setOptions @ index-C0knWsSV.js:49
+(anonymous) @ index-C0knWsSV.js:49
+Ph @ index-C0knWsSV.js:41
+fo @ index-C0knWsSV.js:41
+hy @ index-C0knWsSV.js:41
+qi @ index-C0knWsSV.js:39
+wD @ index-C0knWsSV.js:41
+Xi @ index-C0knWsSV.js:41
+xC @ index-C0knWsSV.js:41
+T @ index-C0knWsSV.js:26
+E @ index-C0knWsSV.js:26Understand this error
+index-C0knWsSV.js:49  GET https://waypoint-solutions.chainsoftwaregroup.com/api/public/agency/waypoint-solutions 500 (Internal Server Error)
+(anonymous) @ index-C0knWsSV.js:49
+i @ index-C0knWsSV.js:49
+v @ index-C0knWsSV.js:49
+start @ index-C0knWsSV.js:49
+fetch @ index-C0knWsSV.js:49
+qc @ index-C0knWsSV.js:49
+onSubscribe @ index-C0knWsSV.js:49
+subscribe @ index-C0knWsSV.js:49
+(anonymous) @ index-C0knWsSV.js:49
+LS @ index-C0knWsSV.js:39
+Ph @ index-C0knWsSV.js:41
+fo @ index-C0knWsSV.js:41
+hy @ index-C0knWsSV.js:41
+qi @ index-C0knWsSV.js:39
+wD @ index-C0knWsSV.js:41
+Xi @ index-C0knWsSV.js:41
+xC @ index-C0knWsSV.js:41
+T @ index-C0knWsSV.js:26
+E @ index-C0knWsSV.js:26Understand this error
+index-C0knWsSV.js:947  GET https://waypoint-solutions.chainsoftwaregroup.com/api/consumer/accounts/jacobbimccant%40gmail.com 500 (Internal Server Error)
+sn @ index-C0knWsSV.js:947
+(anonymous) @ index-C0knWsSV.js:947
+(anonymous) @ index-C0knWsSV.js:947
+Ph @ index-C0knWsSV.js:41
+fo @ index-C0knWsSV.js:41
+hy @ index-C0knWsSV.js:41
+qi @ index-C0knWsSV.js:39
+wD @ index-C0knWsSV.js:41
+Xi @ index-C0knWsSV.js:41
+xC @ index-C0knWsSV.js:41
+T @ index-C0knWsSV.js:26
+E @ index-C0knWsSV.js:26Understand this error
+index-C0knWsSV.js:947 📡 API response: {endpoint: '/api/consumer/accounts/jacobbimccant%40gmail.com', status: 500, ok: false}
+index-C0knWsSV.js:947 Error loading accounts: Error: Failed to load accounts: 500 - {"message":"Failed to fetch accounts"}
+    at index-C0knWsSV.js:947:116690
+(anonymous) @ index-C0knWsSV.js:947
+await in (anonymous)
+(anonymous) @ index-C0knWsSV.js:947
+Ph @ index-C0knWsSV.js:41
+fo @ index-C0knWsSV.js:41
+hy @ index-C0knWsSV.js:41
+qi @ index-C0knWsSV.js:39
+wD @ index-C0knWsSV.js:41
+Xi @ index-C0knWsSV.js:41
+xC @ index-C0knWsSV.js:41
+T @ index-C0knWsSV.js:26
+E @ index-C0knWsSV.js:26Understand this error
+index-C0knWsSV.js:49 🔐 Getting stored consumer token: {hasToken: true, tokenLength: 379, storageAvailable: 2}
+index-C0knWsSV.js:49  GET https://waypoint-solutions.chainsoftwaregroup.com/api/public/agency-branding?slug=waypoint-solutions 500 (Internal Server Error)

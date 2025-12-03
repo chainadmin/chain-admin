@@ -1,0 +1,16 @@
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-13T23:56:06.507186938Z"}
+{"message":"💵 Final payment amount: { amountCents: 2617, amountDollars: '26.17' }","attributes":{"level":"info"},"timestamp":"2025-11-13T23:56:06.507196762Z"}
+{"message":"🏦 Merchant provider: nmi","attributes":{"level":"info"},"timestamp":"2025-11-13T23:56:06.507210079Z"}
+{"message":"🔑 NMI credentials check: credentials configured","attributes":{"level":"info"},"timestamp":"2025-11-13T23:56:06.507220041Z"}
+{"message":"🟣 Processing payment with NMI (Network Merchants Inc.)","attributes":{"level":"info"},"timestamp":"2025-11-13T23:56:06.507228014Z"}
+{"message":"🔐 Adding card to NMI Customer Vault...","attributes":{"level":"info"},"timestamp":"2025-11-13T23:56:06.507244389Z"}
+{"message":"🟣 [NMI] Adding customer to vault...","attributes":{"level":"info"},"timestamp":"2025-11-13T23:56:06.507252584Z"}
+{"message":"🟣 [NMI] Vault response: { response: '3', customerVaultId: undefined }","attributes":{"level":"info"},"timestamp":"2025-11-13T23:56:06.507261556Z"}
+{"message":"❌ [NMI] Vault add failed: You do not have permission to use the Customer Vault  REFID:607863730","attributes":{"level":"error"},"timestamp":"2025-11-13T23:56:06.507270604Z"}
+{"message":"❌ Failed to add card to NMI Customer Vault: You do not have permission to use the Customer Vault  REFID:607863730","attributes":{"level":"error"},"timestamp":"2025-11-13T23:56:06.507278996Z"}
+{"message":"📤 [RESPONSE-JSON] POST /api/consumer/payments/process → 400 (289ms) { dataKeys: 'success, message' }","attributes":{"level":"info"},"timestamp":"2025-11-13T23:56:06.507389358Z"}
+{"message":"📤 [RESPONSE] POST /api/consumer/payments/process → 400 (290ms) {","attributes":{"level":"info"},"timestamp":"2025-11-13T23:56:06.507397045Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-11-13T23:56:06.507408898Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-11-13T23:56:06.507416149Z"}
+{"message":"  bodyPreview: '{\"success\":false,\"message\":\"You do not have permission to use the Customer Vault  REFID:607863730\"}'","attributes":{"level":"info"},"timestamp":"2025-11-13T23:56:06.507422769Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-13T23:56:06.507429410Z"}

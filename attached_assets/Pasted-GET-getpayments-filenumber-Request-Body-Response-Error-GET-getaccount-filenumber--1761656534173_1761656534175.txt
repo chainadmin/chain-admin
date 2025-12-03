@@ -1,0 +1,95 @@
+GET: /getpayments/<filenumber>
+Request Body
+Response
+Error
+
+
+
+GET: /getaccount/<filenumber>
+Request Body
+Response
+Error
+
+
+
+
+
+POST insert_payments_external
+Request Body
+Response
+Error
+POST insert_payments_external
+The POST /insert_payments_external endpoint allows authorized users to securely record payment transactions in the system. Users must provide payment details, including file number, payment date, payor name, payment method, and other relevant information. The request must be authenticated with a valid JWT token. The endpoint validates the submitted data, ensuring all required fields are present. If successful, the payment is stored in the database, and a confirmation message is returned. If any required information is missing, an error response is provided.
+
+Request Body
+{
+    "filenumber": "12345" ,            		(datatype: String, required: True)
+    "paymentdate": "2023-04-15",	 	(datatype: String, required: True)
+    "payorname": "John Doe",      	 	(datatype: String, required: True)
+    "paymentmethod": "CREDIT CARD", 		(datatype: String, required: True)
+    "paymentstatus": "PENDING",	 	(datatype: String, required: True)
+    "typeofpayment": "Online", (can be anything)			(datatype: String, required: True)
+    "checkaccountnumber": "9876543210",	 (datatype: String, required: True)
+    "checkroutingnumber": "012345678", 	(datatype: String, required: True)
+    "cardtype": "Visa",				 (datatype: String, required: True)
+    "cardnumber": "4111111111111111", 	(datatype: String, required: True)
+    "threedigitnumber": "111", 			(datatype: String, required: True)
+    "cardexpirationmonth": "12",		 (datatype: String, required: True)
+    "cardexpirationyear": "2025",		 (datatype: String, required: True)
+    "cardexpirationdate": "12/2025", 		(datatype: String, required: True)
+    "paymentamount": "100.00",		 (datatype: String, required: True)
+    "checkaccounttype": "Checking", 		(datatype: String, required: True)
+    "checkaddress": "Checking", 		(datatype: String, required: True)
+    "checkcity": "Checking", 		(datatype: String, required: True)
+    "checkstate": "Checking", 		(datatype: String, required: True)
+    "checkzip": "Checking", 		(datatype: String, required: True)
+    "acceptedfees": "0 or 1", 			 (datatype: String, required: True)
+    "printed": "false", 				(datatype: String, required: True)
+    "invoice": "INV123456" 			(datatype: String, required: True)
+}
+
+Response
+{
+    "state": "SUCCESS",
+    "message": "Payment successfully inserted"
+}
+
+
+
+
+
+
+POST insert_payplan_external
+This endpoint works the same exact way as insert payments external but instead of inserting one singular payment date and payment amount, you pass it in as a list.
+
+Request Body
+{
+    "filenumber": "r456456" ,            		
+    "payorname": "John Doe",      	 	
+    "paymentmethod": "Credit Card", 		
+    "paymentstatus": "PENDING",	 	
+    "typeofpayment": "Online",
+    "checkaccountnumber": "9876543210",
+    "checkroutingnumber": "012345678", 
+    "cardtype": "Visa",
+    "cardnumber": "4111111111111111",
+    "threedigitnumber": "111",
+    "cardexpirationmonth": "12",		
+    "cardexpirationyear": "2025",		 
+    "cardexpirationdate": "12/2025", 		
+    "paymentamount": "100.00",		 
+    "checkaccounttype": "Checking", 	
+    "acceptedfees": "0", 			 
+    "printed": "false", 				
+    "invoice": "INV123456",
+    "paymentdata": [
+        {
+            "paymentamount": "1.00",
+            "paymentdate": "2025-09-01"
+        },
+        {
+            "paymentamount": "1.00",
+            "paymentdate": "2025-10-01"
+        }
+    ]
+}

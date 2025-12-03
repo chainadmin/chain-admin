@@ -1,0 +1,46 @@
+    code: 'ENOTFOUND',
+    syscall: 'getaddrinfo',
+    hostname: 'api.smaxcollectionsoftware.com'
+Error authenticating with SMAX: TypeError: fetch failed
+    at node:internal/deps/undici/undici:13510:13
+  }
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+}
+    at async SmaxService.authenticate (file:///app/dist/index.js:4123:28)
+Error inserting note to SMAX: Error: Failed to authenticate with SMAX
+    at async SmaxService.makeSmaxRequest (file:///app/dist/index.js:4164:23)
+    at async SmaxService.insertNote (file:///app/dist/index.js:4358:26)
+    at SmaxService.makeSmaxRequest (file:///app/dist/index.js:4166:17)
+    at async processPostmarkWebhook (file:///app/dist/index.js:19802:30)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async file:///app/dist/index.js:19679:9 {
+  [cause]: Error: getaddrinfo ENOTFOUND api.smaxcollectionsoftware.com
+      at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+    errno: -3008,
+    at async SmaxService.insertNote (file:///app/dist/index.js:4358:26)
+    at async processPostmarkWebhook (file:///app/dist/index.js:19802:30)
+    at async file:///app/dist/index.js:19679:9
+2025-11-18 06:50:26.050 UTC [27] LOG:  checkpoint starting: time
+2025-11-18 06:50:26.396 UTC [27] LOG:  checkpoint complete: wrote 4 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.309 s, sync=0.014 s, total=0.346 s; sync files=3, longest=0.008 s, average=0.005 s; distance=16 kB, estimate=37 kB; lsn=0/11181CE0, redo lsn=0/11181C88
+2025-11-18 07:10:26.779 UTC [27] LOG:  checkpoint starting: time
+2025-11-18 07:10:27.453 UTC [27] LOG:  checkpoint complete: wrote 7 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.612 s, sync=0.021 s, total=0.674 s; sync files=3, longest=0.015 s, average=0.007 s; distance=27 kB, estimate=36 kB; lsn=0/11188CA0, redo lsn=0/11188C48
+2025-11-18 07:15:26.549 UTC [27] LOG:  checkpoint starting: time
+2025-11-18 07:15:26.997 UTC [27] LOG:  checkpoint complete: wrote 5 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.408 s, sync=0.009 s, total=0.448 s; sync files=3, longest=0.006 s, average=0.003 s; distance=16 kB, estimate=34 kB; lsn=0/1118CF20, redo lsn=0/1118CEC8
+2025-11-18 07:20:27.095 UTC [27] LOG:  checkpoint starting: time
+2025-11-18 07:20:27.558 UTC [27] LOG:  checkpoint complete: wrote 4 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.320 s, sync=0.034 s, total=0.463 s; sync files=3, longest=0.018 s, average=0.012 s; distance=17 kB, estimate=33 kB; lsn=0/11191388, redo lsn=0/11191330
+2025-11-18 07:50:28.154 UTC [27] LOG:  checkpoint starting: time
+2025-11-18 07:50:28.511 UTC [27] LOG:  checkpoint complete: wrote 4 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.311 s, sync=0.011 s, total=0.357 s; sync files=3, longest=0.006 s, average=0.004 s; distance=17 kB, estimate=31 kB; lsn=0/11195790, redo lsn=0/11195738
+2025-11-18 09:15:30.635 UTC [27] LOG:  checkpoint complete: wrote 5 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.409 s, sync=0.011 s, total=0.457 s; sync files=3, longest=0.006 s, average=0.004 s; distance=19 kB, estimate=30 kB; lsn=0/1119A648, redo lsn=0/1119A5F0
+2025-11-18 09:15:30.178 UTC [27] LOG:  checkpoint starting: time
+2025-11-18 09:30:30.934 UTC [27] LOG:  checkpoint starting: time
+2025-11-18 09:30:31.376 UTC [27] LOG:  checkpoint complete: wrote 5 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.409 s, sync=0.006 s, total=0.443 s; sync files=3, longest=0.004 s, average=0.002 s; distance=17 kB, estimate=29 kB; lsn=0/1119EC28, redo lsn=0/1119EBD0
+2025-11-18 10:05:31.050 UTC [27] LOG:  checkpoint starting: time
+2025-11-18 10:05:31.516 UTC [27] LOG:  checkpoint complete: wrote 5 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.408 s, sync=0.009 s, total=0.467 s; sync files=3, longest=0.006 s, average=0.003 s; distance=15 kB, estimate=27 kB; lsn=0/111A2BC8, redo lsn=0/111A2B70
+2025-11-18 14:40:36.970 UTC [27] LOG:  checkpoint starting: time
+2025-11-18 14:40:37.471 UTC [27] LOG:  checkpoint complete: wrote 5 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.417 s, sync=0.032 s, total=0.502 s; sync files=3, longest=0.021 s, average=0.011 s; distance=17 kB, estimate=26 kB; lsn=0/111A7308, redo lsn=0/111A72B0
+2025-11-18 14:45:36.570 UTC [27] LOG:  checkpoint starting: time
+2025-11-18 14:45:37.361 UTC [27] LOG:  checkpoint complete: wrote 5 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.410 s, sync=0.200 s, total=0.792 s; sync files=3, longest=0.138 s, average=0.067 s; distance=20 kB, estimate=26 kB; lsn=0/111AC468, redo lsn=0/111AC410
+2025-11-18 14:55:36.558 UTC [27] LOG:  checkpoint starting: time
+2025-11-18 14:55:37.858 UTC [27] LOG:  checkpoint complete: wrote 12 buffers (0.1%); 0 WAL file(s) added, 0 removed, 0 recycled; write=1.116 s, sync=0.079 s, total=1.301 s; sync files=11, longest=0.055 s, average=0.008 s; distance=47 kB, estimate=47 kB; lsn=0/111B8400, redo lsn=0/111B83A8
+2025-11-18 15:05:37.058 UTC [27] LOG:  checkpoint starting: time
+2025-11-18 15:05:37.538 UTC [27] LOG:  checkpoint complete: wrote 5 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.408 s, sync=0.035 s, total=0.481 s; sync files=4, longest=0.023 s, average=0.009 s; distance=12 kB, estimate=44 kB; lsn=0/111BB7A0, redo lsn=0/111BB748

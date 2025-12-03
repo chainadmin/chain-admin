@@ -1,0 +1,97 @@
+ userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'
+🔒 Account status filter: 81 consumers have active accounts (excluded inactive/recalled/closed)
+}
+🚀 Approving campaign "decline1120" - targetGroup: "folder", folderId: "658492c8-21f1-41d3-b45c-723b5daf8c11"
+🎯 Resolving campaign audience - targetGroup: "folder", folders: 658492c8-21f1-41d3-b45c-723b5daf8c11
+📊 Total consumers in tenant: 1962, Total accounts: 1958, Active accounts: 1958
+🔍 Filtering for folders: 658492c8-21f1-41d3-b45c-723b5daf8c11
+📁 Found 82 active accounts matching selected folders
+✅ FOLDER FILTER RESULT: Started with 1962 total consumers, filtered to 81 consumers in folders [658492c8-21f1-41d3-b45c-723b5daf8c11]
+   Targeted consumer emails (first 3): [
+  'chelseamills12@gmail.com',
+📨 [REQUEST] GET /api/sms-queue-status {
+  origin: 'none',
+  contentType: 'none',
+  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'
+}
+📤 [RESPONSE-JSON] GET /api/sms-queue-status → 200 (2ms) { dataKeys: 'queueLength, estimatedWaitTime' }
+📤 [RESPONSE] GET /api/sms-queue-status → 200 (2ms) {
+  contentType: 'application/json; charset=utf-8',
+  bodyType: 'string',
+  bodyPreview: '{"queueLength":0,"estimatedWaitTime":0}'
+}
+✅ Email campaign "decline1120" approved. Sending 81 emails via Postmark...
+📨 [REQUEST] GET /api/sms-rate-limit-status {
+  origin: 'none',
+  contentType: 'none',
+  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'
+}
+📤 [RESPONSE-JSON] GET /api/sms-rate-limit-status → 200 (102ms) { dataKeys: 'used, limit, resetTime, canSend' }
+📤 [RESPONSE] GET /api/sms-rate-limit-status → 200 (102ms) {
+  contentType: 'application/json; charset=utf-8',
+  bodyType: 'string',
+  bodyPreview: '{"used":0,"limit":10,"resetTime":1763648366331,"canSend":true}'
+}
+📧 Sending batch of 81 emails via broadcast stream...
+✅ Batch sent: 0 successful, 81 failed
+📤 [RESPONSE-JSON] POST /api/email-campaigns/be70dc61-c2e6-4fc0-b95d-8b68cdbe4ca0/approve → 200 (1165ms) {
+📤 [RESPONSE-JSON] GET /api/email-metrics → 200 (5ms) {
+  dataKeys: 'totalSent, totalDelivered, totalOpened, totalClicked, totalErrors, totalOptOuts, openRate, clickRate, conversionRate, optOutRate, deliveryRate, last7Days, last30Days, sentThisMonth, bestTemplate'
+  dataKeys: 'id, tenantId, templateId, name, targetGroup, folderId, status, totalRecipients, totalSent, totalDelivered, totalOpened, totalClicked, totalErrors, totalOptOuts, createdAt, completedAt, emailResults'
+}
+📤 [RESPONSE] POST /api/email-campaigns/be70dc61-c2e6-4fc0-b95d-8b68cdbe4ca0/approve → 200 (1166ms) {
+  contentType: 'application/json; charset=utf-8',
+  bodyType: 'string',
+  bodyPreview: '{"id":"be70dc61-c2e6-4fc0-b95d-8b68cdbe4ca0","tenantId":"bc63d182-9691-455a-b372-10dfcad9c11e","temp'
+}
+📨 [REQUEST] GET /api/email-campaigns {
+  origin: 'none',
+  contentType: 'none',
+  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'
+}
+📨 [REQUEST] GET /api/email-metrics {
+  origin: 'none',
+  contentType: 'none',
+  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'
+}
+}
+📤 [RESPONSE] GET /api/email-metrics → 200 (5ms) {
+  contentType: 'application/json; charset=utf-8',
+  bodyType: 'string',
+  bodyPreview: '{"totalSent":10172,"totalDelivered":9595,"totalOpened":3523,"totalClicked":77,"totalErrors":425,"tot'
+}
+📤 [RESPONSE-JSON] GET /api/email-campaigns → 200 (13ms) {
+  dataKeys: '0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23'
+}
+📤 [RESPONSE] GET /api/email-campaigns → 200 (13ms) {
+  contentType: 'application/json; charset=utf-8',
+  bodyType: 'string',
+  bodyPreview: '[{"id":"be70dc61-c2e6-4fc0-b95d-8b68cdbe4ca0","tenantId":"bc63d182-9691-455a-b372-10dfcad9c11e","tem'
+}
+  bodyPreview: '{"queueLength":0,"estimatedWaitTime":0}'
+}
+📨 [REQUEST] GET /api/sms-queue-status {
+  origin: 'none',
+  contentType: 'none',
+  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'
+}
+📤 [RESPONSE-JSON] GET /api/sms-queue-status → 200 (2ms) { dataKeys: 'queueLength, estimatedWaitTime' }
+📤 [RESPONSE] GET /api/sms-queue-status → 200 (2ms) {
+  contentType: 'application/json; charset=utf-8',
+  bodyType: 'string',
+📨 [REQUEST] GET /api/sms-rate-limit-status {
+  origin: 'none',
+  contentType: 'none',
+  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'
+}
+📤 [RESPONSE-JSON] GET /api/sms-rate-limit-status → 200 (5ms) { dataKeys: 'used, limit, resetTime, canSend' }
+📤 [RESPONSE] GET /api/sms-rate-limit-status → 200 (5ms) {
+  contentType: 'application/json; charset=utf-8',
+  bodyType: 'string',
+  bodyPreview: '{"used":0,"limit":10,"resetTime":1763648371498,"canSend":true}'
+}
+📨 [REQUEST] GET /api/sms-queue-status {
+  origin: 'none',
+  contentType: 'none',
+  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'
+}

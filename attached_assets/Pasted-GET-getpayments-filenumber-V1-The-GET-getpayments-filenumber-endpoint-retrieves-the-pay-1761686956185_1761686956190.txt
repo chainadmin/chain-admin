@@ -1,0 +1,72 @@
+GET: /getpayments/<filenumber>  (V1)
+
+The GET /getpayments/{filenumber} endpoint retrieves the payment history of a specific customer based on the provided file number. A valid authentication token is required to access the data. If the account exists, the API returns a list of recorded payments, including payment dates, amounts, and types. If no matching record is found, an error message is returned.
+Request Body
+api/getpayments/R10001
+Response
+{
+    "result": [
+        {
+            "datetaken": "2/20/2024",
+            "filenumber": "R1001",
+            "merchant": null,
+            "paymentamount": "15.00",
+            "paymentdate": "Tue, 20 Feb 2024 00:00:00 GMT",
+            "paymentmethod": null,
+            "portfolio": "C2C PDL TEST",
+            "typeofpayment": "IN HOUSE"
+        },
+        {
+            "datetaken": "2/20/2024",
+            "filenumber": "R1001",
+            "merchant": null,
+            "paymentamount": "150.00",
+            "paymentdate": "Tue, 27 Feb 2024 00:00:00 GMT",
+            "paymentmethod": null,
+            "portfolio": "C2C PDL TEST",
+            "typeofpayment": "IN HOUSE"
+        },
+        {
+            "datetaken": "2/20/2024",
+            "filenumber": "R1001",
+            "merchant": null,
+            "paymentamount": "150.00",
+            "paymentdate": "Tue, 05 Mar 2024 00:00:00 GMT",
+            "paymentmethod": null,
+            "portfolio": "C2C PDL TEST",
+            "typeofpayment": "IN HOUSE"
+        }
+    ],
+    "state": "SUCCESS"
+}
+
+Error
+{
+    "result": [
+        {
+            "error": "File number R100 does not exist."
+        },
+        404
+    ],
+    "state": "SUCCESS"
+}
+
+GET: /getpayments/<filenumber>  (V2)
+
+Response
+[
+    {
+        "success": [
+            {
+                "datetaken": null,
+                "filenumber": "r456456",
+                "merchant": null,
+                "paymentamount": 1.0,
+                "paymentdate": "2029-08-01",
+                "paymentmethod": "CREDIT CARD",
+                "portfolio": "CAMPAIGNTEMP",
+                "typeofpayment": "WEB"
+            },
+]
+}
+]

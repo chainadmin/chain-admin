@@ -1,0 +1,33 @@
+{"message":"✅ Consumer token decoded: {","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.023446130Z"}
+{"message":"  type: 'consumer',","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.023453213Z"}
+{"message":"  consumerId: '8d230854-3438-49c9-8248-7c37e9d7de34',","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.023459339Z"}
+{"message":"  email: 'wesowlife@gmail.com',","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.023466269Z"}
+{"message":"  tenantSlug: 'summit-recovery-group'","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.023472695Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.023478986Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/consumer/tenant-settings → 200 (12ms) {","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.023485383Z"}
+{"message":"  dataKeys: 'minimumMonthlyPayment, showPaymentPlans, showDocuments, allowSettlementRequests, merchantProvider, authnetPublicClientKey, authnetApiLoginId, useSandbox'","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.023491717Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.023498836Z"}
+{"message":"📤 [RESPONSE] GET /api/consumer/tenant-settings → 200 (12ms) {","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.023505916Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.023512183Z"}
+{"message":"📤 [RESPONSE] GET /api/consumer/payment-schedules/wesowlife%40gmail.com → 200 (56ms) {","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.024460792Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.024468622Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.024476358Z"}
+{"message":"  bodyPreview: '[]'","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.024483307Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.024489892Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/consumer/documents/wesowlife@gmail.com → 200 (88ms) { dataKeys: '' }","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.024496445Z"}
+{"message":"📤 [RESPONSE] GET /api/consumer/documents/wesowlife@gmail.com → 200 (88ms) {","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.024503889Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.024510354Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.024516677Z"}
+{"message":"  bodyPreview: '[]'","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.024523899Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.024529326Z"}
+{"message":"📨 [REQUEST] GET /api/auth/user {","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.024535347Z"}
+{"message":"  origin: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.024542943Z"}
+{"message":"  contentType: 'none',","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.024549687Z"}
+{"message":"  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb'","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.024556456Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.024570207Z"}
+{"message":"📤 [RESPONSE-JSON] GET /api/auth/user → 401 (1ms) { dataKeys: 'message' }","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.024578256Z"}
+{"message":"📤 [RESPONSE] GET /api/auth/user → 401 (1ms) {","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.024586409Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.024593166Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.024599335Z"}
+{"message":"  bodyPreview: '{\"message\":\"Unauthorized\"}'","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.024605648Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-11-09T23:10:14.024612529Z"}
