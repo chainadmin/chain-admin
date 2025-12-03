@@ -1,0 +1,41 @@
+{"message":"  \"From\": \"+18563006573\",","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.499114007Z"}
+{"message":"Full webhook body: {","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.499118550Z"}
+{"message":"  \"MessageStatus\": \"undelivered\",","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.499122732Z"}
+{"message":"  \"ApiVersion\": \"2010-04-01\",","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.499126528Z"}
+{"message":"  \"ErrorCode\": \"30006\",","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.499127074Z"}
+{"message":"  \"RawDlrDoneDate\": \"2512031451\",","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.499133631Z"}
+{"message":"   Status: undelivered","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.499139505Z"}
+{"message":"  \"MessageSid\": \"SMef640b9c4d4720f0ae9010aaa35ab118\",","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.499144466Z"}
+{"message":"  \"AccountSid\": \"AC0c4f48bcd2b72f06cf04a598b485dc39\"","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.499155672Z"}
+{"message":"✅ Found tracking record: ID=2e925126-a268-4190-beec-e4e9f38eaf1b","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.539016084Z"}
+{"message":"❌ Marking as FAILED: 30006","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.539023965Z"}
+{"message":"💾 Updating tracking record with 1 segments: { status: 'failed', segments: 1, errorMessage: '30006' }","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.539030232Z"}
+{"message":"✅ SMS reply stored successfully","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.708693735Z"}
+{"message":"❌ Failed to log SMS reply to SMAX: TypeError: storage.getSettings is not a function","attributes":{"level":"error"},"timestamp":"2025-12-03T14:51:27.708705334Z"}
+{"message":"    at file:///app/dist/index.js:21328:40","attributes":{"level":"error"},"timestamp":"2025-12-03T14:51:27.708712660Z"}
+{"message":"    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)","attributes":{"level":"error"},"timestamp":"2025-12-03T14:51:27.708719025Z"}
+{"message":"📤 [RESPONSE] POST /api/webhooks/twilio-inbound → 200 (226ms) {","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.708725460Z"}
+{"message":"  contentType: 'text/xml; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.708733110Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.708741182Z"}
+{"message":"  bodyPreview: '<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>'","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.708749790Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.708759457Z"}
+{"message":"✅ Tracking record updated successfully","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.709687480Z"}
+{"message":"🔄 Updating SMS campaign 3e9aec1b-cb46-44d7-b375-eab5ef26a5aa metrics from tracking records","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.709696272Z"}
+{"message":"✅ SMS campaign 3e9aec1b-cb46-44d7-b375-eab5ef26a5aa metrics updated: { totalSent: 83, totalDelivered: 65, totalErrors: 99, totalOptOuts: 0 }","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.724315398Z"}
+{"message":"✅ Recording SMS usage: tenant=990f9278-9632-49d7-a6c6-5277d639235c, segments=1, sid=SMef640b9c4d4720f0ae9010aaa35ab118","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.724332489Z"}
+{"message":"📊 SMS Usage Event Details: {","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.724341338Z"}
+{"message":"  \"tenantId\": \"990f9278-9632-49d7-a6c6-5277d639235c\",","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.724348752Z"}
+{"message":"  \"segments\": 1,","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.724356340Z"}
+{"message":"  \"messageSid\": \"SMef640b9c4d4720f0ae9010aaa35ab118\",","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.724363461Z"}
+{"message":"  \"status\": \"undelivered\",","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.724369793Z"}
+{"message":"  \"timestamp\": \"2025-12-03T14:51:27.722Z\"","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.724377226Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.724387888Z"}
+{"message":"✅ Twilio webhook processed successfully - 1 SMS segments recorded to database for tenant 990f9278-9632-49d7-a6c6-5277d639235c","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.732513035Z"}
+{"message":"================================================================================","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.732524277Z"}
+{"message":"","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.732531341Z"}
+{"message":"📤 [RESPONSE-JSON] POST /api/webhooks/twilio → 200 (234ms) { dataKeys: 'message' }","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.732536796Z"}
+{"message":"📤 [RESPONSE] POST /api/webhooks/twilio → 200 (234ms) {","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.732541187Z"}
+{"message":"  contentType: 'application/json; charset=utf-8',","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.732546358Z"}
+{"message":"  bodyType: 'string',","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.732551232Z"}
+{"message":"  bodyPreview: '{\"message\":\"Webhook processed\"}'","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.732555907Z"}
+{"message":"}","attributes":{"level":"info"},"timestamp":"2025-12-03T14:51:27.732561087Z"}
