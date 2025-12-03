@@ -910,17 +910,20 @@ export default function SMS() {
                   <div className="space-y-4">
                     {/* Debug: Log all campaign statuses */}
                     {console.log('📊 Campaign statuses:', (campaigns as any).map((c: any) => ({ id: c.id, name: c.name, status: c.status })))}
-                    {(campaigns as any).map((campaign: any) => (
+                    {(campaigns as any).map((campaign: any) => {
+                      // Normalize status for consistent comparison
+                      const normalizedStatus = (campaign.status || '').trim().toLowerCase();
+                      return (
                       <div key={campaign.id} className="border rounded-lg p-4">
                         <div className="flex items-start justify-between gap-4 mb-2">
                           <h3 className="font-medium">{campaign.name}</h3>
                           <div className="flex items-center gap-2">
-                            {/* Debug: Show raw status for troubleshooting */}
-                            <span className="text-xs text-gray-400">[{campaign.status}]</span>
+                            {/* Debug: Show raw and normalized status for troubleshooting */}
+                            <span className="text-xs text-gray-400">[raw:"{campaign.status}" norm:"{normalizedStatus}"]</span>
                             <Badge className={getStatusColor(campaign.status)}>
                               {campaign.status}
                             </Badge>
-                            {((campaign.status || '').toLowerCase() === "pending" || (campaign.status || '').toLowerCase() === "pending_approval") && (
+                            {(normalizedStatus === "pending" || normalizedStatus === "pending_approval") && (
                               <>
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
@@ -984,7 +987,7 @@ export default function SMS() {
                                 </AlertDialog>
                               </>
                             )}
-                            {(campaign.status || '').toLowerCase() === "sending" && (
+                            {normalizedStatus === "sending" && (
                               <AlertDialog>
                                 <AlertDialogTrigger asChild>
                                   <Button
@@ -1016,8 +1019,8 @@ export default function SMS() {
                                 </AlertDialogContent>
                               </AlertDialog>
                             )}
-                            {/* Delete button for any campaign status */}
-                            {!((campaign.status || '').toLowerCase() === "pending" || (campaign.status || '').toLowerCase() === "pending_approval") && (
+                            {/* Delete button for any campaign status except pending (which has its own delete) */}
+                            {!(normalizedStatus === "pending" || normalizedStatus === "pending_approval") && (
                               <AlertDialog>
                                 <AlertDialogTrigger asChild>
                                   <Button
@@ -1042,7 +1045,7 @@ export default function SMS() {
                                       className="bg-red-600 hover:bg-red-700"
                                       onClick={() => {
                                         // If sending, cancel first then delete
-                                        if ((campaign.status || '').toLowerCase() === "sending") {
+                                        if (normalizedStatus === "sending") {
                                           cancelCampaignMutation.mutate(campaign.id);
                                         }
                                         deleteCampaignMutation.mutate(campaign.id);
@@ -1079,7 +1082,7 @@ export default function SMS() {
                             <div className="font-medium">{campaign.totalSent || 0}</div>
                           </div>
                         </div>
-                        {campaign.status === "completed" && (
+                        {normalizedStatus === "completed" && (
                           <div className="mt-3 pt-3 border-t grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                             <div>
                               <span className="text-gray-600">Delivered:</span>
@@ -1096,7 +1099,8 @@ export default function SMS() {
                           </div>
                         )}
                       </div>
-                    ))}
+                    );
+                    })}
                   </div>
                 ) : (
                   <div className="text-center py-8 text-gray-500">

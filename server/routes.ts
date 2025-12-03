@@ -3477,21 +3477,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const campaigns = await storage.getSmsCampaignsByTenant(tenantId);
-      console.log(`📋 Retrieved ${campaigns.length} SMS campaigns for tenant ${tenantId}`);
+      const campaignsRaw = await storage.getSmsCampaignsByTenant(tenantId);
+      console.log(`📋 Retrieved ${campaignsRaw.length} SMS campaigns for tenant ${tenantId}`);
+      
+      // Normalize status values to ensure consistent lowercase with no whitespace
+      const campaigns = campaignsRaw.map(c => ({
+        ...c,
+        status: (c.status || 'pending_approval').trim().toLowerCase(),
+      }));
+      
       campaigns.forEach((c, index) => {
         console.log(`   Campaign ${index + 1}: "${c.name}"`);
-        console.log(`      Status: "${c.status}" (type: ${typeof c.status})`);
+        console.log(`      Status: "${c.status}" (normalized)`);
         console.log(`      Target: "${c.targetGroup}"`);
         console.log(`      Folders: ${JSON.stringify(c.folderIds)} (isArray: ${Array.isArray(c.folderIds)})`);
         console.log(`      Template: "${c.templateName}"`);
         console.log(`      Recipients: ${c.totalRecipients}`);
         console.log(`      📱 Phones To Send: "${c.phonesToSend}" (type: ${typeof c.phonesToSend})`);
       });
-      
-      // Log the EXACT JSON being sent to frontend
-      console.log('\n🔍 EXACT JSON RESPONSE BEING SENT TO FRONTEND:');
-      console.log(JSON.stringify(campaigns, null, 2));
       
       res.json(campaigns);
     } catch (error) {
@@ -3929,7 +3932,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Campaign not found" });
       }
 
-      const normalizedStatus = (campaign.status || '').toLowerCase();
+      const normalizedStatus = (campaign.status || '').trim().toLowerCase();
       
       // Can cancel pending, pending_approval, or sending campaigns
       if (!['pending', 'pending_approval', 'sending'].includes(normalizedStatus)) {
@@ -3972,7 +3975,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Campaign not found" });
       }
 
-      const normalizedStatus = (campaign.status || '').toLowerCase();
+      const normalizedStatus = (campaign.status || '').trim().toLowerCase();
       
       // If campaign is currently sending, cancel it first
       if (normalizedStatus === 'sending') {
