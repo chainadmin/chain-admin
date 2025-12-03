@@ -81,6 +81,8 @@ import {
   Loader2,
   ArrowUp,
   ArrowDown,
+  XCircle,
+  PlayCircle,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 
@@ -1272,13 +1274,51 @@ export default function Communications() {
       }
       toast({
         title: "Campaign Deleted",
-        description: `${variables.type === 'email' ? 'Email' : 'SMS'} campaign has been removed before sending.`,
+        description: `${variables.type === 'email' ? 'Email' : 'SMS'} campaign has been deleted.`,
       });
     },
     onError: (error: any) => {
       toast({
         title: "Error",
         description: error.message || "Failed to delete campaign",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const cancelSmsCampaignMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("POST", `/api/sms-campaigns/${id}/cancel`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sms-campaigns"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sms-metrics"] });
+      toast({
+        title: "Campaign Cancelled",
+        description: "SMS campaign has been cancelled. Any remaining messages will not be sent.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to cancel SMS campaign",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const resumeSmsCampaignMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("POST", `/api/sms-campaigns/${id}/resume`),
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sms-campaigns"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sms-metrics"] });
+      toast({
+        title: "Campaign Resumed",
+        description: `Resuming campaign from message ${data.startingAt || 0}. ${data.remainingMessages || 0} messages remaining.`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to resume SMS campaign",
         variant: "destructive",
       });
     },
@@ -3665,38 +3705,92 @@ export default function Communications() {
                               </AlertDialogContent>
                             </AlertDialog>
                           )}
-                          {['pending', 'pending_approval'].includes(campaign.status) && (
+                          {/* Stop/Cancel button for sending SMS campaigns */}
+                          {communicationType === "sms" && campaign.status === "sending" && (
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="text-red-600 hover:text-red-700"
-                                    aria-label="Delete campaign"
+                                  variant="destructive"
+                                  size="sm"
+                                  data-testid="button-cancel-sms-campaign"
+                                >
+                                  <XCircle className="h-4 w-4 mr-1" />
+                                  Stop
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Stop SMS Campaign</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This will immediately stop sending messages. {campaign.totalSent || 0} of {campaign.totalRecipients || 0} messages have been sent. Remaining messages will NOT be sent.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Keep Sending</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    className="bg-red-600 hover:bg-red-700"
+                                    onClick={() => cancelSmsCampaignMutation.mutate(campaign.id)}
+                                    disabled={cancelSmsCampaignMutation.isPending}
                                   >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Delete Campaign</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      This will cancel the pending {communicationType.toUpperCase()} campaign before it is sent to consumers. This action cannot be undone.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction
-                                      className="bg-red-600 hover:bg-red-700"
-                                      onClick={() => deleteCampaignMutation.mutate({ id: campaign.id, type: communicationType })}
-                                      disabled={deleteCampaignMutation.isPending}
-                                    >
-                                      {deleteCampaignMutation.isPending ? "Deleting..." : "Delete"}
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            )}
+                                    {cancelSmsCampaignMutation.isPending ? "Stopping..." : "Stop Campaign"}
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          )}
+                          {/* Resume button for cancelled/failed SMS campaigns with incomplete sends */}
+                          {communicationType === "sms" && ['cancelled', 'failed'].includes(campaign.status) && (campaign.totalSent || 0) < (campaign.totalRecipients || 0) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="border-emerald-400/60 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/20"
+                              onClick={() => resumeSmsCampaignMutation.mutate(campaign.id)}
+                              disabled={resumeSmsCampaignMutation.isPending}
+                              data-testid="button-resume-sms-campaign"
+                            >
+                              <PlayCircle className="h-4 w-4 mr-1" />
+                              {resumeSmsCampaignMutation.isPending ? "Resuming..." : "Resume"}
+                            </Button>
+                          )}
+                          {/* Delete button - ALWAYS visible for ALL campaigns */}
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                                aria-label="Delete campaign"
+                                data-testid="button-delete-campaign"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Campaign</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This will permanently remove this campaign. {campaign.status === 'sending' ? 'The campaign will be stopped first.' : ''} This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  className="bg-red-600 hover:bg-red-700"
+                                  onClick={() => {
+                                    if (communicationType === "sms" && campaign.status === 'sending') {
+                                      cancelSmsCampaignMutation.mutate(campaign.id);
+                                      setTimeout(() => deleteCampaignMutation.mutate({ id: campaign.id, type: communicationType }), 500);
+                                    } else {
+                                      deleteCampaignMutation.mutate({ id: campaign.id, type: communicationType });
+                                    }
+                                  }}
+                                  disabled={deleteCampaignMutation.isPending || cancelSmsCampaignMutation.isPending}
+                                >
+                                  {deleteCampaignMutation.isPending ? "Deleting..." : "Delete"}
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                           </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4 text-sm text-blue-100/70 md:grid-cols-4">
