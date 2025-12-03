@@ -192,6 +192,28 @@ export async function runMigrations() {
       console.log(`  ⚠ phones_to_send (already exists or error)`);
     }
     
+    // Add next_execution column to communication_automations (used by automation processor)
+    console.log('Adding next_execution to communication_automations...');
+    try {
+      await client.query(`ALTER TABLE communication_automations ADD COLUMN IF NOT EXISTS next_execution TIMESTAMP`);
+      console.log(`  ✓ next_execution column added to communication_automations`);
+    } catch (err) {
+      console.log(`  ⚠ next_execution (already exists or error)`);
+    }
+    
+    // Backfill next_execution from scheduled_date for existing automations
+    console.log('Backfilling next_execution for existing automations...');
+    try {
+      const result = await client.query(`
+        UPDATE communication_automations 
+        SET next_execution = scheduled_date 
+        WHERE next_execution IS NULL AND scheduled_date IS NOT NULL AND is_active = true
+      `);
+      console.log(`  ✓ Backfilled next_execution for ${result.rowCount || 0} automations`);
+    } catch (err) {
+      console.log(`  ⚠ next_execution backfill (error or no data)`);
+    }
+    
     // Create communication_sequences table if it doesn't exist
     console.log('Creating communication_sequences table...');
     try {

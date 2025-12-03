@@ -3511,18 +3511,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
         name: z.string().min(1),
         targetGroup: z.enum(["all", "with-balance", "decline", "recent-upload", "folder"]),
         folderIds: z.array(z.string()).optional(),
+        phonesToSend: z.enum(['1', '2', '3', 'all']).optional().default('1'), // How many phone numbers per consumer
       });
 
-      const { templateId, name, targetGroup, folderIds } = insertSmsCampaignSchema.parse(req.body);
+      const { templateId, name, targetGroup, folderIds, phonesToSend } = insertSmsCampaignSchema.parse(req.body);
 
-      console.log(`📱 Creating SMS campaign - name: "${name}", targetGroup: "${targetGroup}", folderIds:`, folderIds);
+      console.log(`📱 Creating SMS campaign - name: "${name}", targetGroup: "${targetGroup}", folderIds:`, folderIds, `phonesToSend: "${phonesToSend}"`);
       console.log(`📱 Request body received:`, JSON.stringify(req.body, null, 2));
 
       // Use the shared audience resolution function
       const { targetedConsumers } = await resolveSmsCampaignAudience(tenantId, targetGroup, folderIds);
 
-      // Count consumers with phone numbers for accurate recipient count
-      const consumersWithPhone = targetedConsumers.filter(consumer => consumer.phone);
+      // Count total phone numbers based on phonesToSend setting (same logic as approval)
+      const countPhoneNumbers = (consumer: any): number => {
+        const phones: string[] = [];
+        
+        // Add primary phone number first
+        if (consumer.phone) {
+          phones.push(consumer.phone);
+        }
+        
+        // Collect additional phone numbers from additionalData
+        if (consumer.additionalData) {
+          const additionalData = consumer.additionalData as Record<string, any>;
+          const phoneKeys = Object.keys(additionalData)
+            .filter(key => key.toLowerCase().includes('phone'))
+            .sort((a, b) => {
+              const numA = parseInt(a.replace(/\D/g, '')) || 0;
+              const numB = parseInt(b.replace(/\D/g, '')) || 0;
+              return numA - numB;
+            });
+          
+          for (const key of phoneKeys) {
+            const value = additionalData[key];
+            if (value && typeof value === 'string') {
+              const trimmed = value.trim();
+              if (trimmed) {
+                const normalized = trimmed.replace(/\D/g, '');
+                if (normalized.length >= 10) {
+                  phones.push(trimmed);
+                }
+              }
+            }
+          }
+        }
+        
+        // Deduplicate by normalized digits
+        const uniquePhones = new Map<string, string>();
+        for (const phone of phones) {
+          const normalized = phone.replace(/\D/g, '');
+          if (!uniquePhones.has(normalized)) {
+            uniquePhones.set(normalized, phone);
+          }
+        }
+        const allPhones = Array.from(uniquePhones.values());
+        
+        // Apply phonesToSend limit
+        if (phonesToSend === 'all') {
+          return allPhones.length;
+        }
+        const limit = parseInt(phonesToSend);
+        return Math.min(allPhones.length, limit);
+      };
+
+      // Calculate total recipients as sum of phone numbers per consumer
+      const totalRecipients = targetedConsumers.reduce((sum, consumer) => sum + countPhoneNumbers(consumer), 0);
+      console.log(`📱 Total recipients based on phonesToSend="${phonesToSend}": ${totalRecipients}`);
       
       const campaignData = {
         tenantId,
@@ -3530,7 +3584,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         name,
         targetGroup,
         folderIds: folderIds || [],
-        totalRecipients: consumersWithPhone.length,
+        phonesToSend,
+        totalRecipients,
         status: 'pending_approval',
       };
       
@@ -3541,12 +3596,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`   Status: "${campaign.status}"`);
       console.log(`   Target Group: "${campaign.targetGroup}"`);
       console.log(`   Folder IDs: ${JSON.stringify(campaign.folderIds)}`);
-      console.log(`   Total Recipients: ${consumersWithPhone.length}`);
+      console.log(`   Phones To Send: "${phonesToSend}"`);
+      console.log(`   Total Recipients: ${totalRecipients}`);
       console.log(`   Campaign ID: ${campaign.id}`);
 
       res.json({
         ...campaign,
-        totalRecipients: consumersWithPhone.length,
+        totalRecipients,
         message: 'Campaign created and awaiting approval',
       });
     } catch (error: any) {
@@ -4104,6 +4160,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         scheduledDate: z.string(), // ISO timestamp
         scheduleTime: z.string(), // HH:MM format
         targetFolderIds: z.array(z.union([z.string(), z.number()]).transform(String)).optional().default([]),
+        phonesToSend: z.enum(['1', '2', '3', 'all']).optional().default('1'), // For SMS: how many phone numbers to send to
       });
 
       const validatedData = insertAutomationSchema.parse(req.body);
@@ -4117,6 +4174,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...validatedData,
         tenantId: tenantId,
         scheduledDate: scheduledDateTime,
+        nextExecution: scheduledDateTime, // CRITICAL: Set nextExecution so the processor knows when to run
         targetType: validatedData.targetFolderIds && validatedData.targetFolderIds.length > 0 ? 'folders' : 'all',
         isActive: true,
       };
@@ -4128,6 +4186,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         id: newAutomation.id,
         name: newAutomation.name,
         scheduledDate: scheduledDateTime.toISOString(),
+        nextExecution: scheduledDateTime.toISOString(),
         scheduleTime: validatedData.scheduleTime,
       });
       
@@ -4170,6 +4229,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         scheduledDate: z.string().optional(),
         scheduleTime: z.string().optional(),
         targetFolderIds: z.array(z.string().uuid()).optional(),
+        phonesToSend: z.enum(['1', '2', '3', 'all']).optional(), // For SMS: how many phone numbers to send to
       });
 
       const validatedData = updateAutomationSchema.parse(req.body);
@@ -4179,9 +4239,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updatedAt: new Date(),
       };
       
-      // Convert scheduledDate string to Date if provided
+      // Convert scheduledDate string to Date if provided and also set nextExecution
       if (updateData.scheduledDate) {
-        updateData.scheduledDate = new Date(updateData.scheduledDate);
+        const scheduledDateTime = new Date(updateData.scheduledDate);
+        updateData.scheduledDate = scheduledDateTime;
+        updateData.nextExecution = scheduledDateTime; // CRITICAL: Update nextExecution so the processor knows when to run
+        console.log('✓ Updated automation schedule:', {
+          scheduledDate: scheduledDateTime.toISOString(),
+          nextExecution: scheduledDateTime.toISOString(),
+        });
       }
       
       const updatedAutomation = await storage.updateAutomation(req.params.id, updateData);

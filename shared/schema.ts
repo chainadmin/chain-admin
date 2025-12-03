@@ -1234,6 +1234,7 @@ export const communicationAutomations = pgTable("communication_automations", {
   phonesToSend: text("phones_to_send", { enum: ['1', '2', '3', 'all'] }).default('1'), // How many phone numbers to send to per consumer (SMS only)
   
   // Execution tracking
+  nextExecution: timestamp("next_execution"), // When the automation should run next (used by processor)
   lastExecuted: timestamp("last_executed"),
   totalSent: bigint("total_sent", { mode: "number" }).default(0),
   
