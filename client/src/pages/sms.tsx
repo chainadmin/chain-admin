@@ -908,8 +908,8 @@ export default function SMS() {
                   <div className="text-center py-4">Loading campaigns...</div>
                 ) : (campaigns as any)?.length > 0 ? (
                   <div className="space-y-4">
-                    {/* Debug: Log all campaign statuses */}
-                    {console.log('📊 Campaign statuses:', (campaigns as any).map((c: any) => ({ id: c.id, name: c.name, status: c.status })))}
+                    {/* Debug: Log all campaign statuses - VERSION: 2025-12-03-v2 */}
+                    {console.log('📊 SMS PAGE VERSION: 2025-12-03-v2 - Campaign statuses:', (campaigns as any).map((c: any) => ({ id: c.id, name: c.name, status: c.status })))}
                     {(campaigns as any).map((campaign: any) => {
                       // Normalize status for consistent comparison
                       const normalizedStatus = (campaign.status || '').trim().toLowerCase();
@@ -1019,45 +1019,42 @@ export default function SMS() {
                                 </AlertDialogContent>
                               </AlertDialog>
                             )}
-                            {/* Delete button for any campaign status except pending (which has its own delete) */}
-                            {!(normalizedStatus === "pending" || normalizedStatus === "pending_approval") && (
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="text-red-600 hover:text-red-700"
-                                    aria-label="Delete campaign"
+                            {/* Delete button - ALWAYS visible for ALL campaigns */}
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="text-red-600 hover:text-red-700"
+                                  aria-label="Delete campaign"
+                                  data-testid="button-delete-campaign"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete Campaign</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This will remove this campaign from your list. If the campaign is still sending, it will be cancelled first. This action cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    className="bg-red-600 hover:bg-red-700"
+                                    onClick={() => {
+                                      // Cancel first if sending, then delete
+                                      cancelCampaignMutation.mutate(campaign.id);
+                                      setTimeout(() => deleteCampaignMutation.mutate(campaign.id), 500);
+                                    }}
+                                    disabled={deleteCampaignMutation.isPending || cancelCampaignMutation.isPending}
                                   >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Delete Campaign</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      This will remove this campaign from your list. If the campaign is still sending, it will be cancelled first. This action cannot be undone.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction
-                                      className="bg-red-600 hover:bg-red-700"
-                                      onClick={() => {
-                                        // If sending, cancel first then delete
-                                        if (normalizedStatus === "sending") {
-                                          cancelCampaignMutation.mutate(campaign.id);
-                                        }
-                                        deleteCampaignMutation.mutate(campaign.id);
-                                      }}
-                                      disabled={deleteCampaignMutation.isPending || cancelCampaignMutation.isPending}
-                                    >
-                                      {deleteCampaignMutation.isPending ? "Deleting..." : "Delete"}
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            )}
+                                    {deleteCampaignMutation.isPending ? "Deleting..." : "Delete"}
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           </div>
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
