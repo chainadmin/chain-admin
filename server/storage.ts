@@ -16,6 +16,7 @@ import {
   smsTemplates,
   smsCampaigns,
   smsTracking,
+  smsBlockedNumbers,
   messagingUsageEvents,
   communicationAutomations,
   automationExecutions,
@@ -314,6 +315,13 @@ export interface IStorage {
     totalErrors: number;
     totalOptOuts: number;
   }>;
+  
+  // SMS opt-out and blocked number operations
+  markConsumerSmsOptedOut(consumerId: string, optedOut: boolean): Promise<Consumer>;
+  getConsumersByPhoneNumber(phoneNumber: string, tenantId?: string): Promise<Consumer[]>;
+  getSmsBlockedNumbers(tenantId: string): Promise<{ phoneNumber: string; reason: string }[]>;
+  addSmsBlockedNumber(tenantId: string, phoneNumber: string, reason: string, errorCode?: string, errorMessage?: string): Promise<void>;
+  isPhoneNumberBlocked(tenantId: string, phoneNumber: string): Promise<boolean>;
   
   // Automation operations
   getAutomationsByTenant(tenantId: string): Promise<CommunicationAutomation[]>;
@@ -1761,6 +1769,108 @@ export class DatabaseStorage implements IStorage {
 
     const [updated] = await db.update(smsTracking).set(sanitizedUpdates).where(eq(smsTracking.id, id)).returning();
     return updated;
+  }
+
+  // SMS opt-out and blocked number operations
+  async markConsumerSmsOptedOut(consumerId: string, optedOut: boolean): Promise<Consumer> {
+    const [updated] = await db
+      .update(consumers)
+      .set({
+        smsOptedOut: optedOut,
+        smsOptedOutAt: optedOut ? new Date() : null,
+      })
+      .where(eq(consumers.id, consumerId))
+      .returning();
+    return updated;
+  }
+
+  async getConsumersByPhoneNumber(phoneNumber: string, tenantId?: string): Promise<Consumer[]> {
+    // Normalize phone number - remove all non-digit characters
+    const normalized = phoneNumber.replace(/\D/g, '');
+    // Handle +1 prefix - remove it for matching
+    const withoutCountryCode = normalized.startsWith('1') && normalized.length === 11 
+      ? normalized.slice(1) 
+      : normalized;
+    
+    const conditions = [
+      or(
+        sql`REPLACE(REPLACE(REPLACE(REPLACE(${consumers.phone}, '-', ''), ' ', ''), '(', ''), ')', '') LIKE ${'%' + withoutCountryCode}`,
+        sql`REPLACE(REPLACE(REPLACE(REPLACE(${consumers.phone}, '-', ''), ' ', ''), '(', ''), ')', '') = ${normalized}`
+      )
+    ];
+    
+    if (tenantId) {
+      conditions.push(eq(consumers.tenantId, tenantId));
+    }
+    
+    return await db
+      .select()
+      .from(consumers)
+      .where(and(...conditions));
+  }
+
+  async getSmsBlockedNumbers(tenantId: string): Promise<{ phoneNumber: string; reason: string }[]> {
+    const results = await db
+      .select({
+        phoneNumber: smsBlockedNumbers.phoneNumber,
+        reason: smsBlockedNumbers.reason,
+      })
+      .from(smsBlockedNumbers)
+      .where(eq(smsBlockedNumbers.tenantId, tenantId));
+    return results;
+  }
+
+  async addSmsBlockedNumber(
+    tenantId: string, 
+    phoneNumber: string, 
+    reason: string, 
+    errorCode?: string, 
+    errorMessage?: string
+  ): Promise<void> {
+    // Normalize phone number
+    const normalized = phoneNumber.replace(/\D/g, '');
+    
+    // Use upsert - if number exists, update failure count and last failed timestamp
+    await db
+      .insert(smsBlockedNumbers)
+      .values({
+        tenantId,
+        phoneNumber: normalized,
+        reason,
+        errorCode: errorCode || null,
+        errorMessage: errorMessage || null,
+        failureCount: 1,
+        firstFailedAt: new Date(),
+        lastFailedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [smsBlockedNumbers.tenantId, smsBlockedNumbers.phoneNumber],
+        set: {
+          failureCount: sql`${smsBlockedNumbers.failureCount} + 1`,
+          lastFailedAt: new Date(),
+          reason: reason,
+          errorCode: errorCode || null,
+          errorMessage: errorMessage || null,
+        },
+      });
+  }
+
+  async isPhoneNumberBlocked(tenantId: string, phoneNumber: string): Promise<boolean> {
+    // Normalize phone number
+    const normalized = phoneNumber.replace(/\D/g, '');
+    
+    const [result] = await db
+      .select({ id: smsBlockedNumbers.id })
+      .from(smsBlockedNumbers)
+      .where(
+        and(
+          eq(smsBlockedNumbers.tenantId, tenantId),
+          eq(smsBlockedNumbers.phoneNumber, normalized)
+        )
+      )
+      .limit(1);
+    
+    return !!result;
   }
 
   // Automation operations

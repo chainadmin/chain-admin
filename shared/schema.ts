@@ -137,6 +137,8 @@ export const consumers = pgTable("consumers", {
   contactPrefs: jsonb("contact_prefs").default(sql`'{}'::jsonb`),
   additionalData: jsonb("additional_data").default(sql`'{}'::jsonb`), // Store custom CSV columns
   paymentStatus: text("payment_status", { enum: ['current', 'pending_payment', 'payment_failed', 'no_payment_plan'] }).default('no_payment_plan'), // Track payment plan status
+  smsOptedOut: boolean("sms_opted_out").default(false), // Consumer opted out of SMS (replied STOP)
+  smsOptedOutAt: timestamp("sms_opted_out_at"), // When they opted out
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -386,6 +388,19 @@ export const smsTracking = pgTable("sms_tracking", {
   deliveredAt: timestamp("delivered_at"),
   errorMessage: text("error_message"),
   trackingData: jsonb("tracking_data").default(sql`'{}'::jsonb`),
+});
+
+// SMS blocked numbers - tracks undeliverable/invalid phone numbers per tenant
+export const smsBlockedNumbers = pgTable("sms_blocked_numbers", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  phoneNumber: text("phone_number").notNull(),
+  reason: text("reason").notNull(), // "undeliverable", "invalid", "carrier_blocked", "opted_out"
+  errorCode: text("error_code"), // Twilio error code if applicable
+  errorMessage: text("error_message"), // Full error message
+  failureCount: integer("failure_count").default(1), // Number of times this number has failed
+  firstFailedAt: timestamp("first_failed_at").defaultNow(),
+  lastFailedAt: timestamp("last_failed_at").defaultNow(),
 });
 
 // Sender identities (per tenant)

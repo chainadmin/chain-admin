@@ -140,7 +140,33 @@ class SmsService {
     tenantId: string,
     campaignId?: string,
     consumerId?: string
-  ): Promise<{ success: boolean; messageId?: string; error?: string; queued?: boolean }> {
+  ): Promise<{ success: boolean; messageId?: string; error?: string; queued?: boolean; blocked?: boolean }> {
+    // SMS COMPLIANCE: Pre-send check for opted-out consumers and blocked numbers
+    // This prevents sending to consumers who have replied STOP or have undeliverable numbers
+    try {
+      // Normalize phone number for consistent lookup
+      const normalizedPhone = to.replace(/\D/g, '');
+      
+      // Check if phone number is in blocked list
+      const isBlocked = await storage.isPhoneNumberBlocked(tenantId, normalizedPhone);
+      if (isBlocked) {
+        console.log(`🚫 SMS blocked: Phone ${normalizedPhone} is in blocked numbers list for tenant ${tenantId}`);
+        return { success: false, blocked: true, error: 'Phone number is blocked or undeliverable' };
+      }
+
+      // If consumerId provided, check if consumer has opted out
+      if (consumerId) {
+        const consumer = await storage.getConsumer(consumerId);
+        if (consumer && (consumer as any).smsOptedOut) {
+          console.log(`🛑 SMS blocked: Consumer ${consumerId} has opted out of SMS`);
+          return { success: false, blocked: true, error: 'Consumer has opted out of SMS communications' };
+        }
+      }
+    } catch (complianceError) {
+      console.error('Error checking SMS compliance (continuing with send):', complianceError);
+      // Don't block on compliance check errors - fail open but log
+    }
+
     const client = await this.getTwilioClient(tenantId);
     if (!client) {
       return { success: false, error: 'SMS service not configured for this agency. Please add Twilio credentials in Settings.' };

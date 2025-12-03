@@ -406,6 +406,53 @@ export async function runMigrations() {
       }
     }
 
+    // Add SMS opt-out tracking to consumers table
+    console.log('Adding SMS opt-out columns to consumers table...');
+    try {
+      await client.query(`
+        ALTER TABLE consumers 
+        ADD COLUMN IF NOT EXISTS sms_opted_out BOOLEAN DEFAULT false
+      `);
+      console.log('  ✓ sms_opted_out column added to consumers');
+    } catch (err: any) {
+      console.log('  ⚠ sms_opted_out column error:', err.message);
+    }
+    try {
+      await client.query(`
+        ALTER TABLE consumers 
+        ADD COLUMN IF NOT EXISTS sms_opted_out_at TIMESTAMP
+      `);
+      console.log('  ✓ sms_opted_out_at column added to consumers');
+    } catch (err: any) {
+      console.log('  ⚠ sms_opted_out_at column error:', err.message);
+    }
+
+    // Create SMS blocked numbers table for undeliverable tracking
+    console.log('Creating sms_blocked_numbers table...');
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS sms_blocked_numbers (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          phone_number TEXT NOT NULL,
+          reason TEXT NOT NULL,
+          error_code TEXT,
+          error_message TEXT,
+          failure_count INTEGER DEFAULT 1,
+          first_failed_at TIMESTAMP DEFAULT NOW(),
+          last_failed_at TIMESTAMP DEFAULT NOW(),
+          UNIQUE(tenant_id, phone_number)
+        )
+      `);
+      console.log('  ✓ sms_blocked_numbers table created');
+    } catch (err: any) {
+      if (err.message?.includes('already exists')) {
+        console.log('  ✓ sms_blocked_numbers table already exists');
+      } else {
+        console.log('  ⚠ sms_blocked_numbers table error:', err.message);
+      }
+    }
+
     // Update push_devices table to support native FCM/APNS tokens
     console.log('Updating push_devices table for native push notifications...');
     const pushDeviceColumns = [

@@ -3466,6 +3466,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     console.log(`🔒 Account status filter: ${targetedConsumers.length} consumers have active accounts (excluded inactive/recalled/closed)`);
 
+    // SMS COMPLIANCE: Filter out consumers who have opted out of SMS (TCPA compliance)
+    const beforeOptOutFilter = targetedConsumers.length;
+    targetedConsumers = targetedConsumers.filter(c => !(c as any).smsOptedOut);
+    const optedOutCount = beforeOptOutFilter - targetedConsumers.length;
+    if (optedOutCount > 0) {
+      console.log(`🛑 SMS opt-out filter: Excluded ${optedOutCount} consumers who opted out of SMS`);
+    }
+
+    // SMS COMPLIANCE: Filter out consumers with blocked phone numbers
+    try {
+      const blockedNumbers = await storage.getSmsBlockedNumbers(tenantId);
+      if (blockedNumbers.length > 0) {
+        const blockedSet = new Set(blockedNumbers.map(b => b.phoneNumber));
+        const beforeBlockFilter = targetedConsumers.length;
+        
+        targetedConsumers = targetedConsumers.filter(c => {
+          if (!c.phone) return true; // Keep consumers without phone (they'll be filtered later anyway)
+          const normalizedPhone = c.phone.replace(/\D/g, '');
+          // Check both full number and without country code
+          const withoutCountryCode = normalizedPhone.startsWith('1') && normalizedPhone.length === 11 
+            ? normalizedPhone.slice(1) 
+            : normalizedPhone;
+          return !blockedSet.has(normalizedPhone) && !blockedSet.has(withoutCountryCode);
+        });
+        
+        const blockedCount = beforeBlockFilter - targetedConsumers.length;
+        if (blockedCount > 0) {
+          console.log(`🚫 Blocked number filter: Excluded ${blockedCount} consumers with undeliverable/blocked phone numbers`);
+        }
+      }
+    } catch (blockedError) {
+      console.error('Error checking blocked numbers (continuing without filter):', blockedError);
+    }
+
+    console.log(`✅ Final SMS audience: ${targetedConsumers.length} consumers after all compliance filters`);
+
     return { targetedConsumers, accountsData: activeAccountsData };
   }
 
@@ -17313,11 +17349,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         if (status === 'failed' || status === 'undelivered') {
-          const errorMessage = req.body.ErrorMessage || req.body.ErrorCode;
+          const errorCode = req.body.ErrorCode;
+          const errorMessage = req.body.ErrorMessage || errorCode;
           if (errorMessage) {
             updates.errorMessage = errorMessage;
           }
           console.log(`❌ Marking as FAILED: ${errorMessage || 'No error message'}`);
+          
+          // Track undeliverable phone numbers for blocking future attempts
+          const toPhone = req.body.To;
+          if (toPhone && tenantId) {
+            // Error codes that indicate permanent delivery failure
+            // https://www.twilio.com/docs/api/errors#error-codes
+            const permanentFailureCodes = [
+              '21211', // Invalid 'To' Phone Number
+              '21610', // Message cannot be sent to this phone number (opt-out)
+              '21614', // 'To' number is not a valid mobile number
+              '21408', // Permission to send to this phone number is denied
+              '30003', // Unreachable destination handset (can be temporary, but often permanent)
+              '30005', // Unknown destination handset (likely invalid)
+              '30006', // Landline or unreachable carrier
+              '30007', // Carrier violation
+            ];
+            
+            const isPermanentFailure = permanentFailureCodes.includes(errorCode);
+            if (isPermanentFailure) {
+              try {
+                // Normalize phone number before storing (storage.addSmsBlockedNumber also normalizes, but be explicit)
+                const normalizedToPhone = toPhone.replace(/\D/g, '');
+                await storage.addSmsBlockedNumber(
+                  tenantId,
+                  normalizedToPhone,
+                  errorCode === '21610' ? 'opted_out' : 'undeliverable',
+                  errorCode,
+                  errorMessage
+                );
+                console.log(`🚫 Phone ${normalizedToPhone} added to blocked numbers (error: ${errorCode})`);
+              } catch (blockError) {
+                console.error('Failed to add blocked number:', blockError);
+              }
+            }
+          }
         }
 
         console.log(`💾 Updating tracking record with ${quantity} segments:`, updates);
@@ -17857,10 +17929,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log('✅ Matched tenant:', matchedTenant.name);
 
-      // Try to find the consumer by phone
-      const consumers = await storage.getConsumersByTenant(matchedTenant.id);
-      const consumer = consumers.find(c => c.phone && fromPhone.includes(c.phone.replace(/\D/g, '')));
+      // Normalize phone number for consistent storage and lookup
+      // Strip +, whitespace, non-digits, and optionally leading 1 for US numbers
+      const normalizePhone = (phone: string): string => {
+        const digits = phone.replace(/\D/g, '');
+        // Remove leading 1 for US numbers (e.g., +15551234567 -> 5551234567)
+        return digits.startsWith('1') && digits.length === 11 ? digits.slice(1) : digits;
+      };
+      const normalizedFromPhone = normalizePhone(fromPhone);
+
+      // Check for STOP/opt-out keywords (TCPA compliance)
+      // Normalize: uppercase, strip all non-alpha characters, check for exact match
+      const optOutKeywords = ['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT'];
+      const messageNormalized = messageBody.trim().toUpperCase().replace(/[^A-Z]/g, '');
+      const isOptOut = optOutKeywords.includes(messageNormalized);
       
+      if (isOptOut) {
+        console.log('🛑 SMS OPT-OUT detected from:', fromPhone, '(normalized:', normalizedFromPhone, ')');
+      }
+
+      // Try to find the consumer by phone - use the new efficient lookup
+      const matchedConsumers = await storage.getConsumersByPhoneNumber(normalizedFromPhone, matchedTenant.id);
+      const consumer = matchedConsumers[0]; // Take first match for this tenant
+      
+      // If this is an opt-out, mark the consumer as opted out
+      if (isOptOut && consumer) {
+        try {
+          await storage.markConsumerSmsOptedOut(consumer.id, true);
+          console.log(`✅ Consumer ${consumer.id} marked as SMS opted out`);
+        } catch (optOutError) {
+          console.error('❌ Failed to mark consumer as opted out:', optOutError);
+        }
+      }
+      
+      // Also add to blocked numbers for this tenant (even if no consumer match)
+      // This ensures even unrecognized numbers that reply STOP are blocked
+      if (isOptOut) {
+        try {
+          await storage.addSmsBlockedNumber(
+            matchedTenant.id, 
+            normalizedFromPhone, // Use normalized phone number for consistent blocking
+            'opted_out',
+            'STOP',
+            `Consumer replied: ${messageBody}`
+          );
+          console.log(`✅ Phone ${normalizedFromPhone} added to blocked numbers for tenant ${matchedTenant.name}`);
+        } catch (blockError) {
+          console.error('❌ Failed to add phone to blocked list:', blockError);
+        }
+      }
+
       // Collect media URLs if present
       const mediaUrls = [];
       const numMedia = parseInt(NumMedia || '0', 10);
