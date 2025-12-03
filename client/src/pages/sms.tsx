@@ -35,7 +35,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { MessageSquare, Plus, Send, FileText, Trash2, Eye, TrendingUp, Users, AlertCircle, UserMinus, Check } from "lucide-react";
+import { MessageSquare, Plus, Send, FileText, Trash2, Eye, TrendingUp, Users, AlertCircle, UserMinus, Check, XCircle } from "lucide-react";
 
 export default function SMS() {
   // VERSION CHECK - Should see this in console
@@ -160,6 +160,27 @@ export default function SMS() {
     },
   });
 
+  const cancelCampaignMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("POST", `/api/sms-campaigns/${id}/cancel`),
+    onSuccess: (data: any, campaignId: string) => {
+      // Stop polling for this campaign
+      stopPollingCampaign(campaignId);
+      queryClient.invalidateQueries({ queryKey: ["/api/sms-campaigns"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sms-metrics"] });
+      toast({
+        title: "Campaign Cancelled",
+        description: "SMS campaign has been cancelled. Any remaining messages will not be sent.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to cancel SMS campaign",
+        variant: "destructive",
+      });
+    },
+  });
+
   const deleteCampaignMutation = useMutation({
     mutationFn: (id: string) => apiRequest("DELETE", `/api/sms-campaigns/${id}`),
     onSuccess: () => {
@@ -215,8 +236,8 @@ export default function SMS() {
           });
         });
 
-        // Stop polling if campaign is complete or failed
-        if (status.status === 'completed' || status.status === 'failed') {
+        // Stop polling if campaign is complete, failed, or cancelled
+        if (status.status === 'completed' || status.status === 'failed' || status.status === 'cancelled') {
           console.log(`✅ Campaign ${campaignId} finished with status: ${status.status}`);
           stopPollingCampaign(campaignId);
           
@@ -337,6 +358,8 @@ export default function SMS() {
         return "bg-yellow-100 text-yellow-800";
       case "failed":
         return "bg-red-100 text-red-800";
+      case "cancelled":
+        return "bg-orange-100 text-orange-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
@@ -953,6 +976,38 @@ export default function SMS() {
                                   </AlertDialogContent>
                                 </AlertDialog>
                               </>
+                            )}
+                            {campaign.status === "sending" && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    data-testid="button-cancel-campaign"
+                                  >
+                                    <XCircle className="h-4 w-4 mr-1" />
+                                    Stop Sending
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Stop SMS Campaign</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      This will immediately stop sending messages. {campaign.totalSent || 0} of {campaign.totalRecipients || 0} messages have been sent. Remaining messages will NOT be sent.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Keep Sending</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      className="bg-red-600 hover:bg-red-700"
+                                      onClick={() => cancelCampaignMutation.mutate(campaign.id)}
+                                      disabled={cancelCampaignMutation.isPending}
+                                    >
+                                      {cancelCampaignMutation.isPending ? "Stopping..." : "Stop Campaign"}
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
                             )}
                           </div>
                         </div>

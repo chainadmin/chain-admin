@@ -3654,6 +3654,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // In-memory lock to prevent concurrent campaign approvals
   const campaignProcessingLocks = new Map<string, boolean>();
+  
+  // Track cancelled campaigns so the SMS service can stop sending
+  const cancelledCampaigns = new Set<string>();
 
   app.post('/api/sms-campaigns/:id/approve', authenticateUser, requireSmsService, async (req: any, res) => {
     let campaign: any;
@@ -3676,6 +3679,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const normalizedStatus = (campaign.status || '').toLowerCase();
       if (!['pending', 'pending_approval'].includes(normalizedStatus)) {
         return res.status(400).json({ message: "Campaign is not awaiting approval" });
+      }
+
+      // Check if this campaign was cancelled (clear stale flag and reject)
+      if (cancelledCampaigns.has(id)) {
+        cancelledCampaigns.delete(id); // Clear stale cancelled flag
+        return res.status(400).json({ message: "Campaign was previously cancelled and cannot be approved" });
       }
 
       // Check if this campaign is already being processed (idempotency guard)
@@ -3806,7 +3815,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
           try {
             console.log(`📤 Starting background SMS send for campaign ${campaign.id}: ${processedMessages.length} messages`);
             
-            const smsResults = await smsService.sendBulkSmsCampaign(processedMessages, tenantId, campaign.id);
+            // Pass the cancellation checker to the SMS service
+            const isCancelled = () => cancelledCampaigns.has(campaign.id);
+            const smsResults = await smsService.sendBulkSmsCampaign(processedMessages, tenantId, campaign.id, isCancelled);
+            
+            if (smsResults.wasCancelled) {
+              console.log(`🛑 Campaign ${campaign.id} was cancelled: ${smsResults.totalSent} sent before cancellation`);
+              // Update metrics for the partial send before cancellation
+              try {
+                await storage.updateSmsCampaign(campaign.id, {
+                  totalSent: smsResults.totalSent,
+                  totalErrors: smsResults.totalFailed,
+                });
+                console.log(`📊 Updated cancelled campaign metrics: ${smsResults.totalSent} sent, ${smsResults.totalFailed} failed`);
+              } catch (err) {
+                console.error('Error updating cancelled campaign metrics:', err);
+              }
+              return; // Status already set to 'cancelled' by the cancel endpoint
+            }
+            
             console.log(`✅ Bulk send completed for campaign ${campaign.id}: ${smsResults.totalSent} sent, ${smsResults.totalFailed} failed`);
 
             // Update campaign metrics from tracking records (more accurate than send results)
@@ -3841,9 +3868,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.error(`❌ CRITICAL: Could not update campaign ${campaign.id} status after failure:`, updateError);
             }
           } finally {
-            // Release the processing lock
+            // Release the processing lock and clean up cancelled set
             console.log(`🔓 Releasing processing lock for campaign ${campaign.id}`);
             campaignProcessingLocks.delete(id);
+            cancelledCampaigns.delete(campaign.id);
           }
         })();
       } else {
@@ -3885,6 +3913,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Cancel an active/sending SMS campaign
+  app.post('/api/sms-campaigns/:id/cancel', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { id } = req.params;
+      const campaign = await storage.getSmsCampaignById(id, tenantId);
+
+      if (!campaign) {
+        return res.status(404).json({ message: "Campaign not found" });
+      }
+
+      const normalizedStatus = (campaign.status || '').toLowerCase();
+      
+      // Can cancel pending, pending_approval, or sending campaigns
+      if (!['pending', 'pending_approval', 'sending'].includes(normalizedStatus)) {
+        return res.status(400).json({ message: "Campaign cannot be cancelled (already completed or failed)" });
+      }
+
+      // Add to cancelled set so background sending stops
+      cancelledCampaigns.add(id);
+      console.log(`🛑 Campaign ${id} marked for cancellation`);
+
+      // Update campaign status to cancelled
+      await storage.updateSmsCampaign(id, {
+        status: 'cancelled',
+        completedAt: new Date(),
+      });
+
+      // Release processing lock if exists
+      campaignProcessingLocks.delete(id);
+
+      console.log(`🛑 SMS campaign "${campaign.name}" cancelled by user`);
+      
+      res.json({ message: 'Campaign cancelled successfully', status: 'cancelled' });
+    } catch (error) {
+      console.error("Error cancelling SMS campaign:", error);
+      res.status(500).json({ message: "Failed to cancel SMS campaign" });
+    }
+  });
+
   app.delete('/api/sms-campaigns/:id', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
@@ -3900,8 +3972,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const normalizedStatus = (campaign.status || '').toLowerCase();
-      if (!['pending', 'pending_approval'].includes(normalizedStatus)) {
-        return res.status(400).json({ message: "Only pending campaigns can be deleted" });
+      if (!['pending', 'pending_approval', 'cancelled'].includes(normalizedStatus)) {
+        return res.status(400).json({ message: "Only pending or cancelled campaigns can be deleted" });
       }
 
       await storage.deleteSmsCampaign(id, tenantId);
@@ -4256,6 +4328,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating automation:", error);
       res.status(500).json({ message: "Failed to update automation" });
+    }
+  });
+
+  // Pause/deactivate an automation
+  app.post('/api/automations/:id/pause', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const automation = await storage.getAutomationById(req.params.id, tenantId);
+      if (!automation) {
+        return res.status(404).json({ message: "Automation not found" });
+      }
+
+      // Set isActive to false to pause the automation
+      await storage.updateAutomation(req.params.id, {
+        isActive: false,
+      });
+
+      console.log(`⏸️ Automation "${automation.name}" paused by user`);
+      res.json({ message: 'Automation paused successfully', isActive: false });
+    } catch (error) {
+      console.error("Error pausing automation:", error);
+      res.status(500).json({ message: "Failed to pause automation" });
     }
   });
 

@@ -374,8 +374,9 @@ class SmsService {
   async sendBulkSmsCampaign(
     recipients: Array<{ to: string; message: string; consumerId?: string; accountId?: string }>,
     tenantId: string,
-    campaignId: string
-  ): Promise<{ totalSent: number; totalFailed: number }> {
+    campaignId: string,
+    isCancelled?: () => boolean
+  ): Promise<{ totalSent: number; totalFailed: number; wasCancelled?: boolean }> {
     let totalSent = 0;
     let totalFailed = 0;
     let lastProgressUpdate = Date.now();
@@ -389,10 +390,21 @@ class SmsService {
     console.log(`📤 Starting SMS campaign send: ${recipients.length} messages at ${maxPerMinute}/min (${delayBetweenBatches}ms between messages)`);
 
     for (let i = 0; i < recipients.length; i++) {
+      // Check if campaign was cancelled
+      if (isCancelled && isCancelled()) {
+        console.log(`🛑 Campaign ${campaignId} cancelled - stopping send after ${totalSent} sent, ${totalFailed} failed`);
+        return { totalSent, totalFailed, wasCancelled: true };
+      }
+      
       const recipient = recipients[i];
       try {
         // Respect rate limits by checking before sending
         while (!this.canSendSms(tenantId, maxPerMinute)) {
+          // Check for cancellation during rate limit wait too
+          if (isCancelled && isCancelled()) {
+            console.log(`🛑 Campaign ${campaignId} cancelled during rate limit wait`);
+            return { totalSent, totalFailed, wasCancelled: true };
+          }
           // Wait for rate limit window to reset
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
