@@ -39,7 +39,7 @@ import { MessageSquare, Plus, Send, FileText, Trash2, Eye, TrendingUp, Users, Al
 
 export default function SMS() {
   // VERSION CHECK - Should see this in console
-  console.log('🔵 SMS PAGE VERSION: 2025-12-03-CANCEL-BUTTON - Stop Sending button + polling fix');
+  console.log('🔵 SMS PAGE VERSION: 2025-10-22-FINAL - Variables, Approval, Folders ALL FIXED');
   
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showCampaignModal, setShowCampaignModal] = useState(false);
@@ -66,7 +66,6 @@ export default function SMS() {
 
   const { data: campaigns, isLoading: campaignsLoading } = useQuery({
     queryKey: ["/api/sms-campaigns"],
-    refetchInterval: 5000, // Refresh every 5 seconds to catch status changes
   });
 
   const { data: smsMetrics, isLoading: metricsLoading } = useQuery({
@@ -279,19 +278,8 @@ export default function SMS() {
   // Auto-start polling for any campaigns that are currently sending
   useEffect(() => {
     if (campaigns && Array.isArray(campaigns)) {
-      // Debug: Log all campaign statuses
-      console.log('📋 Current campaigns:', campaigns.map((c: any) => ({
-        id: c.id,
-        name: c.name,
-        status: c.status,
-        statusType: typeof c.status,
-      })));
-      
       campaigns.forEach((campaign: any) => {
-        // Case-insensitive check for 'sending' status
-        const normalizedStatus = (campaign.status || '').toLowerCase();
-        if (normalizedStatus === 'sending' && !pollingIntervals.current.has(campaign.id)) {
-          console.log(`🔄 Starting polling for sending campaign: ${campaign.id} (status: "${campaign.status}")`);
+        if (campaign.status === 'sending' && !pollingIntervals.current.has(campaign.id)) {
           startPollingCampaign(campaign.id);
         }
       });
@@ -989,7 +977,7 @@ export default function SMS() {
                                 </AlertDialog>
                               </>
                             )}
-                            {(campaign.status || '').toLowerCase() === "sending" && (
+                            {campaign.status === "sending" && (
                               <AlertDialog>
                                 <AlertDialogTrigger asChild>
                                   <Button
