@@ -4093,13 +4093,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Update campaign status to sending/resuming
+      // Update campaign status to sending/resuming with correct recipient count
       await storage.updateSmsCampaign(id, {
         status: 'sending',
+        totalRecipients: processedMessages.length,
         completedAt: null,
       });
 
-      console.log(`✅ SMS campaign "${campaign.name}" resuming. Sending ${remainingMessages} remaining SMS messages in background (starting at index ${startIndex})...`);
+      console.log(`✅ SMS campaign "${campaign.name}" resuming. Total recipients: ${processedMessages.length}, starting at index ${startIndex}, sending ${remainingMessages} remaining messages...`);
 
       // Send remaining messages in background
       (async () => {
