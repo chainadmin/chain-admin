@@ -35,11 +35,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { MessageSquare, Plus, Send, FileText, Trash2, Eye, TrendingUp, Users, AlertCircle, UserMinus, Check, XCircle } from "lucide-react";
+import { MessageSquare, Plus, Send, FileText, Trash2, Eye, TrendingUp, Users, AlertCircle, UserMinus, Check, XCircle, PlayCircle } from "lucide-react";
 
 export default function SMS() {
-  // VERSION CHECK - Should see this in console
-  console.log('🔵 SMS PAGE VERSION: 2025-10-22-FINAL - Variables, Approval, Folders ALL FIXED');
+  // VERSION CHECK - Should see this in console to verify deployment
+  console.log('📊 SMS PAGE VERSION: 2025-12-03-v3 - Resume + Delete Buttons');
   
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showCampaignModal, setShowCampaignModal] = useState(false);
@@ -189,13 +189,33 @@ export default function SMS() {
       queryClient.invalidateQueries({ queryKey: ["/api/sms-metrics"] });
       toast({
         title: "Success",
-        description: "Pending SMS campaign deleted successfully.",
+        description: "Campaign deleted successfully.",
       });
     },
     onError: (error: any) => {
       toast({
         title: "Error",
         description: error.message || "Failed to delete SMS campaign",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const resumeCampaignMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("POST", `/api/sms-campaigns/${id}/resume`),
+    onSuccess: (data: any, campaignId: string) => {
+      startPollingCampaign(campaignId);
+      queryClient.invalidateQueries({ queryKey: ["/api/sms-campaigns"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sms-metrics"] });
+      toast({
+        title: "Campaign Resumed",
+        description: `Resuming campaign from message ${data.startingAt || 0}. ${data.remainingMessages || 0} messages remaining.`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to resume SMS campaign",
         variant: "destructive",
       });
     },
@@ -1018,6 +1038,20 @@ export default function SMS() {
                                   </AlertDialogFooter>
                                 </AlertDialogContent>
                               </AlertDialog>
+                            )}
+                            {/* Resume button for stuck/cancelled/failed campaigns */}
+                            {['cancelled', 'failed'].includes(normalizedStatus) && (campaign.totalSent || 0) < (campaign.totalRecipients || 0) && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-green-600 border-green-600 hover:bg-green-50"
+                                onClick={() => resumeCampaignMutation.mutate(campaign.id)}
+                                disabled={resumeCampaignMutation.isPending}
+                                data-testid="button-resume-campaign"
+                              >
+                                <PlayCircle className="h-4 w-4 mr-1" />
+                                {resumeCampaignMutation.isPending ? "Resuming..." : "Resume"}
+                              </Button>
                             )}
                             {/* Delete button - ALWAYS visible for ALL campaigns */}
                             <AlertDialog>

@@ -371,15 +371,18 @@ class SmsService {
   }
 
   // Synchronous bulk send for campaigns - bypasses queue to ensure accurate metrics
+  // Supports resume functionality via startIndex parameter
   async sendBulkSmsCampaign(
     recipients: Array<{ to: string; message: string; consumerId?: string; accountId?: string }>,
     tenantId: string,
     campaignId: string,
-    isCancelled?: () => boolean
-  ): Promise<{ totalSent: number; totalFailed: number; wasCancelled?: boolean }> {
+    isCancelled?: () => boolean,
+    startIndex: number = 0 // Start from this index for resume functionality
+  ): Promise<{ totalSent: number; totalFailed: number; wasCancelled?: boolean; lastSentIndex: number }> {
     let totalSent = 0;
     let totalFailed = 0;
     let lastProgressUpdate = Date.now();
+    let currentIndex = startIndex;
     const progressUpdateInterval = 5000; // Update progress every 5 seconds
 
     const throttleConfig = await this.getThrottleConfig(tenantId);
@@ -390,13 +393,19 @@ class SmsService {
     const maxPerMinute = Math.max(60, baseMaxPerMinute); // At least 60/min for bulk campaigns
     const delayBetweenBatches = Math.max(100, 60000 / maxPerMinute); // Min 100ms between messages
 
-    console.log(`📤 Starting SMS campaign send: ${recipients.length} messages at ${maxPerMinute}/min (${delayBetweenBatches}ms between messages, tenant base rate: ${baseMaxPerMinute}/min)`);
+    console.log(`📤 Starting SMS campaign send: ${recipients.length - startIndex} remaining messages (starting at index ${startIndex}) at ${maxPerMinute}/min (${delayBetweenBatches}ms between messages, tenant base rate: ${baseMaxPerMinute}/min)`);
 
-    for (let i = 0; i < recipients.length; i++) {
+    for (let i = startIndex; i < recipients.length; i++) {
+      currentIndex = i;
+      
       // Check if campaign was cancelled
       if (isCancelled && isCancelled()) {
-        console.log(`🛑 Campaign ${campaignId} cancelled - stopping send after ${totalSent} sent, ${totalFailed} failed`);
-        return { totalSent, totalFailed, wasCancelled: true };
+        console.log(`🛑 Campaign ${campaignId} cancelled at index ${i} - stopping send after ${totalSent} sent, ${totalFailed} failed`);
+        // Save the last index for resume
+        try {
+          await storage.updateSmsCampaign(campaignId, { lastSentIndex: i });
+        } catch (e) { console.error('Error saving lastSentIndex:', e); }
+        return { totalSent, totalFailed, wasCancelled: true, lastSentIndex: i };
       }
       
       const recipient = recipients[i];
@@ -405,8 +414,11 @@ class SmsService {
         while (!this.canSendSms(tenantId, maxPerMinute)) {
           // Check for cancellation during rate limit wait too
           if (isCancelled && isCancelled()) {
-            console.log(`🛑 Campaign ${campaignId} cancelled during rate limit wait`);
-            return { totalSent, totalFailed, wasCancelled: true };
+            console.log(`🛑 Campaign ${campaignId} cancelled during rate limit wait at index ${i}`);
+            try {
+              await storage.updateSmsCampaign(campaignId, { lastSentIndex: i });
+            } catch (e) { console.error('Error saving lastSentIndex:', e); }
+            return { totalSent, totalFailed, wasCancelled: true, lastSentIndex: i };
           }
           // Wait for rate limit window to reset
           await new Promise(resolve => setTimeout(resolve, 1000));
@@ -433,10 +445,11 @@ class SmsService {
         if (now - lastProgressUpdate >= progressUpdateInterval || (i + 1) % 10 === 0 || i === recipients.length - 1) {
           try {
             await storage.updateSmsCampaign(campaignId, {
-              totalSent: totalSent,
+              totalSent: totalSent + startIndex, // Add previous sent count for resume
               totalErrors: totalFailed,
+              lastSentIndex: i + 1, // Track progress for resume
             });
-            console.log(`📊 Progress: ${totalSent + totalFailed}/${recipients.length} (${totalSent} sent, ${totalFailed} failed)`);
+            console.log(`📊 Progress: ${i + 1}/${recipients.length} (${totalSent} sent this session, ${totalFailed} failed)`);
             lastProgressUpdate = now;
           } catch (updateError) {
             console.error('Error updating campaign progress:', updateError);
@@ -452,7 +465,7 @@ class SmsService {
     }
 
     console.log(`✅ SMS campaign send complete: ${totalSent} sent, ${totalFailed} failed`);
-    return { totalSent, totalFailed };
+    return { totalSent, totalFailed, lastSentIndex: recipients.length };
   }
 
   getQueueStatus(tenantId?: string): { queueLength: number; estimatedWaitTime: number } {

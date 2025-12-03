@@ -3961,6 +3961,207 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Resume a stuck/cancelled SMS campaign from where it left off
+  app.post('/api/sms-campaigns/:id/resume', authenticateUser, requireSmsService, async (req: any, res) => {
+    let campaign: any;
+    let targetedConsumers: any[] = [];
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { id } = req.params;
+      campaign = await storage.getSmsCampaignById(id, tenantId);
+
+      if (!campaign) {
+        return res.status(404).json({ message: "Campaign not found" });
+      }
+
+      const normalizedStatus = (campaign.status || '').trim().toLowerCase();
+      
+      // Can resume campaigns that are stuck in sending, cancelled, or failed states
+      if (!['sending', 'cancelled', 'failed'].includes(normalizedStatus)) {
+        return res.status(400).json({ message: "Campaign cannot be resumed (only sending, cancelled, or failed campaigns can be resumed)" });
+      }
+
+      // Clear any cancellation flag for this campaign
+      cancelledCampaigns.delete(id);
+
+      // Check if campaign is already being processed
+      if (campaignProcessingLocks.get(id)) {
+        return res.status(409).json({ message: "Campaign is already being processed" });
+      }
+
+      // Set processing lock
+      campaignProcessingLocks.set(id, true);
+
+      const startIndex = campaign.lastSentIndex || 0;
+      console.log(`🔄 Resuming SMS campaign "${campaign.name}" from index ${startIndex}`);
+
+      const templates = await storage.getSmsTemplatesByTenant(tenantId);
+      const template = templates.find(t => t.id === campaign.templateId);
+      if (!template) {
+        campaignProcessingLocks.delete(id);
+        return res.status(404).json({ message: "SMS template not found" });
+      }
+
+      const tenant = await storage.getTenant(tenantId);
+      if (!tenant) {
+        campaignProcessingLocks.delete(id);
+        return res.status(404).json({ message: "Tenant not found" });
+      }
+
+      const tenantSettings = await storage.getTenantSettings(tenantId);
+      const tenantWithSettings = {
+        ...tenant,
+        contactEmail: tenantSettings?.contactEmail,
+        contactPhone: tenantSettings?.contactPhone,
+        consumerPortalSettings: tenantSettings?.consumerPortalSettings,
+      };
+
+      // Get the same audience as original campaign
+      const audience = await resolveSmsCampaignAudience(
+        tenantId,
+        campaign.targetGroup,
+        campaign.folderIds || [],
+      );
+      targetedConsumers = audience.targetedConsumers;
+      const { accountsData } = audience;
+
+      // Same phone extraction logic as approve endpoint
+      const extractPhoneNumbers = (consumer: any): string[] => {
+        const phones: string[] = [];
+        if (consumer.phone) phones.push(consumer.phone);
+        if (consumer.additionalData) {
+          const additionalData = consumer.additionalData as Record<string, any>;
+          const phoneKeys = Object.keys(additionalData)
+            .filter(key => key.toLowerCase().includes('phone'))
+            .sort((a, b) => {
+              const numA = parseInt(a.replace(/\D/g, '')) || 0;
+              const numB = parseInt(b.replace(/\D/g, '')) || 0;
+              return numA - numB;
+            });
+          for (const key of phoneKeys) {
+            const value = additionalData[key];
+            if (value && typeof value === 'string') {
+              const trimmed = value.trim();
+              if (trimmed) {
+                const normalized = trimmed.replace(/\D/g, '');
+                if (normalized.length >= 10) phones.push(trimmed);
+              }
+            }
+          }
+        }
+        const uniquePhones = new Map<string, string>();
+        for (const phone of phones) {
+          const normalized = phone.replace(/\D/g, '');
+          if (!uniquePhones.has(normalized)) uniquePhones.set(normalized, phone);
+        }
+        const allPhones = Array.from(uniquePhones.values());
+        const phonesToSend = campaign.phonesToSend || (campaign.sendToAllNumbers ? 'all' : '1');
+        if (phonesToSend === 'all') return allPhones;
+        const limit = parseInt(phonesToSend);
+        return allPhones.slice(0, limit);
+      };
+
+      const processedMessages = targetedConsumers.flatMap(consumer => {
+        const phoneNumbers = extractPhoneNumbers(consumer);
+        const consumerAccount = accountsData.find(acc => acc.consumerId === consumer.id);
+        const processedMessage = replaceTemplateVariables(template.message || '', consumer, consumerAccount, tenantWithSettings);
+        return phoneNumbers.map(phoneNumber => ({
+          to: phoneNumber,
+          message: processedMessage,
+          consumerId: consumer.id,
+          accountId: consumerAccount?.id,
+        }));
+      });
+
+      // Calculate remaining messages
+      const remainingMessages = processedMessages.length - startIndex;
+      if (remainingMessages <= 0) {
+        // Campaign was already complete
+        await storage.updateSmsCampaign(id, {
+          status: 'completed',
+          completedAt: new Date(),
+        });
+        campaignProcessingLocks.delete(id);
+        return res.json({ 
+          message: 'Campaign already completed',
+          totalSent: campaign.totalSent,
+          totalRecipients: processedMessages.length
+        });
+      }
+
+      // Update campaign status to sending/resuming
+      await storage.updateSmsCampaign(id, {
+        status: 'sending',
+        completedAt: null,
+      });
+
+      console.log(`✅ SMS campaign "${campaign.name}" resuming. Sending ${remainingMessages} remaining SMS messages in background (starting at index ${startIndex})...`);
+
+      // Send remaining messages in background
+      (async () => {
+        try {
+          console.log(`📤 Resuming background SMS send for campaign ${id}: ${remainingMessages} remaining messages`);
+          
+          const isCancelled = () => cancelledCampaigns.has(id);
+          const smsResults = await smsService.sendBulkSmsCampaign(
+            processedMessages, 
+            tenantId, 
+            id, 
+            isCancelled,
+            startIndex // Start from where we left off
+          );
+          
+          if (smsResults.wasCancelled) {
+            console.log(`🛑 Resumed campaign ${id} was cancelled at index ${smsResults.lastSentIndex}`);
+            return;
+          }
+          
+          console.log(`✅ Resume send completed for campaign ${id}: ${smsResults.totalSent} sent, ${smsResults.totalFailed} failed`);
+
+          await updateSmsCampaignMetrics(id, { tenantId, ensureStatus: true });
+          
+          await storage.updateSmsCampaign(id, {
+            status: 'completed',
+            totalRecipients: processedMessages.length,
+            completedAt: new Date(),
+            lastSentIndex: processedMessages.length,
+          });
+          console.log(`✅ Resumed campaign ${id} completed successfully`);
+        } catch (error) {
+          console.error(`❌ Error in resumed SMS campaign send for ${id}:`, error);
+          try {
+            await storage.updateSmsCampaign(id, {
+              status: 'failed',
+              completedAt: new Date(),
+            });
+          } catch (updateError) {
+            console.error(`❌ Could not update campaign ${id} status after resume failure:`, updateError);
+          }
+        } finally {
+          campaignProcessingLocks.delete(id);
+          cancelledCampaigns.delete(id);
+        }
+      })();
+
+      res.json({
+        message: `Campaign resuming from index ${startIndex}`,
+        remainingMessages,
+        totalRecipients: processedMessages.length,
+        startingAt: startIndex,
+      });
+    } catch (error) {
+      console.error("Error resuming SMS campaign:", error);
+      if (campaign?.id) {
+        campaignProcessingLocks.delete(campaign.id);
+      }
+      res.status(500).json({ message: "Failed to resume SMS campaign" });
+    }
+  });
+
   app.delete('/api/sms-campaigns/:id', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;

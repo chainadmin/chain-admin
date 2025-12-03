@@ -390,6 +390,22 @@ export async function runMigrations() {
       }
     }
 
+    // Add last_sent_index column to sms_campaigns for resume functionality
+    console.log('Adding last_sent_index column to sms_campaigns...');
+    try {
+      await client.query(`
+        ALTER TABLE sms_campaigns 
+        ADD COLUMN IF NOT EXISTS last_sent_index BIGINT DEFAULT 0
+      `);
+      console.log('  ✓ last_sent_index column added to sms_campaigns');
+    } catch (err: any) {
+      if (err.message?.includes('already exists')) {
+        console.log('  ✓ last_sent_index column already exists');
+      } else {
+        console.log('  ⚠ last_sent_index column error:', err.message);
+      }
+    }
+
     // Update push_devices table to support native FCM/APNS tokens
     console.log('Updating push_devices table for native push notifications...');
     const pushDeviceColumns = [

@@ -361,7 +361,8 @@ export const smsCampaigns = pgTable("sms_campaigns", {
   folderIds: text("folder_ids").array().default(sql`ARRAY[]::text[]`), // Array of folder IDs for folder targeting
   sendToAllNumbers: boolean("send_to_all_numbers").default(false), // DEPRECATED: Use phonesToSend instead
   phonesToSend: text("phones_to_send", { enum: ['1', '2', '3', 'all'] }).default('1'), // How many phone numbers to send to per consumer
-  status: text("status").default("pending_approval"), // "pending", "pending_approval", "sending", "completed", "failed"
+  status: text("status").default("pending_approval"), // "pending", "pending_approval", "sending", "completed", "failed", "cancelled"
+  lastSentIndex: bigint("last_sent_index", { mode: "number" }).default(0), // Track progress for resume functionality
   totalRecipients: bigint("total_recipients", { mode: "number" }).default(0),
   totalSent: bigint("total_sent", { mode: "number" }).default(0),
   totalDelivered: bigint("total_delivered", { mode: "number" }).default(0),
