@@ -53,7 +53,7 @@ export default function SMS() {
     templateId: "",
     targetGroup: "all",
     folderIds: [] as string[],
-    sendToAllNumbers: false,
+    phonesToSend: "1" as "1" | "2" | "3" | "all",
   });
 
   const { toast } = useToast();
@@ -124,7 +124,7 @@ export default function SMS() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sms-campaigns"] });
       setShowCampaignModal(false);
-      setCampaignForm({ name: "", templateId: "", targetGroup: "all", folderIds: [], sendToAllNumbers: false });
+      setCampaignForm({ name: "", templateId: "", targetGroup: "all", folderIds: [], phonesToSend: "1" });
       toast({
         title: "Success",
         description: "SMS campaign created and scheduled",
@@ -831,18 +831,25 @@ export default function SMS() {
                         </div>
                       </div>
                     )}
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        id="send-to-all-numbers"
-                        checked={campaignForm.sendToAllNumbers}
-                        onChange={(e) => setCampaignForm({ ...campaignForm, sendToAllNumbers: e.target.checked })}
-                        className="rounded border-gray-300"
-                        data-testid="checkbox-send-to-all-numbers"
-                      />
-                      <label htmlFor="send-to-all-numbers" className="text-sm cursor-pointer">
-                        Send to all available phone numbers (includes alternate phone numbers from CSV imports)
-                      </label>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Phone Numbers to Send To</label>
+                      <Select
+                        value={campaignForm.phonesToSend}
+                        onValueChange={(value: "1" | "2" | "3" | "all") => setCampaignForm({ ...campaignForm, phonesToSend: value })}
+                      >
+                        <SelectTrigger data-testid="select-phones-to-send">
+                          <SelectValue placeholder="Select how many phones" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">1 number (primary phone only)</SelectItem>
+                          <SelectItem value="2">2 numbers</SelectItem>
+                          <SelectItem value="3">3 numbers</SelectItem>
+                          <SelectItem value="all">All available numbers</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Choose how many phone numbers to send to per consumer (uses primary phone + additional phones from CSV imports in order)
+                      </p>
                     </div>
                     <div className="flex justify-end gap-2">
                       <Button

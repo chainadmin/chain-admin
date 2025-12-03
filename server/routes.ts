@@ -3659,25 +3659,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       targetedConsumers = audience.targetedConsumers;
       const { accountsData } = audience;
 
-      // Extract all phone numbers for each consumer
+      // Extract phone numbers for each consumer based on phonesToSend setting
+      // phonesToSend can be '1', '2', '3', or 'all'
       const extractPhoneNumbers = (consumer: any): string[] => {
         const phones: string[] = [];
         
-        // Add primary phone number
+        // Add primary phone number first
         if (consumer.phone) {
           phones.push(consumer.phone);
         }
         
-        // If sendToAllNumbers is enabled, look for additional phone numbers in additionalData
-        if (campaign.sendToAllNumbers && consumer.additionalData) {
+        // Collect additional phone numbers from additionalData
+        if (consumer.additionalData) {
           const additionalData = consumer.additionalData as Record<string, any>;
           
-          // Iterate through ALL fields (case-insensitive) to catch any phone field
-          // This matches the SMAX phone extraction logic
-          for (const [key, value] of Object.entries(additionalData)) {
-            const lowerKey = key.toLowerCase();
-            // Check if field name contains 'phone'
-            if (lowerKey.includes('phone') && value && typeof value === 'string') {
+          // Sort keys to get consistent ordering (phone1, phone2, phone3, etc.)
+          const phoneKeys = Object.keys(additionalData)
+            .filter(key => key.toLowerCase().includes('phone'))
+            .sort((a, b) => {
+              // Extract numeric suffix for proper ordering
+              const numA = parseInt(a.replace(/\D/g, '')) || 0;
+              const numB = parseInt(b.replace(/\D/g, '')) || 0;
+              return numA - numB;
+            });
+          
+          for (const key of phoneKeys) {
+            const value = additionalData[key];
+            if (value && typeof value === 'string') {
               const trimmed = value.trim();
               if (trimmed) {
                 // Validate: phone numbers should have at least 10 digits
@@ -3690,7 +3698,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
         
-        // Return unique phone numbers only (deduplicate by normalized digits)
+        // Deduplicate by normalized digits while maintaining order
         const uniquePhones = new Map<string, string>();
         for (const phone of phones) {
           const normalized = phone.replace(/\D/g, '');
@@ -3698,7 +3706,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             uniquePhones.set(normalized, phone);
           }
         }
-        return Array.from(uniquePhones.values());
+        const allPhones = Array.from(uniquePhones.values());
+        
+        // Apply phonesToSend limit (supports legacy sendToAllNumbers for backward compatibility)
+        const phonesToSend = campaign.phonesToSend || (campaign.sendToAllNumbers ? 'all' : '1');
+        if (phonesToSend === 'all') {
+          return allPhones;
+        }
+        const limit = parseInt(phonesToSend);
+        return allPhones.slice(0, limit);
       };
 
       const processedMessages = targetedConsumers
@@ -12587,24 +12603,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     tenantWithSettings
                   );
                   
-                  // Send SMS
-                  const { smsService } = await import('./smsService');
-                  const phone = consumer.phoneNumber || (consumer.additionalData as any)?.phone;
+                  // Extract phone numbers based on phonesToSend setting
+                  const phonesToSendSetting = (automation as any).phonesToSend || '1';
+                  const extractAutomationPhoneNumbers = (consumer: any): string[] => {
+                    const phones: string[] = [];
+                    
+                    // Add primary phone number first
+                    const primaryPhone = consumer.phone || consumer.phoneNumber;
+                    if (primaryPhone) {
+                      phones.push(primaryPhone);
+                    }
+                    
+                    // Collect additional phone numbers from additionalData
+                    if (consumer.additionalData) {
+                      const additionalData = consumer.additionalData as Record<string, any>;
+                      
+                      // Sort keys to get consistent ordering (phone1, phone2, phone3, etc.)
+                      const phoneKeys = Object.keys(additionalData)
+                        .filter(key => key.toLowerCase().includes('phone'))
+                        .sort((a, b) => {
+                          const numA = parseInt(a.replace(/\D/g, '')) || 0;
+                          const numB = parseInt(b.replace(/\D/g, '')) || 0;
+                          return numA - numB;
+                        });
+                      
+                      for (const key of phoneKeys) {
+                        const value = additionalData[key];
+                        if (value && typeof value === 'string') {
+                          const trimmed = value.trim();
+                          if (trimmed) {
+                            const normalized = trimmed.replace(/\D/g, '');
+                            if (normalized.length >= 10) {
+                              phones.push(trimmed);
+                            }
+                          }
+                        }
+                      }
+                    }
+                    
+                    // Deduplicate by normalized digits while maintaining order
+                    const uniquePhones = new Map<string, string>();
+                    for (const phone of phones) {
+                      const normalized = phone.replace(/\D/g, '');
+                      if (!uniquePhones.has(normalized)) {
+                        uniquePhones.set(normalized, phone);
+                      }
+                    }
+                    const allPhones = Array.from(uniquePhones.values());
+                    
+                    // Apply phonesToSend limit
+                    if (phonesToSendSetting === 'all') {
+                      return allPhones;
+                    }
+                    const limit = parseInt(phonesToSendSetting);
+                    return allPhones.slice(0, limit);
+                  };
                   
-                  if (!phone) {
+                  // Send SMS to all targeted phone numbers
+                  const { smsService } = await import('./smsService');
+                  const phoneNumbers = extractAutomationPhoneNumbers(consumer);
+                  
+                  if (phoneNumbers.length === 0) {
                     console.error(`No phone number for consumer ${consumer.id}`);
                     failedCount++;
                     continue;
                   }
                   
-                  await smsService.sendSms(
-                    phone,
-                    message,
-                    automation.tenantId
-                  );
-                  
-                  sentCount++;
-                  console.log(`📱 Sent SMS to ${phone}`);
+                  // Send to each phone number
+                  for (const phone of phoneNumbers) {
+                    try {
+                      await smsService.sendSms(
+                        phone,
+                        message,
+                        automation.tenantId
+                      );
+                      sentCount++;
+                      console.log(`📱 Sent SMS to ${phone}`);
+                    } catch (smsError) {
+                      console.error(`Failed to send SMS to ${phone}:`, smsError);
+                      failedCount++;
+                    }
+                  }
                 }
               } catch (sendError) {
                 console.error(`Error sending to consumer ${consumer.id}:`, sendError);

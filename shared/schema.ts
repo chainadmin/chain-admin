@@ -359,7 +359,8 @@ export const smsCampaigns = pgTable("sms_campaigns", {
   name: text("name").notNull(),
   targetGroup: text("target_group").notNull(), // "all", "with-balance", "decline", "recent-upload", "folder"
   folderIds: text("folder_ids").array().default(sql`ARRAY[]::text[]`), // Array of folder IDs for folder targeting
-  sendToAllNumbers: boolean("send_to_all_numbers").default(false), // Send to all available phone numbers (phone + additionalData)
+  sendToAllNumbers: boolean("send_to_all_numbers").default(false), // DEPRECATED: Use phonesToSend instead
+  phonesToSend: text("phones_to_send", { enum: ['1', '2', '3', 'all'] }).default('1'), // How many phone numbers to send to per consumer
   status: text("status").default("pending_approval"), // "pending", "pending_approval", "sending", "completed", "failed"
   totalRecipients: bigint("total_recipients", { mode: "number" }).default(0),
   totalSent: bigint("total_sent", { mode: "number" }).default(0),
@@ -1228,6 +1229,9 @@ export const communicationAutomations = pgTable("communication_automations", {
   // Target audience - which folder(s) to send to
   targetType: text("target_type").notNull().default('folders'), // 'folders', 'all', 'consumers'
   targetFolderIds: uuid("target_folder_ids").array(), // Empty array means send to all
+  
+  // SMS-specific settings
+  phonesToSend: text("phones_to_send", { enum: ['1', '2', '3', 'all'] }).default('1'), // How many phone numbers to send to per consumer (SMS only)
   
   // Execution tracking
   lastExecuted: timestamp("last_executed"),

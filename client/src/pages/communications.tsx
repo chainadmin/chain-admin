@@ -442,7 +442,7 @@ export default function Communications() {
     targetGroup: "all",
     targetType: "all" as "all" | "folder" | "custom",
     targetFolderIds: [] as string[],
-    sendToAllNumbers: false,
+    phonesToSend: "1" as "1" | "2" | "3" | "all",
     customFilters: {
       balanceMin: "",
       balanceMax: "",
@@ -499,6 +499,7 @@ export default function Communications() {
     scheduledDate: "",
     scheduleTime: "",
     targetFolderIds: [] as string[],
+    phonesToSend: "1" as "1" | "2" | "3" | "all",
   });
 
   const [showAutomationModal, setShowAutomationModal] = useState(false);
@@ -1176,7 +1177,7 @@ export default function Communications() {
         targetGroup: "all",
         targetType: "all",
         targetFolderIds: [],
-        sendToAllNumbers: false,
+        phonesToSend: "1",
         customFilters: {
           balanceMin: "",
           balanceMax: "",
@@ -1241,7 +1242,7 @@ export default function Communications() {
         targetGroup: "all",
         targetType: "all",
         targetFolderIds: [],
-        sendToAllNumbers: false,
+        phonesToSend: "1",
         customFilters: {
           balanceMin: "",
           balanceMax: "",
@@ -1297,6 +1298,7 @@ export default function Communications() {
         scheduledDate: "",
         scheduleTime: "",
         targetFolderIds: [],
+        phonesToSend: "1",
       });
       toast({
         title: "Success",
@@ -1350,6 +1352,7 @@ export default function Communications() {
         scheduledDate: "",
         scheduleTime: "",
         targetFolderIds: [],
+        phonesToSend: "1",
       });
       toast({
         title: "Success",
@@ -1718,7 +1721,7 @@ export default function Communications() {
           campaignForm.targetType === "folder"
             ? campaignForm.targetFolderIds
             : [],
-        sendToAllNumbers: campaignForm.sendToAllNumbers,
+        phonesToSend: campaignForm.phonesToSend,
       };
 
       createSmsCampaignMutation.mutate(payload);
@@ -3550,21 +3553,25 @@ export default function Communications() {
                     )}
 
                     {communicationType === "sms" && (
-                      <div className="flex items-center space-x-2 border border-white/20 rounded-md p-3 bg-white/5">
-                        <input
-                          type="checkbox"
-                          id="send-to-all-numbers"
-                          checked={campaignForm.sendToAllNumbers}
-                          onChange={(e) => setCampaignForm({ ...campaignForm, sendToAllNumbers: e.target.checked })}
-                          className="rounded"
-                          data-testid="checkbox-send-to-all-numbers"
-                        />
-                        <label htmlFor="send-to-all-numbers" className="text-sm font-medium">
-                          Send to all phone numbers
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Include additional phone numbers from CSV imports and SMAX (not just the primary number)
-                          </p>
-                        </label>
+                      <div className="space-y-2 border border-white/20 rounded-md p-3 bg-white/5">
+                        <Label className="text-sm font-medium">Phone Numbers to Send To</Label>
+                        <Select
+                          value={campaignForm.phonesToSend}
+                          onValueChange={(value: "1" | "2" | "3" | "all") => setCampaignForm({ ...campaignForm, phonesToSend: value })}
+                        >
+                          <SelectTrigger data-testid="select-phones-to-send">
+                            <SelectValue placeholder="Select how many phones" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="1">1 number (primary phone only)</SelectItem>
+                            <SelectItem value="2">2 numbers</SelectItem>
+                            <SelectItem value="3">3 numbers</SelectItem>
+                            <SelectItem value="all">All available numbers</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          Choose how many phone numbers to send to per consumer (uses primary phone + additional phones from CSV imports in order)
+                        </p>
                       </div>
                     )}
 
@@ -3867,6 +3874,29 @@ export default function Communications() {
                       </Select>
                     </div>
 
+                    {automationForm.type === "sms" && (
+                      <div>
+                        <Label>Phone Numbers to Send To</Label>
+                        <Select
+                          value={automationForm.phonesToSend}
+                          onValueChange={(value: "1" | "2" | "3" | "all") => setAutomationForm(prev => ({ ...prev, phonesToSend: value }))}
+                        >
+                          <SelectTrigger data-testid="select-automation-phones-to-send" className="bg-white/10 border-white/20 text-white">
+                            <SelectValue placeholder="Select how many phones" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="1">1 number (primary phone only)</SelectItem>
+                            <SelectItem value="2">2 numbers</SelectItem>
+                            <SelectItem value="3">3 numbers</SelectItem>
+                            <SelectItem value="all">All available numbers</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-blue-100/60 mt-1">
+                          Choose how many phone numbers to send to per consumer
+                        </p>
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <Label htmlFor="schedule-date">Date *</Label>
@@ -4049,6 +4079,29 @@ export default function Communications() {
                       </Select>
                     </div>
 
+                    {automationForm.type === "sms" && (
+                      <div>
+                        <Label>Phone Numbers to Send To</Label>
+                        <Select
+                          value={automationForm.phonesToSend}
+                          onValueChange={(value: "1" | "2" | "3" | "all") => setAutomationForm(prev => ({ ...prev, phonesToSend: value }))}
+                        >
+                          <SelectTrigger data-testid="select-edit-automation-phones-to-send" className="bg-white/10 border-white/20 text-white">
+                            <SelectValue placeholder="Select how many phones" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="1">1 number (primary phone only)</SelectItem>
+                            <SelectItem value="2">2 numbers</SelectItem>
+                            <SelectItem value="3">3 numbers</SelectItem>
+                            <SelectItem value="all">All available numbers</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-blue-100/60 mt-1">
+                          Choose how many phone numbers to send to per consumer
+                        </p>
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <Label htmlFor="edit-schedule-date">Date *</Label>
@@ -4211,6 +4264,7 @@ export default function Communications() {
                                   scheduledDate: automation.scheduledDate ? new Date(automation.scheduledDate).toISOString().split('T')[0] : "",
                                   scheduleTime: automation.scheduleTime || "",
                                   targetFolderIds: automation.targetFolderIds || [],
+                                  phonesToSend: automation.phonesToSend || "1",
                                 });
                                 setShowEditAutomationModal(true);
                               }}

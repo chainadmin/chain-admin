@@ -174,6 +174,24 @@ export async function runMigrations() {
       console.log(`  ⚠ send_to_all_numbers (already exists or error)`);
     }
     
+    // Add phones_to_send column to SMS campaigns (1, 2, 3, or all)
+    console.log('Adding phones_to_send to SMS campaigns...');
+    try {
+      await client.query(`ALTER TABLE sms_campaigns ADD COLUMN IF NOT EXISTS phones_to_send TEXT DEFAULT '1'`);
+      console.log(`  ✓ phones_to_send column added to sms_campaigns`);
+    } catch (err) {
+      console.log(`  ⚠ phones_to_send (already exists or error)`);
+    }
+    
+    // Add phones_to_send column to communication_automations (1, 2, 3, or all)
+    console.log('Adding phones_to_send to communication_automations...');
+    try {
+      await client.query(`ALTER TABLE communication_automations ADD COLUMN IF NOT EXISTS phones_to_send TEXT DEFAULT '1'`);
+      console.log(`  ✓ phones_to_send column added to communication_automations`);
+    } catch (err) {
+      console.log(`  ⚠ phones_to_send (already exists or error)`);
+    }
+    
     // Create communication_sequences table if it doesn't exist
     console.log('Creating communication_sequences table...');
     try {
