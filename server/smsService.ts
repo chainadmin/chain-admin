@@ -535,6 +535,189 @@ class SmsService {
       canSend: currentData.count < throttleConfig.maxPerMinute,
     };
   }
+
+  async syncHistoricalBlockedNumbers(
+    tenantId: string,
+    daysBack: number = 90
+  ): Promise<{
+    success: boolean;
+    failedNumbers: number;
+    optOutNumbers: number;
+    consumersMarkedOptedOut: number;
+    errors: string[];
+    totalMessagesScanned: number;
+  }> {
+    const errors: string[] = [];
+    let failedNumbers = 0;
+    let optOutNumbers = 0;
+    let consumersMarkedOptedOut = 0;
+    let totalMessagesScanned = 0;
+
+    try {
+      const client = await this.getTwilioClient(tenantId);
+      if (!client) {
+        return {
+          success: false,
+          failedNumbers: 0,
+          optOutNumbers: 0,
+          consumersMarkedOptedOut: 0,
+          errors: ['Twilio not configured for this tenant'],
+          totalMessagesScanned: 0,
+        };
+      }
+
+      const tenant = await storage.getTenant(tenantId);
+      const twilioPhoneNumber = tenant?.twilioPhoneNumber;
+      if (!twilioPhoneNumber) {
+        return {
+          success: false,
+          failedNumbers: 0,
+          optOutNumbers: 0,
+          consumersMarkedOptedOut: 0,
+          errors: ['No Twilio phone number configured for this tenant'],
+          totalMessagesScanned: 0,
+        };
+      }
+
+      const dateSent = new Date();
+      dateSent.setDate(dateSent.getDate() - daysBack);
+
+      console.log(`📱 Starting Twilio historical sync for tenant ${tenantId}, scanning ${daysBack} days back...`);
+
+      const normalizePhone = (phone: string): string => {
+        const digits = phone.replace(/\D/g, '');
+        return digits.startsWith('1') && digits.length === 11 ? digits.slice(1) : digits;
+      };
+
+      const permanentFailureCodes = [
+        21211, // Invalid 'To' Phone Number
+        21610, // Message cannot be sent to this phone number (opt-out)
+        21614, // 'To' number is not a valid mobile number
+        21408, // Permission to send to this phone number is denied
+        30003, // Unreachable destination handset
+        30005, // Unknown destination handset
+        30006, // Landline or unreachable carrier
+        30007, // Carrier violation
+      ];
+
+      const optOutKeywords = ['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT'];
+
+      // Fetch outbound failed messages
+      console.log('📤 Scanning outbound messages for delivery failures...');
+      try {
+        const outboundMessages = await client.messages.list({
+          from: twilioPhoneNumber,
+          dateSentAfter: dateSent,
+          limit: 1000,
+        });
+
+        for (const message of outboundMessages) {
+          totalMessagesScanned++;
+          
+          if (message.status === 'failed' || message.status === 'undelivered') {
+            const errorCode = message.errorCode;
+            if (errorCode && permanentFailureCodes.includes(errorCode)) {
+              const normalizedPhone = normalizePhone(message.to);
+              try {
+                await storage.addSmsBlockedNumber(
+                  tenantId,
+                  normalizedPhone,
+                  errorCode === 21610 ? 'opted_out' : 'undeliverable',
+                  String(errorCode),
+                  `Historical sync: ${message.errorMessage || 'Delivery failed'}`
+                );
+                failedNumbers++;
+                console.log(`🚫 Blocked ${normalizedPhone} (error ${errorCode})`);
+              } catch (blockError: any) {
+                if (!blockError.message?.includes('duplicate') && !blockError.message?.includes('already exists')) {
+                  errors.push(`Failed to block ${normalizedPhone}: ${blockError.message}`);
+                }
+              }
+            }
+          }
+        }
+      } catch (outboundError: any) {
+        errors.push(`Error fetching outbound messages: ${outboundError.message}`);
+        console.error('Error fetching outbound messages:', outboundError);
+      }
+
+      // Fetch inbound messages for STOP keywords
+      console.log('📥 Scanning inbound messages for STOP opt-outs...');
+      try {
+        const inboundMessages = await client.messages.list({
+          to: twilioPhoneNumber,
+          dateSentAfter: dateSent,
+          limit: 1000,
+        });
+
+        for (const message of inboundMessages) {
+          totalMessagesScanned++;
+          
+          const messageBody = message.body || '';
+          const messageNormalized = messageBody.trim().toUpperCase().replace(/[^A-Z]/g, '');
+          
+          if (optOutKeywords.includes(messageNormalized)) {
+            const normalizedPhone = normalizePhone(message.from);
+            
+            // Add to blocked numbers
+            try {
+              await storage.addSmsBlockedNumber(
+                tenantId,
+                normalizedPhone,
+                'opted_out',
+                'STOP',
+                `Historical sync: Consumer replied "${messageBody}"`
+              );
+              optOutNumbers++;
+              console.log(`🛑 Blocked ${normalizedPhone} (STOP reply)`);
+            } catch (blockError: any) {
+              if (!blockError.message?.includes('duplicate') && !blockError.message?.includes('already exists')) {
+                errors.push(`Failed to block opt-out ${normalizedPhone}: ${blockError.message}`);
+              }
+            }
+
+            // Try to find and mark consumer as opted out
+            try {
+              const matchedConsumers = await storage.getConsumersByPhoneNumber(normalizedPhone, tenantId);
+              for (const consumer of matchedConsumers) {
+                if (!(consumer as any).smsOptedOut) {
+                  await storage.markConsumerSmsOptedOut(consumer.id, true);
+                  consumersMarkedOptedOut++;
+                  console.log(`✅ Marked consumer ${consumer.id} as SMS opted out`);
+                }
+              }
+            } catch (consumerError: any) {
+              errors.push(`Failed to mark consumer opted out for ${normalizedPhone}: ${consumerError.message}`);
+            }
+          }
+        }
+      } catch (inboundError: any) {
+        errors.push(`Error fetching inbound messages: ${inboundError.message}`);
+        console.error('Error fetching inbound messages:', inboundError);
+      }
+
+      console.log(`✅ Historical sync complete: ${failedNumbers} failed numbers, ${optOutNumbers} opt-outs, ${consumersMarkedOptedOut} consumers marked`);
+
+      return {
+        success: true,
+        failedNumbers,
+        optOutNumbers,
+        consumersMarkedOptedOut,
+        errors,
+        totalMessagesScanned,
+      };
+    } catch (error: any) {
+      console.error('Error during historical sync:', error);
+      return {
+        success: false,
+        failedNumbers,
+        optOutNumbers,
+        consumersMarkedOptedOut,
+        errors: [...errors, `Sync failed: ${error.message}`],
+        totalMessagesScanned,
+      };
+    }
+  }
 }
 
 export const smsService = new SmsService();

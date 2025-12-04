@@ -4252,6 +4252,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Historical SMS sync - fetches Twilio message history to populate blocked numbers
+  app.post('/api/sms-compliance/sync-historical', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { daysBack = 90 } = req.body;
+      
+      // Validate daysBack is reasonable (1-365 days)
+      const days = Math.min(Math.max(parseInt(daysBack) || 90, 1), 365);
+
+      console.log(`📱 Starting historical SMS sync for tenant ${tenantId}, ${days} days back`);
+
+      const result = await smsService.syncHistoricalBlockedNumbers(tenantId, days);
+
+      if (result.success) {
+        res.json({
+          message: 'Historical sync completed',
+          ...result,
+        });
+      } else {
+        res.status(500).json({
+          message: 'Historical sync failed',
+          ...result,
+        });
+      }
+    } catch (error) {
+      console.error("Error running historical SMS sync:", error);
+      res.status(500).json({ message: "Failed to run historical SMS sync" });
+    }
+  });
+
+  // Get blocked SMS numbers for tenant
+  app.get('/api/sms-compliance/blocked-numbers', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const blockedNumbers = await storage.getSmsBlockedNumbers(tenantId);
+      res.json(blockedNumbers);
+    } catch (error) {
+      console.error("Error fetching blocked numbers:", error);
+      res.status(500).json({ message: "Failed to fetch blocked numbers" });
+    }
+  });
+
+  // Unblock a phone number
+  app.delete('/api/sms-compliance/blocked-numbers/:phoneNumber', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { phoneNumber } = req.params;
+      await storage.removeSmsBlockedNumber(tenantId, phoneNumber);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error unblocking phone number:", error);
+      res.status(500).json({ message: "Failed to unblock phone number" });
+    }
+  });
+
   // SMS throttling and queue management routes
   app.get('/api/sms-rate-limit-status', authenticateUser, async (req: any, res) => {
     try {

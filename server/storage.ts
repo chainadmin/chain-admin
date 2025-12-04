@@ -319,8 +319,9 @@ export interface IStorage {
   // SMS opt-out and blocked number operations
   markConsumerSmsOptedOut(consumerId: string, optedOut: boolean): Promise<Consumer>;
   getConsumersByPhoneNumber(phoneNumber: string, tenantId?: string): Promise<Consumer[]>;
-  getSmsBlockedNumbers(tenantId: string): Promise<{ phoneNumber: string; reason: string }[]>;
+  getSmsBlockedNumbers(tenantId: string): Promise<{ phoneNumber: string; reason: string; errorCode?: string | null; errorMessage?: string | null; failureCount: number; firstFailedAt: Date; lastFailedAt: Date }[]>;
   addSmsBlockedNumber(tenantId: string, phoneNumber: string, reason: string, errorCode?: string, errorMessage?: string): Promise<void>;
+  removeSmsBlockedNumber(tenantId: string, phoneNumber: string): Promise<void>;
   isPhoneNumberBlocked(tenantId: string, phoneNumber: string): Promise<boolean>;
   
   // Automation operations
@@ -1809,14 +1810,20 @@ export class DatabaseStorage implements IStorage {
       .where(and(...conditions));
   }
 
-  async getSmsBlockedNumbers(tenantId: string): Promise<{ phoneNumber: string; reason: string }[]> {
+  async getSmsBlockedNumbers(tenantId: string): Promise<{ phoneNumber: string; reason: string; errorCode?: string | null; errorMessage?: string | null; failureCount: number; firstFailedAt: Date; lastFailedAt: Date }[]> {
     const results = await db
       .select({
         phoneNumber: smsBlockedNumbers.phoneNumber,
         reason: smsBlockedNumbers.reason,
+        errorCode: smsBlockedNumbers.errorCode,
+        errorMessage: smsBlockedNumbers.errorMessage,
+        failureCount: smsBlockedNumbers.failureCount,
+        firstFailedAt: smsBlockedNumbers.firstFailedAt,
+        lastFailedAt: smsBlockedNumbers.lastFailedAt,
       })
       .from(smsBlockedNumbers)
-      .where(eq(smsBlockedNumbers.tenantId, tenantId));
+      .where(eq(smsBlockedNumbers.tenantId, tenantId))
+      .orderBy(desc(smsBlockedNumbers.lastFailedAt));
     return results;
   }
 
@@ -1871,6 +1878,20 @@ export class DatabaseStorage implements IStorage {
       .limit(1);
     
     return !!result;
+  }
+
+  async removeSmsBlockedNumber(tenantId: string, phoneNumber: string): Promise<void> {
+    // Normalize phone number
+    const normalized = phoneNumber.replace(/\D/g, '');
+    
+    await db
+      .delete(smsBlockedNumbers)
+      .where(
+        and(
+          eq(smsBlockedNumbers.tenantId, tenantId),
+          eq(smsBlockedNumbers.phoneNumber, normalized)
+        )
+      );
   }
 
   // Automation operations
