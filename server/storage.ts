@@ -408,6 +408,7 @@ export interface IStorage {
   
   // Payment operations
   getPaymentsByTenant(tenantId: string): Promise<(Payment & { consumerName?: string; consumerEmail?: string; accountCreditor?: string })[]>;
+  getPaymentsByConsumer(consumerId: string, tenantId: string): Promise<(Payment & { accountCreditor?: string; arrangementName?: string })[]>;
   getPaymentById(id: string, tenantId: string): Promise<Payment | null>;
   checkRecentDuplicatePayment(consumerId: string, accountId: string | null, amountCents: number, windowMinutes?: number): Promise<Payment | null>;
   createPayment(payment: InsertPayment): Promise<Payment>;
@@ -2585,6 +2586,25 @@ export class DatabaseStorage implements IStorage {
       consumerName: row.consumers ? `${row.consumers.firstName} ${row.consumers.lastName}` : undefined,
       consumerEmail: row.consumers?.email || undefined,
       accountCreditor: row.accounts?.creditor || undefined,
+    }));
+  }
+
+  async getPaymentsByConsumer(consumerId: string, tenantId: string): Promise<(Payment & { accountCreditor?: string; arrangementName?: string })[]> {
+    const result = await db
+      .select()
+      .from(payments)
+      .leftJoin(accounts, eq(payments.accountId, accounts.id))
+      .leftJoin(paymentSchedules, eq(accounts.id, paymentSchedules.accountId))
+      .where(and(
+        eq(payments.consumerId, consumerId),
+        eq(payments.tenantId, tenantId)
+      ))
+      .orderBy(desc(payments.createdAt));
+    
+    return result.map(row => ({
+      ...row.payments,
+      accountCreditor: row.accounts?.creditor || undefined,
+      arrangementName: row.payment_schedules?.name || undefined,
     }));
   }
 

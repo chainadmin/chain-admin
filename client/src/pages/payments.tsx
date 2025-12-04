@@ -16,7 +16,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { CreditCard, DollarSign, TrendingUp, Clock, CheckCircle, Calendar, User, Building2, Lock, Trash2, ThumbsUp, ThumbsDown, RefreshCw } from "lucide-react";
+import { CreditCard, DollarSign, TrendingUp, Clock, CheckCircle, Calendar, User, Building2, Lock, Trash2, ThumbsUp, ThumbsDown, RefreshCw, History, Check, XCircle } from "lucide-react";
 import { PaymentSchedulingCalendar } from "@/components/payment-scheduling-calendar";
 
 export default function Payments() {
@@ -26,7 +26,7 @@ export default function Payments() {
   const [showPayNowModal, setShowPayNowModal] = useState(false);
   const [paymentToDelete, setPaymentToDelete] = useState<string | null>(null);
   const [selectedConsumerForArrangement, setSelectedConsumerForArrangement] = useState<any | null>(null);
-
+  const [selectedConsumerForHistory, setSelectedConsumerForHistory] = useState<{ id: string; name: string } | null>(null);
 
   const [payNowForm, setPayNowForm] = useState({
     consumerEmail: "",
@@ -73,6 +73,12 @@ export default function Payments() {
       return data;
     },
     enabled: !!selectedConsumerForArrangement?.id,
+  });
+
+  // Fetch selected consumer's payment history
+  const { data: consumerPaymentHistory, isLoading: historyLoading } = useQuery({
+    queryKey: ["/api/payments/consumer", selectedConsumerForHistory?.id],
+    enabled: !!selectedConsumerForHistory?.id,
   });
 
   const handlePayNowFormChange = (field: string, value: string) => {
@@ -566,6 +572,18 @@ export default function Payments() {
                                 {payment.createdBy || "Agent"}
                               </div>
                               <div className="flex gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setSelectedConsumerForHistory({
+                                    id: payment.consumerId,
+                                    name: payment.consumerName || payment.consumerEmail || 'Unknown'
+                                  })}
+                                  className="h-8 rounded-lg border border-sky-400/30 bg-sky-500/10 px-3 text-sky-100 transition hover:bg-sky-500/20"
+                                  data-testid={`button-view-history-${payment.id}`}
+                                >
+                                  <History className="h-4 w-4" />
+                                </Button>
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -1108,6 +1126,127 @@ export default function Payments() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Consumer Payment History Dialog */}
+        <Dialog open={!!selectedConsumerForHistory} onOpenChange={() => setSelectedConsumerForHistory(null)}>
+          <DialogContent className="max-w-2xl rounded-3xl border border-white/20 bg-[#0b1733]/95 text-blue-50 max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-xl font-semibold text-blue-50">
+                <History className="h-5 w-5" />
+                Payment History: {selectedConsumerForHistory?.name}
+              </DialogTitle>
+            </DialogHeader>
+            
+            {historyLoading ? (
+              <div className="py-8 text-center">
+                <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                <p className="mt-4 text-blue-100/70">Loading payment history...</p>
+              </div>
+            ) : !consumerPaymentHistory || (consumerPaymentHistory as any[]).length === 0 ? (
+              <div className="py-8 text-center">
+                <History className="mx-auto h-12 w-12 text-blue-100/30" />
+                <p className="mt-4 text-blue-100/70">No payment history found for this consumer.</p>
+              </div>
+            ) : (
+              <div className="space-y-3 py-4">
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-sm text-blue-100/70">
+                    {(consumerPaymentHistory as any[]).length} payment{(consumerPaymentHistory as any[]).length !== 1 ? 's' : ''} on record
+                  </p>
+                  <Badge variant="secondary" className="bg-white/10 text-blue-100">
+                    Total: {formatCurrency((consumerPaymentHistory as any[]).reduce((sum: number, p: any) => 
+                      p.status === 'completed' ? sum + (p.amountCents || 0) : sum, 0
+                    ))}
+                  </Badge>
+                </div>
+                {(consumerPaymentHistory as any[]).map((historyPayment: any) => {
+                  const getHistoryStatusIcon = (status: string) => {
+                    switch (status?.toLowerCase()) {
+                      case 'completed':
+                        return <Check className="h-5 w-5 text-emerald-400" />;
+                      case 'pending':
+                      case 'processing':
+                        return <Clock className="h-5 w-5 text-amber-400" />;
+                      case 'failed':
+                      case 'refunded':
+                        return <XCircle className="h-5 w-5 text-rose-400" />;
+                      default:
+                        return <CreditCard className="h-5 w-5 text-blue-100/50" />;
+                    }
+                  };
+
+                  return (
+                    <div 
+                      key={historyPayment.id} 
+                      className="rounded-xl border border-white/10 bg-white/5 p-4"
+                      data-testid={`history-payment-item-${historyPayment.id}`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-3">
+                          <div className="mt-0.5">
+                            {getHistoryStatusIcon(historyPayment.status)}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg font-semibold text-white">
+                                {formatCurrency(historyPayment.amountCents)}
+                              </span>
+                              <Badge
+                                className={cn(
+                                  "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase",
+                                  historyPayment.status === 'completed' 
+                                    ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-100"
+                                    : historyPayment.status === 'pending' || historyPayment.status === 'processing'
+                                    ? "border-amber-400/40 bg-amber-500/10 text-amber-100"
+                                    : "border-rose-400/40 bg-rose-500/10 text-rose-100"
+                                )}
+                              >
+                                {historyPayment.status}
+                              </Badge>
+                            </div>
+                            <p className="mt-1 text-sm text-blue-100/70">
+                              {historyPayment.accountCreditor && (
+                                <span className="font-medium">{historyPayment.accountCreditor}</span>
+                              )}
+                              {historyPayment.arrangementName && (
+                                <span> • {historyPayment.arrangementName}</span>
+                              )}
+                            </p>
+                            <p className="mt-1 text-xs text-blue-100/50 capitalize">
+                              {historyPayment.paymentMethod?.replace('_', ' ') || 'Card'}
+                              {historyPayment.transactionId && (
+                                <span> • Ref: {historyPayment.transactionId.slice(-8)}</span>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-medium text-blue-100">
+                            {formatDate(historyPayment.processedAt || historyPayment.createdAt)}
+                          </p>
+                        </div>
+                      </div>
+                      {historyPayment.notes && (
+                        <p className="mt-2 rounded-lg bg-white/5 p-2 text-xs text-blue-100/60">
+                          {historyPayment.notes}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="flex justify-end">
+              <Button 
+                onClick={() => setSelectedConsumerForHistory(null)}
+                className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-blue-100 transition hover:bg-white/20"
+              >
+                Close
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
         </ServiceGate>
       </div>
     </AdminLayout>

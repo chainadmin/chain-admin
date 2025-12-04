@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Bell, Phone, Mail, MessageSquare, Download, Building2, CreditCard, FileText, AlertCircle, LogOut, User } from "lucide-react";
+import { Bell, Phone, Mail, MessageSquare, Download, Building2, CreditCard, FileText, AlertCircle, LogOut, User, History, Check, Clock, XCircle } from "lucide-react";
 import { getArrangementSummary, getPlanTypeLabel, formatCurrencyFromCents } from "@/lib/arrangements";
 
 type AgencyBranding = {
@@ -122,6 +122,16 @@ export default function ConsumerDashboard() {
   const { data: arrangements } = useQuery({
     queryKey: [arrangementsUrl || "no-fetch-arrangements"],
     enabled: !!arrangementsUrl && !!consumerSession,
+  });
+
+  // Fetch payment history
+  const paymentHistoryUrl = encodedEmail && encodedTenantSlug
+    ? `/api/consumer/payment-history/${encodedEmail}?tenantSlug=${encodedTenantSlug}`
+    : null;
+
+  const { data: paymentHistory, isLoading: isLoadingPaymentHistory } = useQuery({
+    queryKey: [paymentHistoryUrl || "no-fetch-payment-history"],
+    enabled: !!paymentHistoryUrl && !!consumerSession,
   });
 
   // Submit callback request mutation
@@ -455,7 +465,7 @@ export default function ConsumerDashboard() {
       {/* Main Content */}
       <div className="max-w-4xl mx-auto px-4 py-6">
         <Tabs defaultValue="accounts" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="accounts" className="flex items-center">
               <CreditCard className="h-4 w-4 mr-2" />
               Accounts
@@ -472,6 +482,10 @@ export default function ConsumerDashboard() {
             <TabsTrigger value="payments" className="flex items-center">
               <CreditCard className="h-4 w-4 mr-2" />
               Payment Plans
+            </TabsTrigger>
+            <TabsTrigger value="history" className="flex items-center" data-testid="tab-payment-history">
+              <History className="h-4 w-4 mr-2" />
+              Payment History
             </TabsTrigger>
             <TabsTrigger value="documents" className="flex items-center">
               <FileText className="h-4 w-4 mr-2" />
@@ -665,6 +679,113 @@ export default function ConsumerDashboard() {
                     </CardContent>
                   </Card>
                 ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="history" className="mt-6">
+            {isLoadingPaymentHistory ? (
+              <Card>
+                <CardContent className="pt-6 text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                  <p className="mt-4 text-gray-600">Loading payment history...</p>
+                </CardContent>
+              </Card>
+            ) : !paymentHistory || (paymentHistory as any).length === 0 ? (
+              <Card>
+                <CardContent className="pt-6 text-center">
+                  <History className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Payment History</h3>
+                  <p className="text-gray-600">
+                    You haven't made any payments yet.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Your Payment History</h3>
+                  <Badge variant="secondary" data-testid="badge-payment-count">
+                    {(paymentHistory as any).length} payment{(paymentHistory as any).length !== 1 ? 's' : ''}
+                  </Badge>
+                </div>
+                {(paymentHistory as any).map((payment: any) => {
+                  const getStatusIcon = (status: string) => {
+                    switch (status?.toLowerCase()) {
+                      case 'completed':
+                        return <Check className="h-5 w-5 text-green-600" />;
+                      case 'pending':
+                      case 'processing':
+                        return <Clock className="h-5 w-5 text-yellow-600" />;
+                      case 'failed':
+                      case 'refunded':
+                        return <XCircle className="h-5 w-5 text-red-600" />;
+                      default:
+                        return <CreditCard className="h-5 w-5 text-gray-600" />;
+                    }
+                  };
+                  
+                  const getStatusBadge = (status: string) => {
+                    switch (status?.toLowerCase()) {
+                      case 'completed':
+                        return <Badge className="bg-green-100 text-green-800 border-green-300">{status}</Badge>;
+                      case 'pending':
+                      case 'processing':
+                        return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300">{status}</Badge>;
+                      case 'failed':
+                      case 'refunded':
+                        return <Badge className="bg-red-100 text-red-800 border-red-300">{status}</Badge>;
+                      default:
+                        return <Badge variant="secondary">{status || 'Unknown'}</Badge>;
+                    }
+                  };
+                  
+                  return (
+                    <Card key={payment.id} data-testid={`payment-history-item-${payment.id}`}>
+                      <CardContent className="pt-6">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start space-x-4">
+                            <div className="mt-1">
+                              {getStatusIcon(payment.status)}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg font-bold text-gray-900">
+                                  {formatCurrency(payment.amountCents)}
+                                </span>
+                                {getStatusBadge(payment.status)}
+                              </div>
+                              <p className="text-sm text-gray-600 mt-1">
+                                {payment.accountCreditor && (
+                                  <span className="font-medium">{payment.accountCreditor}</span>
+                                )}
+                                {payment.arrangementName && (
+                                  <span className="text-gray-500"> • {payment.arrangementName}</span>
+                                )}
+                              </p>
+                              <p className="text-sm text-gray-500 mt-1">
+                                <span className="capitalize">{payment.paymentMethod?.replace('_', ' ') || 'Card'}</span>
+                                {payment.transactionId && (
+                                  <span className="text-gray-400"> • Ref: {payment.transactionId.slice(-8)}</span>
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-medium text-gray-900">
+                              {formatDate(payment.processedAt || payment.createdAt)}
+                            </p>
+                            {payment.notes && (
+                              <p className="text-xs text-gray-500 mt-1 max-w-xs truncate">
+                                {payment.notes}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             )}
           </TabsContent>

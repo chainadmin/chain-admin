@@ -1218,6 +1218,33 @@ export async function runMigrations() {
       console.log('  ⚠ force_arrangement (already exists or error)');
     }
     
+    // Add source tracking columns to sms_campaigns for automation/sequence campaigns
+    console.log('Adding source tracking columns to sms_campaigns...');
+    try {
+      await client.query(`ALTER TABLE sms_campaigns ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'manual'`);
+      console.log('  ✓ source');
+    } catch (err) {
+      console.log('  ⚠ source (already exists or error)');
+    }
+    try {
+      await client.query(`ALTER TABLE sms_campaigns ADD COLUMN IF NOT EXISTS automation_id UUID`);
+      console.log('  ✓ automation_id');
+    } catch (err) {
+      console.log('  ⚠ automation_id (already exists or error)');
+    }
+    try {
+      await client.query(`ALTER TABLE sms_campaigns ADD COLUMN IF NOT EXISTS sequence_id UUID`);
+      console.log('  ✓ sequence_id');
+    } catch (err) {
+      console.log('  ⚠ sequence_id (already exists or error)');
+    }
+    try {
+      await client.query(`ALTER TABLE sms_campaigns ADD COLUMN IF NOT EXISTS sequence_step_id UUID`);
+      console.log('  ✓ sequence_step_id');
+    } catch (err) {
+      console.log('  ⚠ sequence_step_id (already exists or error)');
+    }
+    
     console.log('✅ Database migrations completed successfully');
   } catch (error: any) {
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {

@@ -8608,6 +8608,82 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get consumer's payment history
+  app.get('/api/consumer/payment-history/:email', authenticateConsumer, async (req: any, res) => {
+    try {
+      const { email } = req.params;
+      const { tenantSlug } = req.query;
+      const { id: consumerId, email: tokenEmail, tenantId, tenantSlug: tokenTenantSlug } = req.consumer || {};
+
+      if (!consumerId) {
+        return res.status(401).json({ message: "No consumer access" });
+      }
+
+      const normalizedParamEmail = normalizeLowercase(email);
+      const normalizedTokenEmail = normalizeLowercase(tokenEmail);
+      if (!normalizedTokenEmail || normalizedParamEmail !== normalizedTokenEmail) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const requestedTenantSlug = typeof tenantSlug === "string" ? tenantSlug : "";
+      if (!requestedTenantSlug) {
+        return res.status(400).json({ message: "Tenant slug required" });
+      }
+
+      const normalizedRequestedTenantSlug = normalizeLowercase(requestedTenantSlug);
+
+      let tenant = tenantId ? await storage.getTenant(tenantId) : undefined;
+      if (!tenant && tokenTenantSlug) {
+        tenant = await storage.getTenantBySlug(tokenTenantSlug);
+      }
+      if (!tenant) {
+        tenant = await storage.getTenantBySlug(requestedTenantSlug);
+      }
+
+      if (!tenant) {
+        return res.status(404).json({ message: "Tenant not found" });
+      }
+
+      const tenantSlugMatch = normalizeLowercase(tenant.slug);
+      if (!tenantSlugMatch || tenantSlugMatch !== normalizedRequestedTenantSlug) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const consumer = await storage.getConsumer(consumerId);
+      if (!consumer || normalizeLowercase(consumer.email) !== normalizedTokenEmail || consumer.tenantId !== tenant.id) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      // Get all payments for this consumer
+      const payments = await storage.getPaymentsByConsumer(consumerId, tenant.id);
+      
+      // Format the response with clean data for display
+      const paymentHistory = payments.map(payment => ({
+        id: payment.id,
+        amountCents: payment.amountCents,
+        paymentMethod: payment.paymentMethod,
+        status: payment.status,
+        processedAt: payment.processedAt,
+        createdAt: payment.createdAt,
+        accountCreditor: payment.accountCreditor,
+        arrangementName: payment.arrangementName,
+        notes: payment.notes,
+        transactionId: payment.transactionId,
+      }));
+
+      console.log('📜 Payment history for consumer:', {
+        consumerId,
+        tenantId: tenant.id,
+        totalPayments: paymentHistory.length
+      });
+
+      res.json(paymentHistory);
+    } catch (error) {
+      console.error("Error fetching payment history:", error);
+      res.status(500).json({ message: "Failed to fetch payment history" });
+    }
+  });
+
   // Cancel payment schedule (consumer-scoped)
   app.post('/api/consumer/payment-schedule/:scheduleId/cancel', authenticateConsumer, async (req: any, res) => {
     try {
@@ -13082,134 +13158,157 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   console.log(`✉️ Sent email to ${consumer.email}`);
                   
                 } else if (automation.type === 'sms') {
-                  // Get SMS template
-                  const templates = await storage.getSmsTemplatesByTenant(automation.tenantId);
-                  const template = templates.find(t => t.id === templateId);
-                  if (!template) {
-                    console.error(`SMS template ${templateId} not found`);
-                    failedCount++;
-                    continue;
-                  }
-                  
-                  // Get tenant for branding
-                  const tenant = await storage.getTenant(automation.tenantId);
-                  if (!tenant) {
-                    failedCount++;
-                    continue;
-                  }
-                  
-                  // Get tenant settings for additional context
-                  const tenantSettings = await storage.getTenantSettings(automation.tenantId);
-                  const tenantWithSettings = {
-                    ...tenant,
-                    contactEmail: tenantSettings?.contactEmail,
-                    contactPhone: tenantSettings?.contactPhone,
-                  };
-                  
-                  // Use the full replaceTemplateVariables function to support ALL fields including CSV additionalData
-                  const message = replaceTemplateVariables(
-                    template.message || '',
-                    consumer,
-                    consumerAccount,
-                    tenantWithSettings
-                  );
-                  
-                  // Extract phone numbers based on phonesToSend setting
-                  const phonesToSendSetting = (automation as any).phonesToSend || '1';
-                  const extractAutomationPhoneNumbers = (consumer: any): string[] => {
-                    const phones: string[] = [];
-                    
-                    // Add primary phone number first
-                    const primaryPhone = consumer.phone || consumer.phoneNumber;
-                    if (primaryPhone) {
-                      phones.push(primaryPhone);
-                    }
-                    
-                    // Collect additional phone numbers from additionalData
-                    if (consumer.additionalData) {
-                      const additionalData = consumer.additionalData as Record<string, any>;
-                      
-                      // Sort keys to get consistent ordering (phone1, phone2, phone3, etc.)
-                      const phoneKeys = Object.keys(additionalData)
-                        .filter(key => key.toLowerCase().includes('phone'))
-                        .sort((a, b) => {
-                          const numA = parseInt(a.replace(/\D/g, '')) || 0;
-                          const numB = parseInt(b.replace(/\D/g, '')) || 0;
-                          return numA - numB;
-                        });
-                      
-                      for (const key of phoneKeys) {
-                        const value = additionalData[key];
-                        if (value && typeof value === 'string') {
-                          const trimmed = value.trim();
-                          if (trimmed) {
-                            const normalized = trimmed.replace(/\D/g, '');
-                            if (normalized.length >= 10) {
-                              phones.push(trimmed);
-                            }
-                          }
-                        }
-                      }
-                    }
-                    
-                    // Deduplicate by normalized digits while maintaining order
-                    const uniquePhones = new Map<string, string>();
-                    for (const phone of phones) {
-                      const normalized = phone.replace(/\D/g, '');
-                      if (!uniquePhones.has(normalized)) {
-                        uniquePhones.set(normalized, phone);
-                      }
-                    }
-                    const allPhones = Array.from(uniquePhones.values());
-                    
-                    // Apply phonesToSend limit
-                    if (phonesToSendSetting === 'all') {
-                      return allPhones;
-                    }
-                    const limit = parseInt(phonesToSendSetting);
-                    return allPhones.slice(0, limit);
-                  };
-                  
-                  // Send SMS to all targeted phone numbers
-                  const { smsService } = await import('./smsService');
-                  const phoneNumbers = extractAutomationPhoneNumbers(consumer);
-                  
-                  if (phoneNumbers.length === 0) {
-                    console.error(`No phone number for consumer ${consumer.id}`);
-                    failedCount++;
-                    continue;
-                  }
-                  
-                  // Send to each phone number with proper tracking and pacing
-                  for (const phone of phoneNumbers) {
-                    try {
-                      await smsService.sendSms(
-                        phone,
-                        message,
-                        automation.tenantId,
-                        undefined, // campaignId - not applicable for automations
-                        consumer.id, // Pass consumerId for billing tracking
-                        { 
-                          automationId: automation.id,
-                          automationName: automation.name,
-                          source: 'automation'
-                        }
-                      );
-                      sentCount++;
-                      console.log(`📱 Sent SMS to ${phone} (automation: ${automation.name})`);
-                      
-                      // Add small delay between sends to pace automation delivery
-                      await new Promise(resolve => setTimeout(resolve, 100));
-                    } catch (smsError) {
-                      console.error(`Failed to send SMS to ${phone}:`, smsError);
-                      failedCount++;
-                    }
-                  }
+                  // SMS automations now create real campaigns for visibility and tracking
+                  // This is handled at the automation level, not per-consumer
+                  // Skip the inner loop - SMS handled by campaign creation below
                 }
               } catch (sendError) {
                 console.error(`Error sending to consumer ${consumer.id}:`, sendError);
                 failedCount++;
               }
+            }
+          }
+          
+          // For SMS automations, create a real campaign instead of sending directly
+          if (automation.type === 'sms' && templateIds.length > 0) {
+            const templateId = templateIds[0]; // Use first template
+            const templates = await storage.getSmsTemplatesByTenant(automation.tenantId);
+            const template = templates.find(t => t.id === templateId);
+            
+            if (template && targetConsumers.length > 0) {
+              const phonesToSendSetting = (automation as any).phonesToSend || '1';
+              
+              // Create campaign record with source='automation'
+              const campaignName = `[Auto] ${automation.name} - ${now.toLocaleDateString()}`;
+              console.log(`📱 Creating SMS campaign for automation "${automation.name}" with ${targetConsumers.length} recipients`);
+              
+              const campaign = await storage.createSmsCampaign({
+                tenantId: automation.tenantId,
+                templateId: templateId,
+                name: campaignName,
+                targetGroup: 'custom', // Custom targeting since we already resolved audience
+                phonesToSend: phonesToSendSetting as any,
+                status: 'sending',
+                totalRecipients: targetConsumers.length,
+                totalSent: 0,
+                totalErrors: 0,
+                source: 'automation',
+                automationId: automation.id,
+              } as any);
+              
+              console.log(`✅ Created campaign ${campaign.id} for automation "${automation.name}"`);
+              
+              // Get tenant context for variable replacement
+              const tenant = await storage.getTenant(automation.tenantId);
+              const tenantSettings = await storage.getTenantSettings(automation.tenantId);
+              const tenantWithSettings = {
+                ...tenant,
+                contactEmail: tenantSettings?.contactEmail,
+                contactPhone: tenantSettings?.contactPhone,
+              };
+              
+              // Send SMS using campaign tracking
+              const { smsService } = await import('./smsService');
+              let campaignSentCount = 0;
+              let campaignFailedCount = 0;
+              
+              for (const consumer of targetConsumers) {
+                const consumerAccount = allAccounts.find(acc => acc.consumerId === consumer.id);
+                
+                // Replace template variables
+                const message = replaceTemplateVariables(
+                  template.message || '',
+                  consumer,
+                  consumerAccount,
+                  tenantWithSettings
+                );
+                
+                // Extract phone numbers
+                const phones: string[] = [];
+                const primaryPhone = consumer.phone || consumer.phoneNumber;
+                if (primaryPhone) phones.push(primaryPhone);
+                
+                if (consumer.additionalData) {
+                  const additionalData = consumer.additionalData as Record<string, any>;
+                  const phoneKeys = Object.keys(additionalData)
+                    .filter(key => key.toLowerCase().includes('phone'))
+                    .sort((a, b) => {
+                      const numA = parseInt(a.replace(/\D/g, '')) || 0;
+                      const numB = parseInt(b.replace(/\D/g, '')) || 0;
+                      return numA - numB;
+                    });
+                  
+                  for (const key of phoneKeys) {
+                    const value = additionalData[key];
+                    if (value && typeof value === 'string') {
+                      const trimmed = value.trim();
+                      if (trimmed) {
+                        const normalized = trimmed.replace(/\D/g, '');
+                        if (normalized.length >= 10) phones.push(trimmed);
+                      }
+                    }
+                  }
+                }
+                
+                // Deduplicate and apply limit
+                const uniquePhones = new Map<string, string>();
+                for (const phone of phones) {
+                  const normalized = phone.replace(/\D/g, '');
+                  if (!uniquePhones.has(normalized)) {
+                    uniquePhones.set(normalized, phone);
+                  }
+                }
+                let targetPhones = Array.from(uniquePhones.values());
+                if (phonesToSendSetting !== 'all') {
+                  const limit = parseInt(phonesToSendSetting);
+                  targetPhones = targetPhones.slice(0, limit);
+                }
+                
+                // Send to each phone
+                for (const phone of targetPhones) {
+                  try {
+                    await smsService.sendSms(
+                      phone,
+                      message,
+                      automation.tenantId,
+                      campaign.id, // Link to campaign for tracking
+                      consumer.id,
+                      { 
+                        automationId: automation.id,
+                        automationName: automation.name,
+                        source: 'automation'
+                      }
+                    );
+                    campaignSentCount++;
+                    sentCount++;
+                    
+                    // Update campaign progress periodically
+                    if (campaignSentCount % 10 === 0) {
+                      await storage.updateSmsCampaign(campaign.id, {
+                        totalSent: campaignSentCount,
+                        totalErrors: campaignFailedCount,
+                      });
+                    }
+                    
+                    // Pace delivery
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                  } catch (smsError) {
+                    console.error(`Failed to send SMS to ${phone}:`, smsError);
+                    campaignFailedCount++;
+                    failedCount++;
+                  }
+                }
+              }
+              
+              // Finalize campaign
+              await storage.updateSmsCampaign(campaign.id, {
+                status: 'completed',
+                totalSent: campaignSentCount,
+                totalErrors: campaignFailedCount,
+                completedAt: new Date(),
+              });
+              
+              console.log(`✅ Automation campaign completed: ${campaignSentCount} sent, ${campaignFailedCount} failed`);
             }
           }
           
@@ -13802,6 +13901,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching payment stats:", error);
       res.status(500).json({ message: "Failed to fetch payment stats" });
+    }
+  });
+
+  // Get payment history by consumer ID (admin)
+  app.get('/api/payments/consumer/:consumerId', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { consumerId } = req.params;
+      
+      // Verify consumer belongs to this tenant
+      const consumer = await storage.getConsumer(consumerId);
+      if (!consumer || consumer.tenantId !== tenantId) {
+        return res.status(404).json({ message: "Consumer not found" });
+      }
+
+      const payments = await storage.getPaymentsByConsumer(consumerId, tenantId);
+      
+      console.log('📜 Admin fetching payment history for consumer:', {
+        consumerId,
+        tenantId,
+        totalPayments: payments.length
+      });
+
+      res.json(payments);
+    } catch (error) {
+      console.error("Error fetching consumer payment history:", error);
+      res.status(500).json({ message: "Failed to fetch payment history" });
     }
   });
 

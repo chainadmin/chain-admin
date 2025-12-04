@@ -372,6 +372,11 @@ export const smsCampaigns = pgTable("sms_campaigns", {
   totalOptOuts: bigint("total_opt_outs", { mode: "number" }).default(0),
   createdAt: timestamp("created_at").defaultNow(),
   completedAt: timestamp("completed_at"),
+  // Source tracking for automation/sequence campaigns
+  source: text("source", { enum: ['manual', 'automation', 'sequence'] }).default('manual'), // Where this campaign originated
+  automationId: uuid("automation_id"), // Links to communication_automations if source='automation'
+  sequenceId: uuid("sequence_id"), // Links to communication_sequences if source='sequence'
+  sequenceStepId: uuid("sequence_step_id"), // Links to specific step if source='sequence'
 });
 
 // SMS tracking for individual SMS sends
