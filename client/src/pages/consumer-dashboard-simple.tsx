@@ -579,8 +579,13 @@ export default function ConsumerDashboardSimple() {
         const inBalanceRange = selectedAccount.balanceCents >= arr.minBalance && 
           selectedAccount.balanceCents <= arr.maxBalance;
         
-        // Block one-time payments if consumer has no active payment schedules
+        // Block one-time payments if forceArrangement is enabled OR consumer has no active payment schedules
         if (arr.planType === 'one_time_payment') {
+          // If forceArrangement is true, always block one-time payments
+          if (settings?.forceArrangement) {
+            return false;
+          }
+          // Otherwise, only allow if consumer has an active payment schedule
           const hasActiveSchedule = paymentSchedules && paymentSchedules.length > 0;
           return inBalanceRange && hasActiveSchedule;
         }

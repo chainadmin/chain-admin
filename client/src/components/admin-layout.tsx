@@ -237,7 +237,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
               <div className="relative hidden w-full max-w-md md:block" ref={searchRef}>
                 <i aria-hidden="true" className="fas fa-search pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-blue-100/60"></i>
                 <input
-                  className="w-full rounded-2xl border border-white/15 bg-white/10 py-2.5 pl-11 pr-4 text-sm text-blue-50 placeholder:text-blue-100/60 focus:border-sky-400/60 focus:outline-none focus:ring-2 focus:ring-sky-400/40"
+                  className="w-full rounded-2xl border border-white/20 bg-[#0b1733] py-2.5 pl-11 pr-4 text-sm text-blue-50 placeholder:text-blue-100/60 focus:border-sky-400/60 focus:outline-none focus:ring-2 focus:ring-sky-400/40"
                   placeholder="Search consumers, accounts..."
                   type="search"
                   value={searchQuery}

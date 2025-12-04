@@ -4757,7 +4757,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         name: z.string().min(1),
         description: z.string().optional(),
         triggerType: z.enum(['immediate', 'scheduled', 'event']).default('immediate'),
-        triggerEvent: z.enum(['account_created', 'payment_received', 'payment_overdue', 'payment_failed', 'manual']).optional(),
+        triggerEvent: z.enum(['account_created', 'payment_received', 'payment_overdue', 'payment_failed', 'one_time_payment']).optional(),
         triggerDelay: z.number().int().min(0).optional().default(0),
         targetType: z.enum(['all', 'folder', 'custom']).default('all'),
         targetFolderIds: z.array(z.string().uuid()).optional().default([]),
@@ -4799,7 +4799,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         name: z.string().min(1).optional(),
         description: z.string().optional(),
         triggerType: z.enum(['immediate', 'scheduled', 'event']).optional(),
-        triggerEvent: z.enum(['account_created', 'payment_received', 'payment_overdue', 'payment_failed', 'manual']).optional(),
+        triggerEvent: z.enum(['account_created', 'payment_received', 'payment_overdue', 'payment_failed', 'one_time_payment']).optional(),
         triggerDelay: z.number().int().min(0).optional(),
         targetType: z.enum(['all', 'folder', 'custom']).optional(),
         targetFolderIds: z.array(z.string().uuid()).optional(),
@@ -8062,6 +8062,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         showPaymentPlans: settings?.showPaymentPlans ?? true,
         showDocuments: settings?.showDocuments ?? true,
         allowSettlementRequests: settings?.allowSettlementRequests ?? true,
+        forceArrangement: settings?.forceArrangement ?? false, // When true, disable one-time payments
         // Merchant provider settings (public info only - needed for Accept.js)
         merchantProvider: settings?.merchantProvider || 'usaepay',
         authnetPublicClientKey: settings?.authnetPublicClientKey || null,
@@ -8383,7 +8384,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const today = new Date();
       today.setHours(0, 0, 0, 0); // Set to start of day for date comparison
       
-      // Filter options based on balance range and expiration
+      // Filter options based on balance range, expiration, and force arrangement setting
       const applicableOptions = options.filter(option => {
         // Check balance range
         if (balanceCents < option.minBalance || balanceCents > option.maxBalance) {
@@ -8397,6 +8398,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (expirationDate < today) {
             return false; // Offer has expired
           }
+        }
+        
+        // If forceArrangement is enabled, filter out one_time_payment plans
+        if (settings?.forceArrangement && option.planType === 'one_time_payment') {
+          return false;
         }
         
         return true;
@@ -9339,6 +9345,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     zipCode?: string;
     arrangement: any;
     settings: any;
+    isSmaxArrangementPayment?: boolean;
   }): Promise<any> {
     const {
       tenantId,
@@ -9353,6 +9360,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       zipCode,
       arrangement,
       settings,
+      isSmaxArrangementPayment = false,
     } = params;
 
     console.log('💾 Processing successful payment...');
@@ -9427,6 +9435,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       accountId: accountId || undefined,
       metadata: { paymentId: payment.id, amountCents, transactionId }
     });
+    
+    // Trigger one_time_payment event if not part of an arrangement (standalone payment)
+    // Exclude SMAX arrangement payments - they're payments on existing external arrangements
+    if (!arrangement && !isSmaxArrangementPayment) {
+      await eventService.emitSystemEvent('one_time_payment', {
+        tenantId,
+        consumerId,
+        accountId: accountId || undefined,
+        metadata: { paymentId: payment.id, amountCents, transactionId }
+      });
+    }
     
     // NOTE: SMAX payment sync is handled by each processor section (NMI, Authorize.net, USAePay)
     // after calling this helper, because they have access to card expiry, token, and other details
@@ -9645,6 +9664,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      // Check if Force Arrangement is enabled - reject one-time payments if so
+      // But allow SMAX arrangement payments (external arrangements from SMAX system)
+      if (settings?.forceArrangement) {
+        // Detect SMAX arrangement payments: filenumber-linked account with custom amount
+        const isSmaxArrangementPayment = !!account.filenumber && !!customPaymentAmountCents && !arrangementId && !simplifiedFlow;
+        
+        // If no arrangement is being set up AND not a SMAX arrangement payment, this is a standalone one-time payment
+        if (!arrangementId && !simplifiedFlow && !isSmaxArrangementPayment) {
+          console.log('❌ Force Arrangement enabled - rejecting one-time payment');
+          return res.status(400).json({
+            success: false,
+            message: "One-time payments are not available. Please set up a payment arrangement to proceed."
+          });
+        }
+        
+        if (isSmaxArrangementPayment) {
+          console.log('✅ Force Arrangement enabled but allowing SMAX arrangement payment:', {
+            filenumber: account.filenumber,
+            customPaymentAmountCents
+          });
+        }
+      }
+
       // Get arrangement if specified
       let arrangement = null;
       let amountCents = account.balanceCents || 0;
@@ -9655,7 +9697,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         hasArrangementId: !!arrangementId,
         hasSimplifiedFlow: !!simplifiedFlow,
         arrangementId,
-        accountBalance: amountCents
+        accountBalance: amountCents,
+        forceArrangement: settings?.forceArrangement
       });
       
       // Handle simplified flow (new consumer-friendly arrangement creation)
@@ -9702,12 +9745,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // CRITICAL: If customPaymentAmountCents is provided WITHOUT an arrangement
       // (e.g., SMAX arrangement payments), use it instead of full balance
+      // Also detect this as an SMAX arrangement payment for event handling
+      const isSmaxArrangementPayment = !!account.filenumber && !!customPaymentAmountCents && !arrangementId && !isSimplifiedFlow;
+      
       if (!isSimplifiedFlow && !arrangementId && customPaymentAmountCents && customPaymentAmountCents > 0) {
         amountCents = customPaymentAmountCents;
         console.log('💰 Using custom payment amount (SMAX arrangement):', {
           customPaymentAmountCents,
           amountDollars: (customPaymentAmountCents / 100).toFixed(2),
-          originalBalance: account.balanceCents
+          originalBalance: account.balanceCents,
+          isSmaxArrangementPayment
         });
       }
       
@@ -10469,6 +10516,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             zipCode,
             arrangement,
             settings,
+            isSmaxArrangementPayment,
           });
 
           // Sync payment to SMAX if enabled and account has filenumber

@@ -3250,6 +3250,20 @@ export default function Settings() {
                       />
                     </div>
                   </div>
+                  
+                  <div className="flex items-center justify-between border-t border-white/10 pt-4">
+                    <div className="space-y-0.5">
+                      <Label className="text-base font-medium text-white">Force Payment Arrangement</Label>
+                      <p className="text-sm text-blue-100/70">
+                        When enabled, consumers must set up a payment plan and cannot make one-time payments
+                      </p>
+                    </div>
+                    <Switch
+                      checked={localSettings?.forceArrangement ?? false}
+                      onCheckedChange={(checked) => handleSettingsUpdate('forceArrangement', checked)}
+                      data-testid="switch-force-arrangement"
+                    />
+                  </div>
                 </CardContent>
                 {hasUnsavedChanges && (
                   <CardFooter className="border-t border-white/10 pt-6">

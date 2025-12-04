@@ -148,15 +148,28 @@ export default function Accounts() {
     const accountId = urlParams.get('accountId');
 
     if (consumerId && !showViewModal && !selectedAccount) {
-      // Find first account for this consumer
-      const consumerAccount = (accounts as any[])?.find(
+      // Find all accounts for this consumer
+      const consumerAccounts = (accounts as any[])?.filter(
         (acc: any) => acc.consumerId === consumerId
       );
-      if (consumerAccount) {
-        setSelectedAccount(consumerAccount);
+      if (consumerAccounts && consumerAccounts.length > 0) {
+        setSelectedAccount(consumerAccounts[0]);
         setShowViewModal(true);
         // Clear URL parameter after opening
         window.history.replaceState({}, '', window.location.pathname);
+      } else {
+        // Clear URL parameter and notify user
+        window.history.replaceState({}, '', window.location.pathname);
+        // Find consumer info for the toast message
+        const consumer = (consumers as any[])?.find((c: any) => c.id === consumerId);
+        const consumerName = consumer 
+          ? `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim() || 'This consumer'
+          : 'This consumer';
+        toast({
+          title: "No Accounts Found",
+          description: `${consumerName} has no accounts on file. You can create one using the "Add Account" button.`,
+          variant: "default",
+        });
       }
     } else if (accountId && !showViewModal && !selectedAccount) {
       // Find specific account
@@ -166,9 +179,17 @@ export default function Accounts() {
         setShowViewModal(true);
         // Clear URL parameter after opening
         window.history.replaceState({}, '', window.location.pathname);
+      } else {
+        // Clear URL parameter and notify user
+        window.history.replaceState({}, '', window.location.pathname);
+        toast({
+          title: "Account Not Found",
+          description: "The requested account could not be found.",
+          variant: "destructive",
+        });
       }
     }
-  }, [accounts, accountsLoading, showViewModal, selectedAccount]);
+  }, [accounts, accountsLoading, showViewModal, selectedAccount, consumers, toast]);
 
   // Mutations
   const createAccountMutation = useMutation({

@@ -6,6 +6,7 @@ export type SystemEvent =
   | 'payment_received'
   | 'payment_overdue'
   | 'payment_failed'
+  | 'one_time_payment'
   | 'manual';
 
 export interface EventPayload {
@@ -44,6 +45,7 @@ class EventService extends EventEmitter {
       'payment_received',
       'payment_overdue',
       'payment_failed',
+      'one_time_payment',
       'manual',
     ];
 
@@ -86,7 +88,7 @@ class EventService extends EventEmitter {
           // Check target audience filtering
           if (sequence.targetType === 'folder' && sequence.targetFolderIds && sequence.targetFolderIds.length > 0) {
             // Check if consumer has accounts in the target folders
-            const consumerAccounts = await storage.getAccountsByConsumerId(payload.consumerId);
+            const consumerAccounts = await storage.getAccountsByConsumer(payload.consumerId);
             const hasAccountInTargetFolder = consumerAccounts.some(account => 
               sequence.targetFolderIds.includes(account.folderId)
             );
