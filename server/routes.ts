@@ -13151,16 +13151,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     continue;
                   }
                   
-                  // Send to each phone number
+                  // Send to each phone number with proper tracking and pacing
                   for (const phone of phoneNumbers) {
                     try {
                       await smsService.sendSms(
                         phone,
                         message,
-                        automation.tenantId
+                        automation.tenantId,
+                        undefined, // campaignId - not applicable for automations
+                        consumer.id, // Pass consumerId for billing tracking
+                        { 
+                          automationId: automation.id,
+                          automationName: automation.name,
+                          source: 'automation'
+                        }
                       );
                       sentCount++;
-                      console.log(`📱 Sent SMS to ${phone}`);
+                      console.log(`📱 Sent SMS to ${phone} (automation: ${automation.name})`);
+                      
+                      // Add small delay between sends to pace automation delivery
+                      await new Promise(resolve => setTimeout(resolve, 100));
                     } catch (smsError) {
                       console.error(`Failed to send SMS to ${phone}:`, smsError);
                       failedCount++;

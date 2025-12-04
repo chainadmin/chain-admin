@@ -14,6 +14,7 @@ interface QueuedSms {
   campaignId?: string;
   consumerId?: string;
   timestamp: Date;
+  metadata?: { automationId?: string; automationName?: string; source?: string };
 }
 
 class SmsService {
@@ -139,7 +140,8 @@ class SmsService {
     message: string,
     tenantId: string,
     campaignId?: string,
-    consumerId?: string
+    consumerId?: string,
+    metadata?: { automationId?: string; automationName?: string; source?: string }
   ): Promise<{ success: boolean; messageId?: string; error?: string; queued?: boolean; blocked?: boolean }> {
     // SMS COMPLIANCE: Pre-send check for opted-out consumers and blocked numbers
     // This prevents sending to consumers who have replied STOP or have undeliverable numbers
@@ -180,7 +182,7 @@ class SmsService {
       this.incrementSentCount(tenantId);
       
       try {
-        const result = await this.sendImmediately(to, message, tenantId, campaignId, consumerId);
+        const result = await this.sendImmediately(to, message, tenantId, campaignId, consumerId, undefined, metadata);
         if (!result.success) {
           // Rollback count on failure
           this.decrementSentCount(tenantId);
@@ -201,6 +203,7 @@ class SmsService {
         campaignId,
         consumerId,
         timestamp: new Date(),
+        metadata,
       });
       return { success: true, queued: true };
     }
@@ -212,7 +215,8 @@ class SmsService {
     tenantId: string,
     campaignId?: string,
     consumerId?: string,
-    accountId?: string
+    accountId?: string,
+    metadata?: { automationId?: string; automationName?: string; source?: string }
   ): Promise<{ success: boolean; messageId?: string; error?: string }> {
     try {
       const client = await this.getTwilioClient(tenantId);
@@ -286,9 +290,15 @@ class SmsService {
           quantity: 1, // Default to 1 segment, webhook will provide accurate count
           externalMessageId: result.sid,
           occurredAt: new Date(),
-          metadata: { source: 'send_fallback' },
+          metadata: { 
+            source: metadata?.source || 'send_fallback',
+            automationId: metadata?.automationId,
+            automationName: metadata?.automationName,
+            campaignId,
+            consumerId,
+          },
         });
-        console.log(`💰 SMS billing recorded at send time: tenant=${tenantId}, sid=${result.sid}`);
+        console.log(`💰 SMS billing recorded at send time: tenant=${tenantId}, sid=${result.sid}, source=${metadata?.source || 'send_fallback'}`);
       } catch (billingError) {
         console.error('Failed to record SMS billing at send time:', billingError);
         // Don't fail the SMS send if billing fails
@@ -355,7 +365,9 @@ class SmsService {
             queuedSms.message,
             queuedSms.tenantId,
             queuedSms.campaignId,
-            queuedSms.consumerId
+            queuedSms.consumerId,
+            undefined,
+            queuedSms.metadata
           );
 
           if (result.success) {
