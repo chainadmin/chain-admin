@@ -16989,6 +16989,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // SMS Billing - Backfill SMS usage from tracking records (platform admin only)
+  app.post('/api/admin/sms-compliance/backfill-billing', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { tenantId } = req.body;
+      if (!tenantId) {
+        return res.status(400).json({ message: "tenantId is required" });
+      }
+
+      // Get tenant's subscription to determine billing period
+      const subscription = await storage.getSubscriptionByTenant(tenantId);
+      if (!subscription) {
+        return res.status(400).json({ message: "Tenant has no subscription" });
+      }
+
+      // Use subscription billing period or default to last 30 days
+      const periodEnd = subscription.currentPeriodEnd || new Date();
+      const periodStart = subscription.currentPeriodStart || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+      console.log(`📊 Backfilling SMS billing for tenant ${tenantId}`);
+      console.log(`   Period: ${periodStart.toISOString()} to ${periodEnd.toISOString()}`);
+
+      const result = await storage.backfillSmsUsageFromTracking(tenantId, periodStart, periodEnd);
+
+      console.log(`✅ Backfill complete: ${result.backfilledCount} messages, ${result.totalSegments} segments`);
+      
+      res.json({
+        success: true,
+        backfilledCount: result.backfilledCount,
+        totalSegments: result.totalSegments,
+        periodStart: periodStart.toISOString(),
+        periodEnd: periodEnd.toISOString(),
+      });
+    } catch (error) {
+      console.error("Error backfilling SMS billing:", error);
+      res.status(500).json({ message: "Failed to backfill SMS billing" });
+    }
+  });
+
   // Delete consumer (platform admin only)
   app.delete('/api/admin/consumers/:id', isPlatformAdmin, async (req: any, res) => {
     try {

@@ -765,6 +765,29 @@ export default function GlobalAdmin() {
     },
   });
 
+  // SMS Billing - Backfill SMS usage from tracking
+  const [backfillResult, setBackfillResult] = useState<any>(null);
+  const backfillBillingMutation = useMutation({
+    mutationFn: async ({ tenantId }: { tenantId: string }) => {
+      const response = await apiRequest("POST", "/api/admin/sms-compliance/backfill-billing", { tenantId });
+      return response.json();
+    },
+    onSuccess: (data: any) => {
+      setBackfillResult(data);
+      toast({
+        title: "Billing Backfill Complete",
+        description: `Backfilled ${data.backfilledCount} SMS messages (${data.totalSegments} segments) for billing.`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Backfill Failed",
+        description: error.message || "Failed to backfill SMS billing",
+        variant: "destructive",
+      });
+    },
+  });
+
   // SMS Compliance - Unblock number
   const unblockNumberMutation = useMutation({
     mutationFn: ({ tenantId, phoneNumber }: { tenantId: string; phoneNumber: string }) => 
@@ -2221,6 +2244,64 @@ export default function GlobalAdmin() {
                     )}
                   </div>
                 )}
+
+                {/* SMS Billing Backfill */}
+                <div className="p-4 rounded-lg bg-emerald-900/20 border border-emerald-500/20">
+                  <div className="flex items-start gap-4">
+                    <div className="p-2 rounded-lg bg-emerald-600/20">
+                      <DollarSign className="h-6 w-6 text-emerald-400" />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-medium text-emerald-300">SMS Billing Backfill</h4>
+                      <p className="text-sm text-blue-100/70 mt-1">
+                        If SMS messages were sent but not reflected in billing, use this to backfill 
+                        billing data from the SMS tracking records.
+                      </p>
+                      <div className="flex items-center gap-4 mt-4">
+                        <Button
+                          onClick={() => backfillBillingMutation.mutate({ tenantId: smsComplianceTenantId })}
+                          disabled={backfillBillingMutation.isPending}
+                          className="bg-emerald-600 hover:bg-emerald-700"
+                          data-testid="button-backfill-billing"
+                        >
+                          {backfillBillingMutation.isPending ? (
+                            <>
+                              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                              Backfilling...
+                            </>
+                          ) : (
+                            <>
+                              <DollarSign className="h-4 w-4 mr-2" />
+                              Backfill SMS Billing
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                      {backfillResult && (
+                        <div className="mt-3 p-3 rounded bg-emerald-900/30 border border-emerald-500/30">
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                            <div>
+                              <span className="text-blue-100/60">Messages Backfilled:</span>
+                              <div className="font-medium text-emerald-300">{backfillResult.backfilledCount}</div>
+                            </div>
+                            <div>
+                              <span className="text-blue-100/60">Total Segments:</span>
+                              <div className="font-medium text-emerald-300">{backfillResult.totalSegments}</div>
+                            </div>
+                            <div>
+                              <span className="text-blue-100/60">Period Start:</span>
+                              <div className="font-medium text-blue-100">{new Date(backfillResult.periodStart).toLocaleDateString()}</div>
+                            </div>
+                            <div>
+                              <span className="text-blue-100/60">Period End:</span>
+                              <div className="font-medium text-blue-100">{new Date(backfillResult.periodEnd).toLocaleDateString()}</div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
 
                 {/* Blocked Numbers List */}
                 <div>

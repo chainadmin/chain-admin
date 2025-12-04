@@ -493,6 +493,11 @@ export interface IStorage {
     periodStart: Date,
     periodEnd: Date
   ): Promise<{ emailCount: number; smsSegments: number }>;
+  backfillSmsUsageFromTracking(
+    tenantId: string,
+    periodStart: Date,
+    periodEnd: Date
+  ): Promise<{ backfilledCount: number; totalSegments: number }>;
   findSmsTrackingByExternalId(
     externalId: string
   ): Promise<{ tracking: SmsTracking; tenantId: string | null; campaignId: string | null } | undefined>;
@@ -1696,7 +1701,14 @@ export class DatabaseStorage implements IStorage {
     await db
       .insert(messagingUsageEvents)
       .values(event)
-      .onConflictDoNothing({ target: messagingUsageEvents.externalMessageId });
+      .onConflictDoUpdate({
+        target: messagingUsageEvents.externalMessageId,
+        set: {
+          quantity: event.quantity,
+          metadata: event.metadata,
+          occurredAt: event.occurredAt,
+        },
+      });
   }
 
   async getMessagingUsageTotals(
@@ -1732,6 +1744,87 @@ export class DatabaseStorage implements IStorage {
     }
 
     return { emailCount, smsSegments };
+  }
+
+  async backfillSmsUsageFromTracking(
+    tenantId: string,
+    periodStart: Date,
+    periodEnd: Date
+  ): Promise<{ backfilledCount: number; totalSegments: number }> {
+    // Get all SMS tracking records for this tenant in the period that haven't been billed
+    // Only bill for successful sends (sent, delivered, queued, accepted) - skip failed/undelivered
+    const billableStatuses = ['sent', 'delivered', 'queued', 'accepted'];
+    const trackingRecords = await db
+      .select({
+        id: smsTracking.id,
+        segments: smsTracking.segments,
+        sentAt: smsTracking.sentAt,
+        trackingData: smsTracking.trackingData,
+        status: smsTracking.status,
+      })
+      .from(smsTracking)
+      .where(
+        and(
+          eq(smsTracking.tenantId, tenantId),
+          gte(smsTracking.sentAt, periodStart),
+          lte(smsTracking.sentAt, periodEnd),
+          sql`${smsTracking.status} IN (${sql.join(billableStatuses.map(s => sql`${s}`), sql`, `)})`
+        )
+      );
+
+    if (trackingRecords.length === 0) {
+      return { backfilledCount: 0, totalSegments: 0 };
+    }
+
+    // Get existing billing records to avoid duplicates
+    const existingEvents = await db
+      .select({ externalMessageId: messagingUsageEvents.externalMessageId })
+      .from(messagingUsageEvents)
+      .where(
+        and(
+          eq(messagingUsageEvents.tenantId, tenantId),
+          eq(messagingUsageEvents.messageType, 'sms'),
+          gte(messagingUsageEvents.occurredAt, periodStart),
+          lte(messagingUsageEvents.occurredAt, periodEnd)
+        )
+      );
+
+    const existingSids = new Set(existingEvents.map(e => e.externalMessageId).filter(Boolean));
+
+    let backfilledCount = 0;
+    let totalSegments = 0;
+
+    for (const record of trackingRecords) {
+      const trackingData = record.trackingData as { twilioSid?: string } | null;
+      const twilioSid = trackingData?.twilioSid;
+      
+      // Skip records without a Twilio SID - can't deduplicate properly without it
+      if (!twilioSid) {
+        continue;
+      }
+      
+      // Skip if already billed
+      if (existingSids.has(twilioSid)) {
+        continue;
+      }
+
+      const segments = record.segments || 1;
+      totalSegments += segments;
+
+      await db.insert(messagingUsageEvents).values({
+        tenantId,
+        provider: 'twilio',
+        messageType: 'sms',
+        quantity: segments,
+        externalMessageId: twilioSid,
+        occurredAt: record.sentAt || new Date(),
+        metadata: { backfilled: true, trackingId: record.id },
+      });
+
+      backfilledCount++;
+    }
+
+    return { backfilledCount, totalSegments };
   }
 
   async findSmsTrackingByExternalId(

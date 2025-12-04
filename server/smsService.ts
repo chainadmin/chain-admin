@@ -276,6 +276,24 @@ class SmsService {
       
       console.log(`📱 SMS tracking created: tenant=${tenantId}, sid=${result.sid}, campaign=${campaignId || 'none'}`);
 
+      // Record billing at send time as fallback (in case webhook fails)
+      // Estimate 1 segment - webhook will provide accurate count if it works
+      try {
+        await storage.recordMessagingUsageEvent({
+          tenantId,
+          provider: 'twilio',
+          messageType: 'sms',
+          quantity: 1, // Default to 1 segment, webhook will provide accurate count
+          externalMessageId: result.sid,
+          occurredAt: new Date(),
+          metadata: { source: 'send_fallback' },
+        });
+        console.log(`💰 SMS billing recorded at send time: tenant=${tenantId}, sid=${result.sid}`);
+      } catch (billingError) {
+        console.error('Failed to record SMS billing at send time:', billingError);
+        // Don't fail the SMS send if billing fails
+      }
+
       // Create SMAX note if accountId is provided
       if (accountId) {
         try {
