@@ -16945,7 +16945,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { tenantId, daysBack } = req.body;
       if (!tenantId) {
-        return res.status(400).json({ message: "tenantId is required" });
+        return res.status(400).json({ 
+          success: false,
+          message: "tenantId is required",
+          errors: ["tenantId is required"],
+          failedNumbers: 0,
+          optOutNumbers: 0,
+          consumersMarkedOptedOut: 0,
+          totalMessagesScanned: 0,
+        });
       }
       
       // Get tenant to verify it exists and has Twilio credentials
@@ -16956,18 +16964,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .limit(1);
       
       if (!tenant || tenant.length === 0) {
-        return res.status(404).json({ message: "Tenant not found" });
+        return res.status(404).json({ 
+          success: false,
+          message: "Tenant not found",
+          errors: ["Tenant not found"],
+          failedNumbers: 0,
+          optOutNumbers: 0,
+          consumersMarkedOptedOut: 0,
+          totalMessagesScanned: 0,
+        });
       }
       
       if (!tenant[0].twilioAccountSid || !tenant[0].twilioAuthToken) {
-        return res.status(400).json({ message: "Tenant does not have Twilio credentials configured" });
+        return res.status(400).json({ 
+          success: false,
+          message: "Tenant does not have Twilio credentials configured",
+          errors: ["Tenant does not have Twilio credentials configured"],
+          failedNumbers: 0,
+          optOutNumbers: 0,
+          consumersMarkedOptedOut: 0,
+          totalMessagesScanned: 0,
+        });
       }
       
       const result = await smsService.syncHistoricalBlockedNumbers(tenantId, daysBack || 90);
       res.json(result);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error syncing historical SMS data:", error);
-      res.status(500).json({ message: "Failed to sync historical SMS data" });
+      res.status(500).json({ 
+        success: false,
+        message: "Failed to sync historical SMS data",
+        errors: [error.message || "Failed to sync historical SMS data"],
+        failedNumbers: 0,
+        optOutNumbers: 0,
+        consumersMarkedOptedOut: 0,
+        totalMessagesScanned: 0,
+      });
     }
   });
 
