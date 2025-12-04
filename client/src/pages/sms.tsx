@@ -35,7 +35,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { MessageSquare, Plus, Send, FileText, Trash2, Eye, TrendingUp, Users, AlertCircle, UserMinus, Check, XCircle, PlayCircle, Shield, RefreshCw, Ban, Phone } from "lucide-react";
+import { MessageSquare, Plus, Send, FileText, Trash2, Eye, TrendingUp, Users, AlertCircle, UserMinus, Check, XCircle, PlayCircle } from "lucide-react";
 
 export default function SMS() {
   // VERSION CHECK - Should see this in console to verify deployment
@@ -216,65 +216,6 @@ export default function SMS() {
       toast({
         title: "Error",
         description: error.message || "Failed to resume SMS campaign",
-        variant: "destructive",
-      });
-    },
-  });
-
-  // SMS Compliance - Blocked numbers and historical sync
-  const [syncDaysBack, setSyncDaysBack] = useState(90);
-  const [syncInProgress, setSyncInProgress] = useState(false);
-  const [syncResult, setSyncResult] = useState<{
-    success: boolean;
-    failedNumbers: number;
-    optOutNumbers: number;
-    consumersMarkedOptedOut: number;
-    totalMessagesScanned: number;
-    errors: string[];
-  } | null>(null);
-
-  const { data: blockedNumbers, isLoading: blockedNumbersLoading } = useQuery({
-    queryKey: ["/api/sms-compliance/blocked-numbers"],
-  });
-
-  const syncHistoricalMutation = useMutation({
-    mutationFn: (daysBack: number) => apiRequest("POST", "/api/sms-compliance/sync-historical", { daysBack }),
-    onMutate: () => {
-      setSyncInProgress(true);
-      setSyncResult(null);
-    },
-    onSuccess: (data: any) => {
-      setSyncInProgress(false);
-      setSyncResult(data);
-      queryClient.invalidateQueries({ queryKey: ["/api/sms-compliance/blocked-numbers"] });
-      toast({
-        title: "Sync Completed",
-        description: `Found ${data.failedNumbers + data.optOutNumbers} blocked numbers from ${data.totalMessagesScanned} messages scanned.`,
-      });
-    },
-    onError: (error: any) => {
-      setSyncInProgress(false);
-      toast({
-        title: "Sync Failed",
-        description: error.message || "Failed to sync historical SMS data",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const unblockNumberMutation = useMutation({
-    mutationFn: (phoneNumber: string) => apiRequest("DELETE", `/api/sms-compliance/blocked-numbers/${phoneNumber}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/sms-compliance/blocked-numbers"] });
-      toast({
-        title: "Number Unblocked",
-        description: "Phone number has been removed from the blocked list.",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to unblock phone number",
         variant: "destructive",
       });
     },
@@ -462,7 +403,6 @@ export default function SMS() {
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="templates">Templates</TabsTrigger>
             <TabsTrigger value="campaigns">Campaigns</TabsTrigger>
-            <TabsTrigger value="compliance">Compliance</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
@@ -1196,200 +1136,6 @@ export default function SMS() {
                 ) : (
                   <div className="text-center py-8 text-gray-500">
                     No campaigns yet. Create your first SMS campaign to get started.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="compliance" className="space-y-6">
-            {/* Historical Sync Card */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <RefreshCw className="h-5 w-5 mr-2" />
-                  Historical Sync
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <div className="flex items-start">
-                    <Shield className="h-5 w-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0" />
-                    <div className="text-sm">
-                      <p className="font-medium text-blue-900">Sync Historical Twilio Data</p>
-                      <p className="text-blue-700 mt-1">
-                        Scan your Twilio message history to find STOP opt-outs and undeliverable numbers. 
-                        This will populate your blocked numbers list with historical data.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-end gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="sync-days">Days to scan</Label>
-                    <Select 
-                      value={String(syncDaysBack)} 
-                      onValueChange={(value) => setSyncDaysBack(Number(value))}
-                    >
-                      <SelectTrigger className="w-40" data-testid="select-sync-days">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="30">Last 30 days</SelectItem>
-                        <SelectItem value="60">Last 60 days</SelectItem>
-                        <SelectItem value="90">Last 90 days</SelectItem>
-                        <SelectItem value="180">Last 180 days</SelectItem>
-                        <SelectItem value="365">Last 365 days</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Button
-                    onClick={() => syncHistoricalMutation.mutate(syncDaysBack)}
-                    disabled={syncInProgress || syncHistoricalMutation.isPending}
-                    data-testid="button-sync-historical"
-                  >
-                    {syncInProgress ? (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                        Scanning...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Sync Historical Data
-                      </>
-                    )}
-                  </Button>
-                </div>
-
-                {syncResult && (
-                  <div className={`mt-4 p-4 rounded-lg ${syncResult.success ? 'bg-green-50' : 'bg-red-50'}`}>
-                    <h4 className={`font-medium ${syncResult.success ? 'text-green-900' : 'text-red-900'}`}>
-                      {syncResult.success ? 'Sync Completed' : 'Sync Failed'}
-                    </h4>
-                    <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                      <div>
-                        <span className="text-gray-600">Messages Scanned:</span>
-                        <div className="font-medium">{syncResult.totalMessagesScanned}</div>
-                      </div>
-                      <div>
-                        <span className="text-gray-600">Failed Numbers Found:</span>
-                        <div className="font-medium text-red-600">{syncResult.failedNumbers}</div>
-                      </div>
-                      <div>
-                        <span className="text-gray-600">Opt-Outs Found:</span>
-                        <div className="font-medium text-orange-600">{syncResult.optOutNumbers}</div>
-                      </div>
-                      <div>
-                        <span className="text-gray-600">Consumers Marked:</span>
-                        <div className="font-medium text-blue-600">{syncResult.consumersMarkedOptedOut}</div>
-                      </div>
-                    </div>
-                    {syncResult.errors.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-red-200">
-                        <p className="text-sm font-medium text-red-800">Errors:</p>
-                        <ul className="text-sm text-red-700 list-disc list-inside">
-                          {syncResult.errors.slice(0, 5).map((error, i) => (
-                            <li key={i}>{error}</li>
-                          ))}
-                          {syncResult.errors.length > 5 && (
-                            <li>...and {syncResult.errors.length - 5} more errors</li>
-                          )}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Blocked Numbers List */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Ban className="h-5 w-5 mr-2" />
-                  Blocked Numbers ({Array.isArray(blockedNumbers) ? blockedNumbers.length : 0})
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {blockedNumbersLoading ? (
-                  <div className="text-center py-8 text-gray-500">Loading blocked numbers...</div>
-                ) : Array.isArray(blockedNumbers) && blockedNumbers.length > 0 ? (
-                  <div className="space-y-2">
-                    <div className="grid grid-cols-12 gap-4 py-2 px-4 bg-gray-100 rounded-t font-medium text-sm text-gray-600">
-                      <div className="col-span-3">Phone Number</div>
-                      <div className="col-span-2">Reason</div>
-                      <div className="col-span-2">Error Code</div>
-                      <div className="col-span-3">Last Failed</div>
-                      <div className="col-span-2">Actions</div>
-                    </div>
-                    <div className="max-h-96 overflow-y-auto space-y-1">
-                      {blockedNumbers.map((blocked: any, index: number) => (
-                        <div 
-                          key={blocked.phoneNumber} 
-                          className="grid grid-cols-12 gap-4 py-2 px-4 hover:bg-gray-50 rounded items-center text-sm"
-                          data-testid={`blocked-number-${index}`}
-                        >
-                          <div className="col-span-3 font-mono flex items-center">
-                            <Phone className="h-4 w-4 mr-2 text-gray-400" />
-                            {blocked.phoneNumber}
-                          </div>
-                          <div className="col-span-2">
-                            <Badge variant={blocked.reason === 'opted_out' ? 'secondary' : 'destructive'}>
-                              {blocked.reason === 'opted_out' ? 'Opt-Out' : 'Undeliverable'}
-                            </Badge>
-                          </div>
-                          <div className="col-span-2 text-gray-600">
-                            {blocked.errorCode || '-'}
-                          </div>
-                          <div className="col-span-3 text-gray-600">
-                            {blocked.lastFailedAt ? new Date(blocked.lastFailedAt).toLocaleDateString() : '-'}
-                          </div>
-                          <div className="col-span-2">
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button 
-                                  variant="outline" 
-                                  size="sm"
-                                  data-testid={`button-unblock-${blocked.phoneNumber}`}
-                                >
-                                  Unblock
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Unblock Phone Number?</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    This will remove {blocked.phoneNumber} from the blocked list and allow SMS messages to be sent to this number again.
-                                    {blocked.reason === 'opted_out' && (
-                                      <span className="block mt-2 text-orange-600 font-medium">
-                                        Warning: This number opted out by replying STOP. Sending messages may violate TCPA compliance.
-                                      </span>
-                                    )}
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    onClick={() => unblockNumberMutation.mutate(blocked.phoneNumber)}
-                                    disabled={unblockNumberMutation.isPending}
-                                  >
-                                    Unblock
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-gray-500">
-                    <Shield className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-                    <p>No blocked numbers yet.</p>
-                    <p className="text-sm mt-1">Numbers will appear here when consumers opt-out or when messages fail to deliver.</p>
                   </div>
                 )}
               </CardContent>

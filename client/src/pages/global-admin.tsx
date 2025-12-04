@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Building2, Users, DollarSign, TrendingUp, Eye, Ban, CheckCircle, AlertTriangle, Plus, Mail, MessageSquare, Phone, Trash2, Search, Shield, CreditCard, Send, Settings, Repeat, FileText, MessagesSquare, Zap, LogOut, LogIn, QrCode, Download, Pencil, RotateCcw, Bot } from "lucide-react";
+import { Building2, Users, DollarSign, TrendingUp, Eye, Ban, CheckCircle, AlertTriangle, Plus, Mail, MessageSquare, Phone, Trash2, Search, Shield, CreditCard, Send, Settings, Repeat, FileText, MessagesSquare, Zap, LogOut, LogIn, QrCode, Download, Pencil, RotateCcw, Bot, RefreshCw } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -122,6 +122,19 @@ export default function GlobalAdmin() {
   // Tenant agreements state
   const [selectedTenantForAgreement, setSelectedTenantForAgreement] = useState('');
   const [selectedAgreementTemplate, setSelectedAgreementTemplate] = useState('');
+
+  // SMS Compliance state
+  const [smsComplianceTenantId, setSmsComplianceTenantId] = useState('');
+  const [syncDaysBack, setSyncDaysBack] = useState(90);
+  const [syncInProgress, setSyncInProgress] = useState(false);
+  const [syncResult, setSyncResult] = useState<{
+    success: boolean;
+    failedNumbers: number;
+    optOutNumbers: number;
+    consumersMarkedOptedOut: number;
+    totalMessagesScanned: number;
+    errors: string[];
+  } | null>(null);
 
   // Check for admin authentication on component mount
   useEffect(() => {
@@ -710,6 +723,60 @@ export default function GlobalAdmin() {
         variant: "destructive",
       });
     }
+  });
+
+  // SMS Compliance - Query blocked numbers for selected tenant
+  const { data: blockedNumbers, isLoading: blockedNumbersLoading } = useQuery({
+    queryKey: ["/api/admin/sms-compliance/blocked-numbers", smsComplianceTenantId],
+    queryFn: () => smsComplianceTenantId ? apiRequest("GET", `/api/admin/sms-compliance/blocked-numbers?tenantId=${smsComplianceTenantId}`) : Promise.resolve([]),
+    enabled: !!smsComplianceTenantId,
+  });
+
+  // SMS Compliance - Sync historical data
+  const syncHistoricalMutation = useMutation({
+    mutationFn: ({ tenantId, daysBack }: { tenantId: string; daysBack: number }) => 
+      apiRequest("POST", "/api/admin/sms-compliance/sync-historical", { tenantId, daysBack }),
+    onMutate: () => {
+      setSyncInProgress(true);
+      setSyncResult(null);
+    },
+    onSuccess: (data: any) => {
+      setSyncInProgress(false);
+      setSyncResult(data);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/sms-compliance/blocked-numbers", smsComplianceTenantId] });
+      toast({
+        title: "Sync Completed",
+        description: `Found ${data.failedNumbers + data.optOutNumbers} blocked numbers from ${data.totalMessagesScanned} messages scanned.`,
+      });
+    },
+    onError: (error: any) => {
+      setSyncInProgress(false);
+      toast({
+        title: "Sync Failed",
+        description: error.message || "Failed to sync historical SMS data",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // SMS Compliance - Unblock number
+  const unblockNumberMutation = useMutation({
+    mutationFn: ({ tenantId, phoneNumber }: { tenantId: string; phoneNumber: string }) => 
+      apiRequest("DELETE", `/api/admin/sms-compliance/blocked-numbers/${encodeURIComponent(phoneNumber)}?tenantId=${tenantId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/sms-compliance/blocked-numbers", smsComplianceTenantId] });
+      toast({
+        title: "Number Unblocked",
+        description: "Phone number has been removed from the blocked list.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to unblock phone number",
+        variant: "destructive",
+      });
+    },
   });
 
   const handleCreateAgency = () => {
@@ -2022,6 +2089,203 @@ export default function GlobalAdmin() {
             )}
           </DialogContent>
         </Dialog>
+
+        {/* SMS Compliance Section */}
+        <div className="mb-8 rounded-3xl border border-white/10 bg-white/5 shadow-lg shadow-blue-900/20 backdrop-blur">
+          <div className="p-6 border-b border-white/10">
+            <div className="flex items-center gap-3">
+              <Shield className="h-5 w-5 text-blue-300" />
+              <h2 className="text-xl font-semibold text-blue-50">SMS Compliance</h2>
+            </div>
+            <p className="text-sm text-blue-100/60 mt-1">Manage blocked numbers and sync historical Twilio data for TCPA compliance</p>
+          </div>
+          <div className="p-6 space-y-6">
+            {/* Agency Selection */}
+            <div className="space-y-2">
+              <Label className="text-blue-100/80">Select Agency</Label>
+              <Select 
+                value={smsComplianceTenantId} 
+                onValueChange={(value) => {
+                  setSmsComplianceTenantId(value);
+                  setSyncResult(null);
+                }}
+              >
+                <SelectTrigger className="w-full max-w-md bg-white/5 border-white/20 text-blue-50" data-testid="select-compliance-agency">
+                  <SelectValue placeholder="Choose an agency to manage..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {(tenants as any[])?.filter((t: any) => t.twilioAccountSid).map((t: any) => (
+                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-blue-100/50">Only agencies with Twilio credentials configured are shown</p>
+            </div>
+
+            {smsComplianceTenantId && (
+              <>
+                {/* Historical Sync */}
+                <div className="bg-blue-900/20 p-4 rounded-lg border border-blue-500/20">
+                  <div className="flex items-start">
+                    <RefreshCw className="h-5 w-5 text-blue-400 mt-0.5 mr-3 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="font-medium text-blue-100">Sync Historical Twilio Data</p>
+                      <p className="text-blue-100/70 text-sm mt-1">
+                        Scan Twilio message history to find STOP opt-outs and undeliverable numbers. 
+                        This populates the blocked numbers list with historical data.
+                      </p>
+                      <div className="flex items-end gap-4 mt-4">
+                        <div className="space-y-1">
+                          <Label className="text-blue-100/70 text-xs">Days to scan</Label>
+                          <Select 
+                            value={String(syncDaysBack)} 
+                            onValueChange={(value) => setSyncDaysBack(Number(value))}
+                          >
+                            <SelectTrigger className="w-36 bg-white/5 border-white/20 text-blue-50" data-testid="select-sync-days">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="30">Last 30 days</SelectItem>
+                              <SelectItem value="60">Last 60 days</SelectItem>
+                              <SelectItem value="90">Last 90 days</SelectItem>
+                              <SelectItem value="180">Last 180 days</SelectItem>
+                              <SelectItem value="365">Last 365 days</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Button
+                          onClick={() => syncHistoricalMutation.mutate({ tenantId: smsComplianceTenantId, daysBack: syncDaysBack })}
+                          disabled={syncInProgress || syncHistoricalMutation.isPending}
+                          className="bg-blue-600 hover:bg-blue-700"
+                          data-testid="button-sync-historical"
+                        >
+                          {syncInProgress ? (
+                            <>
+                              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                              Scanning...
+                            </>
+                          ) : (
+                            <>
+                              <RefreshCw className="h-4 w-4 mr-2" />
+                              Sync Historical Data
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sync Results */}
+                {syncResult && (
+                  <div className={`p-4 rounded-lg ${syncResult.success ? 'bg-green-900/20 border border-green-500/20' : 'bg-red-900/20 border border-red-500/20'}`}>
+                    <h4 className={`font-medium ${syncResult.success ? 'text-green-300' : 'text-red-300'}`}>
+                      {syncResult.success ? 'Sync Completed' : 'Sync Failed'}
+                    </h4>
+                    <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                      <div>
+                        <span className="text-blue-100/60">Messages Scanned:</span>
+                        <div className="font-medium text-blue-50">{syncResult.totalMessagesScanned}</div>
+                      </div>
+                      <div>
+                        <span className="text-blue-100/60">Failed Numbers:</span>
+                        <div className="font-medium text-red-400">{syncResult.failedNumbers}</div>
+                      </div>
+                      <div>
+                        <span className="text-blue-100/60">Opt-Outs:</span>
+                        <div className="font-medium text-orange-400">{syncResult.optOutNumbers}</div>
+                      </div>
+                      <div>
+                        <span className="text-blue-100/60">Consumers Marked:</span>
+                        <div className="font-medium text-blue-400">{syncResult.consumersMarkedOptedOut}</div>
+                      </div>
+                    </div>
+                    {syncResult.errors.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-red-500/20">
+                        <p className="text-sm font-medium text-red-300">Errors:</p>
+                        <ul className="text-sm text-red-400/80 list-disc list-inside">
+                          {syncResult.errors.slice(0, 5).map((error, i) => (
+                            <li key={i}>{error}</li>
+                          ))}
+                          {syncResult.errors.length > 5 && (
+                            <li>...and {syncResult.errors.length - 5} more errors</li>
+                          )}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Blocked Numbers List */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-medium text-blue-50 flex items-center">
+                      <Ban className="h-5 w-5 mr-2 text-red-400" />
+                      Blocked Numbers ({Array.isArray(blockedNumbers) ? blockedNumbers.length : 0})
+                    </h3>
+                  </div>
+                  
+                  {blockedNumbersLoading ? (
+                    <div className="text-center py-8 text-blue-100/60">Loading blocked numbers...</div>
+                  ) : Array.isArray(blockedNumbers) && blockedNumbers.length > 0 ? (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-12 gap-4 py-2 px-4 bg-white/5 rounded font-medium text-sm text-blue-100/70">
+                        <div className="col-span-3">Phone Number</div>
+                        <div className="col-span-2">Reason</div>
+                        <div className="col-span-2">Error Code</div>
+                        <div className="col-span-3">Last Failed</div>
+                        <div className="col-span-2">Actions</div>
+                      </div>
+                      <div className="max-h-80 overflow-y-auto space-y-1">
+                        {blockedNumbers.map((blocked: any, index: number) => (
+                          <div 
+                            key={blocked.phoneNumber} 
+                            className="grid grid-cols-12 gap-4 py-2 px-4 hover:bg-white/5 rounded items-center text-sm"
+                            data-testid={`blocked-number-${index}`}
+                          >
+                            <div className="col-span-3 font-mono flex items-center text-blue-100">
+                              <Phone className="h-4 w-4 mr-2 text-blue-300/50" />
+                              {blocked.phoneNumber}
+                            </div>
+                            <div className="col-span-2">
+                              <Badge variant={blocked.reason === 'opted_out' ? 'secondary' : 'destructive'}>
+                                {blocked.reason === 'opted_out' ? 'Opt-Out' : 'Undeliverable'}
+                              </Badge>
+                            </div>
+                            <div className="col-span-2 text-blue-100/60">
+                              {blocked.errorCode || '-'}
+                            </div>
+                            <div className="col-span-3 text-blue-100/60">
+                              {blocked.lastFailedAt ? new Date(blocked.lastFailedAt).toLocaleDateString() : '-'}
+                            </div>
+                            <div className="col-span-2">
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                className="border-white/20 text-blue-100 hover:bg-white/10"
+                                onClick={() => unblockNumberMutation.mutate({ tenantId: smsComplianceTenantId, phoneNumber: blocked.phoneNumber })}
+                                disabled={unblockNumberMutation.isPending}
+                                data-testid={`button-unblock-${blocked.phoneNumber}`}
+                              >
+                                Unblock
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-blue-100/60">
+                      <Shield className="h-12 w-12 mx-auto mb-3 text-blue-300/30" />
+                      <p>No blocked numbers for this agency.</p>
+                      <p className="text-sm mt-1">Numbers appear here when consumers opt-out or messages fail to deliver.</p>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
 
         {/* Tenants Table */}
         <div className="rounded-3xl border border-white/10 bg-white/5 shadow-lg shadow-blue-900/20 backdrop-blur">

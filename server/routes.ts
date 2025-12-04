@@ -16924,6 +16924,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // SMS Compliance - Get blocked numbers for a tenant (platform admin only)
+  app.get('/api/admin/sms-compliance/blocked-numbers', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { tenantId } = req.query;
+      if (!tenantId) {
+        return res.status(400).json({ message: "tenantId is required" });
+      }
+      
+      const blockedNumbers = await storage.getSmsBlockedNumbers(tenantId as string);
+      res.json(blockedNumbers);
+    } catch (error) {
+      console.error("Error fetching blocked numbers:", error);
+      res.status(500).json({ message: "Failed to fetch blocked numbers" });
+    }
+  });
+
+  // SMS Compliance - Sync historical data for a tenant (platform admin only)
+  app.post('/api/admin/sms-compliance/sync-historical', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { tenantId, daysBack } = req.body;
+      if (!tenantId) {
+        return res.status(400).json({ message: "tenantId is required" });
+      }
+      
+      // Get tenant to verify it exists and has Twilio credentials
+      const tenant = await db
+        .select()
+        .from(tenants)
+        .where(eq(tenants.id, tenantId))
+        .limit(1);
+      
+      if (!tenant || tenant.length === 0) {
+        return res.status(404).json({ message: "Tenant not found" });
+      }
+      
+      if (!tenant[0].twilioAccountSid || !tenant[0].twilioAuthToken) {
+        return res.status(400).json({ message: "Tenant does not have Twilio credentials configured" });
+      }
+      
+      const result = await smsService.syncHistoricalBlockedNumbers(tenantId, daysBack || 90);
+      res.json(result);
+    } catch (error) {
+      console.error("Error syncing historical SMS data:", error);
+      res.status(500).json({ message: "Failed to sync historical SMS data" });
+    }
+  });
+
+  // SMS Compliance - Unblock a phone number for a tenant (platform admin only)
+  app.delete('/api/admin/sms-compliance/blocked-numbers/:phoneNumber', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { phoneNumber } = req.params;
+      const { tenantId } = req.query;
+      
+      if (!tenantId) {
+        return res.status(400).json({ message: "tenantId is required" });
+      }
+      
+      await storage.removeSmsBlockedNumber(tenantId as string, decodeURIComponent(phoneNumber));
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error unblocking phone number:", error);
+      res.status(500).json({ message: "Failed to unblock phone number" });
+    }
+  });
+
   // Delete consumer (platform admin only)
   app.delete('/api/admin/consumers/:id', isPlatformAdmin, async (req: any, res) => {
     try {
