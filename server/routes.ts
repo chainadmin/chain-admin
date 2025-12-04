@@ -16915,6 +16915,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Generate the full contract content for signing page (separate from email)
+  function generateContractDocument(metadata: Record<string, any>): string {
+    return `
+<div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 30px; color: #333;">
+  <div style="text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #2563eb;">
+    <h1 style="color: #1e40af; margin: 0; font-size: 28px;">Chain Software Group</h1>
+    <p style="color: #64748b; margin: 5px 0 0;">Agency SaaS Agreement</p>
+  </div>
+  
+  <div style="background: linear-gradient(135deg, #eff6ff 0%, #f0f9ff 100%); padding: 20px; border-radius: 10px; margin-bottom: 25px; border-left: 4px solid #2563eb;">
+    <h3 style="margin: 0 0 10px; color: #1e40af;">Your Subscription Details</h3>
+    <table style="width: 100%; border-collapse: collapse;">
+      <tr><td style="padding: 8px 0; color: #64748b;">Company:</td><td style="padding: 8px 0; font-weight: 600;">${metadata.companyName || ''}</td></tr>
+      <tr><td style="padding: 8px 0; color: #64748b;">Plan:</td><td style="padding: 8px 0; font-weight: 600;">${metadata.pricingTier || ''}</td></tr>
+      <tr><td style="padding: 8px 0; color: #64748b;">Add-ons:</td><td style="padding: 8px 0;">${metadata.addonsList || 'None'}</td></tr>
+      <tr><td style="padding: 8px 0; color: #64748b;">Billing Start:</td><td style="padding: 8px 0;">${metadata.billingStartDate || ''}</td></tr>
+    </table>
+  </div>
+
+  <h2 style="color: #1e40af; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">Agency SaaS Agreement</h2>
+  <p><strong>Parties:</strong> Chain Software Group ("Provider") and the subscribing agency ("Customer").</p>
+  <p><strong>Scope:</strong> Access to the multi-tenant platform for uploading account data, communicating with consumers, and optional payment facilitation via third parties.</p>
+
+  <h3 style="color: #334155;">Key Terms</h3>
+  <ul style="line-height: 1.8;">
+    <li><strong>Term & Renewal:</strong> This agreement is month-to-month and auto-renews each month unless either party gives 30 days' written notice to cancel.</li>
+    <li><strong>Customer Data:</strong> Customer is the controller of its Consumer Data. Chain processes it solely to provide the Service, under the Data Processing Addendum (DPA).</li>
+    <li><strong>Acceptable Use & Compliance:</strong> Customer agrees to comply with applicable law (e.g., FDCPA/Reg F, TCPA, state laws) and to only send lawful, consented communications via the Service. Customer is responsible for A2P 10DLC brand/campaign registration where required.</li>
+    <li><strong>Security:</strong> Chain implements administrative, technical, and physical safeguards appropriate to the risk. Customer must secure its credentials and restrict access to authorized personnel.</li>
+    <li><strong>Messaging & Payments:</strong> Messaging is provided via third-party carriers/providers; delivery is not guaranteed. Payments are processed via third-party processors under their terms. Chain is not a debt collector and does not decide settlement terms or lawful contact windows.</li>
+    <li><strong>Confidentiality; IP:</strong> Each party will protect the other's Confidential Information. Chain retains all rights to the Service and underlying IP.</li>
+    <li><strong>Warranties; Disclaimers:</strong> The Service is provided "AS IS." Chain disclaims implied warranties. No legal, compliance, or collection advice is provided.</li>
+    <li><strong>Indemnity:</strong> Customer will indemnify Chain for claims arising from Customer's data, instructions, or unlawful communications. Chain will indemnify Customer for third-party IP claims alleging the Service infringes IP rights.</li>
+    <li><strong>Liability Cap:</strong> Each party's aggregate liability is capped at the fees paid in the 12 months preceding the claim; no indirect or consequential damages.</li>
+    <li><strong>Termination:</strong> Either party may terminate for material breach uncured within 30 days. Upon termination, Customer may export its data for 30 days.</li>
+    <li><strong>Governing Law; Venue:</strong> New York law; exclusive venue Erie County, NY.</li>
+  </ul>
+
+  <h3 style="color: #334155;">Data Processing Addendum (Summary)</h3>
+  <ul style="line-height: 1.8;">
+    <li><strong>Roles:</strong> Customer = Controller; Chain = Processor/Service Provider.</li>
+    <li><strong>Instructions:</strong> Process Consumer Data only per Customer's documented instructions and the Agreement.</li>
+    <li><strong>Sub-processors:</strong> Chain may use vetted sub-processors (hosting, messaging, analytics, payment); list available upon request.</li>
+    <li><strong>Security:</strong> Appropriate technical/organizational measures (encryption in transit, access controls, logging, backups).</li>
+    <li><strong>Breach Notice:</strong> Notify Customer without undue delay of a confirmed personal data breach.</li>
+    <li><strong>Deletion/Return:</strong> On termination, delete or return Consumer Data after the export window, unless retention is required by law.</li>
+  </ul>
+
+  <h2 style="color: #1e40af; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; margin-top: 30px;">Messaging Overage Terms</h2>
+  
+  <h3 style="color: #334155;">SMS Program Requirements</h3>
+  <ul style="line-height: 1.8;">
+    <li>Agency must collect, store, and produce proof of consent for each recipient upon request.</li>
+    <li>Service is subject to Agency's messaging brand and campaign approval by the carrier ecosystem (e.g., A2P 10DLC).</li>
+    <li>Agency is responsible for content compliance with FDCPA/Reg F, TCPA, and state laws.</li>
+  </ul>
+
+  <h3 style="color: #334155;">Overages</h3>
+  <div style="background: #fef3c7; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #f59e0b;">
+    <p style="margin: 0 0 10px;"><strong>Email Overage:</strong> $2.50 per 1,000 emails beyond your plan's monthly allotment.</p>
+    <p style="margin: 0 0 10px;"><strong>SMS Overage:</strong> $0.02 per SMS segment beyond your plan's monthly allotment.</p>
+    <p style="margin: 0; font-size: 13px; color: #64748b;"><em>Note: SMS messages longer than 160 characters are split into multiple segments. Each segment counts toward your usage.</em></p>
+  </div>
+
+  <h3 style="color: #334155;">Billing</h3>
+  <p>Monthly in advance for Service Fee; overages billed in arrears. Invoices due net 15 days. Late balances may accrue interest at 1.5%/mo and may trigger suspension.</p>
+
+  <h3 style="color: #334155;">Compliance & Indemnity</h3>
+  <p>Agency will comply with FDCPA/Reg F, TCPA, state telemarketing/messaging laws, carrier policies, and applicable email anti-spam laws. Agency will indemnify Chain for claims arising from Agency's messaging content or unlawful contact practices.</p>
+
+  <div style="background: #fef3c7; padding: 15px; border-radius: 8px; margin: 25px 0; border-left: 4px solid #f59e0b;">
+    <p style="margin: 0; font-size: 13px;"><strong>Contact Information:</strong><br>
+    Email: ${metadata.contactEmail || ''}<br>
+    Phone: ${metadata.contactPhone || ''}</p>
+  </div>
+
+  <div style="text-align: center; margin-top: 30px; padding: 20px; background: #f8fafc; border-radius: 10px;">
+    <p style="margin: 0 0 15px; color: #64748b;">By clicking "I Agree" below, you acknowledge that you have read and agree to the terms of this Agreement.</p>
+  </div>
+</div>`;
+  }
+
   // Send agreement to tenant
   app.post('/api/admin/tenants/:tenantId/send-agreement', isPlatformAdmin, async (req: any, res) => {
     try {
@@ -16944,12 +17026,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Build complete agreement metadata from tenant and subscription data
       const agreementMetadata = await buildAgreementVariables(tenant, tenantId, storage, baseUrl);
 
-      // Create agreement with complete metadata
+      // Generate the full contract document content for the signing page
+      const documentContent = generateContractDocument(agreementMetadata);
+
+      // Create agreement with complete metadata and document content
       const agreement = await storage.createTenantAgreement({
         tenantId,
         globalDocumentId: template.id,
         agreementType: templateSlug,
         agreementMetadata,
+        documentContent,
         title: title || template.title,
         description: description || template.description || '',
         status: 'pending',
@@ -16962,7 +17048,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         agreementLink,
       };
 
-      // Replace variables in template
+      // Replace variables in template (email is simple with subscription details + link)
       let emailHtml = template.content;
       Object.keys(emailVariables).forEach((key: string) => {
         const value = (emailVariables as any)[key];
@@ -16997,6 +17083,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching tenant agreements:", error);
       res.status(500).json({ message: "Failed to fetch agreements" });
+    }
+  });
+
+  // Get single agreement details for admin viewing (includes full document content)
+  app.get('/api/admin/tenant-agreements/:agreementId', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { agreementId } = req.params;
+      const agreement = await storage.getTenantAgreementById(agreementId);
+
+      if (!agreement) {
+        return res.status(404).json({ message: "Agreement not found" });
+      }
+
+      const tenant = await storage.getTenant(agreement.tenantId);
+      const template = await storage.getGlobalDocumentTemplateById(agreement.globalDocumentId);
+
+      // Use stored documentContent if available, otherwise generate from template
+      const content = agreement.documentContent || template?.content || '';
+
+      res.json({
+        ...agreement,
+        content,
+        tenantName: tenant?.name || 'Unknown',
+        templateName: template?.name || 'Unknown Template',
+      });
+    } catch (error) {
+      console.error("Error fetching agreement details:", error);
+      res.status(500).json({ message: "Failed to fetch agreement details" });
     }
   });
 
@@ -19181,6 +19295,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ? { ...agreement.agreementMetadata as Record<string, any>, agreementLink }
         : { agreementLink };
 
+      // Use stored documentContent if available, otherwise fall back to template content
+      const content = agreement.documentContent || template.content;
+
       res.json({
         id: agreement.id,
         title: agreement.title,
@@ -19188,7 +19305,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: agreement.status,
         agreementType: agreement.agreementType,
         metadata,
-        content: template.content,
+        content,
         interactiveFields: template.interactiveFields || null,
         tenantName: tenant.name,
         createdAt: agreement.createdAt,

@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { FileText, Send, CheckCircle2, XCircle, Eye, Clock } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { FileText, Send, CheckCircle2, XCircle, Eye, Clock, ExternalLink } from 'lucide-react';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 
 interface TenantAgreementsPanelProps {
@@ -15,6 +16,9 @@ interface TenantAgreementsPanelProps {
 export function TenantAgreementsPanel({ tenants, isLoadingTenants, toast, isPlatformAdmin }: TenantAgreementsPanelProps) {
   const [selectedTenantForAgreement, setSelectedTenantForAgreement] = useState('');
   const [selectedAgreementTemplate, setSelectedAgreementTemplate] = useState('');
+  const [viewContractId, setViewContractId] = useState<string | null>(null);
+  const [contractContent, setContractContent] = useState<string>('');
+  const [isLoadingContract, setIsLoadingContract] = useState(false);
 
   const { data: templates, isLoading: templatesLoading } = useQuery({
     queryKey: ['/api/admin/global-document-templates'],
@@ -64,6 +68,36 @@ export function TenantAgreementsPanel({ tenants, isLoadingTenants, toast, isPlat
       tenantId: selectedTenantForAgreement,
       templateSlug: selectedAgreementTemplate,
     });
+  };
+
+  const handleViewContract = async (agreementId: string) => {
+    setIsLoadingContract(true);
+    setViewContractId(agreementId);
+    try {
+      const response = await fetch(`/api/admin/tenant-agreements/${agreementId}`, {
+        credentials: 'include',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setContractContent(data.content || '');
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to load contract",
+          variant: "destructive",
+        });
+        setViewContractId(null);
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to load contract",
+        variant: "destructive",
+      });
+      setViewContractId(null);
+    } finally {
+      setIsLoadingContract(false);
+    }
   };
 
   const getStatusIcon = (status: string) => {
@@ -216,6 +250,18 @@ export function TenantAgreementsPanel({ tenants, isLoadingTenants, toast, isPlat
                           )}
                         </div>
                       </div>
+                      {agreement.status === 'agreed' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleViewContract(agreement.id)}
+                          className="ml-4 border-blue-500/50 text-blue-400 hover:bg-blue-500/10"
+                          data-testid={`button-view-contract-${agreement.id}`}
+                        >
+                          <ExternalLink className="h-4 w-4 mr-1" />
+                          View Contract
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -229,6 +275,28 @@ export function TenantAgreementsPanel({ tenants, isLoadingTenants, toast, isPlat
           </div>
         )}
       </div>
+
+      {/* View Contract Dialog */}
+      <Dialog open={!!viewContractId} onOpenChange={(open) => !open && setViewContractId(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Signed Contract
+            </DialogTitle>
+          </DialogHeader>
+          {isLoadingContract ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full" />
+            </div>
+          ) : (
+            <div 
+              className="prose prose-sm max-w-none dark:prose-invert mt-4"
+              dangerouslySetInnerHTML={{ __html: contractContent }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

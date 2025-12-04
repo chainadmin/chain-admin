@@ -554,6 +554,7 @@ export const tenantAgreements = pgTable("tenant_agreements", {
   globalDocumentId: uuid("global_document_id").references(() => globalDocumentTemplates.id, { onDelete: "cascade" }).notNull(),
   agreementType: text("agreement_type").notNull(), // 'software_proposal', 'payment_authorization'
   agreementMetadata: jsonb("agreement_metadata").notNull(), // {companyName, module, pricing, contact, paymentDetails, etc.}
+  documentContent: text("document_content"), // Full contract content for signing page (separate from email template)
   title: text("title").notNull(),
   description: text("description"),
   status: text("status", {
