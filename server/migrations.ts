@@ -1209,6 +1209,15 @@ export async function runMigrations() {
       console.log('  ⚠ idx_payments_duplicate_check (already exists or error)');
     }
     
+    // Add force_arrangement column to tenant_settings
+    console.log('Adding force_arrangement column to tenant_settings...');
+    try {
+      await client.query(`ALTER TABLE tenant_settings ADD COLUMN IF NOT EXISTS force_arrangement BOOLEAN DEFAULT false`);
+      console.log('  ✓ force_arrangement');
+    } catch (err) {
+      console.log('  ⚠ force_arrangement (already exists or error)');
+    }
+    
     console.log('✅ Database migrations completed successfully');
   } catch (error: any) {
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {

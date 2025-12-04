@@ -683,6 +683,7 @@ export const tenantSettings = pgTable("tenant_settings", {
   smaxPin: text("smax_pin"),
   smaxBaseUrl: text("smax_base_url").default("https://api.smaxcollectionsoftware.com:8000"),
   blockedAccountStatuses: text("blocked_account_statuses").array().default(sql`ARRAY['inactive', 'recalled', 'closed']::text[]`), // Account statuses that block communications and payments
+  forceArrangement: boolean("force_arrangement").default(false), // When true, consumers must set up payment arrangement (no one-time payments)
 });
 
 // Consumer notifications (when accounts are added)
@@ -1280,7 +1281,7 @@ export const communicationSequences = pgTable("communication_sequences", {
   
   // Trigger settings
   triggerType: text("trigger_type", { enum: ['immediate', 'scheduled', 'event'] }).notNull().default('immediate'),
-  triggerEvent: text("trigger_event", { enum: ['account_created', 'payment_received', 'payment_overdue', 'payment_failed', 'manual'] }),
+  triggerEvent: text("trigger_event", { enum: ['account_created', 'payment_received', 'payment_overdue', 'payment_failed', 'one_time_payment'] }),
   triggerDelay: bigint("trigger_delay", { mode: "number" }).default(0), // Days to wait after event before starting sequence
   
   // Target audience
