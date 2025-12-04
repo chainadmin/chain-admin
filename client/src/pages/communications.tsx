@@ -83,6 +83,10 @@ import {
   ArrowDown,
   XCircle,
   PlayCircle,
+  ShieldOff,
+  ShieldCheck,
+  Ban,
+  RefreshCw,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 
@@ -612,6 +616,11 @@ export default function Communications() {
   const { data: sequenceEnrollments } = useQuery({
     queryKey: ['/api/sequences', viewingEnrollmentsSequenceId, 'enrollments'],
     enabled: viewingEnrollmentsSequenceId !== null,
+  });
+
+  // Blocked SMS numbers for compliance
+  const { data: blockedNumbers, isLoading: blockedNumbersLoading, refetch: refetchBlockedNumbers } = useQuery({
+    queryKey: ['/api/sms-compliance/blocked-numbers'],
   });
 
   const consumerPortalUrl = useMemo(() => {
@@ -1479,6 +1488,26 @@ export default function Communications() {
     },
   });
 
+  // SMS Compliance - Unblock phone number
+  const unblockPhoneMutation = useMutation({
+    mutationFn: (phoneNumber: string) => 
+      apiRequest("DELETE", `/api/sms-compliance/blocked-numbers/${encodeURIComponent(phoneNumber)}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sms-compliance/blocked-numbers"] });
+      toast({
+        title: "Success",
+        description: "Phone number unblocked successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to unblock phone number",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Settings mutation for SMS throttle
   const updateSettingsMutation = useMutation({
     mutationFn: (data: any) => apiRequest("PUT", "/api/settings", data),
@@ -2007,7 +2036,7 @@ export default function Communications() {
         </section>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-10">
-          <TabsList className="grid w-full grid-cols-5 gap-2 rounded-2xl border border-white/15 bg-white/10 p-2 text-blue-100 backdrop-blur">
+          <TabsList className="grid w-full grid-cols-7 gap-2 rounded-2xl border border-white/15 bg-white/10 p-2 text-blue-100 backdrop-blur">
             <TabsTrigger
               value="overview"
               className="rounded-xl px-4 py-2.5 text-sm font-semibold text-blue-100 transition data-[state=active]:bg-[#0b1733]/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/20"
@@ -2044,6 +2073,13 @@ export default function Communications() {
               className="rounded-xl px-4 py-2.5 text-sm font-semibold text-blue-100 transition data-[state=active]:bg-[#0b1733]/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/20"
             >
               Sequences
+            </TabsTrigger>
+            <TabsTrigger
+              value="blocked"
+              className="rounded-xl px-4 py-2.5 text-sm font-semibold text-blue-100 transition data-[state=active]:bg-[#0b1733]/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/20"
+            >
+              <Ban className="h-4 w-4 mr-1.5 inline" />
+              Blocked
             </TabsTrigger>
           </TabsList>
 
@@ -4868,6 +4904,123 @@ export default function Communications() {
                         <p className="text-blue-100/60">• Event-Based: Triggered when account created or payment overdue</p>
                       </div>
                     </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Blocked Numbers Tab */}
+          <TabsContent value="blocked" className="space-y-6 text-white">
+            <Card className="rounded-2xl border border-white/15 bg-gradient-to-br from-[#0a1628]/90 to-[#0b1733]/80 shadow-2xl shadow-blue-900/15 backdrop-blur">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-xl font-bold text-blue-50 flex items-center gap-2">
+                    <ShieldOff className="h-5 w-5 text-red-400" />
+                    Blocked Phone Numbers
+                  </CardTitle>
+                  <p className="text-sm text-blue-100/70 mt-1">
+                    Phone numbers that are blocked from receiving SMS messages. Numbers are automatically blocked when consumers reply STOP or when delivery permanently fails.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => refetchBlockedNumbers()}
+                  className="border-white/20 bg-white/5 text-blue-100 hover:bg-white/10"
+                  data-testid="button-refresh-blocked"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {blockedNumbersLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-blue-200/60" />
+                  </div>
+                ) : (blockedNumbers as any[] || []).length > 0 ? (
+                  <div className="space-y-3">
+                    <div className="text-sm text-blue-100/70 mb-4">
+                      {(blockedNumbers as any[]).length} blocked number{(blockedNumbers as any[]).length !== 1 ? 's' : ''}
+                    </div>
+                    <div className="max-h-[500px] overflow-y-auto space-y-2">
+                      {(blockedNumbers as any[]).map((blocked: any) => (
+                        <div 
+                          key={blocked.id} 
+                          className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-4"
+                          data-testid={`blocked-number-${blocked.id}`}
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500/20">
+                              <Phone className="h-5 w-5 text-red-400" />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-blue-50">{blocked.phoneNumber}</p>
+                              <div className="flex items-center gap-2 text-xs text-blue-100/60">
+                                <Badge variant="outline" className="text-xs border-red-400/30 text-red-300">
+                                  {blocked.reason || 'Blocked'}
+                                </Badge>
+                                {blocked.errorCode && (
+                                  <span className="text-blue-100/50">Error: {blocked.errorCode}</span>
+                                )}
+                                <span className="text-blue-100/50">
+                                  {blocked.blockedAt ? new Date(blocked.blockedAt).toLocaleDateString() : 'Unknown date'}
+                                </span>
+                              </div>
+                              {blocked.errorMessage && (
+                                <p className="mt-1 text-xs text-blue-100/50">{blocked.errorMessage}</p>
+                              )}
+                            </div>
+                          </div>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-green-400 hover:text-green-300 hover:bg-green-400/10"
+                                data-testid={`button-unblock-${blocked.id}`}
+                              >
+                                <ShieldCheck className="h-4 w-4 mr-1" />
+                                Unblock
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent className="bg-slate-900 text-white border-white/20">
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Unblock Phone Number</AlertDialogTitle>
+                                <AlertDialogDescription className="text-blue-100/70">
+                                  Are you sure you want to unblock <strong className="text-white">{blocked.phoneNumber}</strong>? 
+                                  This will allow SMS messages to be sent to this number again.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel className="border-white/20 bg-white/5 text-white hover:bg-white/10">
+                                  Cancel
+                                </AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => unblockPhoneMutation.mutate(blocked.phoneNumber)}
+                                  className="bg-green-600 hover:bg-green-700"
+                                >
+                                  Unblock Number
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-white/15 bg-white/5 py-12 text-center text-blue-100/70">
+                    <ShieldCheck className="mx-auto mb-4 h-12 w-12 text-green-400/60" />
+                    <p className="text-base font-semibold text-blue-50">No blocked numbers</p>
+                    <p className="text-sm text-blue-100/60 mt-1">
+                      All phone numbers are currently able to receive SMS messages.
+                    </p>
+                    <p className="text-xs text-blue-100/50 mt-4 max-w-md mx-auto">
+                      Numbers are automatically blocked when consumers reply STOP, STOPALL, or UNSUBSCRIBE, 
+                      or when messages permanently fail to deliver.
+                    </p>
                   </div>
                 )}
               </CardContent>

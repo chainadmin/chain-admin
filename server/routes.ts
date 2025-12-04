@@ -9540,6 +9540,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      // DUPLICATE PAYMENT PROTECTION: Check if a similar payment was processed recently
+      // This prevents double-charges from network timeouts, double-clicks, or browser back/refresh
+      const paymentAmountToCheck = customPaymentAmountCents || account.balanceCents || 0;
+      if (paymentAmountToCheck > 0) {
+        const recentDuplicate = await storage.checkRecentDuplicatePayment(
+          consumerId,
+          accountId,
+          paymentAmountToCheck,
+          5 // 5-minute window
+        );
+        
+        if (recentDuplicate) {
+          console.log(`⚠️ DUPLICATE PAYMENT BLOCKED: Found recent payment for same consumer/account/amount`, {
+            existingPaymentId: recentDuplicate.id,
+            existingTransactionId: recentDuplicate.transactionId,
+            existingCreatedAt: recentDuplicate.createdAt,
+            consumerId,
+            accountId,
+            amountCents: paymentAmountToCheck
+          });
+          return res.status(409).json({
+            success: false,
+            message: "A payment for this amount was already processed within the last few minutes. Please check your payment history before trying again.",
+            existingPaymentId: recentDuplicate.id,
+            existingTransactionId: recentDuplicate.transactionId
+          });
+        }
+      }
+
       // Get arrangement if specified
       let arrangement = null;
       let amountCents = account.balanceCents || 0;
@@ -14259,6 +14288,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
           success: false,
           message: "Payment processing is not configured. Please contact support." 
         });
+      }
+
+      // DUPLICATE PAYMENT PROTECTION: Check if a similar payment was processed recently
+      // This prevents double-charges from network timeouts, double-clicks, or browser back/refresh
+      if (amountCents > 0) {
+        const recentDuplicate = await storage.checkRecentDuplicatePayment(
+          consumer.id,
+          null, // Admin payments don't track specific accountId
+          amountCents,
+          5 // 5-minute window
+        );
+        
+        if (recentDuplicate) {
+          console.log(`⚠️ DUPLICATE ADMIN PAYMENT BLOCKED: Found recent payment for same consumer/amount`, {
+            existingPaymentId: recentDuplicate.id,
+            existingTransactionId: recentDuplicate.transactionId,
+            existingCreatedAt: recentDuplicate.createdAt,
+            consumerId: consumer.id,
+            amountCents
+          });
+          return res.status(409).json({
+            success: false,
+            message: "A payment for this amount was already processed within the last few minutes. Please check your payment history before trying again.",
+            existingPaymentId: recentDuplicate.id,
+            existingTransactionId: recentDuplicate.transactionId
+          });
+        }
       }
 
       console.log('🏦 Admin payment - merchant provider:', merchantProvider);

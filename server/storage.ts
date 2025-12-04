@@ -409,6 +409,7 @@ export interface IStorage {
   // Payment operations
   getPaymentsByTenant(tenantId: string): Promise<(Payment & { consumerName?: string; consumerEmail?: string; accountCreditor?: string })[]>;
   getPaymentById(id: string, tenantId: string): Promise<Payment | null>;
+  checkRecentDuplicatePayment(consumerId: string, accountId: string | null, amountCents: number, windowMinutes?: number): Promise<Payment | null>;
   createPayment(payment: InsertPayment): Promise<Payment>;
   deletePayment(id: string, tenantId: string): Promise<void>;
   bulkDeletePayments(ids: string[], tenantId: string): Promise<number>;
@@ -2595,6 +2596,37 @@ export class DatabaseStorage implements IStorage {
       .limit(1);
     
     return payment || null;
+  }
+
+  async checkRecentDuplicatePayment(
+    consumerId: string, 
+    accountId: string | null, 
+    amountCents: number, 
+    windowMinutes: number = 5
+  ): Promise<Payment | null> {
+    const windowStart = new Date(Date.now() - windowMinutes * 60 * 1000);
+    
+    // Build conditions - accountId may be null for admin payments
+    const conditions = [
+      eq(payments.consumerId, consumerId),
+      eq(payments.amountCents, amountCents),
+      eq(payments.status, 'completed'),
+      gte(payments.createdAt, windowStart)
+    ];
+    
+    // Only check accountId if provided
+    if (accountId) {
+      conditions.push(eq(payments.accountId, accountId));
+    }
+    
+    const [existingPayment] = await db
+      .select()
+      .from(payments)
+      .where(and(...conditions))
+      .orderBy(desc(payments.createdAt))
+      .limit(1);
+    
+    return existingPayment || null;
   }
 
   async createPayment(payment: InsertPayment): Promise<Payment> {

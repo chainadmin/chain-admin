@@ -1197,6 +1197,18 @@ export async function runMigrations() {
       console.log('  ⚠ consumer_id (already exists or error)');
     }
     
+    // Add index for payment duplicate detection (for idempotency checks)
+    console.log('Creating index for payment duplicate detection...');
+    try {
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_payments_duplicate_check 
+        ON payments (consumer_id, account_id, amount_cents, created_at DESC)
+      `);
+      console.log('  ✓ idx_payments_duplicate_check');
+    } catch (err) {
+      console.log('  ⚠ idx_payments_duplicate_check (already exists or error)');
+    }
+    
     console.log('✅ Database migrations completed successfully');
   } catch (error: any) {
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
