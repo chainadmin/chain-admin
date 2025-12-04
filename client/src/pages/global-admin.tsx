@@ -2229,11 +2229,11 @@ export default function GlobalAdmin() {
                         <div className="font-medium text-blue-400">{syncResult.consumersMarkedOptedOut}</div>
                       </div>
                     </div>
-                    {syncResult.errors.length > 0 && (
+                    {syncResult.errors && syncResult.errors.length > 0 && (
                       <div className="mt-3 pt-3 border-t border-red-500/20">
                         <p className="text-sm font-medium text-red-300">Errors:</p>
                         <ul className="text-sm text-red-400/80 list-disc list-inside">
-                          {syncResult.errors.slice(0, 5).map((error, i) => (
+                          {syncResult.errors.slice(0, 5).map((error: string, i: number) => (
                             <li key={i}>{error}</li>
                           ))}
                           {syncResult.errors.length > 5 && (
