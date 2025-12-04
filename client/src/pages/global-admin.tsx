@@ -728,14 +728,20 @@ export default function GlobalAdmin() {
   // SMS Compliance - Query blocked numbers for selected tenant
   const { data: blockedNumbers, isLoading: blockedNumbersLoading } = useQuery({
     queryKey: ["/api/admin/sms-compliance/blocked-numbers", smsComplianceTenantId],
-    queryFn: () => smsComplianceTenantId ? apiRequest("GET", `/api/admin/sms-compliance/blocked-numbers?tenantId=${smsComplianceTenantId}`) : Promise.resolve([]),
+    queryFn: async () => {
+      if (!smsComplianceTenantId) return [];
+      const response = await apiRequest("GET", `/api/admin/sms-compliance/blocked-numbers?tenantId=${smsComplianceTenantId}`);
+      return response.json();
+    },
     enabled: !!smsComplianceTenantId,
   });
 
   // SMS Compliance - Sync historical data
   const syncHistoricalMutation = useMutation({
-    mutationFn: ({ tenantId, daysBack }: { tenantId: string; daysBack: number }) => 
-      apiRequest("POST", "/api/admin/sms-compliance/sync-historical", { tenantId, daysBack }),
+    mutationFn: async ({ tenantId, daysBack }: { tenantId: string; daysBack: number }) => {
+      const response = await apiRequest("POST", "/api/admin/sms-compliance/sync-historical", { tenantId, daysBack });
+      return response.json();
+    },
     onMutate: () => {
       setSyncInProgress(true);
       setSyncResult(null);
