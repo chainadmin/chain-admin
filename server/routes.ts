@@ -9666,7 +9666,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Check if Force Arrangement is enabled - reject one-time payments if so
       // But allow SMAX arrangement payments (external arrangements from SMAX system)
-      if (settings?.forceArrangement) {
+      if (tenantSettings?.forceArrangement) {
         // Detect SMAX arrangement payments: filenumber-linked account with custom amount
         const isSmaxArrangementPayment = !!account.filenumber && !!customPaymentAmountCents && !arrangementId && !simplifiedFlow;
         
@@ -9698,7 +9698,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         hasSimplifiedFlow: !!simplifiedFlow,
         arrangementId,
         accountBalance: amountCents,
-        forceArrangement: settings?.forceArrangement
+        forceArrangement: tenantSettings?.forceArrangement
       });
       
       // Handle simplified flow (new consumer-friendly arrangement creation)
