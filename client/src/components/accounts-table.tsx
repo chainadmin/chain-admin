@@ -231,11 +231,11 @@ export default function AccountsTable({
       ) : (
         <>
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-white/10 text-left">
+            <table className="w-full divide-y divide-white/10 text-left table-fixed">
               <thead className="bg-white/5">
-                <tr className="text-xs font-semibold uppercase tracking-wide text-blue-100/70">
+                <tr className="text-[10px] font-semibold uppercase tracking-wide text-blue-100/70">
                   {showDeleteButton && (
-                    <th className="px-6 py-3">
+                    <th className="px-2 py-2 w-10">
                       <Checkbox
                         checked={selectedAccounts.size === visibleAccounts.length && visibleAccounts.length > 0}
                         onCheckedChange={handleSelectAll}
@@ -243,21 +243,21 @@ export default function AccountsTable({
                       />
                     </th>
                   )}
-                  <th className="px-6 py-3">Consumer</th>
-                  <th className="px-6 py-3">Account</th>
-                  <th className="px-6 py-3">Creditor</th>
-                  <th className="px-6 py-3">Balance</th>
-                  <th className="px-6 py-3">Due date</th>
-                  <th className="px-6 py-3">Status</th>
-                  {showFolderColumn && <th className="px-6 py-3">Folder</th>}
-                  <th className="px-6 py-3">Actions</th>
+                  <th className="px-2 py-2 w-[180px]">Consumer</th>
+                  <th className="px-2 py-2 w-[90px]">Account</th>
+                  <th className="px-2 py-2 w-[100px]">Creditor</th>
+                  <th className="px-2 py-2 w-[80px]">Balance</th>
+                  <th className="px-2 py-2 w-[80px]">Due</th>
+                  <th className="px-2 py-2 w-[70px]">Status</th>
+                  {showFolderColumn && <th className="px-2 py-2 w-[80px]">Folder</th>}
+                  <th className="px-2 py-2">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/10 text-sm text-blue-100/80">
+              <tbody className="divide-y divide-white/10 text-xs text-blue-100/80">
                 {visibleAccounts.map((account) => (
                   <tr key={account.id} className="transition hover:bg-white/10">
                     {showDeleteButton && (
-                      <td className="px-6 py-4 align-middle">
+                      <td className="px-2 py-2 align-middle">
                         <Checkbox
                           checked={selectedAccounts.has(account.id)}
                           onCheckedChange={(checked) => handleSelectAccount(account.id, checked as boolean)}
@@ -265,54 +265,52 @@ export default function AccountsTable({
                         />
                       </td>
                     )}
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-sm font-semibold text-blue-100">
+                    <td className="px-2 py-2">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/10 text-[10px] font-semibold text-blue-100">
                           {getInitials(account.consumer?.firstName, account.consumer?.lastName)}
                         </div>
-                        <div>
-                          <p className="font-semibold text-white">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-white text-xs truncate">
                             {account.consumer?.firstName} {account.consumer?.lastName}
                           </p>
-                          <p className="text-xs text-blue-100/70">{account.consumer?.email}</p>
+                          <p className="text-[10px] text-blue-100/70 truncate">{account.consumer?.email}</p>
                           {account.activeArrangement && (
-                            <p className="mt-0.5 text-xs text-emerald-400/90 font-medium">
-                              {account.activeArrangement.frequency === 'monthly' && '📅 Monthly'}
-                              {account.activeArrangement.frequency === 'weekly' && '📅 Weekly'}
-                              {account.activeArrangement.frequency === 'biweekly' && '📅 Bi-weekly'}
-                              {' '}${((account.activeArrangement.amountCents || 0) / 100).toFixed(2)} payment plan
+                            <p className="text-[10px] text-emerald-400/90 font-medium truncate">
+                              📅 ${((account.activeArrangement.amountCents || 0) / 100).toFixed(0)}/
+                              {account.activeArrangement.frequency === 'monthly' ? 'mo' : account.activeArrangement.frequency === 'weekly' ? 'wk' : 'bi-wk'}
                             </p>
                           )}
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 font-medium text-white">{account.accountNumber || 'N/A'}</td>
-                    <td className="px-6 py-4">{account.creditor}</td>
-                    <td className="px-6 py-4 font-semibold text-white">{formatCurrency(account.balanceCents || 0)}</td>
-                    <td className="px-6 py-4">{account.dueDate ? formatDate(account.dueDate) : 'N/A'}</td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusColor(account.status)}`}>
-                        {account.status || 'Unknown'}
+                    <td className="px-2 py-2 font-medium text-white text-xs truncate">{account.accountNumber || 'N/A'}</td>
+                    <td className="px-2 py-2 truncate">{account.creditor}</td>
+                    <td className="px-2 py-2 font-semibold text-white">{formatCurrency(account.balanceCents || 0)}</td>
+                    <td className="px-2 py-2 text-[10px]">{account.dueDate ? formatDate(account.dueDate) : 'N/A'}</td>
+                    <td className="px-2 py-2">
+                      <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${getStatusColor(account.status)}`}>
+                        {account.status || '?'}
                       </span>
                     </td>
                     {showFolderColumn && (
-                      <td className="px-6 py-4">
+                      <td className="px-2 py-2">
                         {account.folder ? (
-                          <div className="flex items-center gap-2">
-                            <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: account.folder.color }} />
-                            <span>{account.folder.name}</span>
+                          <div className="flex items-center gap-1">
+                            <span className="inline-block h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: account.folder.color }} />
+                            <span className="truncate text-[10px]">{account.folder.name}</span>
                           </div>
                         ) : (
-                          <span className="text-xs text-blue-100/60">No folder</span>
+                          <span className="text-[10px] text-blue-100/60">—</span>
                         )}
                       </td>
                     )}
-                    <td className="px-6 py-4">
-                      <div className="flex flex-wrap items-center gap-2">
+                    <td className="px-2 py-2">
+                      <div className="flex flex-wrap items-center gap-1">
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="rounded-lg border border-white/10 bg-white/10 px-3 text-xs font-semibold text-blue-100 hover:bg-white/20"
+                          className="h-6 rounded border border-white/10 bg-white/10 px-2 text-[10px] font-semibold text-blue-100 hover:bg-white/20"
                           data-testid={`button-view-account-${account.id}`}
                           onClick={() => onView?.(account)}
                         >
@@ -322,7 +320,7 @@ export default function AccountsTable({
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="rounded-lg border border-sky-400/40 bg-sky-500/20 px-3 text-xs font-semibold text-white hover:bg-sky-500/30"
+                            className="h-6 rounded border border-sky-400/40 bg-sky-500/20 px-2 text-[10px] font-semibold text-white hover:bg-sky-500/30"
                             data-testid={`button-edit-account-${account.id}`}
                             onClick={() => onEdit(account)}
                           >
@@ -332,7 +330,7 @@ export default function AccountsTable({
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="rounded-lg border border-white/10 bg-white/10 px-3 text-xs font-semibold text-blue-100 hover:bg-white/20"
+                          className="h-6 rounded border border-white/10 bg-white/10 px-2 text-[10px] font-semibold text-blue-100 hover:bg-white/20"
                           data-testid={`button-contact-account-${account.id}`}
                           onClick={() => onContact?.(account)}
                         >
@@ -342,12 +340,12 @@ export default function AccountsTable({
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="rounded-lg border border-indigo-400/40 bg-indigo-500/20 px-3 text-xs font-semibold text-white hover:bg-indigo-500/30"
+                            className="h-6 rounded border border-indigo-400/40 bg-indigo-500/20 px-2 text-[10px] font-semibold text-white hover:bg-indigo-500/30"
                             data-testid={`button-send-document-${account.id}`}
                             onClick={() => onSendDocument(account)}
                           >
-                            <FileSignature className="h-4 w-4 mr-1" />
-                            Send Document
+                            <FileSignature className="h-3 w-3 mr-0.5" />
+                            Doc
                           </Button>
                         )}
                         {showDeleteButton && (

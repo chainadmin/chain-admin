@@ -1570,32 +1570,32 @@ export default function Accounts() {
           }
         }}
       >
-        <DialogContent className="max-w-2xl bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] border-white/20 text-white">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl border border-white/20 bg-[#0b1733]/95 backdrop-blur-md text-blue-50">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-bold text-white">Compose Email</DialogTitle>
+            <DialogTitle className="text-xl font-bold text-white">Compose Email</DialogTitle>
             <DialogDescription className="text-blue-100/70">
               Send a message to the consumer using the integrated communications system.
             </DialogDescription>
           </DialogHeader>
 
           {selectedAccount && (
-            <div className="space-y-5">
-              <div className="rounded-md border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-                <p className="font-semibold">To: {selectedAccount.consumer?.email}</p>
+            <div className="space-y-4">
+              <div className="rounded-lg border border-sky-400/30 bg-sky-500/10 p-3 text-sm">
+                <p className="font-semibold text-white">To: {selectedAccount.consumer?.email}</p>
                 {selectedAccount.consumer && (
-                  <p className="text-blue-900/80">
+                  <p className="text-blue-100/80">
                     {[selectedAccount.consumer.firstName, selectedAccount.consumer.lastName].filter(Boolean).join(" ")}
                   </p>
                 )}
                 {selectedAccount.accountNumber && (
-                  <p className="mt-1 text-xs text-blue-900/70">
+                  <p className="mt-1 text-xs text-blue-100/60">
                     Account #: {selectedAccount.accountNumber}
                   </p>
                 )}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="compose-template">Template</Label>
+                <Label htmlFor="compose-template" className="text-blue-100">Template</Label>
                 <Select
                   value={composeEmailForm.templateId || "none"}
                   onValueChange={(value) => {
@@ -1613,10 +1613,10 @@ export default function Accounts() {
                   }}
                   disabled={emailTemplatesLoading}
                 >
-                  <SelectTrigger id="compose-template">
+                  <SelectTrigger id="compose-template" className="border-white/20 bg-white/5 text-blue-50">
                     <SelectValue placeholder={emailTemplatesLoading ? "Loading templates..." : "Choose a template (optional)"} />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="border-white/20 bg-[#0f1a3c] text-blue-100">
                     <SelectItem value="none">No template (start from scratch)</SelectItem>
                     {(emailTemplates as any[])?.map((template: any) => (
                       <SelectItem key={template.id} value={template.id}>
@@ -1628,7 +1628,7 @@ export default function Accounts() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="compose-subject">Subject</Label>
+                <Label htmlFor="compose-subject" className="text-blue-100">Subject</Label>
                 <Input
                   id="compose-subject"
                   value={composeEmailForm.subject}
@@ -1636,28 +1636,30 @@ export default function Accounts() {
                     setComposeEmailForm((prev) => ({ ...prev, subject: event.target.value }))
                   }
                   placeholder="Email subject"
+                  className="border-white/20 bg-white/5 text-white placeholder:text-blue-100/50"
                 />
               </div>
 
               <div className="space-y-3">
                 <div className="space-y-2">
-                  <Label htmlFor="compose-body">Message</Label>
+                  <Label htmlFor="compose-body" className="text-blue-100">Message</Label>
                   <Textarea
                     id="compose-body"
                     value={composeEmailForm.body}
                     onChange={(event) =>
                       setComposeEmailForm((prev) => ({ ...prev, body: event.target.value }))
                     }
-                    rows={8}
+                    rows={6}
                     placeholder="Write your message or choose a communication template"
+                    className="border-white/20 bg-white/5 text-white placeholder:text-blue-100/50"
                   />
                 </div>
 
                 {composeEmailForm.body && (
-                  <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                    <p className="mb-2 text-xs font-semibold uppercase text-gray-500">Preview</p>
+                  <div className="rounded-lg border border-white/10 bg-white/5 p-3 max-h-40 overflow-y-auto">
+                    <p className="mb-2 text-xs font-semibold uppercase text-blue-100/60">Preview</p>
                     <div
-                      className="prose prose-sm max-w-none text-gray-800"
+                      className="prose prose-sm prose-invert max-w-none text-blue-100"
                       dangerouslySetInnerHTML={{ __html: buildComposePreviewHtml(composeEmailForm.body) }}
                     />
                   </div>

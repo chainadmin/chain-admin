@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -31,6 +32,9 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
   const [validationResults, setValidationResults] = useState<any>(null);
   const [selectedFolderId, setSelectedFolderId] = useState<string>("");
   const [clearExistingPhones, setClearExistingPhones] = useState<boolean>(false);
+  const [showCreateFolderDialog, setShowCreateFolderDialog] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [newFolderColor, setNewFolderColor] = useState("#3B82F6");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -85,6 +89,45 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
       });
     },
   });
+
+  const createFolderMutation = useMutation({
+    mutationFn: async (data: { name: string; color: string }) => {
+      const response = await apiRequest("POST", "/api/folders", data);
+      return response.json();
+    },
+    onSuccess: (newFolder: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
+      setSelectedFolderId(newFolder.id);
+      setShowCreateFolderDialog(false);
+      setNewFolderName("");
+      setNewFolderColor("#3B82F6");
+      toast({
+        title: "Folder Created",
+        description: `Folder "${newFolder.name}" has been created and selected.`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to Create Folder",
+        description: error?.message || "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleFolderSelect = (value: string) => {
+    if (value === "__create_new__") {
+      setShowCreateFolderDialog(true);
+    } else {
+      setSelectedFolderId(value);
+    }
+  };
+
+  const handleCreateFolder = () => {
+    if (newFolderName.trim()) {
+      createFolderMutation.mutate({ name: newFolderName.trim(), color: newFolderColor });
+    }
+  };
 
   const resetForm = () => {
     setFile(null);
@@ -355,12 +398,18 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
           {/* Folder Selection + Import Options in a row */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             <div className="space-y-1">
-              <Label htmlFor="folder-select" className="text-xs">Destination Folder</Label>
-              <Select value={selectedFolderId} onValueChange={setSelectedFolderId}>
-                <SelectTrigger data-testid="select-folder" className="h-8 text-xs">
+              <Label htmlFor="folder-select" className="text-xs text-blue-100">Destination Folder</Label>
+              <Select value={selectedFolderId} onValueChange={handleFolderSelect}>
+                <SelectTrigger data-testid="select-folder" className="h-8 text-xs border-white/20 bg-white/5 text-blue-50">
                   <SelectValue placeholder="Select folder (optional)" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="border-white/20 bg-[#0f1a3c] text-blue-100">
+                  <SelectItem value="__create_new__" className="text-sky-300 font-medium">
+                    <div className="flex items-center">
+                      <i className="fas fa-plus-circle mr-1.5 text-sky-400"></i>
+                      Create New Folder...
+                    </div>
+                  </SelectItem>
                   {(folders as any[])?.map((folder) => (
                     <SelectItem key={folder.id} value={folder.id}>
                       <div className="flex items-center">
@@ -370,7 +419,7 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
                         />
                         {folder.name}
                         {folder.isDefault && (
-                          <span className="ml-1.5 text-[10px] text-gray-500">(Default)</span>
+                          <span className="ml-1.5 text-[10px] text-blue-100/60">(Default)</span>
                         )}
                       </div>
                     </SelectItem>
@@ -592,6 +641,60 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
           </Button>
         </div>
       </DialogContent>
+
+      {/* Create New Folder Dialog */}
+      <Dialog open={showCreateFolderDialog} onOpenChange={setShowCreateFolderDialog}>
+        <DialogContent className="max-w-sm rounded-2xl border border-white/20 bg-[#0b1733]/95 backdrop-blur-md text-blue-50">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold text-white">Create New Folder</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="new-folder-name" className="text-xs text-blue-100">Folder Name</Label>
+              <Input
+                id="new-folder-name"
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                placeholder="Enter folder name"
+                className="h-9 border-white/20 bg-white/5 text-white placeholder:text-blue-100/50"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-folder-color" className="text-xs text-blue-100">Folder Color</Label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  id="new-folder-color"
+                  value={newFolderColor}
+                  onChange={(e) => setNewFolderColor(e.target.value)}
+                  className="h-9 w-12 cursor-pointer rounded border border-white/20 bg-transparent"
+                />
+                <div 
+                  className="h-6 w-6 rounded-full border border-white/20" 
+                  style={{ backgroundColor: newFolderColor }}
+                />
+                <span className="text-xs text-blue-100/70">{newFolderColor}</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowCreateFolderDialog(false)}
+              className="h-8 text-xs border-white/20 text-blue-100 hover:bg-white/10"
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleCreateFolder}
+              disabled={!newFolderName.trim() || createFolderMutation.isPending}
+              className="h-8 text-xs"
+            >
+              {createFolderMutation.isPending ? "Creating..." : "Create Folder"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }
