@@ -573,11 +573,15 @@ export default function ConsumerDashboardSimple() {
   };
 
   // Get arrangements applicable to the selected account
+  const minimumMonthlyPaymentCents = settings?.minimumMonthlyPayment ?? 5000; // Default $50
+  
   const applicableArrangements = selectedAccount && arrangements
     ? (arrangements as any).templateOptions?.filter((arr: any) => {
         // Check if balance is within range
         const inBalanceRange = selectedAccount.balanceCents >= arr.minBalance && 
           selectedAccount.balanceCents <= arr.maxBalance;
+        
+        if (!inBalanceRange) return false;
         
         // Block one-time payments if forceArrangement is enabled OR consumer has no active payment schedules
         if (arr.planType === 'one_time_payment') {
@@ -587,10 +591,19 @@ export default function ConsumerDashboardSimple() {
           }
           // Otherwise, only allow if consumer has an active payment schedule
           const hasActiveSchedule = paymentSchedules && paymentSchedules.length > 0;
-          return inBalanceRange && hasActiveSchedule;
+          return hasActiveSchedule;
         }
         
-        return inBalanceRange;
+        // Calculate what the payment would be for this arrangement
+        const calculatedPaymentAmount = calculateArrangementPayment(arr, selectedAccount.balanceCents || 0);
+        
+        // Filter out arrangements where the calculated payment is less than the minimum
+        // Exception: pay_in_full is always allowed (consumer paying their entire balance)
+        if (arr.planType !== 'pay_in_full' && calculatedPaymentAmount < minimumMonthlyPaymentCents) {
+          return false;
+        }
+        
+        return true;
       }) || []
     : [];
   
