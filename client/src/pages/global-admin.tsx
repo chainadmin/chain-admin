@@ -808,6 +808,30 @@ export default function GlobalAdmin() {
     },
   });
 
+  // Balance Refresh - Recalculate all account balances from payment history
+  const [refreshBalanceResult, setRefreshBalanceResult] = useState<any>(null);
+  const [refreshBalanceTenantId, setRefreshBalanceTenantId] = useState<string>('');
+  const refreshBalancesMutation = useMutation({
+    mutationFn: async ({ tenantId }: { tenantId?: string }) => {
+      const response = await apiRequest("POST", "/api/admin/refresh-balances", { tenantId: tenantId || undefined });
+      return response.json();
+    },
+    onSuccess: (data: any) => {
+      setRefreshBalanceResult(data);
+      toast({
+        title: "Balances Refreshed",
+        description: `Updated ${data.updatedCount} of ${data.totalAccounts} accounts.`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Refresh Failed",
+        description: error.message || "Failed to refresh account balances",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleCreateAgency = () => {
     if (!newAgencyName.trim() || !newAgencyEmail.trim()) {
       toast({
@@ -2370,6 +2394,101 @@ export default function GlobalAdmin() {
                   )}
                 </div>
               </>
+            )}
+          </div>
+        </div>
+
+        {/* Balance Maintenance Section */}
+        <div className="rounded-3xl border border-white/10 bg-white/5 shadow-lg shadow-blue-900/20 backdrop-blur">
+          <div className="p-6 border-b border-white/10">
+            <div className="flex items-center space-x-3">
+              <RefreshCw className="h-5 w-5 text-blue-300" />
+              <h2 className="text-xl font-semibold text-blue-50">Balance Maintenance</h2>
+            </div>
+            <p className="text-sm text-blue-100/60 mt-1">Recalculate account balances from payment history</p>
+          </div>
+          <div className="p-6 space-y-4">
+            <div className="flex items-end gap-4">
+              <div className="flex-1">
+                <Label className="text-blue-100/80">Select Agency (optional)</Label>
+                <Select 
+                  value={refreshBalanceTenantId} 
+                  onValueChange={setRefreshBalanceTenantId}
+                >
+                  <SelectTrigger className="bg-white/5 border-white/10 text-blue-100" data-testid="select-refresh-tenant">
+                    <SelectValue placeholder="All Agencies" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Agencies</SelectItem>
+                    {(tenants as any[])?.map((tenant: any) => (
+                      <SelectItem key={tenant.id} value={tenant.id}>{tenant.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                onClick={() => refreshBalancesMutation.mutate({ 
+                  tenantId: refreshBalanceTenantId === 'all' ? undefined : refreshBalanceTenantId || undefined 
+                })}
+                disabled={refreshBalancesMutation.isPending}
+                className="bg-blue-600 hover:bg-blue-700"
+                data-testid="button-refresh-balances"
+              >
+                {refreshBalancesMutation.isPending ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Refreshing...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Refresh All Balances
+                  </>
+                )}
+              </Button>
+            </div>
+            
+            {refreshBalanceResult && (
+              <div className="mt-4 p-4 rounded bg-emerald-900/30 border border-emerald-500/30">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <span className="text-blue-100/60">Total Accounts:</span>
+                    <div className="font-medium text-blue-100">{refreshBalanceResult.totalAccounts}</div>
+                  </div>
+                  <div>
+                    <span className="text-blue-100/60">Updated:</span>
+                    <div className="font-medium text-emerald-300">{refreshBalanceResult.updatedCount}</div>
+                  </div>
+                  <div>
+                    <span className="text-blue-100/60">Errors:</span>
+                    <div className="font-medium text-red-300">{refreshBalanceResult.errorCount}</div>
+                  </div>
+                  <div>
+                    <span className="text-blue-100/60">Status:</span>
+                    <div className="font-medium text-emerald-300">Complete</div>
+                  </div>
+                </div>
+                {refreshBalanceResult.updates?.length > 0 && (
+                  <div className="mt-4">
+                    <h4 className="text-sm font-medium text-blue-100 mb-2">Updated Accounts:</h4>
+                    <div className="max-h-40 overflow-y-auto space-y-1 text-xs">
+                      {refreshBalanceResult.updates.slice(0, 20).map((update: any, idx: number) => (
+                        <div key={idx} className="flex justify-between p-2 bg-white/5 rounded">
+                          <span className="text-blue-100">{update.filenumber || update.accountId}</span>
+                          <span className="text-blue-100/60">
+                            ${(update.previousBalance / 100).toFixed(2)} → ${(update.newBalance / 100).toFixed(2)}
+                          </span>
+                        </div>
+                      ))}
+                      {refreshBalanceResult.updates.length > 20 && (
+                        <div className="text-center text-blue-100/60">
+                          ...and {refreshBalanceResult.updates.length - 20} more
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>

@@ -18002,6 +18002,97 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Refresh all account balances by recalculating from payment history
+  app.post('/api/admin/refresh-balances', isPlatformAdmin, async (req: any, res) => {
+    try {
+      console.log('🔄 Starting balance refresh for all accounts...');
+      
+      const { tenantId } = req.body;
+      
+      // Get all accounts (optionally filtered by tenant)
+      const allAccounts = tenantId 
+        ? await storage.getAccounts(tenantId)
+        : await db.select().from(accounts);
+      
+      console.log(`📊 Found ${allAccounts.length} accounts to process`);
+      
+      let updatedCount = 0;
+      let errorCount = 0;
+      const updates: any[] = [];
+      
+      for (const account of allAccounts) {
+        try {
+          // Skip accounts without originalBalanceCents - we can't reliably recalculate
+          if (!account.originalBalanceCents) {
+            console.log(`⏭️ Skipping account ${account.filenumber || account.id}: no originalBalanceCents`);
+            continue;
+          }
+          
+          // Get all completed payments for this account (with tenant scoping for security)
+          const accountPayments = await db
+            .select()
+            .from(payments)
+            .where(
+              and(
+                eq(payments.accountId, account.id),
+                eq(payments.tenantId, account.tenantId),
+                eq(payments.status, 'completed')
+              )
+            );
+          
+          // Sum up all completed payments
+          const totalPaidCents = accountPayments.reduce((sum, p) => {
+            const amount = p.amountCents || 0;
+            return sum + (Number.isFinite(amount) ? amount : 0);
+          }, 0);
+          
+          // Get original balance (from import) - stored in originalBalanceCents
+          const originalBalance = account.originalBalanceCents;
+          
+          // Calculate what the balance should be
+          const expectedBalance = Math.max(0, originalBalance - totalPaidCents);
+          const currentBalance = account.balanceCents || 0;
+          
+          // Only update if there's a discrepancy
+          if (expectedBalance !== currentBalance) {
+            await storage.updateAccount(account.id, {
+              balanceCents: expectedBalance,
+            });
+            
+            updates.push({
+              accountId: account.id,
+              filenumber: account.filenumber,
+              previousBalance: currentBalance,
+              newBalance: expectedBalance,
+              totalPayments: totalPaidCents,
+              paymentCount: accountPayments.length,
+            });
+            
+            updatedCount++;
+            console.log(`✅ Updated account ${account.filenumber || account.id}: ${currentBalance} -> ${expectedBalance} (${accountPayments.length} payments totaling ${totalPaidCents})`);
+          }
+        } catch (accountError) {
+          console.error(`❌ Error processing account ${account.id}:`, accountError);
+          errorCount++;
+        }
+      }
+      
+      console.log(`🔄 Balance refresh complete: ${updatedCount} updated, ${errorCount} errors`);
+      
+      res.json({
+        success: true,
+        message: `Refreshed ${updatedCount} account balances`,
+        totalAccounts: allAccounts.length,
+        updatedCount,
+        errorCount,
+        updates,
+      });
+    } catch (error) {
+      console.error("Error refreshing balances:", error);
+      res.status(500).json({ message: "Failed to refresh balances" });
+    }
+  });
+
   // Twilio webhook endpoint for SMS delivery tracking and usage
   app.post('/api/webhooks/twilio', async (req, res) => {
     try {
