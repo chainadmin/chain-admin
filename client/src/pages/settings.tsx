@@ -3306,7 +3306,7 @@ export default function Settings() {
                           Add Arrangement
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="max-w-lg border-white/10 bg-[#0f172a] text-blue-50">
+                      <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto border-white/10 bg-[#0f172a] text-blue-50">
                         <DialogHeader>
                           <DialogTitle className="text-lg font-semibold text-white">Create Payment Arrangement</DialogTitle>
                         </DialogHeader>

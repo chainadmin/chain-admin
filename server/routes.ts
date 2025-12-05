@@ -7312,6 +7312,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         nmiSecurityKey: z.string().nullable().optional(),
         useSandbox: z.boolean().optional(),
         enableOnlinePayments: z.boolean().optional(),
+        // Consumer portal payment restrictions
+        forceArrangement: z.boolean().optional(),
       });
 
       const validatedData = settingsSchema.parse(req.body);
