@@ -14,6 +14,8 @@ import {
   tenantSettings,
   consumers,
   accounts as accountsTable,
+  accounts,
+  payments,
   agencyCredentials,
   users,
   subscriptionPlans,
