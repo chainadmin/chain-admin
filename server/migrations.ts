@@ -1257,6 +1257,161 @@ export async function runMigrations() {
       console.log('  ⚠ sequence_step_id (already exists or error)');
     }
     
+    // Create email_replies table for inbound email tracking
+    console.log('Creating email_replies table...');
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS email_replies (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          consumer_id UUID REFERENCES consumers(id) ON DELETE SET NULL,
+          from_email TEXT NOT NULL,
+          to_email TEXT NOT NULL,
+          subject TEXT NOT NULL,
+          text_body TEXT,
+          html_body TEXT,
+          message_id TEXT,
+          in_reply_to_message_id TEXT,
+          is_read BOOLEAN DEFAULT false,
+          read_at TIMESTAMP,
+          read_by TEXT,
+          notes TEXT,
+          received_at TIMESTAMP DEFAULT NOW(),
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      console.log('  ✓ email_replies table');
+    } catch (err) {
+      console.log('  ⚠ email_replies (already exists)');
+    }
+    
+    // Create sms_replies table for inbound SMS tracking
+    console.log('Creating sms_replies table...');
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS sms_replies (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          consumer_id UUID REFERENCES consumers(id) ON DELETE SET NULL,
+          from_phone TEXT NOT NULL,
+          to_phone TEXT NOT NULL,
+          message_body TEXT NOT NULL,
+          message_sid TEXT,
+          num_media BIGINT DEFAULT 0,
+          media_urls TEXT[],
+          is_read BOOLEAN DEFAULT false,
+          read_at TIMESTAMP,
+          read_by TEXT,
+          notes TEXT,
+          received_at TIMESTAMP DEFAULT NOW(),
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      console.log('  ✓ sms_replies table');
+    } catch (err) {
+      console.log('  ⚠ sms_replies (already exists)');
+    }
+    
+    // Create automation_executions table for tracking automation runs
+    console.log('Creating automation_executions table...');
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS automation_executions (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          automation_id UUID NOT NULL REFERENCES communication_automations(id) ON DELETE CASCADE,
+          executed_at TIMESTAMP DEFAULT NOW(),
+          status TEXT NOT NULL CHECK (status IN ('success', 'failed', 'partial')),
+          total_sent BIGINT DEFAULT 0,
+          total_failed BIGINT DEFAULT 0,
+          error_message TEXT,
+          execution_details JSONB
+        )
+      `);
+      console.log('  ✓ automation_executions table');
+    } catch (err) {
+      console.log('  ⚠ automation_executions (already exists)');
+    }
+    
+    // Create messaging_usage_events table for usage tracking
+    console.log('Creating messaging_usage_events table...');
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS messaging_usage_events (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          provider TEXT NOT NULL,
+          message_type TEXT NOT NULL,
+          quantity INTEGER NOT NULL DEFAULT 1,
+          external_message_id TEXT NOT NULL,
+          occurred_at TIMESTAMP DEFAULT NOW(),
+          metadata JSONB DEFAULT '{}'::jsonb,
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      console.log('  ✓ messaging_usage_events table');
+      
+      // Create indexes for messaging_usage_events
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS messaging_usage_events_external_idx 
+        ON messaging_usage_events(external_message_id)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS messaging_usage_events_tenant_period_idx 
+        ON messaging_usage_events(tenant_id, occurred_at)
+      `);
+      console.log('  ✓ messaging_usage_events indexes');
+    } catch (err) {
+      console.log('  ⚠ messaging_usage_events (already exists)');
+    }
+    
+    // Create communication_sequence_steps table
+    console.log('Creating communication_sequence_steps table...');
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS communication_sequence_steps (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          sequence_id UUID NOT NULL REFERENCES communication_sequences(id) ON DELETE CASCADE,
+          step_type TEXT NOT NULL CHECK (step_type IN ('email', 'sms', 'signature_request')),
+          template_id UUID,
+          step_order BIGINT NOT NULL,
+          delay_days BIGINT DEFAULT 0,
+          delay_hours BIGINT DEFAULT 0,
+          conditions JSONB,
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      console.log('  ✓ communication_sequence_steps table');
+    } catch (err) {
+      console.log('  ⚠ communication_sequence_steps (already exists)');
+    }
+    
+    // Create communication_sequence_enrollments table
+    console.log('Creating communication_sequence_enrollments table...');
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS communication_sequence_enrollments (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          sequence_id UUID NOT NULL REFERENCES communication_sequences(id) ON DELETE CASCADE,
+          consumer_id UUID NOT NULL REFERENCES consumers(id) ON DELETE CASCADE,
+          current_step_id UUID REFERENCES communication_sequence_steps(id),
+          current_step_order BIGINT DEFAULT 1,
+          status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'completed', 'paused', 'cancelled')),
+          enrolled_at TIMESTAMP DEFAULT NOW(),
+          next_message_at TIMESTAMP,
+          completed_at TIMESTAMP,
+          last_message_sent_at TIMESTAMP,
+          messages_sent BIGINT DEFAULT 0,
+          messages_opened BIGINT DEFAULT 0,
+          messages_clicked BIGINT DEFAULT 0,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      console.log('  ✓ communication_sequence_enrollments table');
+    } catch (err) {
+      console.log('  ⚠ communication_sequence_enrollments (already exists)');
+    }
+    
     console.log('✅ Database migrations completed successfully');
   } catch (error: any) {
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
