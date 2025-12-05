@@ -14,7 +14,6 @@ import {
   tenantSettings,
   consumers,
   accounts as accountsTable,
-  accounts,
   payments,
   agencyCredentials,
   users,
@@ -18008,13 +18007,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/admin/refresh-balances', isPlatformAdmin, async (req: any, res) => {
     try {
       console.log('🔄 Starting balance refresh for all accounts...');
+      console.log('Request body:', JSON.stringify(req.body));
       
       const { tenantId } = req.body;
+      console.log('Tenant ID filter:', tenantId || 'ALL');
       
       // Get all accounts (optionally filtered by tenant)
-      const allAccounts = tenantId 
-        ? await storage.getAccounts(tenantId)
-        : await db.select().from(accounts);
+      let allAccounts: any[];
+      try {
+        if (tenantId) {
+          console.log('Fetching accounts for tenant:', tenantId);
+          allAccounts = await storage.getAccounts(tenantId);
+        } else {
+          console.log('Fetching all accounts from database...');
+          allAccounts = await db.select().from(accounts);
+        }
+      } catch (fetchError: any) {
+        console.error('❌ Error fetching accounts:', fetchError);
+        return res.status(500).json({ message: "Failed to fetch accounts", error: fetchError.message });
+      }
       
       console.log(`📊 Found ${allAccounts.length} accounts to process`);
       
@@ -18027,6 +18038,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Skip accounts without originalBalanceCents - we can't reliably recalculate
           if (!account.originalBalanceCents) {
             console.log(`⏭️ Skipping account ${account.filenumber || account.id}: no originalBalanceCents`);
+            continue;
+          }
+          
+          // Skip accounts without tenantId - data integrity issue
+          if (!account.tenantId) {
+            console.log(`⏭️ Skipping account ${account.filenumber || account.id}: no tenantId`);
             continue;
           }
           
