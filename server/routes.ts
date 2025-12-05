@@ -13231,7 +13231,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     tenantWithSettings
                   );
                   
-                  // Send email
+                  // Send email via broadcast stream (marketing emails)
                   const { emailService } = await import('./emailService');
                   await emailService.sendEmail({
                     to: consumer.email || '',
@@ -13239,6 +13239,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     html,
                     tenantId: automation.tenantId,
                     tag: 'automation',
+                    useBroadcastStream: true, // Use broadcast stream for automation emails
                     metadata: {
                       automationId: automation.id,
                       automationName: automation.name,

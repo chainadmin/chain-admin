@@ -26,6 +26,7 @@ export interface EmailOptions {
   metadata?: Record<string, MetadataValue>;
   tenantId?: string; // For usage tracking
   consumerId?: string; // For conversation tracking - link email to consumer
+  useBroadcastStream?: boolean; // Use broadcast stream for marketing/bulk emails (automations, campaigns)
 }
 
 // Default sender address - verified in Postmark
@@ -63,7 +64,7 @@ export class EmailService {
       const POSTMARK_INBOUND_EMAIL = '0f090c8f2b6c0860ffa1c36028828ba0@inbound.postmarkapp.com';
       const replyToEmail = options.replyTo || POSTMARK_INBOUND_EMAIL;
 
-      const result = await postmarkClient.sendEmail({
+      const emailPayload: any = {
         From: fromEmail,
         To: options.to,
         ReplyTo: replyToEmail,
@@ -73,7 +74,14 @@ export class EmailService {
         Tag: options.tag,
         Metadata: normalizedMetadata,
         TrackOpens: true, // Enable open tracking
-      });
+      };
+      
+      // Use broadcast stream for marketing/bulk emails (automations, campaigns)
+      if (options.useBroadcastStream) {
+        emailPayload.MessageStream = getBroadcastStreamId();
+      }
+      
+      const result = await postmarkClient.sendEmail(emailPayload);
 
       // Log email to database if tenantId is provided
       if (options.tenantId) {
