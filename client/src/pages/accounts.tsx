@@ -335,7 +335,7 @@ export default function Accounts() {
 
   const sendEmailMutation = useMutation({
     mutationFn: async (payload: any) => {
-      const response = await apiRequest("POST", "/api/communications/send-email", payload);
+      const response = await apiRequest("POST", "/api/send-email", payload);
       return response.json();
     },
     onSuccess: () => {
