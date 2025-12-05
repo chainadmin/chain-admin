@@ -782,6 +782,18 @@ export async function runMigrations() {
     } catch (err) {
       console.log('  ⚠ global_document_id index (already exists)');
     }
+
+    // Add document_content column to tenant_agreements
+    console.log('Adding document_content column to tenant_agreements...');
+    try {
+      await client.query(`
+        ALTER TABLE tenant_agreements 
+        ADD COLUMN IF NOT EXISTS document_content TEXT
+      `);
+      console.log('  ✓ document_content column added');
+    } catch (err) {
+      console.log('  ⚠ document_content column (already exists)');
+    }
     
     // Create service activation requests table for à la carte service approvals
     console.log('Creating service_activation_requests table...');
