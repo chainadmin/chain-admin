@@ -1354,7 +1354,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Get consumer's accounts
-      const accountsList = await storage.getAccountsByConsumer(consumer.id);
+      let accountsList = await storage.getAccountsByConsumer(consumer.id);
 
       // Get tenant info for display
       const tenant = tenantId
@@ -1365,6 +1365,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get tenant settings
       const tenantSettings = tenant?.id ? await storage.getTenantSettings(tenant.id) : undefined;
+
+      // SMAX SYNC: If SMAX is enabled, pull fresh account data from SMAX
+      if (tenant?.id && tenantSettings?.smaxEnabled) {
+        console.log('🔄 SMAX enabled - syncing account data for consumer portal access');
+        
+        for (const account of accountsList) {
+          if (account.filenumber) {
+            try {
+              // Get fresh account data from SMAX
+              const smaxAccount = await smaxService.getAccount(tenant.id, account.filenumber);
+              
+              if (smaxAccount) {
+                // Parse and normalize balance from SMAX
+                const rawBalance = smaxAccount.balance || smaxAccount.currentbalance || smaxAccount.balancedue || '0';
+                const balanceFloat = parseFloat(rawBalance.toString().replace(/[^0-9.-]/g, ''));
+                
+                // Guard against NaN/invalid values - skip balance update if SMAX returns garbage
+                if (!Number.isFinite(balanceFloat)) {
+                  console.warn('⚠️ SMAX returned invalid balance, skipping balance sync:', {
+                    filenumber: account.filenumber,
+                    rawSmaxBalance: rawBalance,
+                    parsedValue: balanceFloat
+                  });
+                  // Still update status if available
+                  if (smaxAccount.statusname && smaxAccount.statusname !== account.status) {
+                    await storage.updateAccount(account.id, {
+                      status: smaxAccount.statusname,
+                    });
+                    account.status = smaxAccount.statusname;
+                    console.log('✅ Account status updated from SMAX (balance skipped):', {
+                      filenumber: account.filenumber,
+                      newStatus: smaxAccount.statusname
+                    });
+                  }
+                  continue;
+                }
+                
+                // Normalize to cents - SMAX may return dollars or cents
+                // Clamp to non-negative to prevent invalid negative balances
+                const balanceCents = Math.max(0, rawBalance.toString().includes('.')
+                  ? Math.round(balanceFloat * 100)
+                  : Math.round(balanceFloat));
+                
+                console.log('💰 SMAX Balance Sync:', {
+                  filenumber: account.filenumber,
+                  rawSmaxBalance: rawBalance,
+                  normalizedCents: balanceCents,
+                  currentLocalBalance: account.balanceCents,
+                  smaxStatus: smaxAccount.statusname || smaxAccount.status
+                });
+                
+                // Update local account with SMAX data if different
+                if (balanceCents !== account.balanceCents || 
+                    (smaxAccount.statusname && smaxAccount.statusname !== account.status)) {
+                  await storage.updateAccount(account.id, {
+                    balanceCents: balanceCents,
+                    status: smaxAccount.statusname || account.status,
+                  });
+                  
+                  // Update the account in the list for immediate response
+                  account.balanceCents = balanceCents;
+                  if (smaxAccount.statusname) {
+                    account.status = smaxAccount.statusname;
+                  }
+                  
+                  console.log('✅ Account updated from SMAX:', {
+                    filenumber: account.filenumber,
+                    newBalance: balanceCents,
+                    newStatus: smaxAccount.statusname
+                  });
+                }
+              }
+            } catch (smaxError) {
+              console.error('⚠️ SMAX sync error for filenumber:', account.filenumber, smaxError);
+              // Non-blocking - continue with local data if SMAX fails
+            }
+          }
+        }
+      }
 
       // Get payment schedules for this consumer
       const paymentSchedules = tenant?.id ? await storage.getPaymentSchedulesByConsumer(consumer.id, tenant.id) : [];
