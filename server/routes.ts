@@ -16929,9 +16929,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     <table style="width: 100%; border-collapse: collapse;">
       <tr><td style="padding: 8px 0; color: #64748b;">Company:</td><td style="padding: 8px 0; font-weight: 600;">${metadata.companyName || ''}</td></tr>
       <tr><td style="padding: 8px 0; color: #64748b;">Plan:</td><td style="padding: 8px 0; font-weight: 600;">${metadata.pricingTier || ''}</td></tr>
+      <tr><td style="padding: 8px 0; color: #64748b;">Base Monthly Rate:</td><td style="padding: 8px 0; font-weight: 600;">${metadata.monthlyPrice || ''}</td></tr>
       <tr><td style="padding: 8px 0; color: #64748b;">Add-ons:</td><td style="padding: 8px 0;">${metadata.addonsList || 'None'}</td></tr>
+      <tr style="border-top: 1px solid #cbd5e1;"><td style="padding: 12px 0; color: #1e40af; font-weight: 600;">Total Monthly:</td><td style="padding: 12px 0; font-weight: 700; font-size: 18px; color: #059669;">${metadata.totalMonthlyPrice || ''}</td></tr>
       <tr><td style="padding: 8px 0; color: #64748b;">Billing Start:</td><td style="padding: 8px 0;">${metadata.billingStartDate || ''}</td></tr>
     </table>
+    <p style="font-size: 12px; color: #f59e0b; margin: 15px 0 0; font-style: italic;">* Amount subject to change based on overage usage</p>
   </div>
 
   <h2 style="color: #1e40af; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">Agency SaaS Agreement</h2>
@@ -17099,8 +17102,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tenant = await storage.getTenant(agreement.tenantId);
       const template = await storage.getGlobalDocumentTemplateById(agreement.globalDocumentId);
 
-      // Use stored documentContent if available, otherwise generate from template
-      const content = agreement.documentContent || template?.content || '';
+      // Use stored documentContent if available, otherwise regenerate from agreementMetadata
+      // NEVER fall back to template.content (that's the email template, not the full contract)
+      let content = agreement.documentContent;
+      if (!content && agreement.agreementMetadata) {
+        // Regenerate the full contract from stored metadata
+        content = generateContractDocument(agreement.agreementMetadata as Record<string, any>);
+      }
+      if (!content) {
+        content = '<p>Contract content unavailable. Please contact support.</p>';
+      }
 
       res.json({
         ...agreement,
@@ -19295,8 +19306,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ? { ...agreement.agreementMetadata as Record<string, any>, agreementLink }
         : { agreementLink };
 
-      // Use stored documentContent if available, otherwise fall back to template content
-      const content = agreement.documentContent || template.content;
+      // Use stored documentContent if available, otherwise regenerate from agreementMetadata
+      // NEVER fall back to template.content (that's the email template, not the full contract)
+      let content = agreement.documentContent;
+      if (!content && agreement.agreementMetadata) {
+        // Regenerate the full contract from stored metadata
+        content = generateContractDocument(agreement.agreementMetadata as Record<string, any>);
+      }
+      if (!content) {
+        // Last resort fallback - should not happen for properly created agreements
+        content = '<p>Contract content unavailable. Please contact support.</p>';
+      }
 
       res.json({
         id: agreement.id,
