@@ -16978,7 +16978,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   <h3 style="color: #334155;">Overages</h3>
   <div style="background: #fef3c7; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #f59e0b;">
     <p style="margin: 0 0 10px;"><strong>Email Overage:</strong> $2.50 per 1,000 emails beyond your plan's monthly allotment.</p>
-    <p style="margin: 0 0 10px;"><strong>SMS Overage:</strong> $0.02 per SMS segment beyond your plan's monthly allotment.</p>
+    <p style="margin: 0 0 10px;"><strong>SMS Overage:</strong> $0.03 per SMS segment beyond your plan's monthly allotment.</p>
     <p style="margin: 0; font-size: 13px; color: #64748b;"><em>Note: SMS messages longer than 160 characters are split into multiple segments. Each segment counts toward your usage.</em></p>
   </div>
 
