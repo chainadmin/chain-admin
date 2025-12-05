@@ -10047,49 +10047,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const cardLast4 = paymentResult.cardLast4 || opaqueDataValue?.slice(-4) || 'XXXX';
         const cardBrand = paymentResult.cardType || 'unknown';
 
-        // Create payment record
-        const payment = await storage.createPayment({
-          tenantId: tenantId,
-          consumerId: consumerId,
-          accountId: accountId || null,
+        // Use unified payment processing helper for successful payments
+        // This handles: payment record creation, balance updates, events, and notifications
+        const payment = await processSuccessfulPayment({
+          tenantId,
+          consumerId,
+          accountId,
+          account,
           amountCents,
-          paymentMethod: 'credit_card',
-          status: 'completed',
           transactionId: paymentResult.transactionId || `authnet_${Date.now()}`,
-          processorResponse: JSON.stringify(paymentResult),
-          processedAt: new Date(),
-          notes: arrangement ? `${arrangement.name} - Payment` : 'Payment',
+          processorResponse: paymentResult,
+          cardLast4,
+          cardName: cardName || '',
+          zipCode,
+          arrangement,
+          settings,
         });
 
-        // Update account balance
-        await storage.updateAccount(accountId, {
-          balanceCents: Math.max(0, (account.balanceCents || 0) - amountCents),
-        });
-
-        // Send notification to admins about successful payment
+        // Sync payment to SMAX if enabled and account has filenumber
         const consumer = await storage.getConsumer(consumerId);
-        if (consumer) {
-          await notifyTenantAdmins({
-            tenantId,
-            subject: 'New Payment Received',
-            eventType: 'payment_made',
-            consumer: {
-              firstName: consumer.firstName || '',
-              lastName: consumer.lastName || '',
-              email: consumer.email || '',
-            },
-            amount: amountCents,
-          }).catch(err => console.error('Failed to send payment notification:', err));
+        if (settings.smaxEnabled && account.filenumber && consumer) {
+          try {
+            const { smaxService } = await import('./smaxService');
+            const payorName = `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim() || 'Consumer';
+            
+            console.log('📤 Sending Authorize.net payment to SMAX:', {
+              filenumber: account.filenumber,
+              payorName,
+              amount: (amountCents / 100).toFixed(2),
+              transactionId: paymentResult.transactionId,
+              status: 'PROCESSED'
+            });
+            
+            await smaxService.insertPayment(tenantId, {
+              filenumber: account.filenumber,
+              paymentdate: new Date().toISOString().split('T')[0],
+              payorname: payorName,
+              paymentmethod: 'CREDIT CARD',
+              paymentstatus: 'PROCESSED',
+              typeofpayment: 'Online',
+              checkaccountnumber: '',
+              checkroutingnumber: '',
+              checkaccounttype: '',
+              checkaddress: '',
+              checkcity: '',
+              checkstate: '',
+              checkzip: '',
+              cardtype: cardBrand || '',
+              cardnumber: cardLast4 ? `****${cardLast4}` : '',
+              threedigitnumber: '',
+              cardexpirationmonth: expiryMonth || '',
+              cardexpirationyear: expiryYear || '',
+              cardexpirationdate: expiryMonth && expiryYear ? `${expiryMonth}/${expiryYear.slice(-2)}` : '',
+              paymentamount: (amountCents / 100).toFixed(2),
+              acceptedfees: '0.00',
+              printed: 'No',
+              invoice: paymentResult.transactionId || '',
+              cardLast4: cardLast4,
+              transactionid: paymentResult.transactionId || undefined,
+            });
 
-          await emailService.sendPaymentNotification({
-            tenantId,
-            consumerName: `${consumer.firstName} ${consumer.lastName}`,
-            accountNumber: account.accountNumber || 'N/A',
-            amountCents,
-            paymentMethod: 'Credit Card',
-            transactionId: paymentResult.transactionId || undefined,
-            paymentType: 'one_time',
-          }).catch(err => console.error('Failed to send payment notification to contact email:', err));
+            console.log('✅ Authorize.net payment synced to SMAX');
+          } catch (smaxError) {
+            console.error('Failed to sync Authorize.net payment to SMAX:', smaxError);
+          }
         }
 
         // Create customer payment profile and save payment method if needed
@@ -11090,40 +11111,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
           cardBrand = usaepayResult.cardtype;
         }
 
-        // Create payment record
-        // NOTE: processedAt is ALWAYS the actual processing time (now), never the user-supplied paymentDate
-        // The paymentDate is used ONLY for SMAX sync to attribute the payment to a specific date
-        payment = await storage.createPayment({
-          tenantId: tenantId,
-          consumerId: consumerId,
-          accountId: accountId || null,
-          amountCents,
-          paymentMethod: 'credit_card',
-          status: success ? 'completed' : 'failed',
-          transactionId: transactionId,
-          processorResponse: JSON.stringify(usaepayResult),
-          processedAt: success ? new Date() : null, // Actual processing timestamp
-          notes: arrangement
-            ? `${arrangement.name} - ${cardName} ending in ${cardLast4}`
-            : `Online payment - ${cardName} ending in ${cardLast4}`,
-        });
-        
-        console.log('💾 Payment record created:', {
-          paymentId: payment.id,
-          amountCents: payment.amountCents,
-          status: payment.status,
-          transactionId: payment.transactionId
-        });
-
-        // Trigger payment event for sequence enrollment
-        if (success) {
-          await eventService.emitSystemEvent('payment_received', {
-            tenantId,
-            consumerId,
-            accountId: accountId || undefined,
-            metadata: { paymentId: payment.id, amountCents, transactionId }
+        if (!success) {
+          // Handle failed payment
+          console.error('❌ USAePay payment failed:', usaepayResult.error || usaepayResult.result);
+          
+          // Create failed payment record
+          payment = await storage.createPayment({
+            tenantId: tenantId,
+            consumerId: consumerId,
+            accountId: accountId || null,
+            amountCents,
+            paymentMethod: 'credit_card',
+            status: 'failed',
+            transactionId: transactionId,
+            processorResponse: JSON.stringify(usaepayResult),
+            processedAt: null,
+            notes: arrangement
+              ? `${arrangement.name} - ${cardName} ending in ${cardLast4}`
+              : `Online payment - ${cardName} ending in ${cardLast4}`,
           });
-        } else {
+          
           await eventService.emitSystemEvent('payment_failed', {
             tenantId,
             consumerId,
@@ -11144,58 +11151,92 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.error('Failed to auto-update account status on payment decline:', statusError);
             }
           }
+          
+          return res.status(400).json({
+            success: false,
+            message: usaepayResult.error || usaepayResult.result || 'Payment declined',
+          });
         }
+
+        // Use unified payment processing helper for successful payments
+        // This handles: payment record creation, balance updates, events, and notifications
+        payment = await processSuccessfulPayment({
+          tenantId,
+          consumerId,
+          accountId,
+          account,
+          amountCents,
+          transactionId,
+          processorResponse: usaepayResult,
+          cardLast4,
+          cardName,
+          zipCode,
+          arrangement,
+          settings,
+        });
         
-        // Send payment to SMAX if account has a filenumber
-        if (success && account.filenumber) {
-          const consumer = await storage.getConsumer(consumerId);
-          console.log('📤 Sending payment to SMAX...');
-          
-          // Use the consumer-supplied paymentDate for SMAX attribution if provided
-          // This allows consumers to retry failed SMAX payments and have them show on the correct date
-          const smaxPaymentData = smaxService.createSmaxPaymentData({
-            filenumber: account.filenumber,
-            paymentamount: amountCents / 100,
-            paymentdate: normalizedPaymentDate 
-              ? normalizedPaymentDate.toISOString().split('T')[0] 
-              : new Date().toISOString().split('T')[0],
-            payorname: consumer ? `${consumer.firstName} ${consumer.lastName}` : 'Consumer',
-            paymentmethod: 'CREDIT CARD',
-            cardtype: cardBrand || 'Unknown',
-            cardLast4: cardLast4,
-            transactionid: transactionId || undefined,
-            // Include card token and details for SMAX to save payment method
-            cardtoken: paymentToken || undefined,
-            cardholdername: cardName || undefined,
-            billingzip: zipCode || undefined,
-            cardexpirationmonth: expiryMonth || undefined,
-            cardexpirationyear: expiryYear || undefined,
-          });
-          
-          console.log('🔍 SMAX Payment Sync - Card Token Details:', {
-            hasToken: !!paymentToken,
-            token: paymentToken ? `${paymentToken.substring(0, 8)}...` : 'none',
-            hasCardholderName: !!cardName,
-            cardholderName: cardName || 'missing',
-            hasBillingZip: !!zipCode,
-            billingZip: zipCode || 'missing',
-            hasExpiration: !!(expiryMonth && expiryYear),
-            expiration: (expiryMonth && expiryYear) ? `${expiryMonth}/${expiryYear}` : 'missing',
-            filenumber: account.filenumber
-          });
-          
-          const smaxSuccess = await smaxService.insertPayment(tenantId, smaxPaymentData);
-          if (smaxSuccess) {
-            console.log('✅ Payment synced to SMAX successfully with card token');
-            // Send note to SMAX about successful payment
-            await smaxService.sendPaymentNote(tenantId, {
-              filenumber: account.filenumber!,
-              status: 'processed',
-              amount: amountCents / 100,
-              transactionId: transactionId || undefined
+        // Sync payment to SMAX if enabled and account has filenumber
+        // (matches NMI pattern - each processor handles its own SMAX sync)
+        if (settings.smaxEnabled && account.filenumber) {
+          try {
+            const consumerForSmax = await storage.getConsumer(consumerId);
+            const payorName = consumerForSmax 
+              ? `${consumerForSmax.firstName || ''} ${consumerForSmax.lastName || ''}`.trim() || 'Consumer'
+              : 'Consumer';
+            
+            console.log('📤 Sending USAePay payment to SMAX:', {
+              filenumber: account.filenumber,
+              payorName,
+              amount: (amountCents / 100).toFixed(2),
+              transactionId,
+              status: 'PROCESSED'
             });
-          } else {
-            console.log('⚠️ Failed to sync payment to SMAX (non-blocking)');
+            
+            // Use the consumer-supplied paymentDate for SMAX attribution if provided
+            const smaxPaymentData = smaxService.createSmaxPaymentData({
+              filenumber: account.filenumber,
+              paymentamount: amountCents / 100,
+              paymentdate: normalizedPaymentDate 
+                ? normalizedPaymentDate.toISOString().split('T')[0] 
+                : new Date().toISOString().split('T')[0],
+              payorname: payorName,
+              paymentmethod: 'CREDIT CARD',
+              cardtype: cardBrand || 'Unknown',
+              cardLast4: cardLast4,
+              transactionid: transactionId || undefined,
+              cardtoken: paymentToken || undefined,
+              cardholdername: cardName || undefined,
+              billingzip: zipCode || undefined,
+              cardexpirationmonth: expiryMonth || undefined,
+              cardexpirationyear: expiryYear || undefined,
+            });
+            
+            console.log('🔍 SMAX Payment Sync - Card Token Details:', {
+              hasToken: !!paymentToken,
+              token: paymentToken ? `${paymentToken.substring(0, 8)}...` : 'none',
+              hasCardholderName: !!cardName,
+              cardholderName: cardName || 'missing',
+              hasBillingZip: !!zipCode,
+              billingZip: zipCode || 'missing',
+              hasExpiration: !!(expiryMonth && expiryYear),
+              expiration: (expiryMonth && expiryYear) ? `${expiryMonth}/${expiryYear}` : 'missing',
+              filenumber: account.filenumber
+            });
+            
+            const smaxSuccess = await smaxService.insertPayment(tenantId, smaxPaymentData);
+            if (smaxSuccess) {
+              console.log('✅ USAePay payment synced to SMAX successfully');
+              await smaxService.sendPaymentNote(tenantId, {
+                filenumber: account.filenumber!,
+                status: 'processed',
+                amount: amountCents / 100,
+                transactionId: transactionId || undefined
+              });
+            } else {
+              console.log('⚠️ Failed to sync USAePay payment to SMAX (non-blocking)');
+            }
+          } catch (smaxError) {
+            console.error('Failed to sync USAePay payment to SMAX:', smaxError);
           }
         } else if (!account.filenumber) {
           console.log('ℹ️ No filenumber available - skipping SMAX payment sync');
@@ -11203,35 +11244,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         success = true;
         console.log('⏭️ Skipping immediate charge - will create payment schedule instead');
-      }
-
-      // Send notification to admins about successful payment
-      if (paymentProcessed && success) {
-        const consumer = await storage.getConsumer(consumerId);
-        if (consumer) {
-          await notifyTenantAdmins({
-            tenantId,
-            subject: 'New Payment Received',
-            eventType: 'payment_made',
-            consumer: {
-              firstName: consumer.firstName || '',
-              lastName: consumer.lastName || '',
-              email: consumer.email || '',
-            },
-            amount: amountCents,
-          }).catch(err => console.error('Failed to send payment notification:', err));
-
-          // Also send notification to company contact email
-          await emailService.sendPaymentNotification({
-            tenantId,
-            consumerName: `${consumer.firstName} ${consumer.lastName}`,
-            accountNumber: account.accountNumber || 'N/A',
-            amountCents,
-            paymentMethod: 'Credit Card',
-            transactionId: transactionId || undefined,
-            paymentType: 'one_time',
-          }).catch(err => console.error('Failed to send payment notification to contact email:', err));
-        }
       }
 
       // Step 3: Save payment method if requested and payment successful
