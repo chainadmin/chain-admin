@@ -120,7 +120,7 @@ import {
 } from "@shared/schema";
 import { messagingPlans, EMAIL_OVERAGE_RATE_PER_EMAIL, SMS_OVERAGE_RATE_PER_SEGMENT, DOCUMENT_SIGNING_ADDON_PRICE, MOBILE_APP_BRANDING_MONTHLY, AI_AUTO_RESPONSE_ADDON_PRICE, AUTO_RESPONSE_INCLUDED_RESPONSES, AUTO_RESPONSE_OVERAGE_PER_RESPONSE, type MessagingPlanId } from "@shared/billing-plans";
 import { db } from "./db";
-import { eq, and, or, desc, sql, inArray, gte, lte } from "drizzle-orm";
+import { eq, and, or, desc, sql, inArray, gte, lte, isNotNull } from "drizzle-orm";
 import {
   ensureArrangementOptionsSchema,
   ensureDocumentsSchema,
@@ -2273,6 +2273,49 @@ export class DatabaseStorage implements IStorage {
       .where(and(inArray(accounts.id, ids), eq(accounts.tenantId, tenantId)));
 
     return accountsToDelete.length;
+  }
+
+  // Get accounts in Returned folder that have been there for more than 7 days
+  async getExpiredReturnedAccounts(): Promise<{ id: string; tenantId: string; accountNumber: string | null; returnedAt: Date }[]> {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    
+    const results = await db
+      .select({
+        id: accounts.id,
+        tenantId: accounts.tenantId,
+        accountNumber: accounts.accountNumber,
+        returnedAt: accounts.returnedAt,
+      })
+      .from(accounts)
+      .where(
+        and(
+          isNotNull(accounts.returnedAt),
+          lte(accounts.returnedAt, sevenDaysAgo)
+        )
+      );
+    
+    return results.filter(r => r.returnedAt !== null) as { id: string; tenantId: string; accountNumber: string | null; returnedAt: Date }[];
+  }
+
+  // Delete expired returned accounts (for cron job)
+  async deleteExpiredReturnedAccounts(): Promise<{ deletedCount: number; deletedAccounts: { id: string; tenantId: string; accountNumber: string | null }[] }> {
+    const expiredAccounts = await this.getExpiredReturnedAccounts();
+    
+    if (expiredAccounts.length === 0) {
+      return { deletedCount: 0, deletedAccounts: [] };
+    }
+    
+    const accountIds = expiredAccounts.map(a => a.id);
+    
+    await db
+      .delete(accounts)
+      .where(inArray(accounts.id, accountIds));
+    
+    return {
+      deletedCount: expiredAccounts.length,
+      deletedAccounts: expiredAccounts.map(a => ({ id: a.id, tenantId: a.tenantId, accountNumber: a.accountNumber })),
+    };
   }
 
 

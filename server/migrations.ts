@@ -1404,6 +1404,15 @@ export async function runMigrations() {
       console.log('  ⚠ Could not update software_proposal template:', err);
     }
     
+    // Add returned_at column to accounts for auto-deletion tracking
+    console.log('Adding returned_at column to accounts...');
+    try {
+      await client.query(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS returned_at TIMESTAMP`);
+      console.log(`  ✓ returned_at`);
+    } catch (err) {
+      console.log(`  ⚠ returned_at (already exists or error)`);
+    }
+    
     console.log('✅ Database migrations completed successfully');
   } catch (error: any) {
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {

@@ -167,6 +167,7 @@ export const accounts = pgTable("accounts", {
   status: text("status").default("active"),
   dueDate: date("due_date"),
   additionalData: jsonb("additional_data").default(sql`'{}'::jsonb`), // Store custom CSV columns
+  returnedAt: timestamp("returned_at"), // Timestamp when account was moved to Returned folder (for auto-deletion after 7 days)
   createdAt: timestamp("created_at").defaultNow(),
 });
 

@@ -124,11 +124,28 @@ function setupScheduledTasks(port: number) {
     timezone: 'America/New_York'
   });
   
+  // Delete expired returned accounts daily at 2:00 AM ET
+  cron.schedule('0 2 * * *', async () => {
+    console.log('🕒 [CRON] Running returned accounts cleanup...');
+    try {
+      const response = await fetch(`${baseUrl}/api/accounts/cleanup-returned`, {
+        method: 'POST'
+      });
+      const result = await response.json();
+      console.log('✅ [CRON] Returned accounts cleanup complete:', result);
+    } catch (error) {
+      console.error('❌ [CRON] Returned accounts cleanup failed:', error);
+    }
+  }, {
+    timezone: 'America/New_York'
+  });
+  
   console.log('⏰ Scheduled tasks configured:');
   console.log('   - Payment processor: Daily at 8:00 AM ET (America/New_York timezone)');
   console.log('   - Automation processor: Every 15 minutes');
   console.log('   - Subscription renewal processor: Daily at 12:00 AM ET (America/New_York timezone)');
   console.log('   - Monthly invoice generator: 1st of each month at 12:00 AM ET (America/New_York timezone)');
+  console.log('   - Returned accounts cleanup: Daily at 2:00 AM ET (America/New_York timezone)');
 }
 
 // Start the server in both development and production

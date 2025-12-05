@@ -2202,7 +2202,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         accountUpdates.dueDate = dueDate || null;
       }
 
-      // Auto-change status when account is moved to "Returned" folder
+      // Auto-change status and set returnedAt when account is moved to "Returned" folder
       if (folderId !== undefined && folderId) {
         const returnedFolder = await storage.getReturnedFolder(tenantId);
         if (returnedFolder && folderId === returnedFolder.id) {
@@ -2212,6 +2212,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             accountUpdates.status = "recalled";
             console.log(`🔄 Auto-changing account ${id} status to "recalled" (moved to Returned folder)`);
           }
+          // Set returnedAt timestamp for auto-deletion after 7 days
+          if (!account.returnedAt) {
+            accountUpdates.returnedAt = new Date();
+            console.log(`📅 Setting returnedAt timestamp for account ${id} (will be auto-deleted in 7 days)`);
+          }
+        }
+      }
+      
+      // Clear returnedAt if account is moved out of Returned folder
+      if (folderId !== undefined) {
+        const returnedFolder = await storage.getReturnedFolder(tenantId);
+        if (returnedFolder && folderId !== returnedFolder.id && account.returnedAt) {
+          accountUpdates.returnedAt = null;
+          console.log(`🔄 Clearing returnedAt timestamp for account ${id} (moved out of Returned folder)`);
         }
       }
 
@@ -2253,6 +2267,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error bulk deleting accounts:", error);
       return res.status(500).json({ message: "Failed to delete accounts" });
+    }
+  });
+
+  // Cleanup expired returned accounts (called by cron job daily at 2 AM ET)
+  app.post('/api/accounts/cleanup-returned', async (req: any, res) => {
+    try {
+      console.log('🗑️ [CLEANUP] Starting expired returned accounts cleanup...');
+      
+      const result = await storage.deleteExpiredReturnedAccounts();
+      
+      if (result.deletedCount > 0) {
+        console.log(`🗑️ [CLEANUP] Deleted ${result.deletedCount} expired returned accounts:`);
+        result.deletedAccounts.forEach(acc => {
+          console.log(`   - Account ${acc.accountNumber || acc.id} (Tenant: ${acc.tenantId})`);
+        });
+      } else {
+        console.log('🗑️ [CLEANUP] No expired returned accounts found');
+      }
+      
+      return res.status(200).json({
+        success: true,
+        message: `Cleanup complete: ${result.deletedCount} accounts deleted`,
+        deletedCount: result.deletedCount,
+        deletedAccounts: result.deletedAccounts,
+      });
+    } catch (error) {
+      console.error("Error cleaning up returned accounts:", error);
+      return res.status(500).json({ message: "Failed to cleanup returned accounts" });
     }
   });
 

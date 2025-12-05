@@ -3364,8 +3364,8 @@ export default function Communications() {
 
             {/* Template Preview Modal */}
             <Dialog open={!!previewTemplate} onOpenChange={() => setPreviewTemplate(null)}>
-              <DialogContent className="max-w-2xl">
-                <DialogHeader>
+              <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+                <DialogHeader className="flex-shrink-0">
                   <DialogTitle>
                     {communicationType === "email" ? "Email" : "SMS"} Template Preview: {previewTemplate?.name}
                   </DialogTitle>
@@ -3373,7 +3373,7 @@ export default function Communications() {
                     Preview your template content before using it in campaigns.
                   </p>
                 </DialogHeader>
-                <div className="space-y-4">
+                <div className="flex-1 overflow-y-auto space-y-4 pr-2">
                   {communicationType === "email" ? (
                     <>
                       <div>
@@ -3403,7 +3403,7 @@ export default function Communications() {
                     <span>Status: {previewTemplate?.status}</span>
                   </div>
                 </div>
-                <div className="flex justify-end">
+                <div className="flex justify-end flex-shrink-0 pt-4 border-t">
                   <Button onClick={() => setPreviewTemplate(null)}>
                     Close
                   </Button>
