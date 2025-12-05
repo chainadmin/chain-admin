@@ -1597,9 +1597,9 @@ export default function Accounts() {
               <div className="space-y-2">
                 <Label htmlFor="compose-template">Template</Label>
                 <Select
-                  value={composeEmailForm.templateId}
+                  value={composeEmailForm.templateId || "none"}
                   onValueChange={(value) => {
-                    if (!value) {
+                    if (value === "none") {
                       setComposeEmailForm((prev) => ({ ...prev, templateId: "" }));
                       return;
                     }
@@ -1617,7 +1617,7 @@ export default function Accounts() {
                     <SelectValue placeholder={emailTemplatesLoading ? "Loading templates..." : "Choose a template (optional)"} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No template (start from scratch)</SelectItem>
+                    <SelectItem value="none">No template (start from scratch)</SelectItem>
                     {(emailTemplates as any[])?.map((template: any) => (
                       <SelectItem key={template.id} value={template.id}>
                         {template.name}

@@ -516,8 +516,8 @@ export default function Communications() {
   const [sequenceForm, setSequenceForm] = useState({
     name: '',
     description: '',
-    triggerType: 'immediate' as 'immediate' | 'scheduled' | 'event',
-    triggerEvent: '' as 'account_created' | 'payment_received' | 'payment_overdue' | 'payment_failed' | '',
+    triggerType: 'scheduled' as 'scheduled' | 'event',
+    triggerEvent: '' as 'account_created' | 'payment_received' | 'payment_overdue' | 'payment_failed' | 'one_time_payment_no_arrangement' | 'email_reply_received' | 'sms_reply_received' | '',
     triggerDelay: 0,
     targetType: 'all' as 'all' | 'folder' | 'custom',
     targetFolderIds: [] as number[],
@@ -1678,7 +1678,7 @@ export default function Communications() {
     setSequenceForm({
       name: '',
       description: '',
-      triggerType: 'immediate',
+      triggerType: 'scheduled',
       triggerEvent: '',
       triggerDelay: 0,
       targetType: 'all',
@@ -4545,7 +4545,6 @@ export default function Communications() {
                               <SelectValue placeholder="Select trigger" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="immediate">Immediate (Manual)</SelectItem>
                               <SelectItem value="scheduled">Scheduled</SelectItem>
                               <SelectItem value="event">Event-Based</SelectItem>
                             </SelectContent>
@@ -4567,6 +4566,9 @@ export default function Communications() {
                                 <SelectItem value="payment_received">Payment Received</SelectItem>
                                 <SelectItem value="payment_overdue">Payment Overdue</SelectItem>
                                 <SelectItem value="payment_failed">Payment Failed</SelectItem>
+                                <SelectItem value="one_time_payment_no_arrangement">One-Time Payment (No Arrangement)</SelectItem>
+                                <SelectItem value="email_reply_received">Email Reply Received</SelectItem>
+                                <SelectItem value="sms_reply_received">SMS Reply Received</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>
@@ -4610,13 +4612,20 @@ export default function Communications() {
                             </div>
                           ) : (
                             <Select
-                              value={sequenceForm.targetFolderIds[0]?.toString() || ''}
-                              onValueChange={(value) => setSequenceForm({ ...sequenceForm, targetFolderIds: [parseInt(value)] })}
+                              value={sequenceForm.targetFolderIds[0]?.toString() || 'none'}
+                              onValueChange={(value) => {
+                                if (value === 'none') {
+                                  setSequenceForm({ ...sequenceForm, targetFolderIds: [] });
+                                } else {
+                                  setSequenceForm({ ...sequenceForm, targetFolderIds: [parseInt(value)] });
+                                }
+                              }}
                             >
                               <SelectTrigger className="mt-2 bg-white/10 border-white/20 text-white">
                                 <SelectValue placeholder="Select folder" />
                               </SelectTrigger>
                               <SelectContent>
+                                <SelectItem value="none">Select a folder...</SelectItem>
                                 {(folders as any[]).map((folder: any) => (
                                   <SelectItem key={folder.id} value={folder.id.toString()}>
                                     {folder.name}
@@ -4733,23 +4742,32 @@ export default function Communications() {
                             </div>
 
                             <div>
-                              <label className="text-xs text-blue-100/70">Delay (Days)</label>
+                              <label className="text-xs text-blue-100/70">Send After (Hours)</label>
                               <Input
                                 type="number"
-                                value={step.delayDays}
-                                onChange={(e) => updateSequenceStep(index, 'delayDays', parseInt(e.target.value) || 0)}
+                                min="0"
+                                placeholder="e.g., 24 for 1 day, 48 for 2 days"
+                                value={(step.delayDays || 0) * 24 + (step.delayHours || 0)}
+                                onChange={(e) => {
+                                  const totalHours = parseInt(e.target.value) || 0;
+                                  const days = Math.floor(totalHours / 24);
+                                  const hours = totalHours % 24;
+                                  updateSequenceStep(index, 'delayDays', days);
+                                  updateSequenceStep(index, 'delayHours', hours);
+                                }}
                                 className="mt-1 bg-white/10 border-white/20 text-white text-sm"
                               />
-                            </div>
-
-                            <div>
-                              <label className="text-xs text-blue-100/70">Delay (Hours)</label>
-                              <Input
-                                type="number"
-                                value={step.delayHours}
-                                onChange={(e) => updateSequenceStep(index, 'delayHours', parseInt(e.target.value) || 0)}
-                                className="mt-1 bg-white/10 border-white/20 text-white text-sm"
-                              />
+                              <p className="mt-1 text-xs text-blue-100/50">
+                                {(() => {
+                                  const totalHours = (step.delayDays || 0) * 24 + (step.delayHours || 0);
+                                  if (totalHours === 0) return "Sends immediately after previous step";
+                                  const days = Math.floor(totalHours / 24);
+                                  const hours = totalHours % 24;
+                                  if (days > 0 && hours > 0) return `= ${days} day${days > 1 ? 's' : ''} and ${hours} hour${hours > 1 ? 's' : ''}`;
+                                  if (days > 0) return `= ${days} day${days > 1 ? 's' : ''}`;
+                                  return `= ${hours} hour${hours > 1 ? 's' : ''}`;
+                                })()}
+                              </p>
                             </div>
                           </div>
                         </div>
