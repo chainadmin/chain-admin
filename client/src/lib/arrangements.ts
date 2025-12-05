@@ -41,6 +41,8 @@ export const getPlanTypeLabel = (planType?: string | null): string => {
       return 'Custom terms';
     case 'one_time_payment':
       return 'One-time payment';
+    case 'pay_in_full':
+      return 'Pay Balance in Full';
     case 'range':
     case undefined:
     case null:
@@ -77,6 +79,9 @@ export const calculateArrangementPayment = (
     
     case 'one_time_payment':
       return arrangement.oneTimePaymentMin || accountBalanceCents;
+    
+    case 'pay_in_full':
+      return accountBalanceCents; // Full balance payment
     
     case 'custom_terms':
       return accountBalanceCents;
@@ -201,6 +206,13 @@ export const getArrangementSummary = (arrangement: ArrangementLike) => {
         planType,
         headline,
         detail: 'Make a single payment without setting up a plan',
+      };
+    }
+    case 'pay_in_full': {
+      return {
+        planType,
+        headline: 'Pay your balance in full',
+        detail: 'Clear your entire balance with a single payment',
       };
     }
     default: {

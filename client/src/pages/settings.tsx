@@ -117,7 +117,7 @@ export default function Settings() {
     name: string;
     description: string;
     balanceTier: "under_3000" | "3000_to_5000" | "5000_to_10000" | "over_10000" | "";
-    planType: "range" | "fixed_monthly" | "settlement" | "custom_terms" | "one_time_payment";
+    planType: "range" | "fixed_monthly" | "settlement" | "custom_terms" | "one_time_payment" | "pay_in_full";
     monthlyPaymentMin: string;
     monthlyPaymentMax: string;
     fixedMonthlyPayment: string;
@@ -3378,6 +3378,7 @@ export default function Settings() {
                                 <SelectItem value="settlement">Settlement (% of balance)</SelectItem>
                                 <SelectItem value="custom_terms">Custom terms copy</SelectItem>
                                 <SelectItem value="one_time_payment">One-time payment</SelectItem>
+                                <SelectItem value="pay_in_full">Pay Balance in Full</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>

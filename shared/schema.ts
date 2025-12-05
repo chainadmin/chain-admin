@@ -578,6 +578,7 @@ export const arrangementPlanTypes = [
   "settlement",
   "custom_terms",
   "one_time_payment",
+  "pay_in_full",
 ] as const;
 
 export type ArrangementPlanType = (typeof arrangementPlanTypes)[number];
@@ -1545,6 +1546,11 @@ export const insertArrangementOptionSchema = createInsertSchema(arrangementOptio
       case "one_time_payment": {
         // One-time payment has no additional validation requirements
         // It just needs the base fields (minBalance, maxBalance, name)
+        break;
+      }
+      case "pay_in_full": {
+        // Pay in full has no additional validation requirements
+        // Consumer pays their entire balance
         break;
       }
       default: {
