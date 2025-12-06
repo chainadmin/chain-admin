@@ -164,6 +164,7 @@ export const accounts = pgTable("accounts", {
   filenumber: text("filenumber"), // Required for SMAX integration (nullable for migration)
   creditor: text("creditor").notNull(),
   balanceCents: bigint("balance_cents", { mode: "number" }).notNull(),
+  originalBalanceCents: bigint("original_balance_cents", { mode: "number" }), // Original balance from import, used for balance recalculation
   status: text("status").default("active"),
   dueDate: date("due_date"),
   additionalData: jsonb("additional_data").default(sql`'{}'::jsonb`), // Store custom CSV columns

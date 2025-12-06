@@ -1413,6 +1413,65 @@ export async function runMigrations() {
       console.log(`  ⚠ returned_at (already exists or error)`);
     }
     
+    // Add original_balance_cents column to accounts for balance tracking
+    console.log('Adding original_balance_cents column to accounts...');
+    try {
+      await client.query(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS original_balance_cents BIGINT`);
+      console.log(`  ✓ original_balance_cents`);
+    } catch (err) {
+      console.log(`  ⚠ original_balance_cents (already exists or error)`);
+    }
+    
+    // Backfill original_balance_cents for accounts that have payments
+    console.log('Backfilling original_balance_cents for existing accounts...');
+    try {
+      // Set original_balance_cents = current_balance + sum of completed payments
+      // This recovers the original balance for accounts that already had payments
+      const backfillResult = await client.query(`
+        UPDATE accounts a
+        SET original_balance_cents = a.balance_cents + COALESCE(
+          (SELECT SUM(p.amount_cents) 
+           FROM payments p 
+           WHERE p.account_id = a.id 
+             AND p.tenant_id = a.tenant_id
+             AND p.status = 'completed'), 
+          0
+        )
+        WHERE a.original_balance_cents IS NULL
+      `);
+      console.log(`  ✓ Backfilled original_balance_cents for ${backfillResult.rowCount} accounts`);
+    } catch (err: any) {
+      console.log(`  ⚠ Backfill original_balance_cents error: ${err.message}`);
+    }
+    
+    // Now fix balances: balance_cents should be original_balance_cents - sum of payments
+    console.log('Fixing account balances based on payment history...');
+    try {
+      const fixResult = await client.query(`
+        UPDATE accounts a
+        SET balance_cents = GREATEST(0, a.original_balance_cents - COALESCE(
+          (SELECT SUM(p.amount_cents) 
+           FROM payments p 
+           WHERE p.account_id = a.id 
+             AND p.tenant_id = a.tenant_id
+             AND p.status = 'completed'), 
+          0
+        ))
+        WHERE a.original_balance_cents IS NOT NULL
+          AND a.balance_cents != GREATEST(0, a.original_balance_cents - COALESCE(
+            (SELECT SUM(p.amount_cents) 
+             FROM payments p 
+             WHERE p.account_id = a.id 
+               AND p.tenant_id = a.tenant_id
+               AND p.status = 'completed'), 
+            0
+          ))
+      `);
+      console.log(`  ✓ Fixed balances for ${fixResult.rowCount} accounts`);
+    } catch (err: any) {
+      console.log(`  ⚠ Fix balances error: ${err.message}`);
+    }
+    
     console.log('✅ Database migrations completed successfully');
   } catch (error: any) {
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {

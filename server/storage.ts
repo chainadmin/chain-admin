@@ -1191,7 +1191,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAccount(account: InsertAccount): Promise<Account> {
-    const [newAccount] = await db.insert(accounts).values(account).returning();
+    // Set originalBalanceCents to balanceCents for new accounts if not already set
+    const accountWithOriginal = {
+      ...account,
+      originalBalanceCents: account.originalBalanceCents ?? account.balanceCents,
+    };
+    
+    const [newAccount] = await db.insert(accounts).values(accountWithOriginal).returning();
 
     // Check if consumer is registered and send notification
     await this.notifyConsumerAccountAdded(newAccount);

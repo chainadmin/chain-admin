@@ -2100,6 +2100,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             filenumber: accountData.filenumber,
             creditor: accountData.creditor,
             balanceCents: accountData.balanceCents,
+            // Note: originalBalanceCents is set automatically in createAccount for new accounts only
             dueDate: accountData.dueDate || null,
             status: accountData.status || null,
             additionalData: accountData.additionalData || {},
@@ -2193,7 +2194,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         registrationDate: new Date(),
       });
 
-      // Create account
+      // Create account (originalBalanceCents is set automatically in createAccount)
       const account = await storage.createAccount({
         tenantId: tenantId,
         consumerId: consumer.id,
