@@ -9578,20 +9578,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     // Update account balance if accountId exists
     if (accountId) {
+      console.log('💰 [BALANCE UPDATE] Starting balance update for account:', accountId);
       // Re-read the account fresh to get current balance
       const freshAccount = await storage.getAccount(accountId);
       if (freshAccount) {
-        const newBalance = Math.max(0, (freshAccount.balanceCents || 0) - amountCents);
-        console.log('💰 Balance update:', {
+        const previousBalance = freshAccount.balanceCents || 0;
+        const newBalance = Math.max(0, previousBalance - amountCents);
+        console.log('💰 [BALANCE UPDATE] Calculating:', {
           accountId,
-          previousBalance: freshAccount.balanceCents,
+          previousBalance,
           paymentAmount: amountCents,
-          newBalance
+          newBalance,
+          formula: `max(0, ${previousBalance} - ${amountCents}) = ${newBalance}`
         });
-        await storage.updateAccount(accountId, { balanceCents: newBalance });
+        const updatedAccount = await storage.updateAccount(accountId, { balanceCents: newBalance });
+        console.log('💰 [BALANCE UPDATE] Update complete:', {
+          accountId,
+          balanceAfterUpdate: updatedAccount?.balanceCents,
+          success: updatedAccount?.balanceCents === newBalance
+        });
       } else {
-        console.error('❌ Account not found for balance update:', accountId);
+        console.error('❌ [BALANCE UPDATE] Account not found:', accountId);
       }
+    } else {
+      console.log('⚠️ [BALANCE UPDATE] No accountId provided, skipping balance update');
     }
 
     // Send notification to admins about successful payment
