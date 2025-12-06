@@ -9576,11 +9576,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // after calling this helper, because they have access to card expiry, token, and other details
     // that this helper doesn't receive.
 
-    // Update account balance if accountId exists
+    // Update account balance if accountId exists - recalculate from authoritative sources
     if (accountId) {
-      await storage.updateAccount(accountId, {
-        balanceCents: Math.max(0, (account.balanceCents || 0) - amountCents),
-      });
+      // Re-read the account fresh to get originalBalanceCents
+      const freshAccount = await storage.getAccount(accountId);
+      if (freshAccount) {
+        if (freshAccount.originalBalanceCents !== null && freshAccount.originalBalanceCents !== undefined) {
+          // Calculate total completed payments for this account (tenant-scoped)
+          const accountPayments = await db.select({ 
+            total: sql<number>`COALESCE(SUM(${payments.amountCents}), 0)` 
+          })
+            .from(payments)
+            .where(
+              and(
+                eq(payments.accountId, accountId),
+                eq(payments.tenantId, tenantId),
+                eq(payments.status, 'completed')
+              )
+            );
+          
+          const totalPaymentsCents = Number(accountPayments[0]?.total || 0);
+          const newBalance = Math.max(0, freshAccount.originalBalanceCents - totalPaymentsCents);
+          
+          console.log('💰 Balance recalculation:', {
+            accountId,
+            originalBalanceCents: freshAccount.originalBalanceCents,
+            totalPaymentsCents,
+            newBalanceCents: newBalance
+          });
+          
+          await storage.updateAccount(accountId, { balanceCents: newBalance });
+        } else {
+          // Fallback for accounts without originalBalanceCents (legacy data)
+          console.warn('⚠️ Account missing originalBalanceCents, using legacy subtraction:', accountId);
+          await storage.updateAccount(accountId, {
+            balanceCents: Math.max(0, (freshAccount.balanceCents || 0) - amountCents),
+          });
+        }
+      } else {
+        console.error('❌ Account not found for balance update:', accountId);
+      }
     }
 
     // Send notification to admins about successful payment
@@ -11836,24 +11871,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Step 5: Update account balance
+      // Step 5: Update account balance - recalculate from authoritative sources
       if (accountId && paymentProcessed && success) {
         const account = await storage.getAccount(accountId);
         if (account) {
-          let newBalance = (account.balanceCents || 0) - amountCents;
-
-          // For single-payment settlement, pay off the full balance
-          // For multi-payment settlement, deduct only the payment made
+          // For single-payment settlement, zero out the balance
           const isMultiPaymentSettlement = arrangement?.planType === 'settlement' && arrangement.settlementPaymentCount && arrangement.settlementPaymentCount > 1;
           if (arrangement && arrangement.planType === 'settlement' && !isMultiPaymentSettlement) {
-            // Single payment settlement - zero out balance
-            newBalance = 0;
+            await storage.updateAccount(accountId, { balanceCents: 0 });
+          } else if (account.originalBalanceCents !== null && account.originalBalanceCents !== undefined) {
+            // Recalculate balance from original minus all completed payments
+            const accountPayments = await db.select({ 
+              total: sql<number>`COALESCE(SUM(${payments.amountCents}), 0)` 
+            })
+              .from(payments)
+              .where(
+                and(
+                  eq(payments.accountId, accountId),
+                  eq(payments.tenantId, tenantId),
+                  eq(payments.status, 'completed')
+                )
+              );
+            
+            const totalPaymentsCents = Number(accountPayments[0]?.total || 0);
+            const newBalance = Math.max(0, account.originalBalanceCents - totalPaymentsCents);
+            
+            console.log('💰 Balance recalculation (Step 5):', {
+              accountId,
+              originalBalanceCents: account.originalBalanceCents,
+              totalPaymentsCents,
+              newBalanceCents: newBalance
+            });
+            
+            await storage.updateAccount(accountId, { balanceCents: newBalance });
+          } else {
+            // Fallback for legacy accounts without originalBalanceCents
+            console.warn('⚠️ Account missing originalBalanceCents, using legacy subtraction:', accountId);
+            await storage.updateAccount(accountId, {
+              balanceCents: Math.max(0, (account.balanceCents || 0) - amountCents)
+            });
           }
-          // Multi-payment settlement: just deduct the payment made (already calculated above)
-          
-          await storage.updateAccount(accountId, {
-            balanceCents: Math.max(0, newBalance)
-          });
         }
       }
 
@@ -12849,13 +12906,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 });
 
                 if (success) {
-                  // Update account balance
+                  // Update account balance - recalculate from authoritative sources
                   const account = await storage.getAccount(schedule.accountId);
                   if (account) {
-                    const newBalance = (account.balanceCents || 0) - paymentAmountCents;
-                    await storage.updateAccount(schedule.accountId, {
-                      balanceCents: Math.max(0, newBalance)
-                    });
+                    if (account.originalBalanceCents !== null && account.originalBalanceCents !== undefined) {
+                      // Recalculate balance from original minus all completed payments
+                      const accountPayments = await db.select({ 
+                        total: sql<number>`COALESCE(SUM(${payments.amountCents}), 0)` 
+                      })
+                        .from(payments)
+                        .where(
+                          and(
+                            eq(payments.accountId, schedule.accountId),
+                            eq(payments.tenantId, tenant.id),
+                            eq(payments.status, 'completed')
+                          )
+                        );
+                      
+                      const totalPaymentsCents = Number(accountPayments[0]?.total || 0);
+                      const newBalance = Math.max(0, account.originalBalanceCents - totalPaymentsCents);
+                      
+                      console.log('💰 Scheduled payment balance recalculation:', {
+                        accountId: schedule.accountId,
+                        originalBalanceCents: account.originalBalanceCents,
+                        totalPaymentsCents,
+                        newBalanceCents: newBalance
+                      });
+                      
+                      await storage.updateAccount(schedule.accountId, { balanceCents: newBalance });
+                    } else {
+                      // Fallback for legacy accounts without originalBalanceCents
+                      console.warn('⚠️ Scheduled payment: Account missing originalBalanceCents, using legacy subtraction:', schedule.accountId);
+                      const newBalance = (account.balanceCents || 0) - paymentAmountCents;
+                      await storage.updateAccount(schedule.accountId, {
+                        balanceCents: Math.max(0, newBalance)
+                      });
+                    }
 
                     // Create approval request for SMAX update
                     // Note: The payment already exists in SMAX as PENDING (from when arrangement was created)
