@@ -18017,10 +18017,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         if (tenantId) {
           console.log('Fetching accounts for tenant:', tenantId);
-          allAccounts = await storage.getAccounts(tenantId);
+          allAccounts = await db.select().from(accountsTable).where(eq(accountsTable.tenantId, tenantId));
         } else {
           console.log('Fetching all accounts from database...');
-          allAccounts = await db.select().from(accounts);
+          allAccounts = await db.select().from(accountsTable);
         }
       } catch (fetchError: any) {
         console.error('❌ Error fetching accounts:', fetchError);
