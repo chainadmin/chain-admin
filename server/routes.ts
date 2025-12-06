@@ -18061,12 +18061,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       for (const account of allAccounts) {
         try {
-          // Skip accounts without originalBalanceCents - we can't reliably recalculate
-          if (!account.originalBalanceCents) {
-            console.log(`⏭️ Skipping account ${account.filenumber || account.id}: no originalBalanceCents`);
-            continue;
-          }
-          
           // Skip accounts without tenantId - data integrity issue
           if (!account.tenantId) {
             console.log(`⏭️ Skipping account ${account.filenumber || account.id}: no tenantId`);
@@ -18091,15 +18085,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return sum + (Number.isFinite(amount) ? amount : 0);
           }, 0);
           
-          // Get original balance (from import) - stored in originalBalanceCents
-          const originalBalance = account.originalBalanceCents;
-          
-          // Calculate what the balance should be
-          const expectedBalance = Math.max(0, originalBalance - totalPaidCents);
+          // Current balance IS the original balance (it never got reduced by payments)
+          // So we just subtract all completed payments from the current balance
           const currentBalance = account.balanceCents || 0;
+          const expectedBalance = Math.max(0, currentBalance - totalPaidCents);
           
-          // Only update if there's a discrepancy
-          if (expectedBalance !== currentBalance) {
+          // Only update if there are payments to deduct
+          if (totalPaidCents > 0) {
             await storage.updateAccount(account.id, {
               balanceCents: expectedBalance,
             });
