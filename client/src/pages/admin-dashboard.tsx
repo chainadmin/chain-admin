@@ -438,7 +438,7 @@ export default function AdminDashboard() {
       />
 
       <Dialog open={showViewModal} onOpenChange={handleViewModalChange}>
-        <DialogContent className="max-w-3xl border border-white/10 bg-[#0f1a3c] text-blue-100">
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto border border-white/10 bg-[#0f1a3c] text-blue-100">
           {selectedAccount && (
             <>
               <DialogHeader className="space-y-2 text-left">
@@ -530,7 +530,7 @@ export default function AdminDashboard() {
       </Dialog>
 
       <Dialog open={showContactDialog} onOpenChange={handleContactModalChange}>
-        <DialogContent className="max-w-xl border border-white/10 bg-[#0f1a3c] text-blue-100">
+        <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto border border-white/10 bg-[#0f1a3c] text-blue-100">
           {selectedAccount && (
             <>
               <DialogHeader className="space-y-2 text-left">
@@ -672,7 +672,7 @@ export default function AdminDashboard() {
           }
         }}
       >
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Compose Email</DialogTitle>
             <DialogDescription>

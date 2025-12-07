@@ -1843,7 +1843,7 @@ export default function Billing() {
         </Tabs>
       </div>
       <Dialog open={updateBillingOpen} onOpenChange={setUpdateBillingOpen}>
-        <DialogContent className="max-w-2xl bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] border-white/20 text-white">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] border-white/20 text-white">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold text-white">Update billing information</DialogTitle>
             <DialogDescription className="text-blue-100/70">

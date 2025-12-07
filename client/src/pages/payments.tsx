@@ -661,7 +661,7 @@ export default function Payments() {
                         Pay now
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="max-w-md rounded-3xl border border-white/20 bg-[#0b1733]/95 text-blue-50">
+                    <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto rounded-3xl border border-white/20 bg-[#0b1733]/95 text-blue-50">
                       <DialogHeader>
                         <DialogTitle className="text-lg font-semibold text-blue-50">Secure Payment Processing</DialogTitle>
                       </DialogHeader>

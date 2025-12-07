@@ -403,7 +403,7 @@ export default function Consumers() {
 
       {/* View Consumer Dialog */}
       <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
-        <DialogContent className="max-w-2xl bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] border-white/20 text-white">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] border-white/20 text-white">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold text-white">Consumer Details</DialogTitle>
           </DialogHeader>
@@ -502,7 +502,7 @@ export default function Consumers() {
 
       {/* Edit Consumer Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="max-w-2xl bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] border-white/20 text-white">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] border-white/20 text-white">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold text-white">Edit Consumer Information</DialogTitle>
           </DialogHeader>
@@ -603,7 +603,7 @@ export default function Consumers() {
 
       {/* Contact Consumer Dialog */}
       <Dialog open={showContactDialog} onOpenChange={setShowContactDialog}>
-        <DialogContent className="max-w-2xl bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] border-white/20 text-white">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] border-white/20 text-white">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold text-white">
               Contact {selectedConsumer?.firstName} {selectedConsumer?.lastName}

@@ -851,7 +851,7 @@ export default function Accounts() {
       <ImportModal isOpen={showImportModal} onClose={() => setShowImportModal(false)} />
 
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="max-w-2xl bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] border-white/20 text-white">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] border-white/20 text-white">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold text-white">Create New Account</DialogTitle>
           </DialogHeader>
@@ -1062,7 +1062,7 @@ export default function Accounts() {
       </Dialog>
 
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent className="max-w-2xl bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] border-white/20 text-white">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] border-white/20 text-white">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold text-white">Edit Account</DialogTitle>
           </DialogHeader>
@@ -1296,7 +1296,7 @@ export default function Accounts() {
       </Dialog>
 
       <Dialog open={showViewModal} onOpenChange={handleViewModalChange}>
-        <DialogContent className="max-w-3xl border border-white/10 bg-[#0f1a3c] text-blue-100">
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto border border-white/10 bg-[#0f1a3c] text-blue-100">
           {selectedAccount && (
             <>
               <DialogHeader className="space-y-2 text-left">
@@ -1453,7 +1453,7 @@ export default function Accounts() {
       </Dialog>
 
       <Dialog open={showContactDialog} onOpenChange={handleContactModalChange}>
-        <DialogContent className="max-w-xl border border-white/10 bg-[#0f1a3c] text-blue-100">
+        <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto border border-white/10 bg-[#0f1a3c] text-blue-100">
           {selectedAccount && (
             <>
               <DialogHeader className="space-y-2 text-left">
@@ -1697,7 +1697,7 @@ export default function Accounts() {
 
       {/* Send Document Dialog */}
       <Dialog open={showSendDocumentDialog} onOpenChange={setShowSendDocumentDialog}>
-        <DialogContent className="border-white/10 bg-[#0f172a] text-blue-50 max-w-md">
+        <DialogContent className="border-white/10 bg-[#0f172a] text-blue-50 max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-lg font-semibold text-white">
               Send Document for Signature

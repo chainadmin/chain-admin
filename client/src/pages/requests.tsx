@@ -480,7 +480,7 @@ export default function Requests() {
           setUpdateFormStatus("");
         }
       }}>
-        <DialogContent className="max-w-2xl rounded-3xl border border-white/20 bg-[#0b1733]/95 text-blue-50">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto rounded-3xl border border-white/20 bg-[#0b1733]/95 text-blue-50">
           <DialogHeader>
             <DialogTitle className="text-xl font-semibold text-blue-50">Update Request - {selectedRequest?.consumerName}</DialogTitle>
           </DialogHeader>
