@@ -1382,8 +1382,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
               
               if (smaxAccount) {
                 console.log(`✅ SMAX getAccount returned data for ${smaxIdentifier}:`, JSON.stringify(smaxAccount, null, 2));
-                // Parse and normalize balance from SMAX
-                const rawBalance = smaxAccount.balance || smaxAccount.currentbalance || smaxAccount.balancedue || '0';
+                
+                // Find balance field case-insensitively - SMAX field names may vary in case
+                let rawBalance = '0';
+                for (const [key, value] of Object.entries(smaxAccount)) {
+                  const lowerKey = key.toLowerCase();
+                  if ((lowerKey === 'currentbalance' || lowerKey === 'balance' || 
+                       lowerKey === 'balancedue' || lowerKey === 'totalbalance' ||
+                       lowerKey === 'amountdue' || lowerKey === 'amountowed') && 
+                      value !== null && value !== undefined) {
+                    rawBalance = String(value);
+                    console.log(`💰 Found SMAX balance field "${key}" = "${value}"`);
+                    break;
+                  }
+                }
+                
                 const balanceFloat = parseFloat(rawBalance.toString().replace(/[^0-9.-]/g, ''));
                 
                 // Guard against NaN/invalid values - skip balance update if SMAX returns garbage
@@ -7972,15 +7985,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }
             }
             
-            // Update account balance if available - check multiple possible SMAX field names
+            // Update account balance if available - find balance field case-insensitively
             const updateData: any = {};
-            const rawBalance = smaxAccountData.balance || smaxAccountData.currentbalance || 
-                              smaxAccountData.balancedue || smaxAccountData.totalbalance;
-            if (rawBalance !== undefined && rawBalance !== null) {
-              const balanceFloat = parseFloat(rawBalance.toString().replace(/[^0-9.-]/g, ''));
+            let rawBalance: string | null = null;
+            for (const [key, value] of Object.entries(smaxAccountData)) {
+              const lowerKey = key.toLowerCase();
+              if ((lowerKey === 'currentbalance' || lowerKey === 'balance' || 
+                   lowerKey === 'balancedue' || lowerKey === 'totalbalance' ||
+                   lowerKey === 'amountdue' || lowerKey === 'amountowed') && 
+                  value !== null && value !== undefined) {
+                rawBalance = String(value);
+                console.log(`💰 Found SMAX balance field "${key}" = "${value}"`);
+                break;
+              }
+            }
+            
+            if (rawBalance !== null) {
+              const balanceFloat = parseFloat(rawBalance.replace(/[^0-9.-]/g, ''));
               if (Number.isFinite(balanceFloat)) {
                 // Normalize to cents - SMAX may return dollars or cents
-                const newBalanceCents = rawBalance.toString().includes('.')
+                const newBalanceCents = rawBalance.includes('.')
                   ? Math.round(balanceFloat * 100)
                   : Math.round(balanceFloat);
                 updateData.balanceCents = Math.max(0, newBalanceCents);
@@ -18226,13 +18250,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (smaxAccountData) {
             const updateData: any = {};
             
-            // Get balance from SMAX - check multiple field names
-            const rawBalance = smaxAccountData.balance || smaxAccountData.currentbalance || 
-                              smaxAccountData.balancedue || smaxAccountData.totalbalance;
-            if (rawBalance !== undefined && rawBalance !== null) {
-              const balanceFloat = parseFloat(rawBalance.toString().replace(/[^0-9.-]/g, ''));
+            // Get balance from SMAX - find balance field case-insensitively
+            let rawBalance: string | null = null;
+            for (const [key, value] of Object.entries(smaxAccountData)) {
+              const lowerKey = key.toLowerCase();
+              if ((lowerKey === 'currentbalance' || lowerKey === 'balance' || 
+                   lowerKey === 'balancedue' || lowerKey === 'totalbalance' ||
+                   lowerKey === 'amountdue' || lowerKey === 'amountowed') && 
+                  value !== null && value !== undefined) {
+                rawBalance = String(value);
+                console.log(`💰 Found SMAX balance field "${key}" = "${value}"`);
+                break;
+              }
+            }
+            
+            if (rawBalance !== null) {
+              const balanceFloat = parseFloat(rawBalance.replace(/[^0-9.-]/g, ''));
               if (Number.isFinite(balanceFloat)) {
-                const newBalanceCents = rawBalance.toString().includes('.')
+                const newBalanceCents = rawBalance.includes('.')
                   ? Math.round(balanceFloat * 100)
                   : Math.round(balanceFloat);
                 updateData.balanceCents = Math.max(0, newBalanceCents);
