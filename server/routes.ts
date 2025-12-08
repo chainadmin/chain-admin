@@ -7965,11 +7965,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }
             }
             
-            // Update account balance if available
+            // Update account balance if available - check multiple possible SMAX field names
             const updateData: any = {};
-            if (smaxAccountData.balance !== undefined) {
-              const newBalanceCents = Math.round(parseFloat(smaxAccountData.balance) * 100);
-              updateData.balanceCents = newBalanceCents;
+            const rawBalance = smaxAccountData.balance || smaxAccountData.currentbalance || 
+                              smaxAccountData.balancedue || smaxAccountData.totalbalance;
+            if (rawBalance !== undefined && rawBalance !== null) {
+              const balanceFloat = parseFloat(rawBalance.toString().replace(/[^0-9.-]/g, ''));
+              if (Number.isFinite(balanceFloat)) {
+                // Normalize to cents - SMAX may return dollars or cents
+                const newBalanceCents = rawBalance.toString().includes('.')
+                  ? Math.round(balanceFloat * 100)
+                  : Math.round(balanceFloat);
+                updateData.balanceCents = Math.max(0, newBalanceCents);
+                console.log(`💰 SMAX Balance restored for ${account.accountNumber}: ${newBalanceCents} cents`);
+              }
             }
             
             // Update status if we found one
@@ -18160,6 +18169,97 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error refreshing balances:", error);
       res.status(500).json({ message: "Failed to refresh balances" });
+    }
+  });
+
+  // Force SMAX sync for a specific tenant (platform admin only) - restores balances from SMAX
+  app.post('/api/admin/force-smax-sync', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { tenantId } = req.body;
+      
+      if (!tenantId) {
+        return res.status(400).json({ message: "Tenant ID is required" });
+      }
+      
+      console.log(`🔄 Force SMAX sync requested for tenant ${tenantId}`);
+      
+      // Check if SMAX is enabled for this tenant
+      const settings = await storage.getTenantSettings(tenantId);
+      if (!settings?.smaxEnabled) {
+        return res.status(400).json({ 
+          success: false,
+          message: "SMAX is not enabled for this tenant" 
+        });
+      }
+      
+      // Get all accounts for this tenant
+      const accounts = await storage.getAccountsByTenant(tenantId);
+      console.log(`📊 Found ${accounts.length} accounts to sync from SMAX`);
+      
+      const syncResults = {
+        total: accounts.length,
+        synced: 0,
+        failed: 0,
+        skipped: 0,
+        balancesRestored: 0,
+        errors: [] as string[],
+      };
+      
+      for (const account of accounts) {
+        if (!account.accountNumber && !account.filenumber) {
+          syncResults.skipped++;
+          continue;
+        }
+        
+        try {
+          const smaxAccountData = await smaxService.getAccount(tenantId, account.accountNumber || account.filenumber || '');
+          
+          if (smaxAccountData) {
+            const updateData: any = {};
+            
+            // Get balance from SMAX - check multiple field names
+            const rawBalance = smaxAccountData.balance || smaxAccountData.currentbalance || 
+                              smaxAccountData.balancedue || smaxAccountData.totalbalance;
+            if (rawBalance !== undefined && rawBalance !== null) {
+              const balanceFloat = parseFloat(rawBalance.toString().replace(/[^0-9.-]/g, ''));
+              if (Number.isFinite(balanceFloat)) {
+                const newBalanceCents = rawBalance.toString().includes('.')
+                  ? Math.round(balanceFloat * 100)
+                  : Math.round(balanceFloat);
+                updateData.balanceCents = Math.max(0, newBalanceCents);
+                syncResults.balancesRestored++;
+                console.log(`💰 Balance restored for ${account.accountNumber || account.filenumber}: ${newBalanceCents} cents`);
+              }
+            }
+            
+            // Get status from SMAX
+            if (smaxAccountData.statusname) {
+              updateData.status = smaxAccountData.statusname;
+            }
+            
+            if (Object.keys(updateData).length > 0) {
+              await storage.updateAccount(account.id, updateData);
+              syncResults.synced++;
+            }
+          } else {
+            syncResults.skipped++;
+          }
+        } catch (err: any) {
+          syncResults.failed++;
+          syncResults.errors.push(`${account.accountNumber}: ${err.message}`);
+        }
+      }
+      
+      console.log(`✅ SMAX sync complete: ${syncResults.synced} synced, ${syncResults.balancesRestored} balances restored`);
+      
+      res.json({
+        success: true,
+        message: `SMAX sync complete: ${syncResults.balancesRestored} balances restored`,
+        ...syncResults,
+      });
+    } catch (error) {
+      console.error("Error forcing SMAX sync:", error);
+      res.status(500).json({ message: "Failed to sync from SMAX" });
     }
   });
 

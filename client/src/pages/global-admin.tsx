@@ -832,6 +832,30 @@ export default function GlobalAdmin() {
     },
   });
 
+  // Force SMAX Sync - Restore balances from SMAX for SMAX-enabled tenants
+  const [smaxSyncResult, setSmaxSyncResult] = useState<any>(null);
+  const [smaxSyncTenantId, setSmaxSyncTenantId] = useState<string>('');
+  const forceSmaxSyncMutation = useMutation({
+    mutationFn: async ({ tenantId }: { tenantId: string }) => {
+      const response = await apiRequest("POST", "/api/admin/force-smax-sync", { tenantId });
+      return response.json();
+    },
+    onSuccess: (data: any) => {
+      setSmaxSyncResult(data);
+      toast({
+        title: "SMAX Sync Complete",
+        description: `Restored ${data.balancesRestored} balances from SMAX.`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "SMAX Sync Failed",
+        description: error.message || "Failed to sync from SMAX",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleCreateAgency = () => {
     if (!newAgencyName.trim() || !newAgencyEmail.trim()) {
       toast({
@@ -2490,6 +2514,70 @@ export default function GlobalAdmin() {
                 )}
               </div>
             )}
+
+            {/* SMAX Sync Section */}
+            <div className="mt-6 pt-6 border-t border-white/10">
+              <h3 className="text-lg font-medium text-blue-50 mb-2">SMAX Balance Restore</h3>
+              <p className="text-sm text-blue-100/60 mb-4">For SMAX-enabled tenants, sync balances directly from SMAX</p>
+              <div className="flex items-end gap-4">
+                <div className="flex-1">
+                  <Label className="text-blue-100/80">Select SMAX Agency</Label>
+                  <Select 
+                    value={smaxSyncTenantId} 
+                    onValueChange={setSmaxSyncTenantId}
+                  >
+                    <SelectTrigger className="bg-white/5 border-white/10 text-blue-100" data-testid="select-smax-tenant">
+                      <SelectValue placeholder="Select Agency" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(tenants as any[])?.map((tenant: any) => (
+                        <SelectItem key={tenant.id} value={tenant.id}>{tenant.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  onClick={() => smaxSyncTenantId && forceSmaxSyncMutation.mutate({ tenantId: smaxSyncTenantId })}
+                  disabled={forceSmaxSyncMutation.isPending || !smaxSyncTenantId}
+                  className="bg-amber-600 hover:bg-amber-700"
+                  data-testid="button-force-smax-sync"
+                >
+                  {forceSmaxSyncMutation.isPending ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Syncing from SMAX...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Restore from SMAX
+                    </>
+                  )}
+                </Button>
+              </div>
+              {smaxSyncResult && (
+                <div className="mt-4 p-4 rounded bg-amber-900/30 border border-amber-500/30">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <span className="text-blue-100/60">Total Accounts:</span>
+                      <div className="font-medium text-blue-100">{smaxSyncResult.total}</div>
+                    </div>
+                    <div>
+                      <span className="text-blue-100/60">Balances Restored:</span>
+                      <div className="font-medium text-amber-300">{smaxSyncResult.balancesRestored}</div>
+                    </div>
+                    <div>
+                      <span className="text-blue-100/60">Synced:</span>
+                      <div className="font-medium text-emerald-300">{smaxSyncResult.synced}</div>
+                    </div>
+                    <div>
+                      <span className="text-blue-100/60">Skipped:</span>
+                      <div className="font-medium text-blue-100/60">{smaxSyncResult.skipped}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
