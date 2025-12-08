@@ -1372,10 +1372,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log('🔄 SMAX enabled - syncing account data for consumer portal access');
         
         for (const account of accountsList) {
-          if (account.filenumber) {
+          // Prefer filenumber, fall back to accountNumber for legacy data
+          const smaxIdentifier = account.filenumber || account.accountNumber;
+          if (smaxIdentifier) {
             try {
               // Get fresh account data from SMAX
-              const smaxAccount = await smaxService.getAccount(tenant.id, account.filenumber);
+              const smaxAccount = await smaxService.getAccount(tenant.id, smaxIdentifier);
               
               if (smaxAccount) {
                 // Parse and normalize balance from SMAX
@@ -1385,7 +1387,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 // Guard against NaN/invalid values - skip balance update if SMAX returns garbage
                 if (!Number.isFinite(balanceFloat)) {
                   console.warn('⚠️ SMAX returned invalid balance, skipping balance sync:', {
-                    filenumber: account.filenumber,
+                    smaxIdentifier,
                     rawSmaxBalance: rawBalance,
                     parsedValue: balanceFloat
                   });
@@ -1396,7 +1398,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     });
                     account.status = smaxAccount.statusname;
                     console.log('✅ Account status updated from SMAX (balance skipped):', {
-                      filenumber: account.filenumber,
+                      smaxIdentifier,
                       newStatus: smaxAccount.statusname
                     });
                   }
@@ -1410,7 +1412,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   : Math.round(balanceFloat));
                 
                 console.log('💰 SMAX Balance Sync:', {
-                  filenumber: account.filenumber,
+                  smaxIdentifier,
                   rawSmaxBalance: rawBalance,
                   normalizedCents: balanceCents,
                   currentLocalBalance: account.balanceCents,
@@ -1432,14 +1434,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   }
                   
                   console.log('✅ Account updated from SMAX:', {
-                    filenumber: account.filenumber,
+                    smaxIdentifier,
                     newBalance: balanceCents,
                     newStatus: smaxAccount.statusname
                   });
                 }
               }
             } catch (smaxError) {
-              console.error('⚠️ SMAX sync error for filenumber:', account.filenumber, smaxError);
+              console.error('⚠️ SMAX sync error for:', smaxIdentifier, smaxError);
               // Non-blocking - continue with local data if SMAX fails
             }
           }
@@ -7916,15 +7918,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
 
       for (const account of accounts) {
-        // Skip accounts without account numbers
-        if (!account.accountNumber) {
+        // SMAX uses filenumber - prefer filenumber, fall back to accountNumber for legacy data
+        const smaxIdentifier = account.filenumber || account.accountNumber;
+        if (!smaxIdentifier) {
           syncResults.skipped++;
           continue;
         }
 
         try {
-          // Pull account data from SMAX
-          const smaxAccountData = await smaxService.getAccount(tenantId, account.accountNumber);
+          // Pull account data from SMAX using filenumber (or accountNumber fallback)
+          const smaxAccountData = await smaxService.getAccount(tenantId, smaxIdentifier);
           
           if (smaxAccountData) {
             // Sync account status from SMAX (do this regardless of balance data)
@@ -7977,7 +7980,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   ? Math.round(balanceFloat * 100)
                   : Math.round(balanceFloat);
                 updateData.balanceCents = Math.max(0, newBalanceCents);
-                console.log(`💰 SMAX Balance restored for ${account.accountNumber}: ${newBalanceCents} cents`);
+                console.log(`💰 SMAX Balance restored for ${smaxIdentifier}: ${newBalanceCents} cents`);
               }
             }
             
@@ -8034,14 +8037,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
             
             syncResults.synced++;
-            console.log(`✅ Synced account ${account.accountNumber}: Balance updated to $${smaxAccountData.balance}`);
+            console.log(`✅ Synced account ${smaxIdentifier}: Balance updated to $${smaxAccountData.balance}`);
           } else {
             syncResults.failed++;
-            syncResults.errors.push(`Account ${account.accountNumber}: No balance data from SMAX`);
+            syncResults.errors.push(`Account ${smaxIdentifier}: No balance data from SMAX`);
           }
 
-          // Pull and import payments from SMAX
-          const smaxPayments = await smaxService.getPayments(tenantId, account.accountNumber);
+          // Pull and import payments from SMAX using filenumber (or accountNumber fallback)
+          const smaxPayments = await smaxService.getPayments(tenantId, smaxIdentifier);
           
           if (smaxPayments && smaxPayments.length > 0) {
             // Get existing payments for this account to avoid duplicates
@@ -8077,14 +8080,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
                 syncResults.paymentsImported++;
               } catch (paymentError: any) {
-                console.error(`Failed to import payment for account ${account.accountNumber}:`, paymentError);
+                console.error(`Failed to import payment for account ${smaxIdentifier}:`, paymentError);
               }
             }
           }
         } catch (error: any) {
           syncResults.failed++;
-          syncResults.errors.push(`Account ${account.accountNumber}: ${error.message}`);
-          console.error(`❌ Failed to sync account ${account.accountNumber}:`, error);
+          syncResults.errors.push(`Account ${smaxIdentifier}: ${error.message}`);
+          console.error(`❌ Failed to sync account ${smaxIdentifier}:`, error);
         }
       }
 
@@ -18206,13 +18209,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       for (const account of accounts) {
-        if (!account.accountNumber && !account.filenumber) {
+        // SMAX uses filenumber - prefer filenumber, fall back to accountNumber for legacy data
+        const smaxIdentifier = account.filenumber || account.accountNumber;
+        if (!smaxIdentifier) {
           syncResults.skipped++;
           continue;
         }
         
         try {
-          const smaxAccountData = await smaxService.getAccount(tenantId, account.accountNumber || account.filenumber || '');
+          const smaxAccountData = await smaxService.getAccount(tenantId, smaxIdentifier);
           
           if (smaxAccountData) {
             const updateData: any = {};
@@ -18228,7 +18233,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   : Math.round(balanceFloat);
                 updateData.balanceCents = Math.max(0, newBalanceCents);
                 syncResults.balancesRestored++;
-                console.log(`💰 Balance restored for ${account.accountNumber || account.filenumber}: ${newBalanceCents} cents`);
+                console.log(`💰 Balance restored for ${smaxIdentifier}: ${newBalanceCents} cents`);
               }
             }
             
@@ -18246,7 +18251,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         } catch (err: any) {
           syncResults.failed++;
-          syncResults.errors.push(`${account.accountNumber}: ${err.message}`);
+          syncResults.errors.push(`${smaxIdentifier}: ${err.message}`);
         }
       }
       
