@@ -1377,9 +1377,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (smaxIdentifier) {
             try {
               // Get fresh account data from SMAX
+              console.log(`🔍 Calling SMAX getAccount for: ${smaxIdentifier}`);
               const smaxAccount = await smaxService.getAccount(tenant.id, smaxIdentifier);
               
               if (smaxAccount) {
+                console.log(`✅ SMAX getAccount returned data for ${smaxIdentifier}:`, JSON.stringify(smaxAccount, null, 2));
                 // Parse and normalize balance from SMAX
                 const rawBalance = smaxAccount.balance || smaxAccount.currentbalance || smaxAccount.balancedue || '0';
                 const balanceFloat = parseFloat(rawBalance.toString().replace(/[^0-9.-]/g, ''));
@@ -1439,6 +1441,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     newStatus: smaxAccount.statusname
                   });
                 }
+              } else {
+                console.warn(`⚠️ SMAX getAccount returned null for ${smaxIdentifier} - /getaccount endpoint may not exist or returned no data`);
               }
             } catch (smaxError) {
               console.error('⚠️ SMAX sync error for:', smaxIdentifier, smaxError);
