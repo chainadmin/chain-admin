@@ -1383,6 +1383,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
               if (smaxAccount) {
                 console.log(`✅ SMAX getAccount returned data for ${smaxIdentifier}:`, JSON.stringify(smaxAccount, null, 2));
                 
+                // Log all field names that might contain balance/amount info
+                const allKeys = Object.keys(smaxAccount);
+                const balanceRelatedKeys = allKeys.filter(k => 
+                  k.toLowerCase().includes('balance') || 
+                  k.toLowerCase().includes('amount') || 
+                  k.toLowerCase().includes('owed') ||
+                  k.toLowerCase().includes('due')
+                );
+                console.log(`📋 SMAX response has ${allKeys.length} fields. Balance-related fields:`, balanceRelatedKeys);
+                
                 // Find balance field case-insensitively - SMAX field names may vary in case
                 let rawBalance = '0';
                 for (const [key, value] of Object.entries(smaxAccount)) {
