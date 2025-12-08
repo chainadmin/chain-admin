@@ -1381,30 +1381,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const smaxAccount = await smaxService.getAccount(tenant.id, smaxIdentifier);
               
               if (smaxAccount) {
-                console.log(`✅ SMAX getAccount returned data for ${smaxIdentifier}:`, JSON.stringify(smaxAccount, null, 2));
+                // Handle array response - SMAX may return [account] or account
+                const accountData = Array.isArray(smaxAccount) ? smaxAccount[0] : smaxAccount;
                 
-                // Log all field names that might contain balance/amount info
-                const allKeys = Object.keys(smaxAccount);
-                const balanceRelatedKeys = allKeys.filter(k => 
-                  k.toLowerCase().includes('balance') || 
-                  k.toLowerCase().includes('amount') || 
-                  k.toLowerCase().includes('owed') ||
-                  k.toLowerCase().includes('due')
-                );
-                console.log(`📋 SMAX response has ${allKeys.length} fields. Balance-related fields:`, balanceRelatedKeys);
+                if (!accountData) {
+                  console.log(`⚠️ SMAX returned empty array for ${smaxIdentifier}`);
+                  continue;
+                }
                 
-                // Find balance field case-insensitively - SMAX field names may vary in case
-                let rawBalance = '0';
-                for (const [key, value] of Object.entries(smaxAccount)) {
-                  const lowerKey = key.toLowerCase();
-                  if ((lowerKey === 'currentbalance' || lowerKey === 'balance' || 
-                       lowerKey === 'balancedue' || lowerKey === 'totalbalance' ||
-                       lowerKey === 'amountdue' || lowerKey === 'amountowed') && 
-                      value !== null && value !== undefined) {
-                    rawBalance = String(value);
-                    console.log(`💰 Found SMAX balance field "${key}" = "${value}"`);
-                    break;
+                console.log(`✅ SMAX getAccount returned data for ${smaxIdentifier}, currentbalance: ${accountData.currentbalance}`);
+                
+                // Extract currentbalance directly (case-insensitive lookup as fallback)
+                let rawBalance = accountData.currentbalance || accountData.CurrentBalance || accountData.balance || accountData.Balance || '0';
+                
+                // If still not found, do case-insensitive search
+                if (rawBalance === '0') {
+                  for (const [key, value] of Object.entries(accountData)) {
+                    const lowerKey = key.toLowerCase();
+                    if ((lowerKey === 'currentbalance' || lowerKey === 'balance' || 
+                         lowerKey === 'balancedue' || lowerKey === 'totalbalance') && 
+                        value !== null && value !== undefined) {
+                      rawBalance = String(value);
+                      console.log(`💰 Found SMAX balance field "${key}" = "${value}"`);
+                      break;
+                    }
                   }
+                } else {
+                  console.log(`💰 SMAX currentbalance = "${rawBalance}"`);
                 }
                 
                 const balanceFloat = parseFloat(rawBalance.toString().replace(/[^0-9.-]/g, ''));
@@ -1417,14 +1420,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     parsedValue: balanceFloat
                   });
                   // Still update status if available
-                  if (smaxAccount.statusname && smaxAccount.statusname !== account.status) {
+                  if (accountData.statusname && accountData.statusname !== account.status) {
                     await storage.updateAccount(account.id, {
-                      status: smaxAccount.statusname,
+                      status: accountData.statusname,
                     });
-                    account.status = smaxAccount.statusname;
+                    account.status = accountData.statusname;
                     console.log('✅ Account status updated from SMAX (balance skipped):', {
                       smaxIdentifier,
-                      newStatus: smaxAccount.statusname
+                      newStatus: accountData.statusname
                     });
                   }
                   continue;
@@ -1441,27 +1444,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   rawSmaxBalance: rawBalance,
                   normalizedCents: balanceCents,
                   currentLocalBalance: account.balanceCents,
-                  smaxStatus: smaxAccount.statusname || smaxAccount.status
+                  smaxStatus: accountData.statusname || accountData.status
                 });
                 
                 // Update local account with SMAX data if different
                 if (balanceCents !== account.balanceCents || 
-                    (smaxAccount.statusname && smaxAccount.statusname !== account.status)) {
+                    (accountData.statusname && accountData.statusname !== account.status)) {
                   await storage.updateAccount(account.id, {
                     balanceCents: balanceCents,
-                    status: smaxAccount.statusname || account.status,
+                    status: accountData.statusname || account.status,
                   });
                   
                   // Update the account in the list for immediate response
                   account.balanceCents = balanceCents;
-                  if (smaxAccount.statusname) {
-                    account.status = smaxAccount.statusname;
+                  if (accountData.statusname) {
+                    account.status = accountData.statusname;
                   }
                   
                   console.log('✅ Account updated from SMAX:', {
                     smaxIdentifier,
                     newBalance: balanceCents,
-                    newStatus: smaxAccount.statusname
+                    newStatus: accountData.statusname
                   });
                 }
               } else {
