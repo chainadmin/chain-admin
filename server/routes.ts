@@ -18030,6 +18030,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Refresh all account balances by recalculating from payment history
+  // NOTE: This ONLY works for non-SMAX tenants. SMAX tenants have their balances
+  // managed by SMAX sync and should NOT be processed here.
   app.post('/api/admin/refresh-balances', isPlatformAdmin, async (req: any, res) => {
     try {
       console.log('🔄 Starting balance refresh for all accounts...');
@@ -18037,6 +18039,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const { tenantId } = req.body;
       console.log('Tenant ID filter:', tenantId || 'ALL');
+      
+      // First, get all tenant settings to identify SMAX-enabled tenants
+      const allTenantSettings = await db.select().from(tenantSettings);
+      const smaxEnabledTenantIds = new Set(
+        allTenantSettings
+          .filter(ts => ts.smaxEnabled === true)
+          .map(ts => ts.tenantId)
+      );
+      console.log(`🔍 Found ${smaxEnabledTenantIds.size} SMAX-enabled tenants (will be skipped)`);
+      
+      // Check if the specific tenant requested is SMAX-enabled
+      if (tenantId && smaxEnabledTenantIds.has(tenantId)) {
+        console.log(`⚠️ Tenant ${tenantId} has SMAX enabled - balances are managed by SMAX sync`);
+        return res.json({
+          success: true,
+          message: "This tenant uses SMAX - balances are managed by SMAX sync. Access the accounts page to trigger a fresh sync from SMAX.",
+          totalAccounts: 0,
+          updatedCount: 0,
+          errorCount: 0,
+          skippedSmaxTenant: true,
+          updates: [],
+        });
+      }
       
       // Get all accounts (optionally filtered by tenant)
       let allAccounts: any[];
@@ -18057,6 +18082,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       let updatedCount = 0;
       let errorCount = 0;
+      let skippedSmaxCount = 0;
       const updates: any[] = [];
       
       for (const account of allAccounts) {
@@ -18064,6 +18090,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Skip accounts without tenantId - data integrity issue
           if (!account.tenantId) {
             console.log(`⏭️ Skipping account ${account.filenumber || account.id}: no tenantId`);
+            continue;
+          }
+          
+          // Skip accounts from SMAX-enabled tenants - their balances come from SMAX
+          if (smaxEnabledTenantIds.has(account.tenantId)) {
+            skippedSmaxCount++;
             continue;
           }
           
@@ -18114,13 +18146,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      console.log(`🔄 Balance refresh complete: ${updatedCount} updated, ${errorCount} errors`);
+      console.log(`🔄 Balance refresh complete: ${updatedCount} updated, ${skippedSmaxCount} SMAX accounts skipped, ${errorCount} errors`);
       
       res.json({
         success: true,
-        message: `Refreshed ${updatedCount} account balances`,
+        message: `Refreshed ${updatedCount} account balances (${skippedSmaxCount} SMAX accounts skipped)`,
         totalAccounts: allAccounts.length,
         updatedCount,
+        skippedSmaxCount,
         errorCount,
         updates,
       });
