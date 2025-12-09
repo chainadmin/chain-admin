@@ -48,14 +48,14 @@ const callCenterPlans: Record<MessagingPlanId, MessagingPlan> = {
   pro: {
     id: "pro",
     name: "Professional",
-    price: 1_025,
+    price: 1_125,
     includedEmails: 75_000,
     includedSmsSegments: 40_000,
   },
   scale: {
     id: "scale",
     name: "Enterprise",
-    price: 2_025,
+    price: 2_125,
     includedEmails: 200_000,
     includedSmsSegments: 100_000,
   },
