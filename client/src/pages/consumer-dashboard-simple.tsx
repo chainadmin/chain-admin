@@ -2267,185 +2267,108 @@ export default function ConsumerDashboardSimple() {
                     </div>
                   )}
 
-                  {/* Simplified Payment Plan Section */}
-                  <div className="space-y-3">
-                    <Label className="text-base font-semibold text-white">Set Up Payment Plan</Label>
-                    
-                    {/* Quick Term Buttons */}
-                    <div>
-                      <Label className="text-sm text-blue-100/70 mb-2 block">Choose Payment Term</Label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {([3, 6, 12] as const).map((term) => {
-                          const minimumMonthly = settings?.minimumMonthlyPayment ?? 5000;
-                          const monthlyPayment = calculatePaymentAmount(selectedAccount?.balanceCents || 0, term, minimumMonthly);
-                          const biweeklyPayment = convertToFrequency(monthlyPayment, 'biweekly');
-                          
-                          return (
-                            <button
-                              key={term}
-                              type="button"
-                              onClick={() => {
-                                setPaymentMethod('term');
-                                setSelectedTerm(term);
-                                setMonthlyBaseAmount(monthlyPayment);
-                                setCalculatedPayment(biweeklyPayment);
-                                setSelectedArrangement(null);
-                              }}
-                              className={`p-3 rounded-lg border-2 transition-all text-left backdrop-blur ${
-                                paymentMethod === 'term' && selectedTerm === term
-                                  ? 'border-blue-400 bg-blue-500/20'
-                                  : 'border-white/20 bg-white/5 hover:border-blue-400/50 hover:bg-white/10'
-                              }`}
-                              data-testid={`button-term-${term}`}
-                            >
-                              <div className="text-xs text-blue-100/70 mb-1">{term} Months</div>
-                              <div className="text-lg font-bold text-blue-300">
-                                {formatCurrency(biweeklyPayment)}
-                              </div>
-                              <div className="text-xs text-blue-100/50 mt-1">bi-weekly</div>
-                              {monthlyPayment >= minimumMonthly && monthlyPayment > (selectedAccount?.balanceCents || 0) / term && (
-                                <div className="text-xs text-amber-300 mt-1">Min. applied</div>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* OR Divider */}
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1 border-t border-white/20"></div>
-                      <span className="text-sm text-blue-100/50 font-medium">OR</span>
-                      <div className="flex-1 border-t border-white/20"></div>
-                    </div>
-
-                    {/* Custom Amount Input */}
-                    <div>
-                      <Label htmlFor="customAmountInput" className="text-sm text-blue-100/70 mb-2 block">
-                        Enter Custom Payment Amount
-                      </Label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-100/50 text-lg">$</span>
-                        <Input
-                          type="number"
-                          id="customAmountInput"
-                          value={customAmount}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            setCustomAmount(value);
-                            setPaymentMethod('custom');
-                            setSelectedTerm(null);
-                            setSelectedArrangement(null);
-                            
-                            if (value) {
-                              const amountCents = Math.round(parseFloat(value) * 100);
-                              const minimumMonthly = settings?.minimumMonthlyPayment ?? 5000;
-                              const monthlyAmount = amountCents < minimumMonthly ? minimumMonthly : amountCents;
-                              
-                              // Store monthly base and convert to selected frequency
-                              setMonthlyBaseAmount(monthlyAmount);
-                              const finalAmount = convertToFrequency(monthlyAmount, paymentFrequency);
-                              setCalculatedPayment(finalAmount);
-                              
-                              if (amountCents < minimumMonthly) {
-                                toast({
-                                  title: "Minimum Applied",
-                                  description: `Amount adjusted to minimum monthly: ${formatCurrency(minimumMonthly)}`,
-                                });
-                              }
-                            } else {
-                              setMonthlyBaseAmount(null);
-                              setCalculatedPayment(null);
-                            }
-                          }}
-                          min={((settings?.minimumMonthlyPayment ?? 5000) / 100)}
-                          max={(selectedAccount?.balanceCents || 0) / 100}
-                          step="0.01"
-                          placeholder="0.00"
-                          className="pl-8 text-lg bg-white/5 border-white/20 text-white placeholder:text-blue-100/30"
-                          data-testid="input-custom-amount"
-                        />
-                      </div>
-                      <p className="text-xs text-blue-100/50 mt-1">
-                        Min: ${((settings?.minimumMonthlyPayment ?? 5000) / 100).toFixed(2)} | Max: ${((selectedAccount?.balanceCents || 0) / 100).toFixed(2)}
-                      </p>
-                    </div>
-
-                    {/* Payment Frequency Selector */}
-                    {(calculatedPayment !== null || customAmount) && (
-                      <div>
-                        <Label className="text-sm text-blue-100/70 mb-2 block">Payment Frequency</Label>
-                        <div className="grid grid-cols-3 gap-2">
-                          {(['weekly', 'biweekly', 'monthly'] as const).map((freq) => {
-                            // Always use monthlyBaseAmount for conversion to ensure accuracy
-                            const baseMonthlyAmount = monthlyBaseAmount || 0;
-                            const amount = convertToFrequency(baseMonthlyAmount, freq);
-
-                            return (
-                              <button
-                                key={freq}
-                                type="button"
-                                onClick={() => {
-                                  setPaymentFrequency(freq);
-                                  // Use stored monthlyBaseAmount for conversion
-                                  if (monthlyBaseAmount) {
-                                    setCalculatedPayment(convertToFrequency(monthlyBaseAmount, freq));
-                                  }
-                                }}
-                                className={`p-3 rounded-lg border-2 transition-all backdrop-blur ${
-                                  paymentFrequency === freq
-                                    ? 'border-blue-400 bg-blue-500/20'
-                                    : 'border-white/20 bg-white/5 hover:border-blue-400/50 hover:bg-white/10'
-                                }`}
-                                data-testid={`button-frequency-${freq}`}
-                              >
-                                <div className="text-sm font-medium capitalize text-white">{freq}</div>
-                                <div className="text-xs text-blue-100/70 mt-1">
-                                  {formatCurrency(amount)}
-                                </div>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Payment Schedule Preview */}
-                    {calculatedPayment !== null && (
-                      <div className="rounded-lg bg-white/5 border border-white/10 p-4 backdrop-blur">
+                  {/* Payment Plan Options - Agency Configured */}
+                  {applicableArrangements.filter((arr: any) => arr.planType !== 'settlement').length > 0 && (
+                    <div className="space-y-3">
+                      <div className="rounded-lg bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border-2 border-blue-400/30 p-4 backdrop-blur">
                         <div className="flex items-center gap-2 mb-3">
-                          <Calendar className="h-4 w-4 text-blue-400" />
-                          <Label className="text-sm font-semibold text-blue-200">Payment Schedule Preview</Label>
+                          <Calendar className="h-5 w-5 text-blue-400" />
+                          <Label className="text-base font-semibold text-blue-200">Payment Plans</Label>
                         </div>
                         <div className="space-y-2">
-                          {generatePaymentSchedule(calculatedPayment, paymentFrequency).map((payment, index) => (
-                            <div key={index} className="flex items-center justify-between text-sm">
-                              <span className="text-blue-100/70">{payment.date}</span>
-                              <span className="font-medium text-blue-300">{formatCurrency(payment.amount)}</span>
-                            </div>
-                          ))}
+                          {applicableArrangements
+                            .filter((arr: any) => arr.planType !== 'settlement')
+                            .map((arrangement: any) => {
+                              const summary = getArrangementSummary(arrangement);
+                              const paymentAmount = calculateArrangementPayment(arrangement, selectedAccount?.balanceCents || 0);
+                              const isSelected = selectedArrangement?.id === arrangement.id;
+                              
+                              return (
+                                <div
+                                  key={arrangement.id}
+                                  onClick={() => {
+                                    setSelectedArrangement(arrangement);
+                                    setCalculatedPayment(null);
+                                    setPaymentMethod('term');
+                                    setSelectedTerm(null);
+                                    setCustomAmount('');
+                                  }}
+                                  className={`cursor-pointer rounded-lg border-2 p-3 transition-all ${
+                                    isSelected
+                                      ? 'border-blue-400 bg-blue-500/20 backdrop-blur'
+                                      : 'border-blue-400/30 bg-white/5 hover:bg-white/10 hover:border-blue-400/50'
+                                  }`}
+                                  data-testid={`option-plan-${arrangement.id}`}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex-1">
+                                      <p className="font-medium text-blue-200">{arrangement.name}</p>
+                                      {summary.detail && (
+                                        <p className="text-sm text-blue-100/70 mt-1">{summary.detail}</p>
+                                      )}
+                                      {arrangement.planType === 'one_time_payment' ? (
+                                        <p className="text-sm text-blue-100/70 mt-1">
+                                          Min: {formatCurrency(arrangement.oneTimePaymentMin || 0)}
+                                        </p>
+                                      ) : (
+                                        <p className="text-lg font-bold text-blue-300 mt-1">
+                                          {formatCurrency(paymentAmount)}/month
+                                        </p>
+                                      )}
+                                    </div>
+                                    {isSelected && (
+                                      <Badge className="bg-blue-500 text-white border-blue-400/30">Selected</Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
                         </div>
-                        <p className="text-xs text-blue-100/50 mt-3 border-t border-white/10 pt-2">
-                          Showing next 4 scheduled payments
-                        </p>
                       </div>
-                    )}
 
-                    {/* Info message about one-time payments */}
-                    {(!paymentSchedules || paymentSchedules.length === 0) && (
-                      <div className="rounded-lg bg-blue-500/10 border border-blue-400/30 p-3 backdrop-blur">
-                        <div className="flex gap-2">
-                          <AlertCircle className="h-4 w-4 text-blue-400 flex-shrink-0 mt-0.5" />
-                          <div className="text-sm text-blue-100/80">
-                            <p className="font-medium text-blue-200 mb-1">Set Up a Payment Plan First</p>
-                            <p className="text-xs text-blue-100/70">
-                              To make payments on this account, please choose a payment plan above. This creates a payment arrangement that helps us track and process your payments correctly.
-                            </p>
+                      {/* One-time payment custom amount input */}
+                      {selectedArrangement?.planType === 'one_time_payment' && (
+                        <div className="rounded-lg bg-purple-500/10 border-2 border-purple-400/30 p-4 backdrop-blur">
+                          <Label htmlFor="oneTimePaymentInput" className="text-sm text-purple-100/70 mb-2 block">
+                            Enter Payment Amount
+                          </Label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-purple-100/50 text-lg">$</span>
+                            <Input
+                              type="number"
+                              id="oneTimePaymentInput"
+                              value={customPaymentAmount}
+                              onChange={(e) => setCustomPaymentAmount(e.target.value)}
+                              min={(selectedArrangement.oneTimePaymentMin || 0) / 100}
+                              max={(selectedAccount?.balanceCents || 0) / 100}
+                              step="0.01"
+                              placeholder="0.00"
+                              className="pl-8 text-lg bg-white/5 border-white/20 text-white placeholder:text-purple-100/30"
+                              data-testid="input-one-time-amount"
+                            />
                           </div>
+                          <p className="text-xs text-purple-100/50 mt-1">
+                            Min: ${((selectedArrangement.oneTimePaymentMin || 0) / 100).toFixed(2)} | Max: ${((selectedAccount?.balanceCents || 0) / 100).toFixed(2)}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* No payment plans available message */}
+                  {applicableArrangements.length === 0 && !noArrangementsAvailable && (
+                    <div className="rounded-lg bg-amber-500/10 border border-amber-400/30 p-3 backdrop-blur">
+                      <div className="flex gap-2">
+                        <AlertCircle className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                        <div className="text-sm text-amber-100/80">
+                          <p className="font-medium text-amber-200 mb-1">No Payment Plans Available</p>
+                          <p className="text-xs text-amber-100/70">
+                            There are no payment plans available for your current balance. Please contact us to discuss payment options.
+                          </p>
                         </div>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               )}
 
