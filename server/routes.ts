@@ -8511,7 +8511,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Arrangement Calculation Engine
-  const calculateArrangementDetails = (option: any, balanceCents: number) => {
+  // tenantGlobalMinimum is the tenant-level minimum monthly payment (fallback when plan has no specific minimum)
+  const calculateArrangementDetails = (option: any, balanceCents: number, tenantGlobalMinimum: number = 0) => {
     const calculated: any = {
       ...option,
       calculatedMonthlyPayment: null,
@@ -8523,22 +8524,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     switch (option.planType) {
       case "range":
-        // Use the arrangement's configured minimum monthly payment
-        const minPayment = option.monthlyPaymentMin || 0;
-        const maxPayment = option.monthlyPaymentMax || balanceCents;
+        // Use plan-specific minimum, or fall back to tenant global minimum if not set
+        const minPayment = option.monthlyPaymentMin || tenantGlobalMinimum || 0;
+        // Max payment is always the full balance (removed max restriction)
+        const maxPayment = balanceCents;
         const maxTerm = option.maxTermMonths || 12;
         
         // Calculate minimum payment to pay off balance within max term
         const calculatedMinimum = Math.ceil(balanceCents / maxTerm);
         
         // Use the greater of: configured minimum or calculated minimum
-        // But clamp to the configured maximum to respect plan constraints
         const unclamped = Math.max(minPayment, calculatedMinimum);
-        calculated.calculatedMonthlyPayment = Math.min(unclamped, maxPayment);
+        calculated.calculatedMonthlyPayment = unclamped;
         
-        // Verify the payment is within bounds, otherwise this option is not viable
-        if (calculated.calculatedMonthlyPayment < minPayment || calculated.calculatedMonthlyPayment > maxPayment) {
-          return null; // This option doesn't work for this balance
+        // Store the minimum payment for consumer portal to enforce
+        calculated.minimumMonthlyPayment = minPayment;
+        calculated.maximumMonthlyPayment = maxPayment;
+        
+        // Verify the minimum payment doesn't exceed balance (would be invalid)
+        if (minPayment > balanceCents) {
+          return null; // Minimum is greater than balance, option not viable
         }
         
         // Calculate term and verify it doesn't exceed the max term
@@ -8695,8 +8700,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Calculate payment details for each expanded option and filter out non-viable ones
+      // Use tenant's global minimumMonthlyPayment as fallback when plan has no specific minimum
+      const tenantGlobalMinimum = settings?.minimumMonthlyPayment || 0;
       const calculatedOptions = expandedOptions
-        .map(option => calculateArrangementDetails(option, balanceCents))
+        .map(option => calculateArrangementDetails(option, balanceCents, tenantGlobalMinimum))
         .filter(option => option !== null);
       
       // Fetch SMAX arrangements for all consumer accounts with filenumbers
