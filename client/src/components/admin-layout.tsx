@@ -260,7 +260,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                           <button
                             key={consumer.id}
                             onClick={() => handleResultClick('consumer', consumer.id)}
-                            className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-white/10 transition-colors"
+                            className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-white/10 transition-colors text-white"
                             data-testid={`search-result-consumer-${consumer.id}`}
                           >
                             <div className="flex items-center gap-3">
@@ -288,7 +288,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                           <button
                             key={account.id}
                             onClick={() => handleResultClick('account', account.id)}
-                            className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-white/10 transition-colors"
+                            className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-white/10 transition-colors text-white"
                             data-testid={`search-result-account-${account.id}`}
                           >
                             <div className="flex items-center gap-3">
@@ -300,7 +300,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                                   {account.accountNumber || account.creditor}
                                 </p>
                                 <p className="text-xs text-blue-100/60 truncate">
-                                  {account.firstName} {account.lastName} • ${(account.balanceCents / 100).toFixed(2)}
+                                  {account.firstName} {account.lastName} • ${((account.balanceCents || 0) / 100).toFixed(2)}
                                 </p>
                               </div>
                             </div>
