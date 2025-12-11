@@ -39,66 +39,6 @@ waitForPort = 5000
 localPort = 5000
 externalPort = 80
 
-[[ports]]
-localPort = 32855
-externalPort = 3001
-
-[[ports]]
-localPort = 33189
-externalPort = 9000
-
-[[ports]]
-localPort = 33627
-externalPort = 8099
-
-[[ports]]
-localPort = 34065
-externalPort = 5000
-
-[[ports]]
-localPort = 35089
-externalPort = 8080
-
-[[ports]]
-localPort = 35527
-externalPort = 5173
-
-[[ports]]
-localPort = 39659
-externalPort = 3002
-
-[[ports]]
-localPort = 40429
-externalPort = 6800
-
-[[ports]]
-localPort = 40793
-externalPort = 8000
-
-[[ports]]
-localPort = 40969
-externalPort = 3000
-
-[[ports]]
-localPort = 41833
-externalPort = 3003
-
-[[ports]]
-localPort = 42115
-externalPort = 8081
-
-[[ports]]
-localPort = 42255
-externalPort = 8008
-
-[[ports]]
-localPort = 45965
-externalPort = 6000
-
-[[ports]]
-localPort = 46319
-externalPort = 4200
-
 [agent]
 integrations = ["javascript_supabase:1.0.0", "javascript_object_storage:1.0.0", "javascript_log_in_with_replit:1.0.0"]
 
