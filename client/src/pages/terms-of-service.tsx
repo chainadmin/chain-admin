@@ -110,42 +110,49 @@ export default function TermsOfService() {
             </section>
 
             <section>
-              <h3>6. User conduct; prohibited uses</h3>
+              <h3>6. Refunds and returns policy</h3>
+              <p><strong>ALL PAYMENTS ARE FINAL.</strong> Any request for a refund, reversal, chargeback, or return of a payment made through this platform must be directed to the agency or creditor responsible for servicing your account ("Servicing Agency"). Chain Software Group acts solely as a technology platform provider and payment facilitator; we do not control, process, or have the authority to authorize refunds or payment reversals on behalf of any Servicing Agency.</p>
+              <p>To request a refund or dispute a payment, you must contact the Servicing Agency directly using the contact information provided in your account portal or on any correspondence you have received from them. The Servicing Agency shall have sole discretion to approve or deny any refund request in accordance with their own policies and applicable law. Chain Software Group disclaims any liability arising from the Servicing Agency's decision to grant or deny a refund.</p>
+              <p>You acknowledge that initiating a chargeback or payment dispute with your financial institution without first attempting to resolve the matter directly with the Servicing Agency may result in additional fees, collection activity, or adverse reporting, as permitted by law and the Servicing Agency's policies.</p>
+            </section>
+
+            <section>
+              <h3>7. User conduct; prohibited uses</h3>
               <p>You agree not to use the app for unlawful purposes, attempt to access data that is not yours, interfere with security or integrity, reverse engineer or scrape the service, or impersonate others.</p>
             </section>
 
             <section>
-              <h3>7. Privacy</h3>
+              <h3>8. Privacy</h3>
               <p>Our collection and use of personal information is described in our privacy notice. Agencies are independent entities and may have their own privacy obligations as controllers of their consumer data.</p>
             </section>
 
             <section>
-              <h3>8. Disclaimers</h3>
+              <h3>9. Disclaimers</h3>
               <p>The app is provided “as is.” We disclaim all warranties, express or implied, including merchantability, fitness for a particular purpose, and non-infringement. We do not guarantee the accuracy of account data provided by agencies.</p>
             </section>
 
             <section>
-              <h3>9. Limitation of liability</h3>
+              <h3>10. Limitation of liability</h3>
               <p>To the maximum extent permitted by law, Chain and its affiliates are not liable for any indirect, incidental, special, consequential or punitive damages, or any loss of profits, data, or goodwill arising from or relating to your use of the app. Our total liability shall not exceed the greater of $100 or the amount you paid to us in the 12 months before the claim.</p>
             </section>
 
             <section>
-              <h3>10. Dispute resolution; arbitration; class action waiver</h3>
+              <h3>11. Dispute resolution; arbitration; class action waiver</h3>
               <p>Any dispute will be resolved by binding arbitration on an individual basis. You waive any right to participate in a class action or class-wide arbitration. You may opt out of arbitration within 30 days of account creation by emailing support@chainsoftwaregroup.com with your name and the subject “Arbitration Opt-Out.”</p>
             </section>
 
             <section>
-              <h3>11. Changes</h3>
+              <h3>12. Changes</h3>
               <p>We may update these terms by posting the revised version with a new “last updated” date. Your continued use constitutes acceptance. Material changes will be notified within the app or by email/SMS where appropriate.</p>
             </section>
 
             <section>
-              <h3>12. Termination</h3>
+              <h3>13. Termination</h3>
               <p>We may suspend or terminate your access for any reason. Sections intended to survive termination will continue in effect.</p>
             </section>
 
             <section>
-              <h3>13. Contact</h3>
+              <h3>14. Contact</h3>
               <p>Questions? support@chainsoftwaregroup.com | 1845 Cleveland Ave, Niagara Falls, NY</p>
             </section>
           </div>

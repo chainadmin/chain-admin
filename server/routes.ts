@@ -1751,6 +1751,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const searchPattern = `%${q}%`;
 
+      // Get tenant settings to check if SMAX is enabled
+      const tenantSettingsData = await storage.getTenantSettings(tenantId);
+      const smaxEnabled = tenantSettingsData?.smaxEnabled ?? false;
+
       // Database-level search for consumers (LIMIT 5 for performance)
       const matchingConsumers = await db
         .select({
@@ -1779,6 +1783,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           accountNumber: accountsTable.accountNumber,
           creditor: accountsTable.creditor,
           balanceCents: accountsTable.balanceCents,
+          originalBalanceCents: accountsTable.originalBalanceCents,
           firstName: consumers.firstName,
           lastName: consumers.lastName,
         })
@@ -1797,13 +1802,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         )
         .limit(5);
 
-      const matchingAccounts = matchingAccountsRaw.map(row => ({
-        id: row.id,
-        accountNumber: row.accountNumber,
-        creditor: row.creditor,
-        balanceCents: row.balanceCents,
-        firstName: row.firstName || '',
-        lastName: row.lastName || '',
+      // Process accounts with balance recalculation for non-SMAX tenants with 0 balance
+      const matchingAccounts = await Promise.all(matchingAccountsRaw.map(async (row) => {
+        let calculatedBalance = row.balanceCents || 0;
+        
+        // If balance is 0 and SMAX is NOT enabled, calculate from original balance minus completed payments
+        if (calculatedBalance === 0 && !smaxEnabled && row.originalBalanceCents) {
+          // Get sum of completed/approved payments for this account
+          const paymentSumResult = await db
+            .select({
+              totalPaid: sql<number>`COALESCE(SUM(${payments.amountCents}), 0)`,
+            })
+            .from(payments)
+            .where(
+              and(
+                eq(payments.accountId, row.id),
+                sql`${payments.status} IN ('completed', 'approved')`
+              )
+            );
+          
+          const totalPaid = Number(paymentSumResult[0]?.totalPaid || 0);
+          calculatedBalance = Math.max(0, (row.originalBalanceCents || 0) - totalPaid);
+        }
+        
+        return {
+          id: row.id,
+          accountNumber: row.accountNumber,
+          creditor: row.creditor,
+          balanceCents: calculatedBalance,
+          firstName: row.firstName || '',
+          lastName: row.lastName || '',
+        };
       }));
 
       res.json({

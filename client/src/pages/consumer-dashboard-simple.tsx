@@ -22,6 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AlertCircle, LogOut, User, Building2, CreditCard, DollarSign, TrendingUp, Mail, Phone, Edit, FileText, MessageSquare, Calendar, Upload, CalendarIcon } from "lucide-react";
+import { SiVisa, SiMastercard, SiAmericanexpress, SiDiscover } from "react-icons/si";
 import { format } from "date-fns";
 import chainLogo from "@/assets/chain-logo.png";
 
@@ -2449,7 +2450,15 @@ export default function ConsumerDashboardSimple() {
               )}
 
               <div className="border-t border-white/10 pt-4 space-y-4">
-                <Label className="text-base font-semibold text-white">Payment Information</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-base font-semibold text-white">Payment Information</Label>
+                  <div className="flex items-center gap-2" data-testid="card-logos">
+                    <SiVisa className="h-8 w-12 text-blue-400" aria-label="Visa accepted" data-testid="img-cardlogo-visa" />
+                    <SiMastercard className="h-8 w-10 text-orange-400" aria-label="Mastercard accepted" data-testid="img-cardlogo-mastercard" />
+                    <SiAmericanexpress className="h-8 w-10 text-blue-300" aria-label="American Express accepted" data-testid="img-cardlogo-amex" />
+                    <SiDiscover className="h-8 w-12 text-orange-300" aria-label="Discover accepted" data-testid="img-cardlogo-discover" />
+                  </div>
+                </div>
 
                 <div>
                   <Label htmlFor="cardName" className="text-white">Cardholder Name</Label>
