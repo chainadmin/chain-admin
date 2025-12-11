@@ -442,14 +442,12 @@ class SmsService {
     const progressUpdateInterval = 5000; // Update progress every 5 seconds
 
     const throttleConfig = await this.getThrottleConfig(tenantId);
-    // For bulk campaigns, use a higher rate limit (minimum 60/min for campaigns)
-    // This ensures campaigns complete in reasonable time while respecting Twilio limits
-    // Twilio generally allows up to 100-400 msgs/sec for 10DLC, so 60-120/min is very safe
-    const baseMaxPerMinute = Math.max(1, throttleConfig.maxPerMinute);
-    const maxPerMinute = Math.max(60, baseMaxPerMinute); // At least 60/min for bulk campaigns
+    // Respect tenant's configured throttle limit for campaigns
+    // This allows tenants to control their sending rate for compliance and carrier requirements
+    const maxPerMinute = Math.max(1, throttleConfig.maxPerMinute);
     const delayBetweenBatches = Math.max(100, 60000 / maxPerMinute); // Min 100ms between messages
 
-    console.log(`📤 Starting SMS campaign send: ${recipients.length - startIndex} remaining messages (starting at index ${startIndex}) at ${maxPerMinute}/min (${delayBetweenBatches}ms between messages, tenant base rate: ${baseMaxPerMinute}/min)`);
+    console.log(`📤 Starting SMS campaign send: ${recipients.length - startIndex} remaining messages (starting at index ${startIndex}) at ${maxPerMinute}/min (${delayBetweenBatches}ms between messages)`);
 
     for (let i = startIndex; i < recipients.length; i++) {
       currentIndex = i;
