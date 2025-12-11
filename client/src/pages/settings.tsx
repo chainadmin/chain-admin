@@ -1003,21 +1003,14 @@ export default function Settings() {
 
     if (planType === "range") {
       const monthlyMin = parseCurrencyInput(arrangementForm.monthlyPaymentMin);
+      // Max is optional now - if not set, consumers can pay up to full balance
       const monthlyMax = parseCurrencyInput(arrangementForm.monthlyPaymentMax);
 
-      if (monthlyMin === null || monthlyMax === null) {
+      // Minimum is optional - if not set, will use tenant's global minimum as fallback
+      if (monthlyMin !== null && monthlyMin < 0) {
         toast({
-          title: "Missing Monthly Range",
-          description: "Provide both minimum and maximum monthly payment amounts.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      if (monthlyMin < 0 || monthlyMax < 0 || monthlyMin > monthlyMax) {
-        toast({
-          title: "Invalid Monthly Range",
-          description: "Monthly amounts must be positive and the minimum cannot exceed the maximum.",
+          title: "Invalid Monthly Minimum",
+          description: "Monthly minimum must be a positive amount.",
           variant: "destructive",
         });
         return;
@@ -1032,8 +1025,14 @@ export default function Settings() {
         return;
       }
 
-      payload.monthlyPaymentMin = monthlyMin;
-      payload.monthlyPaymentMax = monthlyMax;
+      // Only include min if set (otherwise tenant global minimum will be used as fallback)
+      if (monthlyMin !== null) {
+        payload.monthlyPaymentMin = monthlyMin;
+      }
+      // Max is deprecated - always allow up to full balance, but keep for backward compatibility
+      if (monthlyMax !== null) {
+        payload.monthlyPaymentMax = monthlyMax;
+      }
       payload.maxTermMonths = maxTermMonths ?? 12;
     } else if (planType === "fixed_monthly") {
       const fixedMonthly = parseCurrencyInput(arrangementForm.fixedMonthlyPayment);
@@ -3384,9 +3383,9 @@ export default function Settings() {
                           </div>
 
                           {arrangementForm.planType === "range" && (
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-4">
                               <div>
-                                <Label className="text-white">Min Payment ($) *</Label>
+                                <Label className="text-white">Minimum Monthly Payment ($)</Label>
                                 <Input
                                   type="number"
                                   step="0.01"
@@ -3395,17 +3394,9 @@ export default function Settings() {
                                   placeholder="50.00"
                                   className={inputClasses}
                                 />
-                              </div>
-                              <div>
-                                <Label className="text-white">Max Payment ($) *</Label>
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  value={arrangementForm.monthlyPaymentMax}
-                                  onChange={(e) => setArrangementForm({ ...arrangementForm, monthlyPaymentMax: e.target.value })}
-                                  placeholder="100.00"
-                                  className={inputClasses}
-                                />
+                                <p className="mt-1 text-xs text-blue-100/70">
+                                  Leave blank to use the global Minimum Monthly Payment from Settings. Consumers can pay any amount from this minimum up to the full balance.
+                                </p>
                               </div>
                             </div>
                           )}

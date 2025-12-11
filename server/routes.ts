@@ -8524,22 +8524,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     switch (option.planType) {
       case "range":
-        // Use plan-specific minimum, or fall back to tenant global minimum if not set
-        const minPayment = option.monthlyPaymentMin || tenantGlobalMinimum || 0;
-        // Max payment is always the full balance (removed max restriction)
-        const maxPayment = balanceCents;
+        // Use plan-specific minimum if set (not null/undefined), otherwise fall back to tenant global minimum
+        const minPayment = (option.monthlyPaymentMin != null && option.monthlyPaymentMin > 0) 
+          ? option.monthlyPaymentMin 
+          : (tenantGlobalMinimum || 0);
+        // Max payment: use legacy monthlyPaymentMax if explicitly set (not null/undefined), otherwise allow up to full balance
+        // This preserves backward compatibility for existing plans with max limits
+        const maxPayment = (option.monthlyPaymentMax != null && option.monthlyPaymentMax > 0) 
+          ? option.monthlyPaymentMax 
+          : balanceCents;
         const maxTerm = option.maxTermMonths || 12;
         
         // Calculate minimum payment to pay off balance within max term
         const calculatedMinimum = Math.ceil(balanceCents / maxTerm);
         
         // Use the greater of: configured minimum or calculated minimum
+        // Clamp to max payment if legacy max exists
         const unclamped = Math.max(minPayment, calculatedMinimum);
-        calculated.calculatedMonthlyPayment = unclamped;
+        calculated.calculatedMonthlyPayment = Math.min(unclamped, maxPayment);
         
-        // Store the minimum payment for consumer portal to enforce
+        // Store the minimum and maximum payment for consumer portal to enforce
         calculated.minimumMonthlyPayment = minPayment;
         calculated.maximumMonthlyPayment = maxPayment;
+        
+        // Verify the payment is within bounds, otherwise this option is not viable
+        if (calculated.calculatedMonthlyPayment < minPayment || calculated.calculatedMonthlyPayment > maxPayment) {
+          return null; // This option doesn't work for this balance
+        }
         
         // Verify the minimum payment doesn't exceed balance (would be invalid)
         if (minPayment > balanceCents) {
