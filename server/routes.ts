@@ -1784,6 +1784,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           creditor: accountsTable.creditor,
           balanceCents: accountsTable.balanceCents,
           originalBalanceCents: accountsTable.originalBalanceCents,
+          filenumber: accountsTable.filenumber,
           firstName: consumers.firstName,
           lastName: consumers.lastName,
         })
@@ -1802,27 +1803,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
         )
         .limit(5);
 
-      // Process accounts with balance recalculation for non-SMAX tenants with 0 balance
+      // Process accounts with balance recalculation
       const matchingAccounts = await Promise.all(matchingAccountsRaw.map(async (row) => {
         let calculatedBalance = row.balanceCents || 0;
         
-        // If balance is 0 and SMAX is NOT enabled, calculate from original balance minus completed payments
-        if (calculatedBalance === 0 && !smaxEnabled && row.originalBalanceCents) {
-          // Get sum of completed/approved payments for this account
-          const paymentSumResult = await db
-            .select({
-              totalPaid: sql<number>`COALESCE(SUM(${payments.amountCents}), 0)`,
-            })
-            .from(payments)
-            .where(
-              and(
-                eq(payments.accountId, row.id),
-                sql`${payments.status} IN ('completed', 'approved')`
-              )
-            );
+        // If balance is 0 and we have original balance, try to calculate actual balance
+        if (calculatedBalance === 0 && row.originalBalanceCents) {
+          let shouldCalculateFromPayments = false;
           
-          const totalPaid = Number(paymentSumResult[0]?.totalPaid || 0);
-          calculatedBalance = Math.max(0, (row.originalBalanceCents || 0) - totalPaid);
+          if (smaxEnabled && row.filenumber) {
+            // SMAX is enabled and account has filenumber - try to fetch from SMAX
+            try {
+              const smaxAccount = await smaxService.getAccount(tenantId, row.filenumber);
+              if (smaxAccount) {
+                // Try common SMAX balance field names (case-insensitive)
+                const balanceField = Object.keys(smaxAccount).find(key => 
+                  key.toLowerCase() === 'currentbalance' || 
+                  key.toLowerCase() === 'balancedue' || 
+                  key.toLowerCase() === 'balance'
+                );
+                if (balanceField && smaxAccount[balanceField] !== null && smaxAccount[balanceField] !== undefined) {
+                  // SMAX returns balance in dollars, convert to cents
+                  const smaxBalanceDollars = parseFloat(smaxAccount[balanceField]) || 0;
+                  calculatedBalance = Math.round(smaxBalanceDollars * 100);
+                } else {
+                  // SMAX returned account but no balance field - fall back
+                  shouldCalculateFromPayments = true;
+                }
+              } else {
+                // SMAX returned no data - fall back to payment calculation
+                shouldCalculateFromPayments = true;
+              }
+            } catch (smaxError) {
+              // SMAX failed - fall back to payment calculation
+              console.log(`SMAX balance fetch failed for ${row.filenumber}, falling back to payment calculation`);
+              shouldCalculateFromPayments = true;
+            }
+          } else {
+            // SMAX not enabled OR account has no filenumber - use payment calculation
+            shouldCalculateFromPayments = true;
+          }
+          
+          if (shouldCalculateFromPayments) {
+            // Calculate from original balance minus completed/approved payments
+            const paymentSumResult = await db
+              .select({
+                totalPaid: sql<number>`COALESCE(SUM(${payments.amountCents}), 0)`,
+              })
+              .from(payments)
+              .where(
+                and(
+                  eq(payments.accountId, row.id),
+                  sql`${payments.status} IN ('completed', 'approved')`
+                )
+              );
+            
+            const totalPaid = Number(paymentSumResult[0]?.totalPaid || 0);
+            calculatedBalance = Math.max(0, (row.originalBalanceCents || 0) - totalPaid);
+          }
         }
         
         return {
