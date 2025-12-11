@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -576,37 +576,39 @@ export default function ConsumerDashboardSimple() {
   // Get arrangements applicable to the selected account
   const minimumMonthlyPaymentCents = settings?.minimumMonthlyPayment ?? 5000; // Default $50
   
-  const applicableArrangements = selectedAccount && arrangements
-    ? (arrangements as any).templateOptions?.filter((arr: any) => {
-        // Check if balance is within range
-        const inBalanceRange = selectedAccount.balanceCents >= arr.minBalance && 
-          selectedAccount.balanceCents <= arr.maxBalance;
-        
-        if (!inBalanceRange) return false;
-        
-        // Block one-time payments if forceArrangement is enabled OR consumer has no active payment schedules
-        if (arr.planType === 'one_time_payment') {
-          // If forceArrangement is true, always block one-time payments
-          if (settings?.forceArrangement) {
-            return false;
-          }
-          // Otherwise, only allow if consumer has an active payment schedule
-          const hasActiveSchedule = paymentSchedules && paymentSchedules.length > 0;
-          return hasActiveSchedule;
-        }
-        
-        // Calculate what the payment would be for this arrangement
-        const calculatedPaymentAmount = calculateArrangementPayment(arr, selectedAccount.balanceCents || 0);
-        
-        // Filter out arrangements where the calculated payment is less than the minimum
-        // Exception: pay_in_full is always allowed (consumer paying their entire balance)
-        if (arr.planType !== 'pay_in_full' && calculatedPaymentAmount < minimumMonthlyPaymentCents) {
+  const applicableArrangements = useMemo(() => {
+    if (!selectedAccount || !arrangements) return [];
+    
+    return (arrangements as any).templateOptions?.filter((arr: any) => {
+      // Check if balance is within range
+      const inBalanceRange = selectedAccount.balanceCents >= arr.minBalance && 
+        selectedAccount.balanceCents <= arr.maxBalance;
+      
+      if (!inBalanceRange) return false;
+      
+      // Block one-time payments if forceArrangement is enabled OR consumer has no active payment schedules
+      if (arr.planType === 'one_time_payment') {
+        // If forceArrangement is true, always block one-time payments
+        if (settings?.forceArrangement) {
           return false;
         }
-        
-        return true;
-      }) || []
-    : [];
+        // Otherwise, only allow if consumer has an active payment schedule
+        const hasActiveSchedule = paymentSchedules && paymentSchedules.length > 0;
+        return hasActiveSchedule;
+      }
+      
+      // Calculate what the payment would be for this arrangement
+      const calculatedPaymentAmount = calculateArrangementPayment(arr, selectedAccount.balanceCents || 0);
+      
+      // Filter out arrangements where the calculated payment is less than the minimum
+      // Exception: pay_in_full is always allowed (consumer paying their entire balance)
+      if (arr.planType !== 'pay_in_full' && calculatedPaymentAmount < minimumMonthlyPaymentCents) {
+        return false;
+      }
+      
+      return true;
+    }) || [];
+  }, [selectedAccount, arrangements, settings?.forceArrangement, paymentSchedules, minimumMonthlyPaymentCents]);
   
   // Get existing SMAX arrangements for this consumer
   const existingSMAXArrangements = arrangements?.existingArrangements || [];
@@ -619,6 +621,27 @@ export default function ConsumerDashboardSimple() {
 
   // Check if no payment arrangements are available
   const noArrangementsAvailable = applicableArrangements.length === 0;
+
+  // Auto-select single arrangement when payment dialog opens
+  const nonSettlementArrangements = useMemo(() => 
+    applicableArrangements.filter((arr: any) => arr.planType !== 'settlement'),
+    [applicableArrangements]
+  );
+  
+  useEffect(() => {
+    // Only auto-select if dialog is open, account is selected, no arrangement selected yet, and exactly one plan exists
+    if (showPaymentDialog && selectedAccount && !selectedArrangement && nonSettlementArrangements.length === 1) {
+      const singleArrangement = nonSettlementArrangements[0];
+      if (singleArrangement) {
+        setSelectedArrangement(singleArrangement);
+        setPaymentMethod('term');
+        setPaymentFrequency('monthly');
+        const monthlyAmount = calculateArrangementPayment(singleArrangement, selectedAccount.balanceCents || 0);
+        setMonthlyBaseAmount(monthlyAmount);
+        setCalculatedPayment(monthlyAmount);
+      }
+    }
+  }, [showPaymentDialog, selectedAccount, selectedArrangement, nonSettlementArrangements]);
 
   // Calculate payment amount based on selected arrangement or simplified flow
   const paymentAmountCents = selectedAccount
@@ -2269,71 +2292,171 @@ export default function ConsumerDashboardSimple() {
 
                   {/* Payment Plan Options - Agency Configured */}
                   {applicableArrangements.filter((arr: any) => arr.planType !== 'settlement').length > 0 && (
-                    <div className="space-y-3">
-                      <div className="rounded-lg bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border-2 border-blue-400/30 p-4 backdrop-blur">
-                        <div className="flex items-center gap-2 mb-3">
-                          <Calendar className="h-5 w-5 text-blue-400" />
-                          <Label className="text-base font-semibold text-blue-200">Payment Plans</Label>
-                        </div>
-                        <div className="space-y-2">
-                          {applicableArrangements
-                            .filter((arr: any) => arr.planType !== 'settlement')
-                            .map((arrangement: any) => {
-                              const summary = getArrangementSummary(arrangement);
-                              const paymentAmount = calculateArrangementPayment(arrangement, selectedAccount?.balanceCents || 0);
-                              const isSelected = selectedArrangement?.id === arrangement.id;
-                              
-                              return (
-                                <div
-                                  key={arrangement.id}
-                                  onClick={() => {
-                                    setSelectedArrangement(arrangement);
-                                    setCalculatedPayment(null);
-                                    setPaymentMethod('term');
-                                    setSelectedTerm(null);
-                                    setCustomAmount('');
-                                  }}
-                                  className={`cursor-pointer rounded-lg border-2 p-3 transition-all ${
-                                    isSelected
-                                      ? 'border-blue-400 bg-blue-500/20 backdrop-blur'
-                                      : 'border-blue-400/30 bg-white/5 hover:bg-white/10 hover:border-blue-400/50'
-                                  }`}
-                                  data-testid={`option-plan-${arrangement.id}`}
-                                >
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex-1">
-                                      <p className="font-medium text-blue-200">{arrangement.name}</p>
-                                      {summary.detail && (
-                                        <p className="text-sm text-blue-100/70 mt-1">{summary.detail}</p>
-                                      )}
-                                      {arrangement.planType === 'one_time_payment' ? (
-                                        <p className="text-sm text-blue-100/70 mt-1">
-                                          Min: {formatCurrency(arrangement.oneTimePaymentMin || 0)}
-                                        </p>
-                                      ) : (
-                                        <p className="text-lg font-bold text-blue-300 mt-1">
-                                          {formatCurrency(paymentAmount)}/month
-                                        </p>
+                    <div className="space-y-4">
+                      {/* Plan Selection */}
+                      {applicableArrangements.filter((arr: any) => arr.planType !== 'settlement').length > 1 && (
+                        <div>
+                          <Label className="text-sm text-blue-100/70 mb-2 block">Select Payment Plan</Label>
+                          <div className="space-y-2">
+                            {applicableArrangements
+                              .filter((arr: any) => arr.planType !== 'settlement')
+                              .map((arrangement: any) => {
+                                const isSelected = selectedArrangement?.id === arrangement.id;
+                                
+                                return (
+                                  <div
+                                    key={arrangement.id}
+                                    onClick={() => {
+                                      setSelectedArrangement(arrangement);
+                                      setPaymentMethod('term');
+                                      setPaymentFrequency('monthly');
+                                      setCustomAmount('');
+                                      // Calculate and set the monthly base amount
+                                      const monthlyAmount = calculateArrangementPayment(arrangement, selectedAccount?.balanceCents || 0);
+                                      setMonthlyBaseAmount(monthlyAmount);
+                                      setCalculatedPayment(monthlyAmount);
+                                    }}
+                                    className={`cursor-pointer rounded-lg border-2 p-3 transition-all ${
+                                      isSelected
+                                        ? 'border-blue-400 bg-blue-500/20 backdrop-blur'
+                                        : 'border-white/20 bg-white/5 hover:bg-white/10 hover:border-blue-400/50'
+                                    }`}
+                                    data-testid={`option-plan-${arrangement.id}`}
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <p className="font-medium text-white">{arrangement.name}</p>
+                                      {isSelected && (
+                                        <Badge className="bg-blue-500 text-white border-blue-400/30">Selected</Badge>
                                       )}
                                     </div>
-                                    {isSelected && (
-                                      <Badge className="bg-blue-500 text-white border-blue-400/30">Selected</Badge>
-                                    )}
                                   </div>
-                                </div>
+                                );
+                              })}
+                          </div>
+                        </div>
+                      )}
+
+
+                      {/* Payment Frequency Options - Show when arrangement is selected */}
+                      {selectedArrangement && selectedArrangement.planType !== 'settlement' && selectedArrangement.planType !== 'one_time_payment' && (
+                        <div className="space-y-3">
+                          <Label className="text-sm text-blue-100/70 block">Choose Payment Frequency</Label>
+                          
+                          {/* Frequency buttons with calculated amounts */}
+                          <div className="grid grid-cols-3 gap-2">
+                            {(['monthly', 'biweekly', 'weekly'] as const).map((freq) => {
+                              const baseMonthlyAmount = calculateArrangementPayment(selectedArrangement, selectedAccount?.balanceCents || 0);
+                              const amount = convertToFrequency(baseMonthlyAmount, freq);
+                              const isSelected = paymentFrequency === freq && paymentMethod === 'term';
+
+                              return (
+                                <button
+                                  key={freq}
+                                  type="button"
+                                  onClick={() => {
+                                    setPaymentFrequency(freq);
+                                    setPaymentMethod('term');
+                                    setMonthlyBaseAmount(baseMonthlyAmount);
+                                    setCalculatedPayment(amount);
+                                    setCustomAmount('');
+                                  }}
+                                  className={`p-3 rounded-lg border-2 transition-all backdrop-blur ${
+                                    isSelected
+                                      ? 'border-blue-400 bg-blue-500/20'
+                                      : 'border-white/20 bg-white/5 hover:border-blue-400/50 hover:bg-white/10'
+                                  }`}
+                                  data-testid={`button-frequency-${freq}`}
+                                >
+                                  <div className="text-lg font-bold text-blue-300">
+                                    {formatCurrency(amount)}
+                                  </div>
+                                  <div className="text-xs text-blue-100/70 mt-1 capitalize">
+                                    {freq === 'biweekly' ? 'Bi-weekly' : freq}
+                                  </div>
+                                </button>
                               );
                             })}
+                          </div>
+
+                          {/* OR Divider */}
+                          <div className="flex items-center gap-3">
+                            <div className="flex-1 border-t border-white/20"></div>
+                            <span className="text-sm text-blue-100/50 font-medium">OR</span>
+                            <div className="flex-1 border-t border-white/20"></div>
+                          </div>
+
+                          {/* Custom Amount Input */}
+                          <div>
+                            <Label htmlFor="customAmountInput" className="text-sm text-blue-100/70 mb-2 block">
+                              Enter Custom Payment Amount
+                            </Label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-100/50 text-lg">$</span>
+                              <Input
+                                type="number"
+                                id="customAmountInput"
+                                value={customAmount}
+                                onChange={(e) => {
+                                  const value = e.target.value;
+                                  setCustomAmount(value);
+                                  setPaymentMethod('custom');
+                                  
+                                  if (value) {
+                                    const amountCents = Math.round(parseFloat(value) * 100);
+                                    // Get the minimum from the arrangement
+                                    const arrangementMin = selectedArrangement.planType === 'range' 
+                                      ? (selectedArrangement.rangeMin || 0)
+                                      : selectedArrangement.planType === 'fixed_monthly'
+                                        ? (selectedArrangement.fixedAmount || 0)
+                                        : 0;
+                                    
+                                    // Use entered amount if above minimum, otherwise use minimum
+                                    const monthlyAmount = amountCents >= arrangementMin ? amountCents : arrangementMin;
+                                    setMonthlyBaseAmount(monthlyAmount);
+                                    setCalculatedPayment(monthlyAmount);
+                                    
+                                    if (amountCents < arrangementMin) {
+                                      toast({
+                                        title: "Minimum Applied",
+                                        description: `Amount adjusted to minimum: ${formatCurrency(arrangementMin)}`,
+                                      });
+                                    }
+                                  } else {
+                                    setMonthlyBaseAmount(null);
+                                    setCalculatedPayment(null);
+                                  }
+                                }}
+                                min={(() => {
+                                  if (selectedArrangement.planType === 'range') return (selectedArrangement.rangeMin || 0) / 100;
+                                  if (selectedArrangement.planType === 'fixed_monthly') return (selectedArrangement.fixedAmount || 0) / 100;
+                                  return 0;
+                                })()}
+                                max={(selectedAccount?.balanceCents || 0) / 100}
+                                step="0.01"
+                                placeholder="0.00"
+                                className="pl-8 text-lg bg-white/5 border-white/20 text-white placeholder:text-blue-100/30"
+                                data-testid="input-custom-amount"
+                              />
+                            </div>
+                            <p className="text-xs text-blue-100/50 mt-1">
+                              Min: ${(() => {
+                                if (selectedArrangement.planType === 'range') return ((selectedArrangement.rangeMin || 0) / 100).toFixed(2);
+                                if (selectedArrangement.planType === 'fixed_monthly') return ((selectedArrangement.fixedAmount || 0) / 100).toFixed(2);
+                                return '0.00';
+                              })()} per month
+                            </p>
+                          </div>
                         </div>
-                      </div>
+                      )}
 
                       {/* One-time payment custom amount input */}
                       {selectedArrangement?.planType === 'one_time_payment' && (
-                        <div className="rounded-lg bg-purple-500/10 border-2 border-purple-400/30 p-4 backdrop-blur">
-                          <Label htmlFor="oneTimePaymentInput" className="text-sm text-purple-100/70 mb-2 block">
+                        <div className="space-y-3">
+                          <Label htmlFor="oneTimePaymentInput" className="text-sm text-blue-100/70 block">
                             Enter Payment Amount
                           </Label>
                           <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-purple-100/50 text-lg">$</span>
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-100/50 text-lg">$</span>
                             <Input
                               type="number"
                               id="oneTimePaymentInput"
@@ -2343,12 +2466,65 @@ export default function ConsumerDashboardSimple() {
                               max={(selectedAccount?.balanceCents || 0) / 100}
                               step="0.01"
                               placeholder="0.00"
-                              className="pl-8 text-lg bg-white/5 border-white/20 text-white placeholder:text-purple-100/30"
+                              className="pl-8 text-lg bg-white/5 border-white/20 text-white placeholder:text-blue-100/30"
                               data-testid="input-one-time-amount"
                             />
                           </div>
-                          <p className="text-xs text-purple-100/50 mt-1">
+                          <p className="text-xs text-blue-100/50">
                             Min: ${((selectedArrangement.oneTimePaymentMin || 0) / 100).toFixed(2)} | Max: ${((selectedAccount?.balanceCents || 0) / 100).toFixed(2)}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Payment Schedule Preview */}
+                      {calculatedPayment !== null && selectedArrangement && selectedArrangement.planType !== 'one_time_payment' && (
+                        <div className="rounded-lg bg-white/5 border border-white/10 p-4 backdrop-blur">
+                          <div className="flex items-center gap-2 mb-3">
+                            <Calendar className="h-4 w-4 text-blue-400" />
+                            <Label className="text-sm font-semibold text-blue-200">Payment Schedule Preview</Label>
+                          </div>
+                          <div className="space-y-2">
+                            {(() => {
+                              // Generate payment schedule based on balance and payment amount
+                              const balance = selectedAccount?.balanceCents || 0;
+                              const paymentAmount = calculatedPayment;
+                              const schedule: { date: string; amount: number }[] = [];
+                              let remainingBalance = balance;
+                              let currentDate = firstPaymentDate || new Date();
+                              
+                              // Show up to 4 payments
+                              for (let i = 0; i < 4 && remainingBalance > 0; i++) {
+                                const thisPayment = Math.min(paymentAmount, remainingBalance);
+                                schedule.push({
+                                  date: currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+                                  amount: thisPayment
+                                });
+                                remainingBalance -= thisPayment;
+                                
+                                // Advance date based on frequency
+                                if (paymentFrequency === 'weekly') {
+                                  currentDate = new Date(currentDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+                                } else if (paymentFrequency === 'biweekly') {
+                                  currentDate = new Date(currentDate.getTime() + 14 * 24 * 60 * 60 * 1000);
+                                } else {
+                                  currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, currentDate.getDate());
+                                }
+                              }
+                              
+                              return schedule.map((payment, index) => (
+                                <div key={index} className="flex items-center justify-between text-sm">
+                                  <span className="text-blue-100/70">{payment.date}</span>
+                                  <span className="font-medium text-blue-300">{formatCurrency(payment.amount)}</span>
+                                </div>
+                              ));
+                            })()}
+                          </div>
+                          <p className="text-xs text-blue-100/50 mt-3 border-t border-white/10 pt-2">
+                            {(() => {
+                              const balance = selectedAccount?.balanceCents || 0;
+                              const totalPayments = Math.ceil(balance / calculatedPayment);
+                              return `Total of ${totalPayments} payment${totalPayments > 1 ? 's' : ''} to pay off balance`;
+                            })()}
                           </p>
                         </div>
                       )}
