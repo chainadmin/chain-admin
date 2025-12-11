@@ -293,6 +293,7 @@ export interface IStorage {
   // SMS template operations
   getSmsTemplatesByTenant(tenantId: string): Promise<SmsTemplate[]>;
   createSmsTemplate(template: InsertSmsTemplate): Promise<SmsTemplate>;
+  updateSmsTemplate(id: string, tenantId: string, updates: Partial<SmsTemplate>): Promise<SmsTemplate>;
   deleteSmsTemplate(id: string, tenantId: string): Promise<void>;
   
   // SMS campaign operations
@@ -1557,6 +1558,20 @@ export class DatabaseStorage implements IStorage {
   async createSmsTemplate(template: InsertSmsTemplate): Promise<SmsTemplate> {
     const [newTemplate] = await db.insert(smsTemplates).values(template).returning();
     return newTemplate;
+  }
+
+  async updateSmsTemplate(id: string, tenantId: string, updates: Partial<SmsTemplate>): Promise<SmsTemplate> {
+    const [updated] = await db
+      .update(smsTemplates)
+      .set(updates)
+      .where(and(eq(smsTemplates.id, id), eq(smsTemplates.tenantId, tenantId)))
+      .returning();
+    
+    if (!updated) {
+      throw new Error('SMS template not found');
+    }
+    
+    return updated;
   }
 
   async deleteSmsTemplate(id: string, tenantId: string): Promise<void> {

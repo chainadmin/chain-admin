@@ -3587,6 +3587,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.put('/api/sms-templates/:id', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { id } = req.params;
+      const { name, message } = req.body;
+      
+      const updates: Partial<any> = {};
+      if (name !== undefined) updates.name = name;
+      if (message !== undefined) updates.message = message;
+
+      const updatedTemplate = await storage.updateSmsTemplate(id, tenantId, updates);
+      
+      res.json(updatedTemplate);
+    } catch (error) {
+      console.error("Error updating SMS template:", error);
+      res.status(500).json({ message: "Failed to update SMS template" });
+    }
+  });
+
   app.delete('/api/sms-templates/:id', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;

@@ -1164,6 +1164,28 @@ export default function Communications() {
     },
   });
 
+  const updateSmsTemplateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) =>
+      apiRequest("PUT", `/api/sms-templates/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sms-templates"] });
+      setShowTemplateModal(false);
+      setEditingTemplate(null);
+      setSmsTemplateForm({ name: "", message: "" });
+      toast({
+        title: "Success",
+        description: "SMS template updated successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update SMS template",
+        variant: "destructive",
+      });
+    },
+  });
+
   const deleteSmsTemplateMutation = useMutation({
     mutationFn: (id: string) => apiRequest("DELETE", `/api/sms-templates/${id}`),
     onSuccess: () => {
@@ -1646,7 +1668,15 @@ export default function Communications() {
         });
         return;
       }
-      createSmsTemplateMutation.mutate(smsTemplateForm);
+      
+      if (editingTemplate) {
+        updateSmsTemplateMutation.mutate({
+          id: editingTemplate.id,
+          data: smsTemplateForm
+        });
+      } else {
+        createSmsTemplateMutation.mutate(smsTemplateForm);
+      }
     }
   };
 
@@ -3137,10 +3167,10 @@ export default function Communications() {
                       <DialogHeader className="pb-4 border-b border-white/20">
                         <DialogTitle className="flex items-center gap-2 text-white">
                           <Sparkles className="h-5 w-5 text-blue-400" />
-                          Create SMS Template
+                          {editingTemplate ? "Edit" : "Create"} SMS Template
                         </DialogTitle>
                         <p className="text-sm text-blue-100/70">
-                          Create a new SMS template for your campaigns.
+                          {editingTemplate ? "Update your" : "Create a new"} SMS template for your campaigns.
                         </p>
                       </DialogHeader>
                       <form onSubmit={handleTemplateSubmit} className="space-y-4">
@@ -3218,10 +3248,12 @@ export default function Communications() {
                           <Button
                             type="submit"
                             className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white"
-                            disabled={createSmsTemplateMutation.isPending}
+                            disabled={createSmsTemplateMutation.isPending || updateSmsTemplateMutation.isPending}
                             data-testid="button-save-template"
                           >
-                            {createSmsTemplateMutation.isPending ? "Creating..." : "Create Template"}
+                            {(createSmsTemplateMutation.isPending || updateSmsTemplateMutation.isPending) 
+                              ? (editingTemplate ? "Updating..." : "Creating...") 
+                              : (editingTemplate ? "Update Template" : "Create Template")}
                           </Button>
                         </div>
                       </form>
