@@ -2541,6 +2541,20 @@ export default function Communications() {
                   </Button>
                 </div>
               </div>
+              <Button
+                data-testid="button-create-template"
+                className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-md shadow-slate-400/40 transition hover:bg-slate-800"
+                onClick={() => {
+                  setEditingTemplate(null);
+                  setEmailTemplateForm(createEmptyEmailTemplateForm());
+                  setSmsTemplateForm({ name: "", message: "" });
+                  setAccountSummaryOptions(createDefaultAccountSummaryOptions());
+                  setShowTemplateModal(true);
+                }}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Create {communicationType === "email" ? "email" : "SMS"} template
+              </Button>
               <Dialog
                 open={showTemplateModal}
                 onOpenChange={(open) => {
@@ -2559,15 +2573,6 @@ export default function Communications() {
                   }
                 }}
               >
-                <DialogTrigger asChild>
-                  <Button
-                    data-testid="button-create-template"
-                    className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-md shadow-slate-400/40 transition hover:bg-slate-800"
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Create {communicationType === "email" ? "email" : "SMS"} template
-                  </Button>
-                </DialogTrigger>
                 <DialogContent className={communicationType === "email" ? "max-w-[98vw] w-full h-[95vh] rounded-3xl border border-white/20 bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] text-white" : "max-w-2xl rounded-3xl border border-white/20 bg-[#0b1733]/95 backdrop-blur-md text-blue-50"}>
                   {communicationType === "email" ? (
                     <>
