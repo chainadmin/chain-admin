@@ -42,6 +42,7 @@ export default function AccountsTable({
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -97,8 +98,17 @@ export default function AccountsTable({
     return account.status?.toLowerCase() === statusFilter.toLowerCase();
   });
 
-  const MAX_RECENT_ACCOUNTS = 10;
-  const visibleAccounts = filteredAccounts.slice(0, MAX_RECENT_ACCOUNTS);
+  const ACCOUNTS_PER_PAGE = 10;
+  const totalPages = Math.ceil(filteredAccounts.length / ACCOUNTS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ACCOUNTS_PER_PAGE;
+  const endIndex = startIndex + ACCOUNTS_PER_PAGE;
+  const visibleAccounts = filteredAccounts.slice(startIndex, endIndex);
+  
+  // Reset to page 1 when filter changes
+  const handleFilterChange = (value: string) => {
+    setStatusFilter(value);
+    setCurrentPage(1);
+  };
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
@@ -182,8 +192,8 @@ export default function AccountsTable({
           <p className="mt-1 text-sm text-blue-100/70">
             {selectedAccounts.size > 0
               ? `${selectedAccounts.size} account${selectedAccounts.size > 1 ? 's' : ''} selected`
-              : filteredAccounts.length > MAX_RECENT_ACCOUNTS
-                ? `Showing ${visibleAccounts.length} of ${filteredAccounts.length} recent accounts`
+              : totalPages > 1
+                ? `Page ${currentPage} of ${totalPages} (${filteredAccounts.length} total accounts)`
                 : 'Latest imported and updated accounts from your team'}
           </p>
         </div>
@@ -199,7 +209,7 @@ export default function AccountsTable({
               Delete selected ({selectedAccounts.size})
             </Button>
           )}
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <Select value={statusFilter} onValueChange={handleFilterChange}>
             <SelectTrigger
               className="order-1 w-44 rounded-xl border border-white/15 bg-white/10 text-left text-blue-50 focus:border-sky-400/60 focus:ring-0 sm:order-2"
               data-testid="select-status-filter"
@@ -393,21 +403,60 @@ export default function AccountsTable({
           <div className="border-t border-white/10 px-6 py-4">
             <div className="flex flex-col gap-4 text-sm text-blue-100/70 sm:flex-row sm:items-center sm:justify-between">
               <p>
-                Showing <span className="font-semibold text-white">{visibleAccounts.length}</span>
+                Showing <span className="font-semibold text-white">{startIndex + 1}-{Math.min(endIndex, filteredAccounts.length)}</span>
                 {` of `}
                 <span className="font-semibold text-white">{filteredAccounts.length}</span> results
               </p>
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" className="rounded-full border border-white/10 bg-white/10 px-3 text-blue-100 hover:bg-white/20" data-testid="button-prev-desktop">
-                  <i className="fas fa-chevron-left"></i>
-                </Button>
-                <Button variant="ghost" size="sm" className="rounded-full border border-sky-400/40 bg-sky-500/20 px-3 font-semibold text-white hover:bg-sky-500/30" data-testid="button-page-1">
-                  1
-                </Button>
-                <Button variant="ghost" size="sm" className="rounded-full border border-white/10 bg-white/10 px-3 text-blue-100 hover:bg-white/20" data-testid="button-next-desktop">
-                  <i className="fas fa-chevron-right"></i>
-                </Button>
-              </div>
+              {totalPages > 1 && (
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="rounded-full border border-white/10 bg-white/10 px-3 text-blue-100 hover:bg-white/20 disabled:opacity-50" 
+                    data-testid="button-prev-page"
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    <i className="fas fa-chevron-left"></i>
+                  </Button>
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum: number;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    return (
+                      <Button 
+                        key={pageNum}
+                        variant="ghost" 
+                        size="sm" 
+                        className={`rounded-full px-3 ${currentPage === pageNum 
+                          ? 'border border-sky-400/40 bg-sky-500/20 font-semibold text-white hover:bg-sky-500/30' 
+                          : 'border border-white/10 bg-white/10 text-blue-100 hover:bg-white/20'}`}
+                        data-testid={`button-page-${pageNum}`}
+                        onClick={() => setCurrentPage(pageNum)}
+                      >
+                        {pageNum}
+                      </Button>
+                    );
+                  })}
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="rounded-full border border-white/10 bg-white/10 px-3 text-blue-100 hover:bg-white/20 disabled:opacity-50" 
+                    data-testid="button-next-page"
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    <i className="fas fa-chevron-right"></i>
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         </>

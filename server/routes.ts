@@ -1756,12 +1756,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const smaxEnabled = tenantSettingsData?.smaxEnabled ?? false;
 
       // Database-level search for consumers (LIMIT 5 for performance)
+      // Search by name, email, phone, and any field in additionalData
       const matchingConsumers = await db
         .select({
           id: consumers.id,
           firstName: consumers.firstName,
           lastName: consumers.lastName,
           email: consumers.email,
+          phone: consumers.phone,
         })
         .from(consumers)
         .where(
@@ -1770,13 +1772,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
             sql`(
               LOWER(${consumers.firstName}) LIKE LOWER(${searchPattern}) OR
               LOWER(${consumers.lastName}) LIKE LOWER(${searchPattern}) OR
-              LOWER(${consumers.email}) LIKE LOWER(${searchPattern})
+              LOWER(${consumers.email}) LIKE LOWER(${searchPattern}) OR
+              LOWER(COALESCE(${consumers.phone}, '')) LIKE LOWER(${searchPattern}) OR
+              LOWER(COALESCE(${consumers.additionalData}::text, '')) LIKE LOWER(${searchPattern})
             )`
           )
         )
         .limit(5);
 
       // Database-level search for accounts with consumer names (LIMIT 5 for performance)
+      // Search by account number, creditor, filenumber, consumer name, phone, and email
       const matchingAccountsRaw = await db
         .select({
           id: accountsTable.id,
@@ -1787,6 +1792,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           filenumber: accountsTable.filenumber,
           firstName: consumers.firstName,
           lastName: consumers.lastName,
+          consumerPhone: consumers.phone,
+          consumerEmail: consumers.email,
         })
         .from(accountsTable)
         .leftJoin(consumers, eq(accountsTable.consumerId, consumers.id))
@@ -1796,8 +1803,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             sql`(
               LOWER(${accountsTable.accountNumber}) LIKE LOWER(${searchPattern}) OR
               LOWER(${accountsTable.creditor}) LIKE LOWER(${searchPattern}) OR
+              LOWER(COALESCE(${accountsTable.filenumber}, '')) LIKE LOWER(${searchPattern}) OR
               LOWER(${consumers.firstName}) LIKE LOWER(${searchPattern}) OR
-              LOWER(${consumers.lastName}) LIKE LOWER(${searchPattern})
+              LOWER(${consumers.lastName}) LIKE LOWER(${searchPattern}) OR
+              LOWER(COALESCE(${consumers.phone}, '')) LIKE LOWER(${searchPattern}) OR
+              LOWER(COALESCE(${consumers.email}, '')) LIKE LOWER(${searchPattern})
             )`
           )
         )
