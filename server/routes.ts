@@ -10504,8 +10504,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             endDate = new Date(paymentStartDate);
             endDate.setMonth(endDate.getMonth() + Number(arrangement.maxTermMonths));
           } else if (arrangement.planType === 'range') {
-            remainingPayments = null;
-            endDate = null;
+            // Calculate remaining payments based on balance / payment amount
+            const accountBalance = account.balanceCents || 0;
+            const isImmediatePayment = !normalizedFirstPaymentDate || normalizedFirstPaymentDate.getTime() <= today.getTime();
+            const balanceAfterImmediate = isImmediatePayment ? Math.max(0, accountBalance - amountCents) : accountBalance;
+            const paymentsNeeded = balanceAfterImmediate > 0 ? Math.max(1, Math.ceil(balanceAfterImmediate / amountCents)) : 0;
+            remainingPayments = paymentsNeeded;
+            
+            // Calculate end date based on remaining payments (assuming monthly)
+            // End date is (remainingPayments - 1) months from start since first payment is at start
+            if (remainingPayments > 0) {
+              endDate = new Date(paymentStartDate);
+              endDate.setMonth(endDate.getMonth() + Math.max(0, remainingPayments - 1));
+            }
+            console.log('💳 Range payment plan calculated (Authorize.net):', { accountBalance, amountCents, isImmediatePayment, balanceAfterImmediate, paymentsNeeded, remainingPayments, endDate: endDate?.toISOString() });
           }
 
           const shouldCreateSchedule = arrangementId && (
@@ -11046,8 +11058,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             endDate = new Date(paymentStartDate);
             endDate.setMonth(endDate.getMonth() + Number(arrangement.maxTermMonths));
           } else if (arrangement.planType === 'range') {
-            remainingPayments = null;
-            endDate = null;
+            // Calculate remaining payments based on balance / payment amount
+            const accountBalance = account.balanceCents || 0;
+            const isImmediatePayment = !normalizedFirstPaymentDate || normalizedFirstPaymentDate.getTime() <= today.getTime();
+            const balanceAfterImmediate = isImmediatePayment ? Math.max(0, accountBalance - amountCents) : accountBalance;
+            const paymentsNeeded = balanceAfterImmediate > 0 ? Math.max(1, Math.ceil(balanceAfterImmediate / amountCents)) : 0;
+            remainingPayments = paymentsNeeded;
+            
+            // Calculate end date based on remaining payments (assuming monthly)
+            // End date is (remainingPayments - 1) months from start since first payment is at start
+            if (remainingPayments > 0) {
+              endDate = new Date(paymentStartDate);
+              endDate.setMonth(endDate.getMonth() + Math.max(0, remainingPayments - 1));
+            }
+            console.log('💳 Range payment plan calculated (NMI):', { accountBalance, amountCents, isImmediatePayment, balanceAfterImmediate, paymentsNeeded, remainingPayments, endDate: endDate?.toISOString() });
           }
 
           const shouldCreateSchedule = arrangementId && (
@@ -11711,11 +11735,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
             endDate.setMonth(endDate.getMonth() + Number(arrangement.maxTermMonths));
             console.log('✓ Calculated:', { remainingPayments, endDate: endDate.toISOString() });
           } else if (arrangement.planType === 'range') {
-            // Range plans continue until balance is paid (no fixed end date or payment count)
-            // This allows payments to continue automatically until the full balance is collected
-            remainingPayments = null; // null = unlimited/continue until balance paid
-            endDate = null; // No fixed end date
-            console.log('💳 Creating range payment plan - will continue until balance is paid');
+            // Calculate remaining payments based on balance / payment amount
+            const accountBalance = account.balanceCents || 0;
+            // Use actual payment amount if payment was processed, otherwise use requested amount
+            const actualPaymentAmount = payment?.amountCents || amountCents;
+            const balanceAfterImmediate = shouldSkipImmediateCharge 
+              ? accountBalance 
+              : Math.max(0, accountBalance - actualPaymentAmount);
+            const paymentsNeeded = balanceAfterImmediate > 0 ? Math.max(1, Math.ceil(balanceAfterImmediate / amountCents)) : 0;
+            remainingPayments = paymentsNeeded;
+            
+            // Calculate end date based on remaining payments (assuming monthly)
+            // End date is (remainingPayments - 1) months from start since first payment is at start
+            if (remainingPayments > 0) {
+              endDate = new Date(paymentStartDate);
+              endDate.setMonth(endDate.getMonth() + Math.max(0, remainingPayments - 1));
+            }
+            console.log('💳 Range payment plan calculated:', { accountBalance, amountCents, shouldSkipImmediateCharge, balanceAfterImmediate, paymentsNeeded, remainingPayments, endDate: endDate?.toISOString() });
           }
         }
 
@@ -13213,6 +13249,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       transactionId: paymentResult.refnum || paymentResult.key || undefined,
                       paymentType: 'scheduled',
                     }).catch(err => console.error('Failed to send scheduled payment notification:', err));
+
+                    // Send receipt email to consumer
+                    if (consumer.email) {
+                      const paymentAmountFormatted = `$${(paymentAmountCents / 100).toFixed(2)}`;
+                      const consumerName = `${consumer.firstName} ${consumer.lastName}`;
+                      const nextPaymentFormatted = nextPayment.toLocaleDateString('en-US', {
+                        month: 'long',
+                        day: 'numeric',
+                        year: 'numeric'
+                      });
+                      
+                      // Check if there are remaining payments (guard against null)
+                      const hasRemainingPayments = updatedRemainingPayments !== null && updatedRemainingPayments > 0;
+                      const isFinalPayment = updatedRemainingPayments !== null && updatedRemainingPayments === 0;
+                      
+                      const emailSubject = 'Payment Received - Thank You';
+                      const emailBody = `
+                        <h2>Payment Received</h2>
+                        <p>Dear ${consumerName},</p>
+                        <p>Your scheduled payment has been successfully processed.</p>
+                        <h3>Payment Details:</h3>
+                        <ul>
+                          <li><strong>Amount Paid:</strong> ${paymentAmountFormatted}</li>
+                          <li><strong>Account:</strong> ${account?.creditor || 'Your Account'}</li>
+                          <li><strong>Payment Date:</strong> ${new Date().toLocaleDateString('en-US', { 
+                            month: 'long', 
+                            day: 'numeric', 
+                            year: 'numeric' 
+                          })}</li>
+                          <li><strong>Transaction ID:</strong> ${paymentResult.refnum || paymentResult.key || 'N/A'}</li>
+                          ${hasRemainingPayments ? `<li><strong>Next Payment:</strong> ${nextPaymentFormatted}</li>` : ''}
+                          ${hasRemainingPayments ? `<li><strong>Payments Remaining:</strong> ${updatedRemainingPayments}</li>` : ''}
+                        </ul>
+                        ${isFinalPayment ? '<p><strong>Congratulations!</strong> This was your final scheduled payment.</p>' : ''}
+                        <p>Thank you for your payment.</p>
+                        <p>Best regards,<br>${tenant.name}</p>
+                      `;
+                      
+                      await emailService.sendEmail({
+                        to: consumer.email,
+                        subject: emailSubject,
+                        html: emailBody,
+                        from: `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>`,
+                        tenantId: tenant.id,
+                      });
+                      console.log(`📧 Payment receipt sent to consumer: ${consumer.email}`);
+                    }
                   } catch (notificationError) {
                     console.error('Error sending scheduled payment notification:', notificationError);
                   }
@@ -13277,6 +13360,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       console.log(`📝 SMAX note created for failed payment on account ${failedAccount.filenumber}`);
                     } catch (smaxError) {
                       console.error('Failed to send declined payment note to SMAX:', smaxError);
+                    }
+                  }
+
+                  // Send decline notification email to consumer
+                  if (consumer.email) {
+                    try {
+                      const paymentAmountFormatted = `$${(paymentAmountCents / 100).toFixed(2)}`;
+                      const emailSubject = 'Scheduled Payment Could Not Be Processed';
+                      const emailBody = `
+                        <h2>Payment Could Not Be Processed</h2>
+                        <p>Dear ${consumerName},</p>
+                        <p>We were unable to process your scheduled payment. Please review the details below.</p>
+                        <h3>Payment Details:</h3>
+                        <ul>
+                          <li><strong>Amount:</strong> ${paymentAmountFormatted}</li>
+                          <li><strong>Account:</strong> ${failedAccount?.creditor || 'Your Account'}</li>
+                          <li><strong>Date:</strong> ${new Date().toLocaleDateString('en-US', { 
+                            month: 'long', 
+                            day: 'numeric', 
+                            year: 'numeric' 
+                          })}</li>
+                          <li><strong>Reason:</strong> ${failureReason}</li>
+                        </ul>
+                        <p>Please log in to your account to update your payment method or contact us if you need assistance.</p>
+                        <p>Thank you,<br/>${tenant.name}</p>
+                      `;
+                      
+                      await emailService.sendEmail({
+                        to: consumer.email,
+                        subject: emailSubject,
+                        html: emailBody,
+                        from: `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>`,
+                        tenantId: tenant.id,
+                      });
+                      console.log(`📧 Decline notification sent to consumer: ${consumer.email}`);
+                    } catch (emailError) {
+                      console.error('Failed to send decline notification to consumer:', emailError);
                     }
                   }
 
