@@ -2488,6 +2488,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Cleanup old tracking data (called by cron job daily at 3 AM ET)
+  // Deletes sms_tracking, email_tracking, automation_executions older than 2 days
+  // Also cleans up expired sessions
+  app.post('/api/system/cleanup-tracking', async (req: any, res) => {
+    try {
+      console.log('🗑️ [CLEANUP] Starting old tracking data cleanup...');
+      
+      const result = await storage.cleanupOldTrackingData(2); // 2 days
+      
+      console.log(`🗑️ [CLEANUP] Cleanup complete:`);
+      console.log(`   - SMS tracking deleted: ${result.smsTrackingDeleted}`);
+      console.log(`   - Email tracking deleted: ${result.emailTrackingDeleted}`);
+      console.log(`   - Automation executions deleted: ${result.automationExecutionsDeleted}`);
+      console.log(`   - Expired sessions deleted: ${result.sessionsDeleted}`);
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Tracking data cleanup complete',
+        ...result,
+      });
+    } catch (error) {
+      console.error("Error cleaning up tracking data:", error);
+      return res.status(500).json({ message: "Failed to cleanup tracking data" });
+    }
+  });
+
   app.patch('/api/accounts/bulk-update-status', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;

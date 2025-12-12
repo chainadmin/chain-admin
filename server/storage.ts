@@ -1904,16 +1904,13 @@ export class DatabaseStorage implements IStorage {
   async getConsumersByPhoneNumber(phoneNumber: string, tenantId?: string): Promise<Consumer[]> {
     // Normalize phone number - remove all non-digit characters
     const normalized = phoneNumber.replace(/\D/g, '');
-    // Handle +1 prefix - remove it for matching
-    const withoutCountryCode = normalized.startsWith('1') && normalized.length === 11 
-      ? normalized.slice(1) 
-      : normalized;
+    // Handle +1 prefix - remove it for matching (get last 10 digits for US numbers)
+    const last10Digits = normalized.length >= 10 ? normalized.slice(-10) : normalized;
     
+    // SQL to strip all non-digit characters from stored phone (including +, -, spaces, parens)
+    // Then get the last 10 digits for comparison
     const conditions = [
-      or(
-        sql`REPLACE(REPLACE(REPLACE(REPLACE(${consumers.phone}, '-', ''), ' ', ''), '(', ''), ')', '') LIKE ${'%' + withoutCountryCode}`,
-        sql`REPLACE(REPLACE(REPLACE(REPLACE(${consumers.phone}, '-', ''), ' ', ''), '(', ''), ')', '') = ${normalized}`
-      )
+      sql`RIGHT(REGEXP_REPLACE(${consumers.phone}, '[^0-9]', '', 'g'), 10) = ${last10Digits}`
     ];
     
     if (tenantId) {
@@ -2336,6 +2333,45 @@ export class DatabaseStorage implements IStorage {
     return {
       deletedCount: expiredAccounts.length,
       deletedAccounts: expiredAccounts.map(a => ({ id: a.id, tenantId: a.tenantId, accountNumber: a.accountNumber })),
+    };
+  }
+
+  // Cleanup old tracking data (for cron job - runs daily)
+  async cleanupOldTrackingData(daysOld: number = 2): Promise<{ 
+    smsTrackingDeleted: number; 
+    emailTrackingDeleted: number; 
+    automationExecutionsDeleted: number;
+    sessionsDeleted: number;
+  }> {
+    // Validate and clamp daysOld to safe range (1-30 days)
+    const safeDays = Math.max(1, Math.min(30, Math.floor(daysOld)));
+    
+    // Use SQL interval with bound parameter for proper UTC timestamp comparison
+    // Delete old SMS tracking records
+    const smsResult = await db.execute(
+      sql`DELETE FROM sms_tracking WHERE sent_at < NOW() - (${safeDays}::int * INTERVAL '1 day') RETURNING id`
+    );
+    
+    // Delete old email tracking records
+    const emailResult = await db.execute(
+      sql`DELETE FROM email_tracking WHERE sent_at < NOW() - (${safeDays}::int * INTERVAL '1 day') RETURNING id`
+    );
+    
+    // Delete old automation execution logs
+    const automationResult = await db.execute(
+      sql`DELETE FROM automation_executions WHERE executed_at < NOW() - (${safeDays}::int * INTERVAL '1 day') RETURNING id`
+    );
+    
+    // Delete expired sessions (sessions table managed by connect-pg-simple)
+    const sessionsResult = await db.execute(
+      sql`DELETE FROM sessions WHERE expire < NOW() RETURNING sid`
+    );
+    
+    return {
+      smsTrackingDeleted: (smsResult as any).rowCount || 0,
+      emailTrackingDeleted: (emailResult as any).rowCount || 0,
+      automationExecutionsDeleted: (automationResult as any).rowCount || 0,
+      sessionsDeleted: (sessionsResult as any).rowCount || 0,
     };
   }
 
