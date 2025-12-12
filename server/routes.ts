@@ -14707,6 +14707,156 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update payment schedule (edit arrangement)
+  app.patch('/api/payment-schedules/:id', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      const { id } = req.params;
+      const { amountCents, nextPaymentDate, frequency, endDate, remainingPayments } = req.body;
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      // Verify the schedule belongs to this tenant
+      const allSchedules = await storage.getAllPaymentSchedulesByTenant(tenantId);
+      const schedule = allSchedules.find((s: any) => s.id === id);
+      
+      if (!schedule) {
+        return res.status(404).json({ message: "Payment schedule not found" });
+      }
+
+      // Build updates object
+      const updates: any = { updatedAt: new Date() };
+      if (amountCents !== undefined) updates.amountCents = amountCents;
+      if (nextPaymentDate !== undefined) updates.nextPaymentDate = new Date(nextPaymentDate);
+      if (frequency !== undefined) updates.frequency = frequency;
+      if (endDate !== undefined) updates.endDate = new Date(endDate);
+      if (remainingPayments !== undefined) updates.remainingPayments = remainingPayments;
+
+      // Update the schedule in database
+      const updatedSchedule = await storage.updatePaymentSchedule(id, tenantId, updates);
+
+      // Sync to SMAX if enabled
+      const tenant = await storage.getTenant(tenantId);
+      const settings = await storage.getTenantSettings(tenantId);
+      
+      if (settings?.smaxEnabled && schedule.account?.accountNumber) {
+        try {
+          const smaxService = new SmaxService();
+          
+          // Use update_payment_external to sync changes to SMAX
+          await smaxService.updatePayment(tenantId, {
+            filenumber: schedule.account.accountNumber,
+            paymentdate: nextPaymentDate ? new Date(nextPaymentDate).toISOString().split('T')[0] : undefined,
+          });
+          
+          console.log(`✅ SMAX sync completed for schedule ${id}`);
+        } catch (smaxError) {
+          console.error('⚠️ SMAX sync failed (continuing):', smaxError);
+        }
+      }
+
+      console.log(`✏️ Payment schedule ${id} updated by admin (tenant: ${tenantId}):`, updates);
+      res.json(updatedSchedule);
+    } catch (error) {
+      console.error("Error updating payment schedule:", error);
+      res.status(500).json({ message: "Failed to update payment schedule" });
+    }
+  });
+
+  // Request cancellation of payment schedule (sends email to agency instead of deleting)
+  app.post('/api/payment-schedules/:id/request-cancellation', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      const { id } = req.params;
+      const { reason } = req.body;
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      // Verify the schedule belongs to this tenant
+      const allSchedules = await storage.getAllPaymentSchedulesByTenant(tenantId);
+      const schedule = allSchedules.find((s: any) => s.id === id);
+      
+      if (!schedule) {
+        return res.status(404).json({ message: "Payment schedule not found" });
+      }
+
+      // Get tenant and consumer info
+      const tenant = await storage.getTenant(tenantId);
+      const consumer = schedule.consumer;
+      const account = schedule.account;
+
+      if (!tenant) {
+        return res.status(404).json({ message: "Tenant not found" });
+      }
+
+      // Get tenant settings to find contact email
+      const settings = await storage.getTenantSettings(tenantId);
+      const recipientEmail = settings?.contactEmail || tenant.email;
+
+      if (!recipientEmail) {
+        return res.status(400).json({ message: "No agency contact email configured" });
+      }
+
+      // Format schedule details
+      const formatCurrency = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+      const formatDate = (date: Date | string | null) => date ? new Date(date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'N/A';
+
+      // Send cancellation request email to agency
+      const emailSubject = `Arrangement Cancellation Request - ${consumer?.firstName} ${consumer?.lastName}`;
+      const emailBody = `
+        <h2>Arrangement Cancellation Request</h2>
+        <p>A consumer has requested to cancel their payment arrangement.</p>
+        
+        <h3>Consumer Information:</h3>
+        <ul>
+          <li><strong>Name:</strong> ${consumer?.firstName} ${consumer?.lastName}</li>
+          <li><strong>Email:</strong> ${consumer?.email || 'N/A'}</li>
+          <li><strong>Phone:</strong> ${consumer?.phone || 'N/A'}</li>
+        </ul>
+        
+        <h3>Account Information:</h3>
+        <ul>
+          <li><strong>Account Number:</strong> ${account?.accountNumber || 'N/A'}</li>
+          <li><strong>Creditor:</strong> ${account?.creditor || 'N/A'}</li>
+          <li><strong>Current Balance:</strong> ${account?.balanceCents ? formatCurrency(account.balanceCents) : 'N/A'}</li>
+        </ul>
+        
+        <h3>Arrangement Details:</h3>
+        <ul>
+          <li><strong>Payment Amount:</strong> ${formatCurrency(schedule.amountCents)}</li>
+          <li><strong>Frequency:</strong> ${schedule.frequency || 'Monthly'}</li>
+          <li><strong>Next Payment Date:</strong> ${formatDate(schedule.nextPaymentDate)}</li>
+          <li><strong>Remaining Payments:</strong> ${schedule.remainingPayments ?? 'N/A'}</li>
+          <li><strong>Schedule Status:</strong> ${schedule.status}</li>
+        </ul>
+        
+        ${reason ? `<h3>Reason for Cancellation:</h3><p>${reason}</p>` : ''}
+        
+        <p><em>Please review this request and take appropriate action in the Chain platform.</em></p>
+        
+        <p>Best regards,<br>Chain Platform</p>
+      `;
+
+      await emailService.sendEmail({
+        to: recipientEmail,
+        subject: emailSubject,
+        html: emailBody,
+        from: `Chain Platform <notifications@chainsoftwaregroup.com>`,
+        tenantId: tenantId,
+      });
+
+      console.log(`📧 Cancellation request email sent to ${recipientEmail} for schedule ${id}`);
+      res.json({ message: "Cancellation request sent successfully" });
+    } catch (error) {
+      console.error("Error sending cancellation request:", error);
+      res.status(500).json({ message: "Failed to send cancellation request" });
+    }
+  });
+
 
   // Payment approval routes
   app.get('/api/payment-approvals', authenticateUser, async (req: any, res) => {

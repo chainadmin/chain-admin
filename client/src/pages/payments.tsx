@@ -16,7 +16,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { CreditCard, DollarSign, TrendingUp, Clock, CheckCircle, Calendar, User, Building2, Lock, Trash2, ThumbsUp, ThumbsDown, RefreshCw, History, Check, XCircle } from "lucide-react";
+import { CreditCard, DollarSign, TrendingUp, Clock, CheckCircle, Calendar, User, Building2, Lock, Trash2, ThumbsUp, ThumbsDown, RefreshCw, History, Check, XCircle, Search, Settings, Edit, Mail } from "lucide-react";
 import { PaymentSchedulingCalendar } from "@/components/payment-scheduling-calendar";
 
 export default function Payments() {
@@ -27,6 +27,18 @@ export default function Payments() {
   const [paymentToDelete, setPaymentToDelete] = useState<string | null>(null);
   const [selectedConsumerForArrangement, setSelectedConsumerForArrangement] = useState<any | null>(null);
   const [selectedConsumerForHistory, setSelectedConsumerForHistory] = useState<{ id: string; name: string } | null>(null);
+  
+  // Manage tab state
+  const [manageSearchQuery, setManageSearchQuery] = useState("");
+  const [editingSchedule, setEditingSchedule] = useState<any | null>(null);
+  const [showCancelRequestDialog, setShowCancelRequestDialog] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [editForm, setEditForm] = useState({
+    amountCents: 0,
+    nextPaymentDate: "",
+    frequency: "monthly",
+    remainingPayments: 0,
+  });
 
   const [payNowForm, setPayNowForm] = useState({
     consumerEmail: "",
@@ -207,6 +219,51 @@ export default function Payments() {
       toast({
         title: "Delete Failed",
         description: error.message || "Unable to delete arrangement. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Update payment schedule mutation
+  const updateScheduleMutation = useMutation({
+    mutationFn: async ({ scheduleId, updates }: { scheduleId: string; updates: any }) => {
+      const response = await apiRequest("PATCH", `/api/payment-schedules/${scheduleId}`, updates);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Arrangement Updated",
+        description: "Payment arrangement has been updated successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/payment-schedules"] });
+      setEditingSchedule(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Update Failed",
+        description: error.message || "Unable to update arrangement. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Request cancellation mutation (sends email instead of deleting)
+  const requestCancellationMutation = useMutation({
+    mutationFn: async ({ scheduleId, reason }: { scheduleId: string; reason?: string }) => {
+      await apiRequest("POST", `/api/payment-schedules/${scheduleId}/request-cancellation`, { reason });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Cancellation Request Sent",
+        description: "The agency has been notified of the cancellation request.",
+      });
+      setShowCancelRequestDialog(null);
+      setCancelReason("");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Request Failed",
+        description: error.message || "Unable to send cancellation request. Please try again.",
         variant: "destructive",
       });
     },
@@ -459,6 +516,10 @@ export default function Payments() {
               <TabsTrigger value="calendar" data-testid="tab-calendar">
                 <Calendar className="w-4 h-4 mr-2" />
                 Payment Schedule
+              </TabsTrigger>
+              <TabsTrigger value="manage" data-testid="tab-manage">
+                <Settings className="w-4 h-4 mr-2" />
+                Manage Schedules
               </TabsTrigger>
             </TabsList>
             
@@ -1086,6 +1147,262 @@ export default function Payments() {
 
           <TabsContent value="calendar" className="mt-0">
             <PaymentSchedulingCalendar />
+          </TabsContent>
+
+          <TabsContent value="manage" className="mt-0">
+            <Card className={glassPanelClass}>
+              <CardHeader className="border-b border-white/20 pb-4">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <CardTitle className="text-lg font-semibold text-blue-50">
+                    Manage Payment Schedules
+                  </CardTitle>
+                  <div className="relative w-full sm:w-80">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-100/60" />
+                    <Input
+                      placeholder="Search by name, email, or account..."
+                      value={manageSearchQuery}
+                      onChange={(e) => setManageSearchQuery(e.target.value)}
+                      className="pl-10 rounded-xl border border-white/20 bg-white/10 text-blue-50 placeholder:text-blue-100/60"
+                      data-testid="input-manage-search"
+                    />
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-6">
+                {schedulesLoading ? (
+                  <div className="text-center text-blue-100/70 py-8">Loading schedules...</div>
+                ) : !paymentSchedules || (paymentSchedules as any[]).length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-white/20 bg-white/5 py-16 text-center text-blue-100/70">
+                    <Settings className="mx-auto mb-4 h-12 w-12 text-blue-200/80" />
+                    <h3 className="text-lg font-semibold text-blue-50">No payment schedules</h3>
+                    <p className="mt-2 text-sm text-blue-100/70">
+                      When consumers set up payment arrangements, they will appear here for management.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {(paymentSchedules as any[])
+                      .filter((schedule: any) => {
+                        if (!manageSearchQuery) return true;
+                        const query = manageSearchQuery.toLowerCase();
+                        const consumerName = `${schedule.consumer?.firstName || ''} ${schedule.consumer?.lastName || ''}`.toLowerCase();
+                        const email = (schedule.consumer?.email || '').toLowerCase();
+                        const accountNumber = (schedule.account?.accountNumber || '').toLowerCase();
+                        return consumerName.includes(query) || email.includes(query) || accountNumber.includes(query);
+                      })
+                      .map((schedule: any) => (
+                        <div
+                          key={schedule.id}
+                          className="rounded-2xl border border-white/15 bg-white/5 p-5 text-blue-50"
+                          data-testid={`manage-schedule-${schedule.id}`}
+                        >
+                          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                            <div className="flex-1 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                              <div>
+                                <span className="text-xs uppercase tracking-wide text-blue-200/80">Consumer</span>
+                                <p className="mt-1 font-semibold text-blue-50">
+                                  {schedule.consumer?.firstName} {schedule.consumer?.lastName}
+                                </p>
+                                <p className="text-xs text-blue-100/60">{schedule.consumer?.email}</p>
+                              </div>
+                              <div>
+                                <span className="text-xs uppercase tracking-wide text-blue-200/80">Account</span>
+                                <p className="mt-1 font-semibold text-blue-50">
+                                  {schedule.account?.accountNumber || 'N/A'}
+                                </p>
+                                <p className="text-xs text-blue-100/60">{schedule.account?.creditor || ''}</p>
+                              </div>
+                              <div>
+                                <span className="text-xs uppercase tracking-wide text-blue-200/80">Payment</span>
+                                <p className="mt-1 font-semibold text-blue-50">
+                                  {formatCurrency(schedule.amountCents)}
+                                </p>
+                                <p className="text-xs text-blue-100/60 capitalize">{schedule.frequency || 'Monthly'}</p>
+                              </div>
+                              <div>
+                                <span className="text-xs uppercase tracking-wide text-blue-200/80">Next Payment</span>
+                                <p className="mt-1 font-semibold text-blue-50">
+                                  {schedule.nextPaymentDate ? formatDate(schedule.nextPaymentDate) : 'N/A'}
+                                </p>
+                                <Badge
+                                  className={cn(
+                                    "mt-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase",
+                                    schedule.status === 'active' 
+                                      ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-100" 
+                                      : schedule.status === 'pending_approval'
+                                      ? "border-amber-400/40 bg-amber-500/10 text-amber-100"
+                                      : "border-slate-400/30 bg-slate-500/10 text-slate-100"
+                                  )}
+                                >
+                                  {schedule.status === 'pending_approval' ? 'Pending' : schedule.status}
+                                </Badge>
+                              </div>
+                            </div>
+                            <div className="flex gap-2 mt-4 lg:mt-0">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="rounded-xl border border-sky-400/40 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20"
+                                onClick={() => {
+                                  setEditingSchedule(schedule);
+                                  setEditForm({
+                                    amountCents: schedule.amountCents,
+                                    nextPaymentDate: schedule.nextPaymentDate ? new Date(schedule.nextPaymentDate).toISOString().split('T')[0] : '',
+                                    frequency: schedule.frequency || 'monthly',
+                                    remainingPayments: schedule.remainingPayments || 0,
+                                  });
+                                }}
+                                data-testid={`button-edit-schedule-${schedule.id}`}
+                              >
+                                <Edit className="w-4 h-4 mr-1" />
+                                Edit
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="rounded-xl border border-amber-400/40 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20"
+                                onClick={() => setShowCancelRequestDialog(schedule.id)}
+                                data-testid={`button-cancel-request-${schedule.id}`}
+                              >
+                                <Mail className="w-4 h-4 mr-1" />
+                                Request Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Edit Schedule Dialog */}
+            <Dialog open={!!editingSchedule} onOpenChange={(open) => !open && setEditingSchedule(null)}>
+              <DialogContent className="rounded-3xl border border-white/20 bg-[#0b1733]/95 text-blue-50 max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="text-xl font-semibold text-blue-50">Edit Payment Schedule</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 pt-4">
+                  <div>
+                    <Label className="text-sm font-semibold text-blue-100/80">Payment Amount ($)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={(editForm.amountCents / 100).toFixed(2)}
+                      onChange={(e) => setEditForm({ ...editForm, amountCents: Math.round(parseFloat(e.target.value || '0') * 100) })}
+                      className="mt-1 rounded-xl border border-white/20 bg-white/10 text-blue-50"
+                      data-testid="input-edit-amount"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-sm font-semibold text-blue-100/80">Next Payment Date</Label>
+                    <Input
+                      type="date"
+                      value={editForm.nextPaymentDate}
+                      onChange={(e) => setEditForm({ ...editForm, nextPaymentDate: e.target.value })}
+                      className="mt-1 rounded-xl border border-white/20 bg-white/10 text-blue-50"
+                      data-testid="input-edit-date"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-sm font-semibold text-blue-100/80">Frequency</Label>
+                    <Select value={editForm.frequency} onValueChange={(value) => setEditForm({ ...editForm, frequency: value })}>
+                      <SelectTrigger className="mt-1 rounded-xl border border-white/20 bg-white/10 text-blue-50">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="weekly">Weekly</SelectItem>
+                        <SelectItem value="bi_weekly">Bi-Weekly</SelectItem>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-semibold text-blue-100/80">Remaining Payments</Label>
+                    <Input
+                      type="number"
+                      value={editForm.remainingPayments}
+                      onChange={(e) => setEditForm({ ...editForm, remainingPayments: parseInt(e.target.value || '0') })}
+                      className="mt-1 rounded-xl border border-white/20 bg-white/10 text-blue-50"
+                      data-testid="input-edit-remaining"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-3 pt-4">
+                    <Button
+                      variant="outline"
+                      onClick={() => setEditingSchedule(null)}
+                      className="rounded-xl border border-white/20 bg-transparent text-blue-100 hover:bg-white/10"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        if (editingSchedule) {
+                          updateScheduleMutation.mutate({
+                            scheduleId: editingSchedule.id,
+                            updates: {
+                              amountCents: editForm.amountCents,
+                              nextPaymentDate: editForm.nextPaymentDate,
+                              frequency: editForm.frequency,
+                              remainingPayments: editForm.remainingPayments,
+                            },
+                          });
+                        }
+                      }}
+                      disabled={updateScheduleMutation.isPending}
+                      className="rounded-xl bg-sky-600 text-white hover:bg-sky-700"
+                      data-testid="button-save-edit"
+                    >
+                      {updateScheduleMutation.isPending ? 'Saving...' : 'Save Changes'}
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            {/* Cancellation Request Dialog */}
+            <AlertDialog open={!!showCancelRequestDialog} onOpenChange={(open) => !open && setShowCancelRequestDialog(null)}>
+              <AlertDialogContent className="rounded-3xl border border-white/20 bg-[#0b1733]/95 text-blue-50">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="text-xl font-semibold text-blue-50">Request Arrangement Cancellation</AlertDialogTitle>
+                  <AlertDialogDescription className="text-blue-100/70">
+                    This will send an email to the agency with the consumer's information requesting cancellation. The arrangement will remain active until the agency processes the request.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <div className="py-4">
+                  <Label className="text-sm font-semibold text-blue-100/80">Reason for Cancellation (Optional)</Label>
+                  <Textarea
+                    value={cancelReason}
+                    onChange={(e) => setCancelReason(e.target.value)}
+                    placeholder="Enter reason for cancellation..."
+                    className="mt-2 rounded-xl border border-white/20 bg-white/10 text-blue-50 placeholder:text-blue-100/50"
+                    data-testid="input-cancel-reason"
+                  />
+                </div>
+                <AlertDialogFooter>
+                  <AlertDialogCancel
+                    className="rounded-xl border border-white/20 bg-transparent px-4 py-2 text-blue-100 hover:bg-white/10"
+                  >
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => {
+                      if (showCancelRequestDialog) {
+                        requestCancellationMutation.mutate({
+                          scheduleId: showCancelRequestDialog,
+                          reason: cancelReason,
+                        });
+                      }
+                    }}
+                    disabled={requestCancellationMutation.isPending}
+                    className="rounded-xl bg-amber-600 text-white hover:bg-amber-700"
+                    data-testid="button-confirm-cancel-request"
+                  >
+                    {requestCancellationMutation.isPending ? 'Sending...' : 'Send Request'}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </TabsContent>
         </Tabs>
 
