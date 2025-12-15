@@ -16,7 +16,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { CreditCard, DollarSign, TrendingUp, Clock, CheckCircle, Calendar, User, Building2, Lock, Trash2, ThumbsUp, ThumbsDown, RefreshCw, History, Check, XCircle, Search, Settings, Edit, Mail } from "lucide-react";
+import { CreditCard, DollarSign, TrendingUp, Clock, CheckCircle, Calendar, User, Building2, Lock, Trash2, ThumbsUp, ThumbsDown, RefreshCw, History, Check, XCircle, Search, Settings, Edit, Mail, MessageSquare, AlertTriangle, Phone } from "lucide-react";
 import { PaymentSchedulingCalendar } from "@/components/payment-scheduling-calendar";
 
 export default function Payments() {
@@ -450,13 +450,13 @@ export default function Payments() {
                     <span className="text-lg font-semibold text-white">{stats.pendingPayments}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-blue-100/70">Failed</span>
-                    <span className="text-lg font-semibold text-white">{stats.failedPayments}</span>
+                    <span className="text-sm text-blue-100/70">Failed/Declined</span>
+                    <span className="text-lg font-semibold text-rose-300">{(stats.failedPayments || 0) + (stats.declinedPayments || 0)}</span>
                   </div>
                 </div>
               </div>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
               <div className="rounded-2xl border border-white/15 bg-white/10 p-5 shadow-lg shadow-blue-900/20">
                 <div className="flex items-center justify-between">
                   <div>
@@ -464,15 +464,6 @@ export default function Payments() {
                     <p className="mt-2 text-2xl font-semibold text-white">{formatCurrency(stats.totalAmountCents)}</p>
                   </div>
                   <DollarSign className="h-8 w-8 text-emerald-200" />
-                </div>
-              </div>
-              <div className="rounded-2xl border border-white/15 bg-white/10 p-5 shadow-lg shadow-blue-900/20">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-blue-100/70">Transactions</p>
-                    <p className="mt-2 text-2xl font-semibold text-white">{stats.totalProcessed}</p>
-                  </div>
-                  <TrendingUp className="h-8 w-8 text-sky-200" />
                 </div>
               </div>
               <div className="rounded-2xl border border-white/15 bg-white/10 p-5 shadow-lg shadow-blue-900/20">
@@ -493,6 +484,24 @@ export default function Payments() {
                   <Clock className="h-8 w-8 text-amber-200" />
                 </div>
               </div>
+              <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 p-5 shadow-lg shadow-blue-900/20">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-rose-200/70">Failed/Declined</p>
+                    <p className="mt-2 text-2xl font-semibold text-rose-100">{(stats.failedPayments || 0) + (stats.declinedPayments || 0)}</p>
+                  </div>
+                  <XCircle className="h-8 w-8 text-rose-300" />
+                </div>
+              </div>
+              <div className="rounded-2xl border border-white/15 bg-white/10 p-5 shadow-lg shadow-blue-900/20">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-blue-100/70">Transactions</p>
+                    <p className="mt-2 text-2xl font-semibold text-white">{stats.totalProcessed}</p>
+                  </div>
+                  <TrendingUp className="h-8 w-8 text-sky-200" />
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -507,11 +516,28 @@ export default function Payments() {
               <TabsTrigger value="pending" data-testid="tab-pending">
                 <Clock className="w-4 h-4 mr-2" />
                 Pending Payments
-                {paymentSchedules && (paymentSchedules as any[]).length > 0 ? (
+                {paymentSchedules && (paymentSchedules as any[]).filter((s: any) => 
+                  ['active', 'pending_approval'].includes(s.status)
+                ).length > 0 ? (
                   <Badge className="ml-2 bg-amber-500 text-white">
-                    {(paymentSchedules as any[]).length}
+                    {(paymentSchedules as any[]).filter((s: any) => 
+                      ['active', 'pending_approval'].includes(s.status)
+                    ).length}
                   </Badge>
                 ) : null}
+              </TabsTrigger>
+              <TabsTrigger value="today" data-testid="tab-today">
+                <Calendar className="w-4 h-4 mr-2" />
+                Today's Payments
+                {paymentSchedules && (() => {
+                  const today = new Date().toISOString().split('T')[0];
+                  const todayCount = (paymentSchedules as any[]).filter((s: any) => 
+                    s.nextPaymentDate && new Date(s.nextPaymentDate).toISOString().split('T')[0] === today
+                  ).length;
+                  return todayCount > 0 ? (
+                    <Badge className="ml-2 bg-sky-500 text-white">{todayCount}</Badge>
+                  ) : null;
+                })()}
               </TabsTrigger>
               <TabsTrigger value="calendar" data-testid="tab-calendar">
                 <Calendar className="w-4 h-4 mr-2" />
@@ -887,17 +913,21 @@ export default function Payments() {
 
           <TabsContent value="pending" className="mt-0">
             <div className="space-y-6">
-              {/* Pending Payment Schedules */}
+              {/* Pending Payment Schedules - only show active and pending_approval */}
               <Card className={glassPanelClass}>
                 <CardHeader className="border-b border-white/20 pb-4">
                   <CardTitle className="text-lg font-semibold text-blue-50">
-                    Scheduled Payments ({(paymentSchedules as any[])?.length || 0})
+                    Scheduled Payments ({(paymentSchedules as any[])?.filter((s: any) => 
+                      ['active', 'pending_approval'].includes(s.status)
+                    ).length || 0})
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-6">
                   {schedulesLoading ? (
                     <div className="text-center text-blue-100/70 py-8">Loading scheduled payments...</div>
-                  ) : !paymentSchedules || (paymentSchedules as any[]).length === 0 ? (
+                  ) : !paymentSchedules || (paymentSchedules as any[]).filter((s: any) => 
+                    ['active', 'pending_approval'].includes(s.status)
+                  ).length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-white/20 bg-white/5 py-16 text-center text-blue-100/70">
                       <Clock className="mx-auto mb-4 h-12 w-12 text-blue-200/80" />
                       <h3 className="text-lg font-semibold text-blue-50">No scheduled payments</h3>
@@ -907,7 +937,9 @@ export default function Payments() {
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      {(paymentSchedules as any[]).map((schedule: any) => (
+                      {(paymentSchedules as any[]).filter((s: any) => 
+                        ['active', 'pending_approval'].includes(s.status)
+                      ).map((schedule: any) => (
                         <div
                           key={schedule.id}
                           className="rounded-2xl border border-white/15 bg-white/5 p-5 text-blue-50 shadow-sm shadow-blue-900/10 transition hover:-translate-y-0.5 hover:border-white/25 hover:shadow-lg"
@@ -965,7 +997,11 @@ export default function Payments() {
                                 <div>
                                   <span className="text-xs uppercase tracking-wide text-blue-200/80">Remaining Payments</span>
                                   <p className="mt-1 font-semibold text-blue-50">
-                                    {schedule.remainingPayments ?? "N/A"}
+                                    {schedule.remainingPayments != null 
+                                      ? schedule.remainingPayments 
+                                      : schedule.totalPayments != null && schedule.completedPayments != null
+                                        ? Math.max(0, schedule.totalPayments - schedule.completedPayments)
+                                        : schedule.totalPayments ?? "0"}
                                   </p>
                                 </div>
                               </div>
@@ -1144,6 +1180,161 @@ export default function Payments() {
             </div>
           </TabsContent>
 
+          <TabsContent value="today" className="mt-0">
+            <Card className={glassPanelClass}>
+              <CardHeader className="border-b border-white/20 pb-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <CardTitle className="text-lg font-semibold text-blue-50">
+                    Today's Scheduled Payments ({(() => {
+                      const today = new Date().toISOString().split('T')[0];
+                      return (paymentSchedules as any[])?.filter((s: any) => 
+                        s.nextPaymentDate && new Date(s.nextPaymentDate).toISOString().split('T')[0] === today
+                      ).length || 0;
+                    })()})
+                  </CardTitle>
+                  <div className="text-sm text-blue-100/70">
+                    {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-6">
+                {schedulesLoading ? (
+                  <div className="text-center text-blue-100/70 py-8">Loading today's payments...</div>
+                ) : (() => {
+                  const today = new Date().toISOString().split('T')[0];
+                  const todaySchedules = (paymentSchedules as any[])?.filter((s: any) => 
+                    s.nextPaymentDate && new Date(s.nextPaymentDate).toISOString().split('T')[0] === today
+                  ) || [];
+                  
+                  if (todaySchedules.length === 0) {
+                    return (
+                      <div className="rounded-2xl border border-dashed border-white/20 bg-white/5 py-16 text-center text-blue-100/70">
+                        <Calendar className="mx-auto mb-4 h-12 w-12 text-blue-200/80" />
+                        <h3 className="text-lg font-semibold text-blue-50">No payments scheduled for today</h3>
+                        <p className="mt-2 text-sm text-blue-100/70">
+                          Payments scheduled for today will appear here for processing and monitoring.
+                        </p>
+                      </div>
+                    );
+                  }
+                  
+                  return (
+                    <div className="space-y-4">
+                      {todaySchedules.map((schedule: any) => (
+                        <div
+                          key={schedule.id}
+                          className={cn(
+                            "rounded-2xl border p-5 text-blue-50 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg",
+                            schedule.status === 'failed' || schedule.status === 'declined'
+                              ? "border-rose-400/40 bg-rose-500/10"
+                              : schedule.status === 'completed'
+                              ? "border-emerald-400/40 bg-emerald-500/10"
+                              : "border-white/15 bg-white/5"
+                          )}
+                          data-testid={`today-schedule-${schedule.id}`}
+                        >
+                          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                            <div className="flex-1 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                              <div>
+                                <span className="text-xs uppercase tracking-wide text-blue-200/80">Consumer</span>
+                                <p className="mt-1 font-semibold text-blue-50">
+                                  {schedule.consumer?.firstName} {schedule.consumer?.lastName}
+                                </p>
+                                <p className="text-xs text-blue-100/60">{schedule.consumer?.email}</p>
+                              </div>
+                              <div>
+                                <span className="text-xs uppercase tracking-wide text-blue-200/80">Account</span>
+                                <p className="mt-1 font-semibold text-blue-50">
+                                  {schedule.account?.accountNumber || 'N/A'}
+                                </p>
+                                <p className="text-xs text-blue-100/60">{schedule.account?.creditor || ''}</p>
+                              </div>
+                              <div>
+                                <span className="text-xs uppercase tracking-wide text-blue-200/80">Payment Amount</span>
+                                <p className="mt-1 font-semibold text-blue-50">
+                                  {formatCurrency(schedule.amountCents)}
+                                </p>
+                              </div>
+                              <div>
+                                <span className="text-xs uppercase tracking-wide text-blue-200/80">Status</span>
+                                <Badge
+                                  className={cn(
+                                    "mt-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase",
+                                    schedule.status === 'completed' 
+                                      ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-100" 
+                                      : schedule.status === 'failed' || schedule.status === 'declined'
+                                      ? "border-rose-400/40 bg-rose-500/10 text-rose-100"
+                                      : schedule.status === 'active'
+                                      ? "border-sky-400/40 bg-sky-500/10 text-sky-100"
+                                      : "border-amber-400/40 bg-amber-500/10 text-amber-100"
+                                  )}
+                                >
+                                  {schedule.status}
+                                </Badge>
+                              </div>
+                              <div>
+                                <span className="text-xs uppercase tracking-wide text-blue-200/80">Remaining</span>
+                                <p className="mt-1 font-semibold text-blue-50">
+                                  {schedule.remainingPayments != null 
+                                    ? schedule.remainingPayments 
+                                    : schedule.totalPayments != null && schedule.completedPayments != null
+                                      ? Math.max(0, schedule.totalPayments - schedule.completedPayments)
+                                      : schedule.totalPayments ?? "0"} payments
+                                </p>
+                              </div>
+                            </div>
+                            
+                            {/* Decline Reason and Contact Buttons */}
+                            <div className="flex flex-col gap-2 mt-2 lg:mt-0">
+                              {(schedule.status === 'failed' || schedule.status === 'declined') && (
+                                <div className="flex items-center gap-2 rounded-xl border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
+                                  <AlertTriangle className="h-4 w-4" />
+                                  <span>{schedule.failureReason || schedule.declineReason || 'Payment declined'}</span>
+                                </div>
+                              )}
+                              
+                              {(schedule.status === 'failed' || schedule.status === 'declined' || schedule.status === 'cancelled') && schedule.consumer && (
+                                <div className="flex gap-2">
+                                  {schedule.consumer?.phone && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="rounded-xl border border-sky-400/40 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20"
+                                      onClick={() => {
+                                        window.location.href = `/sms?to=${encodeURIComponent(schedule.consumer?.phone || '')}`;
+                                      }}
+                                      data-testid={`button-sms-${schedule.id}`}
+                                    >
+                                      <MessageSquare className="w-4 h-4 mr-1" />
+                                      SMS
+                                    </Button>
+                                  )}
+                                  {schedule.consumer?.email && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="rounded-xl border border-indigo-400/40 bg-indigo-500/10 text-indigo-100 hover:bg-indigo-500/20"
+                                      onClick={() => {
+                                        window.location.href = `/email?to=${encodeURIComponent(schedule.consumer?.email || '')}`;
+                                      }}
+                                      data-testid={`button-email-${schedule.id}`}
+                                    >
+                                      <Mail className="w-4 h-4 mr-1" />
+                                      Email
+                                    </Button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           <TabsContent value="calendar" className="mt-0">
             <PaymentSchedulingCalendar />
@@ -1238,35 +1429,79 @@ export default function Payments() {
                                 </Badge>
                               </div>
                             </div>
-                            <div className="flex gap-2 mt-4 lg:mt-0">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="rounded-xl border border-sky-400/40 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20"
-                                onClick={() => {
-                                  setEditingSchedule(schedule);
-                                  setEditForm({
-                                    amountCents: schedule.amountCents,
-                                    nextPaymentDate: schedule.nextPaymentDate ? new Date(schedule.nextPaymentDate).toISOString().split('T')[0] : '',
-                                    frequency: schedule.frequency || 'monthly',
-                                    remainingPayments: schedule.remainingPayments || 0,
-                                  });
-                                }}
-                                data-testid={`button-edit-schedule-${schedule.id}`}
-                              >
-                                <Edit className="w-4 h-4 mr-1" />
-                                Edit
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="rounded-xl border border-amber-400/40 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20"
-                                onClick={() => setShowCancelRequestDialog(schedule.id)}
-                                data-testid={`button-cancel-request-${schedule.id}`}
-                              >
-                                <Mail className="w-4 h-4 mr-1" />
-                                Request Cancel
-                              </Button>
+                            <div className="flex flex-col gap-2 mt-4 lg:mt-0">
+                              {/* Failure reason display */}
+                              {(schedule.status === 'failed' || schedule.status === 'declined') && (schedule.failureReason || schedule.declineReason) && (
+                                <div className="flex items-center gap-2 rounded-xl border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+                                  <AlertTriangle className="h-3.5 w-3.5" />
+                                  <span>{schedule.failureReason || schedule.declineReason}</span>
+                                </div>
+                              )}
+                              
+                              <div className="flex gap-2 flex-wrap">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="rounded-xl border border-sky-400/40 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20"
+                                  onClick={() => {
+                                    setEditingSchedule(schedule);
+                                    setEditForm({
+                                      amountCents: schedule.amountCents,
+                                      nextPaymentDate: schedule.nextPaymentDate ? new Date(schedule.nextPaymentDate).toISOString().split('T')[0] : '',
+                                      frequency: schedule.frequency || 'monthly',
+                                      remainingPayments: schedule.remainingPayments || 0,
+                                    });
+                                  }}
+                                  data-testid={`button-edit-schedule-${schedule.id}`}
+                                >
+                                  <Edit className="w-4 h-4 mr-1" />
+                                  Edit
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="rounded-xl border border-amber-400/40 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20"
+                                  onClick={() => setShowCancelRequestDialog(schedule.id)}
+                                  data-testid={`button-cancel-request-${schedule.id}`}
+                                >
+                                  <Mail className="w-4 h-4 mr-1" />
+                                  Request Cancel
+                                </Button>
+                                
+                                {/* Contact buttons for failed/declined/cancelled */}
+                                {(schedule.status === 'failed' || schedule.status === 'declined' || schedule.status === 'cancelled') && (
+                                  <>
+                                    {schedule.consumer?.phone && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="rounded-xl border border-cyan-400/40 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20"
+                                        onClick={() => {
+                                          window.location.href = `/sms?to=${encodeURIComponent(schedule.consumer?.phone || '')}`;
+                                        }}
+                                        data-testid={`button-manage-sms-${schedule.id}`}
+                                      >
+                                        <MessageSquare className="w-4 h-4 mr-1" />
+                                        SMS
+                                      </Button>
+                                    )}
+                                    {schedule.consumer?.email && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="rounded-xl border border-purple-400/40 bg-purple-500/10 text-purple-100 hover:bg-purple-500/20"
+                                        onClick={() => {
+                                          window.location.href = `/email?to=${encodeURIComponent(schedule.consumer?.email || '')}`;
+                                        }}
+                                        data-testid={`button-manage-email-${schedule.id}`}
+                                      >
+                                        <Mail className="w-4 h-4 mr-1" />
+                                        Email
+                                      </Button>
+                                    )}
+                                  </>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>

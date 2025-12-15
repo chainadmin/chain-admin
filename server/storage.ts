@@ -421,6 +421,7 @@ export interface IStorage {
     successfulPayments: number;
     failedPayments: number;
     pendingPayments: number;
+    declinedPayments: number;
   }>;
   getOrCreatePaymentFolder(tenantId: string, paymentDate: Date): Promise<Folder>;
   
@@ -2851,14 +2852,28 @@ export class DatabaseStorage implements IStorage {
     successfulPayments: number;
     failedPayments: number;
     pendingPayments: number;
+    declinedPayments: number;
   }> {
     const tenantPayments = await db.select().from(payments).where(eq(payments.tenantId, tenantId));
     
-    const totalProcessed = tenantPayments.length;
-    const totalAmountCents = tenantPayments.reduce((sum, payment) => sum + (payment.amountCents || 0), 0);
-    const successfulPayments = tenantPayments.filter(payment => payment.status === 'completed').length;
+    // Only count successful (completed/settled) payments as "processed"
+    const successfulPayments = tenantPayments.filter(payment => 
+      ['completed', 'settled'].includes(payment.status || '')
+    ).length;
+    
+    // Calculate amount only from successful payments
+    const totalAmountCents = tenantPayments
+      .filter(payment => ['completed', 'settled'].includes(payment.status || ''))
+      .reduce((sum, payment) => sum + (payment.amountCents || 0), 0);
+    
     const failedPayments = tenantPayments.filter(payment => payment.status === 'failed').length;
-    const pendingPayments = tenantPayments.filter(payment => ['pending', 'processing'].includes(payment.status || '')).length;
+    const declinedPayments = tenantPayments.filter(payment => payment.status === 'declined').length;
+    const pendingPayments = tenantPayments.filter(payment => 
+      ['pending', 'processing'].includes(payment.status || '')
+    ).length;
+    
+    // Total processed = only successful payments
+    const totalProcessed = successfulPayments;
     
     return {
       totalProcessed,
@@ -2866,6 +2881,7 @@ export class DatabaseStorage implements IStorage {
       successfulPayments,
       failedPayments,
       pendingPayments,
+      declinedPayments,
     };
   }
 
