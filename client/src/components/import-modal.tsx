@@ -197,28 +197,28 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
         // Define standard column mappings (including alternate names from various systems)
         // Note: headers are normalized to lowercase with spaces replaced by underscores
         const standardConsumerFields = [
-          // First name variations
-          'consumer_first_name', 'first_name', 'firstname', 'fname', 'first', 'given_name', 'givenname',
-          // Last name variations
-          'consumer_last_name', 'last_name', 'lastname', 'lname', 'last', 'surname', 'family_name', 'familyname', 'fullname', 'full_name', 'name',
-          // Email variations
-          'consumer_email', 'email', 'emailaddress', 'email_address', 'e_mail', 'mail', 'consumer_e_mail',
-          // Phone variations
-          'consumer_phone', 'phone', 'phonenumber', 'phone_number', 'primaryphone', 'primary_phone', 
+          // First name variations (including camelCase condensed forms)
+          'consumer_first_name', 'consumerfirstname', 'first_name', 'firstname', 'fname', 'first', 'given_name', 'givenname',
+          // Last name variations (including camelCase condensed forms)
+          'consumer_last_name', 'consumerlastname', 'last_name', 'lastname', 'lname', 'last', 'surname', 'family_name', 'familyname', 'fullname', 'full_name', 'name',
+          // Email variations (including camelCase condensed forms)
+          'consumer_email', 'consumeremail', 'email', 'emailaddress', 'email_address', 'e_mail', 'mail', 'consumer_e_mail',
+          // Phone variations (including camelCase condensed forms)
+          'consumer_phone', 'consumerphone', 'consumerphonenumber', 'phone', 'phonenumber', 'phone_number', 'primaryphone', 'primary_phone', 
           'cellphone', 'cell_phone', 'cell', 'mobile', 'mobilephone', 'mobile_phone', 
           'workphone', 'work_phone', 'alternatephone', 'alternate_phone', 'homephone', 'home_phone', 'telephone',
           // Date of birth variations
-          'date_of_birth', 'dob', 'dateofbirth', 'consumer_dob', 'consumer_date_of_birth', 
+          'date_of_birth', 'dob', 'dateofbirth', 'consumer_dob', 'consumerdob', 'consumer_date_of_birth', 
           'birthdate', 'birth_date', 'birthday', 'bday',
           // Address variations
-          'address', 'consumer_address', 'street', 'street_address', 'address1', 'address_1', 
+          'address', 'consumer_address', 'consumeraddress', 'street', 'street_address', 'streetaddress', 'address1', 'address_1', 
           'mailing_address', 'mailingaddress', 'home_address', 'homeaddress', 'address_line_1', 'addressline1',
           // City variations
-          'city', 'consumer_city', 'town',
+          'city', 'consumer_city', 'consumercity', 'town',
           // State variations
-          'state', 'consumer_state', 'province', 'region',
+          'state', 'consumer_state', 'consumerstate', 'province', 'region',
           // Zip code variations
-          'zip_code', 'zipcode', 'zip', 'consumer_zip', 'consumer_zip_code', 
+          'zip_code', 'zipcode', 'zip', 'consumer_zip', 'consumerzip', 'consumer_zip_code', 'consumerzipcode',
           'postalcode', 'postal_code', 'postal', 'postcode', 'post_code',
           // SSN variations
           'socialsecuritynumber', 'ssn', 'social_security_number', 'ssn_last4', 'ssnlast4', 
@@ -239,7 +239,9 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
           // Due date variations
           'due_date', 'duedate', 'payment_due', 'paymentdue', 'date_due', 'datedue',
           // Status variations
-          'status', 'statusname', 'status_name', 'accountstatus', 'account_status', 'acct_status', 'acctstatus'
+          'status', 'statusname', 'status_name', 'accountstatus', 'account_status', 'acct_status', 'acctstatus',
+          // Consumer email for accounts (link consumer to account)
+          'consumer_email', 'consumeremail'
         ];
         
         for (let i = 1; i < lines.length; i++) {
@@ -250,31 +252,33 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
             row[header] = values[index] || '';
           });
 
-          // Extract consumer data - check all email variations
-          const consumerKey = row.consumer_email || row.email || row.emailaddress || row.email_address || 
-                             row.e_mail || row.mail || row.consumer_e_mail || '';
+          // Extract consumer data - check all email variations (including camelCase)
+          const consumerKey = row.consumer_email || row.consumeremail || row.email || row.emailaddress || 
+                             row.email_address || row.e_mail || row.mail || row.consumer_e_mail || '';
           if (consumerKey && !consumers.has(consumerKey)) {
             // Extract date of birth from various possible column names
             const dobValue = row.date_of_birth || row.dob || row.dateofbirth || 
-                           row.consumer_dob || row.consumer_date_of_birth || 
+                           row.consumer_dob || row.consumerdob || row.consumer_date_of_birth || 
                            row.birthdate || row.birth_date || row.birthday || row.bday || '';
             
-            // Extract phone from various possible column names
-            const phoneValue = row.consumer_phone || row.phone || row.phonenumber || row.phone_number ||
+            // Extract phone from various possible column names (including camelCase)
+            const phoneValue = row.consumer_phone || row.consumerphone || row.consumerphonenumber ||
+                             row.phone || row.phonenumber || row.phone_number ||
                              row.primaryphone || row.primary_phone || row.cellphone || row.cell_phone || 
                              row.cell || row.mobile || row.mobilephone || row.mobile_phone ||
                              row.workphone || row.work_phone || row.alternatephone || row.alternate_phone ||
                              row.homephone || row.home_phone || row.telephone || '';
             
-            // Extract address fields with expanded variations
-            const addressValue = row.address || row.consumer_address || row.street || row.street_address || 
+            // Extract address fields with expanded variations (including camelCase)
+            const addressValue = row.address || row.consumer_address || row.consumeraddress || 
+                               row.street || row.street_address || row.streetaddress ||
                                row.address1 || row.address_1 || row.mailing_address || row.mailingaddress ||
                                row.home_address || row.homeaddress || row.address_line_1 || row.addressline1 || '';
-            const cityValue = row.city || row.consumer_city || row.town || '';
-            const stateValue = row.state || row.consumer_state || row.province || row.region || '';
+            const cityValue = row.city || row.consumer_city || row.consumercity || row.town || '';
+            const stateValue = row.state || row.consumer_state || row.consumerstate || row.province || row.region || '';
             const zipValue = row.zip_code || row.zipcode || row.zip || 
-                           row.consumer_zip || row.consumer_zip_code || row.postalcode || row.postal_code ||
-                           row.postal || row.postcode || row.post_code || '';
+                           row.consumer_zip || row.consumerzip || row.consumer_zip_code || row.consumerzipcode ||
+                           row.postalcode || row.postal_code || row.postal || row.postcode || row.post_code || '';
             
             // Extract SSN last 4 digits (from full SSN or just last 4)
             const ssnRaw = row.socialsecuritynumber || row.ssn || row.social_security_number || 
@@ -292,11 +296,11 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
               }
             });
 
-            // Extract first and last name with expanded variations
-            const firstName = row.consumer_first_name || row.first_name || row.firstname || row.fname || 
-                            row.first || row.given_name || row.givenname || '';
-            const lastName = row.consumer_last_name || row.last_name || row.lastname || row.lname || 
-                           row.last || row.surname || row.family_name || row.familyname || '';
+            // Extract first and last name with expanded variations (including camelCase)
+            const firstName = row.consumer_first_name || row.consumerfirstname || row.first_name || row.firstname || 
+                            row.fname || row.first || row.given_name || row.givenname || '';
+            const lastName = row.consumer_last_name || row.consumerlastname || row.last_name || row.lastname || 
+                           row.lname || row.last || row.surname || row.family_name || row.familyname || '';
 
             consumers.set(consumerKey, {
               firstName,
