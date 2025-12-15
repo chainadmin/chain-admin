@@ -177,9 +177,15 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
       try {
         const csv = event.target?.result as string;
         const lines = csv.split('\n').filter(line => line.trim());
-        // Normalize headers: lowercase, remove quotes
+        // Normalize headers: lowercase, remove quotes, replace spaces with underscores
         const rawHeaders = parseCSVLine(lines[0]);
-        const headers = rawHeaders.map(h => h.toLowerCase().replace(/['"]/g, '').trim());
+        const headers = rawHeaders.map(h => 
+          h.toLowerCase()
+            .replace(/['"]/g, '')
+            .trim()
+            .replace(/\s+/g, '_')  // Replace spaces with underscores
+            .replace(/[^a-z0-9_]/g, '')  // Remove special characters
+        );
         
         // Debug: log headers to console
         console.log('CSV Headers (raw):', rawHeaders);
@@ -189,25 +195,51 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
         const accounts = [];
 
         // Define standard column mappings (including alternate names from various systems)
+        // Note: headers are normalized to lowercase with spaces replaced by underscores
         const standardConsumerFields = [
-          'consumer_first_name', 'first_name', 'firstname', 'fname',
-          'consumer_last_name', 'last_name', 'lastname', 'lname', 'fullname',
-          'consumer_email', 'email', 'emailaddress', 'email_address',
-          'consumer_phone', 'phone', 'primaryphone', 'primary_phone', 'cellphone', 'cell_phone', 'workphone', 'alternatephone',
-          'date_of_birth', 'dob', 'dateofbirth', 'consumer_dob', 'consumer_date_of_birth', 'birthdate', 'birth_date',
-          'address', 'consumer_address', 'street', 'street_address',
-          'city', 'consumer_city',
-          'state', 'consumer_state',
-          'zip_code', 'zipcode', 'zip', 'consumer_zip', 'consumer_zip_code', 'postalcode', 'postal_code',
-          'socialsecuritynumber', 'ssn', 'social_security_number', 'ssn_last4', 'ssnlast4'
+          // First name variations
+          'consumer_first_name', 'first_name', 'firstname', 'fname', 'first', 'given_name', 'givenname',
+          // Last name variations
+          'consumer_last_name', 'last_name', 'lastname', 'lname', 'last', 'surname', 'family_name', 'familyname', 'fullname', 'full_name', 'name',
+          // Email variations
+          'consumer_email', 'email', 'emailaddress', 'email_address', 'e_mail', 'mail', 'consumer_e_mail',
+          // Phone variations
+          'consumer_phone', 'phone', 'phonenumber', 'phone_number', 'primaryphone', 'primary_phone', 
+          'cellphone', 'cell_phone', 'cell', 'mobile', 'mobilephone', 'mobile_phone', 
+          'workphone', 'work_phone', 'alternatephone', 'alternate_phone', 'homephone', 'home_phone', 'telephone',
+          // Date of birth variations
+          'date_of_birth', 'dob', 'dateofbirth', 'consumer_dob', 'consumer_date_of_birth', 
+          'birthdate', 'birth_date', 'birthday', 'bday',
+          // Address variations
+          'address', 'consumer_address', 'street', 'street_address', 'address1', 'address_1', 
+          'mailing_address', 'mailingaddress', 'home_address', 'homeaddress', 'address_line_1', 'addressline1',
+          // City variations
+          'city', 'consumer_city', 'town',
+          // State variations
+          'state', 'consumer_state', 'province', 'region',
+          // Zip code variations
+          'zip_code', 'zipcode', 'zip', 'consumer_zip', 'consumer_zip_code', 
+          'postalcode', 'postal_code', 'postal', 'postcode', 'post_code',
+          // SSN variations
+          'socialsecuritynumber', 'ssn', 'social_security_number', 'ssn_last4', 'ssnlast4', 
+          'ssn_last_4', 'last4ssn', 'last_4_ssn', 'social', 'last4', 'last_4'
         ];
         const standardAccountFields = [
-          'account_number', 'account', 'accountnumber', 
-          'filenumber', 'file_number', 'fileno',
-          'creditor', 'originalcreditor', 'original_creditor', 'client', 'clientname',
-          'balance', 'currentbalance', 'current_balance', 'amount', 'amount_due', 'balancedue', 'balance_due', 'totaldue', 'total_due',
-          'due_date', 'duedate',
-          'status', 'statusname', 'status_name', 'accountstatus', 'account_status'
+          // Account number variations
+          'account_number', 'account', 'accountnumber', 'acct', 'acct_number', 'acctnumber', 'account_no', 'accountno',
+          // File number variations
+          'filenumber', 'file_number', 'fileno', 'file_no', 'file', 'reference', 'reference_number', 'refnumber', 'ref_number',
+          // Creditor variations
+          'creditor', 'originalcreditor', 'original_creditor', 'client', 'clientname', 'client_name', 
+          'merchant', 'company', 'creditor_name', 'creditorname', 'original_client', 'originalclient',
+          // Balance variations
+          'balance', 'currentbalance', 'current_balance', 'amount', 'amount_due', 'amountdue',
+          'balancedue', 'balance_due', 'totaldue', 'total_due', 'total_balance', 'totalbalance',
+          'outstanding_balance', 'outstandingbalance', 'owed', 'amount_owed', 'amountowed',
+          // Due date variations
+          'due_date', 'duedate', 'payment_due', 'paymentdue', 'date_due', 'datedue',
+          // Status variations
+          'status', 'statusname', 'status_name', 'accountstatus', 'account_status', 'acct_status', 'acctstatus'
         ];
         
         for (let i = 1; i < lines.length; i++) {
@@ -218,28 +250,36 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
             row[header] = values[index] || '';
           });
 
-          // Extract consumer data
-          const consumerKey = row.consumer_email || row.email || row.emailaddress || row.email_address || '';
+          // Extract consumer data - check all email variations
+          const consumerKey = row.consumer_email || row.email || row.emailaddress || row.email_address || 
+                             row.e_mail || row.mail || row.consumer_e_mail || '';
           if (consumerKey && !consumers.has(consumerKey)) {
-            // Extract date of birth from various possible column names (including birthdate)
+            // Extract date of birth from various possible column names
             const dobValue = row.date_of_birth || row.dob || row.dateofbirth || 
                            row.consumer_dob || row.consumer_date_of_birth || 
-                           row.birthdate || row.birth_date || '';
+                           row.birthdate || row.birth_date || row.birthday || row.bday || '';
             
             // Extract phone from various possible column names
-            const phoneValue = row.consumer_phone || row.phone || row.primaryphone || row.primary_phone ||
-                             row.cellphone || row.cell_phone || row.workphone || row.alternatephone || '';
+            const phoneValue = row.consumer_phone || row.phone || row.phonenumber || row.phone_number ||
+                             row.primaryphone || row.primary_phone || row.cellphone || row.cell_phone || 
+                             row.cell || row.mobile || row.mobilephone || row.mobile_phone ||
+                             row.workphone || row.work_phone || row.alternatephone || row.alternate_phone ||
+                             row.homephone || row.home_phone || row.telephone || '';
             
-            // Extract address fields
-            const addressValue = row.address || row.consumer_address || row.street || row.street_address || '';
-            const cityValue = row.city || row.consumer_city || '';
-            const stateValue = row.state || row.consumer_state || '';
+            // Extract address fields with expanded variations
+            const addressValue = row.address || row.consumer_address || row.street || row.street_address || 
+                               row.address1 || row.address_1 || row.mailing_address || row.mailingaddress ||
+                               row.home_address || row.homeaddress || row.address_line_1 || row.addressline1 || '';
+            const cityValue = row.city || row.consumer_city || row.town || '';
+            const stateValue = row.state || row.consumer_state || row.province || row.region || '';
             const zipValue = row.zip_code || row.zipcode || row.zip || 
-                           row.consumer_zip || row.consumer_zip_code || row.postalcode || row.postal_code || '';
+                           row.consumer_zip || row.consumer_zip_code || row.postalcode || row.postal_code ||
+                           row.postal || row.postcode || row.post_code || '';
             
             // Extract SSN last 4 digits (from full SSN or just last 4)
             const ssnRaw = row.socialsecuritynumber || row.ssn || row.social_security_number || 
-                          row.ssn_last4 || row.ssnlast4 || '';
+                          row.ssn_last4 || row.ssnlast4 || row.ssn_last_4 || row.last4ssn || 
+                          row.last_4_ssn || row.social || row.last4 || row.last_4 || '';
             const ssnLast4 = ssnRaw ? ssnRaw.replace(/\D/g, '').slice(-4) : '';
             
             // Extract additional consumer data (any non-standard columns)
@@ -252,9 +292,11 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
               }
             });
 
-            // Extract first and last name
-            const firstName = row.consumer_first_name || row.first_name || row.firstname || row.fname || '';
-            const lastName = row.consumer_last_name || row.last_name || row.lastname || row.lname || '';
+            // Extract first and last name with expanded variations
+            const firstName = row.consumer_first_name || row.first_name || row.firstname || row.fname || 
+                            row.first || row.given_name || row.givenname || '';
+            const lastName = row.consumer_last_name || row.last_name || row.lastname || row.lname || 
+                           row.last || row.surname || row.family_name || row.familyname || '';
 
             consumers.set(consumerKey, {
               firstName,
@@ -273,8 +315,14 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
 
           // Extract account data - only if we have a valid consumer email, creditor, and balance
           // Filenumber is optional unless SMAX is enabled
-          const creditorValue = row.creditor || row.originalcreditor || row.original_creditor || row.client || row.clientname || '';
-          const balanceValue = row.balance || row.currentbalance || row.current_balance || row.amount || row.amount_due || row.balancedue || row.balance_due || row.totaldue || row.total_due || '';
+          const creditorValue = row.creditor || row.originalcreditor || row.original_creditor || row.client || 
+                               row.clientname || row.client_name || row.merchant || row.company || 
+                               row.creditor_name || row.creditorname || row.original_client || row.originalclient || '';
+          const balanceValue = row.balance || row.currentbalance || row.current_balance || row.amount || 
+                              row.amount_due || row.amountdue || row.balancedue || row.balance_due || 
+                              row.totaldue || row.total_due || row.total_balance || row.totalbalance ||
+                              row.outstanding_balance || row.outstandingbalance || row.owed || 
+                              row.amount_owed || row.amountowed || '';
           if (consumerKey && creditorValue && balanceValue) {
             // Extract additional account data (any non-standard columns)
             const additionalAccountData: any = {};
@@ -287,12 +335,15 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
             });
 
             accounts.push({
-              accountNumber: row.account_number || row.account || row.accountnumber || '',
-              filenumber: row.filenumber || row.file_number || row.fileno || '',
+              accountNumber: row.account_number || row.account || row.accountnumber || row.acct || 
+                           row.acct_number || row.acctnumber || row.account_no || row.accountno || '',
+              filenumber: row.filenumber || row.file_number || row.fileno || row.file_no || row.file ||
+                         row.reference || row.reference_number || row.refnumber || row.ref_number || '',
               creditor: creditorValue,
               balanceCents: Math.round(parseFloat(balanceValue.replace(/[^0-9.-]/g, '')) * 100),
-              dueDate: row.due_date || row.duedate || '',
-              status: row.status || row.statusname || row.status_name || row.accountstatus || row.account_status || '',
+              dueDate: row.due_date || row.duedate || row.payment_due || row.paymentdue || row.date_due || row.datedue || '',
+              status: row.status || row.statusname || row.status_name || row.accountstatus || 
+                     row.account_status || row.acct_status || row.acctstatus || '',
               consumerEmail: consumerKey,
               additionalData: additionalAccountData,
             });
