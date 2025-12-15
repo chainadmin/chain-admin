@@ -2347,14 +2347,31 @@ export class DatabaseStorage implements IStorage {
     const safeDays = Math.max(1, Math.min(30, Math.floor(daysOld)));
     
     // Use SQL interval with bound parameter for proper UTC timestamp comparison
-    // Delete old SMS tracking records
+    // Delete old SMS tracking records ONLY for completed campaigns (not cancelled/failed/sending)
+    // This preserves tracking data needed to resume paused/cancelled campaigns
     const smsResult = await db.execute(
-      sql`DELETE FROM sms_tracking WHERE sent_at < NOW() - (${safeDays}::int * INTERVAL '1 day') RETURNING id`
+      sql`DELETE FROM sms_tracking 
+          WHERE sent_at < NOW() - (${safeDays}::int * INTERVAL '1 day')
+          AND (
+            campaign_id IS NULL 
+            OR campaign_id IN (
+              SELECT id FROM sms_campaigns WHERE status = 'completed'
+            )
+          )
+          RETURNING id`
     );
     
-    // Delete old email tracking records
+    // Delete old email tracking records ONLY for completed campaigns
     const emailResult = await db.execute(
-      sql`DELETE FROM email_tracking WHERE sent_at < NOW() - (${safeDays}::int * INTERVAL '1 day') RETURNING id`
+      sql`DELETE FROM email_tracking 
+          WHERE sent_at < NOW() - (${safeDays}::int * INTERVAL '1 day')
+          AND (
+            campaign_id IS NULL 
+            OR campaign_id IN (
+              SELECT id FROM email_campaigns WHERE status = 'completed'
+            )
+          )
+          RETURNING id`
     );
     
     // Delete old automation execution logs
