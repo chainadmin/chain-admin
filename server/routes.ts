@@ -4313,8 +4313,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Set processing lock
       campaignProcessingLocks.set(id, true);
 
-      const startIndex = campaign.lastSentIndex || 0;
-      console.log(`🔄 Resuming SMS campaign "${campaign.name}" from index ${startIndex}`);
+      console.log(`🔄 Resuming SMS campaign "${campaign.name}"`);
 
       const templates = await storage.getSmsTemplatesByTenant(tenantId);
       const template = templates.find(t => t.id === campaign.templateId);
@@ -4336,6 +4335,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         contactPhone: tenantSettings?.contactPhone,
         consumerPortalSettings: tenantSettings?.consumerPortalSettings,
       };
+
+      // Get tracking records to find which consumers already received messages
+      const existingTracking = await storage.getSmsTrackingByCampaign(id);
+      const alreadySentSet = new Set<string>();
+      for (const record of existingTracking) {
+        // Create unique key from consumerId + normalized phone number
+        const normalizedPhone = (record.phoneNumber || '').replace(/\D/g, '');
+        if (record.consumerId && normalizedPhone) {
+          alreadySentSet.add(`${record.consumerId}:${normalizedPhone}`);
+        }
+      }
+      console.log(`📊 Found ${alreadySentSet.size} already-sent consumer+phone combinations`);
 
       // Get the same audience as original campaign
       const audience = await resolveSmsCampaignAudience(
@@ -4382,7 +4393,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return allPhones.slice(0, limit);
       };
 
-      const processedMessages = targetedConsumers.flatMap(consumer => {
+      // Build all messages, then filter out already-sent ones
+      const allMessages = targetedConsumers.flatMap(consumer => {
         const phoneNumbers = extractPhoneNumbers(consumer);
         const consumerAccount = accountsData.find(acc => acc.consumerId === consumer.id);
         const processedMessage = replaceTemplateVariables(template.message || '', consumer, consumerAccount, tenantWithSettings);
@@ -4394,9 +4406,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }));
       });
 
-      // Calculate remaining messages
-      const remainingMessages = processedMessages.length - startIndex;
-      if (remainingMessages <= 0) {
+      // Filter out messages that were already sent (based on consumerId + phone)
+      const remainingMessages = allMessages.filter(msg => {
+        const normalizedPhone = (msg.to || '').replace(/\D/g, '');
+        const key = `${msg.consumerId}:${normalizedPhone}`;
+        return !alreadySentSet.has(key);
+      });
+
+      console.log(`📊 Total audience: ${allMessages.length}, Already sent: ${alreadySentSet.size}, Remaining: ${remainingMessages.length}`);
+
+      if (remainingMessages.length === 0) {
         // Campaign was already complete
         await storage.updateSmsCampaign(id, {
           status: 'completed',
@@ -4404,33 +4423,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         campaignProcessingLocks.delete(id);
         return res.json({ 
-          message: 'Campaign already completed',
-          totalSent: campaign.totalSent,
-          totalRecipients: processedMessages.length
+          message: 'Campaign already completed - all messages were already sent',
+          totalSent: campaign.totalSent || alreadySentSet.size,
+          totalRecipients: allMessages.length
         });
       }
 
       // Update campaign status to sending/resuming with correct recipient count
       await storage.updateSmsCampaign(id, {
         status: 'sending',
-        totalRecipients: processedMessages.length,
+        totalRecipients: allMessages.length,
         completedAt: null,
       });
 
-      console.log(`✅ SMS campaign "${campaign.name}" resuming. Total recipients: ${processedMessages.length}, starting at index ${startIndex}, sending ${remainingMessages} remaining messages...`);
+      console.log(`✅ SMS campaign "${campaign.name}" resuming. Total audience: ${allMessages.length}, sending ${remainingMessages.length} remaining messages...`);
 
       // Send remaining messages in background
       (async () => {
         try {
-          console.log(`📤 Resuming background SMS send for campaign ${id}: ${remainingMessages} remaining messages`);
+          console.log(`📤 Resuming background SMS send for campaign ${id}: ${remainingMessages.length} remaining messages`);
           
           const isCancelled = () => cancelledCampaigns.has(id);
           const smsResults = await smsService.sendBulkSmsCampaign(
-            processedMessages, 
+            remainingMessages, // Only send to consumers who haven't received yet
             tenantId, 
             id, 
             isCancelled,
-            startIndex // Start from where we left off
+            0 // Start from beginning of the filtered list
           );
           
           if (smsResults.wasCancelled) {
@@ -4444,9 +4463,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           await storage.updateSmsCampaign(id, {
             status: 'completed',
-            totalRecipients: processedMessages.length,
+            totalRecipients: allMessages.length,
             completedAt: new Date(),
-            lastSentIndex: processedMessages.length,
+            lastSentIndex: allMessages.length,
           });
           console.log(`✅ Resumed campaign ${id} completed successfully`);
         } catch (error) {
@@ -4466,10 +4485,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       })();
 
       res.json({
-        message: `Campaign resuming from index ${startIndex}`,
-        remainingMessages,
-        totalRecipients: processedMessages.length,
-        startingAt: startIndex,
+        message: `Campaign resuming - sending to ${remainingMessages.length} remaining recipients`,
+        remainingMessages: remainingMessages.length,
+        alreadySent: alreadySentSet.size,
+        totalRecipients: allMessages.length,
       });
     } catch (error) {
       console.error("Error resuming SMS campaign:", error);
