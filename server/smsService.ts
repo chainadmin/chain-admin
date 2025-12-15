@@ -438,8 +438,10 @@ class SmsService {
     let totalSent = 0;
     let totalFailed = 0;
     let lastProgressUpdate = Date.now();
+    let lastDbStatusCheck = 0; // Start at 0 so first check hits DB immediately
     let currentIndex = startIndex;
     const progressUpdateInterval = 5000; // Update progress every 5 seconds
+    const dbStatusCheckInterval = 2000; // Check database status every 2 seconds
 
     const throttleConfig = await this.getThrottleConfig(tenantId);
     // Respect tenant's configured throttle limit for campaigns
@@ -449,11 +451,39 @@ class SmsService {
 
     console.log(`📤 Starting SMS campaign send: ${recipients.length - startIndex} remaining messages (starting at index ${startIndex}) at ${maxPerMinute}/min (${delayBetweenBatches}ms between messages)`);
 
+    // Helper function to check if campaign should stop - checks both in-memory flag AND database status
+    const shouldStopCampaign = async (): Promise<boolean> => {
+      // First check the fast in-memory flag
+      if (isCancelled && isCancelled()) {
+        return true;
+      }
+      
+      // Periodically verify against database status (every 2 seconds)
+      const now = Date.now();
+      if (now - lastDbStatusCheck >= dbStatusCheckInterval) {
+        lastDbStatusCheck = now;
+        try {
+          const campaign = await storage.getSmsCampaignById(campaignId, tenantId);
+          if (campaign) {
+            const status = (campaign.status || '').toLowerCase().trim();
+            if (status === 'cancelled' || status === 'failed') {
+              console.log(`🛑 Campaign ${campaignId} detected as ${status} from database check`);
+              return true;
+            }
+          }
+        } catch (e) {
+          console.error('Error checking campaign status from database:', e);
+        }
+      }
+      
+      return false;
+    };
+
     for (let i = startIndex; i < recipients.length; i++) {
       currentIndex = i;
       
-      // Check if campaign was cancelled
-      if (isCancelled && isCancelled()) {
+      // Check if campaign was cancelled (in-memory + periodic DB check)
+      if (await shouldStopCampaign()) {
         console.log(`🛑 Campaign ${campaignId} cancelled at index ${i} - stopping send after ${totalSent} sent, ${totalFailed} failed`);
         // Save the last index for resume
         try {
@@ -467,7 +497,7 @@ class SmsService {
         // Respect rate limits by checking before sending
         while (!this.canSendSms(tenantId, maxPerMinute)) {
           // Check for cancellation during rate limit wait too
-          if (isCancelled && isCancelled()) {
+          if (await shouldStopCampaign()) {
             console.log(`🛑 Campaign ${campaignId} cancelled during rate limit wait at index ${i}`);
             try {
               await storage.updateSmsCampaign(campaignId, { lastSentIndex: i });
@@ -476,6 +506,15 @@ class SmsService {
           }
           // Wait for rate limit window to reset
           await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+
+        // Check cancellation one more time right before sending (uses shouldStopCampaign for DB check)
+        if (await shouldStopCampaign()) {
+          console.log(`🛑 Campaign ${campaignId} cancelled just before send at index ${i}`);
+          try {
+            await storage.updateSmsCampaign(campaignId, { lastSentIndex: i });
+          } catch (e) { console.error('Error saving lastSentIndex:', e); }
+          return { totalSent, totalFailed, wasCancelled: true, lastSentIndex: i };
         }
 
         const result = await this.sendImmediately(
@@ -492,6 +531,20 @@ class SmsService {
           this.incrementSentCount(tenantId); // Track sent count for rate limiting
         } else {
           totalFailed++;
+        }
+
+        // Check cancellation immediately after sending to minimize message slip-through
+        // Use fast in-memory check here since DB was just checked before send
+        if (isCancelled && isCancelled()) {
+          console.log(`🛑 Campaign ${campaignId} cancelled after send at index ${i} - stopping immediately`);
+          try {
+            await storage.updateSmsCampaign(campaignId, { 
+              lastSentIndex: i + 1,
+              totalSent: totalSent + startIndex,
+              totalErrors: totalFailed,
+            });
+          } catch (e) { console.error('Error saving lastSentIndex:', e); }
+          return { totalSent, totalFailed, wasCancelled: true, lastSentIndex: i + 1 };
         }
 
         // Update campaign progress periodically (every 5 seconds or every 10 messages)
