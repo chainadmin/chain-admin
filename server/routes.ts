@@ -1734,6 +1734,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Consumer lookup by phone
+  app.get('/api/consumers/lookup-by-phone', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = await getTenantId(req, storage);
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { phone } = req.query;
+      
+      if (!phone || typeof phone !== 'string') {
+        return res.status(400).json({ message: "Phone parameter is required" });
+      }
+
+      // Normalize phone number (strip non-digits)
+      const normalizedPhone = phone.replace(/\D/g, '');
+
+      // Look up consumer by phone within this tenant
+      const consumer = await storage.getConsumerByPhoneAndTenant(normalizedPhone, tenantId);
+      
+      if (!consumer) {
+        return res.json({ message: "Consumer not found", found: false });
+      }
+
+      // Get consumer's accounts
+      const accounts = await storage.getAccountsByConsumer(consumer.id);
+
+      res.json({
+        found: true,
+        consumer: {
+          id: consumer.id,
+          firstName: consumer.firstName,
+          lastName: consumer.lastName,
+          email: consumer.email,
+          phone: consumer.phone,
+          smsOptedOut: consumer.smsOptedOut,
+        },
+        accounts: accounts.map(account => ({
+          id: account.id,
+          accountNumber: account.accountNumber,
+          creditor: account.creditor,
+          balanceCents: account.balanceCents,
+          dueDate: account.dueDate,
+          status: account.status,
+        })),
+      });
+    } catch (error) {
+      console.error("Error looking up consumer by phone:", error);
+      res.status(500).json({ message: "Failed to lookup consumer" });
+    }
+  });
+
   // Global search endpoint
   app.get('/api/search', authenticateUser, async (req: any, res) => {
     try {

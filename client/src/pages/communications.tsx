@@ -464,17 +464,30 @@ export default function Communications() {
     message: "",
   });
 
-  // Parse query params on mount to pre-fill send email form
+  const [sendSmsForm, setSendSmsForm] = useState({
+    to: "",
+    templateId: "",
+    message: "",
+  });
+
+  // Parse query params on mount to pre-fill send email/sms forms
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const emailParam = params.get('email');
-    const nameParam = params.get('name');
+    const phoneParam = params.get('phone');
     const tabParam = params.get('tab');
     
     if (emailParam) {
       setSendEmailForm(prev => ({
         ...prev,
         to: emailParam,
+      }));
+    }
+    
+    if (phoneParam) {
+      setSendSmsForm(prev => ({
+        ...prev,
+        to: phoneParam,
       }));
     }
     
@@ -1575,6 +1588,70 @@ export default function Communications() {
     },
   });
 
+  // Consumer lookup for send SMS form (by phone)
+  const { data: consumerLookupByPhone, isLoading: isLookingUpConsumerByPhone } = useQuery({
+    queryKey: ["/api/consumers/lookup-by-phone", sendSmsForm.to],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/consumers/lookup-by-phone?phone=${encodeURIComponent(sendSmsForm.to)}`);
+      return res.json();
+    },
+    enabled: !!sendSmsForm.to && sendSmsForm.to.replace(/\D/g, '').length >= 10,
+    retry: false,
+  });
+
+  // Send individual SMS mutation
+  const sendIndividualSmsMutation = useMutation({
+    mutationFn: async (data: any) => {
+      return apiRequest("POST", "/api/send-test-sms", {
+        phoneNumber: data.to,
+        message: data.message,
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "SMS Sent",
+        description: "Your text message has been sent successfully",
+      });
+      setSendSmsForm({ to: "", templateId: "", message: "" });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to send SMS",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Handle SMS template selection
+  const handleSmsTemplateSelection = (templateId: string) => {
+    setSendSmsForm({ ...sendSmsForm, templateId });
+    
+    if (templateId && smsTemplates) {
+      const template = (smsTemplates as any).find((t: any) => t.id === templateId);
+      if (template) {
+        setSendSmsForm({
+          ...sendSmsForm,
+          templateId,
+          message: template.message || sendSmsForm.message,
+        });
+      }
+    }
+  };
+
+  const handleSendSms = () => {
+    if (!sendSmsForm.to || !sendSmsForm.message) {
+      toast({
+        title: "Error",
+        description: "Please fill in phone number and message",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    sendIndividualSmsMutation.mutate(sendSmsForm);
+  };
+
   // Handle template selection for send email
   const handleTemplateChange = (templateId: string) => {
     setSendEmailForm({ ...sendEmailForm, templateId });
@@ -2066,7 +2143,7 @@ export default function Communications() {
         </section>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-10">
-          <TabsList className="grid w-full grid-cols-7 gap-2 rounded-2xl border border-white/15 bg-white/10 p-2 text-blue-100 backdrop-blur">
+          <TabsList className="grid w-full grid-cols-8 gap-2 rounded-2xl border border-white/15 bg-white/10 p-2 text-blue-100 backdrop-blur">
             <TabsTrigger
               value="overview"
               className="rounded-xl px-4 py-2.5 text-sm font-semibold text-blue-100 transition data-[state=active]:bg-[#0b1733]/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/20"
@@ -2079,6 +2156,13 @@ export default function Communications() {
             >
               <Mail className="h-4 w-4 mr-1.5 inline" />
               Send Email
+            </TabsTrigger>
+            <TabsTrigger
+              value="send-sms"
+              className="rounded-xl px-4 py-2.5 text-sm font-semibold text-blue-100 transition data-[state=active]:bg-[#0b1733]/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/20"
+            >
+              <MessageSquare className="h-4 w-4 mr-1.5 inline" />
+              Send SMS
             </TabsTrigger>
             <TabsTrigger
               value="templates"
@@ -2528,6 +2612,146 @@ export default function Communications() {
                       <>
                         <Mail className="h-4 w-4 mr-2" />
                         Send Email
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="send-sms" className="space-y-6 text-white">
+            <Card className="border-white/20 bg-white/5 backdrop-blur">
+              <CardHeader>
+                <CardTitle className="text-blue-50 flex items-center gap-2">
+                  <MessageSquare className="h-5 w-5" />
+                  Send Individual SMS
+                </CardTitle>
+                <p className="text-sm text-blue-100/70">Send a quick text message to a specific phone number</p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <Label className="text-blue-100">To (Phone Number) *</Label>
+                    <Input
+                      type="tel"
+                      value={sendSmsForm.to}
+                      onChange={(e) => setSendSmsForm({ ...sendSmsForm, to: e.target.value })}
+                      placeholder="(555) 123-4567"
+                      className="mt-1 bg-white/10 border-white/20 text-white placeholder:text-blue-100/50"
+                      data-testid="input-send-sms-to"
+                    />
+                    {isLookingUpConsumerByPhone && sendSmsForm.to.replace(/\D/g, '').length >= 10 && (
+                      <p className="mt-2 text-xs text-blue-100/60 flex items-center gap-2">
+                        <div className="h-3 w-3 animate-spin rounded-full border-2 border-blue-400 border-t-transparent"></div>
+                        Looking up consumer...
+                      </p>
+                    )}
+                    {consumerLookupByPhone && (consumerLookupByPhone as any).found && (
+                      <div className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+                            <UserCheck className="h-4 w-4" />
+                            Consumer Found
+                          </p>
+                          <a
+                            href={`/consumers?id=${(consumerLookupByPhone as any).consumer.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-emerald-300 hover:text-emerald-200 underline"
+                          >
+                            View Profile →
+                          </a>
+                        </div>
+                        <div className="space-y-1 text-xs text-blue-100">
+                          <p>
+                            <span className="font-medium">Name:</span> {(consumerLookupByPhone as any).consumer.firstName} {(consumerLookupByPhone as any).consumer.lastName}
+                          </p>
+                          {(consumerLookupByPhone as any).consumer.email && (
+                            <p>
+                              <span className="font-medium">Email:</span> {(consumerLookupByPhone as any).consumer.email}
+                            </p>
+                          )}
+                          {(consumerLookupByPhone as any).consumer.smsOptedOut && (
+                            <p className="text-rose-400 flex items-center gap-1">
+                              <Ban className="h-3 w-3" />
+                              Consumer has opted out of SMS
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {consumerLookupByPhone && !(consumerLookupByPhone as any).found && (
+                      <p className="mt-2 text-xs text-amber-400/80">
+                        No consumer found with this phone number in your system
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <Label className="text-blue-100">Template (Optional)</Label>
+                    <select
+                      value={sendSmsForm.templateId}
+                      onChange={(e) => handleSmsTemplateSelection(e.target.value)}
+                      className="mt-1 w-full rounded-md border border-white/20 bg-white/10 px-3 py-2 text-white"
+                      data-testid="select-sms-template"
+                    >
+                      <option value="" className="bg-slate-800">No Template (Plain SMS)</option>
+                      {(smsTemplates as any)?.map((template: any) => (
+                        <option key={template.id} value={template.id} className="bg-slate-800">
+                          {template.name}
+                        </option>
+                      ))}
+                    </select>
+                    {sendSmsForm.templateId && (
+                      <p className="text-xs text-blue-100/60 mt-1">Template message loaded</p>
+                    )}
+                  </div>
+                </div>
+                
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <Label className="text-blue-100">Message *</Label>
+                    <span className={cn(
+                      "text-xs",
+                      sendSmsForm.message.length > 160 ? "text-amber-400" : "text-blue-100/60"
+                    )}>
+                      {sendSmsForm.message.length}/160 characters
+                      {sendSmsForm.message.length > 160 && ` (${Math.ceil(sendSmsForm.message.length / 153)} segments)`}
+                    </span>
+                  </div>
+                  <Textarea
+                    rows={4}
+                    value={sendSmsForm.message}
+                    onChange={(e) => setSendSmsForm({ ...sendSmsForm, message: e.target.value })}
+                    placeholder="Type your message here..."
+                    className="mt-1 bg-white/10 border-white/20 text-white placeholder:text-blue-100/50"
+                    data-testid="textarea-send-sms-message"
+                  />
+                </div>
+                
+                <div className="flex justify-end gap-3 pt-4">
+                  <Button
+                    variant="outline"
+                    className="border-white/20 text-blue-100 hover:bg-white/10"
+                    onClick={() => setSendSmsForm({ to: "", templateId: "", message: "" })}
+                  >
+                    Clear
+                  </Button>
+                  <Button
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                    onClick={handleSendSms}
+                    disabled={sendIndividualSmsMutation.isPending}
+                    data-testid="button-send-sms"
+                  >
+                    {sendIndividualSmsMutation.isPending ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <MessageSquare className="h-4 w-4 mr-2" />
+                        Send SMS
                       </>
                     )}
                   </Button>

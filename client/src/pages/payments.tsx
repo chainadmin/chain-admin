@@ -1301,7 +1301,7 @@ export default function Payments() {
                                       variant="outline"
                                       className="rounded-xl border border-sky-400/40 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20"
                                       onClick={() => {
-                                        window.location.href = `/sms?to=${encodeURIComponent(schedule.consumer?.phone || '')}`;
+                                        window.location.href = `/communications?tab=send-sms&phone=${encodeURIComponent(schedule.consumer?.phone || '')}`;
                                       }}
                                       data-testid={`button-sms-${schedule.id}`}
                                     >
@@ -1315,7 +1315,7 @@ export default function Payments() {
                                       variant="outline"
                                       className="rounded-xl border border-indigo-400/40 bg-indigo-500/10 text-indigo-100 hover:bg-indigo-500/20"
                                       onClick={() => {
-                                        window.location.href = `/email?to=${encodeURIComponent(schedule.consumer?.email || '')}`;
+                                        window.location.href = `/communications?tab=send&email=${encodeURIComponent(schedule.consumer?.email || '')}`;
                                       }}
                                       data-testid={`button-email-${schedule.id}`}
                                     >
@@ -1477,7 +1477,7 @@ export default function Payments() {
                                         variant="outline"
                                         className="rounded-xl border border-cyan-400/40 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20"
                                         onClick={() => {
-                                          window.location.href = `/sms?to=${encodeURIComponent(schedule.consumer?.phone || '')}`;
+                                          window.location.href = `/communications?tab=send-sms&phone=${encodeURIComponent(schedule.consumer?.phone || '')}`;
                                         }}
                                         data-testid={`button-manage-sms-${schedule.id}`}
                                       >
@@ -1491,7 +1491,7 @@ export default function Payments() {
                                         variant="outline"
                                         className="rounded-xl border border-purple-400/40 bg-purple-500/10 text-purple-100 hover:bg-purple-500/20"
                                         onClick={() => {
-                                          window.location.href = `/email?to=${encodeURIComponent(schedule.consumer?.email || '')}`;
+                                          window.location.href = `/communications?tab=send&email=${encodeURIComponent(schedule.consumer?.email || '')}`;
                                         }}
                                         data-testid={`button-manage-email-${schedule.id}`}
                                       >

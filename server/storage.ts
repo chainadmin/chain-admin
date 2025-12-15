@@ -228,6 +228,7 @@ export interface IStorage {
   getConsumerByEmail(email: string): Promise<Consumer | undefined>;
   getConsumersByEmail(email: string): Promise<Consumer[]>;
   getConsumerByEmailAndTenant(email: string, tenantIdentifier: string): Promise<Consumer | undefined>;
+  getConsumerByPhoneAndTenant(phone: string, tenantIdentifier: string): Promise<Consumer | undefined>;
   findConsumersByEmailAndDob(email: string, dateOfBirth: string): Promise<(Consumer & { tenant: Tenant })[]>;
   createConsumer(consumer: InsertConsumer): Promise<Consumer>;
   updateConsumer(id: string, updates: Partial<Consumer>): Promise<Consumer>;
@@ -2240,6 +2241,42 @@ export class DatabaseStorage implements IStorage {
         and(
           eq(consumers.tenantId, tenantId),
           sql`LOWER(TRIM(${consumers.email})) = LOWER(${normalizedEmail})`
+        )
+      );
+
+    return consumer || undefined;
+  }
+
+  async getConsumerByPhoneAndTenant(phone: string, tenantIdentifier: string): Promise<Consumer | undefined> {
+    if (!tenantIdentifier || !phone) {
+      return undefined;
+    }
+
+    // Normalize phone number (strip non-digits)
+    const normalizedPhone = phone.replace(/\D/g, '');
+    if (!normalizedPhone || normalizedPhone.length < 10) {
+      return undefined;
+    }
+
+    const tenant = await this.getTenantBySlug(tenantIdentifier);
+    const tenantId = tenant?.id ?? (tenantIdentifier.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+      ? tenantIdentifier
+      : undefined);
+
+    if (!tenantId) {
+      return undefined;
+    }
+
+    // Get last 10 digits for comparison (handles various formats)
+    const last10Digits = normalizedPhone.slice(-10);
+
+    // Match phone numbers by stripping non-digits and comparing last 10 digits
+    const [consumer] = await db.select()
+      .from(consumers)
+      .where(
+        and(
+          eq(consumers.tenantId, tenantId),
+          sql`RIGHT(REGEXP_REPLACE(COALESCE(${consumers.phone}, ''), '[^0-9]', '', 'g'), 10) = ${last10Digits}`
         )
       );
 
