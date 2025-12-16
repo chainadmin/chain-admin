@@ -4318,11 +4318,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const purgedCount = smsService.cancelCampaign(id);
       console.log(`🗑️ Purged ${purgedCount} queued messages from SMS service for campaign ${id}`);
 
-      // Update campaign status to cancelled
-      await storage.updateSmsCampaign(id, {
+      // Update campaign status to cancelled - PRESERVE lastSentIndex to allow resume
+      // Fetch the current lastSentIndex from the campaign (smsService may have updated it)
+      const currentCampaign = await storage.getSmsCampaignById(id, tenantId);
+      const existingLastSentIndex = currentCampaign?.lastSentIndex ?? campaign.lastSentIndex;
+      
+      // Only include lastSentIndex in update if it exists - don't write 0 if campaign never started
+      const updateData: any = {
         status: 'cancelled',
         completedAt: new Date(),
-      });
+      };
+      if (existingLastSentIndex !== null && existingLastSentIndex !== undefined) {
+        updateData.lastSentIndex = existingLastSentIndex;
+      }
+      
+      await storage.updateSmsCampaign(id, updateData);
 
       // Release processing lock if exists
       campaignProcessingLocks.delete(id);
@@ -4373,7 +4383,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Set processing lock
       campaignProcessingLocks.set(id, true);
 
-      console.log(`🔄 Resuming SMS campaign "${campaign.name}"`);
+      console.log(`🔄 Resuming SMS campaign "${campaign.name}" - lastSentIndex: ${campaign.lastSentIndex ?? 'not set'}, totalSent: ${campaign.totalSent ?? 0}`);
 
       const templates = await storage.getSmsTemplatesByTenant(tenantId);
       const template = templates.find(t => t.id === campaign.templateId);
@@ -9188,17 +9198,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Calculate all upcoming payment dates
         const upcomingPayments: { paymentNumber: number; dueDate: string; amountCents: number }[] = [];
-        if (schedule.nextPaymentDate && schedule.remainingPayments && schedule.remainingPayments > 0) {
+        if (schedule.nextPaymentDate) {
           const startDate = new Date(schedule.nextPaymentDate);
           const frequency = schedule.frequency || 'monthly';
           
-          for (let i = 0; i < schedule.remainingPayments; i++) {
+          // If remainingPayments is set, use it; otherwise default to showing at least the next payment
+          const paymentCount = (schedule.remainingPayments !== null && schedule.remainingPayments > 0) 
+            ? schedule.remainingPayments 
+            : 1; // At minimum show the next scheduled payment
+          
+          for (let i = 0; i < paymentCount; i++) {
             const paymentDate = new Date(startDate);
             if (frequency === 'monthly') {
               paymentDate.setMonth(startDate.getMonth() + i);
             } else if (frequency === 'weekly') {
               paymentDate.setDate(startDate.getDate() + (i * 7));
-            } else if (frequency === 'bi-weekly') {
+            } else if (frequency === 'bi-weekly' || frequency === 'biweekly') {
               paymentDate.setDate(startDate.getDate() + (i * 14));
             }
             
