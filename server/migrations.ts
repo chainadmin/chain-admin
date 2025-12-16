@@ -1472,6 +1472,24 @@ export async function runMigrations() {
       console.log(`  ⚠ Fix balances error: ${err.message}`);
     }
     
+    // Fix stuck SMS campaigns that were interrupted by server restart
+    console.log('Fixing stuck SMS campaigns...');
+    try {
+      const stuckResult = await client.query(`
+        UPDATE sms_campaigns 
+        SET status = 'failed', 
+            completed_at = NOW()
+        WHERE status = 'sending'
+      `);
+      if (stuckResult.rowCount > 0) {
+        console.log(`  ✓ Marked ${stuckResult.rowCount} stuck SMS campaigns as failed (interrupted by restart)`);
+      } else {
+        console.log(`  ✓ No stuck SMS campaigns found`);
+      }
+    } catch (err: any) {
+      console.log(`  ⚠ Fix stuck campaigns error: ${err.message}`);
+    }
+    
     console.log('✅ Database migrations completed successfully');
   } catch (error: any) {
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
