@@ -46,6 +46,7 @@ import { balanceTiers, getBalanceRangeFromTier, getBalanceTierLabel, type Balanc
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import AutoResponseSettings from "@/components/auto-response-settings";
+import TeamMembersSection from "@/components/team-members-section";
 
 export default function Settings() {
   const [showDocumentModal, setShowDocumentModal] = useState(false);
@@ -1229,7 +1230,7 @@ export default function Settings() {
           <Tabs defaultValue="general" className="space-y-8">
             <TabsList className={cn(
               "grid w-full grid-cols-1 gap-2 p-2 text-blue-100",
-              localSettings?.businessType === 'call_center' ? "sm:grid-cols-7" : "sm:grid-cols-6"
+              localSettings?.businessType === 'call_center' ? "sm:grid-cols-8" : "sm:grid-cols-7"
             )}>
               <TabsTrigger value="general" className="px-4 py-2">
                 General
@@ -1254,6 +1255,11 @@ export default function Settings() {
               <TabsTrigger value="auto-response" className="px-4 py-2">
                 AI Auto-Response
               </TabsTrigger>
+              {(authUser?.role === 'owner' || authUser?.role === 'platform_admin') && (
+                <TabsTrigger value="team" className="px-4 py-2">
+                  Team Members
+                </TabsTrigger>
+              )}
             </TabsList>
 
             <TabsContent value="general" className="space-y-6">
@@ -3727,6 +3733,12 @@ export default function Settings() {
             <TabsContent value="auto-response" className="space-y-6">
               <AutoResponseSettings />
             </TabsContent>
+
+            {(authUser?.role === 'owner' || authUser?.role === 'platform_admin') && (
+              <TabsContent value="team" className="space-y-6">
+                <TeamMembersSection cardBaseClasses={cardBaseClasses} inputClasses={inputClasses} />
+              </TabsContent>
+            )}
 
           </Tabs>
         </section>
