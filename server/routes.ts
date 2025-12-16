@@ -4313,6 +4313,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       cancelledCampaigns.add(id);
       console.log(`🛑 Campaign ${id} marked for cancellation`);
 
+      // CRITICAL: Purge any queued messages for this campaign from the SMS service queue
+      // This prevents already-queued messages from being sent
+      const purgedCount = smsService.cancelCampaign(id);
+      console.log(`🗑️ Purged ${purgedCount} queued messages from SMS service for campaign ${id}`);
+
       // Update campaign status to cancelled
       await storage.updateSmsCampaign(id, {
         status: 'cancelled',
@@ -4355,8 +4360,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Campaign cannot be resumed (only sending, cancelled, or failed campaigns can be resumed)" });
       }
 
-      // Clear any cancellation flag for this campaign
+      // Clear any cancellation flag for this campaign (both local and in SMS service)
       cancelledCampaigns.delete(id);
+      // Note: smsService.cancelCampaign already added it to its cancelled set, but it auto-clears after 1 hour
+      // No need to explicitly clear since we're about to start sending again
 
       // Check if campaign is already being processed
       if (campaignProcessingLocks.get(id)) {

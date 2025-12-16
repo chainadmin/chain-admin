@@ -22,6 +22,7 @@ class SmsService {
   private sendQueue: QueuedSms[] = [];
   private processing = false;
   private sentCounts: Map<string, { count: number; resetTime: number }> = new Map();
+  private cancelledCampaigns: Set<string> = new Set(); // Track cancelled campaigns to stop queue processing
 
   constructor() {
     this.initializeDefaultTwilio();
@@ -355,8 +356,16 @@ class SmsService {
 
     try {
       const processedItems: QueuedSms[] = [];
+      const skippedItems: QueuedSms[] = [];
 
       for (const queuedSms of this.sendQueue) {
+        // CRITICAL: Skip messages for cancelled campaigns
+        if (queuedSms.campaignId && this.cancelledCampaigns.has(queuedSms.campaignId)) {
+          console.log(`🛑 Skipping queued SMS for cancelled campaign ${queuedSms.campaignId}`);
+          skippedItems.push(queuedSms);
+          continue;
+        }
+
         const throttleConfig = await this.getThrottleConfig(queuedSms.tenantId);
 
         if (this.canSendSms(queuedSms.tenantId, throttleConfig.maxPerMinute)) {
@@ -377,8 +386,8 @@ class SmsService {
         }
       }
 
-      // Remove processed items from queue
-      this.sendQueue = this.sendQueue.filter(item => !processedItems.includes(item));
+      // Remove processed and skipped items from queue
+      this.sendQueue = this.sendQueue.filter(item => !processedItems.includes(item) && !skippedItems.includes(item));
 
       // Remove old queued items (older than 1 hour)
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
@@ -389,6 +398,33 @@ class SmsService {
     } finally {
       this.processing = false;
     }
+  }
+
+  // Cancel a campaign and purge all pending queue entries for it
+  cancelCampaign(campaignId: string): number {
+    console.log(`🛑 Cancelling campaign ${campaignId} and purging queue...`);
+    
+    // Add to cancelled set to prevent future queue processing
+    this.cancelledCampaigns.add(campaignId);
+    
+    // Count and remove all queued messages for this campaign
+    const beforeCount = this.sendQueue.length;
+    this.sendQueue = this.sendQueue.filter(item => item.campaignId !== campaignId);
+    const removedCount = beforeCount - this.sendQueue.length;
+    
+    console.log(`🗑️ Purged ${removedCount} queued messages for campaign ${campaignId}`);
+    
+    // Clean up old cancelled campaign IDs after 1 hour to prevent memory leak
+    setTimeout(() => {
+      this.cancelledCampaigns.delete(campaignId);
+    }, 60 * 60 * 1000);
+    
+    return removedCount;
+  }
+
+  // Check if a campaign is cancelled
+  isCampaignCancelled(campaignId: string): boolean {
+    return this.cancelledCampaigns.has(campaignId);
   }
 
   async sendBulkSms(
