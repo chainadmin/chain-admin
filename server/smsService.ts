@@ -516,6 +516,28 @@ class SmsService {
     isCancelled?: () => boolean,
     startIndex: number = 0 // Start from this index for resume functionality
   ): Promise<{ totalSent: number; totalFailed: number; wasCancelled?: boolean; lastSentIndex: number }> {
+    // CRITICAL: Check if campaign is already cancelled BEFORE starting any processing
+    // This prevents any work from being done on cancelled campaigns
+    if (this.cancelledCampaigns.has(campaignId)) {
+      console.log(`🛑 Campaign ${campaignId} is cancelled (in-memory) - not starting send`);
+      return { totalSent: 0, totalFailed: 0, wasCancelled: true, lastSentIndex: startIndex };
+    }
+    
+    // Also check database status before starting
+    try {
+      const campaign = await storage.getSmsCampaignById(campaignId, tenantId);
+      if (campaign) {
+        const status = (campaign.status || '').toLowerCase().trim();
+        if (status === 'cancelled' || status === 'failed') {
+          console.log(`🛑 Campaign ${campaignId} is ${status} (database) - not starting send`);
+          this.cancelledCampaigns.add(campaignId); // Cache for future
+          return { totalSent: 0, totalFailed: 0, wasCancelled: true, lastSentIndex: startIndex };
+        }
+      }
+    } catch (e) {
+      console.error('Error checking campaign status before starting send:', e);
+    }
+
     let totalSent = 0;
     let totalFailed = 0;
     let lastProgressUpdate = Date.now();
