@@ -771,6 +771,45 @@ export class DatabaseStorage implements IStorage {
       .where(eq(agencyCredentials.id, id));
   }
 
+  async getAgencyCredentialsByTenant(tenantId: string): Promise<SelectAgencyCredentials[]> {
+    return await db.select()
+      .from(agencyCredentials)
+      .where(eq(agencyCredentials.tenantId, tenantId))
+      .orderBy(agencyCredentials.createdAt);
+  }
+
+  async getAgencyCredentialsByTenantAndRole(tenantId: string, role: string): Promise<SelectAgencyCredentials[]> {
+    return await db.select()
+      .from(agencyCredentials)
+      .where(and(
+        eq(agencyCredentials.tenantId, tenantId),
+        eq(agencyCredentials.role, role)
+      ));
+  }
+
+  async updateAgencyCredentials(id: string, tenantId: string, updates: Partial<SelectAgencyCredentials>): Promise<SelectAgencyCredentials | undefined> {
+    const [updated] = await db.update(agencyCredentials)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(and(eq(agencyCredentials.id, id), eq(agencyCredentials.tenantId, tenantId)))
+      .returning();
+    return updated;
+  }
+
+  async deleteAgencyCredentials(id: string, tenantId: string): Promise<void> {
+    await db.delete(agencyCredentials)
+      .where(and(eq(agencyCredentials.id, id), eq(agencyCredentials.tenantId, tenantId)));
+  }
+
+  async countNonOwnerAgencyCredentials(tenantId: string): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)::int` })
+      .from(agencyCredentials)
+      .where(and(
+        eq(agencyCredentials.tenantId, tenantId),
+        sql`${agencyCredentials.role} != 'owner'`
+      ));
+    return result[0]?.count || 0;
+  }
+
   // Consumer operations
   async getConsumersByTenant(tenantId: string): Promise<Consumer[]> {
     return await db.select().from(consumers).where(eq(consumers.tenantId, tenantId));

@@ -7922,6 +7922,217 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Team Member Management endpoints
+  // Available services that can be restricted for sub-users
+  const AVAILABLE_SERVICES = ['billing', 'sms', 'payments', 'import', 'reports', 'documents', 'automations', 'email'];
+
+  // Get all team members for tenant
+  app.get('/api/team-members', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const members = await storage.getAgencyCredentialsByTenant(tenantId);
+      
+      // Remove password hash from response
+      const safeMembers = members.map(m => ({
+        ...m,
+        passwordHash: undefined,
+      }));
+
+      res.json(safeMembers);
+    } catch (error) {
+      console.error("Error fetching team members:", error);
+      res.status(500).json({ message: "Failed to fetch team members" });
+    }
+  });
+
+  // Create a new sub-user (limit 1 per tenant)
+  app.post('/api/team-members', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      const userRole = req.user.role;
+      
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      // Only owners can create team members
+      if (userRole !== 'owner' && userRole !== 'platform_admin') {
+        return res.status(403).json({ message: "Only owners can manage team members" });
+      }
+
+      // Check limit: only 1 sub-user allowed per tenant
+      const existingCount = await storage.countNonOwnerAgencyCredentials(tenantId);
+      if (existingCount >= 1) {
+        return res.status(400).json({ message: "Maximum of 1 team member allowed per account" });
+      }
+
+      const memberSchema = z.object({
+        username: z.string().min(3).max(50),
+        email: z.string().email(),
+        password: z.string().min(6),
+        firstName: z.string().optional(),
+        lastName: z.string().optional(),
+        restrictedServices: z.array(z.string()).optional(),
+      });
+
+      const data = memberSchema.parse(req.body);
+      
+      // Check if username already exists
+      const existingUser = await storage.getAgencyCredentialsByUsername(data.username);
+      if (existingUser) {
+        return res.status(400).json({ message: "Username already exists" });
+      }
+
+      // Hash password
+      const passwordHash = await bcrypt.hash(data.password, 10);
+      
+      // Sub-users always have 'billing' restricted by default
+      const restrictedServices = data.restrictedServices || [];
+      if (!restrictedServices.includes('billing')) {
+        restrictedServices.push('billing');
+      }
+
+      const newMember = await storage.createAgencyCredentials({
+        tenantId,
+        username: data.username,
+        email: data.email,
+        passwordHash,
+        firstName: data.firstName || null,
+        lastName: data.lastName || null,
+        role: 'agent', // Sub-users get 'agent' role, not 'owner'
+        isActive: true,
+        restrictedServices,
+      });
+
+      res.status(201).json({
+        ...newMember,
+        passwordHash: undefined,
+      });
+    } catch (error) {
+      console.error("Error creating team member:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create team member" });
+    }
+  });
+
+  // Update a team member
+  app.patch('/api/team-members/:id', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      const userRole = req.user.role;
+      const memberId = req.params.id;
+      
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      // Only owners can update team members
+      if (userRole !== 'owner' && userRole !== 'platform_admin') {
+        return res.status(403).json({ message: "Only owners can manage team members" });
+      }
+
+      // Get existing member
+      const existingMember = await storage.getAgencyCredentialsById(memberId);
+      if (!existingMember || existingMember.tenantId !== tenantId) {
+        return res.status(404).json({ message: "Team member not found" });
+      }
+
+      // Cannot edit owner accounts
+      if (existingMember.role === 'owner') {
+        return res.status(403).json({ message: "Cannot modify owner accounts" });
+      }
+
+      const updateSchema = z.object({
+        email: z.string().email().optional(),
+        password: z.string().min(6).optional(),
+        firstName: z.string().optional(),
+        lastName: z.string().optional(),
+        isActive: z.boolean().optional(),
+        restrictedServices: z.array(z.string()).optional(),
+      });
+
+      const data = updateSchema.parse(req.body);
+      
+      const updates: any = {};
+      if (data.email) updates.email = data.email;
+      if (data.firstName !== undefined) updates.firstName = data.firstName;
+      if (data.lastName !== undefined) updates.lastName = data.lastName;
+      if (data.isActive !== undefined) updates.isActive = data.isActive;
+      if (data.restrictedServices !== undefined) {
+        // Ensure billing is always restricted for sub-users
+        const services = data.restrictedServices;
+        if (!services.includes('billing')) {
+          services.push('billing');
+        }
+        updates.restrictedServices = services;
+      }
+      if (data.password) {
+        updates.passwordHash = await bcrypt.hash(data.password, 10);
+      }
+
+      const updated = await storage.updateAgencyCredentials(memberId, tenantId, updates);
+      
+      res.json({
+        ...updated,
+        passwordHash: undefined,
+      });
+    } catch (error) {
+      console.error("Error updating team member:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to update team member" });
+    }
+  });
+
+  // Delete a team member
+  app.delete('/api/team-members/:id', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      const userRole = req.user.role;
+      const memberId = req.params.id;
+      
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      // Only owners can delete team members
+      if (userRole !== 'owner' && userRole !== 'platform_admin') {
+        return res.status(403).json({ message: "Only owners can manage team members" });
+      }
+
+      // Get existing member
+      const existingMember = await storage.getAgencyCredentialsById(memberId);
+      if (!existingMember || existingMember.tenantId !== tenantId) {
+        return res.status(404).json({ message: "Team member not found" });
+      }
+
+      // Cannot delete owner accounts
+      if (existingMember.role === 'owner') {
+        return res.status(403).json({ message: "Cannot delete owner accounts" });
+      }
+
+      await storage.deleteAgencyCredentials(memberId, tenantId);
+      
+      res.json({ message: "Team member deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting team member:", error);
+      res.status(500).json({ message: "Failed to delete team member" });
+    }
+  });
+
+  // Get available services that can be restricted
+  app.get('/api/team-members/available-services', authenticateUser, async (req: any, res) => {
+    res.json({ services: AVAILABLE_SERVICES });
+  });
+
   // Auto-response configuration endpoints
   app.get('/api/auto-response/config', authenticateUser, async (req: any, res) => {
     try {

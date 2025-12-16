@@ -1490,6 +1490,15 @@ export async function runMigrations() {
       console.log(`  ⚠ Fix stuck campaigns error: ${err.message}`);
     }
     
+    // Add restricted_services column to agency_credentials for sub-user permissions
+    console.log('Adding restricted_services column to agency_credentials...');
+    try {
+      await client.query(`ALTER TABLE agency_credentials ADD COLUMN IF NOT EXISTS restricted_services TEXT[] DEFAULT ARRAY[]::TEXT[]`);
+      console.log(`  ✓ restricted_services`);
+    } catch (err: any) {
+      console.log(`  ⚠ restricted_services (already exists or error): ${err.message}`);
+    }
+    
     console.log('✅ Database migrations completed successfully');
   } catch (error: any) {
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
