@@ -99,7 +99,6 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     { name: "Requests", href: buildNavHref("/requests"), icon: "fas fa-phone" },
     { name: "Payments", href: buildNavHref("/payments"), icon: "fas fa-credit-card" },
     ...(isOwner ? [{ name: "Billing", href: buildNavHref("/billing"), icon: "fas fa-receipt" }] : []),
-    ...(isOwner ? [{ name: "Company", href: buildNavHref("/company"), icon: "fas fa-building" }] : []),
     { name: "Settings", href: buildNavHref("/settings"), icon: "fas fa-cog" },
   ].filter(item => !isServiceRestricted(item.name));
 

@@ -23,7 +23,6 @@ import EmailInbox from "@/pages/email-inbox";
 import Requests from "@/pages/requests";
 import Payments from "@/pages/payments";
 import Billing from "@/pages/billing";
-import CompanyManagement from "@/pages/company-management";
 import ConsumerPortal from "@/pages/enhanced-consumer-portal";
 import ConsumerLogin from "@/pages/consumer-login";
 import ConsumerDashboard from "@/pages/consumer-dashboard-simple";
@@ -265,7 +264,6 @@ function Router() {
         <Route key="agency-requests" path="/requests" component={Requests} />,
         <Route key="agency-payments" path="/payments" component={Payments} />,
         <Route key="agency-billing" path="/billing" component={Billing} />,
-        <Route key="agency-company" path="/company" component={CompanyManagement} />,
         <Route key="agency-settings" path="/settings" component={Settings} />,
         <Route key="agency-documents" path="/documents" component={Documents} />
       );
@@ -355,7 +353,6 @@ function Router() {
     <Route key="auth-requests" path="/requests" component={Requests} />,
     <Route key="auth-payments" path="/payments" component={Payments} />,
     <Route key="auth-billing" path="/billing" component={Billing} />,
-    <Route key="auth-company" path="/company" component={CompanyManagement} />,
     <Route key="auth-settings" path="/settings" component={Settings} />,
     <Route key="auth-documents" path="/documents" component={Documents} />,
     ...createRouteElements(adminRoutePaths, GlobalAdmin, "auth-admin"),
