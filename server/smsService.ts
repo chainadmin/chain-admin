@@ -220,6 +220,31 @@ class SmsService {
     metadata?: { automationId?: string; automationName?: string; source?: string }
   ): Promise<{ success: boolean; messageId?: string; error?: string }> {
     try {
+      // CRITICAL: Final check - verify campaign is still active before sending
+      if (campaignId) {
+        // Fast in-memory check first
+        if (this.cancelledCampaigns.has(campaignId)) {
+          console.log(`🛑 Blocked send: Campaign ${campaignId} is cancelled (in-memory)`);
+          return { success: false, error: 'Campaign cancelled' };
+        }
+        
+        // Database check for campaigns cancelled before server restart
+        try {
+          const campaign = await storage.getSmsCampaignById(campaignId, tenantId);
+          if (campaign) {
+            const status = (campaign.status || '').toLowerCase().trim();
+            if (status === 'cancelled' || status === 'failed') {
+              console.log(`🛑 Blocked send: Campaign ${campaignId} is ${status} (database check)`);
+              this.cancelledCampaigns.add(campaignId); // Cache for future checks
+              return { success: false, error: `Campaign ${status}` };
+            }
+          }
+        } catch (e) {
+          console.error('Error checking campaign status before send:', e);
+          // Continue with send if we can't verify - don't block on DB errors
+        }
+      }
+
       const client = await this.getTwilioClient(tenantId);
       if (!client) {
         throw new Error('Twilio client not configured for this agency');
@@ -359,11 +384,31 @@ class SmsService {
       const skippedItems: QueuedSms[] = [];
 
       for (const queuedSms of this.sendQueue) {
-        // CRITICAL: Skip messages for cancelled campaigns
-        if (queuedSms.campaignId && this.cancelledCampaigns.has(queuedSms.campaignId)) {
-          console.log(`🛑 Skipping queued SMS for cancelled campaign ${queuedSms.campaignId}`);
-          skippedItems.push(queuedSms);
-          continue;
+        // CRITICAL: Skip messages for cancelled campaigns (check in-memory first, then database)
+        if (queuedSms.campaignId) {
+          // Fast in-memory check
+          if (this.cancelledCampaigns.has(queuedSms.campaignId)) {
+            console.log(`🛑 Skipping queued SMS for cancelled campaign ${queuedSms.campaignId} (in-memory)`);
+            skippedItems.push(queuedSms);
+            continue;
+          }
+          
+          // Database check for campaigns that were cancelled before server restart
+          try {
+            const campaign = await storage.getSmsCampaignById(queuedSms.campaignId, queuedSms.tenantId);
+            if (campaign) {
+              const status = (campaign.status || '').toLowerCase().trim();
+              if (status === 'cancelled' || status === 'failed' || status === 'completed') {
+                console.log(`🛑 Skipping queued SMS for ${status} campaign ${queuedSms.campaignId} (database check)`);
+                // Add to in-memory set to avoid future DB lookups
+                this.cancelledCampaigns.add(queuedSms.campaignId);
+                skippedItems.push(queuedSms);
+                continue;
+              }
+            }
+          } catch (e) {
+            console.error('Error checking campaign status in queue processing:', e);
+          }
         }
 
         const throttleConfig = await this.getThrottleConfig(queuedSms.tenantId);
