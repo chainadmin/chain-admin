@@ -224,24 +224,31 @@ class SmsService {
       if (campaignId) {
         // Fast in-memory check first
         if (this.cancelledCampaigns.has(campaignId)) {
-          console.log(`🛑 Blocked send: Campaign ${campaignId} is cancelled (in-memory)`);
+          console.log(`🛑 BLOCKED SEND: Campaign ${campaignId} is cancelled (in-memory check)`);
           return { success: false, error: 'Campaign cancelled' };
         }
         
-        // Database check for campaigns cancelled before server restart
+        // ALWAYS check database status before sending - this is the authoritative source
         try {
           const campaign = await storage.getSmsCampaignById(campaignId, tenantId);
-          if (campaign) {
-            const status = (campaign.status || '').toLowerCase().trim();
-            if (status === 'cancelled' || status === 'failed') {
-              console.log(`🛑 Blocked send: Campaign ${campaignId} is ${status} (database check)`);
-              this.cancelledCampaigns.add(campaignId); // Cache for future checks
-              return { success: false, error: `Campaign ${status}` };
-            }
+          if (!campaign) {
+            console.log(`🛑 BLOCKED SEND: Campaign ${campaignId} not found in database`);
+            this.cancelledCampaigns.add(campaignId);
+            return { success: false, error: 'Campaign not found' };
+          }
+          
+          const status = (campaign.status || '').toLowerCase().trim();
+          // Block sending for any non-active status
+          if (status !== 'sending' && status !== 'pending' && status !== 'pending_approval') {
+            console.log(`🛑 BLOCKED SEND: Campaign ${campaignId} has status "${status}" - only 'sending' campaigns can send`);
+            this.cancelledCampaigns.add(campaignId); // Cache for future checks
+            return { success: false, error: `Campaign status: ${status}` };
           }
         } catch (e) {
           console.error('Error checking campaign status before send:', e);
-          // Continue with send if we can't verify - don't block on DB errors
+          // FAIL SAFE: If we can't verify the campaign status, DON'T send
+          console.log(`🛑 BLOCKED SEND: Cannot verify campaign ${campaignId} status - failing safe`);
+          return { success: false, error: 'Cannot verify campaign status' };
         }
       }
 
