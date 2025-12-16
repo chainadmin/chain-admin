@@ -60,6 +60,9 @@ export function useAuth() {
               tenantId: payload.tenantId,
               tenantSlug: tenantSlug,
               tenantName: tenantName,
+              role: payload.role || 'agent',
+              email: payload.email,
+              username: payload.username,
               isJwtAuth: true
             });
           }
