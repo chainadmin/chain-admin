@@ -64,12 +64,31 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     ? (user as any)?.role === 'owner'
     : (userData as any)?.platformUser?.role === 'owner';
   
+  // Get user's restricted services (only applies to non-owners)
+  const restrictedServices: string[] = isJwtAuth
+    ? (user as any)?.restrictedServices || []
+    : (userData as any)?.platformUser?.restrictedServices || [];
+  
   // Build agency-specific navigation URLs
   const buildNavHref = (path: string) => {
     if (agencySlug) {
       return buildAgencyUrl(path);
     }
     return path;
+  };
+  
+  // Map navigation items to their service restriction keys
+  const serviceRestrictionMap: Record<string, string> = {
+    "Communications": "email",
+    "Payments": "payments",
+    "Inbox": "email",
+  };
+  
+  // Check if a navigation item should be hidden based on service restrictions
+  const isServiceRestricted = (itemName: string): boolean => {
+    const serviceKey = serviceRestrictionMap[itemName];
+    if (!serviceKey) return false;
+    return restrictedServices.includes(serviceKey);
   };
   
   const navigationItems = [
@@ -79,10 +98,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     { name: "Inbox", href: buildNavHref("/email-inbox"), icon: "fas fa-inbox" },
     { name: "Requests", href: buildNavHref("/requests"), icon: "fas fa-phone" },
     { name: "Payments", href: buildNavHref("/payments"), icon: "fas fa-credit-card" },
-    { name: "Billing", href: buildNavHref("/billing"), icon: "fas fa-receipt" },
+    ...(isOwner ? [{ name: "Billing", href: buildNavHref("/billing"), icon: "fas fa-receipt" }] : []),
     ...(isOwner ? [{ name: "Company", href: buildNavHref("/company"), icon: "fas fa-building" }] : []),
     { name: "Settings", href: buildNavHref("/settings"), icon: "fas fa-cog" },
-  ];
+  ].filter(item => !isServiceRestricted(item.name));
 
   const isActiveRoute = (href: string) => {
     return location === href;
