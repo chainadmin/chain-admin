@@ -14785,12 +14785,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Consumer not found" });
       }
 
-      // Get active payment schedules for this consumer
+      // Get ALL payment schedules for this consumer (past, present, and future)
       const schedules = await storage.getPaymentSchedulesByConsumer(consumerId, tenantId);
-      const activeSchedules = schedules.filter(s => s.status === 'active');
 
-      // Enrich with account details
-      const enrichedSchedules = await Promise.all(activeSchedules.map(async (schedule) => {
+      // Enrich with account details - include all schedules regardless of status
+      const enrichedSchedules = await Promise.all(schedules.map(async (schedule) => {
         const account = await storage.getAccount(schedule.accountId);
         const paymentMethod = await storage.getPaymentMethod(schedule.paymentMethodId);
 
@@ -14801,6 +14800,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           frequency: schedule.frequency,
           nextPaymentDate: schedule.nextPaymentDate,
           remainingPayments: schedule.remainingPayments,
+          totalPayments: schedule.totalPayments,
+          paymentsCompleted: schedule.paymentsCompleted,
           status: schedule.status,
           source: schedule.source,
           processor: schedule.processor,
@@ -14810,6 +14811,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           cardBrand: paymentMethod?.cardBrand,
           startDate: schedule.startDate,
           endDate: schedule.endDate,
+          createdAt: schedule.createdAt,
+          lastPaymentDate: schedule.lastPaymentDate,
         };
       }));
 
