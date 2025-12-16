@@ -2679,6 +2679,34 @@ export default function Communications() {
                             </p>
                           )}
                         </div>
+                        {/* Display account information */}
+                        {(consumerLookupByPhone as any).accounts && (consumerLookupByPhone as any).accounts.length > 0 && (
+                          <div className="mt-2 pt-2 border-t border-emerald-500/20">
+                            <p className="text-xs font-medium text-emerald-300 mb-1">
+                              {(consumerLookupByPhone as any).accounts.length === 1 ? 'Account' : `Accounts (${(consumerLookupByPhone as any).accounts.length})`}:
+                            </p>
+                            <div className="space-y-1">
+                              {(consumerLookupByPhone as any).accounts.slice(0, 3).map((account: any) => (
+                                <div key={account.id} className="text-xs text-blue-100 bg-white/5 rounded px-2 py-1">
+                                  <div className="flex justify-between items-center">
+                                    <span className="font-medium">#{account.accountNumber}</span>
+                                    <span className="text-emerald-300 font-semibold">
+                                      ${((account.balanceCents || 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </span>
+                                  </div>
+                                  {account.creditor && (
+                                    <p className="text-blue-100/70 text-[11px]">{account.creditor}</p>
+                                  )}
+                                </div>
+                              ))}
+                              {(consumerLookupByPhone as any).accounts.length > 3 && (
+                                <p className="text-[11px] text-blue-100/60">
+                                  +{(consumerLookupByPhone as any).accounts.length - 3} more accounts
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                     {consumerLookupByPhone && !(consumerLookupByPhone as any).found && (
