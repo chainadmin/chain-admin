@@ -90,27 +90,32 @@ export default function Billing() {
   });
 
   // Fetch billing statistics
-  const { data: billingStats, isLoading: statsLoading } = useQuery({
+  const { data: billingStats, isLoading: statsLoading, isError: statsError } = useQuery({
     queryKey: ["/api/billing/stats"],
+    retry: 1,
   });
 
   // Fetch subscription details
-  const { data: subscription, isLoading: subscriptionLoading } = useQuery({
+  const { data: subscription, isLoading: subscriptionLoading, isError: subscriptionError } = useQuery({
     queryKey: ["/api/billing/subscription"],
+    retry: 1,
   });
 
   // Fetch invoices
   const { data: invoices, isLoading: invoicesLoading } = useQuery({
     queryKey: ["/api/billing/invoices"],
+    retry: 1,
   });
 
   // Fetch current invoice
   const { data: currentInvoice } = useQuery({
     queryKey: ["/api/billing/current-invoice"],
+    retry: 1,
   });
 
   const { data: planResponse, isLoading: plansLoading } = useQuery({
     queryKey: ["/api/billing/plans"],
+    retry: 1,
   });
 
   // Fetch tenant settings to check enabled services
@@ -369,6 +374,29 @@ export default function Billing() {
       <AdminLayout>
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  // Show error state if queries failed
+  if (statsError || subscriptionError) {
+    return (
+      <AdminLayout>
+        <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-10 text-blue-50 sm:px-6 lg:px-8">
+          <div className="rounded-2xl border border-red-400/30 bg-red-500/10 p-8 text-center">
+            <AlertCircle className="mx-auto h-12 w-12 text-red-400 mb-4" />
+            <h2 className="text-xl font-semibold text-white mb-2">Unable to load billing information</h2>
+            <p className="text-blue-100/70 mb-4">
+              There was a problem loading your billing data. This may be due to a session timeout or access permissions.
+            </p>
+            <Button
+              onClick={() => window.location.reload()}
+              className="rounded-xl border border-white/20 bg-white/10 px-6 py-2 text-white hover:bg-white/20"
+            >
+              Try Again
+            </Button>
+          </div>
         </div>
       </AdminLayout>
     );
