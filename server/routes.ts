@@ -7957,19 +7957,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tenantId = req.user.tenantId;
       const userRole = req.user.role;
       
+      console.log("[TEAM-MEMBERS] Create request - tenantId:", tenantId, "userRole:", userRole);
+      
       if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
       }
 
       // Only owners can create team members
       if (userRole !== 'owner' && userRole !== 'platform_admin') {
-        return res.status(403).json({ message: "Only owners can manage team members" });
+        console.log("[TEAM-MEMBERS] Role check failed - userRole:", userRole);
+        return res.status(403).json({ message: `Only owners can manage team members. Your role: ${userRole || 'undefined'}` });
       }
 
       // Check limit: only 1 sub-user allowed per tenant
       const existingCount = await storage.countNonOwnerAgencyCredentials(tenantId);
+      console.log("[TEAM-MEMBERS] Existing non-owner count:", existingCount);
       if (existingCount >= 1) {
-        return res.status(400).json({ message: "Maximum of 1 team member allowed per account" });
+        return res.status(400).json({ message: `Maximum of 1 team member allowed per account. Current count: ${existingCount}` });
       }
 
       const memberSchema = z.object({
@@ -7982,11 +7986,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       const data = memberSchema.parse(req.body);
+      console.log("[TEAM-MEMBERS] Validated data - username:", data.username, "email:", data.email);
       
       // Check if username already exists
       const existingUser = await storage.getAgencyCredentialsByUsername(data.username);
       if (existingUser) {
-        return res.status(400).json({ message: "Username already exists" });
+        console.log("[TEAM-MEMBERS] Username already exists:", data.username);
+        return res.status(400).json({ message: `Username "${data.username}" already exists` });
       }
 
       // Hash password
