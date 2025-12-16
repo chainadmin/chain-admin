@@ -811,7 +811,9 @@ export default function ConsumerDashboardSimple() {
           ? Math.round(parseFloat(customPaymentAmount) * 100)
           : (isSimplifiedFlow || isSMAXPayment)
             ? calculatedPayment
-            : null,
+            : (selectedArrangement && calculatedPayment !== null)
+              ? calculatedPayment  // Use calculated/frequency-adjusted amount for arrangement payments
+              : null,
         // Simplified flow specific data
         simplifiedFlow: isSimplifiedFlow ? {
           paymentMethod,
@@ -2405,9 +2407,9 @@ export default function ConsumerDashboardSimple() {
                                     const amountCents = Math.round(parseFloat(value) * 100);
                                     // Get the minimum from the arrangement
                                     const arrangementMin = selectedArrangement.planType === 'range' 
-                                      ? (selectedArrangement.rangeMin || 0)
+                                      ? (selectedArrangement.monthlyPaymentMin || 0)
                                       : selectedArrangement.planType === 'fixed_monthly'
-                                        ? (selectedArrangement.fixedAmount || 0)
+                                        ? (selectedArrangement.fixedMonthlyPayment || 0)
                                         : 0;
                                     
                                     // Use entered amount if above minimum, otherwise use minimum
@@ -2427,8 +2429,8 @@ export default function ConsumerDashboardSimple() {
                                   }
                                 }}
                                 min={(() => {
-                                  if (selectedArrangement.planType === 'range') return (selectedArrangement.rangeMin || 0) / 100;
-                                  if (selectedArrangement.planType === 'fixed_monthly') return (selectedArrangement.fixedAmount || 0) / 100;
+                                  if (selectedArrangement.planType === 'range') return (selectedArrangement.monthlyPaymentMin || 0) / 100;
+                                  if (selectedArrangement.planType === 'fixed_monthly') return (selectedArrangement.fixedMonthlyPayment || 0) / 100;
                                   return 0;
                                 })()}
                                 max={(selectedAccount?.balanceCents || 0) / 100}
@@ -2440,8 +2442,8 @@ export default function ConsumerDashboardSimple() {
                             </div>
                             <p className="text-xs text-blue-100/50 mt-1">
                               Min: ${(() => {
-                                if (selectedArrangement.planType === 'range') return ((selectedArrangement.rangeMin || 0) / 100).toFixed(2);
-                                if (selectedArrangement.planType === 'fixed_monthly') return ((selectedArrangement.fixedAmount || 0) / 100).toFixed(2);
+                                if (selectedArrangement.planType === 'range') return ((selectedArrangement.monthlyPaymentMin || 0) / 100).toFixed(2);
+                                if (selectedArrangement.planType === 'fixed_monthly') return ((selectedArrangement.fixedMonthlyPayment || 0) / 100).toFixed(2);
                                 return '0.00';
                               })()} per month
                             </p>

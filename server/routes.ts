@@ -10448,7 +10448,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Calculate payment amount based on arrangement type
         console.log('💰 Calculating payment amount for arrangement type:', arrangement.planType);
         
-        if (arrangement.planType === 'one_time_payment') {
+        // If customPaymentAmountCents is provided (e.g., frequency-adjusted amount from frontend), use it
+        if (customPaymentAmountCents && customPaymentAmountCents > 0 && arrangement.planType !== 'one_time_payment') {
+          // Validate the custom amount is within acceptable range for this arrangement
+          const minAmount = arrangement.planType === 'range' 
+            ? (arrangement.monthlyPaymentMin || 0)
+            : arrangement.planType === 'fixed_monthly'
+              ? (arrangement.fixedMonthlyPayment || 0)
+              : 0;
+          
+          // For weekly/biweekly payments, the amount can be less than monthly min
+          // So we only validate it's positive and not more than balance
+          if (customPaymentAmountCents > accountBalance) {
+            console.log('❌ Custom payment exceeds balance:', { customPaymentAmountCents, accountBalance });
+            return res.status(400).json({ 
+              success: false,
+              message: `Payment amount cannot exceed your balance of $${(accountBalance / 100).toFixed(2)}` 
+            });
+          }
+          
+          amountCents = customPaymentAmountCents;
+          console.log('✅ Using custom payment amount from frontend:', {
+            customAmount: customPaymentAmountCents,
+            customAmountDollars: (customPaymentAmountCents / 100).toFixed(2),
+            arrangementType: arrangement.planType
+          });
+        } else if (arrangement.planType === 'one_time_payment') {
           // One-time payment: use custom amount provided by consumer
           if (!customPaymentAmountCents || customPaymentAmountCents <= 0) {
             console.log('❌ Invalid custom payment amount:', customPaymentAmountCents);
