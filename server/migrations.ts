@@ -1503,7 +1503,8 @@ export async function runMigrations() {
     // This migrates accounts that were created before the role system was properly implemented
     console.log('Fixing owner roles for primary tenant accounts...');
     try {
-      // Update the first (oldest) agency credential per tenant to be 'owner' if they're currently 'user' or 'agent'
+      // Update the first (oldest) agency credential per tenant to be 'owner' if they're NOT already 'owner'
+      // This handles NULL roles, 'user', 'agent', or any other value
       const fixOwnerResult = await client.query(`
         WITH first_users AS (
           SELECT DISTINCT ON (tenant_id) id, tenant_id
@@ -1514,9 +1515,9 @@ export async function runMigrations() {
         SET role = 'owner'
         FROM first_users fu
         WHERE ac.id = fu.id
-          AND ac.role IN ('user', 'agent')
+          AND (ac.role IS NULL OR ac.role != 'owner')
       `);
-      if (fixOwnerResult.rowCount > 0) {
+      if (fixOwnerResult.rowCount && fixOwnerResult.rowCount > 0) {
         console.log(`  ✓ Upgraded ${fixOwnerResult.rowCount} primary accounts to 'owner' role`);
       } else {
         console.log(`  ✓ All primary accounts already have correct owner role`);

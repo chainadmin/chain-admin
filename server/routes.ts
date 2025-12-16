@@ -7973,7 +7973,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const existingCount = await storage.countNonOwnerAgencyCredentials(tenantId);
       console.log("[TEAM-MEMBERS] Existing non-owner count:", existingCount);
       if (existingCount >= 1) {
-        return res.status(400).json({ message: `Maximum of 1 team member allowed per account. Current count: ${existingCount}` });
+        // Get all credentials for debugging
+        const allCredentials = await storage.getAgencyCredentialsByTenant(tenantId);
+        const credentialSummary = allCredentials.map(c => ({ id: c.id, username: c.username, role: c.role }));
+        console.log("[TEAM-MEMBERS] All credentials for tenant:", JSON.stringify(credentialSummary));
+        return res.status(400).json({ 
+          message: `Maximum of 1 team member allowed per account. Current non-owner count: ${existingCount}`,
+          debug: {
+            existingCredentials: credentialSummary,
+            hint: "If your primary account shows role != 'owner', the migration may not have run. Try logging out and back in after redeployment."
+          }
+        });
       }
 
       const memberSchema = z.object({

@@ -90,9 +90,16 @@ export default function TeamMembersSection({ cardBaseClasses, inputClasses }: Te
       toast({ title: "Team member created successfully" });
     },
     onError: (error: any) => {
+      let description = error.message;
+      if (error.data?.debug) {
+        console.log("[TEAM-MEMBERS] Debug info:", error.data.debug);
+        if (error.data.debug.existingCredentials) {
+          description += ` | Existing accounts: ${JSON.stringify(error.data.debug.existingCredentials)}`;
+        }
+      }
       toast({ 
         title: "Failed to create team member", 
-        description: error.message,
+        description,
         variant: "destructive" 
       });
     },
