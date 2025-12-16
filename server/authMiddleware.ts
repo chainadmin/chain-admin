@@ -16,6 +16,11 @@ export const authenticateUser: RequestHandler = async (req: any, res, next) => {
       // Fetch the user's credentials to get role and restrictedServices
       const userCredentials = await storage.getAgencyCredentialsById(decoded.userId);
       
+      // Determine role: use database value if set, otherwise default to 'owner' for legacy accounts
+      // This ensures existing owners (created before role system) aren't blocked from billing
+      // New team members will always have explicit role set during creation
+      const userRole = userCredentials?.role || 'owner';
+      
       // Attach user info from JWT with role from database
       req.user = {
         id: decoded.userId,
@@ -23,7 +28,7 @@ export const authenticateUser: RequestHandler = async (req: any, res, next) => {
         tenantId: decoded.tenantId,
         tenantSlug: decoded.tenantSlug,
         isJwtAuth: true,
-        role: userCredentials?.role || 'agent',
+        role: userRole,
         restrictedServices: userCredentials?.restrictedServices || [],
         claims: {
           sub: decoded.userId
