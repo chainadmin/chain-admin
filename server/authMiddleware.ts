@@ -13,23 +13,30 @@ export const authenticateUser: RequestHandler = async (req: any, res, next) => {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
       
-      // Fetch the user's credentials to get role and restrictedServices
-      const userCredentials = await storage.getAgencyCredentialsById(decoded.userId);
+      // For impersonation sessions, use the role from the JWT token directly
+      // For regular JWT auth, fetch from database but use JWT role as fallback
+      let userRole = decoded.role || 'owner';
+      let restrictedServices: string[] = [];
       
-      // Determine role: use database value if set, otherwise default to 'owner' for legacy accounts
-      // This ensures existing owners (created before role system) aren't blocked from billing
-      // New team members will always have explicit role set during creation
-      const userRole = userCredentials?.role || 'owner';
+      // Only fetch credentials for non-impersonation sessions
+      if (!decoded.isImpersonation) {
+        const userCredentials = await storage.getAgencyCredentialsById(decoded.userId);
+        if (userCredentials) {
+          userRole = userCredentials.role || 'owner';
+          restrictedServices = userCredentials.restrictedServices || [];
+        }
+      }
       
-      // Attach user info from JWT with role from database
+      // Attach user info from JWT
       req.user = {
         id: decoded.userId,
         userId: decoded.userId,
         tenantId: decoded.tenantId,
         tenantSlug: decoded.tenantSlug,
         isJwtAuth: true,
+        isImpersonation: decoded.isImpersonation || false,
         role: userRole,
-        restrictedServices: userCredentials?.restrictedServices || [],
+        restrictedServices: restrictedServices,
         claims: {
           sub: decoded.userId
         }
