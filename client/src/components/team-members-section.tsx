@@ -364,7 +364,7 @@ export default function TeamMembersSection({ cardBaseClasses, inputClasses }: Te
       </CardContent>
 
       <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
-        <DialogContent className="border-white/10 bg-[#0f172a] text-white sm:max-w-lg">
+        <DialogContent className="border-white/10 bg-[#0f172a] text-white sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl">Add Team Member</DialogTitle>
           </DialogHeader>
@@ -486,7 +486,7 @@ export default function TeamMembersSection({ cardBaseClasses, inputClasses }: Te
       </Dialog>
 
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent className="border-white/10 bg-[#0f172a] text-white sm:max-w-lg">
+        <DialogContent className="border-white/10 bg-[#0f172a] text-white sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl">Edit Team Member</DialogTitle>
           </DialogHeader>
