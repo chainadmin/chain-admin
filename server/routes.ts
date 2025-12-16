@@ -6091,7 +6091,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tenantId: credentials.tenantId,
       };
       
-      // Generate JWT token with tenant information
+      // Generate JWT token with tenant information and service restrictions
       const token = jwt.sign(
         {
           userId: credentials.id,
@@ -6101,6 +6101,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           username: credentials.username,
           email: credentials.email,
           role: credentials.role,
+          restrictedServices: credentials.restrictedServices || [],
         },
         process.env.JWT_SECRET || 'your-secret-key',
         { expiresIn: '7d' }

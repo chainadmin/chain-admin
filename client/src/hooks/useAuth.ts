@@ -63,6 +63,7 @@ export function useAuth() {
               role: payload.role || 'agent',
               email: payload.email,
               username: payload.username,
+              restrictedServices: payload.restrictedServices || [],
               isJwtAuth: true
             });
           }
