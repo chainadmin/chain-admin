@@ -1499,6 +1499,32 @@ export async function runMigrations() {
       console.log(`  ⚠ restricted_services (already exists or error): ${err.message}`);
     }
     
+    // Fix existing owner accounts: The first/primary user per tenant should be 'owner', not 'user' or 'agent'
+    // This migrates accounts that were created before the role system was properly implemented
+    console.log('Fixing owner roles for primary tenant accounts...');
+    try {
+      // Update the first (oldest) agency credential per tenant to be 'owner' if they're currently 'user' or 'agent'
+      const fixOwnerResult = await client.query(`
+        WITH first_users AS (
+          SELECT DISTINCT ON (tenant_id) id, tenant_id
+          FROM agency_credentials
+          ORDER BY tenant_id, created_at ASC
+        )
+        UPDATE agency_credentials ac
+        SET role = 'owner'
+        FROM first_users fu
+        WHERE ac.id = fu.id
+          AND ac.role IN ('user', 'agent')
+      `);
+      if (fixOwnerResult.rowCount > 0) {
+        console.log(`  ✓ Upgraded ${fixOwnerResult.rowCount} primary accounts to 'owner' role`);
+      } else {
+        console.log(`  ✓ All primary accounts already have correct owner role`);
+      }
+    } catch (err: any) {
+      console.log(`  ⚠ Fix owner roles error: ${err.message}`);
+    }
+    
     console.log('✅ Database migrations completed successfully');
   } catch (error: any) {
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
