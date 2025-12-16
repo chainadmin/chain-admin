@@ -46,7 +46,6 @@ const AVAILABLE_SERVICES = [
   { id: 'email', label: 'Email Campaigns', description: 'Send and manage email campaigns' },
   { id: 'payments', label: 'Payment Processing', description: 'Process payments and refunds' },
   { id: 'import', label: 'Data Import', description: 'Import consumers and accounts' },
-  { id: 'reports', label: 'Reports', description: 'View analytics and reports' },
   { id: 'documents', label: 'Documents', description: 'Manage document templates' },
   { id: 'automations', label: 'Automations', description: 'Create and manage automations' },
 ];
