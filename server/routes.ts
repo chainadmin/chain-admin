@@ -1,7 +1,7 @@
 import type { Express, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage, type IStorage } from "./storage";
-import { authenticateUser, authenticateConsumer, getCurrentUser, requireEmailService, requireSmsService, requirePortalAccess, requirePaymentProcessing } from "./authMiddleware";
+import { authenticateUser, authenticateConsumer, getCurrentUser, requireEmailService, requireSmsService, requirePortalAccess, requirePaymentProcessing, requireOwner, requireServiceAccess } from "./authMiddleware";
 import { postmarkServerService } from "./postmarkServerService";
 import {
   insertConsumerSchema,
@@ -15915,8 +15915,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Billing endpoints
-  app.get('/api/billing/subscription', authenticateUser, async (req: any, res) => {
+  // Billing endpoints - require owner access
+  app.get('/api/billing/subscription', authenticateUser, requireOwner, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
       if (!tenantId) { 
@@ -15956,7 +15956,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/billing/plans', authenticateUser, async (req: any, res) => {
+  app.get('/api/billing/plans', authenticateUser, requireOwner, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
       if (!tenantId) {
@@ -15994,7 +15994,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/billing/select-plan', authenticateUser, async (req: any, res) => {
+  app.post('/api/billing/select-plan', authenticateUser, requireOwner, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
       if (!tenantId) {
@@ -16070,7 +16070,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/billing/invoices', authenticateUser, async (req: any, res) => {
+  app.get('/api/billing/invoices', authenticateUser, requireOwner, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
       if (!tenantId) { 
@@ -16085,7 +16085,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/billing/stats', authenticateUser, async (req: any, res) => {
+  app.get('/api/billing/stats', authenticateUser, requireOwner, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
       if (!tenantId) { 
@@ -16184,7 +16184,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/billing/current-invoice', authenticateUser, async (req: any, res) => {
+  app.get('/api/billing/current-invoice', authenticateUser, requireOwner, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
       if (!tenantId) { 
@@ -16200,7 +16200,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Mark invoice as paid (admin only)
-  app.post('/api/billing/invoices/:invoiceId/mark-paid', authenticateUser, async (req: any, res) => {
+  app.post('/api/billing/invoices/:invoiceId/mark-paid', authenticateUser, requireOwner, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
       if (!tenantId) { 
@@ -16514,7 +16514,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Request à la carte service activation (creates pending request for global admin approval)
-  app.post('/api/billing/activate-service', authenticateUser, async (req: any, res) => {
+  app.post('/api/billing/activate-service', authenticateUser, requireOwner, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
       const userEmail = req.user.email;
@@ -16614,7 +16614,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Uses CHAIN_AUTHNET_API_LOGIN_ID and CHAIN_AUTHNET_TRANSACTION_KEY
   // ============================================
   
-  app.post('/api/billing/platform-payment', authenticateUser, async (req: any, res) => {
+  app.post('/api/billing/platform-payment', authenticateUser, requireOwner, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
       if (!tenantId) {

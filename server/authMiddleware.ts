@@ -13,13 +13,18 @@ export const authenticateUser: RequestHandler = async (req: any, res, next) => {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
       
-      // Attach user info from JWT
+      // Fetch the user's credentials to get role and restrictedServices
+      const userCredentials = await storage.getAgencyCredentialsById(decoded.userId);
+      
+      // Attach user info from JWT with role from database
       req.user = {
         id: decoded.userId,
         userId: decoded.userId,
         tenantId: decoded.tenantId,
         tenantSlug: decoded.tenantSlug,
         isJwtAuth: true,
+        role: userCredentials?.role || 'agent',
+        restrictedServices: userCredentials?.restrictedServices || [],
         claims: {
           sub: decoded.userId
         }
@@ -292,4 +297,58 @@ export const requirePaymentProcessing: RequestHandler = async (req: any, res, ne
     console.error("Error checking payment processing:", error);
     res.status(500).json({ message: "Error checking service availability" });
   }
+};
+
+// Middleware to check if user is an owner (required for billing access)
+export const requireOwner: RequestHandler = async (req: any, res, next) => {
+  try {
+    const userRole = req.user?.role;
+    
+    // Platform admins and owners can access billing
+    if (userRole === 'owner' || userRole === 'platform_admin') {
+      return next();
+    }
+    
+    return res.status(403).json({ 
+      message: "Access denied. Only account owners can access billing features." 
+    });
+  } catch (error) {
+    console.error("Error checking owner access:", error);
+    res.status(500).json({ message: "Error checking access permissions" });
+  }
+};
+
+// Middleware to check if user has access to a specific service (not in restrictedServices)
+export const requireServiceAccess = (serviceName: string): RequestHandler => {
+  return async (req: any, res, next) => {
+    try {
+      const userRole = req.user?.role;
+      
+      // Platform admins and owners have full access
+      if (userRole === 'owner' || userRole === 'platform_admin') {
+        return next();
+      }
+      
+      // For non-owners, check if service is restricted
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      // Fetch the user's credentials to get restrictedServices
+      const userCredentials = await storage.getAgencyCredentialsById(userId);
+      const restrictedServices = userCredentials?.restrictedServices || [];
+      
+      if (Array.isArray(restrictedServices) && restrictedServices.includes(serviceName)) {
+        return res.status(403).json({ 
+          message: `Access denied. You don't have permission to access ${serviceName} features.` 
+        });
+      }
+      
+      next();
+    } catch (error) {
+      console.error(`Error checking service access for ${serviceName}:`, error);
+      res.status(500).json({ message: "Error checking access permissions" });
+    }
+  };
 };
