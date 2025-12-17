@@ -4372,8 +4372,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Clear any cancellation flag for this campaign (both local and in SMS service)
       cancelledCampaigns.delete(id);
-      // Note: smsService.cancelCampaign already added it to its cancelled set, but it auto-clears after 1 hour
-      // No need to explicitly clear since we're about to start sending again
+      // CRITICAL: Also clear from SMS service's internal cancelled set
+      smsService.clearCancelledCampaign(id);
 
       // Check if campaign is already being processed
       if (campaignProcessingLocks.get(id)) {
@@ -4500,13 +4500,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Update campaign status to sending/resuming with correct recipient count
+      // CRITICAL: This MUST complete before starting the background send
       await storage.updateSmsCampaign(id, {
         status: 'sending',
         totalRecipients: allMessages.length,
         completedAt: null,
       });
 
-      console.log(`✅ SMS campaign "${campaign.name}" resuming. Total audience: ${allMessages.length}, sending ${remainingMessages.length} remaining messages...`);
+      // Verify the status was actually updated before proceeding
+      const updatedCampaign = await storage.getSmsCampaignById(id, tenantId);
+      if (!updatedCampaign || updatedCampaign.status !== 'sending') {
+        console.error(`❌ Failed to update campaign ${id} status to sending - current status: ${updatedCampaign?.status}`);
+        campaignProcessingLocks.delete(id);
+        return res.status(500).json({ message: "Failed to update campaign status for resume" });
+      }
+
+      console.log(`✅ SMS campaign "${campaign.name}" resuming. Status confirmed as 'sending'. Total audience: ${allMessages.length}, sending ${remainingMessages.length} remaining messages...`);
 
       // Send remaining messages in background
       (async () => {

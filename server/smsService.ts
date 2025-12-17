@@ -534,6 +534,14 @@ class SmsService {
     return this.cancelledCampaigns.has(campaignId);
   }
 
+  // Clear a campaign from the cancelled set (for resume functionality)
+  clearCancelledCampaign(campaignId: string): void {
+    if (this.cancelledCampaigns.has(campaignId)) {
+      console.log(`🔄 Clearing campaign ${campaignId} from cancelled set for resume`);
+      this.cancelledCampaigns.delete(campaignId);
+    }
+  }
+
   async sendBulkSms(
     recipients: Array<{ to: string; message: string; consumerId?: string }>,
     tenantId: string,
