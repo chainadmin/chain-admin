@@ -643,19 +643,19 @@ export default function ConsumerDashboardSimple() {
     }
   }, [showPaymentDialog, selectedAccount, selectedArrangement, nonSettlementArrangements]);
 
-  // Calculate payment amount based on selected arrangement or simplified flow
+  // Calculate payment amount based on user selection - prioritize custom amounts
   const paymentAmountCents = selectedAccount
-    ? selectedArrangement
-      ? (selectedArrangement.planType === 'one_time_payment' && customPaymentAmount
-          ? Math.round(parseFloat(customPaymentAmount) * 100) // Convert dollars to cents
-          : calculateArrangementPayment(selectedArrangement, selectedAccount.balanceCents || 0))
-      : calculatedPayment !== null
+    ? // PRIORITY 1: If user entered a custom amount, always use it
+      (customPaymentAmount && !isNaN(parseFloat(customPaymentAmount)) && parseFloat(customPaymentAmount) > 0)
+        ? Math.round(parseFloat(customPaymentAmount) * 100)
+      // PRIORITY 2: If calculatedPayment was set (from arrangement/SMAX selection), use it
+      : calculatedPayment !== null && calculatedPayment > 0
         ? calculatedPayment
-        : (paymentMethod === 'custom' && customPaymentAmount && !isNaN(parseFloat(customPaymentAmount)))
-          ? Math.round(parseFloat(customPaymentAmount) * 100)
-          : (noArrangementsAvailable && customPaymentAmount && !isNaN(parseFloat(customPaymentAmount)))
-            ? Math.round(parseFloat(customPaymentAmount) * 100)
-            : selectedAccount.balanceCents || 0
+      // PRIORITY 3: If arrangement selected, calculate the payment
+      : selectedArrangement
+        ? calculateArrangementPayment(selectedArrangement, selectedAccount.balanceCents || 0)
+      // PRIORITY 4: Fall back to account balance
+      : selectedAccount.balanceCents || 0
     : 0;
 
   const handlePaymentSubmit = async (e: React.FormEvent) => {
@@ -803,17 +803,15 @@ export default function ConsumerDashboardSimple() {
         saveCard: saveCard || isSimplifiedFlow,
         setupRecurring: shouldSetupRecurring,
         firstPaymentDate: paymentDate,
-        customPaymentAmountCents: (paymentMethod === 'custom' && customPaymentAmount && !isNaN(parseFloat(customPaymentAmount)))
+        // Only pass customPaymentAmountCents for:
+        // 1. Explicit custom amounts entered by user
+        // 2. SMAX one-time payments (no arrangement, just paying existing plan)
+        // For arrangement-driven payments, leave null so backend uses arrangement logic
+        customPaymentAmountCents: (customPaymentAmount && !isNaN(parseFloat(customPaymentAmount)) && parseFloat(customPaymentAmount) > 0)
           ? Math.round(parseFloat(customPaymentAmount) * 100)
-          : noArrangementsAvailable && customPaymentAmount
-          ? Math.round(parseFloat(customPaymentAmount) * 100)
-          : selectedArrangement?.planType === 'one_time_payment' && customPaymentAmount
-          ? Math.round(parseFloat(customPaymentAmount) * 100)
-          : (isSimplifiedFlow || isSMAXPayment)
-            ? calculatedPayment
-            : (selectedArrangement && calculatedPayment !== null)
-              ? calculatedPayment  // Use calculated/frequency-adjusted amount for arrangement payments
-              : null,
+          : (paymentMethod === 'smax' && calculatedPayment !== null && calculatedPayment > 0)
+            ? calculatedPayment  // SMAX payments need the amount since there's no arrangement ID
+            : null,
         // Simplified flow specific data
         simplifiedFlow: isSimplifiedFlow ? {
           paymentMethod,
@@ -2106,6 +2104,7 @@ export default function ConsumerDashboardSimple() {
                         setMonthlyBaseAmount(arrangementPaymentAmount);
                         setPaymentMethod('smax');
                         setSelectedArrangement(null);
+                        setCustomPaymentAmount(''); // Clear custom amount when selecting SMAX arrangement
                       }}
                       className={`w-full p-4 rounded-lg border-2 transition-all text-left backdrop-blur ${
                         paymentMethod === 'smax'
@@ -2213,7 +2212,12 @@ export default function ConsumerDashboardSimple() {
                             return (
                               <div
                                 key={uniqueKey}
-                                onClick={() => setSelectedArrangement(arrangement)}
+                                onClick={() => {
+                                  setSelectedArrangement(arrangement);
+                                  const amount = calculateArrangementPayment(arrangement, selectedAccount?.balanceCents || 0);
+                                  setCalculatedPayment(amount);
+                                  setCustomPaymentAmount(''); // Clear custom amount when selecting arrangement
+                                }}
                                 className={`cursor-pointer rounded-lg border-2 p-3 transition-all ${
                                   isSelected
                                     ? 'border-emerald-400 bg-emerald-500/20 backdrop-blur'
@@ -2313,6 +2317,7 @@ export default function ConsumerDashboardSimple() {
                                       setPaymentMethod('term');
                                       setPaymentFrequency('monthly');
                                       setCustomAmount('');
+                                      setCustomPaymentAmount(''); // Clear custom amount when selecting arrangement
                                       // Calculate and set the monthly base amount
                                       const monthlyAmount = calculateArrangementPayment(arrangement, selectedAccount?.balanceCents || 0);
                                       setMonthlyBaseAmount(monthlyAmount);
@@ -2361,6 +2366,7 @@ export default function ConsumerDashboardSimple() {
                                     setMonthlyBaseAmount(baseMonthlyAmount);
                                     setCalculatedPayment(amount);
                                     setCustomAmount('');
+                                    setCustomPaymentAmount(''); // Clear custom amount when selecting frequency
                                   }}
                                   className={`p-3 rounded-lg border-2 transition-all backdrop-blur ${
                                     isSelected
