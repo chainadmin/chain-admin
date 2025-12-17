@@ -24,6 +24,54 @@ class SmsService {
   private sentCounts: Map<string, { count: number; resetTime: number }> = new Map();
   private cancelledCampaigns: Set<string> = new Set(); // Track cancelled campaigns to stop queue processing
 
+  /**
+   * Calculate the number of SMS segments for a message
+   * GSM-7 encoding: 160 chars for single segment, 153 chars per segment for multi-segment
+   * Unicode (UCS-2): 70 chars for single segment, 67 chars per segment for multi-segment
+   */
+  calculateSegments(message: string): number {
+    if (!message || message.length === 0) {
+      return 0;
+    }
+
+    // GSM-7 character set (basic Latin + some special chars)
+    const gsm7Chars = '@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞ !"#¤%&\'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZ' +
+      'ÄÖÑÜäöñüàÆæßÉ§¿abcdefghijklmnopqrstuvwxyz{}\\[~]|€^';
+    
+    // Extended GSM-7 characters (each counts as 2 characters)
+    const gsm7Extended = '|^€{}[~]\\';
+    
+    // Check if message contains non-GSM characters (requires Unicode/UCS-2)
+    let isUnicode = false;
+    let effectiveLength = 0;
+    
+    for (const char of message) {
+      if (!gsm7Chars.includes(char)) {
+        isUnicode = true;
+        break;
+      }
+      // Extended chars count as 2 in GSM-7
+      effectiveLength += gsm7Extended.includes(char) ? 2 : 1;
+    }
+    
+    if (isUnicode) {
+      // Unicode/UCS-2 encoding
+      const length = message.length;
+      if (length <= 70) {
+        return 1;
+      }
+      // Multi-segment: 67 chars per segment due to UDH header
+      return Math.ceil(length / 67);
+    } else {
+      // GSM-7 encoding
+      if (effectiveLength <= 160) {
+        return 1;
+      }
+      // Multi-segment: 153 chars per segment due to UDH header
+      return Math.ceil(effectiveLength / 153);
+    }
+  }
+
   constructor() {
     this.initializeDefaultTwilio();
     // Start processing queue every 10 seconds
