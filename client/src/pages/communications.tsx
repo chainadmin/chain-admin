@@ -4063,8 +4063,8 @@ export default function Communications() {
                               </AlertDialogContent>
                             </AlertDialog>
                           )}
-                          {/* Resume button for cancelled/failed SMS campaigns with incomplete sends */}
-                          {communicationType === "sms" && ['cancelled', 'failed'].includes(campaign.status) && (campaign.totalSent || 0) < (campaign.totalRecipients || 0) && (
+                          {/* Resume button for cancelled/failed/stuck-sending SMS campaigns with incomplete sends */}
+                          {communicationType === "sms" && ['cancelled', 'failed', 'sending'].includes(campaign.status) && (campaign.totalSent || 0) < (campaign.totalRecipients || 0) && (
                             <Button
                               variant="outline"
                               size="sm"
