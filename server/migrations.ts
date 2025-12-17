@@ -1473,16 +1473,16 @@ export async function runMigrations() {
     }
     
     // Fix stuck SMS campaigns that were interrupted by server restart
+    // Mark them as 'cancelled' (not 'failed') so users can resume them
     console.log('Fixing stuck SMS campaigns...');
     try {
       const stuckResult = await client.query(`
         UPDATE sms_campaigns 
-        SET status = 'failed', 
-            completed_at = NOW()
+        SET status = 'cancelled'
         WHERE status = 'sending'
       `);
       if (stuckResult.rowCount > 0) {
-        console.log(`  ✓ Marked ${stuckResult.rowCount} stuck SMS campaigns as failed (interrupted by restart)`);
+        console.log(`  ✓ Marked ${stuckResult.rowCount} stuck SMS campaigns as cancelled (can be resumed)`);
       } else {
         console.log(`  ✓ No stuck SMS campaigns found`);
       }
