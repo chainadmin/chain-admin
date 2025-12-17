@@ -39,7 +39,8 @@ class SmsService {
       'ÄÖÑÜäöñüàÆæßÉ§¿abcdefghijklmnopqrstuvwxyz{}\\[~]|€^';
     
     // Extended GSM-7 characters (each counts as 2 characters)
-    const gsm7Extended = '|^€{}[~]\\';
+    // Complete list: | ^ € { } [ ] ~ \
+    const gsm7Extended = '|^€{}[]~\\';
     
     // Check if message contains non-GSM characters (requires Unicode/UCS-2)
     let isUnicode = false;
@@ -347,6 +348,10 @@ class SmsService {
 
       const result = await client.messages.create(messageOptions);
 
+      // Calculate accurate segment count based on message content
+      const segmentCount = this.calculateSegments(message);
+      console.log(`📊 SMS segment calculation: ${message.length} chars = ${segmentCount} segment(s)`);
+
       // Track ALL sent SMS for billing purposes (not just campaigns)
       await storage.createSmsTracking({
         tenantId,
@@ -354,32 +359,34 @@ class SmsService {
         consumerId: consumerId || null,
         phoneNumber: to,
         messageBody: message,
+        segments: segmentCount, // Store calculated segment count
         status: result.status || 'queued', // Use Twilio's actual status (queued, accepted, etc.)
         sentAt: new Date(),
         trackingData: { twilioSid: result.sid },
       });
       
-      console.log(`📱 SMS tracking created: tenant=${tenantId}, sid=${result.sid}, campaign=${campaignId || 'none'}`);
+      console.log(`📱 SMS tracking created: tenant=${tenantId}, sid=${result.sid}, segments=${segmentCount}, campaign=${campaignId || 'none'}`);
 
-      // Record billing at send time as fallback (in case webhook fails)
-      // Estimate 1 segment - webhook will provide accurate count if it works
+      // Record billing at send time with accurate segment count
       try {
         await storage.recordMessagingUsageEvent({
           tenantId,
           provider: 'twilio',
           messageType: 'sms',
-          quantity: 1, // Default to 1 segment, webhook will provide accurate count
+          quantity: segmentCount, // Use calculated segment count
           externalMessageId: result.sid,
           occurredAt: new Date(),
           metadata: { 
-            source: metadata?.source || 'send_fallback',
+            source: metadata?.source || 'send_calculated',
             automationId: metadata?.automationId,
             automationName: metadata?.automationName,
             campaignId,
             consumerId,
+            messageLength: message.length,
+            segmentCount,
           },
         });
-        console.log(`💰 SMS billing recorded at send time: tenant=${tenantId}, sid=${result.sid}, source=${metadata?.source || 'send_fallback'}`);
+        console.log(`💰 SMS billing recorded: tenant=${tenantId}, sid=${result.sid}, segments=${segmentCount}, source=${metadata?.source || 'send_calculated'}`);
       } catch (billingError) {
         console.error('Failed to record SMS billing at send time:', billingError);
         // Don't fail the SMS send if billing fails
