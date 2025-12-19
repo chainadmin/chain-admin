@@ -629,6 +629,9 @@ export default function ConsumerDashboardSimple() {
   );
   
   useEffect(() => {
+    // Skip auto-selection when consumer is explicitly paying an existing SMAX arrangement
+    if (paymentMethod === 'smax') return;
+
     // Only auto-select if dialog is open, account is selected, no arrangement selected yet, and exactly one plan exists
     if (showPaymentDialog && selectedAccount && !selectedArrangement && nonSettlementArrangements.length === 1) {
       const singleArrangement = nonSettlementArrangements[0];
@@ -641,7 +644,7 @@ export default function ConsumerDashboardSimple() {
         setCalculatedPayment(monthlyAmount);
       }
     }
-  }, [showPaymentDialog, selectedAccount, selectedArrangement, nonSettlementArrangements]);
+  }, [showPaymentDialog, selectedAccount, selectedArrangement, nonSettlementArrangements, paymentMethod]);
 
   // Calculate payment amount based on user selection - prioritize custom amounts
   const paymentAmountCents = selectedAccount
