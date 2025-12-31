@@ -6153,6 +6153,150 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Agency forgot password - request password reset email
+  app.post('/api/agency/forgot-password', async (req, res) => {
+    try {
+      const { identifier } = req.body; // Can be username or email
+      
+      if (!identifier) {
+        return res.status(400).json({ message: "Username or email is required" });
+      }
+      
+      const normalizedIdentifier = identifier.trim().toLowerCase();
+      
+      // Try to find credentials by username first, then by email
+      let credentials = await storage.getAgencyCredentialsByUsername(normalizedIdentifier);
+      if (!credentials) {
+        credentials = await storage.getAgencyCredentialsByEmail(normalizedIdentifier);
+      }
+      
+      // Always return success to prevent user enumeration attacks
+      if (!credentials || !credentials.email) {
+        console.log(`Password reset requested for unknown identifier: ${normalizedIdentifier}`);
+        return res.json({ 
+          message: "If an account exists with that username or email, a password reset link will be sent." 
+        });
+      }
+      
+      // Check if account is active
+      if (!credentials.isActive) {
+        console.log(`Password reset requested for deactivated account: ${credentials.username}`);
+        return res.json({ 
+          message: "If an account exists with that username or email, a password reset link will be sent." 
+        });
+      }
+      
+      // Generate secure token
+      const token = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour expiration
+      
+      // Store token
+      await storage.createPasswordResetToken(credentials.id, token, expiresAt);
+      
+      // Get tenant for branding (optional)
+      const tenant = await storage.getTenant(credentials.tenantId);
+      
+      // Build reset URL - use the main domain for the reset page
+      const baseUrl = process.env.BASE_URL || 'https://chainsoftwaregroup.com';
+      const resetUrl = `${baseUrl}/agency/reset-password?token=${token}`;
+      
+      // Send password reset email
+      const emailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%); padding: 30px; text-align: center;">
+            <h1 style="color: white; margin: 0;">Password Reset Request</h1>
+          </div>
+          <div style="padding: 30px; background: #f9f9f9;">
+            <p>Hello${credentials.firstName ? ` ${credentials.firstName}` : ''},</p>
+            <p>We received a request to reset the password for your Chain account${tenant ? ` (${tenant.name})` : ''}.</p>
+            <p>Click the button below to set a new password:</p>
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${resetUrl}" style="background: #1e3a5f; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Reset Password</a>
+            </div>
+            <p style="color: #666; font-size: 14px;">This link will expire in 1 hour for security reasons.</p>
+            <p style="color: #666; font-size: 14px;">If you didn't request this password reset, you can safely ignore this email. Your password will remain unchanged.</p>
+            <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
+            <p style="color: #999; font-size: 12px;">If the button doesn't work, copy and paste this link into your browser:</p>
+            <p style="color: #999; font-size: 12px; word-break: break-all;">${resetUrl}</p>
+          </div>
+        </div>
+      `;
+      
+      await emailService.sendEmail({
+        to: credentials.email,
+        subject: 'Password Reset Request - Chain',
+        html: emailHtml,
+        tag: 'password-reset',
+      });
+      
+      console.log(`Password reset email sent to ${credentials.email} for user ${credentials.username}`);
+      
+      res.json({ 
+        message: "If an account exists with that username or email, a password reset link will be sent." 
+      });
+      
+    } catch (error) {
+      console.error("Error during password reset request:", error);
+      res.status(500).json({ message: "Failed to process password reset request" });
+    }
+  });
+
+  // Agency reset password - verify token and update password
+  app.post('/api/agency/reset-password', async (req, res) => {
+    try {
+      const { token, newPassword } = req.body;
+      
+      if (!token || !newPassword) {
+        return res.status(400).json({ message: "Token and new password are required" });
+      }
+      
+      // Validate password strength
+      if (newPassword.length < 8) {
+        return res.status(400).json({ message: "Password must be at least 8 characters long" });
+      }
+      
+      // Get token from database
+      const resetToken = await storage.getPasswordResetToken(token);
+      
+      if (!resetToken) {
+        return res.status(400).json({ message: "Invalid or expired reset link. Please request a new one." });
+      }
+      
+      // Check if token is expired
+      if (new Date() > resetToken.expiresAt) {
+        return res.status(400).json({ message: "This reset link has expired. Please request a new one." });
+      }
+      
+      // Check if token was already used
+      if (resetToken.usedAt) {
+        return res.status(400).json({ message: "This reset link has already been used. Please request a new one." });
+      }
+      
+      // Get credentials to verify they still exist
+      const credentials = await storage.getAgencyCredentialsById(resetToken.credentialId);
+      if (!credentials) {
+        return res.status(400).json({ message: "Account not found. Please contact support." });
+      }
+      
+      // Hash new password
+      const passwordHash = await bcrypt.hash(newPassword, 10);
+      
+      // Update password
+      await storage.updateAgencyCredentialsPassword(credentials.id, passwordHash);
+      
+      // Mark token as used
+      await storage.markPasswordResetTokenUsed(token);
+      
+      console.log(`Password successfully reset for user ${credentials.username}`);
+      
+      res.json({ message: "Password has been reset successfully. You can now log in with your new password." });
+      
+    } catch (error) {
+      console.error("Error during password reset:", error);
+      res.status(500).json({ message: "Failed to reset password" });
+    }
+  });
+
   // Consumer login route
   app.post('/api/consumer/login', async (req, res) => {
     try {

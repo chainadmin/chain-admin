@@ -1499,6 +1499,28 @@ export async function runMigrations() {
       console.log(`  ⚠ restricted_services (already exists or error): ${err.message}`);
     }
     
+    // Create password_reset_tokens table for tenant password reset functionality
+    console.log('Creating password_reset_tokens table...');
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          credential_id UUID NOT NULL REFERENCES agency_credentials(id) ON DELETE CASCADE,
+          token VARCHAR(255) UNIQUE NOT NULL,
+          expires_at TIMESTAMP NOT NULL,
+          used_at TIMESTAMP,
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      console.log(`  ✓ password_reset_tokens table`);
+      
+      // Create index for fast token lookup
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token ON password_reset_tokens(token)`);
+      console.log(`  ✓ password_reset_tokens token index`);
+    } catch (err: any) {
+      console.log(`  ⚠ password_reset_tokens table (already exists or error): ${err.message}`);
+    }
+    
     // Fix existing owner accounts: The first/primary user per tenant should be 'owner', not 'user' or 'agent'
     // This migrates accounts that were created before the role system was properly implemented
     console.log('Fixing owner roles for primary tenant accounts...');

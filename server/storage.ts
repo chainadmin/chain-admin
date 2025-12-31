@@ -218,9 +218,16 @@ export interface IStorage {
   
   // Agency credentials operations
   getAgencyCredentialsByUsername(username: string): Promise<SelectAgencyCredentials | undefined>;
+  getAgencyCredentialsByEmail(email: string): Promise<SelectAgencyCredentials | undefined>;
   getAgencyCredentialsById(id: string): Promise<SelectAgencyCredentials | undefined>;
   createAgencyCredentials(credentials: InsertAgencyCredentials): Promise<SelectAgencyCredentials>;
   updateAgencyLoginTime(id: string): Promise<void>;
+  updateAgencyCredentialsPassword(id: string, passwordHash: string): Promise<void>;
+  
+  // Password reset token operations
+  createPasswordResetToken(credentialId: string, token: string, expiresAt: Date): Promise<void>;
+  getPasswordResetToken(token: string): Promise<{ id: string; credentialId: string; token: string; expiresAt: Date; usedAt: Date | null } | undefined>;
+  markPasswordResetTokenUsed(token: string): Promise<void>;
   
   // Consumer operations
   getConsumersByTenant(tenantId: string): Promise<Consumer[]>;
@@ -769,6 +776,62 @@ export class DatabaseStorage implements IStorage {
     await db.update(agencyCredentials)
       .set({ lastLoginAt: new Date() })
       .where(eq(agencyCredentials.id, id));
+  }
+
+  async getAgencyCredentialsByEmail(email: string): Promise<SelectAgencyCredentials | undefined> {
+    const normalizedEmail = normalizeEmailValue(email);
+    if (!normalizedEmail) {
+      return undefined;
+    }
+
+    const [credentials] = await db
+      .select()
+      .from(agencyCredentials)
+      .where(sql`LOWER(TRIM(${agencyCredentials.email})) = ${normalizedEmail}`);
+    return credentials;
+  }
+
+  async updateAgencyCredentialsPassword(id: string, passwordHash: string): Promise<void> {
+    await db.update(agencyCredentials)
+      .set({ passwordHash, updatedAt: new Date() })
+      .where(eq(agencyCredentials.id, id));
+  }
+
+  // Password reset token operations
+  async createPasswordResetToken(credentialId: string, token: string, expiresAt: Date): Promise<void> {
+    await db.execute(sql`
+      INSERT INTO password_reset_tokens (credential_id, token, expires_at)
+      VALUES (${credentialId}, ${token}, ${expiresAt})
+    `);
+  }
+
+  async getPasswordResetToken(token: string): Promise<{ id: string; credentialId: string; token: string; expiresAt: Date; usedAt: Date | null } | undefined> {
+    const result = await db.execute(sql`
+      SELECT id, credential_id, token, expires_at, used_at
+      FROM password_reset_tokens
+      WHERE token = ${token}
+    `);
+    
+    if (!result.rows || result.rows.length === 0) {
+      return undefined;
+    }
+    
+    const row = result.rows[0] as any;
+    return {
+      id: row.id,
+      credentialId: row.credential_id,
+      token: row.token,
+      expiresAt: new Date(row.expires_at),
+      usedAt: row.used_at ? new Date(row.used_at) : null,
+    };
+  }
+
+  async markPasswordResetTokenUsed(token: string): Promise<void> {
+    await db.execute(sql`
+      UPDATE password_reset_tokens
+      SET used_at = NOW()
+      WHERE token = ${token}
+    `);
   }
 
   async getAgencyCredentialsByTenant(tenantId: string): Promise<SelectAgencyCredentials[]> {
