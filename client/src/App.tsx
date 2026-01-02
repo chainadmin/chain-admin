@@ -96,6 +96,9 @@ function Router() {
   // Check if we're on a public route that doesn't need auth
   const isPublicRoute = pathname === '/agency-registration' ||
                        pathname === '/agency-register' ||
+                       pathname === '/agency-login' ||
+                       pathname === '/agency/forgot-password' ||
+                       pathname === '/agency/reset-password' ||
                        pathname === '/consumer-login' ||
                        pathname === '/consumer-dashboard' ||
                        pathname.startsWith('/consumer-register') ||
