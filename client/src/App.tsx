@@ -32,6 +32,8 @@ import MobileAppLogin from "@/pages/mobile-app-login";
 import MobileAppRegister from "@/pages/mobile-app-register";
 import AgencyRegistration from "@/pages/agency-registration";
 import AgencyLogin from "@/pages/agency-login";
+import AgencyForgotPassword from "@/pages/agency-forgot-password";
+import AgencyResetPassword from "@/pages/agency-reset-password";
 import AgencyLanding from "@/pages/agency-landing";
 import PrivacyPolicy from "@/pages/privacy-policy";
 import TermsOfService from "@/pages/terms-of-service";
@@ -320,6 +322,8 @@ function Router() {
       <Route key="public-agency-registration" path="/agency-registration" component={AgencyRegistration} />,
       <Route key="public-info" path="/info" component={Info} />,
       <Route key="public-agency-login" path="/agency-login" component={AgencyLogin} />,
+      <Route key="public-agency-forgot-password" path="/agency/forgot-password" component={AgencyForgotPassword} />,
+      <Route key="public-agency-reset-password" path="/agency/reset-password" component={AgencyResetPassword} />,
       <Route key="public-agency" path="/agency/:agencySlug" component={AgencyLanding} />,
       <Route key="public-privacy" path="/privacy-policy" component={PrivacyPolicy} />,
       <Route key="public-terms" path="/terms-of-service" component={TermsOfService} />,

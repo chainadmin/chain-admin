@@ -204,6 +204,16 @@ export default function AgencyLogin() {
 
           <div className="space-y-2 text-center text-sm text-blue-100/70">
             <p>
+              <Button
+                variant="link"
+                onClick={() => (window.location.href = "/agency/forgot-password")}
+                className="p-0 text-blue-100 hover:text-white"
+                data-testid="link-forgot-password"
+              >
+                Forgot your password?
+              </Button>
+            </p>
+            <p>
               Don&rsquo;t have an account yet?{" "}
               <Button
                 variant="link"
