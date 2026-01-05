@@ -6156,23 +6156,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Agency forgot password - request password reset email
   app.post('/api/agency/forgot-password', async (req, res) => {
     try {
-      const { identifier } = req.body; // Can be username or email
+      const { email } = req.body;
       
-      if (!identifier) {
-        return res.status(400).json({ message: "Username or email is required" });
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
       }
       
-      const normalizedIdentifier = identifier.trim().toLowerCase();
+      const normalizedEmail = email.trim().toLowerCase();
       
-      // Try to find credentials by username first, then by email
-      let credentials = await storage.getAgencyCredentialsByUsername(normalizedIdentifier);
-      if (!credentials) {
-        credentials = await storage.getAgencyCredentialsByEmail(normalizedIdentifier);
-      }
+      // Find credentials by email
+      const credentials = await storage.getAgencyCredentialsByEmail(normalizedEmail);
       
       // Always return success to prevent user enumeration attacks
       if (!credentials || !credentials.email) {
-        console.log(`Password reset requested for unknown identifier: ${normalizedIdentifier}`);
+        console.log(`Password reset requested for unknown email: ${normalizedEmail}`);
         return res.json({ 
           message: "If an account exists with that username or email, a password reset link will be sent." 
         });
