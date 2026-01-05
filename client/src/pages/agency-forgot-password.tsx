@@ -12,7 +12,7 @@ import { useState } from "react";
 import AgencyAuthLayout from "@/components/agency-auth-layout";
 
 const forgotPasswordSchema = z.object({
-  identifier: z.string().min(1, "Username or email is required"),
+  email: z.string().email("Enter a valid email address"),
 });
 
 type ForgotPasswordData = z.infer<typeof forgotPasswordSchema>;
@@ -24,7 +24,7 @@ export default function AgencyForgotPassword() {
   const form = useForm<ForgotPasswordData>({
     resolver: zodResolver(forgotPasswordSchema),
     defaultValues: {
-      identifier: "",
+      email: "",
     },
   });
 
@@ -91,7 +91,7 @@ export default function AgencyForgotPassword() {
     <AgencyAuthLayout
       badgeText="Password recovery"
       title="Forgot your password?"
-      description="Enter your username or email address and we'll send you a link to reset your password."
+      description="Enter your email address and we'll send you a link to reset your password."
       contentClassName="p-8 sm:p-10"
     >
       <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-[#0f1f3f]/40 p-6 sm:p-8">
@@ -109,18 +109,18 @@ export default function AgencyForgotPassword() {
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
               <FormField
                 control={form.control}
-                name="identifier"
+                name="email"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="flex items-center gap-2 text-sm font-semibold text-blue-100/80">
                       <Mail className="h-4 w-4" />
-                      Username or Email
+                      Email address
                     </FormLabel>
                     <FormControl>
                       <Input
                         {...field}
-                        placeholder="your.username or email@company.com"
-                        data-testid="input-identifier"
+                        placeholder="email@company.com"
+                        data-testid="input-email"
                         disabled={forgotPasswordMutation.isPending}
                         className="h-11 rounded-xl border-white/20 bg-white/10 text-white placeholder:text-blue-100/60 focus-visible:ring-sky-400"
                       />
