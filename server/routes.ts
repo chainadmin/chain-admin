@@ -6185,6 +6185,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Generate secure token
       const token = crypto.randomBytes(32).toString('hex');
+      const resetCode = token.slice(0, 6).toUpperCase();
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour expiration
       
       // Store token
@@ -6206,6 +6207,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           <div style="padding: 30px; background: #f9f9f9;">
             <p>Hello${credentials.firstName ? ` ${credentials.firstName}` : ''},</p>
             <p>We received a request to reset the password for your Chain account${tenant ? ` (${tenant.name})` : ''}.</p>
+            <p><strong>Username:</strong> ${credentials.username}</p>
+            <p>Your reset code is:</p>
+            <div style="text-align: center; margin: 20px 0; font-size: 24px; letter-spacing: 4px; font-weight: bold; color: #1e3a5f;">
+              ${resetCode}
+            </div>
             <p>Click the button below to set a new password:</p>
             <div style="text-align: center; margin: 30px 0;">
               <a href="${resetUrl}" style="background: #1e3a5f; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Reset Password</a>
@@ -6221,7 +6227,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       await emailService.sendEmail({
         to: credentials.email,
-        subject: 'Password Reset Request - Chain',
+        subject: 'Password Reset Code - Chain',
         html: emailHtml,
         tag: 'password-reset',
       });

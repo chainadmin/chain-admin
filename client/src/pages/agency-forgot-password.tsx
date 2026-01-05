@@ -54,7 +54,7 @@ export default function AgencyForgotPassword() {
       <AgencyAuthLayout
         badgeText="Password recovery"
         title="Check your email"
-        description="If an account exists with the provided username or email, we've sent instructions to reset your password."
+        description="If an account exists with the provided email, we've sent a reset code and link to update your password."
         contentClassName="p-8 sm:p-10"
       >
         <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-[#0f1f3f]/40 p-6 sm:p-8">
@@ -66,7 +66,7 @@ export default function AgencyForgotPassword() {
             <div className="space-y-2">
               <h2 className="text-2xl font-semibold text-white">Email Sent</h2>
               <p className="text-sm text-blue-100/70">
-                Check your inbox for a password reset link. The link will expire in 1 hour.
+                Check your inbox for a password reset code and link. The link will expire in 1 hour.
               </p>
               <p className="text-sm text-blue-100/50">
                 Don't see the email? Check your spam folder.
@@ -91,7 +91,7 @@ export default function AgencyForgotPassword() {
     <AgencyAuthLayout
       badgeText="Password recovery"
       title="Forgot your password?"
-      description="Enter your email address and we'll send you a link to reset your password."
+      description="Enter your email address and we'll send you a reset code and link to update your password."
       contentClassName="p-8 sm:p-10"
     >
       <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-[#0f1f3f]/40 p-6 sm:p-8">
@@ -101,7 +101,7 @@ export default function AgencyForgotPassword() {
             <p className="text-sm uppercase tracking-wide text-blue-100/70">Password reset</p>
             <h2 className="text-2xl font-semibold text-white">Reset your password</h2>
             <p className="text-sm text-blue-100/70">
-              We'll send a secure link to your email address to set a new password.
+              We'll send a reset code and secure link to your email address to set a new password.
             </p>
           </div>
 
@@ -136,7 +136,7 @@ export default function AgencyForgotPassword() {
                 disabled={forgotPasswordMutation.isPending}
                 data-testid="button-send-reset"
               >
-                {forgotPasswordMutation.isPending ? "Sending..." : "Send Reset Link"}
+                {forgotPasswordMutation.isPending ? "Sending..." : "Send Reset Code"}
               </Button>
             </form>
           </Form>
