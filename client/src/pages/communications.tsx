@@ -446,9 +446,10 @@ export default function Communications() {
     name: "",
     templateId: "",
     targetGroup: "all",
-    targetType: "all" as "all" | "folder" | "custom",
+    targetType: "all" as "all" | "folder" | "custom" | "individual",
     targetFolderIds: [] as string[],
     phonesToSend: "1" as "1" | "2" | "3" | "all",
+    consumerId: undefined as string | undefined,
     customFilters: {
       balanceMin: "",
       balanceMax: "",
@@ -456,6 +457,10 @@ export default function Communications() {
       lastContactDays: "",
     },
   });
+
+  // Individual consumer targeting state
+  const [consumerSearch, setConsumerSearch] = useState("");
+  const [selectedConsumer, setSelectedConsumer] = useState<{ id: string; name: string; phone: string; email: string } | null>(null);
 
   const [sendEmailForm, setSendEmailForm] = useState({
     to: "",
@@ -1224,6 +1229,7 @@ export default function Communications() {
         targetType: "all",
         targetFolderIds: [],
         phonesToSend: "1",
+        consumerId: undefined,
         customFilters: {
           balanceMin: "",
           balanceMax: "",
@@ -1231,6 +1237,8 @@ export default function Communications() {
           lastContactDays: "",
         },
       });
+      setSelectedConsumer(null);
+      setConsumerSearch("");
       toast({
         title: "Success",
         description: "Email campaign created and awaiting approval",
@@ -1289,6 +1297,7 @@ export default function Communications() {
         targetType: "all",
         targetFolderIds: [],
         phonesToSend: "1",
+        consumerId: undefined,
         customFilters: {
           balanceMin: "",
           balanceMax: "",
@@ -1296,6 +1305,8 @@ export default function Communications() {
           lastContactDays: "",
         },
       });
+      setSelectedConsumer(null);
+      setConsumerSearch("");
       toast({
         title: "Success",
         description: "SMS campaign created and scheduled",
@@ -1777,6 +1788,15 @@ export default function Communications() {
       return;
     }
 
+    if (campaignForm.targetType === "individual" && !campaignForm.consumerId) {
+      toast({
+        title: "Select a consumer",
+        description: "Please search and select a consumer for this campaign",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Show confirmation dialog instead of immediately creating campaign
     setShowCampaignConfirmation(true);
   };
@@ -1874,7 +1894,9 @@ export default function Communications() {
         targetGroup:
           campaignForm.targetType === "folder"
             ? "folder"
-            : campaignForm.targetGroup,
+            : campaignForm.targetType === "individual"
+              ? "individual"
+              : campaignForm.targetGroup,
         folderId:
           campaignForm.targetType === "folder"
             ? campaignForm.targetFolderIds[0] || null
@@ -1883,6 +1905,7 @@ export default function Communications() {
           campaignForm.targetType === "folder"
             ? campaignForm.targetFolderIds
             : [],
+        consumerId: campaignForm.targetType === "individual" ? campaignForm.consumerId : undefined,
       };
 
       createEmailCampaignMutation.mutate(payload);
@@ -1892,12 +1915,15 @@ export default function Communications() {
         targetGroup:
           campaignForm.targetType === "folder"
             ? "folder"
-            : campaignForm.targetGroup,
+            : campaignForm.targetType === "individual"
+              ? "individual"
+              : campaignForm.targetGroup,
         folderIds:
           campaignForm.targetType === "folder"
             ? campaignForm.targetFolderIds
             : [],
         phonesToSend: campaignForm.phonesToSend,
+        consumerId: campaignForm.targetType === "individual" ? campaignForm.consumerId : undefined,
       };
 
       createSmsCampaignMutation.mutate(payload);
@@ -3774,20 +3800,27 @@ export default function Communications() {
                       <Label htmlFor="target-type">Target Type</Label>
                       <Select
                         value={campaignForm.targetType}
-                        onValueChange={(value: "all" | "folder" | "custom") => {
+                        onValueChange={(value: "all" | "folder" | "custom" | "individual") => {
                           const resolvedTargetGroup =
                             value === "all"
                               ? "all"
                               : value === "folder"
                                 ? "folder"
-                                : "custom";
+                                : value === "individual"
+                                  ? "individual"
+                                  : "custom";
 
                           setCampaignForm({
                             ...campaignForm,
                             targetType: value,
                             targetGroup: resolvedTargetGroup,
                             targetFolderIds: value === "folder" ? campaignForm.targetFolderIds : [],
+                            consumerId: value === "individual" ? campaignForm.consumerId : undefined,
                           });
+                          if (value !== "individual") {
+                            setSelectedConsumer(null);
+                            setConsumerSearch("");
+                          }
                         }}
                       >
                         <SelectTrigger data-testid="select-target-type">
@@ -3796,10 +3829,100 @@ export default function Communications() {
                         <SelectContent>
                           <SelectItem value="all">All Consumers</SelectItem>
                           <SelectItem value="folder">Specific Folders</SelectItem>
+                          <SelectItem value="individual">Individual Consumer</SelectItem>
                           <SelectItem value="custom">Custom Selection</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
+
+                    {campaignForm.targetType === "individual" && (
+                      <div>
+                        <Label htmlFor="consumer-search-comm">Search Consumer</Label>
+                        <Input
+                          id="consumer-search-comm"
+                          data-testid="input-consumer-search-comm"
+                          value={consumerSearch}
+                          onChange={(e) => setConsumerSearch(e.target.value)}
+                          placeholder="Search by name, email, or phone..."
+                          className="mb-2"
+                        />
+                        {selectedConsumer ? (
+                          <div className="flex items-center justify-between p-3 border rounded-md bg-green-50">
+                            <div>
+                              <p className="font-medium text-green-800">{selectedConsumer.name}</p>
+                              <p className="text-sm text-green-600">{communicationType === "sms" ? selectedConsumer.phone : selectedConsumer.email}</p>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedConsumer(null);
+                                setCampaignForm({ ...campaignForm, consumerId: undefined });
+                              }}
+                              data-testid="button-clear-consumer-comm"
+                            >
+                              <XCircle className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="max-h-40 overflow-y-auto border rounded-md">
+                            {(consumers as any[])
+                              ?.filter((c: any) => {
+                                if (!consumerSearch.trim()) return true;
+                                const search = consumerSearch.toLowerCase();
+                                const fullName = `${c.firstName} ${c.lastName}`.toLowerCase();
+                                const email = (c.email || '').toLowerCase();
+                                const phone = (c.phone || '').replace(/\D/g, '');
+                                const searchDigits = consumerSearch.replace(/\D/g, '');
+                                return fullName.includes(search) || 
+                                       email.includes(search) || 
+                                       (searchDigits && phone.includes(searchDigits));
+                              })
+                              .slice(0, 10)
+                              .map((consumer: any) => {
+                                const hasContact = communicationType === "sms" ? consumer.phone : consumer.email;
+                                return (
+                                  <button
+                                    key={consumer.id}
+                                    type="button"
+                                    onClick={() => {
+                                      if (!hasContact) {
+                                        toast({
+                                          title: communicationType === "sms" ? "No phone number" : "No email address",
+                                          description: `This consumer doesn't have a ${communicationType === "sms" ? "phone number" : "email address"}`,
+                                          variant: "destructive"
+                                        });
+                                        return;
+                                      }
+                                      setSelectedConsumer({
+                                        id: consumer.id,
+                                        name: `${consumer.firstName} ${consumer.lastName}`,
+                                        phone: consumer.phone || '',
+                                        email: consumer.email || ''
+                                      });
+                                      setCampaignForm({ ...campaignForm, consumerId: consumer.id });
+                                      setConsumerSearch("");
+                                    }}
+                                    className={`w-full text-left px-3 py-2 hover:bg-gray-100 border-b last:border-b-0 ${!hasContact ? 'opacity-50' : ''}`}
+                                    data-testid={`select-consumer-comm-${consumer.id}`}
+                                  >
+                                    <p className="font-medium text-sm">
+                                      {consumer.firstName} {consumer.lastName}
+                                    </p>
+                                    <p className="text-xs text-gray-500">
+                                      {consumer.email || 'No email'} • {consumer.phone || 'No phone'}
+                                    </p>
+                                  </button>
+                                );
+                              })}
+                            {(consumers as any[])?.length === 0 && (
+                              <p className="p-3 text-sm text-gray-500 text-center">No consumers found</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {campaignForm.targetType === "all" && (
                       <div>

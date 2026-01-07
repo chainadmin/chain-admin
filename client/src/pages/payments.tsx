@@ -1287,9 +1287,17 @@ export default function Payments() {
                             {/* Decline Reason and Contact Buttons */}
                             <div className="flex flex-col gap-2 mt-2 lg:mt-0">
                               {(schedule.status === 'failed' || schedule.status === 'declined') && (
-                                <div className="flex items-center gap-2 rounded-xl border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
-                                  <AlertTriangle className="h-4 w-4" />
-                                  <span>{schedule.failureReason || schedule.declineReason || 'Payment declined'}</span>
+                                <div className="flex flex-col gap-1 rounded-xl border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
+                                  <div className="flex items-center gap-2">
+                                    <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                                    <span className="font-medium">{schedule.lastFailureReason || 'Payment declined'}</span>
+                                  </div>
+                                  {schedule.failedAttempts > 0 && (
+                                    <p className="text-xs text-rose-200/70 ml-6">Failed attempts: {schedule.failedAttempts}</p>
+                                  )}
+                                  {schedule.lastProcessedAt && (
+                                    <p className="text-xs text-rose-200/70 ml-6">Last attempt: {new Date(schedule.lastProcessedAt).toLocaleString()}</p>
+                                  )}
                                 </div>
                               )}
                               
@@ -1431,10 +1439,18 @@ export default function Payments() {
                             </div>
                             <div className="flex flex-col gap-2 mt-4 lg:mt-0">
                               {/* Failure reason display */}
-                              {(schedule.status === 'failed' || schedule.status === 'declined') && (schedule.failureReason || schedule.declineReason) && (
-                                <div className="flex items-center gap-2 rounded-xl border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
-                                  <AlertTriangle className="h-3.5 w-3.5" />
-                                  <span>{schedule.failureReason || schedule.declineReason}</span>
+                              {(schedule.status === 'failed' || schedule.status === 'declined') && (
+                                <div className="flex flex-col gap-1 rounded-xl border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+                                  <div className="flex items-center gap-2">
+                                    <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+                                    <span className="font-medium">{schedule.lastFailureReason || 'Payment declined'}</span>
+                                  </div>
+                                  {schedule.failedAttempts > 0 && (
+                                    <p className="text-[10px] text-rose-200/70 ml-5">Failed attempts: {schedule.failedAttempts}</p>
+                                  )}
+                                  {schedule.lastProcessedAt && (
+                                    <p className="text-[10px] text-rose-200/70 ml-5">Last attempt: {new Date(schedule.lastProcessedAt).toLocaleString()}</p>
+                                  )}
                                 </div>
                               )}
                               
