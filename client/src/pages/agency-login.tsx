@@ -205,6 +205,7 @@ export default function AgencyLogin() {
           <div className="space-y-2 text-center text-sm text-blue-100/70">
             <p>
               <Button
+                type="button"
                 variant="link"
                 onClick={() => (window.location.href = "/agency/forgot-password")}
                 className="p-0 text-blue-100 hover:text-white"
@@ -216,6 +217,7 @@ export default function AgencyLogin() {
             <p>
               Don&rsquo;t have an account yet?{" "}
               <Button
+                type="button"
                 variant="link"
                 onClick={() => (window.location.href = "/agency-registration")}
                 className="p-0 text-blue-100 hover:text-white"
@@ -227,6 +229,7 @@ export default function AgencyLogin() {
             <p>
               Looking for consumer access?{" "}
               <Button
+                type="button"
                 variant="link"
                 onClick={() => (window.location.href = "/consumer-login")}
                 className="p-0 text-blue-100 hover:text-white"
