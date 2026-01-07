@@ -3633,6 +3633,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Quick SMS send endpoint - for sending individual SMS to a consumer
+  app.post('/api/sms/quick', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { consumerId, phoneNumber, message } = req.body;
+
+      if (!message) {
+        return res.status(400).json({ message: "Message is required" });
+      }
+
+      if (!consumerId && !phoneNumber) {
+        return res.status(400).json({ message: "Either consumerId or phoneNumber is required" });
+      }
+
+      let targetPhone = phoneNumber;
+      let targetConsumerId = consumerId;
+
+      // If consumerId provided, get the consumer's phone number
+      if (consumerId && !phoneNumber) {
+        const consumer = await storage.getConsumer(consumerId);
+        if (!consumer || consumer.tenantId !== tenantId) {
+          return res.status(404).json({ message: "Consumer not found" });
+        }
+        if (!consumer.phone) {
+          return res.status(400).json({ message: "Consumer has no phone number" });
+        }
+        targetPhone = consumer.phone;
+      }
+
+      // Check if consumer is opted out of SMS
+      if (targetConsumerId) {
+        const consumer = await storage.getConsumer(targetConsumerId);
+        if (consumer?.smsOptedOut) {
+          return res.status(400).json({ message: "Consumer has opted out of SMS communications" });
+        }
+      }
+
+      // Check if number is blocked
+      const blockedNumbers = await storage.getBlockedNumbers(tenantId);
+      const normalizedPhone = targetPhone.replace(/\D/g, '');
+      const isBlocked = blockedNumbers.some(bn => bn.phoneNumber.replace(/\D/g, '') === normalizedPhone);
+      if (isBlocked) {
+        return res.status(400).json({ message: "This phone number is blocked from receiving SMS" });
+      }
+
+      // Send the SMS
+      const { smsService } = await import('./smsService');
+      const result = await smsService.sendSms(
+        targetPhone,
+        message,
+        tenantId,
+        undefined, // campaignId
+        targetConsumerId || undefined
+      );
+
+      res.json({ 
+        message: 'SMS sent successfully',
+        result
+      });
+    } catch (error) {
+      console.error("Error sending quick SMS:", error);
+      res.status(500).json({ message: "Failed to send SMS" });
+    }
+  });
+
   // SMS template routes
   app.get('/api/sms-templates', authenticateUser, async (req: any, res) => {
     try {
@@ -3883,18 +3952,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const insertSmsCampaignSchema = z.object({
         templateId: z.string().uuid(),
         name: z.string().min(1),
-        targetGroup: z.enum(["all", "with-balance", "decline", "recent-upload", "folder"]),
+        targetGroup: z.enum(["all", "with-balance", "decline", "recent-upload", "folder", "individual"]),
         folderIds: z.array(z.string()).optional(),
         phonesToSend: z.enum(['1', '2', '3', 'all']).optional().default('1'), // How many phone numbers per consumer
+        consumerId: z.string().uuid().optional(), // For individual targeting
       });
 
-      const { templateId, name, targetGroup, folderIds, phonesToSend } = insertSmsCampaignSchema.parse(req.body);
+      const { templateId, name, targetGroup, folderIds, phonesToSend, consumerId } = insertSmsCampaignSchema.parse(req.body);
 
-      console.log(`📱 Creating SMS campaign - name: "${name}", targetGroup: "${targetGroup}", folderIds:`, folderIds, `phonesToSend: "${phonesToSend}"`);
+      console.log(`📱 Creating SMS campaign - name: "${name}", targetGroup: "${targetGroup}", folderIds:`, folderIds, `phonesToSend: "${phonesToSend}", consumerId: "${consumerId}"`);
       console.log(`📱 Request body received:`, JSON.stringify(req.body, null, 2));
 
-      // Use the shared audience resolution function
-      const { targetedConsumers } = await resolveSmsCampaignAudience(tenantId, targetGroup, folderIds);
+      // Handle individual targeting separately
+      let targetedConsumers: any[] = [];
+      if (targetGroup === 'individual' && consumerId) {
+        const consumer = await storage.getConsumer(consumerId);
+        if (!consumer || consumer.tenantId !== tenantId) {
+          return res.status(404).json({ message: "Consumer not found" });
+        }
+        if (!consumer.phone) {
+          return res.status(400).json({ message: "Consumer has no phone number" });
+        }
+        if (consumer.smsOptedOut) {
+          return res.status(400).json({ message: "Consumer has opted out of SMS communications" });
+        }
+        targetedConsumers = [consumer];
+      } else {
+        // Use the shared audience resolution function
+        const result = await resolveSmsCampaignAudience(tenantId, targetGroup, folderIds);
+        targetedConsumers = result.targetedConsumers;
+      }
 
       // Count total phone numbers based on phonesToSend setting (same logic as approval)
       const countPhoneNumbers = (consumer: any): number => {
@@ -3961,6 +4048,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         phonesToSend,
         totalRecipients,
         status: 'pending_approval',
+        consumerId: targetGroup === 'individual' ? consumerId : null, // Store consumer for individual targeting
       };
       
       console.log(`📱 Creating campaign with data:`, campaignData);
@@ -4089,14 +4177,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         consumerPortalSettings: tenantSettings?.consumerPortalSettings,
       };
 
-      // Use the shared audience resolution function
-      const audience = await resolveSmsCampaignAudience(
-        tenantId,
-        campaign.targetGroup,
-        campaign.folderIds || [],
-      );
-      targetedConsumers = audience.targetedConsumers;
-      const { accountsData } = audience;
+      // Handle individual targeting separately, otherwise use shared audience resolution
+      let accountsData: any[] = [];
+      if (campaign.targetGroup === 'individual' && campaign.consumerId) {
+        const consumer = await storage.getConsumer(campaign.consumerId);
+        if (!consumer || consumer.tenantId !== tenantId) {
+          return res.status(404).json({ message: "Consumer not found" });
+        }
+        if (!consumer.phone) {
+          return res.status(400).json({ message: "Consumer has no phone number" });
+        }
+        if (consumer.smsOptedOut) {
+          return res.status(400).json({ message: "Consumer has opted out of SMS communications" });
+        }
+        targetedConsumers = [consumer];
+        // Get account for the consumer if needed
+        const allAccounts = await storage.getAccountsByTenant(tenantId);
+        accountsData = allAccounts.filter(a => a.consumerId === consumer.id);
+      } else {
+        // Use the shared audience resolution function
+        const audience = await resolveSmsCampaignAudience(
+          tenantId,
+          campaign.targetGroup,
+          campaign.folderIds || [],
+        );
+        targetedConsumers = audience.targetedConsumers;
+        accountsData = audience.accountsData;
+      }
 
       // Extract phone numbers for each consumer based on phonesToSend setting
       // phonesToSend can be '1', '2', '3', or 'all'

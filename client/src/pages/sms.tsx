@@ -55,6 +55,10 @@ export default function SMS() {
     folderIds: [] as string[],
     phonesToSend: "1" as "1" | "2" | "3" | "all",
   });
+  
+  // Individual consumer search state
+  const [consumerSearch, setConsumerSearch] = useState("");
+  const [selectedConsumer, setSelectedConsumer] = useState<{ id: string; name: string; phone: string } | null>(null);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -126,6 +130,8 @@ export default function SMS() {
       queryClient.invalidateQueries({ queryKey: ["/api/sms-campaigns"] });
       setShowCampaignModal(false);
       setCampaignForm({ name: "", templateId: "", targetGroup: "all", folderIds: [], phonesToSend: "1" });
+      setSelectedConsumer(null);
+      setConsumerSearch("");
       toast({
         title: "Success",
         description: "SMS campaign created and scheduled",
@@ -338,8 +344,21 @@ export default function SMS() {
       });
       return;
     }
-    console.log('🚀 Creating campaign with data:', campaignForm);
-    createCampaignMutation.mutate(campaignForm);
+    // For individual targeting, require a selected consumer
+    if (campaignForm.targetGroup === "individual" && !selectedConsumer) {
+      toast({
+        title: "Error",
+        description: "Please select a consumer to send to",
+        variant: "destructive",
+      });
+      return;
+    }
+    const submissionData = {
+      ...campaignForm,
+      consumerId: campaignForm.targetGroup === "individual" ? selectedConsumer?.id : undefined,
+    };
+    console.log('🚀 Creating campaign with data:', submissionData);
+    createCampaignMutation.mutate(submissionData);
   };
 
   const handlePreview = (template: any) => {
@@ -348,6 +367,8 @@ export default function SMS() {
 
   const getTargetGroupLabel = (targetGroup: string, campaign?: any) => {
     switch (targetGroup) {
+      case "individual":
+        return "Individual Consumer";
       case "all":
         return "All Consumers";
       case "with-balance":
@@ -829,12 +850,19 @@ export default function SMS() {
                       <Label htmlFor="target-group">Target Group</Label>
                       <Select
                         value={campaignForm.targetGroup}
-                        onValueChange={(value) => setCampaignForm({ ...campaignForm, targetGroup: value, folderIds: [] })}
+                        onValueChange={(value) => {
+                          setCampaignForm({ ...campaignForm, targetGroup: value, folderIds: [] });
+                          if (value !== 'individual') {
+                            setSelectedConsumer(null);
+                            setConsumerSearch("");
+                          }
+                        }}
                       >
                         <SelectTrigger data-testid="select-target-group">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="individual">Individual Consumer</SelectItem>
                           <SelectItem value="all">All Consumers</SelectItem>
                           <SelectItem value="with-balance">With Outstanding Balance</SelectItem>
                           <SelectItem value="decline">Decline Status</SelectItem>
@@ -875,6 +903,86 @@ export default function SMS() {
                             </div>
                           ))}
                         </div>
+                      </div>
+                    )}
+                    {campaignForm.targetGroup === "individual" && (
+                      <div>
+                        <Label htmlFor="consumer-search">Search Consumer</Label>
+                        <Input
+                          id="consumer-search"
+                          data-testid="input-consumer-search"
+                          value={consumerSearch}
+                          onChange={(e) => setConsumerSearch(e.target.value)}
+                          placeholder="Search by name, email, or phone..."
+                          className="mb-2"
+                        />
+                        {selectedConsumer ? (
+                          <div className="flex items-center justify-between p-3 border rounded-md bg-green-50">
+                            <div>
+                              <p className="font-medium text-green-800">{selectedConsumer.name}</p>
+                              <p className="text-sm text-green-600">{selectedConsumer.phone}</p>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setSelectedConsumer(null)}
+                              data-testid="button-clear-consumer"
+                            >
+                              <XCircle className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="max-h-40 overflow-y-auto border rounded-md">
+                            {(consumers as any[])
+                              ?.filter((c: any) => {
+                                if (!consumerSearch.trim()) return true;
+                                const search = consumerSearch.toLowerCase();
+                                const fullName = `${c.firstName} ${c.lastName}`.toLowerCase();
+                                const email = (c.email || '').toLowerCase();
+                                const phone = (c.phone || '').replace(/\D/g, '');
+                                const searchDigits = consumerSearch.replace(/\D/g, '');
+                                return fullName.includes(search) || 
+                                       email.includes(search) || 
+                                       (searchDigits && phone.includes(searchDigits));
+                              })
+                              .slice(0, 10)
+                              .map((consumer: any) => (
+                                <button
+                                  key={consumer.id}
+                                  type="button"
+                                  onClick={() => {
+                                    if (!consumer.phone) {
+                                      toast({
+                                        title: "No phone number",
+                                        description: "This consumer doesn't have a phone number",
+                                        variant: "destructive"
+                                      });
+                                      return;
+                                    }
+                                    setSelectedConsumer({
+                                      id: consumer.id,
+                                      name: `${consumer.firstName} ${consumer.lastName}`,
+                                      phone: consumer.phone
+                                    });
+                                    setConsumerSearch("");
+                                  }}
+                                  className={`w-full text-left px-3 py-2 hover:bg-gray-100 border-b last:border-b-0 ${!consumer.phone ? 'opacity-50' : ''}`}
+                                  data-testid={`select-consumer-${consumer.id}`}
+                                >
+                                  <p className="font-medium text-sm">
+                                    {consumer.firstName} {consumer.lastName}
+                                  </p>
+                                  <p className="text-xs text-gray-500">
+                                    {consumer.email || 'No email'} • {consumer.phone || 'No phone'}
+                                  </p>
+                                </button>
+                              ))}
+                            {(consumers as any[])?.length === 0 && (
+                              <p className="p-3 text-sm text-gray-500 text-center">No consumers found</p>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                     <div className="space-y-2">

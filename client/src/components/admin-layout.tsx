@@ -1,14 +1,26 @@
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import chainLogo from "@/assets/chain-logo.png";
 import { useAgencyContext } from "@/hooks/useAgencyContext";
 import { cn } from "@/lib/utils";
 import { clearAuth } from "@/lib/cookies";
 import { useServiceAccess } from "@/hooks/useServiceAccess";
+import { MessageSquare, Mail } from "lucide-react";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -20,6 +32,7 @@ interface SearchResults {
     firstName: string;
     lastName: string;
     email: string;
+    phone: string | null;
   }>;
   accounts: Array<{
     id: string;
@@ -31,6 +44,14 @@ interface SearchResults {
   }>;
 }
 
+interface QuickSendTarget {
+  consumerId: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  type: 'sms' | 'email';
+}
+
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const { user, isJwtAuth } = useAuth();
   const [location, navigate] = useLocation();
@@ -39,6 +60,13 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  
+  // Quick send modal state
+  const [quickSendTarget, setQuickSendTarget] = useState<QuickSendTarget | null>(null);
+  const [quickSendMessage, setQuickSendMessage] = useState("");
+  const [quickSendSubject, setQuickSendSubject] = useState("");
   
   const { data: userData } = useQuery({
     queryKey: ["/api/auth/user"],
@@ -139,6 +167,77 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     
     // Navigate using the complete path
     navigate(`${basePath}${queryParam}`);
+  };
+
+  // Quick send mutations
+  const sendQuickSmsMutation = useMutation({
+    mutationFn: (data: { consumerId: string; message: string }) =>
+      apiRequest("POST", "/api/sms/quick", data),
+    onSuccess: () => {
+      toast({ title: "Success", description: "SMS sent successfully" });
+      setQuickSendTarget(null);
+      setQuickSendMessage("");
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to send SMS",
+        variant: "destructive"
+      });
+    },
+  });
+
+  const sendQuickEmailMutation = useMutation({
+    mutationFn: (data: { to: string; subject: string; message: string }) =>
+      apiRequest("POST", "/api/send-email", data),
+    onSuccess: () => {
+      toast({ title: "Success", description: "Email sent successfully" });
+      setQuickSendTarget(null);
+      setQuickSendMessage("");
+      setQuickSendSubject("");
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to send email",
+        variant: "destructive"
+      });
+    },
+  });
+
+  const openQuickSend = (consumer: SearchResults['consumers'][0], type: 'sms' | 'email') => {
+    setQuickSendTarget({
+      consumerId: consumer.id,
+      name: `${consumer.firstName} ${consumer.lastName}`,
+      email: consumer.email,
+      phone: consumer.phone,
+      type
+    });
+    setQuickSendMessage("");
+    setQuickSendSubject("");
+    setShowSearchResults(false);
+    setSearchQuery("");
+  };
+
+  const handleQuickSend = () => {
+    if (!quickSendTarget || !quickSendMessage.trim()) return;
+    
+    if (quickSendTarget.type === 'sms') {
+      sendQuickSmsMutation.mutate({
+        consumerId: quickSendTarget.consumerId,
+        message: quickSendMessage
+      });
+    } else {
+      if (!quickSendSubject.trim()) {
+        toast({ title: "Error", description: "Subject is required", variant: "destructive" });
+        return;
+      }
+      sendQuickEmailMutation.mutate({
+        to: quickSendTarget.email,
+        subject: quickSendSubject,
+        message: quickSendMessage
+      });
+    }
   };
 
   // Close mobile nav on route change
@@ -275,24 +374,60 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                           Consumers
                         </div>
                         {searchResults.consumers.map((consumer) => (
-                          <button
+                          <div
                             key={consumer.id}
-                            onClick={() => handleResultClick('consumer', consumer.id)}
-                            className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-white/10 transition-colors text-white"
+                            className="w-full px-3 py-2.5 rounded-xl hover:bg-white/10 transition-colors text-white"
                             data-testid={`search-result-consumer-${consumer.id}`}
                           >
                             <div className="flex items-center gap-3">
-                              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500/20 border border-blue-400/30">
+                              <button 
+                                onClick={() => handleResultClick('consumer', consumer.id)}
+                                className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500/20 border border-blue-400/30 hover:bg-blue-500/30 transition-colors"
+                                title="View Account"
+                              >
                                 <i className="fas fa-user text-sm text-blue-300"></i>
-                              </div>
-                              <div className="flex-1 min-w-0">
+                              </button>
+                              <button 
+                                onClick={() => handleResultClick('consumer', consumer.id)}
+                                className="flex-1 min-w-0 text-left"
+                              >
                                 <p className="text-sm font-medium text-white truncate">
                                   {consumer.firstName} {consumer.lastName}
                                 </p>
                                 <p className="text-xs text-blue-100/60 truncate">{consumer.email}</p>
+                              </button>
+                              <div className="flex items-center gap-1">
+                                {consumer.phone && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openQuickSend(consumer, 'sms');
+                                    }}
+                                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/20 border border-emerald-400/30 hover:bg-emerald-500/40 transition-colors"
+                                    title="Send Text"
+                                    data-testid={`search-sms-${consumer.id}`}
+                                  >
+                                    <MessageSquare className="h-4 w-4 text-emerald-300" />
+                                  </button>
+                                )}
+                                {consumer.email && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openQuickSend(consumer, 'email');
+                                    }}
+                                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-500/20 border border-sky-400/30 hover:bg-sky-500/40 transition-colors"
+                                    title="Send Email"
+                                    data-testid={`search-email-${consumer.id}`}
+                                  >
+                                    <Mail className="h-4 w-4 text-sky-300" />
+                                  </button>
+                                )}
                               </div>
                             </div>
-                          </button>
+                          </div>
                         ))}
                       </div>
                     )}
@@ -483,6 +618,88 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* Quick Send Dialog */}
+      <Dialog open={!!quickSendTarget} onOpenChange={(open) => !open && setQuickSendTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {quickSendTarget?.type === 'sms' ? (
+                <>
+                  <MessageSquare className="h-5 w-5 text-emerald-500" />
+                  Send Text to {quickSendTarget?.name}
+                </>
+              ) : (
+                <>
+                  <Mail className="h-5 w-5 text-sky-500" />
+                  Send Email to {quickSendTarget?.name}
+                </>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            {quickSendTarget?.type === 'sms' ? (
+              <div className="text-sm text-gray-600">
+                Sending to: {quickSendTarget?.phone}
+              </div>
+            ) : (
+              <>
+                <div className="text-sm text-gray-600">
+                  Sending to: {quickSendTarget?.email}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="quick-subject">Subject</Label>
+                  <Input
+                    id="quick-subject"
+                    value={quickSendSubject}
+                    onChange={(e) => setQuickSendSubject(e.target.value)}
+                    placeholder="Enter subject..."
+                    data-testid="input-quick-subject"
+                  />
+                </div>
+              </>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="quick-message">Message</Label>
+              <Textarea
+                id="quick-message"
+                value={quickSendMessage}
+                onChange={(e) => setQuickSendMessage(e.target.value)}
+                placeholder={quickSendTarget?.type === 'sms' ? "Enter your text message..." : "Enter your email message..."}
+                rows={4}
+                data-testid="input-quick-message"
+              />
+              {quickSendTarget?.type === 'sms' && (
+                <p className="text-xs text-gray-500">
+                  {quickSendMessage.length}/160 characters
+                </p>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setQuickSendTarget(null)}
+                data-testid="button-quick-cancel"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={handleQuickSend}
+                disabled={sendQuickSmsMutation.isPending || sendQuickEmailMutation.isPending || !quickSendMessage.trim()}
+                data-testid="button-quick-send"
+              >
+                {sendQuickSmsMutation.isPending || sendQuickEmailMutation.isPending ? (
+                  "Sending..."
+                ) : (
+                  <>Send {quickSendTarget?.type === 'sms' ? 'Text' : 'Email'}</>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

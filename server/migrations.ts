@@ -406,6 +406,22 @@ export async function runMigrations() {
       }
     }
 
+    // Add consumer_id column for individual SMS targeting
+    console.log('Adding consumer_id column to sms_campaigns...');
+    try {
+      await client.query(`
+        ALTER TABLE sms_campaigns 
+        ADD COLUMN IF NOT EXISTS consumer_id UUID REFERENCES consumers(id)
+      `);
+      console.log('  ✓ consumer_id column added to sms_campaigns');
+    } catch (err: any) {
+      if (err.message?.includes('already exists')) {
+        console.log('  ✓ consumer_id column already exists');
+      } else {
+        console.log('  ⚠ consumer_id column error:', err.message);
+      }
+    }
+
     // Add SMS opt-out tracking to consumers table
     console.log('Adding SMS opt-out columns to consumers table...');
     try {
