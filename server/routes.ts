@@ -7948,6 +7948,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         enableOnlinePayments: z.boolean().optional(),
         // Consumer portal payment restrictions
         forceArrangement: z.boolean().optional(),
+        // Collection Max integration
+        collectionMaxEnabled: z.boolean().optional(),
       });
 
       const validatedData = settingsSchema.parse(req.body);
