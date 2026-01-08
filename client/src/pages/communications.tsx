@@ -87,6 +87,7 @@ import {
   ShieldCheck,
   Ban,
   RefreshCw,
+  Search,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 
