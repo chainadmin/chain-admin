@@ -71,6 +71,20 @@ function setupScheduledTasks(port: number) {
       });
       const result = await response.json();
       console.log('✅ [CRON] Payment processing complete:', result);
+      
+      // Generate Collection Max export after payment processing
+      console.log('📊 [CRON] Generating Collection Max export...');
+      try {
+        const exportResponse = await fetch(`${baseUrl}/api/collection-max/generate-export`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
+        const exportResult = await exportResponse.json();
+        console.log('✅ [CRON] Collection Max export complete:', exportResult);
+      } catch (exportError) {
+        console.error('❌ [CRON] Collection Max export failed:', exportError);
+      }
     } catch (error) {
       console.error('❌ [CRON] Payment processing failed:', error);
     }

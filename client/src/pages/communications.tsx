@@ -475,6 +475,32 @@ export default function Communications() {
     message: "",
   });
 
+  // Universal consumer search state for Send Email/SMS tabs
+  const [emailSearchQuery, setEmailSearchQuery] = useState("");
+  const [smsSearchQuery, setSmsSearchQuery] = useState("");
+  const [showEmailSearchResults, setShowEmailSearchResults] = useState(false);
+  const [showSmsSearchResults, setShowSmsSearchResults] = useState(false);
+
+  // Universal search query for Send Email tab
+  const { data: emailSearchResults, isLoading: isSearchingForEmail } = useQuery({
+    queryKey: ["/api/search", "email", emailSearchQuery],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/search?q=${encodeURIComponent(emailSearchQuery)}`);
+      return res.json();
+    },
+    enabled: emailSearchQuery.length >= 2,
+  });
+
+  // Universal search query for Send SMS tab
+  const { data: smsSearchResults, isLoading: isSearchingForSms } = useQuery({
+    queryKey: ["/api/search", "sms", smsSearchQuery],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/search?q=${encodeURIComponent(smsSearchQuery)}`);
+      return res.json();
+    },
+    enabled: smsSearchQuery.length >= 2,
+  });
+
   // Parse query params on mount to pre-fill send email/sms forms
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -2501,6 +2527,77 @@ export default function Communications() {
                 <p className="text-sm text-blue-100/70">Send a quick email to a specific consumer</p>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Universal Consumer Search */}
+                <div className="relative">
+                  <Label className="text-blue-100">Search Consumer (by name, email, or phone)</Label>
+                  <div className="relative mt-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-100/50" />
+                    <Input
+                      value={emailSearchQuery}
+                      onChange={(e) => {
+                        setEmailSearchQuery(e.target.value);
+                        setShowEmailSearchResults(true);
+                      }}
+                      onFocus={() => setShowEmailSearchResults(true)}
+                      placeholder="Type name, email, or phone to search..."
+                      className="pl-10 bg-white/10 border-white/20 text-white placeholder:text-blue-100/50"
+                      data-testid="input-email-consumer-search"
+                    />
+                    {isSearchingForEmail && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-400 border-t-transparent"></div>
+                      </div>
+                    )}
+                  </div>
+                  {/* Search Results Dropdown */}
+                  {showEmailSearchResults && emailSearchQuery.length >= 2 && (
+                    <div className="absolute z-50 mt-1 w-full rounded-xl border border-white/20 bg-[#0b1733]/95 backdrop-blur shadow-xl max-h-64 overflow-y-auto">
+                      {emailSearchResults?.consumers?.length > 0 ? (
+                        <div className="p-2">
+                          {emailSearchResults.consumers.map((consumer: any) => (
+                            <button
+                              key={consumer.id}
+                              type="button"
+                              onClick={() => {
+                                if (consumer.email) {
+                                  setSendEmailForm({ ...sendEmailForm, to: consumer.email });
+                                  setEmailSearchQuery("");
+                                  setShowEmailSearchResults(false);
+                                }
+                              }}
+                              disabled={!consumer.email}
+                              className={cn(
+                                "w-full text-left px-3 py-2.5 rounded-lg transition-colors flex items-center justify-between",
+                                consumer.email 
+                                  ? "hover:bg-white/10 text-white cursor-pointer" 
+                                  : "text-blue-100/50 cursor-not-allowed"
+                              )}
+                              data-testid={`email-search-result-${consumer.id}`}
+                            >
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">
+                                  {consumer.firstName} {consumer.lastName}
+                                </p>
+                                <p className="text-xs text-blue-100/60 truncate">
+                                  {consumer.email || "No email on file"}
+                                  {consumer.phone && ` • ${consumer.phone}`}
+                                </p>
+                              </div>
+                              {consumer.email && (
+                                <Mail className="h-4 w-4 text-sky-400 flex-shrink-0 ml-2" />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      ) : emailSearchQuery.length >= 2 && !isSearchingForEmail ? (
+                        <div className="p-4 text-center text-sm text-blue-100/60">
+                          No consumers found for "{emailSearchQuery}"
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
                     <Label className="text-blue-100">To (Email Address) *</Label>
@@ -2656,6 +2753,77 @@ export default function Communications() {
                 <p className="text-sm text-blue-100/70">Send a quick text message to a specific phone number</p>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Universal Consumer Search for SMS */}
+                <div className="relative">
+                  <Label className="text-blue-100">Search Consumer (by name, email, or phone)</Label>
+                  <div className="relative mt-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-100/50" />
+                    <Input
+                      value={smsSearchQuery}
+                      onChange={(e) => {
+                        setSmsSearchQuery(e.target.value);
+                        setShowSmsSearchResults(true);
+                      }}
+                      onFocus={() => setShowSmsSearchResults(true)}
+                      placeholder="Type name, email, or phone to search..."
+                      className="pl-10 bg-white/10 border-white/20 text-white placeholder:text-blue-100/50"
+                      data-testid="input-sms-consumer-search"
+                    />
+                    {isSearchingForSms && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-400 border-t-transparent"></div>
+                      </div>
+                    )}
+                  </div>
+                  {/* Search Results Dropdown */}
+                  {showSmsSearchResults && smsSearchQuery.length >= 2 && (
+                    <div className="absolute z-50 mt-1 w-full rounded-xl border border-white/20 bg-[#0b1733]/95 backdrop-blur shadow-xl max-h-64 overflow-y-auto">
+                      {smsSearchResults?.consumers?.length > 0 ? (
+                        <div className="p-2">
+                          {smsSearchResults.consumers.map((consumer: any) => (
+                            <button
+                              key={consumer.id}
+                              type="button"
+                              onClick={() => {
+                                if (consumer.phone) {
+                                  setSendSmsForm({ ...sendSmsForm, to: consumer.phone });
+                                  setSmsSearchQuery("");
+                                  setShowSmsSearchResults(false);
+                                }
+                              }}
+                              disabled={!consumer.phone}
+                              className={cn(
+                                "w-full text-left px-3 py-2.5 rounded-lg transition-colors flex items-center justify-between",
+                                consumer.phone 
+                                  ? "hover:bg-white/10 text-white cursor-pointer" 
+                                  : "text-blue-100/50 cursor-not-allowed"
+                              )}
+                              data-testid={`sms-search-result-${consumer.id}`}
+                            >
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">
+                                  {consumer.firstName} {consumer.lastName}
+                                </p>
+                                <p className="text-xs text-blue-100/60 truncate">
+                                  {consumer.phone || "No phone on file"}
+                                  {consumer.email && ` • ${consumer.email}`}
+                                </p>
+                              </div>
+                              {consumer.phone && (
+                                <MessageSquare className="h-4 w-4 text-emerald-400 flex-shrink-0 ml-2" />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      ) : smsSearchQuery.length >= 2 && !isSearchingForSms ? (
+                        <div className="p-4 text-center text-sm text-blue-100/60">
+                          No consumers found for "{smsSearchQuery}"
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
                     <Label className="text-blue-100">To (Phone Number) *</Label>

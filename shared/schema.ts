@@ -692,6 +692,8 @@ export const tenantSettings = pgTable("tenant_settings", {
   smaxApiKey: text("smax_api_key"),
   smaxPin: text("smax_pin"),
   smaxBaseUrl: text("smax_base_url").default("https://api.smaxcollectionsoftware.com:8000"),
+  // Collection Max integration fields
+  collectionMaxEnabled: boolean("collection_max_enabled").default(false),
   blockedAccountStatuses: text("blocked_account_statuses").array().default(sql`ARRAY['inactive', 'recalled', 'closed']::text[]`), // Account statuses that block communications and payments
   forceArrangement: boolean("force_arrangement").default(false), // When true, consumers must set up payment arrangement (no one-time payments)
 });

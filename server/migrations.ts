@@ -54,6 +54,15 @@ export async function runMigrations() {
       }
     }
     
+    // Add Collection Max integration column
+    console.log('Adding Collection Max column...');
+    try {
+      await client.query(`ALTER TABLE tenant_settings ADD COLUMN IF NOT EXISTS collection_max_enabled BOOLEAN DEFAULT false`);
+      console.log(`  ✓ collection_max_enabled`);
+    } catch (err) {
+      console.log(`  ⚠ collection_max_enabled (already exists or error)`);
+    }
+    
     // Add business_type column for multi-module architecture
     console.log('Adding business type column...');
     try {

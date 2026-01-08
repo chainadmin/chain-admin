@@ -417,6 +417,7 @@ export interface IStorage {
   
   // Payment operations
   getPaymentsByTenant(tenantId: string): Promise<(Payment & { consumerName?: string; consumerEmail?: string; accountCreditor?: string })[]>;
+  getPaymentsByTenantAndDate(tenantId: string, date: string): Promise<Payment[]>;
   getPaymentsByConsumer(consumerId: string, tenantId: string): Promise<(Payment & { accountCreditor?: string; arrangementName?: string })[]>;
   getPaymentById(id: string, tenantId: string): Promise<Payment | null>;
   checkRecentDuplicatePayment(consumerId: string, accountId: string | null, amountCents: number, windowMinutes?: number): Promise<Payment | null>;
@@ -2844,6 +2845,38 @@ export class DatabaseStorage implements IStorage {
       consumerEmail: row.consumers?.email || undefined,
       accountCreditor: row.accounts?.creditor || undefined,
     }));
+  }
+
+  async getPaymentsByTenantAndDate(tenantId: string, date: string): Promise<Payment[]> {
+    // Parse the date and create range for that day
+    const startOfDay = new Date(date + 'T00:00:00.000Z');
+    const endOfDay = new Date(date + 'T23:59:59.999Z');
+    
+    // Filter by processedAt to capture payments processed on the given date
+    // This ensures scheduled payments processed today (even if created earlier) are included
+    const result = await db
+      .select()
+      .from(payments)
+      .where(and(
+        eq(payments.tenantId, tenantId),
+        or(
+          // Payments processed on this date
+          and(
+            isNotNull(payments.processedAt),
+            gte(payments.processedAt, startOfDay),
+            lte(payments.processedAt, endOfDay)
+          ),
+          // Fallback: payments created on this date without processedAt (legacy/manual payments)
+          and(
+            sql`${payments.processedAt} IS NULL`,
+            gte(payments.createdAt, startOfDay),
+            lte(payments.createdAt, endOfDay)
+          )
+        )
+      ))
+      .orderBy(desc(payments.processedAt));
+    
+    return result;
   }
 
   async getPaymentsByConsumer(consumerId: string, tenantId: string): Promise<(Payment & { accountCreditor?: string; arrangementName?: string })[]> {

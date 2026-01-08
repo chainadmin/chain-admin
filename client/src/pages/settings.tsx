@@ -36,7 +36,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Trash2, Upload, Plus, Save, CreditCard, Shield, Settings as SettingsIcon, ImageIcon, Copy, ExternalLink, Repeat, FileText, Users, MessagesSquare, DollarSign, Code, Table, Eye, Bold, Italic, Underline, List, ListOrdered, Heading1, Heading2, Heading3, Palette, Link2, Link2Off, Eraser, Send, Check, ChevronsUpDown } from "lucide-react";
+import { Trash2, Upload, Plus, Save, CreditCard, Shield, Settings as SettingsIcon, ImageIcon, Copy, ExternalLink, Repeat, FileText, Users, MessagesSquare, DollarSign, Code, Table, Eye, Bold, Italic, Underline, List, ListOrdered, Heading1, Heading2, Heading3, Palette, Link2, Link2Off, Eraser, Send, Check, ChevronsUpDown, Download } from "lucide-react";
 import { useRef } from "react";
 import { isSubdomainSupported } from "@shared/utils/subdomain";
 import { resolveConsumerPortalUrl } from "@shared/utils/consumerPortal";
@@ -1239,8 +1239,8 @@ export default function Settings() {
                 Payment Processing
               </TabsTrigger>
               {localSettings?.businessType === 'call_center' && (
-                <TabsTrigger value="smax" className="px-4 py-2">
-                  SMAX Integration
+                <TabsTrigger value="integrations" className="px-4 py-2">
+                  Integrations
                 </TabsTrigger>
               )}
               <TabsTrigger value="documents" className="px-4 py-2">
@@ -2185,7 +2185,7 @@ export default function Settings() {
             </TabsContent>
 
             {localSettings?.businessType === 'call_center' && (
-              <TabsContent value="smax" className="space-y-6">
+              <TabsContent value="integrations" className="space-y-6">
                 <Card className={cardBaseClasses}>
                 <CardHeader className="space-y-1 text-white">
                   <CardTitle className="text-xl font-semibold text-white">SMAX Collection Software Integration</CardTitle>
@@ -2347,6 +2347,104 @@ export default function Settings() {
                       </li>
                     </ul>
                   </div>
+                </CardContent>
+                {hasUnsavedChanges && (
+                  <CardFooter className="border-t border-white/10 pt-6">
+                    <Button
+                      onClick={handleSaveSettings}
+                      disabled={updateSettingsMutation.isPending}
+                      className={cn(
+                        "ml-auto rounded-xl bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-6 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 transition hover:from-sky-400/80 hover:to-indigo-400/80",
+                        updateSettingsMutation.isPending && "opacity-60",
+                      )}
+                    >
+                      {updateSettingsMutation.isPending ? "Saving..." : "Save changes"}
+                    </Button>
+                  </CardFooter>
+                )}
+              </Card>
+
+              {/* Collection Max Integration Card */}
+              <Card className={cardBaseClasses}>
+                <CardHeader className="space-y-1 text-white">
+                  <CardTitle className="text-xl font-semibold text-white">Collection Max Integration</CardTitle>
+                  <p className="text-sm text-blue-100/70">
+                    Generate daily CSV exports of payment results for upload to Collection Max.
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-6 text-sm text-blue-100/80">
+                  {/* Enable Collection Max Toggle */}
+                  <div className="flex items-center justify-between space-x-4 rounded-xl border border-white/10 bg-white/5 p-4">
+                    <div className="flex-1">
+                      <Label className="text-base font-medium text-white">Enable Collection Max Export</Label>
+                      <p className="text-sm text-blue-100/70">
+                        When enabled, a daily CSV file will be generated with payment results (account number, file number, status)
+                      </p>
+                    </div>
+                    <Switch
+                      checked={localSettings?.collectionMaxEnabled || false}
+                      onCheckedChange={(checked) => handleSettingsUpdate('collectionMaxEnabled', checked)}
+                      data-testid="switch-collection-max-enabled"
+                    />
+                  </div>
+
+                  {/* Collection Max Features Info */}
+                  <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-4">
+                    <h3 className="text-base font-medium text-white">What's included in the export?</h3>
+                    <ul className="space-y-2 text-sm text-blue-100/70">
+                      <li className="flex items-start">
+                        <span className="mr-2">•</span>
+                        <span>Account Number</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="mr-2">•</span>
+                        <span>File Number</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="mr-2">•</span>
+                        <span>Payment Status (Posted/Declined)</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="mr-2">•</span>
+                        <span>Payment Amount</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="mr-2">•</span>
+                        <span>Transaction Date</span>
+                      </li>
+                    </ul>
+                  </div>
+
+                  {/* Download Collection Max Export */}
+                  {localSettings?.collectionMaxEnabled && (
+                    <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-4">
+                      <h3 className="text-base font-medium text-white">Download Export</h3>
+                      <p className="text-sm text-blue-100/70">
+                        Download payment results CSV for a specific date. The CSV includes all payments processed that day.
+                      </p>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="date"
+                          id="collection-max-export-date"
+                          defaultValue={new Date().toISOString().split('T')[0]}
+                          className="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-white text-sm focus:border-sky-400 focus:outline-none"
+                          data-testid="input-collection-max-date"
+                        />
+                        <Button
+                          onClick={() => {
+                            const dateInput = document.getElementById('collection-max-export-date') as HTMLInputElement;
+                            const date = dateInput?.value || new Date().toISOString().split('T')[0];
+                            window.open(`/api/collection-max/download/${tenantId}?date=${date}`, '_blank');
+                          }}
+                          className="rounded-xl bg-gradient-to-r from-emerald-500/80 to-teal-500/80 px-4 py-2 text-sm font-semibold text-white shadow-lg transition hover:from-emerald-400/80 hover:to-teal-400/80"
+                          data-testid="button-download-collection-max"
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          Download CSV
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
                 {hasUnsavedChanges && (
                   <CardFooter className="border-t border-white/10 pt-6">

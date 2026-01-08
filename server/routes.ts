@@ -14096,6 +14096,135 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Generate Collection Max CSV export (called by cron or manually)
+  app.post('/api/collection-max/generate-export', async (req: any, res) => {
+    try {
+      const { date } = req.body; // Optional: specific date, defaults to today
+      const exportDate = date || new Date().toISOString().split('T')[0];
+      
+      console.log(`📊 [Collection Max] Generating export for date: ${exportDate}`);
+      
+      // Get all tenants with Collection Max enabled
+      const allTenants = await storage.getAllTenants();
+      const exportResults: any[] = [];
+      
+      for (const tenant of allTenants) {
+        // Check if Collection Max is enabled for this tenant
+        const settings = await storage.getTenantSettings(tenant.id);
+        if (!settings?.collectionMaxEnabled) {
+          continue;
+        }
+        
+        console.log(`📁 [Collection Max] Processing tenant: ${tenant.name}`);
+        
+        // Get all payments for this tenant from the export date
+        const payments = await storage.getPaymentsByTenantAndDate(tenant.id, exportDate);
+        
+        for (const payment of payments) {
+          // Get account info for file number
+          const account = await storage.getAccount(payment.accountId);
+          
+          exportResults.push({
+            tenantId: tenant.id,
+            tenantName: tenant.name,
+            accountNumber: account?.accountNumber || '',
+            fileNumber: account?.filenumber || '',
+            paymentStatus: payment.status === 'successful' ? 'PAID' : 'DECLINED',
+            amount: (payment.amountCents / 100).toFixed(2),
+            transactionDate: exportDate,
+            transactionId: payment.transactionId || '',
+            declineReason: payment.status !== 'successful' ? (payment as any).failureReason : ''
+          });
+        }
+      }
+      
+      // Generate CSV content
+      const csvHeaders = ['Account Number', 'File Number', 'Payment Status', 'Amount', 'Transaction Date', 'Transaction ID', 'Decline Reason'];
+      const csvRows = exportResults.map(r => [
+        r.accountNumber,
+        r.fileNumber,
+        r.paymentStatus,
+        r.amount,
+        r.transactionDate,
+        r.transactionId,
+        r.declineReason
+      ].map(v => `"${(v || '').toString().replace(/"/g, '""')}"`).join(','));
+      
+      const csvContent = [csvHeaders.join(','), ...csvRows].join('\n');
+      
+      console.log(`✅ [Collection Max] Generated CSV with ${exportResults.length} records`);
+      
+      res.json({
+        success: true,
+        recordCount: exportResults.length,
+        date: exportDate,
+        csv: csvContent
+      });
+
+    } catch (error) {
+      console.error("Error generating Collection Max export:", error);
+      res.status(500).json({ message: "Failed to generate Collection Max export" });
+    }
+  });
+
+  // Download Collection Max CSV export (for admin UI)
+  app.get('/api/collection-max/download/:tenantId', async (req: any, res) => {
+    try {
+      const { tenantId } = req.params;
+      const { date } = req.query;
+      const exportDate = (date as string) || new Date().toISOString().split('T')[0];
+      
+      // Check if Collection Max is enabled for this tenant
+      const settings = await storage.getTenantSettings(tenantId);
+      if (!settings?.collectionMaxEnabled) {
+        return res.status(400).json({ message: "Collection Max is not enabled for this tenant" });
+      }
+      
+      console.log(`📥 [Collection Max] Downloading export for tenant ${tenantId}, date: ${exportDate}`);
+      
+      // Get payments for this tenant from the export date
+      const payments = await storage.getPaymentsByTenantAndDate(tenantId, exportDate);
+      const exportResults: any[] = [];
+      
+      for (const payment of payments) {
+        const account = await storage.getAccount(payment.accountId);
+        
+        exportResults.push({
+          accountNumber: account?.accountNumber || '',
+          fileNumber: account?.filenumber || '',
+          paymentStatus: payment.status === 'successful' ? 'PAID' : 'DECLINED',
+          amount: (payment.amountCents / 100).toFixed(2),
+          transactionDate: exportDate,
+          transactionId: payment.transactionId || '',
+          declineReason: payment.status !== 'successful' ? (payment as any).failureReason : ''
+        });
+      }
+      
+      // Generate CSV content
+      const csvHeaders = ['Account Number', 'File Number', 'Payment Status', 'Amount', 'Transaction Date', 'Transaction ID', 'Decline Reason'];
+      const csvRows = exportResults.map(r => [
+        r.accountNumber,
+        r.fileNumber,
+        r.paymentStatus,
+        r.amount,
+        r.transactionDate,
+        r.transactionId,
+        r.declineReason
+      ].map(v => `"${(v || '').toString().replace(/"/g, '""')}"`).join(','));
+      
+      const csvContent = [csvHeaders.join(','), ...csvRows].join('\n');
+      
+      // Set headers for CSV download
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="collection_max_export_${exportDate}.csv"`);
+      res.send(csvContent);
+
+    } catch (error) {
+      console.error("Error downloading Collection Max export:", error);
+      res.status(500).json({ message: "Failed to download Collection Max export" });
+    }
+  });
+
   // Process due automations (called by cron/scheduler)
   app.post('/api/automations/process', async (req: any, res) => {
     try {

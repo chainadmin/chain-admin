@@ -223,11 +223,19 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     if (!quickSendTarget || !quickSendMessage.trim()) return;
     
     if (quickSendTarget.type === 'sms') {
+      if (!quickSendTarget.phone) {
+        toast({ title: "Error", description: "Consumer has no phone number on file", variant: "destructive" });
+        return;
+      }
       sendQuickSmsMutation.mutate({
         consumerId: quickSendTarget.consumerId,
         message: quickSendMessage
       });
     } else {
+      if (!quickSendTarget.email) {
+        toast({ title: "Error", description: "Consumer has no email address on file", variant: "destructive" });
+        return;
+      }
       if (!quickSendSubject.trim()) {
         toast({ title: "Error", description: "Subject is required", variant: "destructive" });
         return;
@@ -639,25 +647,37 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           </DialogHeader>
           <div className="space-y-4 pt-4">
             {quickSendTarget?.type === 'sms' ? (
-              <div className="text-sm text-gray-600">
-                Sending to: {quickSendTarget?.phone}
-              </div>
-            ) : (
-              <>
+              quickSendTarget?.phone ? (
                 <div className="text-sm text-gray-600">
-                  Sending to: {quickSendTarget?.email}
+                  Sending to: {quickSendTarget?.phone}
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="quick-subject">Subject</Label>
-                  <Input
-                    id="quick-subject"
-                    value={quickSendSubject}
-                    onChange={(e) => setQuickSendSubject(e.target.value)}
-                    placeholder="Enter subject..."
-                    data-testid="input-quick-subject"
-                  />
+              ) : (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                  This consumer has no phone number on file
                 </div>
-              </>
+              )
+            ) : (
+              quickSendTarget?.email ? (
+                <>
+                  <div className="text-sm text-gray-600">
+                    Sending to: {quickSendTarget?.email}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="quick-subject">Subject</Label>
+                    <Input
+                      id="quick-subject"
+                      value={quickSendSubject}
+                      onChange={(e) => setQuickSendSubject(e.target.value)}
+                      placeholder="Enter subject..."
+                      data-testid="input-quick-subject"
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                  This consumer has no email address on file
+                </div>
+              )
             )}
             <div className="space-y-2">
               <Label htmlFor="quick-message">Message</Label>
@@ -687,7 +707,13 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
               <Button
                 type="button"
                 onClick={handleQuickSend}
-                disabled={sendQuickSmsMutation.isPending || sendQuickEmailMutation.isPending || !quickSendMessage.trim()}
+                disabled={
+                  sendQuickSmsMutation.isPending || 
+                  sendQuickEmailMutation.isPending || 
+                  !quickSendMessage.trim() ||
+                  (quickSendTarget?.type === 'sms' && !quickSendTarget?.phone) ||
+                  (quickSendTarget?.type === 'email' && !quickSendTarget?.email)
+                }
                 data-testid="button-quick-send"
               >
                 {sendQuickSmsMutation.isPending || sendQuickEmailMutation.isPending ? (
