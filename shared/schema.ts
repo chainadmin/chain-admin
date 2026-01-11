@@ -380,6 +380,7 @@ export const smsCampaigns = pgTable("sms_campaigns", {
   automationId: uuid("automation_id"), // Links to communication_automations if source='automation'
   sequenceId: uuid("sequence_id"), // Links to communication_sequences if source='sequence'
   sequenceStepId: uuid("sequence_step_id"), // Links to specific step if source='sequence'
+  targetAccountStatuses: text("target_account_statuses").array().default(sql`ARRAY[]::text[]`), // Optional: filter by account status (e.g., ['active', 'past_due'])
 });
 
 // SMS tracking for individual SMS sends

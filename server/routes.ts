@@ -3788,6 +3788,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     tenantId: string,
     targetGroup: string,
     folderSelection?: string | string[] | null,
+    targetAccountStatuses?: string[] | null, // Optional: filter to only accounts with these statuses
   ) {
     const consumersList = await storage.getConsumersByTenant(tenantId);
     const accountsData = await storage.getAccountsByTenant(tenantId);
@@ -3797,9 +3798,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Use case-insensitive comparison
     const blockedStatuses = tenantSettings?.blockedAccountStatuses || [];
     const blockedStatusesLower = blockedStatuses.map((s: string) => s.toLowerCase());
-    const activeAccountsData = accountsData.filter(acc => 
+    let activeAccountsData = accountsData.filter(acc => 
       !acc.status || !blockedStatusesLower.includes(acc.status.toLowerCase())
     );
+    
+    // Optional: Filter to only accounts with specific statuses (additional filter, not replacement)
+    if (targetAccountStatuses && targetAccountStatuses.length > 0) {
+      const targetStatusesLower = targetAccountStatuses.map((s: string) => s.toLowerCase());
+      activeAccountsData = activeAccountsData.filter(acc => 
+        acc.status && targetStatusesLower.includes(acc.status.toLowerCase())
+      );
+      console.log(`📋 Account status filter applied: targeting ${targetAccountStatuses.join(', ')} - ${activeAccountsData.length} accounts match`);
+    }
 
     const folderIds = Array.isArray(folderSelection)
       ? folderSelection.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
@@ -3956,9 +3966,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         folderIds: z.array(z.string()).optional(),
         phonesToSend: z.enum(['1', '2', '3', 'all']).optional().default('1'), // How many phone numbers per consumer
         consumerId: z.string().uuid().optional(), // For individual targeting
+        targetAccountStatuses: z.array(z.string()).optional(), // Optional: filter to accounts with these statuses
       });
 
-      const { templateId, name, targetGroup, folderIds, phonesToSend, consumerId } = insertSmsCampaignSchema.parse(req.body);
+      const { templateId, name, targetGroup, folderIds, phonesToSend, consumerId, targetAccountStatuses } = insertSmsCampaignSchema.parse(req.body);
 
       console.log(`📱 Creating SMS campaign - name: "${name}", targetGroup: "${targetGroup}", folderIds:`, folderIds, `phonesToSend: "${phonesToSend}", consumerId: "${consumerId}"`);
       console.log(`📱 Request body received:`, JSON.stringify(req.body, null, 2));
@@ -3979,7 +3990,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         targetedConsumers = [consumer];
       } else {
         // Use the shared audience resolution function
-        const result = await resolveSmsCampaignAudience(tenantId, targetGroup, folderIds);
+        const result = await resolveSmsCampaignAudience(tenantId, targetGroup, folderIds, targetAccountStatuses);
         targetedConsumers = result.targetedConsumers;
       }
 
@@ -4049,6 +4060,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalRecipients,
         status: 'pending_approval',
         consumerId: targetGroup === 'individual' ? consumerId : null, // Store consumer for individual targeting
+        targetAccountStatuses: targetAccountStatuses || [], // Optional status filter
       };
       
       console.log(`📱 Creating campaign with data:`, campaignData);
@@ -4200,6 +4212,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           tenantId,
           campaign.targetGroup,
           campaign.folderIds || [],
+          campaign.targetAccountStatuses || [], // Optional status filter
         );
         targetedConsumers = audience.targetedConsumers;
         accountsData = audience.accountsData;
@@ -4530,6 +4543,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tenantId,
         campaign.targetGroup,
         campaign.folderIds || [],
+        campaign.targetAccountStatuses || [], // Optional status filter
       );
       targetedConsumers = audience.targetedConsumers;
       const { accountsData } = audience;
@@ -5110,6 +5124,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const validatedData = updateAutomationSchema.parse(req.body);
       
+      // Get existing automation to access current schedule data
+      const existingAutomation = await storage.getAutomationById(req.params.id, tenantId);
+      if (!existingAutomation) {
+        return res.status(404).json({ message: "Automation not found" });
+      }
+      
       const updateData: any = {
         ...validatedData,
         updatedAt: new Date(),
@@ -5124,6 +5144,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
           scheduledDate: scheduledDateTime.toISOString(),
           nextExecution: scheduledDateTime.toISOString(),
         });
+      }
+      
+      // CRITICAL: When enabling/resuming an automation, recalculate nextExecution
+      if (validatedData.isActive === true && !existingAutomation.isActive) {
+        // Automation is being resumed - recalculate nextExecution from existing schedule
+        const scheduledDate = updateData.scheduledDate || existingAutomation.scheduledDate;
+        const scheduleTime = updateData.scheduleTime || existingAutomation.scheduleTime;
+        
+        if (scheduledDate) {
+          const scheduledDateTime = new Date(scheduledDate);
+          // If the scheduled date has passed, use today's date with the scheduled time
+          const now = new Date();
+          if (scheduledDateTime < now) {
+            // Use today + scheduled time for the next execution
+            const newScheduledDate = new Date();
+            if (scheduleTime) {
+              const [hours, minutes] = scheduleTime.split(':').map(Number);
+              newScheduledDate.setHours(hours, minutes, 0, 0);
+              // If today's time has passed, schedule for tomorrow
+              if (newScheduledDate < now) {
+                newScheduledDate.setDate(newScheduledDate.getDate() + 1);
+              }
+            }
+            updateData.nextExecution = newScheduledDate;
+            console.log('✓ Automation resumed - scheduled for next available time:', {
+              nextExecution: newScheduledDate.toISOString(),
+            });
+          } else {
+            updateData.nextExecution = scheduledDateTime;
+            console.log('✓ Automation resumed - using original scheduled date:', {
+              nextExecution: scheduledDateTime.toISOString(),
+            });
+          }
+        }
       }
       
       const updatedAutomation = await storage.updateAutomation(req.params.id, updateData);
@@ -5158,6 +5212,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error pausing automation:", error);
       res.status(500).json({ message: "Failed to pause automation" });
+    }
+  });
+
+  // Resume/reactivate an automation
+  app.post('/api/automations/:id/resume', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) { 
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const automation = await storage.getAutomationById(req.params.id, tenantId);
+      if (!automation) {
+        return res.status(404).json({ message: "Automation not found" });
+      }
+
+      // Calculate the next execution time
+      const now = new Date();
+      let nextExecution: Date | null = null;
+      
+      if (automation.scheduledDate) {
+        const scheduledDateTime = new Date(automation.scheduledDate);
+        if (scheduledDateTime > now) {
+          // Original schedule is still in the future
+          nextExecution = scheduledDateTime;
+        } else {
+          // Schedule has passed - calculate next available time
+          nextExecution = new Date();
+          if (automation.scheduleTime) {
+            const [hours, minutes] = automation.scheduleTime.split(':').map(Number);
+            nextExecution.setHours(hours, minutes, 0, 0);
+            // If today's time has passed, schedule for tomorrow
+            if (nextExecution < now) {
+              nextExecution.setDate(nextExecution.getDate() + 1);
+            }
+          }
+        }
+      } else {
+        // No scheduled date - use now as default
+        nextExecution = now;
+      }
+
+      await storage.updateAutomation(req.params.id, {
+        isActive: true,
+        nextExecution: nextExecution,
+      });
+
+      console.log(`▶️ Automation "${automation.name}" resumed - next execution: ${nextExecution?.toISOString()}`);
+      res.json({ 
+        message: 'Automation resumed successfully', 
+        isActive: true,
+        nextExecution: nextExecution?.toISOString()
+      });
+    } catch (error) {
+      console.error("Error resuming automation:", error);
+      res.status(500).json({ message: "Failed to resume automation" });
     }
   });
 

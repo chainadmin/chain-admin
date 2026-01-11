@@ -192,6 +192,15 @@ export async function runMigrations() {
       console.log(`  ⚠ phones_to_send (already exists or error)`);
     }
     
+    // Add target_account_statuses column to SMS campaigns for optional status filtering
+    console.log('Adding target_account_statuses to SMS campaigns...');
+    try {
+      await client.query(`ALTER TABLE sms_campaigns ADD COLUMN IF NOT EXISTS target_account_statuses TEXT[] DEFAULT ARRAY[]::TEXT[]`);
+      console.log(`  ✓ target_account_statuses column added to sms_campaigns`);
+    } catch (err) {
+      console.log(`  ⚠ target_account_statuses (already exists or error)`);
+    }
+    
     // Add phones_to_send column to communication_automations (1, 2, 3, or all)
     console.log('Adding phones_to_send to communication_automations...');
     try {

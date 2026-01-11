@@ -451,6 +451,7 @@ export default function Communications() {
     targetFolderIds: [] as string[],
     phonesToSend: "1" as "1" | "2" | "3" | "all",
     consumerId: undefined as string | undefined,
+    targetAccountStatuses: [] as string[], // Optional: filter by specific account statuses
     customFilters: {
       balanceMin: "",
       balanceMax: "",
@@ -1257,6 +1258,7 @@ export default function Communications() {
         targetFolderIds: [],
         phonesToSend: "1",
         consumerId: undefined,
+        targetAccountStatuses: [],
         customFilters: {
           balanceMin: "",
           balanceMax: "",
@@ -1325,6 +1327,7 @@ export default function Communications() {
         targetFolderIds: [],
         phonesToSend: "1",
         consumerId: undefined,
+        targetAccountStatuses: [],
         customFilters: {
           balanceMin: "",
           balanceMax: "",
@@ -4138,6 +4141,44 @@ export default function Communications() {
                             </div>
                           ))}
                         </div>
+                      </div>
+                    )}
+
+                    {/* Optional Account Status Filter - applies to all target types except individual */}
+                    {campaignForm.targetType !== "individual" && (
+                      <div className="space-y-2 border border-gray-200 rounded-md p-3 bg-gray-50">
+                        <Label className="text-sm font-medium">Filter by Account Status (Optional)</Label>
+                        <p className="text-xs text-gray-500 mb-2">Leave empty to include all statuses. Select one or more to target only accounts with those statuses.</p>
+                        <div className="flex flex-wrap gap-2">
+                          {["Active", "Past Due", "In Collections", "Payment Plan", "Settled", "Closed", "Dispute"].map((status) => (
+                            <label key={status} className="flex items-center space-x-1 text-sm cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={campaignForm.targetAccountStatuses.includes(status)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setCampaignForm({
+                                      ...campaignForm,
+                                      targetAccountStatuses: [...campaignForm.targetAccountStatuses, status]
+                                    });
+                                  } else {
+                                    setCampaignForm({
+                                      ...campaignForm,
+                                      targetAccountStatuses: campaignForm.targetAccountStatuses.filter(s => s !== status)
+                                    });
+                                  }
+                                }}
+                                className="rounded"
+                              />
+                              <span>{status}</span>
+                            </label>
+                          ))}
+                        </div>
+                        {campaignForm.targetAccountStatuses.length > 0 && (
+                          <p className="text-xs text-blue-600 mt-1">
+                            Filtering to: {campaignForm.targetAccountStatuses.join(", ")}
+                          </p>
+                        )}
                       </div>
                     )}
 
