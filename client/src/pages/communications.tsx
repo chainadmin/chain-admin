@@ -1457,7 +1457,26 @@ export default function Communications() {
       queryClient.invalidateQueries({ queryKey: ["/api/automations"] });
       toast({
         title: "Success",
-        description: "Automation updated successfully",
+        description: "Automation paused successfully",
+      });
+    },
+  });
+
+  // Dedicated resume mutation that properly recalculates nextExecution
+  const resumeAutomationMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("POST", `/api/automations/${id}/resume`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/automations"] });
+      toast({
+        title: "Success",
+        description: "Automation resumed and scheduled for execution",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to resume automation",
+        variant: "destructive",
       });
     },
   });
@@ -4992,15 +5011,24 @@ export default function Communications() {
                               variant="ghost"
                               size="sm"
                               className="rounded-full border border-white/15 bg-white/10 px-4 py-1 text-xs font-semibold text-blue-100/80 shadow-sm hover:bg-white"
-                              onClick={() =>
-                                toggleAutomationMutation.mutate({
-                                  id: automation.id,
-                                  isActive: !automation.isActive,
-                                })
-                              }
+                              onClick={() => {
+                                if (automation.isActive) {
+                                  // Pause: use toggle to set isActive = false
+                                  toggleAutomationMutation.mutate({
+                                    id: automation.id,
+                                    isActive: false,
+                                  });
+                                } else {
+                                  // Resume: use dedicated resume endpoint to recalculate nextExecution
+                                  resumeAutomationMutation.mutate(automation.id);
+                                }
+                              }}
+                              disabled={toggleAutomationMutation.isPending || resumeAutomationMutation.isPending}
                               data-testid={`button-toggle-automation-${automation.id}`}
                             >
-                              {automation.isActive ? "Pause" : "Resume"}
+                              {(toggleAutomationMutation.isPending || resumeAutomationMutation.isPending) 
+                                ? "..." 
+                                : automation.isActive ? "Pause" : "Resume"}
                             </Button>
                             <Button
                               variant="ghost"
