@@ -240,7 +240,7 @@ export default function Accounts() {
         ? Math.round(parseFloat(balanceValue) * 100)
         : undefined;
 
-      return apiRequest("PATCH", `/api/accounts/${selectedAccount.id}`, {
+      const response = await apiRequest("PATCH", `/api/accounts/${selectedAccount.id}`, {
         firstName: data.firstName,
         lastName: data.lastName,
         email: data.email,
@@ -257,6 +257,7 @@ export default function Accounts() {
         state: data.state || null,
         zipCode: data.zipCode || null,
       });
+      return response.json();
     },
     onSuccess: (updatedAccount: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
