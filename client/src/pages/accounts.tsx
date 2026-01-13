@@ -148,9 +148,9 @@ export default function Accounts() {
     const accountId = urlParams.get('accountId');
 
     if (consumerId && !showViewModal && !selectedAccount) {
-      // Find all accounts for this consumer
+      // Find all accounts for this consumer (ensure string comparison)
       const consumerAccounts = (accounts as any[])?.filter(
-        (acc: any) => acc.consumerId === consumerId
+        (acc: any) => String(acc.consumerId) === String(consumerId)
       );
       if (consumerAccounts && consumerAccounts.length > 0) {
         setSelectedAccount(consumerAccounts[0]);
@@ -161,7 +161,7 @@ export default function Accounts() {
         // Clear URL parameter and notify user
         window.history.replaceState({}, '', window.location.pathname);
         // Find consumer info for the toast message
-        const consumer = (consumers as any[])?.find((c: any) => c.id === consumerId);
+        const consumer = (consumers as any[])?.find((c: any) => String(c.id) === String(consumerId));
         const consumerName = consumer 
           ? `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim() || 'This consumer'
           : 'This consumer';
@@ -172,8 +172,8 @@ export default function Accounts() {
         });
       }
     } else if (accountId && !showViewModal && !selectedAccount) {
-      // Find specific account
-      const account = (accounts as any[])?.find((acc: any) => acc.id === accountId);
+      // Find specific account (ensure string comparison)
+      const account = (accounts as any[])?.find((acc: any) => String(acc.id) === String(accountId));
       if (account) {
         setSelectedAccount(account);
         setShowViewModal(true);
