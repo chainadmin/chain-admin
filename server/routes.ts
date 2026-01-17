@@ -13527,7 +13527,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 // Determine payment provider
                 const merchantProvider = settings?.merchantProvider || 'usaepay';
                 
-                // Determine payment amount - use remaining balance for final payment
+                // Determine payment amount
+                // For settlement/SIF arrangements, always use the scheduled amount (the whole point is paying less than full balance)
+                // For regular payment plans, use remaining balance only if it's LESS than scheduled amount (to handle final payment rounding)
                 let paymentAmountCents = schedule.amountCents;
                 const isFinalPayment = schedule.remainingPayments !== null && schedule.remainingPayments === 1;
                 
@@ -13535,9 +13537,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   // Get current account balance for final payment
                   const account = await storage.getAccount(schedule.accountId);
                   if (account && account.balanceCents > 0) {
-                    // Use actual remaining balance for final payment
-                    paymentAmountCents = account.balanceCents;
-                    console.log(`💳 Final payment - using remaining balance: $${(paymentAmountCents / 100).toFixed(2)} instead of scheduled $${(schedule.amountCents / 100).toFixed(2)}`);
+                    // Only use account balance if it's LESS than the scheduled amount
+                    // This handles rounding in payment plans where the last payment might be slightly less
+                    // For settlements (SIF), the scheduled amount is intentionally LESS than the balance, so we keep it
+                    if (account.balanceCents < schedule.amountCents) {
+                      console.log(`💳 Final payment - using remaining balance: $${(account.balanceCents / 100).toFixed(2)} (less than scheduled $${(schedule.amountCents / 100).toFixed(2)})`);
+                      paymentAmountCents = account.balanceCents;
+                    } else {
+                      console.log(`💳 Final payment - using scheduled amount: $${(schedule.amountCents / 100).toFixed(2)} (settlement/SIF - balance is $${(account.balanceCents / 100).toFixed(2)})`);
+                    }
                   }
                 }
 
