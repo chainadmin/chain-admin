@@ -1,6 +1,7 @@
 import type { Express, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage, type IStorage } from "./storage";
+import { voipStorage } from "./voipStorage";
 import { authenticateUser, authenticateConsumer, getCurrentUser, requireEmailService, requireSmsService, requirePortalAccess, requirePaymentProcessing, requireOwner, requireServiceAccess } from "./authMiddleware";
 import { postmarkServerService } from "./postmarkServerService";
 import {
@@ -21318,7 +21319,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const phoneNumbers = await storage.getVoipPhoneNumbersByTenant(user.tenantId);
+      const phoneNumbers = await voipStorage.getVoipPhoneNumbersByTenant(user.tenantId);
       res.json(phoneNumbers);
     } catch (error) {
       console.error("Error getting phone numbers:", error);
@@ -21351,13 +21352,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // If this is set as primary, unset any existing primary
       if (isPrimary) {
-        const existingPrimary = await storage.getPrimaryVoipPhoneNumber(user.tenantId);
+        const existingPrimary = await voipStorage.getPrimaryVoipPhoneNumber(user.tenantId);
         if (existingPrimary) {
-          await storage.updateVoipPhoneNumber(existingPrimary.id, user.tenantId, { isPrimary: false });
+          await voipStorage.updateVoipPhoneNumber(existingPrimary.id, user.tenantId, { isPrimary: false });
         }
       }
 
-      const newPhoneNumber = await storage.createVoipPhoneNumber({
+      const newPhoneNumber = await voipStorage.createVoipPhoneNumber({
         tenantId: user.tenantId,
         phoneNumber: formattedNumber,
         areaCode,
@@ -21388,13 +21389,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // If setting as primary, unset existing primary
       if (isPrimary) {
-        const existingPrimary = await storage.getPrimaryVoipPhoneNumber(user.tenantId);
+        const existingPrimary = await voipStorage.getPrimaryVoipPhoneNumber(user.tenantId);
         if (existingPrimary && existingPrimary.id !== id) {
-          await storage.updateVoipPhoneNumber(existingPrimary.id, user.tenantId, { isPrimary: false });
+          await voipStorage.updateVoipPhoneNumber(existingPrimary.id, user.tenantId, { isPrimary: false });
         }
       }
 
-      const updated = await storage.updateVoipPhoneNumber(id, user.tenantId, {
+      const updated = await voipStorage.updateVoipPhoneNumber(id, user.tenantId, {
         friendlyName,
         isPrimary,
         isActive,
@@ -21416,7 +21417,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { id } = req.params;
-      const success = await storage.deleteVoipPhoneNumber(id, user.tenantId);
+      const success = await voipStorage.deleteVoipPhoneNumber(id, user.tenantId);
       
       if (success) {
         res.json({ message: "Phone number deleted" });
@@ -21440,7 +21441,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const limit = parseInt(req.query.limit as string) || 100;
       const offset = parseInt(req.query.offset as string) || 0;
 
-      const callLogs = await storage.getVoipCallLogsByTenant(user.tenantId, limit, offset);
+      const callLogs = await voipStorage.getVoipCallLogsByTenant(user.tenantId, limit, offset);
       res.json(callLogs);
     } catch (error) {
       console.error("Error getting call logs:", error);
@@ -21457,7 +21458,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { consumerId } = req.params;
-      const callLogs = await storage.getVoipCallLogsByConsumer(consumerId, user.tenantId);
+      const callLogs = await voipStorage.getVoipCallLogsByConsumer(consumerId, user.tenantId);
       res.json(callLogs);
     } catch (error) {
       console.error("Error getting consumer call logs:", error);
@@ -21483,16 +21484,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Find the best outbound caller ID based on the destination area code
       const destinationAreaCode = extractAreaCode(toNumber);
-      let fromPhoneNumber = await storage.getVoipPhoneNumberByAreaCode(destinationAreaCode, user.tenantId);
+      let fromPhoneNumber = await voipStorage.getVoipPhoneNumberByAreaCode(destinationAreaCode, user.tenantId);
       
       if (!fromPhoneNumber) {
         // Fall back to primary number
-        fromPhoneNumber = await storage.getPrimaryVoipPhoneNumber(user.tenantId);
+        fromPhoneNumber = await voipStorage.getPrimaryVoipPhoneNumber(user.tenantId);
       }
 
       if (!fromPhoneNumber) {
         // Get any active number
-        const allNumbers = await storage.getVoipPhoneNumbersByTenant(user.tenantId);
+        const allNumbers = await voipStorage.getVoipPhoneNumbersByTenant(user.tenantId);
         fromPhoneNumber = allNumbers.find(n => n.isActive);
       }
 
@@ -21501,7 +21502,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Create call log entry
-      const callLog = await storage.createVoipCallLog({
+      const callLog = await voipStorage.createVoipCallLog({
         tenantId: user.tenantId,
         consumerId: consumerId || null,
         accountId: accountId || null,
@@ -21537,12 +21538,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const { notes, consumerId, accountId } = req.body;
 
-      const callLog = await storage.getVoipCallLogById(id, user.tenantId);
+      const callLog = await voipStorage.getVoipCallLogById(id, user.tenantId);
       if (!callLog) {
         return res.status(404).json({ message: "Call log not found" });
       }
 
-      const updated = await storage.updateVoipCallLog(id, {
+      const updated = await voipStorage.updateVoipCallLog(id, {
         notes,
         consumerId: consumerId || callLog.consumerId,
         accountId: accountId || callLog.accountId,
@@ -21613,7 +21614,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { CallSid, CallStatus, Duration, From, To, Timestamp } = req.body;
 
       // Update call log with status
-      const callLog = await storage.getVoipCallLogByCallSid(CallSid);
+      const callLog = await voipStorage.getVoipCallLogByCallSid(CallSid);
       if (callLog) {
         const updates: any = {
           status: CallStatus,
@@ -21628,7 +21629,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
-        await storage.updateVoipCallLog(callLog.id, updates);
+        await voipStorage.updateVoipCallLog(callLog.id, updates);
       }
 
       res.sendStatus(200);
@@ -21644,9 +21645,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { CallSid, RecordingSid, RecordingUrl, RecordingStatus, RecordingDuration } = req.body;
 
       // Update call log with recording info
-      const callLog = await storage.getVoipCallLogByCallSid(CallSid);
+      const callLog = await voipStorage.getVoipCallLogByCallSid(CallSid);
       if (callLog) {
-        await storage.updateVoipCallLog(callLog.id, {
+        await voipStorage.updateVoipCallLog(callLog.id, {
           recordingSid: RecordingSid,
           recordingUrl: `${RecordingUrl}.mp3`,
           recordingStatus: RecordingStatus,

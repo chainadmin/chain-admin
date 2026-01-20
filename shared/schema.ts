@@ -85,6 +85,11 @@ export const tenants = pgTable("tenants", {
   cardBrand: text("card_brand"), // Card brand (Visa, Mastercard, etc.)
   bankAccountLast4: text("bank_account_last4"), // Last 4 digits of account number
   bankRoutingLast4: text("bank_routing_last4"), // Last 4 digits of routing number
+  // VoIP Phone System add-on
+  voipEnabled: boolean("voip_enabled").default(false), // VoIP add-on enabled
+  voipUserPrice: integer("voip_user_price").default(8000), // Price per VoIP user in cents ($80.00)
+  voipLocalDidPrice: integer("voip_local_did_price").default(500), // Price per local DID in cents ($5.00)
+  voipTollFreePrice: integer("voip_toll_free_price").default(1000), // Price per toll-free number in cents ($10.00)
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -100,6 +105,7 @@ export const agencyCredentials = pgTable("agency_credentials", {
   role: text("role", { enum: ['owner', 'manager', 'agent', 'viewer', 'uploader'] }).default('owner').notNull(),
   isActive: boolean("is_active").default(true),
   restrictedServices: text("restricted_services").array().default(sql`ARRAY[]::TEXT[]`), // Services this user cannot access (e.g., 'billing', 'sms', 'payments', 'import', 'reports')
+  voipAccess: boolean("voip_access").default(false), // Whether this user can access the VoIP softphone
   lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -925,6 +931,7 @@ export const voipPhoneNumbers = pgTable("voip_phone_numbers", {
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
   phoneNumber: text("phone_number").notNull(), // E.164 format (+1234567890)
   areaCode: text("area_code").notNull(), // 3-digit area code for matching
+  numberType: text("number_type", { enum: ['local', 'toll_free'] }).default('local').notNull(), // Type of phone number
   friendlyName: text("friendly_name"), // Display name for the number
   twilioPhoneSid: text("twilio_phone_sid"), // Twilio Phone Number SID
   capabilities: jsonb("capabilities").default(sql`'{"voice": true, "sms": false}'::jsonb`), // What this number can do

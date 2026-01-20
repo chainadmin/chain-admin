@@ -275,7 +275,11 @@ export async function runMigrations() {
       { name: 'email_service_enabled', type: 'BOOLEAN', default: 'true' },
       { name: 'sms_service_enabled', type: 'BOOLEAN', default: 'true' },
       { name: 'portal_access_enabled', type: 'BOOLEAN', default: 'true' },
-      { name: 'payment_processing_enabled', type: 'BOOLEAN', default: 'true' }
+      { name: 'payment_processing_enabled', type: 'BOOLEAN', default: 'true' },
+      { name: 'voip_enabled', type: 'BOOLEAN', default: 'false' },
+      { name: 'voip_user_price', type: 'INTEGER', default: '8000' },
+      { name: 'voip_local_did_price', type: 'INTEGER', default: '500' },
+      { name: 'voip_toll_free_price', type: 'INTEGER', default: '1000' }
     ];
     
     for (const col of tenantColumns) {
@@ -1533,6 +1537,14 @@ export async function runMigrations() {
       console.log(`  ⚠ restricted_services (already exists or error): ${err.message}`);
     }
     
+    console.log('Adding voip_access column to agency_credentials...');
+    try {
+      await client.query(`ALTER TABLE agency_credentials ADD COLUMN IF NOT EXISTS voip_access BOOLEAN DEFAULT false`);
+      console.log(`  ✓ voip_access`);
+    } catch (err: any) {
+      console.log(`  ⚠ voip_access (already exists or error): ${err.message}`);
+    }
+    
     // Create password_reset_tokens table for tenant password reset functionality
     console.log('Creating password_reset_tokens table...');
     try {
@@ -1603,6 +1615,14 @@ export async function runMigrations() {
       console.log(`  ✓ voip_phone_numbers table`);
     } catch (err: any) {
       console.log(`  ⚠ voip_phone_numbers table (already exists or error): ${err.message}`);
+    }
+    
+    console.log('Adding number_type column to voip_phone_numbers...');
+    try {
+      await client.query(`ALTER TABLE voip_phone_numbers ADD COLUMN IF NOT EXISTS number_type TEXT DEFAULT 'local' NOT NULL`);
+      console.log(`  ✓ number_type`);
+    } catch (err: any) {
+      console.log(`  ⚠ number_type (already exists or error): ${err.message}`);
     }
     
     // Create VoIP call logs table
