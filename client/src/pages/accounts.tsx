@@ -378,6 +378,26 @@ export default function Accounts() {
     },
   });
 
+  const initiateVoipCallMutation = useMutation({
+    mutationFn: async ({ toNumber, consumerId, accountId }: { toNumber: string; consumerId?: string; accountId?: string }) => {
+      const response = await apiRequest("POST", "/api/voip/call", { toNumber, consumerId, accountId });
+      return response.json();
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: "Call initiated",
+        description: `Calling ${data.toNumber || "number"}. Open the Phones page to manage your call.`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to initiate call. Make sure you have phone numbers configured.",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Handlers
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1503,10 +1523,15 @@ export default function Accounts() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      asChild
                       className="rounded-lg border border-white/10 bg-white/5 px-3 text-blue-100 hover:bg-white/10"
+                      disabled={initiateVoipCallMutation.isPending}
+                      onClick={() => initiateVoipCallMutation.mutate({
+                        toNumber: selectedAccount.consumer.phone,
+                        consumerId: selectedAccount.consumer?.id,
+                        accountId: selectedAccount.id,
+                      })}
                     >
-                      <a href={`tel:${selectedAccount.consumer.phone}`}>Call</a>
+                      {initiateVoipCallMutation.isPending ? "Calling..." : "Call"}
                     </Button>
                   ) : (
                     <Button
