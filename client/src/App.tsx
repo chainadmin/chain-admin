@@ -46,6 +46,7 @@ import FixDatabase from "@/pages/fix-db";
 import Documents from "@/pages/documents";
 import SignDocument from "@/pages/sign-document";
 import Info from "@/pages/info";
+import Phones from "@/pages/phones";
 
 function Router() {
   const { isAuthenticated, isLoading, user, isJwtAuth } = useAuth();
@@ -270,7 +271,8 @@ function Router() {
         <Route key="agency-payments" path="/payments" component={Payments} />,
         <Route key="agency-billing" path="/billing" component={Billing} />,
         <Route key="agency-settings" path="/settings" component={Settings} />,
-        <Route key="agency-documents" path="/documents" component={Documents} />
+        <Route key="agency-documents" path="/documents" component={Documents} />,
+        <Route key="agency-phones" path="/phones" component={Phones} />
       );
     }
 
@@ -362,6 +364,7 @@ function Router() {
     <Route key="auth-billing" path="/billing" component={Billing} />,
     <Route key="auth-settings" path="/settings" component={Settings} />,
     <Route key="auth-documents" path="/documents" component={Documents} />,
+    <Route key="auth-phones" path="/phones" component={Phones} />,
     ...createRouteElements(adminRoutePaths, GlobalAdmin, "auth-admin"),
     <Route key="auth-agency-login" path="/agency-login" component={AgencyLogin} />,
     <Route key="auth-agency-register" path="/agency-register" component={AgencyRegistration} />,
