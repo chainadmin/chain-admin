@@ -919,6 +919,48 @@ export const messagingUsageEvents = pgTable(
   })
 );
 
+// VoIP Phone Numbers (per tenant)
+export const voipPhoneNumbers = pgTable("voip_phone_numbers", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  phoneNumber: text("phone_number").notNull(), // E.164 format (+1234567890)
+  areaCode: text("area_code").notNull(), // 3-digit area code for matching
+  friendlyName: text("friendly_name"), // Display name for the number
+  twilioPhoneSid: text("twilio_phone_sid"), // Twilio Phone Number SID
+  capabilities: jsonb("capabilities").default(sql`'{"voice": true, "sms": false}'::jsonb`), // What this number can do
+  isActive: boolean("is_active").default(true),
+  isPrimary: boolean("is_primary").default(false), // Default outbound number when no area code match
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// VoIP Call Logs (tracks all inbound and outbound calls)
+export const voipCallLogs = pgTable("voip_call_logs", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "set null" }), // Link to consumer if matched
+  accountId: uuid("account_id").references(() => accounts.id, { onDelete: "set null" }), // Link to account if applicable
+  agentCredentialId: uuid("agent_credential_id").references(() => agencyCredentials.id, { onDelete: "set null" }), // Agent who made/took the call
+  callSid: text("call_sid").unique(), // Twilio Call SID
+  direction: text("direction", { enum: ['inbound', 'outbound'] }).notNull(),
+  fromNumber: text("from_number").notNull(), // Caller phone number
+  toNumber: text("to_number").notNull(), // Called phone number
+  status: text("status").default("initiated"), // "initiated", "ringing", "in-progress", "completed", "busy", "no-answer", "failed", "canceled"
+  duration: integer("duration").default(0), // Call duration in seconds
+  startedAt: timestamp("started_at"),
+  answeredAt: timestamp("answered_at"),
+  endedAt: timestamp("ended_at"),
+  recordingUrl: text("recording_url"), // URL to call recording
+  recordingSid: text("recording_sid"), // Twilio Recording SID
+  recordingDuration: integer("recording_duration"), // Recording duration in seconds
+  recordingStatus: text("recording_status"), // "processing", "completed", "absent"
+  transcription: text("transcription"), // Transcription of the recording (if enabled)
+  notes: text("notes"), // Agent notes about the call
+  metadata: jsonb("metadata").default(sql`'{}'::jsonb`), // Additional call data
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Relations
 export const tenantsRelations = relations(tenants, ({ one, many }) => ({
   platformUsers: many(platformUsers),
@@ -1604,6 +1646,8 @@ export const insertAutomationExecutionSchema = createInsertSchema(automationExec
 export const insertCommunicationSequenceSchema = createInsertSchema(communicationSequences).omit({ id: true, createdAt: true, updatedAt: true, totalEnrolled: true, totalCompleted: true });
 export const insertCommunicationSequenceStepSchema = createInsertSchema(communicationSequenceSteps).omit({ id: true, createdAt: true });
 export const insertCommunicationSequenceEnrollmentSchema = createInsertSchema(communicationSequenceEnrollments).omit({ id: true, createdAt: true, updatedAt: true, messagesSent: true, messagesOpened: true, messagesClicked: true });
+export const insertVoipPhoneNumberSchema = createInsertSchema(voipPhoneNumbers).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertVoipCallLogSchema = createInsertSchema(voipCallLogs).omit({ id: true, createdAt: true, updatedAt: true });
 
 // Types
 export type UpsertUser = typeof users.$inferInsert;
@@ -1695,3 +1739,7 @@ export type CommunicationSequenceStep = typeof communicationSequenceSteps.$infer
 export type InsertCommunicationSequenceStep = z.infer<typeof insertCommunicationSequenceStepSchema>;
 export type CommunicationSequenceEnrollment = typeof communicationSequenceEnrollments.$inferSelect;
 export type InsertCommunicationSequenceEnrollment = z.infer<typeof insertCommunicationSequenceEnrollmentSchema>;
+export type VoipPhoneNumber = typeof voipPhoneNumbers.$inferSelect;
+export type InsertVoipPhoneNumber = z.infer<typeof insertVoipPhoneNumberSchema>;
+export type VoipCallLog = typeof voipCallLogs.$inferSelect;
+export type InsertVoipCallLog = z.infer<typeof insertVoipCallLogSchema>;

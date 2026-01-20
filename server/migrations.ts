@@ -1582,6 +1582,72 @@ export async function runMigrations() {
       console.log(`  ⚠ Fix owner roles error: ${err.message}`);
     }
     
+    // Create VoIP phone numbers table
+    console.log('Creating VoIP phone numbers table...');
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS voip_phone_numbers (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          phone_number TEXT NOT NULL,
+          area_code TEXT NOT NULL,
+          friendly_name TEXT,
+          twilio_phone_sid TEXT,
+          capabilities JSONB DEFAULT '{"voice": true, "sms": false}'::jsonb,
+          is_active BOOLEAN DEFAULT true,
+          is_primary BOOLEAN DEFAULT false,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      console.log(`  ✓ voip_phone_numbers table`);
+    } catch (err: any) {
+      console.log(`  ⚠ voip_phone_numbers table (already exists or error): ${err.message}`);
+    }
+    
+    // Create VoIP call logs table
+    console.log('Creating VoIP call logs table...');
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS voip_call_logs (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          consumer_id UUID REFERENCES consumers(id) ON DELETE SET NULL,
+          account_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
+          agent_credential_id UUID REFERENCES agency_credentials(id) ON DELETE SET NULL,
+          call_sid TEXT UNIQUE,
+          direction TEXT NOT NULL,
+          from_number TEXT NOT NULL,
+          to_number TEXT NOT NULL,
+          status TEXT DEFAULT 'initiated',
+          duration INTEGER DEFAULT 0,
+          started_at TIMESTAMP,
+          answered_at TIMESTAMP,
+          ended_at TIMESTAMP,
+          recording_url TEXT,
+          recording_sid TEXT,
+          recording_duration INTEGER,
+          recording_status TEXT,
+          transcription TEXT,
+          notes TEXT,
+          metadata JSONB DEFAULT '{}'::jsonb,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      console.log(`  ✓ voip_call_logs table`);
+      
+      // Create index for tenant lookups
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_voip_call_logs_tenant_id ON voip_call_logs(tenant_id)`);
+      console.log(`  ✓ voip_call_logs tenant index`);
+      
+      // Create index for call_sid lookups
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_voip_call_logs_call_sid ON voip_call_logs(call_sid)`);
+      console.log(`  ✓ voip_call_logs call_sid index`);
+    } catch (err: any) {
+      console.log(`  ⚠ voip_call_logs table (already exists or error): ${err.message}`);
+    }
+    
     console.log('✅ Database migrations completed successfully');
   } catch (error: any) {
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
