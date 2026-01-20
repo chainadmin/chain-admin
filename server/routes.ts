@@ -21284,6 +21284,431 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // =====================================================
+  // VoIP Phone Routes
+  // =====================================================
+
+  // Generate Twilio Voice token for browser-based calling
+  app.get('/api/voip/token', authenticateUser, async (req, res) => {
+    try {
+      const user = getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { generateVoiceToken } = await import('./twilioVoiceService');
+      const token = generateVoiceToken(user.username, user.tenantId);
+      
+      if (!token) {
+        return res.status(500).json({ message: "Failed to generate voice token - Twilio not configured" });
+      }
+
+      res.json({ token, identity: user.username });
+    } catch (error) {
+      console.error("Error generating voice token:", error);
+      res.status(500).json({ message: "Failed to generate voice token" });
+    }
+  });
+
+  // Get tenant's VoIP phone numbers
+  app.get('/api/voip/phone-numbers', authenticateUser, async (req, res) => {
+    try {
+      const user = getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const phoneNumbers = await storage.getVoipPhoneNumbersByTenant(user.tenantId);
+      res.json(phoneNumbers);
+    } catch (error) {
+      console.error("Error getting phone numbers:", error);
+      res.status(500).json({ message: "Failed to get phone numbers" });
+    }
+  });
+
+  // Add a new VoIP phone number
+  app.post('/api/voip/phone-numbers', authenticateUser, requireOwner, async (req, res) => {
+    try {
+      const user = getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { phoneNumber, friendlyName, isPrimary, twilioPhoneSid } = req.body;
+
+      if (!phoneNumber) {
+        return res.status(400).json({ message: "Phone number is required" });
+      }
+
+      // Extract area code from phone number
+      const { extractAreaCode, formatPhoneE164 } = await import('./twilioVoiceService');
+      const formattedNumber = formatPhoneE164(phoneNumber);
+      const areaCode = extractAreaCode(phoneNumber);
+
+      if (!areaCode) {
+        return res.status(400).json({ message: "Could not extract area code from phone number" });
+      }
+
+      // If this is set as primary, unset any existing primary
+      if (isPrimary) {
+        const existingPrimary = await storage.getPrimaryVoipPhoneNumber(user.tenantId);
+        if (existingPrimary) {
+          await storage.updateVoipPhoneNumber(existingPrimary.id, user.tenantId, { isPrimary: false });
+        }
+      }
+
+      const newPhoneNumber = await storage.createVoipPhoneNumber({
+        tenantId: user.tenantId,
+        phoneNumber: formattedNumber,
+        areaCode,
+        friendlyName: friendlyName || `Phone (${areaCode})`,
+        twilioPhoneSid,
+        isPrimary: isPrimary ?? false,
+        isActive: true,
+        capabilities: { voice: true, sms: false },
+      });
+
+      res.json(newPhoneNumber);
+    } catch (error) {
+      console.error("Error adding phone number:", error);
+      res.status(500).json({ message: "Failed to add phone number" });
+    }
+  });
+
+  // Update VoIP phone number
+  app.patch('/api/voip/phone-numbers/:id', authenticateUser, requireOwner, async (req, res) => {
+    try {
+      const user = getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const { friendlyName, isPrimary, isActive } = req.body;
+
+      // If setting as primary, unset existing primary
+      if (isPrimary) {
+        const existingPrimary = await storage.getPrimaryVoipPhoneNumber(user.tenantId);
+        if (existingPrimary && existingPrimary.id !== id) {
+          await storage.updateVoipPhoneNumber(existingPrimary.id, user.tenantId, { isPrimary: false });
+        }
+      }
+
+      const updated = await storage.updateVoipPhoneNumber(id, user.tenantId, {
+        friendlyName,
+        isPrimary,
+        isActive,
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating phone number:", error);
+      res.status(500).json({ message: "Failed to update phone number" });
+    }
+  });
+
+  // Delete VoIP phone number
+  app.delete('/api/voip/phone-numbers/:id', authenticateUser, requireOwner, async (req, res) => {
+    try {
+      const user = getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const success = await storage.deleteVoipPhoneNumber(id, user.tenantId);
+      
+      if (success) {
+        res.json({ message: "Phone number deleted" });
+      } else {
+        res.status(404).json({ message: "Phone number not found" });
+      }
+    } catch (error) {
+      console.error("Error deleting phone number:", error);
+      res.status(500).json({ message: "Failed to delete phone number" });
+    }
+  });
+
+  // Get call logs
+  app.get('/api/voip/call-logs', authenticateUser, async (req, res) => {
+    try {
+      const user = getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const limit = parseInt(req.query.limit as string) || 100;
+      const offset = parseInt(req.query.offset as string) || 0;
+
+      const callLogs = await storage.getVoipCallLogsByTenant(user.tenantId, limit, offset);
+      res.json(callLogs);
+    } catch (error) {
+      console.error("Error getting call logs:", error);
+      res.status(500).json({ message: "Failed to get call logs" });
+    }
+  });
+
+  // Get call logs for a specific consumer
+  app.get('/api/voip/call-logs/consumer/:consumerId', authenticateUser, async (req, res) => {
+    try {
+      const user = getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { consumerId } = req.params;
+      const callLogs = await storage.getVoipCallLogsByConsumer(consumerId, user.tenantId);
+      res.json(callLogs);
+    } catch (error) {
+      console.error("Error getting consumer call logs:", error);
+      res.status(500).json({ message: "Failed to get call logs" });
+    }
+  });
+
+  // Initiate an outbound call
+  app.post('/api/voip/call', authenticateUser, async (req, res) => {
+    try {
+      const user = getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { toNumber, consumerId, accountId } = req.body;
+
+      if (!toNumber) {
+        return res.status(400).json({ message: "Phone number to call is required" });
+      }
+
+      const { extractAreaCode, formatPhoneE164 } = await import('./twilioVoiceService');
+      
+      // Find the best outbound caller ID based on the destination area code
+      const destinationAreaCode = extractAreaCode(toNumber);
+      let fromPhoneNumber = await storage.getVoipPhoneNumberByAreaCode(destinationAreaCode, user.tenantId);
+      
+      if (!fromPhoneNumber) {
+        // Fall back to primary number
+        fromPhoneNumber = await storage.getPrimaryVoipPhoneNumber(user.tenantId);
+      }
+
+      if (!fromPhoneNumber) {
+        // Get any active number
+        const allNumbers = await storage.getVoipPhoneNumbersByTenant(user.tenantId);
+        fromPhoneNumber = allNumbers.find(n => n.isActive);
+      }
+
+      if (!fromPhoneNumber) {
+        return res.status(400).json({ message: "No phone numbers configured. Please add a phone number first." });
+      }
+
+      // Create call log entry
+      const callLog = await storage.createVoipCallLog({
+        tenantId: user.tenantId,
+        consumerId: consumerId || null,
+        accountId: accountId || null,
+        agentCredentialId: user.credentialId || null,
+        direction: 'outbound',
+        fromNumber: fromPhoneNumber.phoneNumber,
+        toNumber: formatPhoneE164(toNumber),
+        status: 'initiated',
+        startedAt: new Date(),
+      });
+
+      res.json({
+        callLogId: callLog.id,
+        fromNumber: fromPhoneNumber.phoneNumber,
+        toNumber: formatPhoneE164(toNumber),
+        status: 'initiated',
+        message: 'Call initiated. Use the Twilio Voice SDK to handle the call.'
+      });
+    } catch (error) {
+      console.error("Error initiating call:", error);
+      res.status(500).json({ message: "Failed to initiate call" });
+    }
+  });
+
+  // Update call log (for notes)
+  app.patch('/api/voip/call-logs/:id', authenticateUser, async (req, res) => {
+    try {
+      const user = getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      const { notes, consumerId, accountId } = req.body;
+
+      const callLog = await storage.getVoipCallLogById(id, user.tenantId);
+      if (!callLog) {
+        return res.status(404).json({ message: "Call log not found" });
+      }
+
+      const updated = await storage.updateVoipCallLog(id, {
+        notes,
+        consumerId: consumerId || callLog.consumerId,
+        accountId: accountId || callLog.accountId,
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating call log:", error);
+      res.status(500).json({ message: "Failed to update call log" });
+    }
+  });
+
+  // TwiML endpoint for outbound calls (called by Twilio)
+  app.post('/api/voice/outbound', async (req, res) => {
+    try {
+      const { To, From, CallSid } = req.body;
+      
+      const { generateTwiML } = await import('./twilioVoiceService');
+      
+      // Generate TwiML to dial the number
+      const twiml = generateTwiML({
+        action: 'dial',
+        to: To,
+        from: From,
+        record: true,
+      });
+
+      res.type('text/xml');
+      res.send(twiml);
+    } catch (error) {
+      console.error("Error generating TwiML for outbound call:", error);
+      res.status(500).send('<Response><Say>An error occurred</Say></Response>');
+    }
+  });
+
+  // TwiML endpoint for inbound calls (called by Twilio when someone calls your number)
+  app.post('/api/voice/inbound', async (req, res) => {
+    try {
+      const { From, To, CallSid } = req.body;
+      
+      // Find the tenant that owns this phone number
+      const { formatPhoneE164 } = await import('./twilioVoiceService');
+      const formattedTo = formatPhoneE164(To);
+      
+      // TODO: Look up tenant by phone number and route call appropriately
+      // For now, we'll just ring all connected clients
+      
+      const { generateTwiML } = await import('./twilioVoiceService');
+      
+      // This would normally connect to your browser-based agents
+      // For now, we'll play a message
+      const twiml = generateTwiML({
+        action: 'say',
+        message: 'Thank you for calling. Please hold while we connect you to an agent.',
+      });
+
+      res.type('text/xml');
+      res.send(twiml);
+    } catch (error) {
+      console.error("Error handling inbound call:", error);
+      res.status(500).send('<Response><Say>An error occurred</Say></Response>');
+    }
+  });
+
+  // Call status callback (called by Twilio during call lifecycle)
+  app.post('/api/voice/call-status', async (req, res) => {
+    try {
+      const { CallSid, CallStatus, Duration, From, To, Timestamp } = req.body;
+
+      // Update call log with status
+      const callLog = await storage.getVoipCallLogByCallSid(CallSid);
+      if (callLog) {
+        const updates: any = {
+          status: CallStatus,
+        };
+
+        if (CallStatus === 'in-progress') {
+          updates.answeredAt = new Date();
+        } else if (['completed', 'busy', 'no-answer', 'failed', 'canceled'].includes(CallStatus)) {
+          updates.endedAt = new Date();
+          if (Duration) {
+            updates.duration = parseInt(Duration);
+          }
+        }
+
+        await storage.updateVoipCallLog(callLog.id, updates);
+      }
+
+      res.sendStatus(200);
+    } catch (error) {
+      console.error("Error handling call status callback:", error);
+      res.sendStatus(500);
+    }
+  });
+
+  // Recording status callback (called by Twilio when recording is ready)
+  app.post('/api/voice/recording-status', async (req, res) => {
+    try {
+      const { CallSid, RecordingSid, RecordingUrl, RecordingStatus, RecordingDuration } = req.body;
+
+      // Update call log with recording info
+      const callLog = await storage.getVoipCallLogByCallSid(CallSid);
+      if (callLog) {
+        await storage.updateVoipCallLog(callLog.id, {
+          recordingSid: RecordingSid,
+          recordingUrl: `${RecordingUrl}.mp3`,
+          recordingStatus: RecordingStatus,
+          recordingDuration: parseInt(RecordingDuration) || 0,
+        });
+      }
+
+      res.sendStatus(200);
+    } catch (error) {
+      console.error("Error handling recording status callback:", error);
+      res.sendStatus(500);
+    }
+  });
+
+  // Get recording playback URL
+  app.get('/api/voip/recording/:recordingSid', authenticateUser, async (req, res) => {
+    try {
+      const user = getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { recordingSid } = req.params;
+      
+      const { getRecordingUrl } = await import('./twilioVoiceService');
+      const url = await getRecordingUrl(recordingSid);
+
+      if (!url) {
+        return res.status(404).json({ message: "Recording not found" });
+      }
+
+      res.json({ url });
+    } catch (error) {
+      console.error("Error getting recording:", error);
+      res.status(500).json({ message: "Failed to get recording" });
+    }
+  });
+
+  // End an active call
+  app.post('/api/voip/hangup/:callSid', authenticateUser, async (req, res) => {
+    try {
+      const user = getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { callSid } = req.params;
+      
+      const { hangupCall } = await import('./twilioVoiceService');
+      const success = await hangupCall(callSid);
+
+      if (success) {
+        res.json({ message: "Call ended" });
+      } else {
+        res.status(500).json({ message: "Failed to end call" });
+      }
+    } catch (error) {
+      console.error("Error ending call:", error);
+      res.status(500).json({ message: "Failed to end call" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

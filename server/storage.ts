@@ -42,6 +42,8 @@ import {
   subscriptionPlans,
   invoices,
   autoResponseUsage,
+  voipPhoneNumbers,
+  voipCallLogs,
   type User,
   type UpsertUser,
   type Tenant,
@@ -117,6 +119,10 @@ import {
   type InsertSubscription,
   type Invoice,
   type InsertInvoice,
+  type VoipPhoneNumber,
+  type InsertVoipPhoneNumber,
+  type VoipCallLog,
+  type InsertVoipCallLog,
 } from "@shared/schema";
 import { messagingPlans, EMAIL_OVERAGE_RATE_PER_EMAIL, SMS_OVERAGE_RATE_PER_SEGMENT, DOCUMENT_SIGNING_ADDON_PRICE, MOBILE_APP_BRANDING_MONTHLY, AI_AUTO_RESPONSE_ADDON_PRICE, AUTO_RESPONSE_INCLUDED_RESPONSES, AUTO_RESPONSE_OVERAGE_PER_RESPONSE, type MessagingPlanId } from "@shared/billing-plans";
 import { db } from "./db";
@@ -565,6 +571,24 @@ export interface IStorage {
   getTenantAgreementById(id: string): Promise<TenantAgreement | undefined>;
   getTenantAgreementsByTenant(tenantId: string): Promise<TenantAgreement[]>;
   updateTenantAgreement(id: string, updates: Partial<TenantAgreement>): Promise<TenantAgreement>;
+  
+  // VoIP phone number operations
+  getVoipPhoneNumbersByTenant(tenantId: string): Promise<VoipPhoneNumber[]>;
+  getVoipPhoneNumberById(id: string, tenantId: string): Promise<VoipPhoneNumber | undefined>;
+  getVoipPhoneNumberByAreaCode(areaCode: string, tenantId: string): Promise<VoipPhoneNumber | undefined>;
+  getPrimaryVoipPhoneNumber(tenantId: string): Promise<VoipPhoneNumber | undefined>;
+  createVoipPhoneNumber(phoneNumber: InsertVoipPhoneNumber): Promise<VoipPhoneNumber>;
+  updateVoipPhoneNumber(id: string, tenantId: string, updates: Partial<VoipPhoneNumber>): Promise<VoipPhoneNumber>;
+  deleteVoipPhoneNumber(id: string, tenantId: string): Promise<boolean>;
+  
+  // VoIP call log operations
+  getVoipCallLogsByTenant(tenantId: string, limit?: number, offset?: number): Promise<VoipCallLog[]>;
+  getVoipCallLogById(id: string, tenantId: string): Promise<VoipCallLog | undefined>;
+  getVoipCallLogByCallSid(callSid: string): Promise<VoipCallLog | undefined>;
+  getVoipCallLogsByConsumer(consumerId: string, tenantId: string): Promise<VoipCallLog[]>;
+  createVoipCallLog(callLog: InsertVoipCallLog): Promise<VoipCallLog>;
+  updateVoipCallLog(id: string, updates: Partial<VoipCallLog>): Promise<VoipCallLog>;
+  updateVoipCallLogByCallSid(callSid: string, updates: Partial<VoipCallLog>): Promise<VoipCallLog | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4282,6 +4306,141 @@ export class DatabaseStorage implements IStorage {
         received: receivedSms.map(s => ({ ...s, type: 'received', timestamp: s.receivedAt })),
       },
     };
+  }
+
+  // VoIP phone number operations
+  async getVoipPhoneNumbersByTenant(tenantId: string): Promise<VoipPhoneNumber[]> {
+    return await db
+      .select()
+      .from(voipPhoneNumbers)
+      .where(eq(voipPhoneNumbers.tenantId, tenantId))
+      .orderBy(desc(voipPhoneNumbers.isPrimary), voipPhoneNumbers.areaCode);
+  }
+
+  async getVoipPhoneNumberById(id: string, tenantId: string): Promise<VoipPhoneNumber | undefined> {
+    const [phoneNumber] = await db
+      .select()
+      .from(voipPhoneNumbers)
+      .where(and(eq(voipPhoneNumbers.id, id), eq(voipPhoneNumbers.tenantId, tenantId)));
+    return phoneNumber;
+  }
+
+  async getVoipPhoneNumberByAreaCode(areaCode: string, tenantId: string): Promise<VoipPhoneNumber | undefined> {
+    const [phoneNumber] = await db
+      .select()
+      .from(voipPhoneNumbers)
+      .where(
+        and(
+          eq(voipPhoneNumbers.areaCode, areaCode),
+          eq(voipPhoneNumbers.tenantId, tenantId),
+          eq(voipPhoneNumbers.isActive, true)
+        )
+      );
+    return phoneNumber;
+  }
+
+  async getPrimaryVoipPhoneNumber(tenantId: string): Promise<VoipPhoneNumber | undefined> {
+    const [phoneNumber] = await db
+      .select()
+      .from(voipPhoneNumbers)
+      .where(
+        and(
+          eq(voipPhoneNumbers.tenantId, tenantId),
+          eq(voipPhoneNumbers.isPrimary, true),
+          eq(voipPhoneNumbers.isActive, true)
+        )
+      );
+    return phoneNumber;
+  }
+
+  async createVoipPhoneNumber(phoneNumber: InsertVoipPhoneNumber): Promise<VoipPhoneNumber> {
+    const [newPhoneNumber] = await db
+      .insert(voipPhoneNumbers)
+      .values(phoneNumber)
+      .returning();
+    return newPhoneNumber;
+  }
+
+  async updateVoipPhoneNumber(id: string, tenantId: string, updates: Partial<VoipPhoneNumber>): Promise<VoipPhoneNumber> {
+    const [updated] = await db
+      .update(voipPhoneNumbers)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(and(eq(voipPhoneNumbers.id, id), eq(voipPhoneNumbers.tenantId, tenantId)))
+      .returning();
+    return updated;
+  }
+
+  async deleteVoipPhoneNumber(id: string, tenantId: string): Promise<boolean> {
+    const result = await db
+      .delete(voipPhoneNumbers)
+      .where(and(eq(voipPhoneNumbers.id, id), eq(voipPhoneNumbers.tenantId, tenantId)));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  // VoIP call log operations
+  async getVoipCallLogsByTenant(tenantId: string, limit = 100, offset = 0): Promise<VoipCallLog[]> {
+    return await db
+      .select()
+      .from(voipCallLogs)
+      .where(eq(voipCallLogs.tenantId, tenantId))
+      .orderBy(desc(voipCallLogs.createdAt))
+      .limit(limit)
+      .offset(offset);
+  }
+
+  async getVoipCallLogById(id: string, tenantId: string): Promise<VoipCallLog | undefined> {
+    const [callLog] = await db
+      .select()
+      .from(voipCallLogs)
+      .where(and(eq(voipCallLogs.id, id), eq(voipCallLogs.tenantId, tenantId)));
+    return callLog;
+  }
+
+  async getVoipCallLogByCallSid(callSid: string): Promise<VoipCallLog | undefined> {
+    const [callLog] = await db
+      .select()
+      .from(voipCallLogs)
+      .where(eq(voipCallLogs.callSid, callSid));
+    return callLog;
+  }
+
+  async getVoipCallLogsByConsumer(consumerId: string, tenantId: string): Promise<VoipCallLog[]> {
+    return await db
+      .select()
+      .from(voipCallLogs)
+      .where(
+        and(
+          eq(voipCallLogs.consumerId, consumerId),
+          eq(voipCallLogs.tenantId, tenantId)
+        )
+      )
+      .orderBy(desc(voipCallLogs.createdAt));
+  }
+
+  async createVoipCallLog(callLog: InsertVoipCallLog): Promise<VoipCallLog> {
+    const [newCallLog] = await db
+      .insert(voipCallLogs)
+      .values(callLog)
+      .returning();
+    return newCallLog;
+  }
+
+  async updateVoipCallLog(id: string, updates: Partial<VoipCallLog>): Promise<VoipCallLog> {
+    const [updated] = await db
+      .update(voipCallLogs)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(voipCallLogs.id, id))
+      .returning();
+    return updated;
+  }
+
+  async updateVoipCallLogByCallSid(callSid: string, updates: Partial<VoipCallLog>): Promise<VoipCallLog | undefined> {
+    const [updated] = await db
+      .update(voipCallLogs)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(voipCallLogs.callSid, callSid))
+      .returning();
+    return updated;
   }
 }
 

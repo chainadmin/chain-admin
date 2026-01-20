@@ -1,0 +1,165 @@
+import twilio from 'twilio';
+import { VoiceGrant } from 'twilio/lib/jwt/AccessToken';
+import AccessToken from 'twilio/lib/jwt/AccessToken';
+
+const accountSid = process.env.TWILIO_ACCOUNT_SID;
+const authToken = process.env.TWILIO_AUTH_TOKEN;
+const apiKeySid = process.env.TWILIO_API_KEY_SID;
+const apiKeySecret = process.env.TWILIO_API_KEY_SECRET;
+
+let twilioClient: twilio.Twilio | null = null;
+
+if (accountSid && authToken) {
+  twilioClient = twilio(accountSid, authToken);
+  console.log('Twilio Voice service initialized');
+} else {
+  console.warn('Twilio Voice service not configured - missing credentials');
+}
+
+export function getTwilioClient(): twilio.Twilio | null {
+  return twilioClient;
+}
+
+export function generateVoiceToken(identity: string, tenantId: string): string | null {
+  if (!accountSid || !apiKeySid || !apiKeySecret) {
+    console.error('Cannot generate voice token - missing Twilio API credentials');
+    return null;
+  }
+
+  const token = new AccessToken(accountSid, apiKeySid, apiKeySecret, {
+    identity: identity,
+    ttl: 3600,
+  });
+
+  const voiceGrant = new VoiceGrant({
+    outgoingApplicationSid: process.env.TWILIO_TWIML_APP_SID,
+    incomingAllow: true,
+  });
+
+  token.addGrant(voiceGrant);
+
+  return token.toJwt();
+}
+
+export function extractAreaCode(phoneNumber: string): string {
+  const cleaned = phoneNumber.replace(/\D/g, '');
+  if (cleaned.startsWith('1') && cleaned.length === 11) {
+    return cleaned.substring(1, 4);
+  }
+  if (cleaned.length === 10) {
+    return cleaned.substring(0, 3);
+  }
+  return '';
+}
+
+export function formatPhoneE164(phone: string): string {
+  const cleaned = phone.replace(/\D/g, '');
+  if (cleaned.startsWith('1') && cleaned.length === 11) {
+    return `+${cleaned}`;
+  }
+  if (cleaned.length === 10) {
+    return `+1${cleaned}`;
+  }
+  return phone;
+}
+
+export async function initiateOutboundCall(
+  toNumber: string,
+  fromNumber: string,
+  callbackUrl: string
+): Promise<{ callSid: string; status: string } | null> {
+  if (!twilioClient) {
+    console.error('Twilio client not initialized');
+    return null;
+  }
+
+  try {
+    const call = await twilioClient.calls.create({
+      to: formatPhoneE164(toNumber),
+      from: formatPhoneE164(fromNumber),
+      url: callbackUrl,
+      record: true,
+      recordingStatusCallback: `${callbackUrl.replace('/voice/outbound', '/voice/recording-status')}`,
+      statusCallback: `${callbackUrl.replace('/voice/outbound', '/voice/call-status')}`,
+      statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
+    });
+
+    return {
+      callSid: call.sid,
+      status: call.status,
+    };
+  } catch (error: any) {
+    console.error('Failed to initiate outbound call:', error.message);
+    return null;
+  }
+}
+
+export async function getRecordingUrl(recordingSid: string): Promise<string | null> {
+  if (!twilioClient) {
+    console.error('Twilio client not initialized');
+    return null;
+  }
+
+  try {
+    const recording = await twilioClient.recordings(recordingSid).fetch();
+    return `https://api.twilio.com${recording.uri.replace('.json', '.mp3')}`;
+  } catch (error: any) {
+    console.error('Failed to get recording URL:', error.message);
+    return null;
+  }
+}
+
+export async function hangupCall(callSid: string): Promise<boolean> {
+  if (!twilioClient) {
+    console.error('Twilio client not initialized');
+    return false;
+  }
+
+  try {
+    await twilioClient.calls(callSid).update({ status: 'completed' });
+    return true;
+  } catch (error: any) {
+    console.error('Failed to hangup call:', error.message);
+    return false;
+  }
+}
+
+export function generateTwiML(options: {
+  action: 'dial' | 'say' | 'connect-client';
+  to?: string;
+  from?: string;
+  message?: string;
+  clientIdentity?: string;
+  record?: boolean;
+}): string {
+  const VoiceResponse = twilio.twiml.VoiceResponse;
+  const response = new VoiceResponse();
+
+  switch (options.action) {
+    case 'dial':
+      if (options.to) {
+        const dial = response.dial({
+          callerId: options.from,
+          record: options.record ? 'record-from-answer-dual' : undefined,
+          recordingStatusCallback: '/api/voice/recording-status',
+        });
+        dial.number(options.to);
+      }
+      break;
+    case 'say':
+      response.say(options.message || 'Hello');
+      break;
+    case 'connect-client':
+      if (options.clientIdentity) {
+        const dial = response.dial({
+          callerId: options.from,
+          record: options.record ? 'record-from-answer-dual' : undefined,
+          recordingStatusCallback: '/api/voice/recording-status',
+        });
+        dial.client(options.clientIdentity);
+      }
+      break;
+  }
+
+  return response.toString();
+}
