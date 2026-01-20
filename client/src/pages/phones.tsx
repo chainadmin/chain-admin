@@ -59,6 +59,7 @@ interface VoipPhoneNumber {
   tenantId: string;
   phoneNumber: string;
   areaCode: string;
+  numberType: 'local' | 'toll_free';
   friendlyName: string;
   twilioPhoneSid: string | null;
   isPrimary: boolean;
@@ -66,6 +67,32 @@ interface VoipPhoneNumber {
   capabilities: { voice: boolean; sms: boolean };
   createdAt: string;
   updatedAt: string | null;
+}
+
+interface AvailablePhoneNumber {
+  phoneNumber: string;
+  friendlyName: string;
+  locality: string;
+  region: string;
+  capabilities: { voice: boolean; sms: boolean; mms: boolean };
+}
+
+interface VoipBillingSummary {
+  voipEnabled: boolean;
+  voipUserCount: number;
+  localDidCount: number;
+  tollFreeCount: number;
+  pricing: {
+    userPriceCents: number;
+    localDidPriceCents: number;
+    tollFreePriceCents: number;
+  };
+  costs: {
+    usersCostCents: number;
+    localDidsCostCents: number;
+    tollFreeCostCents: number;
+    totalCostCents: number;
+  };
 }
 
 interface VoipCallLog {
@@ -105,6 +132,11 @@ export default function PhonesPage() {
   const [callDuration, setCallDuration] = useState(0);
   const [agentStatus, setAgentStatus] = useState<"available" | "busy" | "away">("available");
   const [showAddPhoneDialog, setShowAddPhoneDialog] = useState(false);
+  const [showProvisionDialog, setShowProvisionDialog] = useState(false);
+  const [provisionType, setProvisionType] = useState<'local' | 'toll_free'>('local');
+  const [searchAreaCode, setSearchAreaCode] = useState("");
+  const [availableNumbers, setAvailableNumbers] = useState<AvailablePhoneNumber[]>([]);
+  const [searchingNumbers, setSearchingNumbers] = useState(false);
   const [newPhoneNumber, setNewPhoneNumber] = useState("");
   const [newPhoneFriendlyName, setNewPhoneFriendlyName] = useState("");
   const [newPhoneIsPrimary, setNewPhoneIsPrimary] = useState(false);
@@ -112,6 +144,23 @@ export default function PhonesPage() {
   const [showNotesDialog, setShowNotesDialog] = useState(false);
   const [callNotes, setCallNotes] = useState("");
   const [playingRecordingId, setPlayingRecordingId] = useState<string | null>(null);
+
+  const isJwtAuth = !!localStorage.getItem('chain_jwt');
+  const storedUser = localStorage.getItem('chain_user');
+  const user = storedUser ? JSON.parse(storedUser) : null;
+  
+  const { data: userData } = useQuery({
+    queryKey: ["/api/auth/user"],
+    enabled: !isJwtAuth,
+  });
+
+  const isOwner = isJwtAuth 
+    ? (user as any)?.role === 'owner' || (user as any)?.role === 'manager'
+    : (userData as any)?.platformUser?.role === 'owner' || (userData as any)?.platformUser?.role === 'manager';
+
+  const hasVoipAccess = isJwtAuth
+    ? (user as any)?.voipAccess === true || isOwner
+    : true; // Platform users with access can use phones
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -127,6 +176,87 @@ export default function PhonesPage() {
     queryKey: ["/api/voip/token"],
     refetchInterval: 1000 * 60 * 55,
   });
+
+  const { data: billingSummary } = useQuery<VoipBillingSummary>({
+    queryKey: ["/api/voip/billing-summary"],
+    enabled: isOwner,
+  });
+
+  const searchLocalNumbersMutation = useMutation({
+    mutationFn: async (areaCode: string) => {
+      const response = await apiRequest("GET", `/api/voip/available-numbers/local/${areaCode}`);
+      return response.json();
+    },
+    onSuccess: (data: AvailablePhoneNumber[]) => {
+      setAvailableNumbers(data);
+      setSearchingNumbers(false);
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to search numbers", variant: "destructive" });
+      setSearchingNumbers(false);
+    },
+  });
+
+  const searchTollFreeNumbersMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("GET", "/api/voip/available-numbers/toll-free");
+      return response.json();
+    },
+    onSuccess: (data: AvailablePhoneNumber[]) => {
+      setAvailableNumbers(data);
+      setSearchingNumbers(false);
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to search numbers", variant: "destructive" });
+      setSearchingNumbers(false);
+    },
+  });
+
+  const provisionNumberMutation = useMutation({
+    mutationFn: async (phoneNumber: string) => {
+      const response = await apiRequest("POST", "/api/voip/provision-number", { phoneNumber });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/voip/phone-numbers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/voip/billing-summary"] });
+      toast({ title: "Success", description: "Phone number provisioned successfully" });
+      setShowProvisionDialog(false);
+      setAvailableNumbers([]);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to provision number", variant: "destructive" });
+    },
+  });
+
+  const releaseNumberMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/voip/release-number/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/voip/phone-numbers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/voip/billing-summary"] });
+      toast({ title: "Success", description: "Phone number released" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to release number", variant: "destructive" });
+    },
+  });
+
+  const handleSearchNumbers = () => {
+    setSearchingNumbers(true);
+    setAvailableNumbers([]);
+    if (provisionType === 'local') {
+      if (!searchAreaCode || searchAreaCode.length !== 3) {
+        toast({ title: "Error", description: "Please enter a 3-digit area code", variant: "destructive" });
+        setSearchingNumbers(false);
+        return;
+      }
+      searchLocalNumbersMutation.mutate(searchAreaCode);
+    } else {
+      searchTollFreeNumbersMutation.mutate();
+    }
+  };
 
   useEffect(() => {
     if (callState === "in-call") {
@@ -375,16 +505,18 @@ export default function PhonesPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid grid-cols-3 w-[400px]">
+          <TabsList className={`grid ${isAdmin ? 'grid-cols-3 w-[400px]' : 'grid-cols-2 w-[280px]'}`}>
             <TabsTrigger value="dialpad" className="flex items-center gap-2">
               <Hash className="h-4 w-4" /> Dialpad
             </TabsTrigger>
             <TabsTrigger value="history" className="flex items-center gap-2">
               <History className="h-4 w-4" /> Call History
             </TabsTrigger>
-            <TabsTrigger value="settings" className="flex items-center gap-2">
-              <Settings className="h-4 w-4" /> Phone Numbers
-            </TabsTrigger>
+            {isAdmin && (
+              <TabsTrigger value="settings" className="flex items-center gap-2">
+                <Settings className="h-4 w-4" /> Phone Numbers
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="dialpad" className="mt-6">
@@ -705,16 +837,52 @@ export default function PhonesPage() {
             </Card>
           </TabsContent>
 
+          {isAdmin && (
           <TabsContent value="settings" className="mt-6">
+            {billingSummary && (
+              <Card className="mb-6">
+                <CardHeader>
+                  <CardTitle className="text-lg">VoIP Billing Summary</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                      <div className="text-2xl font-bold">{billingSummary.voipUserCount}</div>
+                      <div className="text-sm text-gray-500">VoIP Users</div>
+                      <div className="text-xs text-gray-400">${(billingSummary.costs.usersCostCents / 100).toFixed(2)}/mo</div>
+                    </div>
+                    <div className="text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                      <div className="text-2xl font-bold">{billingSummary.localDidCount}</div>
+                      <div className="text-sm text-gray-500">Local DIDs</div>
+                      <div className="text-xs text-gray-400">${(billingSummary.costs.localDidsCostCents / 100).toFixed(2)}/mo</div>
+                    </div>
+                    <div className="text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                      <div className="text-2xl font-bold">{billingSummary.tollFreeCount}</div>
+                      <div className="text-sm text-gray-500">Toll-Free</div>
+                      <div className="text-xs text-gray-400">${(billingSummary.costs.tollFreeCostCents / 100).toFixed(2)}/mo</div>
+                    </div>
+                    <div className="text-center p-3 bg-blue-50 dark:bg-blue-900 rounded-lg">
+                      <div className="text-2xl font-bold">${(billingSummary.costs.totalCostCents / 100).toFixed(2)}</div>
+                      <div className="text-sm text-gray-500">Total/Month</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle>Phone Numbers</CardTitle>
                   <CardDescription>Manage your VoIP phone numbers</CardDescription>
                 </div>
-                <Button onClick={() => setShowAddPhoneDialog(true)}>
-                  <Plus className="h-4 w-4 mr-2" /> Add Number
-                </Button>
+                <div className="flex gap-2">
+                  <Button onClick={() => setShowProvisionDialog(true)}>
+                    <Plus className="h-4 w-4 mr-2" /> Provision Number
+                  </Button>
+                  <Button variant="outline" onClick={() => setShowAddPhoneDialog(true)}>
+                    <Plus className="h-4 w-4 mr-2" /> Manual Add
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 {loadingNumbers ? (
@@ -725,9 +893,9 @@ export default function PhonesPage() {
                   <div className="text-center py-12 text-gray-500">
                     <Phone className="h-16 w-16 mx-auto mb-4 text-gray-300" />
                     <p className="text-lg">No phone numbers configured</p>
-                    <p className="text-sm mb-4">Add your Twilio phone numbers to start making calls</p>
-                    <Button onClick={() => setShowAddPhoneDialog(true)}>
-                      <Plus className="h-4 w-4 mr-2" /> Add Your First Number
+                    <p className="text-sm mb-4">Provision phone numbers from Twilio to start making calls</p>
+                    <Button onClick={() => setShowProvisionDialog(true)}>
+                      <Plus className="h-4 w-4 mr-2" /> Provision Your First Number
                     </Button>
                   </div>
                 ) : (
@@ -735,6 +903,7 @@ export default function PhonesPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Phone Number</TableHead>
+                        <TableHead>Type</TableHead>
                         <TableHead>Area Code</TableHead>
                         <TableHead>Name</TableHead>
                         <TableHead>Status</TableHead>
@@ -746,6 +915,11 @@ export default function PhonesPage() {
                       {phoneNumbers.map((phone) => (
                         <TableRow key={phone.id}>
                           <TableCell className="font-mono">{phone.phoneNumber}</TableCell>
+                          <TableCell>
+                            <Badge variant={phone.numberType === 'toll_free' ? 'secondary' : 'outline'}>
+                              {phone.numberType === 'toll_free' ? 'Toll-Free' : 'Local'}
+                            </Badge>
+                          </TableCell>
                           <TableCell>{phone.areaCode}</TableCell>
                           <TableCell>{phone.friendlyName}</TableCell>
                           <TableCell>
@@ -806,6 +980,7 @@ export default function PhonesPage() {
               </CardContent>
             </Card>
           </TabsContent>
+          )}
         </Tabs>
 
         <Dialog open={showAddPhoneDialog} onOpenChange={setShowAddPhoneDialog}>
@@ -863,6 +1038,112 @@ export default function PhonesPage() {
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 ) : null}
                 Add Number
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Provision Phone Number Dialog */}
+        <Dialog open={showProvisionDialog} onOpenChange={setShowProvisionDialog}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Provision Phone Number</DialogTitle>
+              <DialogDescription>
+                Search and provision a new phone number from Twilio
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="flex gap-4">
+                <Button
+                  variant={provisionType === 'local' ? 'default' : 'outline'}
+                  onClick={() => { setProvisionType('local'); setAvailableNumbers([]); }}
+                >
+                  Local DID ($5/mo)
+                </Button>
+                <Button
+                  variant={provisionType === 'toll_free' ? 'default' : 'outline'}
+                  onClick={() => { setProvisionType('toll_free'); setAvailableNumbers([]); }}
+                >
+                  Toll-Free ($10/mo)
+                </Button>
+              </div>
+              
+              {provisionType === 'local' && (
+                <div className="flex gap-2">
+                  <Input
+                    value={searchAreaCode}
+                    onChange={(e) => setSearchAreaCode(e.target.value.replace(/\D/g, '').slice(0, 3))}
+                    placeholder="Area code (e.g., 212)"
+                    className="w-32"
+                  />
+                  <Button onClick={handleSearchNumbers} disabled={searchingNumbers}>
+                    {searchingNumbers ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                    Search
+                  </Button>
+                </div>
+              )}
+              
+              {provisionType === 'toll_free' && (
+                <Button onClick={handleSearchNumbers} disabled={searchingNumbers}>
+                  {searchingNumbers ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  Search Toll-Free Numbers
+                </Button>
+              )}
+
+              {availableNumbers.length > 0 && (
+                <div className="border rounded-lg max-h-64 overflow-y-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Number</TableHead>
+                        <TableHead>Location</TableHead>
+                        <TableHead className="text-right">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {availableNumbers.map((num) => (
+                        <TableRow key={num.phoneNumber}>
+                          <TableCell className="font-mono">{num.phoneNumber}</TableCell>
+                          <TableCell>{num.locality ? `${num.locality}, ${num.region}` : num.region || 'USA'}</TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              onClick={() => provisionNumberMutation.mutate(num.phoneNumber)}
+                              disabled={provisionNumberMutation.isPending}
+                            >
+                              {provisionNumberMutation.isPending ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                'Provision'
+                              )}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {billingSummary && (
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 space-y-2">
+                  <h4 className="font-medium">Current VoIP Costs</h4>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <span>VoIP Users ({billingSummary.voipUserCount}):</span>
+                    <span className="text-right">${(billingSummary.costs.usersCostCents / 100).toFixed(2)}</span>
+                    <span>Local DIDs ({billingSummary.localDidCount}):</span>
+                    <span className="text-right">${(billingSummary.costs.localDidsCostCents / 100).toFixed(2)}</span>
+                    <span>Toll-Free ({billingSummary.tollFreeCount}):</span>
+                    <span className="text-right">${(billingSummary.costs.tollFreeCostCents / 100).toFixed(2)}</span>
+                    <span className="font-medium border-t pt-2">Total Monthly:</span>
+                    <span className="font-medium text-right border-t pt-2">${(billingSummary.costs.totalCostCents / 100).toFixed(2)}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowProvisionDialog(false)}>
+                Close
               </Button>
             </DialogFooter>
           </DialogContent>

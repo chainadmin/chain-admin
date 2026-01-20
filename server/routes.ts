@@ -21376,6 +21376,184 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Search available local phone numbers by area code
+  app.get('/api/voip/available-numbers/local/:areaCode', authenticateUser, requireOwner, async (req, res) => {
+    try {
+      const user = getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { areaCode } = req.params;
+      const { searchAvailableLocalNumbers } = await import('./twilioVoiceService');
+      const numbers = await searchAvailableLocalNumbers(areaCode, 10);
+      res.json(numbers);
+    } catch (error) {
+      console.error("Error searching local numbers:", error);
+      res.status(500).json({ message: "Failed to search available numbers" });
+    }
+  });
+
+  // Search available toll-free phone numbers
+  app.get('/api/voip/available-numbers/toll-free', authenticateUser, requireOwner, async (req, res) => {
+    try {
+      const user = getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { searchAvailableTollFreeNumbers } = await import('./twilioVoiceService');
+      const numbers = await searchAvailableTollFreeNumbers(10);
+      res.json(numbers);
+    } catch (error) {
+      console.error("Error searching toll-free numbers:", error);
+      res.status(500).json({ message: "Failed to search available numbers" });
+    }
+  });
+
+  // Provision a phone number from Twilio
+  app.post('/api/voip/provision-number', authenticateUser, requireOwner, async (req, res) => {
+    try {
+      const user = getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { phoneNumber, numberType } = req.body;
+
+      if (!phoneNumber) {
+        return res.status(400).json({ message: "Phone number is required" });
+      }
+
+      const { provisionPhoneNumber, extractAreaCode, formatPhoneE164, isTollFreeNumber } = await import('./twilioVoiceService');
+      
+      // Provision the number with Twilio
+      const provisioned = await provisionPhoneNumber(phoneNumber);
+      if (!provisioned) {
+        return res.status(500).json({ message: "Failed to provision phone number with Twilio" });
+      }
+
+      // Determine number type
+      const detectedNumberType = isTollFreeNumber(phoneNumber) ? 'toll_free' : 'local';
+      const finalNumberType = numberType || detectedNumberType;
+      
+      const formattedNumber = formatPhoneE164(phoneNumber);
+      const areaCode = extractAreaCode(phoneNumber);
+
+      // Check if this should be primary (first number)
+      const existingNumbers = await voipStorage.getVoipPhoneNumbersByTenant(user.tenantId);
+      const isPrimary = existingNumbers.length === 0;
+
+      // Save to database
+      const newPhoneNumber = await voipStorage.createVoipPhoneNumber({
+        tenantId: user.tenantId,
+        phoneNumber: formattedNumber,
+        areaCode,
+        numberType: finalNumberType,
+        friendlyName: `${finalNumberType === 'toll_free' ? 'Toll-Free' : 'Local'} (${areaCode})`,
+        twilioPhoneSid: provisioned.sid,
+        isPrimary,
+        isActive: true,
+        capabilities: { voice: true, sms: false },
+      });
+
+      res.json(newPhoneNumber);
+    } catch (error) {
+      console.error("Error provisioning phone number:", error);
+      res.status(500).json({ message: "Failed to provision phone number" });
+    }
+  });
+
+  // Release a phone number from Twilio
+  app.delete('/api/voip/release-number/:id', authenticateUser, requireOwner, async (req, res) => {
+    try {
+      const user = getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+      
+      // Get the phone number record
+      const phoneNumbers = await voipStorage.getVoipPhoneNumbersByTenant(user.tenantId);
+      const phoneNumber = phoneNumbers.find(p => p.id === id);
+      
+      if (!phoneNumber) {
+        return res.status(404).json({ message: "Phone number not found" });
+      }
+
+      // Release from Twilio if we have the SID
+      if (phoneNumber.twilioPhoneSid) {
+        const { releasePhoneNumber } = await import('./twilioVoiceService');
+        const released = await releasePhoneNumber(phoneNumber.twilioPhoneSid);
+        if (!released) {
+          return res.status(500).json({ message: "Failed to release phone number from Twilio" });
+        }
+      }
+
+      // Delete from database
+      await voipStorage.deleteVoipPhoneNumber(id, user.tenantId);
+
+      res.json({ message: "Phone number released" });
+    } catch (error) {
+      console.error("Error releasing phone number:", error);
+      res.status(500).json({ message: "Failed to release phone number" });
+    }
+  });
+
+  // Get VoIP billing summary for tenant
+  app.get('/api/voip/billing-summary', authenticateUser, async (req, res) => {
+    try {
+      const user = getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const tenant = await storage.getTenantById(user.tenantId);
+      if (!tenant) {
+        return res.status(404).json({ message: "Tenant not found" });
+      }
+
+      // Count phone numbers
+      const counts = await voipStorage.countVoipPhoneNumbersByTenant(user.tenantId);
+      
+      // Count VoIP users
+      const credentials = await storage.getAgencyCredentialsByTenant(user.tenantId);
+      const voipUserCount = credentials.filter(c => c.voipAccess).length;
+
+      // Calculate costs using tenant pricing (or defaults)
+      const userPrice = tenant.voipUserPrice || 8000; // $80
+      const localDidPrice = tenant.voipLocalDidPrice || 500; // $5
+      const tollFreePrice = tenant.voipTollFreePrice || 1000; // $10
+
+      const usersCost = voipUserCount * userPrice;
+      const localDidsCost = counts.localCount * localDidPrice;
+      const tollFreeCost = counts.tollFreeCount * tollFreePrice;
+      const totalCost = usersCost + localDidsCost + tollFreeCost;
+
+      res.json({
+        voipEnabled: tenant.voipEnabled,
+        voipUserCount,
+        localDidCount: counts.localCount,
+        tollFreeCount: counts.tollFreeCount,
+        pricing: {
+          userPriceCents: userPrice,
+          localDidPriceCents: localDidPrice,
+          tollFreePriceCents: tollFreePrice,
+        },
+        costs: {
+          usersCostCents: usersCost,
+          localDidsCostCents: localDidsCost,
+          tollFreeCostCents: tollFreeCost,
+          totalCostCents: totalCost,
+        },
+      });
+    } catch (error) {
+      console.error("Error getting VoIP billing summary:", error);
+      res.status(500).json({ message: "Failed to get billing summary" });
+    }
+  });
+
   // Update VoIP phone number
   app.patch('/api/voip/phone-numbers/:id', authenticateUser, requireOwner, async (req, res) => {
     try {

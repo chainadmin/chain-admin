@@ -163,3 +163,143 @@ export function generateTwiML(options: {
 
   return response.toString();
 }
+
+export interface AvailablePhoneNumber {
+  phoneNumber: string;
+  friendlyName: string;
+  locality: string;
+  region: string;
+  isoCountry: string;
+  capabilities: {
+    voice: boolean;
+    sms: boolean;
+    mms: boolean;
+  };
+}
+
+export async function searchAvailableLocalNumbers(
+  areaCode: string,
+  limit: number = 10
+): Promise<AvailablePhoneNumber[]> {
+  if (!twilioClient) {
+    console.error('Twilio client not initialized');
+    return [];
+  }
+
+  try {
+    const numbers = await twilioClient.availablePhoneNumbers('US')
+      .local
+      .list({
+        areaCode: parseInt(areaCode),
+        voiceEnabled: true,
+        limit,
+      });
+
+    return numbers.map(n => ({
+      phoneNumber: n.phoneNumber,
+      friendlyName: n.friendlyName,
+      locality: n.locality || '',
+      region: n.region || '',
+      isoCountry: n.isoCountry || 'US',
+      capabilities: {
+        voice: n.capabilities?.voice || false,
+        sms: n.capabilities?.sms || false,
+        mms: n.capabilities?.mms || false,
+      },
+    }));
+  } catch (error: any) {
+    console.error('Failed to search local numbers:', error.message);
+    return [];
+  }
+}
+
+export async function searchAvailableTollFreeNumbers(
+  limit: number = 10
+): Promise<AvailablePhoneNumber[]> {
+  if (!twilioClient) {
+    console.error('Twilio client not initialized');
+    return [];
+  }
+
+  try {
+    const numbers = await twilioClient.availablePhoneNumbers('US')
+      .tollFree
+      .list({
+        voiceEnabled: true,
+        limit,
+      });
+
+    return numbers.map(n => ({
+      phoneNumber: n.phoneNumber,
+      friendlyName: n.friendlyName,
+      locality: n.locality || '',
+      region: n.region || '',
+      isoCountry: n.isoCountry || 'US',
+      capabilities: {
+        voice: n.capabilities?.voice || false,
+        sms: n.capabilities?.sms || false,
+        mms: n.capabilities?.mms || false,
+      },
+    }));
+  } catch (error: any) {
+    console.error('Failed to search toll-free numbers:', error.message);
+    return [];
+  }
+}
+
+export async function provisionPhoneNumber(
+  phoneNumber: string,
+  friendlyName?: string
+): Promise<{ sid: string; phoneNumber: string } | null> {
+  if (!twilioClient) {
+    console.error('Twilio client not initialized');
+    return null;
+  }
+
+  try {
+    const voiceUrl = process.env.REPLIT_DEV_DOMAIN 
+      ? `https://${process.env.REPLIT_DEV_DOMAIN}/api/voice/inbound`
+      : undefined;
+    
+    const statusCallback = process.env.REPLIT_DEV_DOMAIN
+      ? `https://${process.env.REPLIT_DEV_DOMAIN}/api/voice/call-status`
+      : undefined;
+
+    const purchasedNumber = await twilioClient.incomingPhoneNumbers.create({
+      phoneNumber,
+      friendlyName: friendlyName || `Chain VoIP - ${phoneNumber}`,
+      voiceUrl,
+      voiceMethod: 'POST',
+      statusCallback,
+      statusCallbackMethod: 'POST',
+    });
+
+    return {
+      sid: purchasedNumber.sid,
+      phoneNumber: purchasedNumber.phoneNumber,
+    };
+  } catch (error: any) {
+    console.error('Failed to provision phone number:', error.message);
+    return null;
+  }
+}
+
+export async function releasePhoneNumber(phoneSid: string): Promise<boolean> {
+  if (!twilioClient) {
+    console.error('Twilio client not initialized');
+    return false;
+  }
+
+  try {
+    await twilioClient.incomingPhoneNumbers(phoneSid).remove();
+    return true;
+  } catch (error: any) {
+    console.error('Failed to release phone number:', error.message);
+    return false;
+  }
+}
+
+export function isTollFreeNumber(phoneNumber: string): boolean {
+  const areaCode = extractAreaCode(phoneNumber);
+  return ['800', '888', '877', '866', '855', '844', '833'].includes(areaCode);
+}
