@@ -21297,6 +21297,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
+      // Check VoIP access - owners/managers always have access, agents need voipAccess flag
+      const isOwner = user.role === 'owner' || user.role === 'manager';
+      if (!isOwner && !user.voipAccess) {
+        return res.status(403).json({ message: "VoIP access not enabled for this user" });
+      }
+
       const { generateVoiceToken } = await import('./twilioVoiceService');
       const token = generateVoiceToken(user.username, user.tenantId);
       
@@ -21616,6 +21622,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
+      // Check VoIP access
+      const isOwner = user.role === 'owner' || user.role === 'manager';
+      if (!isOwner && !user.voipAccess) {
+        return res.status(403).json({ message: "VoIP access not enabled for this user" });
+      }
+
       const limit = parseInt(req.query.limit as string) || 100;
       const offset = parseInt(req.query.offset as string) || 0;
 
@@ -21650,6 +21662,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = getCurrentUser(req);
       if (!user) {
         return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Check VoIP access
+      const isOwner = user.role === 'owner' || user.role === 'manager';
+      if (!isOwner && !user.voipAccess) {
+        return res.status(403).json({ message: "VoIP access not enabled for this user" });
       }
 
       const { toNumber, consumerId, accountId } = req.body;
@@ -21848,6 +21866,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
+      // Check VoIP access
+      const isOwner = user.role === 'owner' || user.role === 'manager';
+      if (!isOwner && !user.voipAccess) {
+        return res.status(403).json({ message: "VoIP access not enabled for this user" });
+      }
+
       const { recordingSid } = req.params;
       
       const { getRecordingUrl } = await import('./twilioVoiceService');
@@ -21870,6 +21894,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = getCurrentUser(req);
       if (!user) {
         return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Check VoIP access
+      const isOwner = user.role === 'owner' || user.role === 'manager';
+      if (!isOwner && !user.voipAccess) {
+        return res.status(403).json({ message: "VoIP access not enabled for this user" });
       }
 
       const { callSid } = req.params;

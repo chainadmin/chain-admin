@@ -47,6 +47,7 @@ import Documents from "@/pages/documents";
 import SignDocument from "@/pages/sign-document";
 import Info from "@/pages/info";
 import Phones from "@/pages/phones";
+import Softphone from "@/pages/softphone";
 
 function Router() {
   const { isAuthenticated, isLoading, user, isJwtAuth } = useAuth();
@@ -100,6 +101,7 @@ function Router() {
                        pathname === '/agency-login' ||
                        pathname === '/agency/forgot-password' ||
                        pathname === '/agency/reset-password' ||
+                       pathname === '/softphone' ||
                        pathname === '/consumer-login' ||
                        pathname === '/consumer-dashboard' ||
                        pathname.startsWith('/consumer-register') ||
@@ -233,6 +235,7 @@ function Router() {
       ...getSmsOptInRoutes("agency-sms"),
       ...createRouteElements(tenantAgreementPaths, TenantAgreement, "agency"),
       <Route key="agency-sign" path="/sign/:requestId" component={SignDocument} />,
+      <Route key="agency-softphone" path="/softphone" component={Softphone} />,
       <Route key="agency-landing" path="/agency/:agencySlug" component={AgencyLanding} />,
       <Route key="agency-login" path="/agency-login" component={AgencyLogin} />,
       <Route
@@ -336,6 +339,7 @@ function Router() {
       ...createRouteElements(tenantAgreementPaths, TenantAgreement, "public"),
       <Route key="public-fix-db" path="/fix-db" component={FixDatabase} />,
       <Route key="public-sign" path="/sign/:requestId" component={SignDocument} />,
+      <Route key="public-softphone" path="/softphone" component={Softphone} />,
       ...createRouteElements(adminRoutePaths, GlobalAdmin, "public-admin"),
       <Route key="public-fallback" path="/:rest*" component={NotFound} />
     ];
@@ -365,6 +369,7 @@ function Router() {
     <Route key="auth-settings" path="/settings" component={Settings} />,
     <Route key="auth-documents" path="/documents" component={Documents} />,
     <Route key="auth-phones" path="/phones" component={Phones} />,
+    <Route key="auth-softphone" path="/softphone" component={Softphone} />,
     ...createRouteElements(adminRoutePaths, GlobalAdmin, "auth-admin"),
     <Route key="auth-agency-login" path="/agency-login" component={AgencyLogin} />,
     <Route key="auth-agency-register" path="/agency-register" component={AgencyRegistration} />,
