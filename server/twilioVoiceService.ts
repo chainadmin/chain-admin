@@ -303,3 +303,33 @@ export function isTollFreeNumber(phoneNumber: string): boolean {
   const areaCode = extractAreaCode(phoneNumber);
   return ['800', '888', '877', '866', '855', '844', '833'].includes(areaCode);
 }
+
+export interface OwnedPhoneNumber {
+  sid: string;
+  phoneNumber: string;
+  friendlyName: string;
+  numberType: 'local' | 'toll_free';
+  areaCode: string;
+}
+
+export async function listOwnedPhoneNumbers(): Promise<OwnedPhoneNumber[]> {
+  if (!twilioClient) {
+    console.error('Twilio client not initialized');
+    return [];
+  }
+
+  try {
+    const numbers = await twilioClient.incomingPhoneNumbers.list({ limit: 100 });
+    
+    return numbers.map((num) => ({
+      sid: num.sid,
+      phoneNumber: num.phoneNumber,
+      friendlyName: num.friendlyName || '',
+      numberType: isTollFreeNumber(num.phoneNumber) ? 'toll_free' as const : 'local' as const,
+      areaCode: extractAreaCode(num.phoneNumber),
+    }));
+  } catch (error: any) {
+    console.error('Failed to list owned phone numbers:', error.message);
+    return [];
+  }
+}

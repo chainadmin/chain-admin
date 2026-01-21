@@ -19,6 +19,7 @@ export interface IVoipStorage {
   deleteVoipPhoneNumber(id: string, tenantId: string): Promise<boolean>;
   countVoipPhoneNumbersByTenant(tenantId: string): Promise<{ localCount: number; tollFreeCount: number }>;
   countVoipUsersForTenant(tenantId: string): Promise<number>;
+  getAllAssignedPhoneNumbers(): Promise<string[]>;
   
   getVoipCallLogsByTenant(tenantId: string, limit?: number, offset?: number): Promise<VoipCallLog[]>;
   getVoipCallLogById(id: string, tenantId: string): Promise<VoipCallLog | undefined>;
@@ -127,6 +128,13 @@ export class VoipStorage implements IVoipStorage {
         eq(agencyCredentials.voipAccess, true)
       ));
     return result.length;
+  }
+
+  async getAllAssignedPhoneNumbers(): Promise<string[]> {
+    const result = await db
+      .select({ phoneNumber: voipPhoneNumbers.phoneNumber })
+      .from(voipPhoneNumbers);
+    return result.map(r => r.phoneNumber);
   }
 
   async getVoipCallLogsByTenant(tenantId: string, limit = 100, offset = 0): Promise<VoipCallLog[]> {

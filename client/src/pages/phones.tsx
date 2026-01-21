@@ -107,6 +107,8 @@ export default function PhonesPage() {
   const [searchAreaCode, setSearchAreaCode] = useState("");
   const [availableNumbers, setAvailableNumbers] = useState<AvailablePhoneNumber[]>([]);
   const [searchingNumbers, setSearchingNumbers] = useState(false);
+  const [unassignedNumbers, setUnassignedNumbers] = useState<{sid: string; phoneNumber: string; friendlyName: string; numberType: 'local' | 'toll_free'; areaCode: string}[]>([]);
+  const [loadingUnassigned, setLoadingUnassigned] = useState(false);
 
   const { data: phoneNumbers = [], isLoading: loadingNumbers } = useQuery<VoipPhoneNumber[]>({
     queryKey: ["/api/voip/phone-numbers"],
@@ -163,6 +165,29 @@ export default function PhonesPage() {
       toast({
         title: "Error",
         description: error.message || "Failed to provision phone number",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const assignNumberMutation = useMutation({
+    mutationFn: async (data: { phoneNumber: string; twilioSid: string; numberType: 'local' | 'toll_free' }) => {
+      return apiRequest('POST', '/api/voip/phone-numbers/assign', data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/voip/phone-numbers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/voip/billing-summary"] });
+      setShowProvisionDialog(false);
+      setUnassignedNumbers([]);
+      toast({
+        title: "Number Assigned",
+        description: "Phone number has been assigned to your company",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to assign phone number",
         variant: "destructive",
       });
     },
@@ -229,6 +254,20 @@ export default function PhonesPage() {
       });
     },
   });
+
+  const fetchUnassignedNumbers = async () => {
+    setLoadingUnassigned(true);
+    try {
+      const response = await apiRequest('GET', '/api/voip/unassigned-numbers');
+      const data = await response.json();
+      setUnassignedNumbers(data || []);
+    } catch (error: any) {
+      console.error("Failed to fetch unassigned numbers:", error);
+      setUnassignedNumbers([]);
+    } finally {
+      setLoadingUnassigned(false);
+    }
+  };
 
   const searchAvailableNumbers = async () => {
     if (provisionType === 'local' && !searchAreaCode) {
@@ -642,16 +681,79 @@ export default function PhonesPage() {
       </div>
 
       {/* Provision Number Dialog */}
-      <Dialog open={showProvisionDialog} onOpenChange={setShowProvisionDialog}>
+      <Dialog open={showProvisionDialog} onOpenChange={(open) => {
+        setShowProvisionDialog(open);
+        if (open) {
+          fetchUnassignedNumbers();
+        }
+      }}>
         <DialogContent className="bg-[#0f1629] border-white/10 text-white max-w-2xl">
           <DialogHeader>
             <DialogTitle>Add Phone Number</DialogTitle>
             <DialogDescription className="text-blue-100/60">
-              Search for and provision a new phone number
+              Select from available numbers or search for new ones
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
+            {/* Show unassigned numbers at the top */}
+            {loadingUnassigned ? (
+              <div className="flex items-center gap-2 text-sm text-blue-100/60">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Checking for available numbers...
+              </div>
+            ) : unassignedNumbers.length > 0 && (
+              <div className="space-y-2">
+                <Label className="text-green-300 flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Available Numbers (Already Owned - No Additional Cost)
+                </Label>
+                <div className="max-h-[200px] overflow-y-auto space-y-2">
+                  {unassignedNumbers.map((number) => (
+                    <div 
+                      key={number.phoneNumber}
+                      className="flex items-center justify-between p-3 bg-green-500/10 rounded-lg border border-green-400/30"
+                    >
+                      <div>
+                        <div className="font-mono text-white">{number.phoneNumber}</div>
+                        <div className="text-xs text-blue-100/60">
+                          {number.numberType === 'toll_free' ? 'Toll-Free' : `Local (${number.areaCode})`}
+                          {number.friendlyName && ` · ${number.friendlyName}`}
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => assignNumberMutation.mutate({ phoneNumber: number.phoneNumber, twilioSid: number.sid, numberType: number.numberType })}
+                        disabled={assignNumberMutation.isPending}
+                        className="bg-green-500 hover:bg-green-600"
+                      >
+                        {assignNumberMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            <Plus className="h-4 w-4 mr-1" />
+                            Use This
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Divider if there are unassigned numbers */}
+            {unassignedNumbers.length > 0 && (
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t border-white/10" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-[#0f1629] px-2 text-blue-100/40">Or purchase a new number</span>
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-4">
               <Button
                 variant={provisionType === 'local' ? 'default' : 'outline'}
@@ -716,7 +818,7 @@ export default function PhonesPage() {
 
             {availableNumbers.length > 0 && (
               <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                <Label className="text-blue-100/80">Available Numbers</Label>
+                <Label className="text-blue-100/80">Available Numbers (New Purchase)</Label>
                 {availableNumbers.map((number) => (
                   <div 
                     key={number.phoneNumber}
@@ -756,6 +858,7 @@ export default function PhonesPage() {
                 setShowProvisionDialog(false);
                 setAvailableNumbers([]);
                 setSearchAreaCode("");
+                setUnassignedNumbers([]);
               }}
               className="border-white/20 text-white hover:bg-white/10"
             >

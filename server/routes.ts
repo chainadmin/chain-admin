@@ -21454,6 +21454,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get unassigned numbers from Twilio account (numbers we own but haven't assigned to any tenant)
+  app.get('/api/voip/unassigned-numbers', authenticateUser, requireOwner, async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { listOwnedPhoneNumbers } = await import('./twilioVoiceService');
+      
+      // Get all numbers owned in Twilio
+      const ownedNumbers = await listOwnedPhoneNumbers();
+      
+      // Get all numbers assigned to tenants in our database
+      const assignedNumbers = await voipStorage.getAllAssignedPhoneNumbers();
+      const assignedSet = new Set(assignedNumbers);
+      
+      // Filter to only unassigned numbers
+      const unassignedNumbers = ownedNumbers.filter(num => !assignedSet.has(num.phoneNumber));
+      
+      res.json(unassignedNumbers);
+    } catch (error) {
+      console.error("Error getting unassigned numbers:", error);
+      res.status(500).json({ message: "Failed to get unassigned numbers" });
+    }
+  });
+
+  // Assign an existing Twilio number to a tenant (no new purchase needed)
+  app.post('/api/voip/phone-numbers/assign', authenticateUser, requireOwner, async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user || !user.tenantId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { phoneNumber, twilioSid, numberType } = req.body;
+      
+      if (!phoneNumber || !twilioSid) {
+        return res.status(400).json({ message: "Phone number and Twilio SID are required" });
+      }
+
+      // Check if already assigned
+      const assignedNumbers = await voipStorage.getAllAssignedPhoneNumbers();
+      if (assignedNumbers.includes(phoneNumber)) {
+        return res.status(400).json({ message: "This number is already assigned to a tenant" });
+      }
+
+      const { extractAreaCode, formatPhoneE164 } = await import('./twilioVoiceService');
+      const formattedNumber = formatPhoneE164(phoneNumber);
+      const areaCode = extractAreaCode(phoneNumber);
+
+      // Check if this is the first number for the tenant (make it primary)
+      const existingNumbers = await voipStorage.getVoipPhoneNumbersByTenant(user.tenantId);
+      const isPrimary = existingNumbers.length === 0;
+
+      // Save the number assignment
+      const newNumber = await voipStorage.createVoipPhoneNumber({
+        tenantId: user.tenantId,
+        phoneNumber: formattedNumber,
+        areaCode,
+        numberType: numberType || (areaCode.match(/^8(00|88|77|66|55|44|33)$/) ? 'toll_free' : 'local'),
+        friendlyName: isPrimary ? 'Main Line' : null,
+        twilioPhoneSid: twilioSid,
+        isPrimary,
+        isActive: true,
+        capabilities: { voice: true, sms: false },
+      });
+
+      res.json(newNumber);
+    } catch (error) {
+      console.error("Error assigning phone number:", error);
+      res.status(500).json({ message: "Failed to assign phone number" });
+    }
+  });
+
   // Provision a phone number from Twilio
   app.post('/api/voip/provision-number', authenticateUser, requireOwner, async (req, res) => {
     try {
