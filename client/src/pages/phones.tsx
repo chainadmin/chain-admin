@@ -173,7 +173,7 @@ export default function PhonesPage() {
 
   const isOwner = isJwtAuth 
     ? (user as any)?.role === 'owner' || (user as any)?.role === 'manager'
-    : (userData as any)?.platformUser?.role === 'owner' || (userData as any)?.platformUser?.role === 'manager';
+    : (userData as any)?.platformUser?.role === 'owner' || (userData as any)?.platformUser?.role === 'manager' || (userData as any)?.platformUser?.role === 'platform_admin';
 
   const hasVoipAccess = isJwtAuth
     ? (user as any)?.voipAccess === true || isOwner
