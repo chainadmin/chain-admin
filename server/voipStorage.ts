@@ -27,6 +27,7 @@ export interface IVoipStorage {
   createVoipCallLog(callLog: InsertVoipCallLog): Promise<VoipCallLog>;
   updateVoipCallLog(id: string, updates: Partial<VoipCallLog>): Promise<VoipCallLog>;
   updateVoipCallLogByCallSid(callSid: string, updates: Partial<VoipCallLog>): Promise<VoipCallLog | undefined>;
+  getTenantByPhoneNumber(phoneNumber: string): Promise<string | null>;
 }
 
 export class VoipStorage implements IVoipStorage {
@@ -195,6 +196,21 @@ export class VoipStorage implements IVoipStorage {
       .where(eq(voipCallLogs.callSid, callSid))
       .returning();
     return result[0];
+  }
+
+  async getTenantByPhoneNumber(phoneNumber: string): Promise<string | null> {
+    // Format phone number to E.164 for matching
+    const formattedNumber = phoneNumber.startsWith('+') ? phoneNumber : `+1${phoneNumber.replace(/\D/g, '')}`;
+    
+    const result = await db
+      .select()
+      .from(voipPhoneNumbers)
+      .where(eq(voipPhoneNumbers.phoneNumber, formattedNumber));
+    
+    if (result.length > 0) {
+      return result[0].tenantId;
+    }
+    return null;
   }
 }
 

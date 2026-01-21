@@ -27,6 +27,7 @@ import {
   autoResponseConfig,
   autoResponseUsage,
   messagingUsageEvents,
+  voipPhoneNumbers,
   type Account,
   type Consumer,
   type Tenant,
@@ -21304,13 +21305,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { generateVoiceToken } = await import('./twilioVoiceService');
-      const token = generateVoiceToken(user.username, user.tenantId);
+      // Identity format: tenantId_agentId - allows routing inbound calls to correct tenant's agents
+      const identity = `${user.tenantId}_${user.id}`;
+      const token = generateVoiceToken(identity, user.tenantId);
       
       if (!token) {
         return res.status(500).json({ message: "Failed to generate voice token - Twilio not configured" });
       }
 
-      res.json({ token, identity: user.username });
+      res.json({ token, identity });
     } catch (error) {
       console.error("Error generating voice token:", error);
       res.status(500).json({ message: "Failed to generate voice token" });
@@ -21534,7 +21537,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const usersCost = voipUserCount * userPrice;
       const localDidsCost = counts.localCount * localDidPrice;
-      const tollFreeCost = counts.tollFreeCount * tollFreePrice;
+      // First toll-free is included free, charge for additional ones
+      const additionalTollFreeCount = Math.max(0, counts.tollFreeCount - 1);
+      const tollFreeCost = additionalTollFreeCount * tollFreePrice;
       const totalCost = usersCost + localDidsCost + tollFreeCost;
 
       res.json({
@@ -21557,6 +21562,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error getting VoIP billing summary:", error);
       res.status(500).json({ message: "Failed to get billing summary" });
+    }
+  });
+
+  // Enable/disable VoIP for tenant
+  app.post('/api/voip/enable', authenticateUser, requireOwner, async (req, res) => {
+    try {
+      const user = getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { enabled } = req.body;
+
+      if (enabled) {
+        // Check if tenant already has phone numbers
+        const existingNumbers = await voipStorage.getVoipPhoneNumbersByTenant(user.tenantId);
+        
+        if (existingNumbers.length === 0) {
+          // Auto-provision first toll-free number
+          const { searchAvailableTollFreeNumbers, provisionPhoneNumber, extractAreaCode, formatPhoneE164 } = await import('./twilioVoiceService');
+          
+          const availableNumbers = await searchAvailableTollFreeNumbers(1);
+          if (availableNumbers.length === 0) {
+            return res.status(500).json({ message: "No toll-free numbers available. Please try again later." });
+          }
+
+          const numberToProvision = availableNumbers[0].phoneNumber;
+          const provisioned = await provisionPhoneNumber(numberToProvision);
+          
+          if (!provisioned) {
+            return res.status(500).json({ message: "Failed to provision phone number. Please try again." });
+          }
+
+          const formattedNumber = formatPhoneE164(numberToProvision);
+          const areaCode = extractAreaCode(numberToProvision);
+
+          // Save the first toll-free number as primary
+          await voipStorage.createVoipPhoneNumber({
+            tenantId: user.tenantId,
+            phoneNumber: formattedNumber,
+            areaCode,
+            numberType: 'toll_free',
+            friendlyName: 'Main Line (Toll-Free)',
+            twilioPhoneSid: provisioned.sid || null,
+            isPrimary: true,
+            isActive: true,
+            capabilities: { voice: true, sms: false },
+          });
+        }
+
+        // Enable VoIP for tenant
+        await storage.updateTenant(user.tenantId, { voipEnabled: true });
+        res.json({ success: true, message: "VoIP enabled successfully with a toll-free number" });
+      } else {
+        // Disable VoIP (keep numbers for now, just disable access)
+        await storage.updateTenant(user.tenantId, { voipEnabled: false });
+        res.json({ success: true, message: "VoIP disabled" });
+      }
+    } catch (error) {
+      console.error("Error enabling VoIP:", error);
+      res.status(500).json({ message: "Failed to enable VoIP" });
     }
   });
 
@@ -21781,26 +21847,86 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { From, To, CallSid } = req.body;
       
       // Find the tenant that owns this phone number
+      const tenantId = await voipStorage.getTenantByPhoneNumber(To);
+      
+      if (!tenantId) {
+        console.error("No tenant found for phone number:", To);
+        res.type('text/xml');
+        res.send('<Response><Say>This number is not configured. Goodbye.</Say></Response>');
+        return;
+      }
+
+      // Get all agents with VoIP access for this tenant
+      const credentials = await storage.getAgencyCredentialsByTenant(tenantId);
+      const voipAgents = credentials.filter(c => c.voipAccess === true);
+      
+      // Create call log for this inbound call
       const { formatPhoneE164 } = await import('./twilioVoiceService');
-      const formattedTo = formatPhoneE164(To);
-      
-      // TODO: Look up tenant by phone number and route call appropriately
-      // For now, we'll just ring all connected clients
-      
-      const { generateTwiML } = await import('./twilioVoiceService');
-      
-      // This would normally connect to your browser-based agents
-      // For now, we'll play a message
-      const twiml = generateTwiML({
-        action: 'say',
-        message: 'Thank you for calling. Please hold while we connect you to an agent.',
+      await voipStorage.createVoipCallLog({
+        tenantId,
+        agentCredentialId: null, // Will be updated when agent answers
+        callSid: CallSid,
+        direction: 'inbound',
+        fromNumber: formatPhoneE164(From),
+        toNumber: formatPhoneE164(To),
+        status: 'ringing',
+        createdAt: new Date(),
       });
 
+      // Generate TwiML to ring all agents from this tenant
+      // Using Twilio Client, we dial all agents with the tenant ID in their identity
+      const VoiceResponse = (await import('twilio')).twiml.VoiceResponse;
+      const twiml = new VoiceResponse();
+      
+      if (voipAgents.length === 0) {
+        twiml.say('No agents are available to take your call. Please try again later.');
+      } else {
+        twiml.say({ voice: 'alice' }, 'Please hold while we connect you to the next available agent.');
+        
+        // Create a dial with simultaneous ring to all tenant's agents
+        const dial = twiml.dial({
+          timeout: 30,
+          callerId: formatPhoneE164(From),
+          action: '/api/voice/dial-status',
+          method: 'POST',
+        });
+        
+        // Ring all agents with VoIP access for this tenant simultaneously
+        // Agent identity format: tenantId_agentId (allows routing to specific tenant's agents)
+        voipAgents.forEach(agent => {
+          dial.client(`${tenantId}_${agent.id}`);
+        });
+      }
+
       res.type('text/xml');
-      res.send(twiml);
+      res.send(twiml.toString());
     } catch (error) {
       console.error("Error handling inbound call:", error);
-      res.status(500).send('<Response><Say>An error occurred</Say></Response>');
+      res.type('text/xml');
+      res.send('<Response><Say>An error occurred. Please try again later.</Say></Response>');
+    }
+  });
+
+  // Dial status callback (called by Twilio when dial attempt completes)
+  app.post('/api/voice/dial-status', async (req, res) => {
+    try {
+      const { CallSid, DialCallStatus, DialCallSid } = req.body;
+      console.log("Dial status callback:", { CallSid, DialCallStatus, DialCallSid });
+      
+      // Update call log based on dial outcome
+      const callLog = await voipStorage.getVoipCallLogByCallSid(CallSid);
+      if (callLog) {
+        if (DialCallStatus === 'completed' || DialCallStatus === 'answered') {
+          await voipStorage.updateVoipCallLog(callLog.id, { status: 'completed', answeredAt: new Date() });
+        } else if (DialCallStatus === 'no-answer' || DialCallStatus === 'busy' || DialCallStatus === 'failed') {
+          await voipStorage.updateVoipCallLog(callLog.id, { status: DialCallStatus, endedAt: new Date() });
+        }
+      }
+      
+      res.sendStatus(200);
+    } catch (error) {
+      console.error("Error handling dial status callback:", error);
+      res.sendStatus(500);
     }
   });
 

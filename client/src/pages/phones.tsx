@@ -377,6 +377,28 @@ export default function PhonesPage() {
     },
   });
 
+  const enableVoipMutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const response = await apiRequest("POST", "/api/voip/enable", { enabled });
+      return response.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/voip/billing-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/voip/phone-numbers"] });
+      toast({ 
+        title: "Success", 
+        description: data.message || "VoIP settings updated" 
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update VoIP settings",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleDialpadPress = (digit: string) => {
     setDialpadNumber((prev) => prev + digit);
   };
@@ -505,14 +527,14 @@ export default function PhonesPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className={`grid ${isAdmin ? 'grid-cols-3 w-[400px]' : 'grid-cols-2 w-[280px]'}`}>
+          <TabsList className={`grid ${isOwner ? 'grid-cols-3 w-[400px]' : 'grid-cols-2 w-[280px]'}`}>
             <TabsTrigger value="dialpad" className="flex items-center gap-2">
               <Hash className="h-4 w-4" /> Dialpad
             </TabsTrigger>
             <TabsTrigger value="history" className="flex items-center gap-2">
               <History className="h-4 w-4" /> Call History
             </TabsTrigger>
-            {isAdmin && (
+            {isOwner && (
               <TabsTrigger value="settings" className="flex items-center gap-2">
                 <Settings className="h-4 w-4" /> Phone Numbers
               </TabsTrigger>
@@ -837,9 +859,41 @@ export default function PhonesPage() {
             </Card>
           </TabsContent>
 
-          {isAdmin && (
+          {isOwner && (
           <TabsContent value="settings" className="mt-6">
-            {billingSummary && (
+            {/* VoIP Enable/Disable Toggle */}
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center justify-between">
+                  <span>VoIP Phone System</span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-normal text-gray-500">
+                      {billingSummary?.voipEnabled ? "Enabled" : "Disabled"}
+                    </span>
+                    <Switch
+                      checked={billingSummary?.voipEnabled || false}
+                      onCheckedChange={(checked) => enableVoipMutation.mutate(checked)}
+                      disabled={enableVoipMutation.isPending}
+                    />
+                  </div>
+                </CardTitle>
+                <CardDescription>
+                  {billingSummary?.voipEnabled 
+                    ? "VoIP is enabled. Your first toll-free number is included. Additional numbers are charged at standard rates."
+                    : "Enable VoIP to make and receive calls. Includes 1 toll-free number. $80/user/month for unlimited calls."}
+                </CardDescription>
+              </CardHeader>
+              {enableVoipMutation.isPending && (
+                <CardContent>
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {billingSummary?.voipEnabled ? "Disabling VoIP..." : "Enabling VoIP and provisioning your toll-free number..."}
+                  </div>
+                </CardContent>
+              )}
+            </Card>
+
+            {billingSummary?.voipEnabled && billingSummary && (
               <Card className="mb-6">
                 <CardHeader>
                   <CardTitle className="text-lg">VoIP Billing Summary</CardTitle>
