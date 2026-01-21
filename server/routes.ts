@@ -21327,7 +21327,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Generate Twilio Voice token for browser-based calling
   app.get('/api/voip/token', authenticateUser, async (req, res) => {
     try {
-      const user = getCurrentUser(req);
+      const user = await getCurrentUser(req);
       if (!user) {
         return res.status(401).json({ message: "Unauthorized" });
       }
@@ -21357,7 +21357,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get tenant's VoIP phone numbers
   app.get('/api/voip/phone-numbers', authenticateUser, async (req, res) => {
     try {
-      const user = getCurrentUser(req);
+      const user = await getCurrentUser(req);
       if (!user) {
         return res.status(401).json({ message: "Unauthorized" });
       }
@@ -21373,7 +21373,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Add a new VoIP phone number
   app.post('/api/voip/phone-numbers', authenticateUser, requireOwner, async (req, res) => {
     try {
-      const user = getCurrentUser(req);
+      const user = await getCurrentUser(req);
       if (!user) {
         return res.status(401).json({ message: "Unauthorized" });
       }
@@ -21422,7 +21422,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Search available local phone numbers by area code
   app.get('/api/voip/available-numbers/local/:areaCode', authenticateUser, requireOwner, async (req, res) => {
     try {
-      const user = getCurrentUser(req);
+      const user = await getCurrentUser(req);
       if (!user) {
         return res.status(401).json({ message: "Unauthorized" });
       }
@@ -21440,7 +21440,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Search available toll-free phone numbers
   app.get('/api/voip/available-numbers/toll-free', authenticateUser, requireOwner, async (req, res) => {
     try {
-      const user = getCurrentUser(req);
+      const user = await getCurrentUser(req);
       if (!user) {
         return res.status(401).json({ message: "Unauthorized" });
       }
@@ -21457,7 +21457,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Provision a phone number from Twilio
   app.post('/api/voip/provision-number', authenticateUser, requireOwner, async (req, res) => {
     try {
-      const user = getCurrentUser(req);
+      const user = await getCurrentUser(req);
       if (!user) {
         return res.status(401).json({ message: "Unauthorized" });
       }
@@ -21510,7 +21510,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Release a phone number from Twilio
   app.delete('/api/voip/release-number/:id', authenticateUser, requireOwner, async (req, res) => {
     try {
-      const user = getCurrentUser(req);
+      const user = await getCurrentUser(req);
       if (!user) {
         return res.status(401).json({ message: "Unauthorized" });
       }
@@ -21547,7 +21547,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get VoIP billing summary for tenant
   app.get('/api/voip/billing-summary', authenticateUser, async (req, res) => {
     try {
-      const user = getCurrentUser(req);
+      const user = await getCurrentUser(req);
       if (!user) {
         return res.status(401).json({ message: "Unauthorized" });
       }
@@ -21602,7 +21602,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Enable/disable VoIP for tenant
   app.post('/api/voip/enable', authenticateUser, requireOwner, async (req, res) => {
     try {
-      const user = getCurrentUser(req);
+      const user = await getCurrentUser(req);
       if (!user) {
         return res.status(401).json({ message: "Unauthorized" });
       }
@@ -21668,7 +21668,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update VoIP phone number
   app.patch('/api/voip/phone-numbers/:id', authenticateUser, requireOwner, async (req, res) => {
     try {
-      const user = getCurrentUser(req);
+      const user = await getCurrentUser(req);
       if (!user) {
         return res.status(401).json({ message: "Unauthorized" });
       }
@@ -21700,7 +21700,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Delete VoIP phone number
   app.delete('/api/voip/phone-numbers/:id', authenticateUser, requireOwner, async (req, res) => {
     try {
-      const user = getCurrentUser(req);
+      const user = await getCurrentUser(req);
       if (!user) {
         return res.status(401).json({ message: "Unauthorized" });
       }
@@ -21722,7 +21722,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get call logs
   app.get('/api/voip/call-logs', authenticateUser, async (req, res) => {
     try {
-      const user = getCurrentUser(req);
+      const user = await getCurrentUser(req);
       if (!user) {
         return res.status(401).json({ message: "Unauthorized" });
       }
@@ -21747,7 +21747,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get call logs for a specific consumer
   app.get('/api/voip/call-logs/consumer/:consumerId', authenticateUser, async (req, res) => {
     try {
-      const user = getCurrentUser(req);
+      const user = await getCurrentUser(req);
       if (!user) {
         return res.status(401).json({ message: "Unauthorized" });
       }
@@ -21764,7 +21764,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Initiate an outbound call
   app.post('/api/voip/call', authenticateUser, async (req, res) => {
     try {
-      const user = getCurrentUser(req);
+      const user = await getCurrentUser(req);
       if (!user) {
         return res.status(401).json({ message: "Unauthorized" });
       }
@@ -21831,7 +21831,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update call log (for notes)
   app.patch('/api/voip/call-logs/:id', authenticateUser, async (req, res) => {
     try {
-      const user = getCurrentUser(req);
+      const user = await getCurrentUser(req);
       if (!user) {
         return res.status(401).json({ message: "Unauthorized" });
       }
@@ -22026,7 +22026,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get recording playback URL
   app.get('/api/voip/recording/:recordingSid', authenticateUser, async (req, res) => {
     try {
-      const user = getCurrentUser(req);
+      const user = await getCurrentUser(req);
       if (!user) {
         return res.status(401).json({ message: "Unauthorized" });
       }
@@ -22063,7 +22063,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // End an active call
   app.post('/api/voip/hangup/:callSid', authenticateUser, async (req, res) => {
     try {
-      const user = getCurrentUser(req);
+      const user = await getCurrentUser(req);
       if (!user) {
         return res.status(401).json({ message: "Unauthorized" });
       }
