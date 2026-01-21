@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { Link } from "wouter";
 import AdminLayout from "@/components/admin-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +47,7 @@ import {
   Smartphone,
   Building2,
   Lock,
+  Phone,
 } from "lucide-react";
 import { SiVisa, SiMastercard, SiAmericanexpress, SiDiscover } from "react-icons/si";
 
@@ -124,6 +126,17 @@ export default function Billing() {
   });
   const enabledAddons = (settingsData as any)?.enabledAddons || [];
   const isTrialAccount = (settingsData as any)?.isTrialAccount ?? true;
+
+  // Fetch VoIP billing summary
+  const { data: voipBillingSummary } = useQuery<{
+    voipEnabled: boolean;
+    voipUserCount: number;
+    localDidCount: number;
+    tollFreeCount: number;
+    costs: { totalCostCents: number };
+  }>({
+    queryKey: ["/api/voip/billing-summary"],
+  });
 
   // Fetch service activation requests for this tenant
   const { data: serviceRequestsData } = useQuery({
@@ -1043,6 +1056,61 @@ export default function Billing() {
                       }}
                       data-testid="switch-mobile-app-branding"
                     />
+                  </div>
+                </div>
+
+                <div className="flex items-start justify-between rounded-2xl border border-white/10 bg-white/5 p-6">
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Phone className="h-5 w-5 text-green-400" />
+                      <h3 className="text-base font-semibold text-white">VoIP Phone System</h3>
+                      <span className="rounded-full bg-green-500/20 px-2 py-0.5 text-xs font-semibold text-green-200 border border-green-400/30">
+                        $80/user/mo
+                      </span>
+                    </div>
+                    <p className="text-sm text-blue-100/70">
+                      Make and receive calls directly from your browser with our integrated softphone. Includes unlimited calling and call recording.
+                    </p>
+                    <div className="flex flex-wrap gap-2 text-xs text-blue-100/60">
+                      <span className="rounded-full bg-white/10 px-2 py-1">Unlimited Calls</span>
+                      <span className="rounded-full bg-white/10 px-2 py-1">Call Recording</span>
+                      <span className="rounded-full bg-white/10 px-2 py-1">Browser Softphone</span>
+                    </div>
+                    <div className="mt-3 space-y-1 text-xs text-blue-100/70">
+                      <p><strong className="text-white">Per user:</strong> $80/month (unlimited calls)</p>
+                      <p><strong className="text-white">Local DIDs:</strong> $5/month each</p>
+                      <p><strong className="text-white">Toll-Free:</strong> First included free, additional $10/month each</p>
+                    </div>
+                    {voipBillingSummary?.voipEnabled && (
+                      <div className="mt-3 rounded-lg bg-green-500/10 border border-green-400/20 p-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-green-200">
+                            Currently active: {voipBillingSummary.voipUserCount} users, {voipBillingSummary.localDidCount} local DIDs, {voipBillingSummary.tollFreeCount} toll-free
+                          </span>
+                          <span className="font-semibold text-green-300">
+                            ${((voipBillingSummary.costs?.totalCostCents || 0) / 100).toFixed(2)}/mo
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-col items-end gap-2">
+                    <div className="flex items-center gap-2">
+                      {voipBillingSummary?.voipEnabled ? (
+                        <Badge className="bg-green-500/20 text-green-200 border border-green-400/30">Active</Badge>
+                      ) : (
+                        <Badge className="bg-gray-500/20 text-gray-300 border border-gray-400/30">Inactive</Badge>
+                      )}
+                    </div>
+                    <Link href="/phones">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-green-400/40 bg-green-500/10 text-green-200 hover:bg-green-500/20"
+                      >
+                        Manage VoIP
+                      </Button>
+                    </Link>
                   </div>
                 </div>
 

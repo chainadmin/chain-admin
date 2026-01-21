@@ -8460,6 +8460,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         lastName: z.string().optional(),
         isActive: z.boolean().optional(),
         restrictedServices: z.array(z.string()).optional(),
+        voipAccess: z.boolean().optional(),
       });
 
       const data = updateSchema.parse(req.body);
@@ -8469,6 +8470,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (data.firstName !== undefined) updates.firstName = data.firstName;
       if (data.lastName !== undefined) updates.lastName = data.lastName;
       if (data.isActive !== undefined) updates.isActive = data.isActive;
+      if (data.voipAccess !== undefined) updates.voipAccess = data.voipAccess;
       if (data.restrictedServices !== undefined) {
         // Ensure billing is always restricted for sub-users
         const services = data.restrictedServices;

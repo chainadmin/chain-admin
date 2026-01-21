@@ -37,6 +37,7 @@ import {
   VolumeX,
   Clock,
   User,
+  Users,
   Play,
   Pause,
   Download,
@@ -95,6 +96,19 @@ interface VoipBillingSummary {
   };
 }
 
+interface TeamMember {
+  id: string;
+  username: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  role: string;
+  isActive: boolean;
+  voipAccess: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
+}
+
 interface VoipCallLog {
   id: string;
   tenantId: string;
@@ -120,6 +134,9 @@ interface VoipCallLog {
 }
 
 type CallState = "idle" | "connecting" | "ringing" | "in-call" | "ended";
+
+const cardBaseClasses = "rounded-2xl border border-white/10 bg-white/5 text-blue-50 shadow-lg shadow-blue-900/20 backdrop-blur";
+const inputClasses = "border-white/20 bg-white/10 text-white placeholder:text-blue-100/60 focus:border-sky-400/60 focus-visible:ring-sky-400/40";
 
 export default function PhonesPage() {
   const { toast } = useToast();
@@ -180,6 +197,26 @@ export default function PhonesPage() {
   const { data: billingSummary } = useQuery<VoipBillingSummary>({
     queryKey: ["/api/voip/billing-summary"],
     enabled: isOwner,
+  });
+
+  const { data: teamMembers = [], isLoading: loadingTeamMembers } = useQuery<TeamMember[]>({
+    queryKey: ["/api/team-members"],
+    enabled: isOwner,
+  });
+
+  const updateVoipAccessMutation = useMutation({
+    mutationFn: async ({ id, voipAccess }: { id: string; voipAccess: boolean }) => {
+      const response = await apiRequest("PATCH", `/api/team-members/${id}`, { voipAccess });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/team-members"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/voip/billing-summary"] });
+      toast({ title: "Success", description: "VoIP access updated" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to update VoIP access", variant: "destructive" });
+    },
   });
 
   const searchLocalNumbersMutation = useMutation({
@@ -527,25 +564,30 @@ export default function PhonesPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className={`grid ${isOwner ? 'grid-cols-3 w-[400px]' : 'grid-cols-2 w-[280px]'}`}>
+          <TabsList className={`grid ${isOwner ? 'grid-cols-4 w-[520px]' : 'grid-cols-2 w-[280px]'}`}>
             <TabsTrigger value="dialpad" className="flex items-center gap-2">
               <Hash className="h-4 w-4" /> Dialpad
             </TabsTrigger>
             <TabsTrigger value="history" className="flex items-center gap-2">
-              <History className="h-4 w-4" /> Call History
+              <History className="h-4 w-4" /> History
             </TabsTrigger>
             {isOwner && (
+              <TabsTrigger value="users" className="flex items-center gap-2">
+                <Users className="h-4 w-4" /> Users
+              </TabsTrigger>
+            )}
+            {isOwner && (
               <TabsTrigger value="settings" className="flex items-center gap-2">
-                <Settings className="h-4 w-4" /> Phone Numbers
+                <Settings className="h-4 w-4" /> Settings
               </TabsTrigger>
             )}
           </TabsList>
 
           <TabsContent value="dialpad" className="mt-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="max-w-md mx-auto lg:mx-0">
+              <Card className={`max-w-md mx-auto lg:mx-0 ${cardBaseClasses}`}>
                 <CardHeader className="text-center pb-2">
-                  <CardTitle>Softphone</CardTitle>
+                  <CardTitle className="text-white">Softphone</CardTitle>
                   <CardDescription>
                     {callState === "idle" && "Ready to make calls"}
                     {callState === "connecting" && "Connecting..."}
@@ -672,9 +714,9 @@ export default function PhonesPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className={cardBaseClasses}>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
+                  <CardTitle className="flex items-center gap-2 text-white">
                     <History className="h-5 w-5" /> Recent Calls
                   </CardTitle>
                 </CardHeader>
@@ -757,10 +799,10 @@ export default function PhonesPage() {
           </TabsContent>
 
           <TabsContent value="history" className="mt-6">
-            <Card>
+            <Card className={cardBaseClasses}>
               <CardHeader>
-                <CardTitle>Call History</CardTitle>
-                <CardDescription>View all your past calls and recordings</CardDescription>
+                <CardTitle className="text-white">Call History</CardTitle>
+                <CardDescription className="text-blue-100/70">View all your past calls and recordings</CardDescription>
               </CardHeader>
               <CardContent>
                 {loadingLogs ? (
@@ -860,14 +902,118 @@ export default function PhonesPage() {
           </TabsContent>
 
           {isOwner && (
+          <TabsContent value="users" className="mt-6">
+            <Card className={cardBaseClasses}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-white">
+                  <Users className="h-5 w-5" /> VoIP Users
+                </CardTitle>
+                <CardDescription className="text-blue-100/70">
+                  Enable VoIP access for team members to allow them to make and receive calls. 
+                  Each user with VoIP access is billed at $80/month.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loadingTeamMembers ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+                  </div>
+                ) : teamMembers.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500">
+                    <Users className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                    <p className="text-lg">No team members found</p>
+                    <p className="text-sm">Add team members in Settings to enable VoIP access</p>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>User</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>VoIP Access</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {teamMembers.map((member) => (
+                        <TableRow key={member.id}>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{member.username}</span>
+                              {(member.firstName || member.lastName) && (
+                                <span className="text-sm text-gray-500">
+                                  {[member.firstName, member.lastName].filter(Boolean).join(' ')}
+                                </span>
+                              )}
+                              <span className="text-xs text-gray-400">{member.email}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={member.role === 'owner' ? 'default' : 'secondary'}>
+                              {member.role}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={member.isActive ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}>
+                              {member.isActive ? "Active" : "Inactive"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {member.role === 'owner' ? (
+                              <div className="flex items-center gap-2 text-sm text-gray-500">
+                                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                <span>Always enabled</span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <Switch
+                                  checked={member.voipAccess || false}
+                                  onCheckedChange={(checked) => 
+                                    updateVoipAccessMutation.mutate({ id: member.id, voipAccess: checked })
+                                  }
+                                  disabled={updateVoipAccessMutation.isPending}
+                                />
+                                <span className="text-sm text-gray-500">
+                                  {member.voipAccess ? "$80/mo" : "Disabled"}
+                                </span>
+                              </div>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+
+                {billingSummary && (
+                  <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-sm font-medium">VoIP Users Cost</span>
+                        <p className="text-xs text-gray-500">
+                          {billingSummary.voipUserCount} users with VoIP access
+                        </p>
+                      </div>
+                      <span className="text-lg font-bold">
+                        ${(billingSummary.costs.usersCostCents / 100).toFixed(2)}/mo
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+          )}
+
+          {isOwner && (
           <TabsContent value="settings" className="mt-6">
             {/* VoIP Enable/Disable Toggle */}
-            <Card className="mb-6">
+            <Card className={`mb-6 ${cardBaseClasses}`}>
               <CardHeader>
-                <CardTitle className="text-lg flex items-center justify-between">
+                <CardTitle className="text-lg flex items-center justify-between text-white">
                   <span>VoIP Phone System</span>
                   <div className="flex items-center gap-3">
-                    <span className="text-sm font-normal text-gray-500">
+                    <span className="text-sm font-normal text-blue-100/60">
                       {billingSummary?.voipEnabled ? "Enabled" : "Disabled"}
                     </span>
                     <Switch
@@ -877,7 +1023,7 @@ export default function PhonesPage() {
                     />
                   </div>
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-blue-100/70">
                   {billingSummary?.voipEnabled 
                     ? "VoIP is enabled. Your first toll-free number is included. Additional numbers are charged at standard rates."
                     : "Enable VoIP to make and receive calls. Includes 1 toll-free number. $80/user/month for unlimited calls."}
@@ -885,7 +1031,7 @@ export default function PhonesPage() {
               </CardHeader>
               {enableVoipMutation.isPending && (
                 <CardContent>
-                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <div className="flex items-center gap-2 text-sm text-blue-100/60">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     {billingSummary?.voipEnabled ? "Disabling VoIP..." : "Enabling VoIP and provisioning your toll-free number..."}
                   </div>
@@ -894,40 +1040,40 @@ export default function PhonesPage() {
             </Card>
 
             {billingSummary?.voipEnabled && billingSummary && (
-              <Card className="mb-6">
+              <Card className={`mb-6 ${cardBaseClasses}`}>
                 <CardHeader>
-                  <CardTitle className="text-lg">VoIP Billing Summary</CardTitle>
+                  <CardTitle className="text-lg text-white">VoIP Billing Summary</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                      <div className="text-2xl font-bold">{billingSummary.voipUserCount}</div>
-                      <div className="text-sm text-gray-500">VoIP Users</div>
-                      <div className="text-xs text-gray-400">${(billingSummary.costs.usersCostCents / 100).toFixed(2)}/mo</div>
+                    <div className="text-center p-3 bg-white/5 rounded-lg border border-white/10">
+                      <div className="text-2xl font-bold text-white">{billingSummary.voipUserCount}</div>
+                      <div className="text-sm text-blue-100/60">VoIP Users</div>
+                      <div className="text-xs text-blue-100/40">${(billingSummary.costs.usersCostCents / 100).toFixed(2)}/mo</div>
                     </div>
-                    <div className="text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                      <div className="text-2xl font-bold">{billingSummary.localDidCount}</div>
-                      <div className="text-sm text-gray-500">Local DIDs</div>
-                      <div className="text-xs text-gray-400">${(billingSummary.costs.localDidsCostCents / 100).toFixed(2)}/mo</div>
+                    <div className="text-center p-3 bg-white/5 rounded-lg border border-white/10">
+                      <div className="text-2xl font-bold text-white">{billingSummary.localDidCount}</div>
+                      <div className="text-sm text-blue-100/60">Local DIDs</div>
+                      <div className="text-xs text-blue-100/40">${(billingSummary.costs.localDidsCostCents / 100).toFixed(2)}/mo</div>
                     </div>
-                    <div className="text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                      <div className="text-2xl font-bold">{billingSummary.tollFreeCount}</div>
-                      <div className="text-sm text-gray-500">Toll-Free</div>
-                      <div className="text-xs text-gray-400">${(billingSummary.costs.tollFreeCostCents / 100).toFixed(2)}/mo</div>
+                    <div className="text-center p-3 bg-white/5 rounded-lg border border-white/10">
+                      <div className="text-2xl font-bold text-white">{billingSummary.tollFreeCount}</div>
+                      <div className="text-sm text-blue-100/60">Toll-Free</div>
+                      <div className="text-xs text-blue-100/40">${(billingSummary.costs.tollFreeCostCents / 100).toFixed(2)}/mo</div>
                     </div>
-                    <div className="text-center p-3 bg-blue-50 dark:bg-blue-900 rounded-lg">
-                      <div className="text-2xl font-bold">${(billingSummary.costs.totalCostCents / 100).toFixed(2)}</div>
-                      <div className="text-sm text-gray-500">Total/Month</div>
+                    <div className="text-center p-3 bg-sky-500/20 rounded-lg border border-sky-400/30">
+                      <div className="text-2xl font-bold text-white">${(billingSummary.costs.totalCostCents / 100).toFixed(2)}</div>
+                      <div className="text-sm text-blue-100/60">Total/Month</div>
                     </div>
                   </div>
                 </CardContent>
               </Card>
             )}
-            <Card>
+            <Card className={cardBaseClasses}>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
-                  <CardTitle>Phone Numbers</CardTitle>
-                  <CardDescription>Manage your VoIP phone numbers</CardDescription>
+                  <CardTitle className="text-white">Phone Numbers</CardTitle>
+                  <CardDescription className="text-blue-100/70">Manage your VoIP phone numbers</CardDescription>
                 </div>
                 <div className="flex gap-2">
                   <Button onClick={() => setShowProvisionDialog(true)}>
