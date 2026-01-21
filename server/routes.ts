@@ -21874,6 +21874,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { recordingSid } = req.params;
       
+      // Verify the recording belongs to a call from this tenant
+      const callLogs = await voipStorage.getVoipCallLogsByTenant(user.tenantId, 1000, 0);
+      const callLog = callLogs.find(log => log.recordingSid === recordingSid);
+      if (!callLog) {
+        return res.status(404).json({ message: "Recording not found" });
+      }
+      
       const { getRecordingUrl } = await import('./twilioVoiceService');
       const url = await getRecordingUrl(recordingSid);
 
@@ -21903,6 +21910,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { callSid } = req.params;
+      
+      // Verify the call belongs to this tenant
+      const callLog = await voipStorage.getVoipCallLogByCallSid(callSid);
+      if (!callLog || callLog.tenantId !== user.tenantId) {
+        return res.status(404).json({ message: "Call not found" });
+      }
       
       const { hangupCall } = await import('./twilioVoiceService');
       const success = await hangupCall(callSid);
