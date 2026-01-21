@@ -21615,45 +21615,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { enabled } = req.body;
 
       if (enabled) {
-        // Check if tenant already has phone numbers
-        const existingNumbers = await voipStorage.getVoipPhoneNumbersByTenant(user.tenantId);
-        
-        if (existingNumbers.length === 0) {
-          // Auto-provision first toll-free number
-          const { searchAvailableTollFreeNumbers, provisionPhoneNumber, extractAreaCode, formatPhoneE164 } = await import('./twilioVoiceService');
-          
-          const availableNumbers = await searchAvailableTollFreeNumbers(1);
-          if (availableNumbers.length === 0) {
-            return res.status(500).json({ message: "No toll-free numbers available. Please try again later." });
-          }
-
-          const numberToProvision = availableNumbers[0].phoneNumber;
-          const provisioned = await provisionPhoneNumber(numberToProvision);
-          
-          if (!provisioned) {
-            return res.status(500).json({ message: "Failed to provision phone number. Please try again." });
-          }
-
-          const formattedNumber = formatPhoneE164(numberToProvision);
-          const areaCode = extractAreaCode(numberToProvision);
-
-          // Save the first toll-free number as primary
-          await voipStorage.createVoipPhoneNumber({
-            tenantId: user.tenantId,
-            phoneNumber: formattedNumber,
-            areaCode,
-            numberType: 'toll_free',
-            friendlyName: 'Main Line (Toll-Free)',
-            twilioPhoneSid: provisioned.sid || null,
-            isPrimary: true,
-            isActive: true,
-            capabilities: { voice: true, sms: false },
-          });
-        }
-
-        // Enable VoIP for tenant
+        // Just enable VoIP - user will select and add phone numbers separately
         await storage.updateTenant(user.tenantId, { voipEnabled: true });
-        res.json({ success: true, message: "VoIP enabled successfully with a toll-free number" });
+        res.json({ success: true, message: "VoIP enabled successfully. You can now add phone numbers from the Numbers tab." });
       } else {
         // Disable VoIP (keep numbers for now, just disable access)
         await storage.updateTenant(user.tenantId, { voipEnabled: false });

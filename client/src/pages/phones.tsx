@@ -129,7 +129,7 @@ export default function PhonesPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/voip/phone-numbers"] });
       toast({
         title: "VoIP Updated",
-        description: billingSummary?.voipEnabled ? "VoIP has been disabled" : "VoIP has been enabled with your first toll-free number",
+        description: billingSummary?.voipEnabled ? "VoIP has been disabled" : "VoIP has been enabled. Add phone numbers from the Numbers tab.",
       });
     },
     onError: (error: any) => {
@@ -324,15 +324,15 @@ export default function PhonesPage() {
                 </CardTitle>
                 <CardDescription className="text-blue-100/70">
                   {billingSummary?.voipEnabled 
-                    ? "VoIP is enabled. Your first toll-free number is included. Additional numbers are charged at standard rates."
-                    : "Enable VoIP to make and receive calls. Includes 1 toll-free number. $80/user/month for unlimited calls."}
+                    ? "VoIP is enabled. Add phone numbers from the Numbers tab to start making calls."
+                    : "Enable VoIP to make and receive calls. $80/user/month. Phone numbers billed separately."}
                 </CardDescription>
               </CardHeader>
               {enableVoipMutation.isPending && (
                 <CardContent>
                   <div className="flex items-center gap-2 text-sm text-blue-100/60">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    {billingSummary?.voipEnabled ? "Disabling VoIP..." : "Enabling VoIP and provisioning your toll-free number..."}
+                    {billingSummary?.voipEnabled ? "Disabling VoIP..." : "Enabling VoIP..."}
                   </div>
                 </CardContent>
               )}
@@ -397,7 +397,7 @@ export default function PhonesPage() {
                   <div className="text-center py-8 text-blue-100/60">
                     <Phone className="h-12 w-12 mx-auto mb-4 opacity-50" />
                     <p>No phone numbers configured</p>
-                    <p className="text-sm">Enable VoIP to get started with your first toll-free number</p>
+                    <p className="text-sm">Click "Add Number" to search and select your phone numbers</p>
                   </div>
                 ) : (
                   <Table>
@@ -630,7 +630,7 @@ export default function PhonesPage() {
                         </div>
                       </div>
                       <p className="text-xs text-blue-100/40 mt-3">
-                        First toll-free number is included free when VoIP is enabled.
+                        Local: $5/month, Toll-Free: $10/month
                       </p>
                     </div>
                   </div>
