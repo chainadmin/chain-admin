@@ -16674,6 +16674,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tenantSettings = await storage.getTenantSettings(tenantId);
       const businessType = (tenantSettings?.businessType || 'call_center') as import('../shared/terminology').BusinessType;
       
+      // Get VoIP billing summary
+      const tenant = await storage.getTenant(tenantId);
+      let voipCosts = 0;
+      let voipDetails = null;
+      if (tenant?.voipEnabled) {
+        const voipUserCount = await voipStorage.countVoipUsersForTenant(tenantId);
+        const { localCount, tollFreeCount } = await voipStorage.countVoipPhoneNumbersByTenant(tenantId);
+        
+        const userPrice = tenant.voipUserPrice || 8000; // $80 default
+        const localDidPrice = tenant.voipLocalDidPrice || 500; // $5 default
+        const tollFreePrice = tenant.voipTollFreePrice || 1000; // $10 default
+        
+        const userCost = voipUserCount * userPrice;
+        const localCost = localCount * localDidPrice;
+        const tollFreeCost = Math.max(0, tollFreeCount - 1) * tollFreePrice; // First toll-free is free
+        
+        voipCosts = (userCost + localCost + tollFreeCost) / 100; // Convert to dollars
+        voipDetails = {
+          userCount: voipUserCount,
+          userCost: userCost / 100,
+          localDidCount: localCount,
+          localDidCost: localCost / 100,
+          tollFreeCount,
+          tollFreeCost: tollFreeCost / 100,
+          totalCost: voipCosts,
+        };
+      }
+      
       // Get business-type-specific plans
       const { getPlansForBusinessType, EMAIL_OVERAGE_RATE_PER_THOUSAND, SMS_OVERAGE_RATE_PER_SEGMENT } = await import('../shared/billing-plans');
       const businessTypePlans = getPlansForBusinessType(businessType);
@@ -16693,7 +16721,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const smsOverageCharge = Number((smsOverage * SMS_OVERAGE_RATE_PER_SEGMENT).toFixed(2));
         
         const usageCharges = Number((emailOverageCharge + smsOverageCharge).toFixed(2));
-        const totalBill = Number((currentPlan.price + (stats.addonFees || 0) + usageCharges).toFixed(2));
+        const totalBill = Number((currentPlan.price + (stats.addonFees || 0) + usageCharges + voipCosts).toFixed(2));
         
         // Update stats with business-type-specific limits
         stats.emailUsage = {
@@ -16714,6 +16742,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         stats.usageCharges = usageCharges;
         stats.totalBill = totalBill;
         stats.planName = currentPlan.name;
+        stats.voipCosts = voipCosts;
+        stats.voipDetails = voipDetails;
       } else {
         // À la carte billing - calculate based on enabled services
         const enabledAddons = tenantSettings?.enabledAddons || [];
@@ -16726,7 +16756,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         stats.monthlyBase = aLaCarteBase;
         stats.usageCharges = usageCharges;
-        stats.totalBill = Number((aLaCarteBase + (stats.addonFees || 0) + usageCharges).toFixed(2));
+        stats.totalBill = Number((aLaCarteBase + (stats.addonFees || 0) + usageCharges + voipCosts).toFixed(2));
+        stats.voipCosts = voipCosts;
+        stats.voipDetails = voipDetails;
         
         // Update usage to show zero included
         stats.emailUsage = {
@@ -21573,6 +21605,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = getCurrentUser(req);
       if (!user) {
         return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      if (!user.tenantId) {
+        console.error("VoIP enable failed: user.tenantId is null or undefined", { userId: user.id });
+        return res.status(400).json({ message: "Invalid tenant configuration. Please contact support." });
       }
 
       const { enabled } = req.body;

@@ -423,6 +423,8 @@ export default function Billing() {
     activeConsumers: 0,
     monthlyBase: 0,
     addonFees: 0,
+    voipCosts: 0,
+    voipDetails: null,
     usageCharges: 0,
     totalBill: 0,
     nextBillDate: "N/A",
@@ -508,6 +510,7 @@ export default function Billing() {
                   <span className="text-xs font-medium text-blue-100/70">
                     Base {formatCurrency(stats.monthlyBase)}
                     {stats.addonFees > 0 && ` · Add-ons ${formatCurrency(stats.addonFees)}`}
+                    {stats.voipCosts > 0 && ` · VoIP ${formatCurrency(stats.voipCosts)}`}
                     {` · Usage ${formatCurrency(stats.usageCharges)}`}
                   </span>
                 </div>
@@ -597,9 +600,12 @@ export default function Billing() {
                     <p className="mt-2 text-2xl font-semibold text-white" data-testid="text-total-bill">
                       {formatCurrency(stats.totalBill)}
                     </p>
-                    {stats.addonFees > 0 && (
+                    {(stats.addonFees > 0 || stats.voipCosts > 0) && (
                       <p className="mt-2 text-xs text-blue-100/70">
-                        Base {formatCurrency(stats.monthlyBase)} · Addons {formatCurrency(stats.addonFees)} · Usage {formatCurrency(stats.usageCharges)}
+                        Base {formatCurrency(stats.monthlyBase)}
+                        {stats.addonFees > 0 && ` · Addons ${formatCurrency(stats.addonFees)}`}
+                        {stats.voipCosts > 0 && ` · VoIP ${formatCurrency(stats.voipCosts)}`}
+                        {` · Usage ${formatCurrency(stats.usageCharges)}`}
                       </p>
                     )}
                   </div>
@@ -621,7 +627,7 @@ export default function Billing() {
             </Card>
 
             {/* Add-ons & Features */}
-            {stats.addonFees > 0 && stats.addons && (
+            {(stats.addonFees > 0 || stats.voipCosts > 0) && (
               <Card className="rounded-3xl border-white/10 bg-white/5 text-blue-50 shadow-lg shadow-blue-900/20">
                 <CardHeader className="border-b border-white/10 pb-4">
                   <CardTitle className="text-lg font-semibold text-white">Add-ons & Premium Features</CardTitle>
@@ -629,7 +635,7 @@ export default function Billing() {
                 </CardHeader>
                 <CardContent className="pt-6">
                   <div className="space-y-4">
-                    {stats.addons.documentSigning && (
+                    {stats.addons?.documentSigning && (
                       <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 p-4">
                         <div className="flex items-center gap-3">
                           <div className="rounded-lg bg-sky-500/20 p-2">
@@ -648,9 +654,30 @@ export default function Billing() {
                         </div>
                       </div>
                     )}
+                    {stats.voipDetails && stats.voipCosts > 0 && (
+                      <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="rounded-lg bg-emerald-500/20 p-2">
+                            <Phone className="h-5 w-5 text-emerald-300" />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-white">VoIP Phone System</p>
+                            <p className="text-xs text-blue-100/60">
+                              {stats.voipDetails.userCount} user{stats.voipDetails.userCount !== 1 ? 's' : ''} · {stats.voipDetails.localDidCount} local DID{stats.voipDetails.localDidCount !== 1 ? 's' : ''} · {stats.voipDetails.tollFreeCount} toll-free
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-semibold text-white" data-testid="text-addon-voip">
+                            {formatCurrency(stats.voipCosts)}
+                          </p>
+                          <p className="text-xs text-blue-100/60">per month</p>
+                        </div>
+                      </div>
+                    )}
                     <div className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-3">
                       <p className="text-xs text-amber-200">
-                        <strong>Total add-on fees:</strong> {formatCurrency(stats.addonFees)}/month
+                        <strong>Total premium fees:</strong> {formatCurrency((stats.addonFees || 0) + (stats.voipCosts || 0))}/month
                       </p>
                     </div>
                   </div>

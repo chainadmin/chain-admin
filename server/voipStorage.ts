@@ -18,6 +18,7 @@ export interface IVoipStorage {
   updateVoipPhoneNumber(id: string, tenantId: string, updates: Partial<VoipPhoneNumber>): Promise<VoipPhoneNumber>;
   deleteVoipPhoneNumber(id: string, tenantId: string): Promise<boolean>;
   countVoipPhoneNumbersByTenant(tenantId: string): Promise<{ localCount: number; tollFreeCount: number }>;
+  countVoipUsersForTenant(tenantId: string): Promise<number>;
   
   getVoipCallLogsByTenant(tenantId: string, limit?: number, offset?: number): Promise<VoipCallLog[]>;
   getVoipCallLogById(id: string, tenantId: string): Promise<VoipCallLog | undefined>;
@@ -114,6 +115,18 @@ export class VoipStorage implements IVoipStorage {
       }
     }
     return { localCount, tollFreeCount };
+  }
+
+  async countVoipUsersForTenant(tenantId: string): Promise<number> {
+    const { agencyCredentials } = await import("@shared/schema");
+    const result = await db
+      .select()
+      .from(agencyCredentials)
+      .where(and(
+        eq(agencyCredentials.tenantId, tenantId),
+        eq(agencyCredentials.voipAccess, true)
+      ));
+    return result.length;
   }
 
   async getVoipCallLogsByTenant(tenantId: string, limit = 100, offset = 0): Promise<VoipCallLog[]> {
