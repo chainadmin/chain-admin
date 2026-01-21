@@ -172,6 +172,11 @@ export const authenticateConsumer: RequestHandler = async (req: any, res, next) 
 
 // Get current user with tenant information
 export const getCurrentUser = async (req: any) => {
+  // Check if req.user exists (set by authenticateUser middleware)
+  if (!req.user || !req.user.id || !req.user.tenantId) {
+    return null;
+  }
+  
   // JWT auth - fetch the full tenant info including slug
   const tenant = await storage.getTenant(req.user.tenantId);
   return {
