@@ -208,6 +208,7 @@ export interface IStorage {
   getPlatformStats(): Promise<any>;
   updateTenantStatus(id: string, updates: { isActive: boolean; suspensionReason?: string | null; suspendedAt?: Date | null }): Promise<Tenant>;
   upgradeTenantToPaid(id: string): Promise<Tenant>;
+  updateTenant(id: string, updates: Partial<Tenant>): Promise<Tenant>;
   updateTenantTwilioSettings(id: string, twilioSettings: {
     twilioAccountSid?: string | null;
     twilioAuthToken?: string | null;
@@ -3883,6 +3884,14 @@ export class DatabaseStorage implements IStorage {
         isPaidAccount: true,
         isTrialAccount: false,
       })
+      .where(eq(tenants.id, id))
+      .returning();
+    return updatedTenant;
+  }
+
+  async updateTenant(id: string, updates: Partial<Tenant>): Promise<Tenant> {
+    const [updatedTenant] = await db.update(tenants)
+      .set(updates)
       .where(eq(tenants.id, id))
       .returning();
     return updatedTenant;
