@@ -21454,6 +21454,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Search available phone numbers (unified endpoint for frontend)
+  app.get('/api/voip/phone-numbers/available', authenticateUser, requireOwner, async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { type, areaCode } = req.query;
+      const { searchAvailableLocalNumbers, searchAvailableTollFreeNumbers } = await import('./twilioVoiceService');
+      
+      let numbers;
+      if (type === 'toll_free') {
+        numbers = await searchAvailableTollFreeNumbers(10);
+      } else {
+        if (!areaCode) {
+          return res.status(400).json({ message: "Area code is required for local numbers" });
+        }
+        numbers = await searchAvailableLocalNumbers(areaCode as string, 10);
+      }
+      
+      res.json({ numbers });
+    } catch (error) {
+      console.error("Error searching available numbers:", error);
+      res.status(500).json({ message: "Failed to search available numbers" });
+    }
+  });
+
+  // Provision a new phone number (unified endpoint for frontend)
+  app.post('/api/voip/phone-numbers/provision', authenticateUser, requireOwner, async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user || !user.tenantId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { phoneNumber, numberType } = req.body;
+      
+      if (!phoneNumber) {
+        return res.status(400).json({ message: "Phone number is required" });
+      }
+
+      const { provisionPhoneNumber, extractAreaCode, formatPhoneE164 } = await import('./twilioVoiceService');
+      
+      // Provision the number in Twilio
+      const provisionedNumber = await provisionPhoneNumber(phoneNumber);
+      
+      const formattedNumber = formatPhoneE164(phoneNumber);
+      const areaCode = extractAreaCode(phoneNumber);
+      
+      // Check if this is the first number for the tenant (make it primary)
+      const existingNumbers = await voipStorage.getVoipPhoneNumbersByTenant(user.tenantId);
+      const isPrimary = existingNumbers.length === 0;
+
+      // Save the number assignment
+      const newNumber = await voipStorage.createVoipPhoneNumber({
+        tenantId: user.tenantId,
+        phoneNumber: formattedNumber,
+        areaCode,
+        numberType: numberType || (areaCode.match(/^8(00|88|77|66|55|44|33)$/) ? 'toll_free' : 'local'),
+        friendlyName: isPrimary ? 'Main Line' : null,
+        twilioPhoneSid: provisionedNumber.sid,
+        isPrimary,
+        isActive: true,
+        capabilities: { voice: true, sms: true },
+      });
+
+      res.json(newNumber);
+    } catch (error: any) {
+      console.error("Error provisioning phone number:", error);
+      res.status(500).json({ message: error.message || "Failed to provision phone number" });
+    }
+  });
+
   // Get unassigned numbers from Twilio account (numbers we own but haven't assigned to any tenant)
   app.get('/api/voip/unassigned-numbers', authenticateUser, requireOwner, async (req, res) => {
     try {
