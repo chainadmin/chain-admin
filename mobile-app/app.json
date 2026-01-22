@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Chain",
-    "slug": "chain-mobile",
+    "slug": "chain",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -16,7 +16,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.chainsoftware.platform",
       "infoPlist": {
-        "NSFaceIDUsageDescription": "Use Face ID to quickly and securely log in to your account"
+        "NSFaceIDUsageDescription": "Use Face ID to quickly and securely log in to your account",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -25,11 +26,22 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.chainsoftware.platform",
-      "permissions": ["USE_BIOMETRIC", "USE_FINGERPRINT"]
+      "permissions": [
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ]
     },
     "plugins": [
       "expo-local-authentication",
       "expo-secure-store"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "4e12d26e-7f5e-448a-b793-e0c76057b3f9"
+      }
+    },
+    "owner": "waypointsolutions2023"
   }
 }
