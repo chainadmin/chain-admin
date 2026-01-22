@@ -122,8 +122,9 @@ export default function TermsOfService() {
             </section>
 
             <section>
-              <h3>8. Privacy</h3>
+              <h3>8. Privacy & data retention</h3>
               <p>Our collection and use of personal information is described in our privacy notice. Agencies are independent entities and may have their own privacy obligations as controllers of their consumer data.</p>
+              <p><strong>Data retention:</strong> Chain Software Group retains consumer information (including names, email addresses, phone numbers, and account details) uploaded by participating agencies. This data is stored to provide platform services, maintain communication records, support dispute resolution, ensure regulatory compliance, and protect the integrity of our platform. Data may be retained beyond the duration of your relationship with any individual agency.</p>
             </section>
 
             <section>

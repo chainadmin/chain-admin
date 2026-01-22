@@ -81,6 +81,12 @@ export default function PrivacyPolicy() {
             </section>
 
             <section>
+              <h3>Data uploaded by agencies</h3>
+              <p>Agencies using our platform may upload consumer information including names, email addresses, phone numbers, mailing addresses, and account details. <strong>Chain Software Group retains this data</strong> to provide platform services, maintain communication history, support dispute resolution, and comply with legal and regulatory requirements.</p>
+              <p>This data may be retained even after your relationship with the originating agency ends, as required for audit trails, legal compliance, and platform integrity. You may request information about your data by contacting support@chainsoftwaregroup.com.</p>
+            </section>
+
+            <section>
               <h3>Why we use data</h3>
               <p>Provide and secure the service, display account details, deliver communications (SMS/email/push), support you, prevent fraud, and comply with legal requirements.</p>
             </section>
