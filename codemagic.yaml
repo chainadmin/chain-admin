@@ -5,7 +5,7 @@ workflows:
     instance_type: mac_mini_m2
     
     integrations:
-      app_store_connect: Chain Software App Store
+      app_store_connect: Chain Software App Store admin
     
     environment:
       ios_signing:
