@@ -21701,7 +21701,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const tenant = await storage.getTenantById(user.tenantId);
+      const tenant = await storage.getTenant(user.tenantId);
       if (!tenant) {
         return res.status(404).json({ message: "Tenant not found" });
       }
