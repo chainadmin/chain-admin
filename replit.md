@@ -31,6 +31,7 @@ The frontend is built with React and TypeScript, leveraging shadcn/ui components
 - **Multi-Module Architecture**: Supports various business types with module-specific customization and a terminology system for UI components.
 - **Global Search**: Real-time search functionality across consumers and accounts in the admin dashboard with database-level filtering.
 - **Deployment Workflow**: Database changes are deployed exclusively through GitHub pushes to Railway. Schema changes in `shared/schema.ts` must be committed, and new columns must also be added to `server/migrations.ts` as ALTER TABLE statements. Railway automatically runs migrations from `server/migrations.ts` on startup.
+- **Consumer Mobile App**: Expo-based mobile app wrapper in `mobile-app/` folder that loads the web consumer portal via WebView while providing native features (biometric authentication via Face ID/Touch ID, haptic feedback, secure token storage). Uses `expo-bridge.ts` for bidirectional communication between the WebView and native Expo features. Replaces the previous Capacitor-based mobile approach to enable Replit's "Publish to App Store" feature.
 
 ## System Design Choices
 - **Database**: PostgreSQL with Drizzle ORM, utilizing a multi-tenant schema.
@@ -85,3 +86,10 @@ The frontend is built with React and TypeScript, leveraging shadcn/ui components
 - **Wouter**
 - **date-fns**
 - **Zod**
+
+## Mobile App
+- **Expo** (React Native framework for iOS/Android)
+- **expo-local-authentication** (Biometric auth)
+- **expo-secure-store** (Secure token storage)
+- **expo-haptics** (Native haptic feedback)
+- **react-native-webview** (WebView wrapper)

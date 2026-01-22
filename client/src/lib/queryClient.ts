@@ -1,5 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
-import { Capacitor } from '@capacitor/core';
+import { isExpoApp } from './expo-bridge';
 import { getAuthToken } from "./cookies";
 import { getStoredConsumerToken } from "./consumer-auth";
 
@@ -54,36 +54,30 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
-// Get the API base URL - calculated dynamically each time
 function getApiUrl(path: string): string {
   if (path.startsWith("http")) {
-    return path; // Already a full URL
+    return path;
   }
 
   if (!path.startsWith("/")) {
     path = "/" + path;
   }
 
-  // First check if VITE_API_URL is set (allows override)
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL + path;
   }
   
-  // For native mobile platforms (iOS/Android), use the production server
-  if (Capacitor.isNativePlatform()) {
+  if (isExpoApp()) {
     const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://chain-admin-production.up.railway.app';
     return baseUrl + path;
   }
   
-  // Only use localhost:5000 if we're actually on localhost
   const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
   
   if (hostname === 'localhost') {
     return 'http://localhost:5000' + path;
   }
   
-  // For Replit webview and production, use relative URLs (same origin)
-  // The Express server serves both frontend and API on the same port in Replit
   return path;
 }
 
@@ -93,17 +87,15 @@ export async function apiRequest(
   data?: unknown | undefined,
 ): Promise<Response> {
   const fullUrl = getApiUrl(url);
-  const token = getAuthToken(); // Now checks cookies first, then localStorage
-  const consumerToken = getStoredConsumerToken(); // Check for consumer token
-  const adminToken = sessionStorage.getItem("admin_token"); // Check for admin token
+  const token = getAuthToken();
+  const consumerToken = getStoredConsumerToken();
+  const adminToken = sessionStorage.getItem("admin_token");
   const headers: HeadersInit = {};
   
-  // Only set Content-Type for non-FormData requests
   if (data && !(data instanceof FormData)) {
     headers["Content-Type"] = "application/json";
   }
   
-  // Determine which token to use based on endpoint
   if (consumerToken && isConsumerEndpoint(url)) {
     headers["Authorization"] = `Bearer ${consumerToken}`;
   } else if (adminToken && url.includes('/api/admin')) {
@@ -116,15 +108,13 @@ export async function apiRequest(
     const res = await fetch(fullUrl, {
       method,
       headers,
-      // FormData should be sent as-is, JSON data should be stringified
       body: data instanceof FormData ? data : (data ? JSON.stringify(data) : undefined),
-      credentials: "include", // Important for cookies to be sent
+      credentials: "include",
     });
 
     await throwIfResNotOk(res);
     return res;
   } catch (error) {
-    // Network errors (connection refused, timeout, etc.)
     if (error instanceof TypeError) {
       throw new ApiError(0, "Network error: Unable to connect to server. Please check your internet connection.", error);
     }
@@ -138,23 +128,20 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    // Handle single string query keys (like our consumer accounts URL)
     const queryPath = Array.isArray(queryKey) && queryKey.length === 1 && typeof queryKey[0] === 'string'
       ? queryKey[0]
       : queryKey.join("/") as string;
     
-    // Skip fetching for placeholder keys
     if (queryPath.includes("no-fetch") || queryPath === "skip") {
       return null;
     }
     
     const url = getApiUrl(queryPath);
-    const token = getAuthToken(); // Now checks cookies first, then localStorage
-    const consumerToken = getStoredConsumerToken(); // Check for consumer token
-    const adminToken = sessionStorage.getItem("admin_token"); // Check for admin token
+    const token = getAuthToken();
+    const consumerToken = getStoredConsumerToken();
+    const adminToken = sessionStorage.getItem("admin_token");
     const headers: HeadersInit = {};
     
-    // Determine which token to use based on endpoint
     if (consumerToken && isConsumerEndpoint(url)) {
       headers["Authorization"] = `Bearer ${consumerToken}`;
     } else if (adminToken && url.includes('/api/admin')) {
@@ -166,7 +153,7 @@ export const getQueryFn: <T>(options: {
     try {
       const res = await fetch(url, {
         headers,
-        credentials: "include", // Important for cookies to be sent
+        credentials: "include",
       });
 
       if (unauthorizedBehavior === "returnNull" && res.status === 401) {
@@ -176,7 +163,6 @@ export const getQueryFn: <T>(options: {
       await throwIfResNotOk(res);
       return await res.json();
     } catch (error) {
-      // Network errors (connection refused, timeout, etc.)
       if (error instanceof TypeError) {
         throw new ApiError(0, "Network error: Unable to connect to server. Please check your internet connection.", error);
       }

@@ -1,50 +1,67 @@
-import { BiometricAuth, BiometryType, BiometryErrorType, CheckBiometryResult } from '@aparajita/capacitor-biometric-auth';
-import { Capacitor } from '@capacitor/core';
+import { 
+  isExpoApp, 
+  checkBiometricAvailability, 
+  authenticateWithBiometric, 
+  getBiometryTypeName as getExpoBiometryTypeName 
+} from './expo-bridge';
 
 export interface BiometricAuthResult {
   success: boolean;
   error?: string;
-  biometryType?: BiometryType;
+  biometryType?: string;
+}
+
+export interface CheckBiometryResult {
+  isAvailable: boolean;
+  biometryType: string;
+  strongBiometryIsAvailable: boolean;
+  biometryTypes: string[];
+  deviceIsSecure: boolean;
+  reason: string;
+  code: string;
 }
 
 export const biometricAuth = {
-  /**
-   * Check if biometric authentication is available on this device
-   */
   async isAvailable(): Promise<CheckBiometryResult> {
-    if (!Capacitor.isNativePlatform()) {
+    if (!isExpoApp()) {
       return {
         isAvailable: false,
-        biometryType: BiometryType.none,
+        biometryType: 'none',
         strongBiometryIsAvailable: false,
         biometryTypes: [],
         deviceIsSecure: false,
         reason: 'Not running on a native platform',
-        code: BiometryErrorType.biometryNotAvailable
+        code: 'biometryNotAvailable'
       };
     }
 
     try {
-      return await BiometricAuth.checkBiometry();
+      const result = await checkBiometricAvailability();
+      return {
+        isAvailable: result.available,
+        biometryType: result.biometryType,
+        strongBiometryIsAvailable: result.available,
+        biometryTypes: result.available ? [result.biometryType] : [],
+        deviceIsSecure: result.available,
+        reason: result.available ? '' : 'Biometric not available',
+        code: result.available ? '' : 'biometryNotAvailable'
+      };
     } catch (error) {
       console.error('Biometry check failed:', error);
       return {
         isAvailable: false,
-        biometryType: BiometryType.none,
+        biometryType: 'none',
         strongBiometryIsAvailable: false,
         biometryTypes: [],
         deviceIsSecure: false,
         reason: error instanceof Error ? error.message : 'Unknown error',
-        code: BiometryErrorType.biometryNotAvailable
+        code: 'biometryNotAvailable'
       };
     }
   },
 
-  /**
-   * Authenticate user with biometrics
-   */
   async authenticate(reason: string = 'Authenticate to access your account'): Promise<BiometricAuthResult> {
-    if (!Capacitor.isNativePlatform()) {
+    if (!isExpoApp()) {
       return {
         success: false,
         error: 'Biometric authentication is only available in the mobile app'
@@ -52,29 +69,20 @@ export const biometricAuth = {
     }
 
     try {
-      // Check if biometrics are available
-      const check = await BiometricAuth.checkBiometry();
+      const check = await checkBiometricAvailability();
       
-      if (!check.isAvailable) {
+      if (!check.available) {
         return {
           success: false,
-          error: check.reason || 'Biometric authentication is not available on this device'
+          error: 'Biometric authentication is not available on this device'
         };
       }
 
-      // Perform authentication
-      await BiometricAuth.authenticate({
-        reason,
-        cancelTitle: 'Cancel',
-        allowDeviceCredential: true,
-        iosFallbackTitle: 'Use Passcode',
-        androidTitle: 'Biometric Authentication',
-        androidSubtitle: reason,
-        androidConfirmationRequired: false
-      });
+      const result = await authenticateWithBiometric(reason);
 
       return {
-        success: true,
+        success: result.success,
+        error: result.error,
         biometryType: check.biometryType
       };
     } catch (error) {
@@ -86,23 +94,7 @@ export const biometricAuth = {
     }
   },
 
-  /**
-   * Get biometry type name for display
-   */
-  getBiometryTypeName(type: BiometryType): string {
-    switch (type) {
-      case BiometryType.touchId:
-        return 'Touch ID';
-      case BiometryType.faceId:
-        return 'Face ID';
-      case BiometryType.fingerprintAuthentication:
-        return 'Fingerprint';
-      case BiometryType.faceAuthentication:
-        return 'Face Recognition';
-      case BiometryType.irisAuthentication:
-        return 'Iris Recognition';
-      default:
-        return 'Biometric';
-    }
+  getBiometryTypeName(type: string): string {
+    return getExpoBiometryTypeName(type);
   }
 };

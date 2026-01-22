@@ -1,14 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { getAuthToken, getStoredTenantName, getStoredTenantSlug, persistTenantMetadata } from "@/lib/cookies";
-import { Capacitor } from '@capacitor/core';
+import { isExpoApp } from '@/lib/expo-bridge';
 
 export function useAuth() {
   const [jwtAuth, setJwtAuth] = useState<any>(null);
   const [checkingJwt, setCheckingJwt] = useState(true);
   
   // Detect if running in mobile app
-  const isMobileApp = Capacitor.isNativePlatform();
+  const isMobileApp = isExpoApp();
   
   // Skip admin auth for consumer routes AND mobile apps
   const pathname = window.location.pathname;

@@ -9,7 +9,6 @@ import { apiCall } from "@/lib/api";
 import { persistConsumerAuth } from "@/lib/consumer-auth";
 import { biometricAuth } from "@/lib/biometric-auth";
 import { pushNotificationService } from "@/lib/push-notifications";
-import { Capacitor } from "@capacitor/core";
 
 interface AgencyContext {
   slug: string;
