@@ -4,16 +4,13 @@ workflows:
     max_build_duration: 60
     instance_type: mac_mini_m2
     
-    integrations:
-      app_store_connect: Chain Software App Store admin
-    
     environment:
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.chainsoftware.platform
+      groups:
+        - ios_credentials
       vars:
         XCODE_WORKSPACE: "ios/App/App.xcworkspace"
         XCODE_SCHEME: "App"
+        BUNDLE_ID: "com.chainsoftware.platform"
       node: 18
       xcode: latest
       cocoapods: default
@@ -43,18 +40,25 @@ workflows:
         script: |
           cd ios/App && pod install
           
-      - name: Fetch signing files
-        script: |
-          app-store-connect fetch-signing-files com.chainsoftware.platform \
-            --type IOS_APP_STORE \
-            --create
-          
-      - name: Set up code signing
+      - name: Set up keychain
         script: |
           keychain initialize
-          app-store-connect certificates create --type IOS_DISTRIBUTION --save || true
-          app-store-connect certificates list --type IOS_DISTRIBUTION --save
-          keychain add-certificates
+          
+      - name: Set up provisioning profiles
+        script: |
+          PROFILES_HOME="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILES_HOME"
+          PROFILE_PATH="$(mktemp "$PROFILES_HOME"/$(uuidgen).mobileprovision)"
+          echo ${CM_PROVISIONING_PROFILE} | base64 --decode > "$PROFILE_PATH"
+          echo "Provisioning profile installed at $PROFILE_PATH"
+          
+      - name: Set up signing certificate
+        script: |
+          echo ${CM_CERTIFICATE} | base64 --decode > /tmp/certificate.p12
+          keychain add-certificates --certificate /tmp/certificate.p12 --certificate-password ${CM_CERTIFICATE_PASSWORD}
+          
+      - name: Set up code signing settings
+        script: |
           xcode-project use-profiles
           
       - name: Build iOS app
@@ -67,9 +71,3 @@ workflows:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
       - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
-
-    publishing:
-      app_store_connect:
-        auth: integration
-        submit_to_testflight: true
-        submit_to_app_store: false
