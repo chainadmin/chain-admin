@@ -16688,7 +16688,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         const userCost = voipUserCount * userPrice;
         const localCost = localCount * localDidPrice;
-        const tollFreeCost = Math.max(0, tollFreeCount - 1) * tollFreePrice; // First toll-free is free
+        const tollFreeCost = tollFreeCount * tollFreePrice; // Charge for all toll-free numbers
         
         voipCosts = (userCost + localCost + tollFreeCost) / 100; // Convert to dollars
         voipDetails = {
@@ -21720,9 +21720,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const usersCost = voipUserCount * userPrice;
       const localDidsCost = counts.localCount * localDidPrice;
-      // First toll-free is included free, charge for additional ones
-      const additionalTollFreeCount = Math.max(0, counts.tollFreeCount - 1);
-      const tollFreeCost = additionalTollFreeCount * tollFreePrice;
+      // Charge for all toll-free numbers
+      const tollFreeCost = counts.tollFreeCount * tollFreePrice;
       const totalCost = usersCost + localDidsCost + tollFreeCost;
 
       res.json({
@@ -21888,32 +21887,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "VoIP access not enabled for this user" });
       }
 
-      const { toNumber, consumerId, accountId } = req.body;
+      const { toNumber, consumerId, accountId, callerIdMode: rawCallerIdMode } = req.body;
 
       if (!toNumber) {
         return res.status(400).json({ message: "Phone number to call is required" });
       }
 
+      // Validate callerIdMode - default to 'auto' if invalid
+      const validModes = ['auto', 'private', 'office'];
+      const callerIdMode = validModes.includes(rawCallerIdMode) ? rawCallerIdMode : 'auto';
+
       const { extractAreaCode, formatPhoneE164 } = await import('./twilioVoiceService');
       
-      // Find the best outbound caller ID based on the destination area code
-      const destinationAreaCode = extractAreaCode(toNumber);
-      let fromPhoneNumber = await voipStorage.getVoipPhoneNumberByAreaCode(destinationAreaCode, user.tenantId);
-      
-      if (!fromPhoneNumber) {
-        // Fall back to primary number
-        fromPhoneNumber = await voipStorage.getPrimaryVoipPhoneNumber(user.tenantId);
-      }
+      const allNumbers = await voipStorage.getVoipPhoneNumbersByTenant(user.tenantId);
+      let fromPhoneNumber: typeof allNumbers[0] | undefined;
+      let isPrivate = false;
 
-      if (!fromPhoneNumber) {
-        // Get any active number
-        const allNumbers = await voipStorage.getVoipPhoneNumbersByTenant(user.tenantId);
+      // Handle caller ID mode
+      if (callerIdMode === 'private') {
+        // Private mode - use any number but mark as private (will block caller ID)
+        isPrivate = true;
         fromPhoneNumber = allNumbers.find(n => n.isActive);
+      } else if (callerIdMode === 'office') {
+        // Office mode - use toll-free number
+        fromPhoneNumber = allNumbers.find(n => n.numberType === 'toll_free' && n.isActive);
+        if (!fromPhoneNumber) {
+          return res.status(400).json({ message: "No toll-free number configured. Add a toll-free number to use Office caller ID." });
+        }
+      } else {
+        // Auto mode - find the best outbound caller ID based on the destination area code
+        const destinationAreaCode = extractAreaCode(toNumber);
+        fromPhoneNumber = await voipStorage.getVoipPhoneNumberByAreaCode(destinationAreaCode, user.tenantId);
+        
+        if (!fromPhoneNumber) {
+          // Fall back to primary number
+          fromPhoneNumber = await voipStorage.getPrimaryVoipPhoneNumber(user.tenantId);
+        }
+
+        if (!fromPhoneNumber) {
+          // Get any active number
+          fromPhoneNumber = allNumbers.find(n => n.isActive);
+        }
       }
 
       if (!fromPhoneNumber) {
         return res.status(400).json({ message: "No phone numbers configured. Please add a phone number first." });
       }
+
+      // Determine the displayed caller ID
+      const displayedCallerId = isPrivate ? 'Anonymous' : fromPhoneNumber.phoneNumber;
 
       // Create call log entry
       const callLog = await voipStorage.createVoipCallLog({
@@ -21930,10 +21952,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({
         callLogId: callLog.id,
-        fromNumber: fromPhoneNumber.phoneNumber,
+        fromNumber: displayedCallerId,
+        actualFromNumber: fromPhoneNumber.phoneNumber,
         toNumber: formatPhoneE164(toNumber),
         status: 'initiated',
-        message: 'Call initiated. Use the Twilio Voice SDK to handle the call.'
+        isPrivate,
+        callerIdMode: callerIdMode || 'auto',
+        message: isPrivate ? 'Call initiated with blocked caller ID.' : 'Call initiated. Use the Twilio Voice SDK to handle the call.'
       });
     } catch (error) {
       console.error("Error initiating call:", error);

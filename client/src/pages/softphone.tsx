@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Phone, PhoneCall, PhoneOff, PhoneOutgoing, PhoneIncoming, Mic, MicOff, Volume2, VolumeX, History, LogOut } from "lucide-react";
+import { Loader2, Phone, PhoneCall, PhoneOff, PhoneOutgoing, PhoneIncoming, Mic, MicOff, Volume2, VolumeX, History, LogOut, EyeOff, Building2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 interface VoipCallLog {
@@ -61,6 +61,7 @@ export default function SoftphonePage() {
   const [isMuted, setIsMuted] = useState(false);
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
   const [agentStatus, setAgentStatus] = useState<"available" | "busy" | "away">("available");
+  const [callerIdMode, setCallerIdMode] = useState<"auto" | "private" | "office">("auto");
 
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
   const deviceRef = useRef<any>(null);
@@ -199,7 +200,7 @@ export default function SoftphonePage() {
           "Content-Type": "application/json",
           ...getAuthHeaders(),
         },
-        body: JSON.stringify({ toNumber }),
+        body: JSON.stringify({ toNumber, callerIdMode }),
       });
       if (response.status === 401 || response.status === 403) {
         handleAuthError();
@@ -409,6 +410,33 @@ export default function SoftphonePage() {
 
               {callState === "idle" && (
                 <>
+                  {/* Caller ID Mode Toggles */}
+                  <div className="flex items-center justify-center gap-2 pb-2 border-b border-gray-200 dark:border-gray-700">
+                    <span className="text-xs text-gray-500 mr-2">Caller ID:</span>
+                    <Button
+                      size="sm"
+                      variant={callerIdMode === "private" ? "default" : "outline"}
+                      onClick={() => setCallerIdMode(callerIdMode === "private" ? "auto" : "private")}
+                      className={`h-8 px-3 ${callerIdMode === "private" ? "bg-gray-700 hover:bg-gray-600" : ""}`}
+                    >
+                      <EyeOff className="h-3 w-3 mr-1" />
+                      Private
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={callerIdMode === "office" ? "default" : "outline"}
+                      onClick={() => setCallerIdMode(callerIdMode === "office" ? "auto" : "office")}
+                      className={`h-8 px-3 ${callerIdMode === "office" ? "bg-blue-600 hover:bg-blue-500" : ""}`}
+                    >
+                      <Building2 className="h-3 w-3 mr-1" />
+                      Office
+                    </Button>
+                    {callerIdMode !== "auto" && (
+                      <span className="text-xs text-gray-400 ml-1">
+                        {callerIdMode === "private" ? "(Anonymous)" : "(Toll-Free)"}
+                      </span>
+                    )}
+                  </div>
                   <div className="grid grid-cols-3 gap-2">
                     {dialpadButtons.map((btn) => (
                       <Button
