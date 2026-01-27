@@ -856,6 +856,38 @@ export default function GlobalAdmin() {
     },
   });
 
+  // Duplicate Account Cleanup - Remove true duplicates (same filenumber, creditor, and balance)
+  const [duplicateCleanupResult, setDuplicateCleanupResult] = useState<any>(null);
+  const [duplicateCleanupTenantId, setDuplicateCleanupTenantId] = useState<string>('');
+  const duplicateCleanupMutation = useMutation({
+    mutationFn: async ({ tenantId, dryRun }: { tenantId: string; dryRun: boolean }) => {
+      const response = await apiRequest("POST", `/api/admin/cleanup-duplicates/${tenantId}`, { dryRun });
+      return response.json();
+    },
+    onSuccess: (data: any) => {
+      setDuplicateCleanupResult(data);
+      if (data.dryRun) {
+        toast({
+          title: "Scan Complete",
+          description: `Found ${data.duplicatesFound} duplicate accounts that can be removed.`,
+        });
+      } else {
+        toast({
+          title: "Cleanup Complete",
+          description: `Removed ${data.deleted} duplicate accounts.`,
+        });
+        queryClient.invalidateQueries({ queryKey: ['/api/tenants'] });
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Cleanup Failed",
+        description: error.message || "Failed to cleanup duplicates",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleCreateAgency = () => {
     if (!newAgencyName.trim() || !newAgencyEmail.trim()) {
       toast({
@@ -2575,6 +2607,117 @@ export default function GlobalAdmin() {
                       <div className="font-medium text-blue-100/60">{smaxSyncResult.skipped}</div>
                     </div>
                   </div>
+                </div>
+              )}
+            </div>
+
+            {/* Duplicate Account Cleanup Section */}
+            <div className="mt-6 pt-6 border-t border-white/10">
+              <h3 className="text-lg font-medium text-blue-50 mb-2">Duplicate Account Cleanup</h3>
+              <p className="text-sm text-blue-100/60 mb-4">Find and remove duplicate accounts (same filenumber, creditor, and balance)</p>
+              <div className="flex items-end gap-4">
+                <div className="flex-1">
+                  <Label className="text-blue-100/80">Select Agency</Label>
+                  <Select 
+                    value={duplicateCleanupTenantId} 
+                    onValueChange={(value) => {
+                      setDuplicateCleanupTenantId(value);
+                      setDuplicateCleanupResult(null);
+                    }}
+                  >
+                    <SelectTrigger className="bg-white/5 border-white/10 text-blue-100" data-testid="select-duplicate-cleanup-tenant">
+                      <SelectValue placeholder="Select Agency" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(tenants as any[])?.map((tenant: any) => (
+                        <SelectItem key={tenant.id} value={tenant.id}>{tenant.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  onClick={() => duplicateCleanupTenantId && duplicateCleanupMutation.mutate({ 
+                    tenantId: duplicateCleanupTenantId, 
+                    dryRun: true 
+                  })}
+                  disabled={duplicateCleanupMutation.isPending || !duplicateCleanupTenantId}
+                  variant="outline"
+                  className="border-purple-500/50 text-purple-300 hover:bg-purple-900/30"
+                  data-testid="button-scan-duplicates"
+                >
+                  {duplicateCleanupMutation.isPending ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Scanning...
+                    </>
+                  ) : (
+                    <>
+                      <Search className="h-4 w-4 mr-2" />
+                      Scan for Duplicates
+                    </>
+                  )}
+                </Button>
+              </div>
+              {duplicateCleanupResult && (
+                <div className="mt-4 p-4 rounded bg-purple-900/30 border border-purple-500/30">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <span className="text-blue-100/60">Duplicates Found:</span>
+                      <div className="font-medium text-purple-300">{duplicateCleanupResult.duplicatesFound}</div>
+                    </div>
+                    <div>
+                      <span className="text-blue-100/60">Status:</span>
+                      <div className="font-medium text-blue-100">
+                        {duplicateCleanupResult.dryRun ? 'Preview (not deleted)' : 'Deleted'}
+                      </div>
+                    </div>
+                    {!duplicateCleanupResult.dryRun && (
+                      <div>
+                        <span className="text-blue-100/60">Removed:</span>
+                        <div className="font-medium text-emerald-300">{duplicateCleanupResult.deleted}</div>
+                      </div>
+                    )}
+                  </div>
+                  {duplicateCleanupResult.samples?.length > 0 && (
+                    <div className="mt-4">
+                      <h4 className="text-sm font-medium text-blue-100 mb-2">Sample Duplicates:</h4>
+                      <div className="max-h-40 overflow-y-auto space-y-1 text-xs">
+                        {duplicateCleanupResult.samples.map((sample: any, idx: number) => (
+                          <div key={idx} className="flex justify-between p-2 bg-white/5 rounded">
+                            <span className="text-blue-100">{sample.filenumber}</span>
+                            <span className="text-blue-100/60">
+                              {sample.creditor} - ${sample.balance?.toFixed(2)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {duplicateCleanupResult.dryRun && duplicateCleanupResult.duplicatesFound > 0 && (
+                    <div className="mt-4 flex justify-end">
+                      <Button
+                        onClick={() => duplicateCleanupTenantId && duplicateCleanupMutation.mutate({ 
+                          tenantId: duplicateCleanupTenantId, 
+                          dryRun: false 
+                        })}
+                        disabled={duplicateCleanupMutation.isPending}
+                        className="bg-red-600 hover:bg-red-700"
+                        data-testid="button-confirm-delete-duplicates"
+                      >
+                        {duplicateCleanupMutation.isPending ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                            Deleting...
+                          </>
+                        ) : (
+                          <>
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete {duplicateCleanupResult.duplicatesFound} Duplicates
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
