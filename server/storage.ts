@@ -1339,28 +1339,34 @@ export class DatabaseStorage implements IStorage {
   async findOrCreateAccount(accountData: InsertAccount): Promise<Account> {
     let existingAccount = null;
     
-    // Strategy 1: Try to find by filenumber + consumer + tenant (most reliable if filenumber exists)
-    if (accountData.filenumber && accountData.consumerId && accountData.tenantId) {
+    // Strategy 1: Try to find by filenumber + tenant ONLY (filenumber is unique per tenant - most reliable)
+    // This prevents duplicates when re-importing the same file, even if consumer lookup creates new consumer
+    if (accountData.filenumber && accountData.tenantId) {
       const [found] = await db.select()
         .from(accounts)
         .where(
           and(
             eq(accounts.tenantId, accountData.tenantId),
-            eq(accounts.consumerId, accountData.consumerId),
             eq(accounts.filenumber, accountData.filenumber)
           )
         );
-      if (found) existingAccount = found;
+      if (found) {
+        existingAccount = found;
+        // Update consumerId if the account was previously linked to a different consumer
+        // This handles cases where consumer email changed between imports
+        if (accountData.consumerId && found.consumerId !== accountData.consumerId) {
+          console.log(`[Account Dedup] Filenumber ${accountData.filenumber} matched, updating consumerId from ${found.consumerId} to ${accountData.consumerId}`);
+        }
+      }
     }
     
-    // Strategy 2: Try to find by accountNumber + consumer + tenant
-    if (!existingAccount && accountData.accountNumber && accountData.consumerId && accountData.tenantId) {
+    // Strategy 2: Try to find by accountNumber + tenant (accountNumber should also be unique per tenant)
+    if (!existingAccount && accountData.accountNumber && accountData.tenantId) {
       const [found] = await db.select()
         .from(accounts)
         .where(
           and(
             eq(accounts.tenantId, accountData.tenantId),
-            eq(accounts.consumerId, accountData.consumerId),
             eq(accounts.accountNumber, accountData.accountNumber)
           )
         );
@@ -1383,6 +1389,13 @@ export class DatabaseStorage implements IStorage {
     if (existingAccount) {
       // Account exists - update it with new data from CSV
       const updates: any = {};
+      
+      // Update consumerId if account was matched by filenumber/accountNumber but consumer changed
+      // This handles cases where consumer email changed in the CSV between imports
+      if (accountData.consumerId !== undefined && accountData.consumerId !== existingAccount.consumerId) {
+        updates.consumerId = accountData.consumerId;
+        console.log(`[Account Update] Updating consumerId from ${existingAccount.consumerId} to ${accountData.consumerId}`);
+      }
       
       // Always update filenumber if provided (critical for transition to mandatory filenumber)
       if (accountData.filenumber !== undefined && accountData.filenumber !== existingAccount.filenumber) {

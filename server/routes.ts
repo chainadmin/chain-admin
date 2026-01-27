@@ -2310,6 +2310,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Cleanup duplicate accounts endpoint
+  app.post('/api/accounts/cleanup-duplicates', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+      
+      // Find duplicate accounts by filenumber within the same tenant
+      // Keep the oldest one (first created)
+      const duplicatesByFilenumber = await db.execute(sql`
+        WITH ranked_accounts AS (
+          SELECT 
+            id,
+            filenumber,
+            tenant_id,
+            consumer_id,
+            created_at,
+            ROW_NUMBER() OVER (PARTITION BY tenant_id, filenumber ORDER BY created_at ASC) as rn
+          FROM accounts
+          WHERE tenant_id = ${tenantId} AND filenumber IS NOT NULL AND filenumber != ''
+        )
+        SELECT id, filenumber FROM ranked_accounts WHERE rn > 1
+      `);
+      
+      // Find duplicate accounts by accountNumber within the same tenant
+      const duplicatesByAccountNumber = await db.execute(sql`
+        WITH ranked_accounts AS (
+          SELECT 
+            id,
+            account_number,
+            tenant_id,
+            consumer_id,
+            created_at,
+            ROW_NUMBER() OVER (PARTITION BY tenant_id, account_number ORDER BY created_at ASC) as rn
+          FROM accounts
+          WHERE tenant_id = ${tenantId} AND account_number IS NOT NULL AND account_number != ''
+          AND filenumber IS NULL
+        )
+        SELECT id, account_number FROM ranked_accounts WHERE rn > 1
+      `);
+      
+      const duplicateFilenumberIds = (duplicatesByFilenumber.rows as any[]).map(r => r.id);
+      const duplicateAccountNumberIds = (duplicatesByAccountNumber.rows as any[]).map(r => r.id);
+      const allDuplicateIds = [...duplicateFilenumberIds, ...duplicateAccountNumberIds];
+      
+      if (allDuplicateIds.length === 0) {
+        return res.json({ message: "No duplicate accounts found", deleted: 0 });
+      }
+      
+      // Delete duplicates
+      for (const id of allDuplicateIds) {
+        await db.delete(accounts).where(eq(accounts.id, id));
+      }
+      
+      console.log(`[Cleanup] Deleted ${allDuplicateIds.length} duplicate accounts for tenant ${tenantId}`);
+      
+      res.json({ 
+        message: `Successfully removed ${allDuplicateIds.length} duplicate accounts`,
+        deleted: allDuplicateIds.length,
+        deletedByFilenumber: duplicateFilenumberIds.length,
+        deletedByAccountNumber: duplicateAccountNumberIds.length
+      });
+    } catch (error: any) {
+      console.error("Error cleaning up duplicate accounts:", error);
+      res.status(500).json({ message: error.message || "Failed to cleanup duplicates" });
+    }
+  });
+
   // Account management routes
   app.post('/api/accounts', authenticateUser, async (req: any, res) => {
     try {
