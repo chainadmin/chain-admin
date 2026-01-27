@@ -2350,7 +2350,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Delete duplicates
       for (const id of duplicateIds) {
-        await db.delete(accounts).where(eq(accounts.id, id));
+        await db.delete(accountsTable).where(eq(accountsTable.id, id));
       }
       
       console.log(`[Cleanup] Deleted ${duplicateIds.length} duplicate accounts for tenant ${tenantId}`);
@@ -17672,7 +17672,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Delete duplicates
       for (const dup of duplicates) {
-        await db.delete(accounts).where(eq(accounts.id, dup.id));
+        await db.delete(accountsTable).where(eq(accountsTable.id, dup.id));
       }
       
       console.log(`[Global Cleanup] Deleted ${duplicates.length} duplicate accounts for tenant ${tenantId}`);
