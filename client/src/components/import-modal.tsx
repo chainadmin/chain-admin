@@ -52,6 +52,8 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
 
   const importMutation = useMutation({
     mutationFn: async (data: any) => {
+      console.log('[CSV Import Debug] selectedFolderId:', selectedFolderId, 'type:', typeof selectedFolderId);
+      console.log('[CSV Import Debug] folderId being sent:', selectedFolderId || undefined);
       const response = await apiRequest("POST", "/api/import/csv", {
         ...data,
         folderId: selectedFolderId || undefined,
@@ -97,7 +99,7 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
     },
     onSuccess: (newFolder: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
-      setSelectedFolderId(newFolder.id);
+      setSelectedFolderId(String(newFolder.id));
       setShowCreateFolderDialog(false);
       setNewFolderName("");
       setNewFolderColor("#3B82F6");
@@ -466,7 +468,7 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
                     </div>
                   </SelectItem>
                   {(folders as any[])?.map((folder) => (
-                    <SelectItem key={folder.id} value={folder.id}>
+                    <SelectItem key={folder.id} value={String(folder.id)}>
                       <div className="flex items-center">
                         <div 
                           className="w-2.5 h-2.5 rounded-full mr-1.5" 
