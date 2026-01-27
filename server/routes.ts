@@ -2116,8 +2116,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { consumers: consumersData, accounts: accountsData, folderId, clearExistingPhones } = req.body;
       
-      console.log('[CSV Import Debug] Received folderId from request:', folderId, 'type:', typeof folderId);
-      
       // Basic array validation
       if (!consumersData || !Array.isArray(consumersData)) {
         return res.status(400).json({ message: "Invalid consumer data format" });
@@ -2205,15 +2203,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Get default folder if no folder is specified
       let targetFolderId = folderId;
-      console.log('[CSV Import Debug] Initial targetFolderId:', targetFolderId);
       if (!targetFolderId) {
-        console.log('[CSV Import Debug] No folderId provided, getting default folder');
         await storage.ensureDefaultFolders(tenantId);
         const defaultFolder = await storage.getDefaultFolder(tenantId);
         targetFolderId = defaultFolder?.id;
-        console.log('[CSV Import Debug] Default folder assigned:', targetFolderId, 'name:', defaultFolder?.name);
-      } else {
-        console.log('[CSV Import Debug] Using provided folderId:', targetFolderId);
       }
       
       // Find or create consumers (using filtered valid consumers)

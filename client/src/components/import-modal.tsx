@@ -52,8 +52,6 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
 
   const importMutation = useMutation({
     mutationFn: async (data: any) => {
-      console.log('[CSV Import Debug] selectedFolderId:', selectedFolderId, 'type:', typeof selectedFolderId);
-      console.log('[CSV Import Debug] folderId being sent:', selectedFolderId || undefined);
       const response = await apiRequest("POST", "/api/import/csv", {
         ...data,
         folderId: selectedFolderId || undefined,

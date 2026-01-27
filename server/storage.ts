@@ -1339,12 +1339,13 @@ export class DatabaseStorage implements IStorage {
   async findOrCreateAccount(accountData: InsertAccount): Promise<Account> {
     let existingAccount = null;
     
-    // Strategy 1: Try to find by filenumber and consumer (most reliable if both exist)
-    if (accountData.filenumber && accountData.consumerId) {
+    // Strategy 1: Try to find by filenumber + consumer + tenant (most reliable if filenumber exists)
+    if (accountData.filenumber && accountData.consumerId && accountData.tenantId) {
       const [found] = await db.select()
         .from(accounts)
         .where(
           and(
+            eq(accounts.tenantId, accountData.tenantId),
             eq(accounts.consumerId, accountData.consumerId),
             eq(accounts.filenumber, accountData.filenumber)
           )
@@ -1352,12 +1353,13 @@ export class DatabaseStorage implements IStorage {
       if (found) existingAccount = found;
     }
     
-    // Strategy 2: If not found by filenumber, try accountNumber (for existing accounts without filenumber)
-    if (!existingAccount && accountData.accountNumber && accountData.consumerId) {
+    // Strategy 2: Try to find by accountNumber + consumer + tenant
+    if (!existingAccount && accountData.accountNumber && accountData.consumerId && accountData.tenantId) {
       const [found] = await db.select()
         .from(accounts)
         .where(
           and(
+            eq(accounts.tenantId, accountData.tenantId),
             eq(accounts.consumerId, accountData.consumerId),
             eq(accounts.accountNumber, accountData.accountNumber)
           )
@@ -1365,14 +1367,14 @@ export class DatabaseStorage implements IStorage {
       if (found) existingAccount = found;
     }
     
-    // Strategy 3: If still not found, try by consumer + creditor (fallback for accounts with no accountNumber or filenumber)
+    // Strategy 3: Try to find by consumer + creditor with case-insensitive matching (fallback)
     if (!existingAccount && accountData.consumerId && accountData.creditor) {
       const [found] = await db.select()
         .from(accounts)
         .where(
           and(
             eq(accounts.consumerId, accountData.consumerId),
-            eq(accounts.creditor, accountData.creditor)
+            sql`LOWER(TRIM(${accounts.creditor})) = LOWER(TRIM(${accountData.creditor}))`
           )
         );
       if (found) existingAccount = found;
