@@ -63,6 +63,25 @@ export async function runMigrations() {
       console.log(`  ⚠ collection_max_enabled (already exists or error)`);
     }
     
+    // Add Debt Manager Pro integration columns (separate from SMAX)
+    console.log('Adding Debt Manager Pro columns...');
+    const dmpColumns = [
+      { name: 'dmp_enabled', type: 'BOOLEAN', default: 'false' },
+      { name: 'dmp_api_url', type: 'TEXT' },
+      { name: 'dmp_username', type: 'TEXT' },
+      { name: 'dmp_password', type: 'TEXT' }
+    ];
+    
+    for (const col of dmpColumns) {
+      try {
+        const defaultClause = col.default ? ` DEFAULT ${col.default}` : '';
+        await client.query(`ALTER TABLE tenant_settings ADD COLUMN IF NOT EXISTS ${col.name} ${col.type}${defaultClause}`);
+        console.log(`  ✓ ${col.name}`);
+      } catch (err) {
+        console.log(`  ⚠ ${col.name} (already exists or error)`);
+      }
+    }
+    
     // Add business_type column for multi-module architecture
     console.log('Adding business type column...');
     try {

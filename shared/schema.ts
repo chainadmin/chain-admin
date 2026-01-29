@@ -701,6 +701,11 @@ export const tenantSettings = pgTable("tenant_settings", {
   smaxBaseUrl: text("smax_base_url").default("https://api.smaxcollectionsoftware.com:8000"),
   // Collection Max integration fields
   collectionMaxEnabled: boolean("collection_max_enabled").default(false),
+  // Debt Manager Pro integration fields (completely separate from SMAX)
+  dmpEnabled: boolean("dmp_enabled").default(false),
+  dmpApiUrl: text("dmp_api_url"),
+  dmpUsername: text("dmp_username"),
+  dmpPassword: text("dmp_password"),
   blockedAccountStatuses: text("blocked_account_statuses").array().default(sql`ARRAY['inactive', 'recalled', 'closed']::text[]`), // Account statuses that block communications and payments
   forceArrangement: boolean("force_arrangement").default(false), // When true, consumers must set up payment arrangement (no one-time payments)
 });
