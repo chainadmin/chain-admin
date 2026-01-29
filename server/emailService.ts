@@ -3,6 +3,7 @@ import { db } from './db';
 import { emailLogs, tenants, tenantSettings } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 import { smaxService } from './smaxService';
+import { storage } from './storage';
 
 // Postmark client will be validated at server startup, not module load
 // This allows Docker build to succeed without runtime env vars
@@ -213,6 +214,25 @@ export class EmailService {
                 console.log(`📝 SMAX note created for email to account ${originalEmail.metadata.filenumber}`);
               } catch (noteError) {
                 console.error('Error creating SMAX note for email:', noteError);
+              }
+            }
+            
+            // Log email communication to DMP if enabled
+            if (originalEmail.metadata?.filenumber && originalEmail.tenantId && !isInternalNotification) {
+              try {
+                const tenantSettings = await storage.getTenantSettings(originalEmail.tenantId);
+                if ((tenantSettings as any)?.dmpEnabled) {
+                  const { dmpService } = await import('./dmpService');
+                  await dmpService.logCommunication(originalEmail.tenantId, String(originalEmail.metadata.filenumber), {
+                    type: 'email',
+                    content: originalEmail.subject,
+                    direction: 'outbound',
+                    status: 'sent',
+                  });
+                  console.log(`📝 DMP communication logged for email to account ${originalEmail.metadata.filenumber}`);
+                }
+              } catch (dmpError) {
+                console.error('Error logging email to DMP (non-blocking):', dmpError);
               }
             }
             

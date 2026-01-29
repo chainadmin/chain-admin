@@ -411,6 +411,29 @@ class SmsService {
         }
       }
 
+      // Log communication to DMP if enabled
+      if (accountId) {
+        try {
+          const tenantSettings = await storage.getTenantSettings(tenantId);
+          if ((tenantSettings as any)?.dmpEnabled) {
+            const account = await storage.getAccount(accountId);
+            const identifier = account?.filenumber || account?.accountNumber;
+            if (account && identifier) {
+              const { dmpService } = await import('./dmpService');
+              await dmpService.logCommunication(tenantId, identifier, {
+                type: 'sms',
+                content: message,
+                direction: 'outbound',
+                status: 'sent',
+              });
+              console.log(`📝 DMP communication logged for SMS to account ${identifier}`);
+            }
+          }
+        } catch (dmpError) {
+          console.error('Error logging SMS to DMP (non-blocking):', dmpError);
+        }
+      }
+
       return { success: true, messageId: result.sid };
     } catch (error: any) {
       console.error('Twilio SMS error:', error);

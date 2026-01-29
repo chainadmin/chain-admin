@@ -2570,6 +2570,53 @@ export default function Settings() {
                     </div>
                   )}
 
+                  {/* DMP Import Accounts - Only show when enabled */}
+                  {(localSettings as any)?.dmpEnabled && (
+                    <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-4">
+                      <h3 className="text-base font-medium text-white">Import Accounts from DMP</h3>
+                      <p className="text-sm text-blue-100/70">
+                        Manually import accounts from Debt Manager Pro. This will create new accounts or update existing ones.
+                      </p>
+                      <Button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            toast({
+                              title: "Importing...",
+                              description: "Fetching accounts from DMP...",
+                            });
+                            const response = await apiRequest("POST", "/api/dmp/import-accounts", {});
+                            const result = await response.json();
+
+                            if (result.success) {
+                              toast({
+                                title: "Import Complete",
+                                description: result.message || `Imported ${result.imported} accounts, updated ${result.updated}`,
+                              });
+                            } else {
+                              toast({
+                                title: "Import Failed",
+                                description: result.error || "Failed to import accounts from DMP",
+                                variant: "destructive",
+                              });
+                            }
+                          } catch (error: any) {
+                            toast({
+                              title: "Import Error",
+                              description: error.message || "Failed to import accounts from DMP",
+                              variant: "destructive",
+                            });
+                          }
+                        }}
+                        className="rounded-xl bg-gradient-to-r from-emerald-500/80 to-teal-500/80 px-6 py-2 text-sm font-semibold text-white shadow-lg transition hover:from-emerald-400/80 hover:to-teal-400/80"
+                        data-testid="button-import-dmp-accounts"
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Import Accounts
+                      </Button>
+                    </div>
+                  )}
+
                   {/* DMP Features Info */}
                   <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-4">
                     <h3 className="text-base font-medium text-white">What gets synced with DMP?</h3>

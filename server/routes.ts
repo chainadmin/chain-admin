@@ -8827,6 +8827,280 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Import accounts from Debt Manager Pro - manual trigger only
+  app.post('/api/dmp/import-accounts', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { dmpService } = await import('./dmpService');
+      
+      // Check if DMP is enabled for this tenant
+      const settings = await storage.getTenantSettings(tenantId);
+      if (!(settings as any)?.dmpEnabled) {
+        return res.status(400).json({ 
+          success: false,
+          error: "Debt Manager Pro integration is not enabled for this tenant" 
+        });
+      }
+
+      // Get optional portfolio filter from request
+      const { portfolioId, folderId } = req.body || {};
+
+      // Fetch accounts from DMP
+      const dmpAccounts = await dmpService.getAccounts(tenantId, { portfolioId });
+      
+      if (!dmpAccounts || dmpAccounts.length === 0) {
+        return res.json({
+          success: true,
+          message: "No accounts found in DMP to import",
+          imported: 0,
+          updated: 0,
+          skipped: 0
+        });
+      }
+
+      const results = {
+        imported: 0,
+        updated: 0,
+        skipped: 0,
+        errors: [] as string[]
+      };
+
+      for (const dmpAccount of dmpAccounts) {
+        try {
+          // Check if account already exists by filenumber
+          const existingAccounts = await storage.getAccountsByTenant(tenantId);
+          const existing = existingAccounts.find(a => 
+            a.filenumber === dmpAccount.filenumber || 
+            a.accountNumber === dmpAccount.accountNumber
+          );
+
+          if (existing) {
+            // Update existing account with DMP data
+            await storage.updateAccount(existing.id, {
+              balance: dmpAccount.balance,
+              status: dmpAccount.status || existing.status,
+              creditorName: dmpAccount.creditorName || existing.creditorName,
+            });
+            results.updated++;
+          } else {
+            // Create new consumer and account
+            // First check if consumer exists
+            let consumer = null;
+            if (dmpAccount.consumerEmail || dmpAccount.consumerPhone) {
+              const consumers = await storage.getConsumersByTenant(tenantId);
+              consumer = consumers.find(c => 
+                (dmpAccount.consumerEmail && c.email === dmpAccount.consumerEmail) ||
+                (dmpAccount.consumerPhone && c.phone === dmpAccount.consumerPhone)
+              );
+            }
+
+            if (!consumer) {
+              // Create new consumer
+              consumer = await storage.createConsumer({
+                tenantId,
+                firstName: dmpAccount.firstName || 'Unknown',
+                lastName: dmpAccount.lastName || 'Consumer',
+                email: dmpAccount.consumerEmail || null,
+                phone: dmpAccount.consumerPhone || null,
+                address: dmpAccount.address || null,
+                city: dmpAccount.city || null,
+                state: dmpAccount.state || null,
+                zipCode: dmpAccount.zipCode || null,
+              });
+            }
+
+            // Create account
+            await storage.createAccount({
+              tenantId,
+              consumerId: consumer.id,
+              accountNumber: dmpAccount.accountNumber || dmpAccount.filenumber,
+              filenumber: dmpAccount.filenumber,
+              balance: dmpAccount.balance || 0,
+              creditorName: dmpAccount.creditorName || 'Unknown Creditor',
+              status: dmpAccount.status || 'active',
+              folderId: folderId || null,
+            });
+            results.imported++;
+          }
+        } catch (err: any) {
+          results.errors.push(`Account ${dmpAccount.filenumber}: ${err.message}`);
+          results.skipped++;
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Imported ${results.imported} new accounts, updated ${results.updated} existing`,
+        ...results
+      });
+    } catch (error: any) {
+      console.error("Error importing accounts from DMP:", error);
+      res.status(500).json({
+        success: false,
+        error: error.message || "Failed to import accounts from DMP" 
+      });
+    }
+  });
+
+  // Post payment to DMP when payment is processed in Chain
+  app.post('/api/dmp/post-payment', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { dmpService } = await import('./dmpService');
+      
+      // Check if DMP is enabled
+      const settings = await storage.getTenantSettings(tenantId);
+      if (!(settings as any)?.dmpEnabled) {
+        return res.json({ 
+          success: false,
+          message: "DMP integration is not enabled" 
+        });
+      }
+
+      const { paymentId } = req.body;
+      if (!paymentId) {
+        return res.status(400).json({ success: false, message: "Payment ID required" });
+      }
+
+      // Get payment details
+      const payment = await storage.getPaymentById(paymentId);
+      if (!payment) {
+        return res.status(404).json({ success: false, message: "Payment not found" });
+      }
+
+      // Get account for filenumber
+      const account = await storage.getAccountById(payment.accountId);
+      if (!account) {
+        return res.status(404).json({ success: false, message: "Account not found" });
+      }
+
+      // Post payment to DMP
+      const result = await dmpService.postPayment(tenantId, {
+        filenumber: account.filenumber || account.accountNumber,
+        amount: payment.amount / 100, // Convert cents to dollars
+        date: payment.createdAt,
+        type: payment.type || 'payment',
+        reference: payment.transactionId || `CHAIN-${payment.id}`,
+        status: payment.status,
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error posting payment to DMP:", error);
+      res.status(500).json({
+        success: false,
+        message: error.message || "Failed to post payment to DMP" 
+      });
+    }
+  });
+
+  // Post note to DMP
+  app.post('/api/dmp/post-note', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { dmpService } = await import('./dmpService');
+      
+      // Check if DMP is enabled
+      const settings = await storage.getTenantSettings(tenantId);
+      if (!(settings as any)?.dmpEnabled) {
+        return res.json({ 
+          success: false,
+          message: "DMP integration is not enabled" 
+        });
+      }
+
+      const { accountId, content, type } = req.body;
+      if (!accountId || !content) {
+        return res.status(400).json({ success: false, message: "Account ID and content required" });
+      }
+
+      // Get account for filenumber
+      const account = await storage.getAccountById(accountId);
+      if (!account) {
+        return res.status(404).json({ success: false, message: "Account not found" });
+      }
+
+      // Post note to DMP
+      const result = await dmpService.postNote(tenantId, account.filenumber || account.accountNumber, {
+        content,
+        type: type || 'general',
+        createdBy: req.user.username || 'Chain',
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error posting note to DMP:", error);
+      res.status(500).json({
+        success: false,
+        message: error.message || "Failed to post note to DMP" 
+      });
+    }
+  });
+
+  // Log communication to DMP (SMS/Email)
+  app.post('/api/dmp/log-communication', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { dmpService } = await import('./dmpService');
+      
+      // Check if DMP is enabled
+      const settings = await storage.getTenantSettings(tenantId);
+      if (!(settings as any)?.dmpEnabled) {
+        return res.json({ 
+          success: false,
+          message: "DMP integration is not enabled" 
+        });
+      }
+
+      const { accountId, type, content, direction, status } = req.body;
+      if (!accountId || !type || !content) {
+        return res.status(400).json({ success: false, message: "Account ID, type, and content required" });
+      }
+
+      // Get account for filenumber
+      const account = await storage.getAccountById(accountId);
+      if (!account) {
+        return res.status(404).json({ success: false, message: "Account not found" });
+      }
+
+      // Log communication to DMP
+      const result = await dmpService.logCommunication(tenantId, account.filenumber || account.accountNumber, {
+        type: type as 'sms' | 'email',
+        content,
+        direction: direction || 'outbound',
+        status: status || 'sent',
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error logging communication to DMP:", error);
+      res.status(500).json({
+        success: false,
+        message: error.message || "Failed to log communication to DMP" 
+      });
+    }
+  });
+
   // Sync accounts from SMAX - Call this endpoint every 8 hours
   app.post('/api/smax/sync-accounts', authenticateUser, async (req: any, res) => {
     try {
@@ -10631,6 +10905,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('✅ Payment notifications sent successfully');
     } else {
       console.warn('⚠️ Consumer not found - skipping payment notifications');
+    }
+
+    // Sync payment to DMP if enabled
+    try {
+      const tenantSettings = await storage.getTenantSettings(tenantId);
+      if ((tenantSettings as any)?.dmpEnabled && account) {
+        console.log('🔄 Syncing payment to DMP...');
+        const { dmpService } = await import('./dmpService');
+        await dmpService.postPayment(tenantId, {
+          filenumber: account.filenumber || account.accountNumber,
+          amount: amountCents / 100,
+          date: new Date(),
+          type: 'payment',
+          reference: transactionId || `CHAIN-${payment.id}`,
+          status: 'completed',
+        });
+        console.log('✅ Payment synced to DMP');
+      }
+    } catch (dmpError) {
+      console.error('⚠️ Failed to sync payment to DMP (non-blocking):', dmpError);
     }
 
     return payment;

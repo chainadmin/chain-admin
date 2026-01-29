@@ -505,6 +505,122 @@ class DebtManagerProService {
     const config = await this.getDmpConfig(tenantId);
     return config !== null && config.enabled;
   }
+
+  // Wrapper method for posting payments (used by Chain's payment flow)
+  async postPayment(tenantId: string, data: {
+    filenumber: string;
+    amount: number;
+    date: Date;
+    type: string;
+    reference: string;
+    status: string;
+  }): Promise<any> {
+    const paymentData: DmpPaymentData = {
+      filenumber: data.filenumber,
+      paymentdate: data.date.toISOString().split('T')[0],
+      paymentamount: data.amount,
+      paymentmethod: 'credit_card',
+      paymentstatus: data.status === 'completed' ? 'POSTED' : 'DECLINED',
+      typeofpayment: data.type === 'payment' ? 'REGULAR' : data.type.toUpperCase(),
+      transactionid: data.reference,
+    };
+    return this.insertPayment(tenantId, paymentData);
+  }
+
+  // Wrapper method for posting notes (used by Chain's notes flow)
+  async postNote(tenantId: string, filenumber: string, data: {
+    content: string;
+    type?: string;
+    createdBy?: string;
+  }): Promise<any> {
+    const noteData: DmpNoteData = {
+      filenumber,
+      collectorname: data.createdBy || 'Chain',
+      logmessage: data.content,
+    };
+    return this.insertNote(tenantId, noteData);
+  }
+
+  // Wrapper method for logging communications (SMS/Email)
+  async logCommunication(tenantId: string, filenumber: string, data: {
+    type: 'sms' | 'email';
+    content: string;
+    direction: 'outbound' | 'inbound';
+    status?: string;
+  }): Promise<any> {
+    if (data.type === 'sms') {
+      // Create an attempt record for SMS
+      const attemptData: DmpAttemptData = {
+        filenumber,
+        attempttype: 'TEXT',
+        attemptdate: new Date().toISOString().split('T')[0],
+        notes: data.content.length > 200 ? data.content.substring(0, 200) + '...' : data.content,
+        result: data.status === 'sent' ? 'SENT' : data.status?.toUpperCase() || 'SENT',
+      };
+      return this.insertAttempt(tenantId, attemptData);
+    } else {
+      // Create an attempt record for Email
+      const attemptData: DmpAttemptData = {
+        filenumber,
+        attempttype: 'EMAIL',
+        attemptdate: new Date().toISOString().split('T')[0],
+        notes: data.content,
+        result: data.status === 'sent' ? 'SENT' : data.status?.toUpperCase() || 'SENT',
+      };
+      return this.insertAttempt(tenantId, attemptData);
+    }
+  }
+
+  // Fetch accounts from DMP (for import)
+  async getAccounts(tenantId: string, options?: { portfolioId?: string }): Promise<any[]> {
+    if (options?.portfolioId) {
+      const accounts = await this.getAccountsInPortfolio(tenantId, options.portfolioId);
+      return accounts?.map(acc => ({
+        filenumber: acc.filenumber,
+        accountNumber: acc.accountnumber || acc.filenumber,
+        firstName: acc.debtor_firstname,
+        lastName: acc.debtor_lastname,
+        address: acc.debtor_address,
+        city: acc.debtor_city,
+        state: acc.debtor_state,
+        zipCode: acc.debtor_zip,
+        consumerEmail: acc.email,
+        consumerPhone: acc.phone_cell || acc.phone_home || acc.phone_work,
+        balance: acc.balance ? Math.round(acc.balance * 100) : 0,
+        creditorName: acc.creditor,
+        status: acc.status || 'active',
+      })) || [];
+    }
+
+    // If no portfolio specified, get all portfolios and then get accounts from each
+    const portfolios = await this.getPortfolios(tenantId);
+    if (!portfolios || portfolios.length === 0) {
+      return [];
+    }
+
+    const allAccounts: any[] = [];
+    for (const portfolio of portfolios.slice(0, 5)) { // Limit to first 5 portfolios for safety
+      const accounts = await this.getAccountsInPortfolio(tenantId, portfolio.id);
+      if (accounts) {
+        allAccounts.push(...accounts.map(acc => ({
+          filenumber: acc.filenumber,
+          accountNumber: acc.accountnumber || acc.filenumber,
+          firstName: acc.debtor_firstname,
+          lastName: acc.debtor_lastname,
+          address: acc.debtor_address,
+          city: acc.debtor_city,
+          state: acc.debtor_state,
+          zipCode: acc.debtor_zip,
+          consumerEmail: acc.email,
+          consumerPhone: acc.phone_cell || acc.phone_home || acc.phone_work,
+          balance: acc.balance ? Math.round(acc.balance * 100) : 0,
+          creditorName: acc.creditor,
+          status: acc.status || 'active',
+        })));
+      }
+    }
+    return allAccounts;
+  }
 }
 
 export const dmpService = new DebtManagerProService();
