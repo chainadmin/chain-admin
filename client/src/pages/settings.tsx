@@ -2461,6 +2461,153 @@ export default function Settings() {
                   </CardFooter>
                 )}
               </Card>
+
+              {/* Debt Manager Pro Integration Card */}
+              <Card className={cardBaseClasses}>
+                <CardHeader className="space-y-1 text-white">
+                  <CardTitle className="text-xl font-semibold text-white">Debt Manager Pro Integration</CardTitle>
+                  <p className="text-sm text-blue-100/70">
+                    Connect to Debt Manager Pro for bidirectional sync of accounts, payments, and communications.
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-6 text-sm text-blue-100/80">
+                  {/* Enable DMP Toggle */}
+                  <div className="flex items-center justify-between space-x-4 rounded-xl border border-white/10 bg-white/5 p-4">
+                    <div className="flex-1">
+                      <Label className="text-base font-medium text-white">Enable Debt Manager Pro</Label>
+                      <p className="text-sm text-blue-100/70">
+                        Sync accounts, payments, notes, and communication attempts with DMP
+                      </p>
+                    </div>
+                    <Switch
+                      checked={(localSettings as any)?.dmpEnabled || false}
+                      onCheckedChange={(checked) => handleSettingsUpdate('dmpEnabled', checked)}
+                      data-testid="switch-dmp-enabled"
+                    />
+                  </div>
+
+                  {/* DMP Configuration Fields */}
+                  {(localSettings as any)?.dmpEnabled && (
+                    <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-4">
+                      <div className="space-y-2">
+                        <Label className="text-white">API URL</Label>
+                        <Input
+                          type="text"
+                          placeholder="https://your-dmp-server.com"
+                          value={(localSettings as any)?.dmpApiUrl || ''}
+                          onChange={(e) => handleSettingsUpdate('dmpApiUrl', e.target.value)}
+                          className={inputClasses}
+                          data-testid="input-dmp-api-url"
+                        />
+                        <p className="text-xs text-blue-100/50">
+                          The base URL for your Debt Manager Pro API server
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-white">Username</Label>
+                        <Input
+                          type="text"
+                          placeholder="Your DMP username"
+                          value={(localSettings as any)?.dmpUsername || ''}
+                          onChange={(e) => handleSettingsUpdate('dmpUsername', e.target.value)}
+                          className={inputClasses}
+                          data-testid="input-dmp-username"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-white">Password</Label>
+                        <Input
+                          type="password"
+                          placeholder="Your DMP password"
+                          value={(localSettings as any)?.dmpPassword || ''}
+                          onChange={(e) => handleSettingsUpdate('dmpPassword', e.target.value)}
+                          className={inputClasses}
+                          data-testid="input-dmp-password"
+                        />
+                      </div>
+
+                      <div className="flex justify-end">
+                        <Button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              const response = await apiRequest("POST", "/api/settings/test-dmp", {
+                                dmpEnabled: (localSettings as any)?.dmpEnabled ?? false,
+                                dmpApiUrl: (localSettings as any)?.dmpApiUrl,
+                                dmpUsername: (localSettings as any)?.dmpUsername,
+                                dmpPassword: (localSettings as any)?.dmpPassword,
+                              });
+                              const result = await response.json();
+
+                              if (result.success) {
+                                toast({
+                                  title: "Connection Successful",
+                                  description: "Successfully connected to Debt Manager Pro",
+                                });
+                              } else {
+                                toast({
+                                  title: "Connection Failed",
+                                  description: result.message || "Failed to connect to DMP",
+                                  variant: "destructive",
+                                });
+                              }
+                            } catch (error: any) {
+                              toast({
+                                title: "Connection Error",
+                                description: error.message || "Failed to test DMP connection",
+                                variant: "destructive",
+                              });
+                            }
+                          }}
+                          className="rounded-xl bg-gradient-to-r from-purple-500/80 to-pink-500/80 px-6 py-2 text-sm font-semibold text-white shadow-lg shadow-purple-900/30 transition hover:from-purple-400/80 hover:to-pink-400/80"
+                          data-testid="button-test-dmp"
+                        >
+                          Test Connection
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* DMP Features Info */}
+                  <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-4">
+                    <h3 className="text-base font-medium text-white">What gets synced with DMP?</h3>
+                    <ul className="space-y-2 text-sm text-blue-100/70">
+                      <li className="flex items-start">
+                        <span className="mr-2">•</span>
+                        <span>Payment transactions and results</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="mr-2">•</span>
+                        <span>SMS and email communications</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="mr-2">•</span>
+                        <span>Account notes and collection attempts</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="mr-2">•</span>
+                        <span>VoIP call results and dispositions (if VoIP enabled)</span>
+                      </li>
+                    </ul>
+                  </div>
+                </CardContent>
+                {hasUnsavedChanges && (
+                  <CardFooter className="border-t border-white/10 pt-6">
+                    <Button
+                      onClick={handleSaveSettings}
+                      disabled={updateSettingsMutation.isPending}
+                      className={cn(
+                        "ml-auto rounded-xl bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-6 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 transition hover:from-sky-400/80 hover:to-indigo-400/80",
+                        updateSettingsMutation.isPending && "opacity-60",
+                      )}
+                    >
+                      {updateSettingsMutation.isPending ? "Saving..." : "Save changes"}
+                    </Button>
+                  </CardFooter>
+                )}
+              </Card>
             </TabsContent>
             )}
 

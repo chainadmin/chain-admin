@@ -8793,6 +8793,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Test Debt Manager Pro connection
+  app.post('/api/settings/test-dmp', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { dmpService } = await import('./dmpService');
+      const {
+        dmpEnabled,
+        dmpApiUrl,
+        dmpUsername,
+        dmpPassword,
+      } = req.body || {};
+
+      const result = await dmpService.testConnection(tenantId, {
+        enabled: typeof dmpEnabled === 'boolean' ? dmpEnabled : undefined,
+        apiUrl: typeof dmpApiUrl === 'string' ? dmpApiUrl : undefined,
+        username: typeof dmpUsername === 'string' ? dmpUsername : undefined,
+        password: typeof dmpPassword === 'string' ? dmpPassword : undefined,
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error testing DMP connection:", error);
+      res.status(500).json({
+        success: false,
+        message: error.message || "Failed to test DMP connection" 
+      });
+    }
+  });
+
   // Sync accounts from SMAX - Call this endpoint every 8 hours
   app.post('/api/smax/sync-accounts', authenticateUser, async (req: any, res) => {
     try {
