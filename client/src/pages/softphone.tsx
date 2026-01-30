@@ -300,30 +300,34 @@ export default function SoftphonePage() {
             <CardDescription>Sign in to access your phone system</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleLogin} className="space-y-4">
+            <form onSubmit={handleLogin} className="space-y-4" autoComplete="off">
               {loginError && (
                 <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 text-sm">
                   {loginError}
                 </div>
               )}
               <div className="space-y-2">
-                <Label htmlFor="username">Username</Label>
+                <Label htmlFor="softphone-username">Username</Label>
                 <Input
-                  id="username"
+                  id="softphone-username"
+                  name="softphone-username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder="Enter your username"
+                  autoComplete="off"
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="softphone-password">Password</Label>
                 <Input
-                  id="password"
+                  id="softphone-password"
+                  name="softphone-password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password"
+                  autoComplete="new-password"
                   required
                 />
               </div>
