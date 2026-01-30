@@ -8436,10 +8436,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         firstName: z.string().optional(),
         lastName: z.string().optional(),
         restrictedServices: z.array(z.string()).optional(),
+        voipAccess: z.boolean().optional(),
       });
 
       const data = memberSchema.parse(req.body);
-      console.log("[TEAM-MEMBERS] Validated data - username:", data.username, "email:", data.email);
+      console.log("[TEAM-MEMBERS] Validated data - username:", data.username, "email:", data.email, "voipAccess:", data.voipAccess);
       
       // Check if username already exists
       const existingUser = await storage.getAgencyCredentialsByUsername(data.username);
@@ -8467,6 +8468,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         role: 'agent', // Sub-users get 'agent' role, not 'owner'
         isActive: true,
         restrictedServices,
+        voipAccess: data.voipAccess || false,
       });
 
       res.status(201).json({

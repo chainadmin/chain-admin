@@ -37,6 +37,7 @@ interface TeamMember {
   role: string;
   isActive: boolean;
   restrictedServices: string[] | null;
+  voipAccess: boolean;
   lastLoginAt: string | null;
   createdAt: string;
 }
@@ -72,6 +73,7 @@ export default function TeamMembersSection({ cardBaseClasses, inputClasses }: Te
     firstName: "",
     lastName: "",
     restrictedServices: [] as string[],
+    voipAccess: false,
   });
 
   const { data: teamMembers = [], isLoading } = useQuery<TeamMember[]>({
@@ -154,6 +156,7 @@ export default function TeamMembersSection({ cardBaseClasses, inputClasses }: Te
       firstName: "",
       lastName: "",
       restrictedServices: [],
+      voipAccess: false,
     });
     setShowPassword(false);
   };
@@ -169,6 +172,7 @@ export default function TeamMembersSection({ cardBaseClasses, inputClasses }: Te
       firstName: formData.firstName,
       lastName: formData.lastName,
       restrictedServices: formData.restrictedServices,
+      voipAccess: formData.voipAccess,
     };
     if (formData.password) {
       updateData.password = formData.password;
@@ -190,6 +194,7 @@ export default function TeamMembersSection({ cardBaseClasses, inputClasses }: Te
       firstName: member.firstName || "",
       lastName: member.lastName || "",
       restrictedServices: member.restrictedServices || [],
+      voipAccess: member.voipAccess || false,
     });
     setShowEditModal(true);
   };
@@ -440,6 +445,21 @@ export default function TeamMembersSection({ cardBaseClasses, inputClasses }: Te
             </div>
             
             <div className="space-y-3 pt-4 border-t border-white/10">
+              <Label className="text-blue-100">VoIP Softphone Access</Label>
+              <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
+                <div>
+                  <div className="text-sm font-medium text-white">Enable Softphone</div>
+                  <div className="text-xs text-blue-100/60">Allow this user to make and receive calls via the softphone</div>
+                </div>
+                <Switch
+                  checked={formData.voipAccess}
+                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, voipAccess: checked }))}
+                  data-testid="switch-voip-access"
+                />
+              </div>
+            </div>
+            
+            <div className="space-y-3 pt-4 border-t border-white/10">
               <Label className="text-blue-100">Feature Restrictions</Label>
               <p className="text-xs text-blue-100/60">
                 Toggle off features you want to restrict for this user. Billing is always restricted.
@@ -565,6 +585,20 @@ export default function TeamMembersSection({ cardBaseClasses, inputClasses }: Te
                 checked={selectedMember?.isActive ?? true}
                 onCheckedChange={() => selectedMember && toggleMemberActive(selectedMember)}
               />
+            </div>
+            
+            <div className="space-y-3 pt-4 border-t border-white/10">
+              <Label className="text-blue-100">VoIP Softphone Access</Label>
+              <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
+                <div>
+                  <div className="text-sm font-medium text-white">Enable Softphone</div>
+                  <div className="text-xs text-blue-100/60">Allow this user to make and receive calls via the softphone</div>
+                </div>
+                <Switch
+                  checked={formData.voipAccess}
+                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, voipAccess: checked }))}
+                />
+              </div>
             </div>
             
             <div className="space-y-3 pt-4 border-t border-white/10">
