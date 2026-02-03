@@ -1843,6 +1843,16 @@ export default function Billing() {
                 <div className="mt-8 pt-6 border-t border-white/10">
                   <Button
                     onClick={async () => {
+                      // Validate amount first
+                      if (!stats.totalBill || stats.totalBill <= 0) {
+                        toast({
+                          title: "No balance due",
+                          description: "There is no outstanding balance to pay.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      
                       // Validate form based on payment method
                       if (paymentMethod === 'card') {
                         if (!paymentForm.cardholderName || !paymentForm.cardNumber || 
