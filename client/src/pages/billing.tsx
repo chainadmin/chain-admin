@@ -66,6 +66,8 @@ export default function Billing() {
   // Payment form state
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'ach'>('card');
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [customAmount, setCustomAmount] = useState<string>('');
+  const [useCustomAmount, setUseCustomAmount] = useState(false);
   const [paymentForm, setPaymentForm] = useState({
     // Card fields
     cardholderName: '',
