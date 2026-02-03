@@ -17620,6 +17620,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const chainTransactionKey = process.env.CHAIN_AUTHNET_TRANSACTION_KEY;
       const chainUseSandbox = process.env.CHAIN_AUTHNET_SANDBOX !== 'false'; // Default to sandbox
 
+      console.log('🔐 Platform payment auth check:', {
+        hasApiLoginId: !!chainApiLoginId,
+        apiLoginIdLength: chainApiLoginId?.length || 0,
+        hasTransactionKey: !!chainTransactionKey,
+        transactionKeyLength: chainTransactionKey?.length || 0,
+        useSandbox: chainUseSandbox,
+        sandboxEnvValue: process.env.CHAIN_AUTHNET_SANDBOX,
+      });
+
       if (!chainApiLoginId || !chainTransactionKey) {
         console.log('⚠️ Platform payment credentials not configured');
         return res.status(503).json({
