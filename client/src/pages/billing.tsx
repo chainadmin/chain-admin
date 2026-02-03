@@ -1905,7 +1905,8 @@ export default function Billing() {
                           accountNumber: paymentForm.accountNumber,
                         };
 
-                        const result = await apiRequest("POST", "/api/billing/platform-payment", paymentData) as any;
+                        const response = await apiRequest("POST", "/api/billing/platform-payment", paymentData);
+                        const result = await response.json();
                         
                         if (result.success) {
                           toast({
