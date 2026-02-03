@@ -17671,6 +17671,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         paymentMethod,
         amount,
         invoiceId: invoiceId || 'none',
+        hasCvv: !!cvv,
+        cvvLength: cvv?.length || 0,
+        hasCardNumber: !!cardNumber,
+        cardNumberLength: cardNumber?.replace(/\s/g, '').length || 0,
       });
 
       const authnetService = new AuthnetService({

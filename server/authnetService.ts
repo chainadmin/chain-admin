@@ -185,12 +185,13 @@ export class AuthnetService {
         messageText: result?.messages?.message?.[0]?.text,
         transId: result?.transactionResponse?.transId,
         authCode: result?.transactionResponse?.authCode,
+        avsResultCode: result?.transactionResponse?.avsResultCode,
+        cvvResultCode: result?.transactionResponse?.cvvResultCode,
+        transErrors: result?.transactionResponse?.errors,
       });
 
-      // Log full response in sandbox for debugging
-      if (this.config.useSandbox) {
-        console.log('🔵 [Authorize.net Sandbox] Full API Response:', JSON.stringify(result, null, 2));
-      }
+      // Always log full response for debugging production issues
+      console.log('🔵 [Authorize.net] Full API Response:', JSON.stringify(result, null, 2));
 
       if (result?.messages?.resultCode === 'Ok' && result?.transactionResponse?.responseCode === '1') {
         // Success - responseCode 1 means approved
