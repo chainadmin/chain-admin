@@ -138,7 +138,15 @@ export class AuthnetService {
         throw new Error('Either paymentNonce or card details must be provided');
       }
 
-      // Add billing address if provided
+      // Add order information BEFORE billTo (Authorize.net requires specific element order)
+      if (request.invoice || request.description) {
+        payload.createTransactionRequest.transactionRequest.order = {
+          ...(request.invoice && { invoiceNumber: request.invoice }),
+          ...(request.description && { description: request.description }),
+        };
+      }
+
+      // Add billing address if provided (must come AFTER order in Authorize.net schema)
       if (request.billingAddress) {
         payload.createTransactionRequest.transactionRequest.billTo = {
           firstName: request.billingAddress.firstName || '',
@@ -147,14 +155,6 @@ export class AuthnetService {
           city: request.billingAddress.city || '',
           state: request.billingAddress.state || '',
           zip: request.billingAddress.zip || '',
-        };
-      }
-
-      // Add order information
-      if (request.invoice || request.description) {
-        payload.createTransactionRequest.transactionRequest.order = {
-          ...(request.invoice && { invoiceNumber: request.invoice }),
-          ...(request.description && { description: request.description }),
         };
       }
 
