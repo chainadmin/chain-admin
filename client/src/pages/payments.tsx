@@ -32,6 +32,7 @@ export default function Payments() {
   const [manageSearchQuery, setManageSearchQuery] = useState("");
   const [editingSchedule, setEditingSchedule] = useState<any | null>(null);
   const [showCancelRequestDialog, setShowCancelRequestDialog] = useState<string | null>(null);
+  const [showDirectCancelDialog, setShowDirectCancelDialog] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [editForm, setEditForm] = useState({
     amountCents: 0,
@@ -1061,14 +1062,14 @@ export default function Payments() {
                               {schedule.status === 'active' && (
                                 <div className="flex gap-3 pt-3 border-t border-white/10">
                                   <Button
-                                    onClick={() => deleteScheduleMutation.mutate(schedule.id)}
+                                    onClick={() => setShowDirectCancelDialog(schedule.id)}
                                     disabled={deleteScheduleMutation.isPending}
                                     variant="destructive"
                                     size="sm"
                                     className="flex items-center gap-2"
                                     data-testid={`button-delete-schedule-${schedule.id}`}
                                   >
-                                    <Trash2 className="w-4 h-4" />
+                                    <XCircle className="w-4 h-4" />
                                     Cancel Arrangement
                                   </Button>
                                 </div>
@@ -1476,12 +1477,12 @@ export default function Payments() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="rounded-xl border border-amber-400/40 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20"
-                                  onClick={() => setShowCancelRequestDialog(schedule.id)}
-                                  data-testid={`button-cancel-request-${schedule.id}`}
+                                  className="rounded-xl border border-rose-400/40 bg-rose-500/10 text-rose-100 hover:bg-rose-500/20"
+                                  onClick={() => setShowDirectCancelDialog(schedule.id)}
+                                  data-testid={`button-cancel-${schedule.id}`}
                                 >
-                                  <Mail className="w-4 h-4 mr-1" />
-                                  Request Cancel
+                                  <XCircle className="w-4 h-4 mr-1" />
+                                  Cancel
                                 </Button>
                                 
                                 {/* Contact buttons for failed/declined/cancelled */}
@@ -1611,51 +1612,40 @@ export default function Payments() {
               </DialogContent>
             </Dialog>
 
-            {/* Cancellation Request Dialog */}
-            <AlertDialog open={!!showCancelRequestDialog} onOpenChange={(open) => !open && setShowCancelRequestDialog(null)}>
-              <AlertDialogContent className="rounded-3xl border border-white/20 bg-[#0b1733]/95 text-blue-50">
-                <AlertDialogHeader>
-                  <AlertDialogTitle className="text-xl font-semibold text-blue-50">Request Arrangement Cancellation</AlertDialogTitle>
-                  <AlertDialogDescription className="text-blue-100/70">
-                    This will send an email to the agency with the consumer's information requesting cancellation. The arrangement will remain active until the agency processes the request.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <div className="py-4">
-                  <Label className="text-sm font-semibold text-blue-100/80">Reason for Cancellation (Optional)</Label>
-                  <Textarea
-                    value={cancelReason}
-                    onChange={(e) => setCancelReason(e.target.value)}
-                    placeholder="Enter reason for cancellation..."
-                    className="mt-2 rounded-xl border border-white/20 bg-white/10 text-blue-50 placeholder:text-blue-100/50"
-                    data-testid="input-cancel-reason"
-                  />
-                </div>
-                <AlertDialogFooter>
-                  <AlertDialogCancel
-                    className="rounded-xl border border-white/20 bg-transparent px-4 py-2 text-blue-100 hover:bg-white/10"
-                  >
-                    Cancel
-                  </AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={() => {
-                      if (showCancelRequestDialog) {
-                        requestCancellationMutation.mutate({
-                          scheduleId: showCancelRequestDialog,
-                          reason: cancelReason,
-                        });
-                      }
-                    }}
-                    disabled={requestCancellationMutation.isPending}
-                    className="rounded-xl bg-amber-600 text-white hover:bg-amber-700"
-                    data-testid="button-confirm-cancel-request"
-                  >
-                    {requestCancellationMutation.isPending ? 'Sending...' : 'Send Request'}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
           </TabsContent>
         </Tabs>
+
+        {/* Direct Cancel Arrangement Dialog (for admins) */}
+        <AlertDialog open={!!showDirectCancelDialog} onOpenChange={(open) => !open && setShowDirectCancelDialog(null)}>
+          <AlertDialogContent className="rounded-3xl border border-white/20 bg-[#0b1733]/95 text-blue-50">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-xl font-semibold text-blue-50">Cancel Payment Arrangement</AlertDialogTitle>
+              <AlertDialogDescription className="text-blue-100/70">
+                Are you sure you want to cancel this payment arrangement? Future scheduled payments will be stopped, but completed payments will remain on record.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel
+                className="rounded-xl border border-white/20 bg-transparent px-4 py-2 text-blue-100 hover:bg-white/10"
+              >
+                Keep Arrangement
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  if (showDirectCancelDialog) {
+                    deleteScheduleMutation.mutate(showDirectCancelDialog);
+                    setShowDirectCancelDialog(null);
+                  }
+                }}
+                disabled={deleteScheduleMutation.isPending}
+                className="rounded-xl bg-rose-600 text-white hover:bg-rose-700"
+                data-testid="button-confirm-cancel-arrangement"
+              >
+                {deleteScheduleMutation.isPending ? 'Cancelling...' : 'Cancel Arrangement'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* Delete Payment Confirmation Dialog */}
         <AlertDialog open={!!paymentToDelete} onOpenChange={() => setPaymentToDelete(null)}>
