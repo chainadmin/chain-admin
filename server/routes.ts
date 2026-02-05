@@ -17713,7 +17713,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             zip: billingZip || '',
           },
           invoice: invoiceId || undefined,
-          description: `Chain Software Group - Subscription Payment for ${tenantName}`,
+          description: `Chain Software Group - Payment for ${tenantName}`,
         });
       } else if (paymentMethod === 'ach') {
         // ACH payments require a different API approach
