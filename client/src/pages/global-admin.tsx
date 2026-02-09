@@ -112,6 +112,8 @@ export default function GlobalAdmin() {
   const [markPaidDialogOpen, setMarkPaidDialogOpen] = useState(false);
   const [selectedInvoiceForPayment, setSelectedInvoiceForPayment] = useState<any>(null);
   const [paymentNotes, setPaymentNotes] = useState('');
+  const [viewInvoiceDialogOpen, setViewInvoiceDialogOpen] = useState(false);
+  const [selectedInvoiceForView, setSelectedInvoiceForView] = useState<any>(null);
 
   // Billing date editor state
   const [billingDateDialogOpen, setBillingDateDialogOpen] = useState(false);
@@ -1912,16 +1914,30 @@ export default function GlobalAdmin() {
                           )}
                         </div>
                       </div>
-                      {invoice.status !== 'paid' && (
+                      <div className="flex gap-2 flex-shrink-0">
                         <Button
                           size="sm"
-                          onClick={() => handleOpenMarkPaid(invoice)}
-                          data-testid={`button-mark-paid-${invoice.id}`}
+                          variant="outline"
+                          className="border-white/20 text-blue-100 hover:bg-white/10"
+                          onClick={() => {
+                            setSelectedInvoiceForView(invoice);
+                            setViewInvoiceDialogOpen(true);
+                          }}
                         >
-                          <CheckCircle className="h-4 w-4 mr-2" />
-                          Mark Paid
+                          <Eye className="h-4 w-4 mr-2" />
+                          View
                         </Button>
-                      )}
+                        {invoice.status !== 'paid' && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleOpenMarkPaid(invoice)}
+                            data-testid={`button-mark-paid-${invoice.id}`}
+                          >
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                            Mark Paid
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1985,6 +2001,238 @@ export default function GlobalAdmin() {
                 </div>
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* View Invoice Dialog */}
+        <Dialog open={viewInvoiceDialogOpen} onOpenChange={setViewInvoiceDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center justify-between">
+                <span>Invoice Details</span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    if (!selectedInvoiceForView) return;
+                    const inv = selectedInvoiceForView;
+                    const fmtDate = (d: any) => d ? new Date(d).toLocaleDateString() : 'N/A';
+                    const fmtCurrency = (cents: number) => '$' + (cents / 100).toFixed(2);
+                    const statusClass = inv.status === 'paid' ? 'status-paid' : inv.status === 'overdue' ? 'status-overdue' : 'status-pending';
+                    const consumerTotal = (inv.consumerCount || 0) * (inv.perConsumerCents || 0);
+                    const hasConsumerFee = inv.consumerCount > 0 && inv.perConsumerCents > 0;
+
+                    const html = `<!DOCTYPE html>
+<html><head><title>Invoice ${inv.invoiceNumber || ''}</title>
+<style>
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a1a; padding: 40px; max-width: 800px; margin: 0 auto; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; border-bottom: 3px solid #1e3a5f; padding-bottom: 20px; }
+  .company { font-size: 24px; font-weight: 700; color: #1e3a5f; }
+  .company-sub { font-size: 12px; color: #666; margin-top: 4px; }
+  .inv-title { font-size: 28px; font-weight: 700; color: #1e3a5f; text-align: right; }
+  .inv-num { text-align: right; font-size: 13px; color: #555; margin-top: 4px; }
+  .grid { display: flex; gap: 24px; margin-bottom: 24px; }
+  .grid > div { flex: 1; }
+  .label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: 8px; font-weight: 600; }
+  .bill-to { background: #f8f9fa; padding: 16px; border-radius: 8px; border-left: 4px solid #1e3a5f; }
+  .bill-to p { margin: 4px 0; font-size: 14px; }
+  .bill-to .name { font-weight: 600; font-size: 16px; }
+  .details-box { background: #f8f9fa; padding: 16px; border-radius: 8px; }
+  .detail-row { display: flex; justify-content: space-between; margin: 6px 0; font-size: 13px; }
+  .detail-row .lbl { color: #666; }
+  .detail-row .val { font-weight: 500; }
+  table { width: 100%; border-collapse: collapse; margin: 24px 0; }
+  th { background: #1e3a5f; color: white; padding: 10px 16px; text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+  th:last-child { text-align: right; }
+  td { padding: 12px 16px; border-bottom: 1px solid #eee; font-size: 14px; }
+  td:last-child { text-align: right; }
+  td .sub { font-size: 11px; color: #888; margin-top: 2px; }
+  .total td { font-weight: 700; font-size: 16px; border-top: 2px solid #1e3a5f; border-bottom: none; background: #f0f4f8; }
+  .badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; text-transform: uppercase; }
+  .status-paid { background: #d4edda; color: #155724; }
+  .status-pending { background: #fff3cd; color: #856404; }
+  .status-overdue { background: #f8d7da; color: #721c24; }
+  .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #888; text-align: center; }
+  @media print { body { padding: 20px; } }
+</style></head><body>
+  <div class="header">
+    <div><div class="company">Chain Software Group</div><div class="company-sub">Software &amp; Platform Services</div></div>
+    <div><div class="inv-title">INVOICE</div><div class="inv-num">#${inv.invoiceNumber || ''}</div></div>
+  </div>
+  <div class="grid">
+    <div>
+      <div class="label">Bill To</div>
+      <div class="bill-to">
+        <p class="name">${inv.tenantName || 'N/A'}</p>
+        ${inv.tenantEmail ? `<p>${inv.tenantEmail}</p>` : ''}
+        ${inv.tenantSlug ? `<p style="font-size:12px;color:#888">${inv.tenantSlug}.chainsoftwaregroup.com</p>` : ''}
+      </div>
+    </div>
+    <div>
+      <div class="label">Invoice Details</div>
+      <div class="details-box">
+        <div class="detail-row"><span class="lbl">Date Issued:</span><span class="val">${fmtDate(inv.createdAt)}</span></div>
+        <div class="detail-row"><span class="lbl">Due Date:</span><span class="val">${fmtDate(inv.dueDate)}</span></div>
+        <div class="detail-row"><span class="lbl">Status:</span><span class="badge ${statusClass}">${inv.status || 'pending'}</span></div>
+        ${inv.paidAt ? `<div class="detail-row"><span class="lbl">Paid On:</span><span class="val" style="color:#28a745">${fmtDate(inv.paidAt)}</span></div>` : ''}
+      </div>
+    </div>
+  </div>
+  <div style="margin-bottom:16px">
+    <div class="label">Billing Period</div>
+    <p style="font-size:14px">${fmtDate(inv.periodStart)} — ${fmtDate(inv.periodEnd)}</p>
+  </div>
+  <table>
+    <thead><tr><th>Description</th><th>Amount</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Platform Subscription (Base Fee)${inv.planId ? `<div class="sub">Plan: ${inv.planId}</div>` : ''}</td>
+        <td>${fmtCurrency(inv.baseAmountCents || 0)}</td>
+      </tr>
+      ${hasConsumerFee ? `<tr>
+        <td>Per-Consumer Fee<div class="sub">${inv.consumerCount} consumers × ${fmtCurrency(inv.perConsumerCents)} each</div></td>
+        <td>${fmtCurrency(consumerTotal)}</td>
+      </tr>` : ''}
+    </tbody>
+    <tfoot><tr class="total"><td>Total Due</td><td>${fmtCurrency(inv.totalAmountCents || 0)}</td></tr></tfoot>
+  </table>
+  <div class="footer">
+    <p>Chain Software Group — Platform Services</p>
+    <p>Thank you for your business</p>
+  </div>
+</body></html>`;
+
+                    const printWindow = window.open('', '_blank');
+                    if (printWindow) {
+                      printWindow.document.write(html);
+                      printWindow.document.close();
+                      printWindow.print();
+                    }
+                  }}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Print / Download
+                </Button>
+              </DialogTitle>
+            </DialogHeader>
+            {selectedInvoiceForView && (() => {
+              const fmtDate = (d: any) => d ? new Date(d).toLocaleDateString() : 'N/A';
+              return (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px', paddingBottom: '16px', borderBottom: '2px solid rgba(255,255,255,0.1)' }}>
+                  <div>
+                    <h2 className="text-xl font-bold text-blue-50">Chain Software Group</h2>
+                    <p className="text-xs text-blue-100/60 mt-1">Software & Platform Services</p>
+                  </div>
+                  <div className="text-right">
+                    <h3 className="text-2xl font-bold text-blue-50">INVOICE</h3>
+                    <p className="text-sm text-blue-100/70 mt-1">#{selectedInvoiceForView.invoiceNumber}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-6 mb-6">
+                  <div>
+                    <p className="text-xs uppercase tracking-wider text-blue-100/50 mb-2 font-semibold">Bill To</p>
+                    <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+                      <p className="font-semibold text-blue-50">{selectedInvoiceForView.tenantName || 'N/A'}</p>
+                      {selectedInvoiceForView.tenantEmail && (
+                        <p className="text-sm text-blue-100/70 mt-1">{selectedInvoiceForView.tenantEmail}</p>
+                      )}
+                      {selectedInvoiceForView.tenantSlug && (
+                        <p className="text-xs text-blue-100/50 mt-1">{selectedInvoiceForView.tenantSlug}.chainsoftwaregroup.com</p>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wider text-blue-100/50 mb-2 font-semibold">Invoice Details</p>
+                    <div className="rounded-lg border border-white/10 bg-white/5 p-4 space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-sm text-blue-100/70">Date Issued:</span>
+                        <span className="text-sm text-blue-50">{fmtDate(selectedInvoiceForView.createdAt)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-blue-100/70">Due Date:</span>
+                        <span className="text-sm text-blue-50">{fmtDate(selectedInvoiceForView.dueDate)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-blue-100/70">Status:</span>
+                        <Badge variant={selectedInvoiceForView.status === 'paid' ? 'default' : selectedInvoiceForView.status === 'overdue' ? 'destructive' : 'secondary'}>
+                          {selectedInvoiceForView.status || 'pending'}
+                        </Badge>
+                      </div>
+                      {selectedInvoiceForView.paidAt && (
+                        <div className="flex justify-between">
+                          <span className="text-sm text-blue-100/70">Paid On:</span>
+                          <span className="text-sm text-emerald-300">{fmtDate(selectedInvoiceForView.paidAt)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mb-6">
+                  <p className="text-xs uppercase tracking-wider text-blue-100/50 mb-2 font-semibold">Billing Period</p>
+                  <p className="text-sm text-blue-50">
+                    {fmtDate(selectedInvoiceForView.periodStart)} — {fmtDate(selectedInvoiceForView.periodEnd)}
+                  </p>
+                </div>
+
+                <div className="mb-6">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-white/20">
+                        <th className="text-left text-xs uppercase tracking-wider text-blue-100/50 py-3 font-semibold">Description</th>
+                        <th className="text-right text-xs uppercase tracking-wider text-blue-100/50 py-3 font-semibold">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b border-white/10">
+                        <td className="py-3">
+                          <p className="text-sm text-blue-50">Platform Subscription (Base Fee)</p>
+                          {selectedInvoiceForView.planId && (
+                            <p className="text-xs text-blue-100/50 mt-1">Plan: {selectedInvoiceForView.planId}</p>
+                          )}
+                        </td>
+                        <td className="text-right text-sm text-blue-50 py-3">
+                          {formatCurrency(selectedInvoiceForView.baseAmountCents / 100)}
+                        </td>
+                      </tr>
+                      {selectedInvoiceForView.consumerCount > 0 && selectedInvoiceForView.perConsumerCents > 0 && (
+                        <tr className="border-b border-white/10">
+                          <td className="py-3">
+                            <p className="text-sm text-blue-50">Per-Consumer Fee</p>
+                            <p className="text-xs text-blue-100/50 mt-1">
+                              {selectedInvoiceForView.consumerCount} consumers × {formatCurrency(selectedInvoiceForView.perConsumerCents / 100)} each
+                            </p>
+                          </td>
+                          <td className="text-right text-sm text-blue-50 py-3">
+                            {formatCurrency((selectedInvoiceForView.consumerCount * selectedInvoiceForView.perConsumerCents) / 100)}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-white/20">
+                        <td className="py-4">
+                          <p className="text-base font-bold text-blue-50">Total Due</p>
+                        </td>
+                        <td className="text-right py-4">
+                          <p className="text-lg font-bold text-blue-50">
+                            {formatCurrency(selectedInvoiceForView.totalAmountCents / 100)}
+                          </p>
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+
+                <div className="text-center pt-4 border-t border-white/10">
+                  <p className="text-xs text-blue-100/40">Chain Software Group — Platform Services</p>
+                  <p className="text-xs text-blue-100/40 mt-1">Thank you for your business</p>
+                </div>
+              </div>
+              );
+            })()}
           </DialogContent>
         </Dialog>
 
