@@ -3191,25 +3191,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
         completedAt: null,
       });
 
-      console.log(`✅ Email campaign "${campaign.name}" approved. Sending ${processedEmails.length} emails via Postmark...`);
-
-      let emailResults = { successful: 0, failed: 0, results: [] as any[] };
-      if (processedEmails.length > 0) {
-        emailResults = await emailService.sendBulkEmails(processedEmails);
-      }
-
-      const updatedCampaign = await storage.updateEmailCampaign(campaign.id, {
-        status: 'completed',
-        totalSent: emailResults.successful,
-        totalErrors: emailResults.failed,
-        totalRecipients: processedEmails.length,
-        completedAt: new Date(),
-      });
+      console.log(`✅ Email campaign "${campaign.name}" approved. Sending ${processedEmails.length} emails via Postmark in background...`);
 
       res.json({
-        ...updatedCampaign,
-        emailResults,
+        id: campaign.id,
+        status: 'sending',
+        totalRecipients: processedEmails.length,
+        message: `Campaign approved. Sending ${processedEmails.length} emails in the background.`,
       });
+
+      (async () => {
+        try {
+          let emailResults = { successful: 0, failed: 0, results: [] as any[] };
+          if (processedEmails.length > 0) {
+            emailResults = await emailService.sendBulkEmails(processedEmails);
+          }
+
+          await storage.updateEmailCampaign(campaign.id, {
+            status: 'completed',
+            totalSent: emailResults.successful,
+            totalErrors: emailResults.failed,
+            totalRecipients: processedEmails.length,
+            completedAt: new Date(),
+          });
+
+          console.log(`📬 Campaign "${campaign.name}" sending complete: ${emailResults.successful} sent, ${emailResults.failed} failed`);
+        } catch (bgError) {
+          console.error(`❌ Background email sending failed for campaign "${campaign.name}":`, bgError);
+          try {
+            await storage.updateEmailCampaign(campaign.id, {
+              status: 'failed',
+              totalRecipients: processedEmails.length,
+              completedAt: new Date(),
+            });
+          } catch (updateError) {
+            console.error('Error updating campaign status after background failure:', updateError);
+          }
+        }
+      })();
     } catch (error) {
       console.error("Error approving email campaign:", error);
 
