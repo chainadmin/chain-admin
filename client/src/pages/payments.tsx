@@ -394,6 +394,27 @@ export default function Payments() {
     return payment.status === filterStatus;
   }) || [];
 
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  const monthName = now.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+
+  const isCurrentMonth = (dateStr: any) => {
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return false;
+    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  };
+
+  const thisMonthPayments = (payments as any[])?.filter((payment: any) =>
+    isCurrentMonth(payment.processedAt || payment.createdAt) && payment.status === 'completed'
+  ) || [];
+
+  const thisMonthTotal = thisMonthPayments.reduce((sum: number, p: any) => sum + (p.amountCents || 0), 0);
+  const thisMonthFailed = (payments as any[])?.filter((payment: any) =>
+    isCurrentMonth(payment.processedAt || payment.createdAt) && payment.status === 'failed'
+  )?.length || 0;
+
   const stats = (paymentStats as any) || {
     totalProcessed: 0,
     totalAmountCents: 0,
@@ -505,6 +526,76 @@ export default function Payments() {
               </div>
             </div>
           </div>
+        </section>
+
+        <section className={cn(glassPanelClass, "p-6")}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/20">
+                <TrendingUp className="h-5 w-5 text-emerald-300" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-white">Processed This Month</h2>
+                <p className="text-xs text-blue-100/60">{monthName}</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-2xl font-bold text-emerald-300">{formatCurrency(thisMonthTotal)}</p>
+              <p className="text-xs text-blue-100/60">{thisMonthPayments.length} successful{thisMonthFailed > 0 ? ` / ${thisMonthFailed} failed` : ''}</p>
+            </div>
+          </div>
+
+          {thisMonthPayments.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-white/15 bg-white/5 py-8 text-center">
+              <DollarSign className="mx-auto mb-2 h-8 w-8 text-blue-200/40" />
+              <p className="text-sm text-blue-100/50">No payments processed this month yet.</p>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-white/10 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-white/10 bg-white/5">
+                    <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-blue-100/60">Consumer</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-blue-100/60">Account</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-blue-100/60">Date</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-blue-100/60">Method</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-blue-100/60">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {thisMonthPayments.map((payment: any, index: number) => (
+                    <tr key={payment.id} className={cn("border-b border-white/5 transition hover:bg-white/5", index % 2 === 0 ? "bg-transparent" : "bg-white/[0.02]")}>
+                      <td className="px-4 py-2.5 text-blue-50 font-medium">
+                        {payment.consumerName || payment.consumerEmail || 'Unknown'}
+                      </td>
+                      <td className="px-4 py-2.5 text-blue-100/70">
+                        {payment.accountCreditor || '—'}
+                      </td>
+                      <td className="px-4 py-2.5 text-blue-100/70">
+                        {new Date(payment.processedAt || payment.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </td>
+                      <td className="px-4 py-2.5 text-blue-100/70 capitalize">
+                        {payment.paymentMethod?.replace('_', ' ') || '—'}
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-semibold text-emerald-300">
+                        {formatCurrency(payment.amountCents)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-white/15 bg-white/5">
+                    <td colSpan={4} className="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-blue-100/60">
+                      Monthly Total
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-bold text-emerald-300">
+                      {formatCurrency(thisMonthTotal)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
         </section>
 
         <Tabs defaultValue="transactions" className="w-full">
