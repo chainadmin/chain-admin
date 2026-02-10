@@ -7819,6 +7819,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return trimmed;
   };
 
+  function calculateNextPaymentDate(startDate: Date, frequency: string): Date {
+    const next = new Date(startDate);
+    if (frequency === 'weekly') {
+      next.setDate(next.getDate() + 7);
+    } else if (frequency === 'biweekly') {
+      next.setDate(next.getDate() + 14);
+    } else {
+      next.setMonth(next.getMonth() + 1);
+    }
+    return next;
+  }
+
+  function calculateFirstPaymentDueDate(): Date {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dayOfWeek = today.getDay();
+    let daysToFriday = (5 - dayOfWeek + 7) % 7;
+    if (daysToFriday === 0) daysToFriday = 7;
+    const friday = new Date(today);
+    friday.setDate(friday.getDate() + daysToFriday);
+    return friday;
+  }
+
+  function advanceDateByFrequency(date: Date, frequency: string, periods: number): Date {
+    const result = new Date(date);
+    if (frequency === 'weekly') {
+      result.setDate(result.getDate() + (periods * 7));
+    } else if (frequency === 'biweekly') {
+      result.setDate(result.getDate() + (periods * 14));
+    } else {
+      result.setMonth(result.getMonth() + periods);
+    }
+    return result;
+  }
+
   const buildArrangementOptionPayload = (body: any, tenantId: string): InsertArrangementOption => {
     const planTypeRaw = typeof body.planType === "string" ? body.planType : "range";
     const planType = planTypeSet.has(planTypeRaw as any) ? (planTypeRaw as InsertArrangementOption["planType"]) : "range";
@@ -7872,6 +7907,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       : [];
     const settlementPaymentFrequency = typeof body.settlementPaymentFrequency === "string" ? body.settlementPaymentFrequency.trim() : null;
     const settlementOfferExpiresDate = parseDateInput(body.settlementOfferExpiresDate);
+    const paymentFrequency = typeof body.paymentFrequency === "string" && ['weekly', 'biweekly', 'monthly'].includes(body.paymentFrequency) ? body.paymentFrequency : 'monthly';
 
     const candidate = {
       tenantId,
@@ -7891,6 +7927,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       settlementPaymentCounts: planType === "settlement" ? settlementPaymentCounts : null,
       settlementPaymentFrequency: planType === "settlement" ? settlementPaymentFrequency : null,
       settlementOfferExpiresDate: planType === "settlement" ? settlementOfferExpiresDate : null,
+      paymentFrequency: (planType === "range" || planType === "fixed_monthly") ? paymentFrequency : null,
       customTermsText: planType === "custom_terms" ? customTermsText : null,
       maxTermMonths:
         planType === "settlement" || planType === "custom_terms"
@@ -11000,17 +11037,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         parsedDate.setHours(0, 0, 0, 0);
         
-        // Validate first payment date is not more than 1 month out
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        const oneMonthFromNow = new Date(today);
-        oneMonthFromNow.setMonth(oneMonthFromNow.getMonth() + 1);
         
-        if (parsedDate > oneMonthFromNow) {
-          return res.status(400).json({
-            success: false,
-            message: "First payment date cannot be more than one month in the future",
-          });
+        // For recurring arrangements (range/fixed_monthly), cap first payment at next Friday
+        if (setupRecurring && arrangementId) {
+          const maxFirstPaymentDate = calculateFirstPaymentDueDate();
+          if (parsedDate > maxFirstPaymentDate) {
+            return res.status(400).json({
+              success: false,
+              message: `First payment date cannot be later than ${maxFirstPaymentDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}`,
+            });
+          }
+        } else {
+          // Non-recurring payments: keep original 1-month limit
+          const oneMonthFromNow = new Date(today);
+          oneMonthFromNow.setMonth(oneMonthFromNow.getMonth() + 1);
+          if (parsedDate > oneMonthFromNow) {
+            return res.status(400).json({
+              success: false,
+              message: "First payment date cannot be more than one month in the future",
+            });
+          }
         }
         
         normalizedFirstPaymentDate = parsedDate;
@@ -11593,8 +11641,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let createdSchedule: any = null;
         if (arrangement && savedPaymentMethod) {
           const paymentStartDate = normalizedFirstPaymentDate ? new Date(normalizedFirstPaymentDate) : new Date();
-          const nextMonth = new Date(paymentStartDate);
-          nextMonth.setMonth(nextMonth.getMonth() + 1);
+          const arrangementFrequency = arrangement?.paymentFrequency || arrangement?.settlementPaymentFrequency || 'monthly';
+          const nextMonth = calculateNextPaymentDate(paymentStartDate, arrangementFrequency);
           const today = new Date();
           today.setHours(0, 0, 0, 0);
 
@@ -11633,7 +11681,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const maxPayments = Number(arrangement.maxTermMonths);
             remainingPayments = maxPayments - 1;
             endDate = new Date(paymentStartDate);
-            endDate.setMonth(endDate.getMonth() + Number(arrangement.maxTermMonths));
+            endDate = advanceDateByFrequency(endDate, arrangementFrequency, Number(arrangement.maxTermMonths));
           } else if (arrangement.planType === 'range') {
             // Calculate remaining payments based on balance / payment amount
             const accountBalance = account.balanceCents || 0;
@@ -11642,11 +11690,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const paymentsNeeded = balanceAfterImmediate > 0 ? Math.max(1, Math.ceil(balanceAfterImmediate / amountCents)) : 0;
             remainingPayments = paymentsNeeded;
             
-            // Calculate end date based on remaining payments (assuming monthly)
-            // End date is (remainingPayments - 1) months from start since first payment is at start
             if (remainingPayments > 0) {
               endDate = new Date(paymentStartDate);
-              endDate.setMonth(endDate.getMonth() + Math.max(0, remainingPayments - 1));
+              endDate = advanceDateByFrequency(endDate, arrangementFrequency, Math.max(0, remainingPayments - 1));
             }
             console.log('💳 Range payment plan calculated (Authorize.net):', { accountBalance, amountCents, isImmediatePayment, balanceAfterImmediate, paymentsNeeded, remainingPayments, endDate: endDate?.toISOString() });
           }
@@ -11673,7 +11719,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 paymentMethodId: savedPaymentMethod.id,
                 arrangementType: arrangement.planType,
                 amountCents,
-                frequency: 'monthly',
+                frequency: arrangementFrequency,
                 startDate: paymentStartDate.toISOString().split('T')[0],
                 endDate: endDate ? endDate.toISOString().split('T')[0] : null,
                 nextPaymentDate: nextMonth.toISOString().split('T')[0],
@@ -11729,7 +11775,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     filenumber: fileNumber,
                     attempttype: 'Promise To Pay',
                     attemptdate: firstPaymentDate,
-                    notes: `Arrangement: ${arrangementName} | Amount: $${amountDollars} | Frequency: Monthly`,
+                    notes: `Arrangement: ${arrangementName} | Amount: $${amountDollars} | Frequency: ${arrangementFrequency.charAt(0).toUpperCase() + arrangementFrequency.slice(1)}`,
                   });
 
                   await smaxService.insertNote(tenantId, {
@@ -12150,8 +12196,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let createdSchedule: any = null;
         if (arrangement && savedPaymentMethod) {
           const paymentStartDate = normalizedFirstPaymentDate ? new Date(normalizedFirstPaymentDate) : new Date();
-          const nextMonth = new Date(paymentStartDate);
-          nextMonth.setMonth(nextMonth.getMonth() + 1);
+          const arrangementFrequency = arrangement?.paymentFrequency || arrangement?.settlementPaymentFrequency || 'monthly';
+          const nextMonth = calculateNextPaymentDate(paymentStartDate, arrangementFrequency);
 
           let remainingPayments = null;
           let endDate = null;
@@ -12187,7 +12233,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const maxPayments = Number(arrangement.maxTermMonths);
             remainingPayments = maxPayments - 1;
             endDate = new Date(paymentStartDate);
-            endDate.setMonth(endDate.getMonth() + Number(arrangement.maxTermMonths));
+            endDate = advanceDateByFrequency(endDate, arrangementFrequency, Number(arrangement.maxTermMonths));
           } else if (arrangement.planType === 'range') {
             // Calculate remaining payments based on balance / payment amount
             const accountBalance = account.balanceCents || 0;
@@ -12196,11 +12242,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const paymentsNeeded = balanceAfterImmediate > 0 ? Math.max(1, Math.ceil(balanceAfterImmediate / amountCents)) : 0;
             remainingPayments = paymentsNeeded;
             
-            // Calculate end date based on remaining payments (assuming monthly)
-            // End date is (remainingPayments - 1) months from start since first payment is at start
             if (remainingPayments > 0) {
               endDate = new Date(paymentStartDate);
-              endDate.setMonth(endDate.getMonth() + Math.max(0, remainingPayments - 1));
+              endDate = advanceDateByFrequency(endDate, arrangementFrequency, Math.max(0, remainingPayments - 1));
             }
             console.log('💳 Range payment plan calculated (NMI):', { accountBalance, amountCents, isImmediatePayment, balanceAfterImmediate, paymentsNeeded, remainingPayments, endDate: endDate?.toISOString() });
           }
@@ -12227,7 +12271,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 paymentMethodId: savedPaymentMethod.id,
                 arrangementType: arrangement.planType,
                 amountCents,
-                frequency: 'monthly',
+                frequency: arrangementFrequency,
                 startDate: paymentStartDate.toISOString().split('T')[0],
                 endDate: endDate ? endDate.toISOString().split('T')[0] : null,
                 nextPaymentDate: nextMonth.toISOString().split('T')[0],
@@ -12283,7 +12327,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     filenumber: fileNumber,
                     attempttype: 'Promise To Pay',
                     attemptdate: firstPaymentDate,
-                    notes: `Arrangement: ${arrangementName} | Amount: $${amountDollars} | Frequency: Monthly`,
+                    notes: `Arrangement: ${arrangementName} | Amount: $${amountDollars} | Frequency: ${arrangementFrequency.charAt(0).toUpperCase() + arrangementFrequency.slice(1)}`,
                   });
 
                   await smaxService.insertNote(tenantId, {
@@ -12741,8 +12785,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const paymentStartDate = normalizedFirstPaymentDate ? new Date(normalizedFirstPaymentDate) : new Date();
         console.log('📆 Payment start date:', paymentStartDate.toISOString());
         
-        const nextMonth = new Date(paymentStartDate);
-        nextMonth.setMonth(nextMonth.getMonth() + 1);
+        const mainArrangementFrequency = arrangement?.paymentFrequency || arrangement?.settlementPaymentFrequency || simplifiedArrangementData?.paymentFrequency || 'monthly';
+        const nextMonth = calculateNextPaymentDate(paymentStartDate, mainArrangementFrequency);
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
@@ -12863,7 +12907,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const maxPayments = Number(arrangement.maxTermMonths);
             remainingPayments = shouldSkipImmediateCharge ? maxPayments : maxPayments - 1; // Minus the one we just made
             endDate = new Date(paymentStartDate);
-            endDate.setMonth(endDate.getMonth() + Number(arrangement.maxTermMonths));
+            endDate = advanceDateByFrequency(endDate, mainArrangementFrequency, Number(arrangement.maxTermMonths));
             console.log('✓ Calculated:', { remainingPayments, endDate: endDate.toISOString() });
           } else if (arrangement.planType === 'range') {
             // Calculate remaining payments based on balance / payment amount
@@ -12876,11 +12920,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const paymentsNeeded = balanceAfterImmediate > 0 ? Math.max(1, Math.ceil(balanceAfterImmediate / amountCents)) : 0;
             remainingPayments = paymentsNeeded;
             
-            // Calculate end date based on remaining payments (assuming monthly)
-            // End date is (remainingPayments - 1) months from start since first payment is at start
             if (remainingPayments > 0) {
               endDate = new Date(paymentStartDate);
-              endDate.setMonth(endDate.getMonth() + Math.max(0, remainingPayments - 1));
+              endDate = advanceDateByFrequency(endDate, mainArrangementFrequency, Math.max(0, remainingPayments - 1));
             }
             console.log('💳 Range payment plan calculated:', { accountBalance, amountCents, shouldSkipImmediateCharge, balanceAfterImmediate, paymentsNeeded, remainingPayments, endDate: endDate?.toISOString() });
           }
@@ -12926,7 +12968,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               paymentMethodId: savedPaymentMethod.id,
               arrangementType: arrangement.planType,
               amountCents,
-              frequency: 'monthly',
+              frequency: mainArrangementFrequency,
               startDate: paymentStartDate.toISOString().split('T')[0],
               endDate: endDate ? endDate.toISOString().split('T')[0] : null,
               nextPaymentDate: shouldSkipImmediateCharge
@@ -13038,7 +13080,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   <h3>Arrangement Details:</h3>
                   <ul>
                     <li><strong>Payment Amount:</strong> ${paymentAmountFormatted}</li>
-                    <li><strong>Frequency:</strong> Monthly</li>
+                    <li><strong>Frequency:</strong> ${(mainArrangementFrequency || 'monthly').charAt(0).toUpperCase() + (mainArrangementFrequency || 'monthly').slice(1)}</li>
                     <li><strong>Arrangement Type:</strong> ${arrangement.name || arrangement.planType}</li>
                   </ul>
                   <p>Your saved payment method will be charged automatically on the scheduled date. You can manage your arrangement at any time through your consumer portal.</p>
@@ -13088,7 +13130,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   const attemptNotesParts = [
                     `Arrangement: ${arrangementName}`,
                     `Amount: $${amountDollars}`,
-                    'Frequency: Monthly',
+                    `Frequency: ${(mainArrangementFrequency || 'monthly').charAt(0).toUpperCase() + (mainArrangementFrequency || 'monthly').slice(1)}`,
                     `First Payment: ${firstPaymentDate}`,
                     nextPaymentDate && nextPaymentDate !== firstPaymentDate
                       ? `Next Payment: ${nextPaymentDate}`
@@ -13373,10 +13415,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
             // Check if payment schedule was created (need to recalculate next payment date)
             if (setupRecurring && arrangement && arrangement.planType !== 'settlement' && arrangement.planType !== 'one_time_payment' && savedPaymentMethod) {
-              // Calculate next payment date (1 month from first payment or today)
               const paymentStartDate = normalizedFirstPaymentDate ? new Date(normalizedFirstPaymentDate) : new Date();
-              const nextPaymentDate = new Date(paymentStartDate);
-              nextPaymentDate.setMonth(nextPaymentDate.getMonth() + 1);
+              const emailFrequency = mainArrangementFrequency || 'monthly';
+              const nextPaymentDate = calculateNextPaymentDate(paymentStartDate, emailFrequency);
 
               emailSubject = 'Payment Arrangement Confirmed';
               emailBody += `
@@ -13384,7 +13425,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               <p>You have successfully set up a recurring payment arrangement for this account.</p>
               <ul>
                 <li><strong>Payment Amount:</strong> ${paymentAmountFormatted}</li>
-                <li><strong>Frequency:</strong> Monthly</li>
+                <li><strong>Frequency:</strong> ${emailFrequency.charAt(0).toUpperCase() + emailFrequency.slice(1)}</li>
                 <li><strong>Next Payment Date:</strong> ${nextPaymentDate.toLocaleDateString('en-US', {
                   month: 'long',
                   day: 'numeric',
@@ -14334,8 +14375,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   }
 
                   // Update schedule for next payment
-                  const nextPayment = new Date(schedule.nextPaymentDate);
-                  nextPayment.setMonth(nextPayment.getMonth() + 1);
+                  const nextPayment = calculateNextPaymentDate(new Date(schedule.nextPaymentDate), schedule.frequency || 'monthly');
                   
                   const updatedRemainingPayments = schedule.remainingPayments !== null 
                     ? schedule.remainingPayments - 1 
@@ -15357,8 +15397,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const dateStr = formatDate(currentDate, 'yyyy-MM-dd');
               futureDates.push(dateStr);
               
-              // Move to next month using date-fns (handles month boundaries correctly)
-              currentDate = addMonths(currentDate, 1);
+              const freq = schedule.frequency || 'monthly';
+              if (freq === 'weekly') {
+                currentDate = new Date(currentDate);
+                currentDate.setDate(currentDate.getDate() + 7);
+              } else if (freq === 'biweekly') {
+                currentDate = new Date(currentDate);
+                currentDate.setDate(currentDate.getDate() + 14);
+              } else {
+                currentDate = addMonths(currentDate, 1);
+              }
             }
             
             // Add each future payment date to the calendar

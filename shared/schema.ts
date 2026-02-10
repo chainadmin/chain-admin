@@ -650,6 +650,7 @@ export const arrangementOptions = pgTable("arrangement_options", {
   settlementPaymentCounts: integer("settlement_payment_counts").array(), // Array of payment count options (e.g., [1, 3, 6] creates 3 options)
   settlementPaymentFrequency: text("settlement_payment_frequency"), // "monthly", "weekly", "biweekly"
   settlementOfferExpiresDate: date("settlement_offer_expires_date"), // Optional expiration date for settlement offers
+  paymentFrequency: text("payment_frequency").default("monthly"), // "weekly", "biweekly", "monthly" - applies to all plan types
   customTermsText: text("custom_terms_text"),
   maxTermMonths: bigint("max_term_months", { mode: "number" }).default(12),
   isActive: boolean("is_active").default(true),

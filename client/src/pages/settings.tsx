@@ -128,6 +128,7 @@ export default function Settings() {
     settlementPaymentCounts: string; // Comma-separated values like "1,3,6"
     settlementPaymentFrequency: string;
     settlementOfferExpiresDate: string;
+    paymentFrequency: string;
     payoffText: string;
     customTermsText: string;
     maxTermMonths: string;
@@ -147,6 +148,7 @@ export default function Settings() {
     settlementPaymentCounts: "1,3,6", // Default to 3 options
     settlementPaymentFrequency: "monthly",
     settlementOfferExpiresDate: "",
+    paymentFrequency: "monthly",
     payoffText: "",
     customTermsText: "",
     maxTermMonths: "12",
@@ -1035,6 +1037,7 @@ export default function Settings() {
         payload.monthlyPaymentMax = monthlyMax;
       }
       payload.maxTermMonths = maxTermMonths ?? 12;
+      payload.paymentFrequency = arrangementForm.paymentFrequency || 'monthly';
     } else if (planType === "fixed_monthly") {
       const fixedMonthly = parseCurrencyInput(arrangementForm.fixedMonthlyPayment);
       if (fixedMonthly === null || fixedMonthly <= 0) {
@@ -1057,6 +1060,7 @@ export default function Settings() {
 
       payload.fixedMonthlyPayment = fixedMonthly;
       payload.maxTermMonths = maxTermMonths ?? null;
+      payload.paymentFrequency = arrangementForm.paymentFrequency || 'monthly';
     } else if (planType === "settlement") {
       const settlementPercentage = parsePercentageInput(arrangementForm.payoffPercentage);
       // Parse comma-separated payment counts like "1,3,6"
@@ -3662,6 +3666,7 @@ export default function Settings() {
                                   payoffDueDate: "",
                                   payoffText: "",
                                   customTermsText: "",
+                                  paymentFrequency: "monthly",
                                   maxTermMonths: value === "fixed_monthly" ? "until_paid" : "12",
                                 })
                               }
@@ -3710,6 +3715,28 @@ export default function Settings() {
                                 placeholder="150.00"
                                 className={inputClasses}
                               />
+                            </div>
+                          )}
+
+                          {(arrangementForm.planType === "range" || arrangementForm.planType === "fixed_monthly") && (
+                            <div>
+                              <Label className="text-white">Payment Frequency *</Label>
+                              <Select
+                                value={arrangementForm.paymentFrequency}
+                                onValueChange={(value) => setArrangementForm({ ...arrangementForm, paymentFrequency: value })}
+                              >
+                                <SelectTrigger className={selectTriggerClasses}>
+                                  <SelectValue placeholder="Select frequency" />
+                                </SelectTrigger>
+                                <SelectContent className="border-white/10 bg-[#0f172a] text-blue-50">
+                                  <SelectItem value="weekly">Weekly</SelectItem>
+                                  <SelectItem value="biweekly">Bi-weekly</SelectItem>
+                                  <SelectItem value="monthly">Monthly</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <p className="mt-1 text-xs text-blue-100/70">
+                                How often payments will be scheduled for this plan
+                              </p>
                             </div>
                           )}
 
@@ -3824,7 +3851,7 @@ export default function Settings() {
 
                           {(arrangementForm.planType === "range" || arrangementForm.planType === "fixed_monthly") && (
                             <div>
-                              <Label className="text-white">Max Term (Months)</Label>
+                              <Label className="text-white">Max Number of Payments</Label>
                               <Select
                                 value={arrangementForm.maxTermMonths}
                                 onValueChange={(value) => setArrangementForm({ ...arrangementForm, maxTermMonths: value })}
@@ -3833,11 +3860,11 @@ export default function Settings() {
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="6">6 months</SelectItem>
-                                  <SelectItem value="12">12 months</SelectItem>
-                                  <SelectItem value="18">18 months</SelectItem>
-                                  <SelectItem value="24">24 months</SelectItem>
-                                  <SelectItem value="36">36 months</SelectItem>
+                                  <SelectItem value="6">6 payments</SelectItem>
+                                  <SelectItem value="12">12 payments</SelectItem>
+                                  <SelectItem value="18">18 payments</SelectItem>
+                                  <SelectItem value="24">24 payments</SelectItem>
+                                  <SelectItem value="36">36 payments</SelectItem>
                                   {arrangementForm.planType === "fixed_monthly" && (
                                     <SelectItem value="until_paid">Until paid in full</SelectItem>
                                   )}

@@ -1687,6 +1687,15 @@ export async function runMigrations() {
       console.log(`  ⚠ voip_call_logs table (already exists or error): ${err.message}`);
     }
     
+    // Add payment_frequency column to arrangement_options for universal frequency support
+    console.log('Adding payment_frequency column to arrangement_options...');
+    try {
+      await client.query(`ALTER TABLE arrangement_options ADD COLUMN IF NOT EXISTS payment_frequency TEXT DEFAULT 'monthly'`);
+      console.log(`  ✓ payment_frequency`);
+    } catch (err) {
+      console.log(`  ⚠ payment_frequency (already exists or error)`);
+    }
+
     console.log('✅ Database migrations completed successfully');
   } catch (error: any) {
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {

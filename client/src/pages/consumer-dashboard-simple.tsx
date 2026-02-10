@@ -638,7 +638,7 @@ export default function ConsumerDashboardSimple() {
       if (singleArrangement) {
         setSelectedArrangement(singleArrangement);
         setPaymentMethod('term');
-        setPaymentFrequency('monthly');
+        setPaymentFrequency(singleArrangement.paymentFrequency || 'monthly');
         const monthlyAmount = calculateArrangementPayment(singleArrangement, selectedAccount.balanceCents || 0);
         setMonthlyBaseAmount(monthlyAmount);
         setCalculatedPayment(monthlyAmount);
@@ -2037,8 +2037,8 @@ export default function ConsumerDashboardSimple() {
                     {selectedArrangement && (
                       <p className="text-xs text-emerald-200/70 mt-1">
                         {selectedArrangement.planType === 'settlement' && 'Settlement payment - full balance will be cleared'}
-                        {selectedArrangement.planType === 'fixed_monthly' && (setupRecurring ? 'Monthly installment amount (first payment on scheduled date)' : 'First installment payment')}
-                        {selectedArrangement.planType === 'range' && (setupRecurring ? 'Minimum monthly payment (first payment on scheduled date)' : 'Minimum monthly payment')}
+                        {selectedArrangement.planType === 'fixed_monthly' && (setupRecurring ? `${(selectedArrangement.paymentFrequency === 'weekly' ? 'Weekly' : selectedArrangement.paymentFrequency === 'biweekly' ? 'Bi-weekly' : 'Monthly')} installment amount (first payment on scheduled date)` : 'First installment payment')}
+                        {selectedArrangement.planType === 'range' && (setupRecurring ? `Minimum ${(selectedArrangement.paymentFrequency === 'weekly' ? 'weekly' : selectedArrangement.paymentFrequency === 'biweekly' ? 'bi-weekly' : 'monthly')} payment (first payment on scheduled date)` : 'Minimum payment')}
                         {selectedArrangement.planType === 'one_time_payment' && (customPaymentAmount ? 'Custom one-time payment' : 'Enter payment amount below')}
                       </p>
                     )}
@@ -2745,8 +2745,17 @@ export default function ConsumerDashboardSimple() {
                           disabled={(date) => {
                             const today = new Date();
                             today.setHours(0, 0, 0, 0);
-                            const maxDate = new Date();
-                            maxDate.setMonth(maxDate.getMonth() + 1);
+                            let maxDate: Date;
+                            if (setupRecurring && selectedArrangement) {
+                              const dayOfWeek = today.getDay();
+                              let daysToFriday = (5 - dayOfWeek + 7) % 7;
+                              if (daysToFriday === 0) daysToFriday = 7;
+                              maxDate = new Date(today);
+                              maxDate.setDate(maxDate.getDate() + daysToFriday);
+                            } else {
+                              maxDate = new Date();
+                              maxDate.setMonth(maxDate.getMonth() + 1);
+                            }
                             return date < today || date > maxDate;
                           }}
                           initialFocus
@@ -2771,7 +2780,7 @@ export default function ConsumerDashboardSimple() {
                     </Popover>
                     <p className="text-xs text-blue-100/70 mt-1">
                       {setupRecurring 
-                        ? 'Choose when your first automatic payment should be charged'
+                        ? 'Choose when your first payment should be charged (must be by next Friday at the latest)'
                         : 'Leave blank to charge immediately, or select a future date (within next 30 days)'}
                     </p>
                   </div>

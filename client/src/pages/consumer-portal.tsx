@@ -187,8 +187,8 @@ export default function ConsumerPortal() {
       case 'fixed_monthly': {
         if (arrangement.calculatedMonthlyPayment && arrangement.calculatedTermMonths) {
           return {
-            headline: `${formatCurrency(arrangement.calculatedMonthlyPayment)} per month`,
-            detail: `${arrangement.calculatedTermMonths} month${arrangement.calculatedTermMonths > 1 ? 's' : ''} • Total: ${formatCurrency(arrangement.calculatedTotalAmount || 0)}`
+            headline: `${formatCurrency(arrangement.calculatedMonthlyPayment)} per ${arrangement.paymentFrequency === 'weekly' ? 'week' : arrangement.paymentFrequency === 'biweekly' ? 'two weeks' : 'month'}`,
+            detail: `${arrangement.calculatedTermMonths} payment${arrangement.calculatedTermMonths > 1 ? 's' : ''} • Total: ${formatCurrency(arrangement.calculatedTotalAmount || 0)}`
           };
         }
         return getArrangementSummary(arrangement);
