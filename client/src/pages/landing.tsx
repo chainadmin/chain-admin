@@ -24,7 +24,7 @@ export default function Landing() {
       icon: MessageSquare,
       title: "SMS Campaigns",
       description:
-        "Send targeted SMS campaigns to your consumers with smart audience segmentation, multi-number support, and real-time delivery tracking.",
+        "Reach your customers instantly with targeted SMS campaigns, smart audience segmentation, multi-number delivery, and real-time tracking.",
       color: "text-emerald-400",
       bg: "bg-emerald-500/10 border-emerald-500/20",
     },
@@ -32,7 +32,7 @@ export default function Landing() {
       icon: Mail,
       title: "Email Communications",
       description:
-        "Professional branded emails with WYSIWYG template editor, Postmark delivery, campaign analytics, and automated sequences.",
+        "Send professional branded emails with a visual template editor, campaign analytics, automated sequences, and delivery tracking.",
       color: "text-blue-400",
       bg: "bg-blue-500/10 border-blue-500/20",
     },
@@ -40,7 +40,7 @@ export default function Landing() {
       icon: CreditCard,
       title: "Payment Processing",
       description:
-        "Accept payments through USAePay, Authorize.net, and NMI with recurring billing, payment plans, and automated scheduled processing.",
+        "Accept payments through USAePay, Authorize.net, and NMI with recurring billing, flexible payment plans, and automated scheduling.",
       color: "text-violet-400",
       bg: "bg-violet-500/10 border-violet-500/20",
     },
@@ -48,7 +48,7 @@ export default function Landing() {
       icon: Phone,
       title: "VoIP Phone System",
       description:
-        "Built-in cloud phone system powered by Twilio with local and toll-free DIDs, call tracking, and softphone capabilities for your team.",
+        "Built-in cloud phone system with local and toll-free numbers, call tracking, softphone capabilities, and team management.",
       color: "text-amber-400",
       bg: "bg-amber-500/10 border-amber-500/20",
     },
@@ -56,7 +56,7 @@ export default function Landing() {
       icon: Receipt,
       title: "Invoicing & Billing",
       description:
-        "Automated monthly invoicing with subscription tiers, usage-based billing for SMS and email, and integrated payment collection.",
+        "Automated invoicing with subscription tiers, usage-based billing for SMS and email, and integrated payment tracking.",
       color: "text-rose-400",
       bg: "bg-rose-500/10 border-rose-500/20",
     },
@@ -64,7 +64,7 @@ export default function Landing() {
       icon: FileSignature,
       title: "Document Signing",
       description:
-        "Built-in e-signature with ESIGN Act compliance, professional DocuSign-quality experience, audit trails, and template management.",
+        "Built-in e-signature with ESIGN Act compliance, professional signing experience, full audit trails, and reusable templates.",
       color: "text-cyan-400",
       bg: "bg-cyan-500/10 border-cyan-500/20",
     },
@@ -73,23 +73,23 @@ export default function Landing() {
   const whyChain = [
     {
       icon: Users,
-      title: "Multi-Tenant Architecture",
-      description: "Each business gets their own branded portal with custom subdomains, logos, and personalized consumer experiences.",
+      title: "Multi-Tenant Platform",
+      description: "Every business gets their own branded portal with a custom subdomain, logos, colors, and a personalized customer experience.",
     },
     {
       icon: Shield,
       title: "Enterprise Security",
-      description: "Bank-level encryption, role-based access controls, TCPA compliance, and secure consumer authentication.",
+      description: "Bank-level encryption, role-based access controls, compliance tools, and secure customer authentication built in.",
     },
     {
       icon: TrendingUp,
-      title: "Collection Software Integrations",
-      description: "Bidirectional sync with SMAX, Debt Manager Pro, and Collection Max for seamless account and payment management.",
+      title: "Third-Party Integrations",
+      description: "Connect with industry software like SMAX, Debt Manager Pro, and Collection Max for bidirectional data sync and workflow automation.",
     },
     {
       icon: Zap,
       title: "AI-Powered Responses",
-      description: "Automated intelligent replies to consumer emails with customizable tone, business-type adaptation, and usage tracking.",
+      description: "Automatically generate intelligent replies to customer emails with customizable tone, business-type adaptation, and usage tracking.",
     },
   ];
 
@@ -97,17 +97,17 @@ export default function Landing() {
     {
       number: "01",
       title: "Onboard in minutes",
-      description: "Register your agency, configure branding, and set up your custom subdomain portal instantly.",
+      description: "Register your business, configure your branding, and set up your custom portal with a dedicated subdomain.",
     },
     {
       number: "02",
       title: "Import & configure",
-      description: "Upload consumer data via CSV, connect your payment processor, and customize communication templates.",
+      description: "Upload your customer data via CSV, connect your payment processor, and customize your communication templates.",
     },
     {
       number: "03",
-      title: "Communicate & collect",
-      description: "Launch SMS and email campaigns, process payments, and manage consumer interactions from one dashboard.",
+      title: "Communicate & manage",
+      description: "Launch SMS and email campaigns, process payments, send invoices, and manage all customer interactions from one dashboard.",
     },
   ];
 
@@ -162,7 +162,7 @@ export default function Landing() {
               Built for agencies & businesses
             </Badge>
             <h1 className="mx-auto mt-6 max-w-4xl text-4xl font-bold tracking-tight text-white sm:text-5xl lg:text-6xl">
-              One platform for payments, communications & consumer management
+              One platform for payments, communications & customer management
             </h1>
             <p className="mx-auto mt-6 max-w-2xl text-lg text-blue-100/70">
               Chain gives your business branded portals, SMS & email campaigns, VoIP phones, payment processing, document signing, and automated invoicing — all from a single dashboard.
@@ -217,7 +217,7 @@ export default function Landing() {
                 Everything your business needs in one place
               </h2>
               <p className="mx-auto mt-3 max-w-2xl text-base text-blue-100/60">
-                From first contact to final payment, Chain handles every step of the consumer journey with powerful, integrated tools.
+                From first contact to final payment, Chain handles every step of the customer journey with powerful, integrated tools.
               </p>
             </div>
             <div className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -285,9 +285,9 @@ export default function Landing() {
                 <Smartphone className="h-8 w-8 text-blue-300" />
               </div>
               <div className="flex-1">
-                <h2 className="text-2xl font-bold text-white sm:text-3xl">Branded consumer mobile app</h2>
+                <h2 className="text-2xl font-bold text-white sm:text-3xl">Branded customer mobile app</h2>
                 <p className="mt-2 text-base text-blue-100/70">
-                  Give your consumers a native mobile experience. Your branded portal works as a downloadable app with biometric login, push notifications, and secure payments — all under your company name.
+                  Give your customers a native mobile experience. Your branded portal works as a downloadable app with biometric login, push notifications, and secure payments — all under your company name.
                 </p>
               </div>
             </div>
@@ -312,7 +312,7 @@ export default function Landing() {
               <div>
                 <h2 className="text-3xl font-bold sm:text-4xl">Ready to transform your business?</h2>
                 <p className="mt-3 max-w-xl text-base text-blue-50/80">
-                  Join agencies and businesses already using Chain to streamline communications, automate collections, and deliver exceptional consumer experiences.
+                  Join businesses already using Chain to streamline communications, automate billing, and deliver exceptional customer experiences.
                 </p>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row">
