@@ -2,7 +2,7 @@
   "expo": {
     "name": "Chain",
     "slug": "chain",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "scheme": "chain",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.chainsoftware.platform",
-      "buildNumber": "1",
+      "buildNumber": "2",
       "newArchEnabled": false,
       "infoPlist": {
         "NSFaceIDUsageDescription": "Use Face ID to quickly and securely log in to your account",
@@ -43,7 +43,8 @@
         "expo-build-properties",
         {
           "ios": {
-            "newArchEnabled": false
+            "newArchEnabled": false,
+            "deploymentTarget": "16.0"
           },
           "android": {
             "newArchEnabled": false
