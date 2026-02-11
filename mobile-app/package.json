@@ -11,7 +11,7 @@
     "build:all": "eas build --platform all --profile production"
   },
   "dependencies": {
-    "expo": "~52.0.0",
+    "expo": "^54.0.33",
     "expo-asset": "~11.0.1",
     "expo-build-properties": "~0.13.3",
     "expo-constants": "~17.0.0",
