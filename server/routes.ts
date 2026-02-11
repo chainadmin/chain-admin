@@ -12236,9 +12236,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           let remainingPayments = null;
           let endDate = null;
 
+          const isMultiPaymentSettlement = arrangement.planType === 'settlement' && arrangement.settlementPaymentCount && arrangement.settlementPaymentCount > 1;
+
           if (arrangement.planType === 'settlement') {
-            // Check if this is a multi-payment settlement
-            const isMultiPaymentSettlement = arrangement.settlementPaymentCount && arrangement.settlementPaymentCount > 1;
             
             if (isMultiPaymentSettlement) {
               // Multi-payment settlement - create a payment schedule
