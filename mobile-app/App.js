@@ -7,7 +7,11 @@ import * as SecureStore from 'expo-secure-store';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState, useRef } from 'react';
 
-SplashScreen.preventAutoHideAsync();
+try {
+  SplashScreen.preventAutoHideAsync();
+} catch (e) {
+  console.log('SplashScreen.preventAutoHideAsync error:', e);
+}
 
 const API_BASE_URL = 'https://chain-admin-production.up.railway.app';
 
