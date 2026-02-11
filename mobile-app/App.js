@@ -4,14 +4,7 @@ import { WebView } from 'react-native-webview';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as Haptics from 'expo-haptics';
 import * as SecureStore from 'expo-secure-store';
-import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState, useRef } from 'react';
-
-try {
-  SplashScreen.preventAutoHideAsync();
-} catch (e) {
-  console.log('SplashScreen.preventAutoHideAsync error:', e);
-}
 
 const API_BASE_URL = 'https://chain-admin-production.up.railway.app';
 
@@ -49,7 +42,6 @@ export default function App() {
       console.log('Biometric check error:', error);
     } finally {
       setIsLoading(false);
-      await SplashScreen.hideAsync();
     }
   };
 
