@@ -547,7 +547,8 @@ export async function runMigrations() {
       { name: 'smax_next_payment_date', type: 'DATE' },
       { name: 'smax_expected_amount_cents', type: 'BIGINT' },
       { name: 'smax_status', type: 'TEXT' },
-      { name: 'last_failure_reason', type: 'TEXT' }
+      { name: 'last_failure_reason', type: 'TEXT' },
+      { name: 'total_payments', type: 'INTEGER' }
     ];
     
     for (const col of paymentScheduleColumns) {

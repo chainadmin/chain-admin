@@ -10033,6 +10033,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           frequency: schedule.frequency,
           nextPaymentDate: schedule.nextPaymentDate,
           remainingPayments: schedule.remainingPayments,
+          totalPayments: schedule.totalPayments,
+          paymentMethodId: schedule.paymentMethodId,
           status: schedule.status,
           cardLast4: paymentMethod?.cardLast4,
           cardBrand: paymentMethod?.cardBrand,
@@ -11712,6 +11714,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
 
             try {
+              const totalPaymentsAuthNet = remainingPayments !== null ? remainingPayments + 1 : null;
               createdSchedule = await storage.createPaymentSchedule({
                 tenantId,
                 consumerId,
@@ -11724,6 +11727,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 endDate: endDate ? endDate.toISOString().split('T')[0] : null,
                 nextPaymentDate: nextMonth.toISOString().split('T')[0],
                 remainingPayments,
+                totalPayments: totalPaymentsAuthNet,
                 status: 'active',
                 source: 'chain',
                 smaxSynced: false,
@@ -12264,6 +12268,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
 
             try {
+              const totalPaymentsNMI = remainingPayments !== null ? remainingPayments + 1 : null;
               createdSchedule = await storage.createPaymentSchedule({
                 tenantId,
                 consumerId,
@@ -12276,6 +12281,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 endDate: endDate ? endDate.toISOString().split('T')[0] : null,
                 nextPaymentDate: nextMonth.toISOString().split('T')[0],
                 remainingPayments,
+                totalPayments: totalPaymentsNMI,
                 status: 'active',
                 source: 'chain',
                 smaxSynced: false,
@@ -12978,6 +12984,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               status: 'active',
             });
 
+            const totalPaymentsUSAePay = remainingPayments !== null ? (shouldSkipImmediateCharge ? remainingPayments : remainingPayments + 1) : null;
             createdSchedule = await storage.createPaymentSchedule({
               tenantId,
               consumerId,
@@ -12992,9 +12999,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 ? paymentStartDate.toISOString().split('T')[0]
                 : nextMonth.toISOString().split('T')[0],
               remainingPayments,
+              totalPayments: totalPaymentsUSAePay,
               status: 'active',
-              source: 'chain', // Mark as Chain-created
-              smaxSynced: false, // Will be set to true after SMAX sync
+              source: 'chain',
+              smaxSynced: false,
             });
             
             console.log('✅✅✅ PAYMENT SCHEDULE CREATED SUCCESSFULLY IN DATABASE! ✅✅✅');
