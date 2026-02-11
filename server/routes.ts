@@ -11016,6 +11016,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const {
         accountId,
         arrangementId,
+        settlementPaymentCount: requestedSettlementPaymentCount,
         cardNumber,
         expiryMonth,
         expiryYear,
@@ -11298,6 +11299,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
+        if (arrangement.planType === 'settlement' && requestedSettlementPaymentCount) {
+          const validCounts = arrangement.settlementPaymentCounts || [1];
+          const requestedCount = Number(requestedSettlementPaymentCount);
+          if (validCounts.includes(requestedCount)) {
+            (arrangement as any).settlementPaymentCount = requestedCount;
+            console.log('📋 Settlement payment count set from request:', requestedCount);
+          } else {
+            (arrangement as any).settlementPaymentCount = validCounts[0] || 1;
+            console.log('⚠️ Requested settlement count not in valid options, using default:', validCounts[0] || 1);
+          }
+        } else if (arrangement.planType === 'settlement') {
+          const validCounts = arrangement.settlementPaymentCounts || [1];
+          (arrangement as any).settlementPaymentCount = validCounts[0] || 1;
+          console.log('📋 Settlement payment count defaulted to:', validCounts[0] || 1);
+        }
+
         // Calculate payment amount based on arrangement type
         console.log('💰 Calculating payment amount for arrangement type:', arrangement.planType);
         
@@ -11364,11 +11381,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
             accountBalance: accountBalance
           });
         } else if (arrangement.planType === 'settlement' && arrangement.payoffPercentageBasisPoints) {
-          // Settlement: percentage of balance
-          amountCents = Math.round(amountCents * arrangement.payoffPercentageBasisPoints / 10000);
+          const settlementTotal = Math.round(amountCents * arrangement.payoffPercentageBasisPoints / 10000);
+          const paymentCount = (arrangement as any).settlementPaymentCount || 1;
+          if (paymentCount > 1) {
+            amountCents = Math.floor(settlementTotal / paymentCount);
+          } else {
+            amountCents = settlementTotal;
+          }
           console.log('✅ Settlement amount calculated:', {
             percentage: arrangement.payoffPercentageBasisPoints / 100,
-            amountCents
+            settlementTotal,
+            paymentCount,
+            perPaymentAmount: amountCents
           });
         } else if (arrangement.planType === 'fixed_monthly' && arrangement.fixedMonthlyPayment) {
           // Fixed monthly payment

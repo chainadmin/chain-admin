@@ -801,6 +801,7 @@ export default function ConsumerDashboardSimple() {
       let paymentData: any = {
         accountId: selectedAccount.id,
         arrangementId: selectedArrangement?.id || null,
+        settlementPaymentCount: selectedArrangement?.planType === 'settlement' ? (selectedArrangement?.settlementPaymentCount || 1) : undefined,
         cardName: paymentForm.cardName,
         zipCode: paymentForm.zipCode,
         saveCard: saveCard || isSimplifiedFlow,
