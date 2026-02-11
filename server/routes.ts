@@ -10207,6 +10207,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No remaining payments on this schedule" });
       }
 
+      if (schedule.arrangementType === 'settlement') {
+        return res.status(400).json({ message: "Settlement arrangements cannot be paid off early. The remaining balance is forgiven upon completion of settlement payments." });
+      }
+
       // Get the account to calculate remaining balance
       const account = await storage.getAccount(schedule.accountId);
       if (!account) {
@@ -11298,7 +11302,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log('💰 Calculating payment amount for arrangement type:', arrangement.planType);
         
         // If customPaymentAmountCents is provided (e.g., frequency-adjusted amount from frontend), use it
-        if (customPaymentAmountCents && customPaymentAmountCents > 0 && arrangement.planType !== 'one_time_payment') {
+        // Skip for settlements and one_time_payments - these have their own amount calculation logic
+        if (customPaymentAmountCents && customPaymentAmountCents > 0 && arrangement.planType !== 'one_time_payment' && arrangement.planType !== 'settlement') {
           // Validate the custom amount is within acceptable range for this arrangement
           const minAmount = arrangement.planType === 'range' 
             ? (arrangement.monthlyPaymentMin || 0)
@@ -11714,7 +11719,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
 
             try {
-              const totalPaymentsAuthNet = remainingPayments !== null ? remainingPayments + 1 : null;
+              const isImmediateAuthNet = !normalizedFirstPaymentDate || normalizedFirstPaymentDate.getTime() <= today.getTime();
+              const totalPaymentsCalc = remainingPayments !== null ? (isImmediateAuthNet ? remainingPayments + 1 : remainingPayments) : null;
               createdSchedule = await storage.createPaymentSchedule({
                 tenantId,
                 consumerId,
@@ -11727,7 +11733,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 endDate: endDate ? endDate.toISOString().split('T')[0] : null,
                 nextPaymentDate: nextMonth.toISOString().split('T')[0],
                 remainingPayments,
-                totalPayments: totalPaymentsAuthNet,
+                totalPayments: totalPaymentsCalc,
                 status: 'active',
                 source: 'chain',
                 smaxSynced: false,
@@ -12268,7 +12274,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
 
             try {
-              const totalPaymentsNMI = remainingPayments !== null ? remainingPayments + 1 : null;
+              const isImmediateNMI = !normalizedFirstPaymentDate || normalizedFirstPaymentDate.getTime() <= today.getTime();
+              const totalPaymentsCalcNMI = remainingPayments !== null ? (isImmediateNMI ? remainingPayments + 1 : remainingPayments) : null;
               createdSchedule = await storage.createPaymentSchedule({
                 tenantId,
                 consumerId,
@@ -12281,7 +12288,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 endDate: endDate ? endDate.toISOString().split('T')[0] : null,
                 nextPaymentDate: nextMonth.toISOString().split('T')[0],
                 remainingPayments,
-                totalPayments: totalPaymentsNMI,
+                totalPayments: totalPaymentsCalcNMI,
                 status: 'active',
                 source: 'chain',
                 smaxSynced: false,
