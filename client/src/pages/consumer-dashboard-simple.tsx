@@ -976,14 +976,20 @@ export default function ConsumerDashboardSimple() {
       });
       
       const frequencyText = paymentFrequency === 'weekly' ? 'weekly' : paymentFrequency === 'biweekly' ? 'bi-weekly' : 'monthly';
-      const successMessage = isRecurringSetup
+      const isSinglePaymentSettlement = selectedArrangement?.planType === 'settlement' && (!selectedArrangement?.settlementPaymentCount || selectedArrangement?.settlementPaymentCount <= 1);
+      const isMultiPaymentSettlement = selectedArrangement?.planType === 'settlement' && selectedArrangement?.settlementPaymentCount > 1;
+      const successMessage = isSinglePaymentSettlement
+        ? `Your settlement of ${formatCurrency(paymentAmountCents)} has been processed. Your remaining balance has been forgiven.`
+        : isMultiPaymentSettlement
+        ? `Your first settlement payment of ${formatCurrency(paymentAmountCents)} has been processed. ${selectedArrangement.settlementPaymentCount - 1} remaining payment(s) will be scheduled automatically.`
+        : isRecurringSetup
         ? isSimplifiedFlow
           ? `Your payment plan has been set up successfully. Your first ${frequencyText} payment of ${formatCurrency(paymentAmountCents)} will be processed on ${formattedDate}.`
           : `Your payment plan has been set up successfully. Your first payment of ${formatCurrency(paymentAmountCents)} will be processed on ${formattedDate}.`
         : `Your payment of ${formatCurrency(paymentAmountCents)} has been processed.`;
 
       toast({
-        title: isRecurringSetup ? "Payment Plan Activated" : "Payment Successful",
+        title: isSinglePaymentSettlement ? "Settlement Complete" : isMultiPaymentSettlement ? "Settlement Payment Processed" : isRecurringSetup ? "Payment Plan Activated" : "Payment Successful",
         description: successMessage,
       });
 
@@ -1323,15 +1329,21 @@ export default function ConsumerDashboardSimple() {
                             )}
                           </div>
                           
-                          <Button 
-                            onClick={() => handlePayment(account)}
-                            size="sm"
-                            className="bg-emerald-500 hover:bg-emerald-400 text-white w-full sm:w-auto"
-                            data-testid={`button-pay-${account.id}`}
-                          >
-                            <DollarSign className="h-4 w-4 mr-1" />
-                            Pay Now
-                          </Button>
+                          {(account.balanceCents || 0) > 0 ? (
+                            <Button 
+                              onClick={() => handlePayment(account)}
+                              size="sm"
+                              className="bg-emerald-500 hover:bg-emerald-400 text-white w-full sm:w-auto"
+                              data-testid={`button-pay-${account.id}`}
+                            >
+                              <DollarSign className="h-4 w-4 mr-1" />
+                              Pay Now
+                            </Button>
+                          ) : (
+                            <Badge className="border-emerald-400/30 bg-emerald-500/10 text-emerald-200 border px-3 py-1">
+                              Paid in Full
+                            </Badge>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -2490,8 +2502,8 @@ export default function ConsumerDashboardSimple() {
                         </div>
                       )}
 
-                      {/* Payment Schedule Preview */}
-                      {calculatedPayment !== null && selectedArrangement && selectedArrangement.planType !== 'one_time_payment' && (
+                      {/* Payment Schedule Preview - exclude settlements (they have their own breakdown) */}
+                      {calculatedPayment !== null && selectedArrangement && selectedArrangement.planType !== 'one_time_payment' && selectedArrangement.planType !== 'settlement' && (
                         <div className="rounded-lg bg-white/5 border border-white/10 p-4 backdrop-blur">
                           <div className="flex items-center gap-2 mb-3">
                             <Calendar className="h-4 w-4 text-blue-400" />
