@@ -10909,13 +10909,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const freshAccount = await storage.getAccount(accountId);
       if (freshAccount) {
         const previousBalance = freshAccount.balanceCents || 0;
-        const newBalance = Math.max(0, previousBalance - amountCents);
+        const isSinglePaymentSettlement = arrangement?.planType === 'settlement' && (!arrangement.settlementPaymentCount || arrangement.settlementPaymentCount <= 1);
+        const newBalance = isSinglePaymentSettlement ? 0 : Math.max(0, previousBalance - amountCents);
         console.log('💰 [BALANCE UPDATE] Calculating:', {
           accountId,
           previousBalance,
           paymentAmount: amountCents,
+          isSinglePaymentSettlement,
           newBalance,
-          formula: `max(0, ${previousBalance} - ${amountCents}) = ${newBalance}`
+          formula: isSinglePaymentSettlement ? 'Settlement in full → $0' : `max(0, ${previousBalance} - ${amountCents}) = ${newBalance}`
         });
         const updatedAccount = await storage.updateAccount(accountId, { balanceCents: newBalance });
         console.log('💰 [BALANCE UPDATE] Update complete:', {
@@ -13302,26 +13304,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Step 5: Update account balance
-      if (accountId && paymentProcessed && success) {
-        const account = await storage.getAccount(accountId);
-        if (account) {
-          // For single-payment settlement, zero out the balance
-          const isMultiPaymentSettlement = arrangement?.planType === 'settlement' && arrangement.settlementPaymentCount && arrangement.settlementPaymentCount > 1;
-          if (arrangement && arrangement.planType === 'settlement' && !isMultiPaymentSettlement) {
-            await storage.updateAccount(accountId, { balanceCents: 0 });
-          } else {
-            const newBalance = Math.max(0, (account.balanceCents || 0) - amountCents);
-            console.log('💰 Balance update (Step 5):', {
-              accountId,
-              previousBalance: account.balanceCents,
-              paymentAmount: amountCents,
-              newBalance
-            });
-            await storage.updateAccount(accountId, { balanceCents: newBalance });
-          }
-        }
-      }
+      // Step 5: Balance update is now handled centrally by processSuccessfulPayment helper
+      // (includes single-payment settlement zero-out logic for all processors)
 
       if (paymentProcessed && !success) {
         // Send payment failure notification to consumer
