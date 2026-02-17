@@ -809,6 +809,32 @@ export const paymentSchedules = pgTable("payment_schedules", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Payment processing logs - records every scheduled payment attempt for visibility
+export const paymentProcessingLogs = pgTable("payment_processing_logs", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  scheduleId: uuid("schedule_id").references(() => paymentSchedules.id, { onDelete: "set null" }),
+  consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "set null" }),
+  accountId: uuid("account_id").references(() => accounts.id, { onDelete: "set null" }),
+  consumerName: text("consumer_name"),
+  accountNumber: text("account_number"),
+  creditor: text("creditor"),
+  amountCents: bigint("amount_cents", { mode: "number" }).notNull(),
+  status: text("status").notNull(), // "success", "failed", "skipped"
+  processor: text("processor"), // "authorize_net", "nmi", "usaepay"
+  transactionId: text("transaction_id"),
+  failureReason: text("failure_reason"),
+  cardLast4: text("card_last4"),
+  cardBrand: text("card_brand"),
+  runType: text("run_type").default("cron"), // "cron" or "manual"
+  processedAt: timestamp("processed_at").defaultNow(),
+});
+
+export const insertPaymentProcessingLogSchema = createInsertSchema(paymentProcessingLogs).omit({
+  id: true,
+  processedAt: true,
+});
+
 // Payment approvals for SMAX updates and card changes
 export const paymentApprovals = pgTable("payment_approvals", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1757,3 +1783,5 @@ export type VoipPhoneNumber = typeof voipPhoneNumbers.$inferSelect;
 export type InsertVoipPhoneNumber = z.infer<typeof insertVoipPhoneNumberSchema>;
 export type VoipCallLog = typeof voipCallLogs.$inferSelect;
 export type InsertVoipCallLog = z.infer<typeof insertVoipCallLogSchema>;
+export type PaymentProcessingLog = typeof paymentProcessingLogs.$inferSelect;
+export type InsertPaymentProcessingLog = z.infer<typeof insertPaymentProcessingLogSchema>;

@@ -271,14 +271,17 @@ export default function Payments() {
   });
 
 
+  const { data: processingLogs, isLoading: logsLoading } = useQuery({
+    queryKey: ['/api/payment-processing-logs'],
+  });
+
   // Manual payment processor trigger mutation
   const processScheduledPaymentsMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch('/api/payments/process-scheduled', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runType: 'manual' }),
       });
       if (!response.ok) {
         throw new Error('Failed to process scheduled payments');
@@ -293,6 +296,7 @@ export default function Payments() {
       queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/payments/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/payment-schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payment-processing-logs"] });
     },
     onError: (error: any) => {
       toast({
@@ -638,6 +642,10 @@ export default function Payments() {
               <TabsTrigger value="manage" data-testid="tab-manage">
                 <Settings className="w-4 h-4 mr-2" />
                 Manage Schedules
+              </TabsTrigger>
+              <TabsTrigger value="history" data-testid="tab-history">
+                <History className="w-4 h-4 mr-2" />
+                Processing History
               </TabsTrigger>
             </TabsList>
             
@@ -1703,6 +1711,138 @@ export default function Payments() {
               </DialogContent>
             </Dialog>
 
+          </TabsContent>
+
+          <TabsContent value="history" className="mt-0">
+            {logsLoading ? (
+              <div className="flex h-64 items-center justify-center">
+                <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-slate-900" />
+              </div>
+            ) : !processingLogs || (processingLogs as any[]).length === 0 ? (
+              <div className={cn(glassPanelClass, "p-8")}>
+                <div className="rounded-xl border border-dashed border-white/15 bg-white/5 py-12 text-center">
+                  <History className="mx-auto mb-3 h-10 w-10 text-blue-200/40" />
+                  <p className="text-sm text-blue-100/60 max-w-md mx-auto">
+                    No processing history yet. Payment processing logs will appear here after the next scheduled run or when you click 'Process Scheduled Payments'.
+                  </p>
+                </div>
+              </div>
+            ) : (() => {
+              const logs = processingLogs as any[];
+              const today = new Date();
+              const todayStr = today.toISOString().split('T')[0];
+              const yesterday = new Date(today);
+              yesterday.setDate(yesterday.getDate() - 1);
+              const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+              const todayLogs = logs.filter((l: any) => l.processedAt && new Date(l.processedAt).toISOString().split('T')[0] === todayStr);
+              const processedToday = todayLogs.filter((l: any) => l.status === 'success').length;
+              const failedToday = todayLogs.filter((l: any) => l.status === 'failed').length;
+              const skippedToday = todayLogs.filter((l: any) => l.status === 'skipped').length;
+              const lastRun = logs.length > 0 ? logs.reduce((latest: any, l: any) => {
+                if (!latest || new Date(l.processedAt) > new Date(latest.processedAt)) return l;
+                return latest;
+              }, null) : null;
+
+              const grouped: Record<string, any[]> = {};
+              logs.forEach((log: any) => {
+                const dateKey = log.processedAt ? new Date(log.processedAt).toISOString().split('T')[0] : 'unknown';
+                if (!grouped[dateKey]) grouped[dateKey] = [];
+                grouped[dateKey].push(log);
+              });
+              const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+
+              const getDateLabel = (dateKey: string) => {
+                if (dateKey === 'unknown') return 'Unknown Date';
+                if (dateKey === todayStr) return 'Today';
+                if (dateKey === yesterdayStr) return 'Yesterday';
+                const parsed = new Date(dateKey + 'T00:00:00');
+                if (isNaN(parsed.getTime())) return 'Unknown Date';
+                return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+              };
+
+              const getProcessorLabel = (processor: string) => {
+                switch (processor) {
+                  case 'authorize_net': return 'Authorize.net';
+                  case 'nmi': return 'NMI';
+                  case 'usaepay': return 'USAePay';
+                  default: return processor || '—';
+                }
+              };
+
+              return (
+                <div className="space-y-6">
+                  <div className={cn(glassPanelClass, "p-6")}>
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/20">
+                        <History className="h-5 w-5 text-indigo-300" />
+                      </div>
+                      <div>
+                        <h2 className="text-lg font-semibold text-white">Processing Summary</h2>
+                        <p className="text-xs text-blue-100/60">
+                          Last run: {lastRun ? new Date(lastRun.processedAt).toLocaleString() : 'Never'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-3">
+                      <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-4">
+                        <p className="text-xs uppercase tracking-wide text-emerald-200/70">Processed Today</p>
+                        <p className="mt-1 text-2xl font-semibold text-emerald-100">{processedToday}</p>
+                      </div>
+                      <div className="rounded-2xl border border-rose-400/20 bg-rose-500/10 p-4">
+                        <p className="text-xs uppercase tracking-wide text-rose-200/70">Failed Today</p>
+                        <p className="mt-1 text-2xl font-semibold text-rose-100">{failedToday}</p>
+                      </div>
+                      <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 p-4">
+                        <p className="text-xs uppercase tracking-wide text-amber-200/70">Skipped Today</p>
+                        <p className="mt-1 text-2xl font-semibold text-amber-100">{skippedToday}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {sortedDates.map((dateKey) => (
+                    <div key={dateKey} className="space-y-3">
+                      <h3 className="text-sm font-semibold text-blue-100/80 uppercase tracking-wider">{getDateLabel(dateKey)}</h3>
+                      <div className={cn(glassPanelClass, "overflow-hidden")}>
+                        <div className="divide-y divide-white/10">
+                          {grouped[dateKey].sort((a: any, b: any) => (new Date(b.processedAt || 0).getTime()) - (new Date(a.processedAt || 0).getTime())).map((log: any) => (
+                            <div key={log.id} className="flex items-start gap-4 p-4 hover:bg-white/5 transition-colors">
+                              <div className="mt-0.5">
+                                {log.status === 'success' && <CheckCircle className="h-5 w-5 text-emerald-400" />}
+                                {log.status === 'failed' && <XCircle className="h-5 w-5 text-rose-400" />}
+                                {log.status === 'skipped' && <AlertTriangle className="h-5 w-5 text-amber-400" />}
+                              </div>
+                              <div className="flex-1 min-w-0 space-y-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-medium text-white text-sm">{log.consumerName || '—'}</span>
+                                  <Badge className={cn("text-xs", log.status === 'success' ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/30' : log.status === 'failed' ? 'bg-rose-500/20 text-rose-200 border-rose-400/30' : 'bg-amber-500/20 text-amber-200 border-amber-400/30')}>
+                                    {log.status}
+                                  </Badge>
+                                  {log.runType && (
+                                    <Badge className="text-xs bg-white/10 text-blue-200 border-white/20">{log.runType}</Badge>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-3 text-xs text-blue-100/60 flex-wrap">
+                                  {log.accountNumber && <span>Acct: {log.accountNumber}</span>}
+                                  {log.creditor && <span>• {log.creditor}</span>}
+                                  <span>• ${(log.amountCents / 100).toFixed(2)}</span>
+                                  <span>• {getProcessorLabel(log.processor)}</span>
+                                  {log.cardBrand && log.cardLast4 && <span>• {log.cardBrand} ****{log.cardLast4}</span>}
+                                  <span>• {log.processedAt ? new Date(log.processedAt).toLocaleString() : 'N/A'}</span>
+                                </div>
+                                {log.failureReason && (log.status === 'failed' || log.status === 'skipped') && (
+                                  <p className="text-xs text-rose-300/80 mt-1">Reason: {log.failureReason}</p>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </TabsContent>
         </Tabs>
 

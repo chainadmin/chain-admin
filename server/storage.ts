@@ -38,6 +38,7 @@ import {
   paymentMethods,
   paymentSchedules,
   paymentApprovals,
+  paymentProcessingLogs,
   subscriptions,
   subscriptionPlans,
   invoices,
@@ -115,6 +116,8 @@ import {
   type InsertPaymentSchedule,
   type PaymentApproval,
   type InsertPaymentApproval,
+  type PaymentProcessingLog,
+  type InsertPaymentProcessingLog,
   type Subscription,
   type InsertSubscription,
   type Invoice,
@@ -473,6 +476,10 @@ export interface IStorage {
   approvePaymentApproval(id: string, approvedBy: string): Promise<PaymentApproval>;
   rejectPaymentApproval(id: string, approvedBy: string, reason: string): Promise<PaymentApproval>;
   
+  // Payment processing log operations
+  createPaymentProcessingLog(log: InsertPaymentProcessingLog): Promise<PaymentProcessingLog>;
+  getPaymentProcessingLogs(tenantId: string, limit?: number): Promise<PaymentProcessingLog[]>;
+
   // Billing operations
   getSubscriptionByTenant(tenantId: string): Promise<Subscription | undefined>;
   createSubscription(subscription: InsertSubscription): Promise<Subscription>;
@@ -4465,6 +4472,23 @@ export class DatabaseStorage implements IStorage {
       .where(eq(voipCallLogs.callSid, callSid))
       .returning();
     return updated;
+  }
+
+  async createPaymentProcessingLog(log: InsertPaymentProcessingLog): Promise<PaymentProcessingLog> {
+    const [created] = await db
+      .insert(paymentProcessingLogs)
+      .values(log)
+      .returning();
+    return created;
+  }
+
+  async getPaymentProcessingLogs(tenantId: string, limit: number = 100): Promise<PaymentProcessingLog[]> {
+    return await db
+      .select()
+      .from(paymentProcessingLogs)
+      .where(eq(paymentProcessingLogs.tenantId, tenantId))
+      .orderBy(desc(paymentProcessingLogs.processedAt))
+      .limit(limit);
   }
 }
 

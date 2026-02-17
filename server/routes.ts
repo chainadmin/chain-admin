@@ -13878,6 +13878,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/payments/process-scheduled', async (req: any, res) => {
     try {
       const today = new Date().toISOString().split('T')[0];
+      const runType = req.body?.runType || 'cron';
       
       // Get all active payment schedules due today
       const allTenants = await storage.getAllTenants();
@@ -13908,6 +13909,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     accountId: schedule.accountId,
                     reason: 'Payment processing disabled for this account (trial mode)'
                   });
+                  try {
+                    await storage.createPaymentProcessingLog({
+                      tenantId: tenant.id,
+                      scheduleId: schedule.id,
+                      consumerId: consumer.id,
+                      accountId: schedule.accountId,
+                      consumerName: `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim(),
+                      amountCents: schedule.amountCents,
+                      status: 'skipped',
+                      failureReason: 'Payment processing disabled (trial mode)',
+                      runType,
+                    });
+                  } catch (logError) {
+                    console.error('Failed to log payment processing (skipped - trial mode):', logError);
+                  }
                   continue;
                 }
 
@@ -13926,6 +13942,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       accountId: schedule.accountId,
                       reason: statusValidation.reason
                     });
+                    try {
+                      await storage.createPaymentProcessingLog({
+                        tenantId: tenant.id,
+                        scheduleId: schedule.id,
+                        consumerId: consumer.id,
+                        accountId: schedule.accountId,
+                        consumerName: `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim(),
+                        accountNumber: scheduleAccount?.accountNumber || undefined,
+                        creditor: scheduleAccount?.creditor || undefined,
+                        amountCents: schedule.amountCents,
+                        status: 'skipped',
+                        failureReason: statusValidation.reason,
+                        runType,
+                      });
+                    } catch (logError) {
+                      console.error('Failed to log payment processing (skipped - blocked status):', logError);
+                    }
                     continue;
                   }
                 }
@@ -13994,6 +14027,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 
                 if (!paymentMethod) {
                   console.error(`Payment method not found for schedule ${schedule.id}`);
+                  try {
+                    await storage.createPaymentProcessingLog({
+                      tenantId: tenant.id,
+                      scheduleId: schedule.id,
+                      consumerId: consumer.id,
+                      accountId: schedule.accountId,
+                      consumerName: `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim(),
+                      accountNumber: scheduleAccount?.accountNumber || undefined,
+                      creditor: scheduleAccount?.creditor || undefined,
+                      amountCents: schedule.amountCents,
+                      status: 'skipped',
+                      failureReason: 'Payment method not found',
+                      runType,
+                    });
+                  } catch (logError) {
+                    console.error('Failed to log payment processing (skipped - no payment method):', logError);
+                  }
                   continue;
                 }
 
@@ -14038,6 +14088,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       accountId: schedule.accountId,
                       reason: 'Authorize.net credentials not configured'
                     });
+                    try {
+                      await storage.createPaymentProcessingLog({
+                        tenantId: tenant.id,
+                        scheduleId: schedule.id,
+                        consumerId: consumer.id,
+                        accountId: schedule.accountId,
+                        consumerName: `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim(),
+                        accountNumber: scheduleAccount?.accountNumber || undefined,
+                        creditor: scheduleAccount?.creditor || undefined,
+                        amountCents: paymentAmountCents,
+                        status: 'failed',
+                        processor: 'authorize_net',
+                        failureReason: 'Authorize.net credentials not configured',
+                        cardLast4: paymentMethod.cardLast4 || undefined,
+                        cardBrand: paymentMethod.cardBrand || undefined,
+                        runType,
+                      });
+                    } catch (logError) {
+                      console.error('Failed to log payment processing (failed - authnet creds):', logError);
+                    }
                     continue;
                   }
 
@@ -14109,6 +14179,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
                         accountId: schedule.accountId,
                         reason: 'NMI credentials not configured'
                       });
+                      try {
+                        await storage.createPaymentProcessingLog({
+                          tenantId: tenant.id,
+                          scheduleId: schedule.id,
+                          consumerId: consumer.id,
+                          accountId: schedule.accountId,
+                          consumerName: `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim(),
+                          accountNumber: scheduleAccount?.accountNumber || undefined,
+                          creditor: scheduleAccount?.creditor || undefined,
+                          amountCents: paymentAmountCents,
+                          status: 'failed',
+                          processor: 'nmi',
+                          failureReason: 'NMI credentials not configured',
+                          cardLast4: paymentMethod.cardLast4 || undefined,
+                          cardBrand: paymentMethod.cardBrand || undefined,
+                          runType,
+                        });
+                      } catch (logError) {
+                        console.error('Failed to log payment processing (failed - NMI creds):', logError);
+                      }
                       continue;
                     }
 
@@ -14248,6 +14338,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       accountId: schedule.accountId,
                       reason: 'USAePay credentials not configured'
                     });
+                    try {
+                      await storage.createPaymentProcessingLog({
+                        tenantId: tenant.id,
+                        scheduleId: schedule.id,
+                        consumerId: consumer.id,
+                        accountId: schedule.accountId,
+                        consumerName: `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim(),
+                        accountNumber: scheduleAccount?.accountNumber || undefined,
+                        creditor: scheduleAccount?.creditor || undefined,
+                        amountCents: paymentAmountCents,
+                        status: 'failed',
+                        processor: 'usaepay',
+                        failureReason: 'USAePay credentials not configured',
+                        cardLast4: paymentMethod.cardLast4 || undefined,
+                        cardBrand: paymentMethod.cardBrand || undefined,
+                        runType,
+                      });
+                    } catch (logError) {
+                      console.error('Failed to log payment processing (failed - USAePay creds):', logError);
+                    }
                     continue;
                   }
 
@@ -14503,6 +14613,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   }
 
                   processedPayments.push({ scheduleId: schedule.id, consumerId: consumer.id });
+                  try {
+                    await storage.createPaymentProcessingLog({
+                      tenantId: tenant.id,
+                      scheduleId: schedule.id,
+                      consumerId: consumer.id,
+                      accountId: schedule.accountId,
+                      consumerName: `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim(),
+                      accountNumber: scheduleAccount?.accountNumber || undefined,
+                      creditor: scheduleAccount?.creditor || undefined,
+                      amountCents: paymentAmountCents,
+                      status: 'success',
+                      processor: merchantProvider,
+                      transactionId: extractedTransactionId,
+                      cardLast4: paymentMethod.cardLast4 || undefined,
+                      cardBrand: paymentMethod.cardBrand || undefined,
+                      runType,
+                    });
+                  } catch (logError) {
+                    console.error('Failed to log payment processing (success):', logError);
+                  }
                 } else {
                   // Payment failed - update failed attempts and store failure reason
                   const failedAttempts = (schedule.failedAttempts || 0) + 1;
@@ -14612,6 +14742,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     error: failureReason,
                     attemptCount: failedAttempts
                   });
+                  try {
+                    await storage.createPaymentProcessingLog({
+                      tenantId: tenant.id,
+                      scheduleId: schedule.id,
+                      consumerId: consumer.id,
+                      accountId: schedule.accountId,
+                      consumerName: consumerName || undefined,
+                      accountNumber: failedAccount?.accountNumber || undefined,
+                      creditor: failedAccount?.creditor || undefined,
+                      amountCents: paymentAmountCents,
+                      status: 'failed',
+                      processor: merchantProvider,
+                      failureReason,
+                      cardLast4: paymentMethod.cardLast4 || undefined,
+                      cardBrand: paymentMethod.cardBrand || undefined,
+                      runType,
+                    });
+                  } catch (logError) {
+                    console.error('Failed to log payment processing (failed):', logError);
+                  }
                 }
               } catch (err) {
                 console.error(`Error processing schedule ${schedule.id}:`, err);
@@ -15799,6 +15949,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching consumer payment history:", error);
       res.status(500).json({ message: "Failed to fetch payment history" });
+    }
+  });
+
+  // Get payment processing logs for admin dashboard
+  app.get('/api/payment-processing-logs', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const limit = parseInt(req.query.limit as string) || 100;
+      const logs = await storage.getPaymentProcessingLogs(tenantId, Math.min(limit, 500));
+      res.json(logs);
+    } catch (error) {
+      console.error("Error fetching payment processing logs:", error);
+      res.status(500).json({ message: "Failed to fetch payment processing logs" });
     }
   });
 

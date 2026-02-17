@@ -1697,6 +1697,35 @@ export async function runMigrations() {
       console.log(`  ⚠ payment_frequency (already exists or error)`);
     }
 
+    // Create payment_processing_logs table for scheduled payment visibility
+    console.log('Creating payment_processing_logs table...');
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS payment_processing_logs (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          schedule_id UUID REFERENCES payment_schedules(id) ON DELETE SET NULL,
+          consumer_id UUID REFERENCES consumers(id) ON DELETE SET NULL,
+          account_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
+          consumer_name TEXT,
+          account_number TEXT,
+          creditor TEXT,
+          amount_cents BIGINT NOT NULL,
+          status TEXT NOT NULL,
+          processor TEXT,
+          transaction_id TEXT,
+          failure_reason TEXT,
+          card_last4 TEXT,
+          card_brand TEXT,
+          run_type TEXT DEFAULT 'cron',
+          processed_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      console.log('  ✓ payment_processing_logs table created');
+    } catch (err) {
+      console.log('  ⚠ payment_processing_logs table (already exists or error)');
+    }
+
     console.log('✅ Database migrations completed successfully');
   } catch (error: any) {
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
