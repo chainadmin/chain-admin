@@ -15,6 +15,7 @@ import {
   tenantSettings,
   consumers,
   accounts as accountsTable,
+  paymentSchedules as paymentSchedulesTable,
   payments,
   agencyCredentials,
   users,
@@ -13896,936 +13897,350 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`⏰ Cron job processing all ${tenantsToProcess.length} tenants`);
       }
       
-      const processedPayments = [];
-      const failedPayments = [];
+      const processedPayments: any[] = [];
+      const failedPayments: any[] = [];
 
       for (const tenant of tenantsToProcess) {
-        const consumers = await storage.getConsumersByTenant(tenant.id);
+        const settings = await storage.getTenantSettings(tenant.id);
+        const merchantProvider = settings?.merchantProvider || 'usaepay';
         
-        for (const consumer of consumers) {
-          const schedules = await storage.getPaymentSchedulesByConsumer(consumer.id, tenant.id);
-          
-          for (const schedule of schedules) {
-            // Skip SMAX-sourced arrangements (SMAX handles those payments)
-            if ((schedule as any).source === 'smax') {
-              console.log(`⏭️ Skipping SMAX-managed payment schedule: ${schedule.id}`);
+        console.log(`💳 Processing tenant: ${tenant.name} (${tenant.id}), provider: ${merchantProvider}`);
+
+        if (!tenant.paymentProcessingEnabled) {
+          console.log(`⏭️ Skipping tenant ${tenant.name} - payment processing disabled (trial mode)`);
+          continue;
+        }
+
+        const todaySchedules = await db
+          .select()
+          .from(paymentSchedulesTable)
+          .where(
+            and(
+              eq(paymentSchedulesTable.tenantId, tenant.id),
+              eq(paymentSchedulesTable.status, 'active'),
+              eq(paymentSchedulesTable.nextPaymentDate, today),
+              sql`COALESCE(${paymentSchedulesTable.source}, 'chain') != 'smax'`
+            )
+          );
+
+        console.log(`📋 Found ${todaySchedules.length} active schedules due today for tenant ${tenant.name}`);
+
+        if (todaySchedules.length === 0) continue;
+
+        for (const schedule of todaySchedules) {
+          try {
+            const consumer = await storage.getConsumer(schedule.consumerId);
+            if (!consumer) {
+              console.error(`Consumer not found for schedule ${schedule.id}`);
               continue;
             }
+            const consumerName = `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim();
 
-            // Check if payment is due today and schedule is active
-            if (schedule.status === 'active' && schedule.nextPaymentDate === today) {
+            const scheduleAccount = await storage.getAccount(schedule.accountId);
+            if (scheduleAccount) {
+              const statusValidation = await validatePaymentStatus(scheduleAccount, tenant.id, settings);
+              if (statusValidation.isBlocked) {
+                console.log(`⏭️ Skipping scheduled payment: ${statusValidation.reason}`);
+                failedPayments.push({ scheduleId: schedule.id, accountId: schedule.accountId, reason: statusValidation.reason });
+                try { await storage.createPaymentProcessingLog({ tenantId: tenant.id, scheduleId: schedule.id, consumerId: consumer.id, accountId: schedule.accountId, consumerName, accountNumber: scheduleAccount?.accountNumber || undefined, creditor: scheduleAccount?.creditor || undefined, amountCents: schedule.amountCents, status: 'skipped', failureReason: statusValidation.reason, runType }); } catch (logError) { console.error('Failed to log:', logError); }
+                continue;
+              }
+            }
+
+            if (settings?.smaxEnabled && scheduleAccount?.filenumber) {
               try {
-                // Check if payment processing is enabled for this tenant (trial mode restriction)
-                if (!tenant.paymentProcessingEnabled) {
-                  console.log(`⏭️ Skipping scheduled payment for tenant with disabled payment processing: ${tenant.id} (trial mode)`);
-                  failedPayments.push({
-                    scheduleId: schedule.id,
-                    accountId: schedule.accountId,
-                    reason: 'Payment processing disabled for this account (trial mode)'
-                  });
-                  try {
-                    await storage.createPaymentProcessingLog({
-                      tenantId: tenant.id,
-                      scheduleId: schedule.id,
-                      consumerId: consumer.id,
-                      accountId: schedule.accountId,
-                      consumerName: `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim(),
-                      amountCents: schedule.amountCents,
-                      status: 'skipped',
-                      failureReason: 'Payment processing disabled (trial mode)',
-                      runType,
-                    });
-                  } catch (logError) {
-                    console.error('Failed to log payment processing (skipped - trial mode):', logError);
-                  }
-                  continue;
-                }
-
-                // Get tenant settings (used for blocked status check, SMAX preflight check, and USAePay credentials)
-                const settings = await storage.getTenantSettings(tenant.id);
-                
-                // Check if account status is blocked (configured per tenant)
-                // This checks SMAX statusname (if SMAX enabled) or Chain's account status
-                const scheduleAccount = await storage.getAccount(schedule.accountId);
-                if (scheduleAccount) {
-                  const statusValidation = await validatePaymentStatus(scheduleAccount, tenant.id, settings);
-                  if (statusValidation.isBlocked) {
-                    console.log(`⏭️ Skipping scheduled payment: ${statusValidation.reason}`);
-                    failedPayments.push({
-                      scheduleId: schedule.id,
-                      accountId: schedule.accountId,
-                      reason: statusValidation.reason
-                    });
-                    try {
-                      await storage.createPaymentProcessingLog({
-                        tenantId: tenant.id,
-                        scheduleId: schedule.id,
-                        consumerId: consumer.id,
-                        accountId: schedule.accountId,
-                        consumerName: `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim(),
-                        accountNumber: scheduleAccount?.accountNumber || undefined,
-                        creditor: scheduleAccount?.creditor || undefined,
-                        amountCents: schedule.amountCents,
-                        status: 'skipped',
-                        failureReason: statusValidation.reason,
-                        runType,
-                      });
-                    } catch (logError) {
-                      console.error('Failed to log payment processing (skipped - blocked status):', logError);
-                    }
-                    continue;
-                  }
-                }
-
-                // CRITICAL: Preflight check - Query SMAX for existing payments on this date
-                // This prevents duplicate charges if SMAX already has a payment scheduled
-                if (settings?.smaxEnabled && scheduleAccount?.filenumber) {
-                  try {
-                    console.log(`🔍 Preflight check: Querying SMAX for existing payments on ${today} for filenumber ${scheduleAccount.filenumber}`);
-                    const smaxArrangement = await smaxService.getPaymentArrangement(tenant.id, scheduleAccount.filenumber);
-                    
-                    if (smaxArrangement) {
-                      // Normalize dates for comparison (handle ISO timestamps, timezone strings, etc.)
-                      const normalizeDate = (dateStr: string | null | undefined): string | null => {
-                        if (!dateStr) return null;
-                        try {
-                          // Parse date and return YYYY-MM-DD format
-                          const date = new Date(dateStr);
-                          if (isNaN(date.getTime())) return null;
-                          return date.toISOString().split('T')[0];
-                        } catch {
-                          return null;
-                        }
-                      };
-
-                      // Check if SMAX has a payment scheduled for today
-                      // Compare nextPaymentDate field
-                      const smaxNextDate = normalizeDate(smaxArrangement.nextPaymentDate);
-                      if (smaxNextDate === today) {
-                        console.log(`⚠️ SMAX nextPaymentDate matches today - skipping Chain payment to prevent duplicate`);
-                        failedPayments.push({
-                          scheduleId: schedule.id,
-                          accountId: schedule.accountId,
-                          reason: 'SMAX payment already scheduled for this date'
-                        });
-                        continue;
-                      }
-
-                      // Also check futurePayments array if present
-                      if (Array.isArray(smaxArrangement.futurePayments)) {
-                        const hasPaymentToday = smaxArrangement.futurePayments.some((payment: any) => {
-                          const paymentDate = normalizeDate(payment.paymentDate || payment.date || payment.scheduledDate);
-                          return paymentDate === today;
-                        });
-
-                        if (hasPaymentToday) {
-                          console.log(`⚠️ SMAX has future payment for today - skipping Chain payment to prevent duplicate`);
-                          failedPayments.push({
-                            scheduleId: schedule.id,
-                            accountId: schedule.accountId,
-                            reason: 'SMAX payment already scheduled for this date (future payments array)'
-                          });
-                          continue;
-                        }
-                      }
-                    }
-                  } catch (smaxError) {
-                    console.warn('⚠️ SMAX preflight check failed (continuing with Chain payment):', smaxError);
-                    // Continue with payment if SMAX check fails (better to process than skip)
-                  }
-                }
-                
-                // Get payment method
-                const paymentMethods = await storage.getPaymentMethodsByConsumer(consumer.id, tenant.id);
-                const paymentMethod = paymentMethods.find(pm => pm.id === schedule.paymentMethodId);
-                
-                if (!paymentMethod) {
-                  console.error(`Payment method not found for schedule ${schedule.id}`);
-                  try {
-                    await storage.createPaymentProcessingLog({
-                      tenantId: tenant.id,
-                      scheduleId: schedule.id,
-                      consumerId: consumer.id,
-                      accountId: schedule.accountId,
-                      consumerName: `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim(),
-                      accountNumber: scheduleAccount?.accountNumber || undefined,
-                      creditor: scheduleAccount?.creditor || undefined,
-                      amountCents: schedule.amountCents,
-                      status: 'skipped',
-                      failureReason: 'Payment method not found',
-                      runType,
-                    });
-                  } catch (logError) {
-                    console.error('Failed to log payment processing (skipped - no payment method):', logError);
-                  }
-                  continue;
-                }
-
-                // Determine payment provider
-                const merchantProvider = settings?.merchantProvider || 'usaepay';
-                
-                // Determine payment amount
-                // For settlement/SIF arrangements, always use the scheduled amount (the whole point is paying less than full balance)
-                // For regular payment plans, use remaining balance only if it's LESS than scheduled amount (to handle final payment rounding)
-                let paymentAmountCents = schedule.amountCents;
-                const isFinalPayment = schedule.remainingPayments !== null && schedule.remainingPayments === 1;
-                
-                if (isFinalPayment) {
-                  // Get current account balance for final payment
-                  const account = await storage.getAccount(schedule.accountId);
-                  if (account && account.balanceCents > 0) {
-                    // Only use account balance if it's LESS than the scheduled amount
-                    // This handles rounding in payment plans where the last payment might be slightly less
-                    // For settlements (SIF), the scheduled amount is intentionally LESS than the balance, so we keep it
-                    if (account.balanceCents < schedule.amountCents) {
-                      console.log(`💳 Final payment - using remaining balance: $${(account.balanceCents / 100).toFixed(2)} (less than scheduled $${(schedule.amountCents / 100).toFixed(2)})`);
-                      paymentAmountCents = account.balanceCents;
-                    } else {
-                      console.log(`💳 Final payment - using scheduled amount: $${(schedule.amountCents / 100).toFixed(2)} (settlement/SIF - balance is $${(account.balanceCents / 100).toFixed(2)})`);
-                    }
-                  }
-                }
-
-                let success = false;
-                let paymentResult: any = null;
-
-                // Route to appropriate payment processor
-                if (merchantProvider === 'authorize_net') {
-                  // ===== AUTHORIZE.NET SCHEDULED PAYMENT =====
-                  console.log('🔵 Processing scheduled payment with Authorize.net');
-
-                  // Verify Authorize.net is configured
-                  if (!settings?.authnetApiLoginId || !settings?.authnetTransactionKey) {
-                    console.error(`Authorize.net not configured for tenant ${tenant.id}`);
-                    failedPayments.push({
-                      scheduleId: schedule.id,
-                      accountId: schedule.accountId,
-                      reason: 'Authorize.net credentials not configured'
-                    });
-                    try {
-                      await storage.createPaymentProcessingLog({
-                        tenantId: tenant.id,
-                        scheduleId: schedule.id,
-                        consumerId: consumer.id,
-                        accountId: schedule.accountId,
-                        consumerName: `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim(),
-                        accountNumber: scheduleAccount?.accountNumber || undefined,
-                        creditor: scheduleAccount?.creditor || undefined,
-                        amountCents: paymentAmountCents,
-                        status: 'failed',
-                        processor: 'authorize_net',
-                        failureReason: 'Authorize.net credentials not configured',
-                        cardLast4: paymentMethod.cardLast4 || undefined,
-                        cardBrand: paymentMethod.cardBrand || undefined,
-                        runType,
-                      });
-                    } catch (logError) {
-                      console.error('Failed to log payment processing (failed - authnet creds):', logError);
-                    }
-                    continue;
-                  }
-
-                  // Initialize Authorize.net service
-                  const { AuthnetService } = await import('./authnetService');
-                  const authnetService = new AuthnetService({
-                    apiLoginId: settings.authnetApiLoginId.trim(),
-                    transactionKey: settings.authnetTransactionKey.trim(),
-                    useSandbox: settings.useSandbox ?? true,
-                  });
-
-                  // Parse payment token (format: customerProfileId|paymentProfileId)
-                  const [customerProfileId, paymentProfileId] = paymentMethod.paymentToken.split('|');
-
-                  if (!customerProfileId || !paymentProfileId) {
-                    console.error(`Invalid Authorize.net payment token format for schedule ${schedule.id}`);
-                    failedPayments.push({
-                      scheduleId: schedule.id,
-                      accountId: schedule.accountId,
-                      reason: 'Invalid payment token format'
-                    });
-                    continue;
-                  }
-
-                  // Charge the saved payment profile
-                  const authnetResult = await authnetService.chargeCustomerProfile({
-                    customerProfileId,
-                    paymentProfileId,
-                    amount: paymentAmountCents / 100,
-                    invoice: schedule.accountId.substring(0, 20),
-                    description: `Scheduled ${schedule.arrangementType} payment`,
-                  });
-
-                  paymentResult = authnetResult;
-                  success = authnetResult.success;
-                  
-                  if (!success) {
-                    console.error('❌ Authorize.net scheduled payment failed:', authnetResult.errorMessage);
-                    
-                    // Auto-change account status to "declined" when scheduled payment fails
-                    try {
-                      const account = await storage.getAccount(schedule.accountId);
-                      if (account && account.tenantId === tenant.id) {
-                        const currentStatus = account.status?.toLowerCase();
-                        // Only change if not already terminal status (recalled/closed)
-                        if (currentStatus !== 'recalled' && currentStatus !== 'closed') {
-                          await storage.updateAccount(schedule.accountId, { status: "declined" });
-                          console.log(`🔄 Auto-changed account ${schedule.accountId} status to "declined" (scheduled payment declined)`);
-                        }
-                      }
-                    } catch (statusError) {
-                      console.error('Failed to auto-update account status on scheduled payment decline:', statusError);
-                    }
-                  }
-                } else if (merchantProvider === 'nmi') {
-                  // ===== NMI SCHEDULED PAYMENT =====
-                  // Support both NMI Customer Vault and SMAX card storage
-                  const isNMIVaultToken = paymentMethod.paymentToken.startsWith('nmi_vault_');
-                  
-                  if (isNMIVaultToken) {
-                    // ===== NMI Customer Vault =====
-                    console.log('🟣 Processing scheduled payment with NMI Customer Vault');
-
-                    // Verify NMI is configured
-                    if (!settings?.nmiSecurityKey) {
-                      console.error(`NMI not configured for tenant ${tenant.id}`);
-                      failedPayments.push({
-                        scheduleId: schedule.id,
-                        accountId: schedule.accountId,
-                        reason: 'NMI credentials not configured'
-                      });
-                      try {
-                        await storage.createPaymentProcessingLog({
-                          tenantId: tenant.id,
-                          scheduleId: schedule.id,
-                          consumerId: consumer.id,
-                          accountId: schedule.accountId,
-                          consumerName: `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim(),
-                          accountNumber: scheduleAccount?.accountNumber || undefined,
-                          creditor: scheduleAccount?.creditor || undefined,
-                          amountCents: paymentAmountCents,
-                          status: 'failed',
-                          processor: 'nmi',
-                          failureReason: 'NMI credentials not configured',
-                          cardLast4: paymentMethod.cardLast4 || undefined,
-                          cardBrand: paymentMethod.cardBrand || undefined,
-                          runType,
-                        });
-                      } catch (logError) {
-                        console.error('Failed to log payment processing (failed - NMI creds):', logError);
-                      }
-                      continue;
-                    }
-
-                    // Extract vault ID from token
-                    const vaultId = paymentMethod.paymentToken.replace('nmi_vault_', '').trim();
-
-                    // Validate vault ID exists
-                    if (!vaultId) {
-                      console.error(`Invalid or missing NMI vault ID for schedule ${schedule.id}`);
-                      failedPayments.push({
-                        scheduleId: schedule.id,
-                        accountId: schedule.accountId,
-                        reason: 'Invalid payment method token'
-                      });
-                      continue;
-                    }
-
-                    try {
-                      // Initialize NMI service
-                      const { NMIService } = await import('./nmiService');
-                      const nmiService = new NMIService({
-                        securityKey: settings.nmiSecurityKey.trim(),
-                      });
-
-                      // Charge via Customer Vault
-                      const nmiResult = await nmiService.chargeCustomerVault({
-                        customerVaultId: vaultId,
-                        amount: parseFloat((paymentAmountCents / 100).toFixed(2)),
-                        orderid: schedule.accountId || `schedule_${schedule.id}`,
-                      });
-
-                      paymentResult = nmiResult;
-                      success = nmiResult.success;
-                      
-                      if (!success) {
-                        console.error('❌ NMI vault scheduled payment failed:', nmiResult.responseText);
-                        
-                        // Auto-change account status to "declined" when scheduled payment fails
-                        try {
-                          const account = await storage.getAccount(schedule.accountId);
-                          if (account && account.tenantId === tenant.id) {
-                            const currentStatus = account.status?.toLowerCase();
-                            // Only change if not already terminal status (recalled/closed)
-                            if (currentStatus !== 'recalled' && currentStatus !== 'closed') {
-                              await storage.updateAccount(schedule.accountId, { status: "declined" });
-                              console.log(`🔄 Auto-changed account ${schedule.accountId} status to "declined" (scheduled payment declined)`);
-                            }
-                          }
-                        } catch (statusError) {
-                          console.error('Failed to auto-update account status on scheduled payment decline:', statusError);
-                        }
-                        
-                        failedPayments.push({
-                          scheduleId: schedule.id,
-                          accountId: schedule.accountId,
-                          reason: nmiResult.errorMessage || nmiResult.responseText || 'NMI vault payment declined'
-                        });
-                        continue;
-                      } else {
-                        console.log('✅ NMI vault scheduled payment succeeded');
-                      }
-                    } catch (nmiError: any) {
-                      console.error('❌ NMI vault scheduled payment exception:', nmiError);
-                      paymentResult = { success: false, errorMessage: nmiError.message, responsetext: nmiError.message };
-                      success = false;
-                      failedPayments.push({
-                        scheduleId: schedule.id,
-                        accountId: schedule.accountId,
-                        reason: nmiError.message || 'NMI vault payment processing failed'
-                      });
-                      continue;
-                    }
-                  } else {
-                    // ===== NMI via SMAX (legacy flow) =====
-                    // SMAX-stored card tokens require NMI Security Key to process
-                    console.log('🟣 Processing scheduled payment with NMI (SMAX-stored card)');
-
-                    if (!settings?.nmiSecurityKey) {
-                      console.error(`NMI not configured for tenant ${tenant.id} (required to charge SMAX-stored cards)`);
-                      failedPayments.push({
-                        scheduleId: schedule.id,
-                        accountId: schedule.accountId,
-                        reason: 'NMI credentials required to process SMAX-stored card payments'
-                      });
-                      continue;
-                    }
-
-                    try {
-                      const { NMIService } = await import('./nmiService');
-                      const nmiServiceInstance = new NMIService({
-                        securityKey: settings.nmiSecurityKey.trim(),
-                      });
-
-                      const nmiLegacyResult = await nmiServiceInstance.chargeCustomerVault({
-                        customerVaultId: paymentMethod.paymentToken.trim(),
-                        amount: parseFloat((paymentAmountCents / 100).toFixed(2)),
-                        orderid: schedule.accountId || `schedule_${schedule.id}`,
-                      });
-
-                      paymentResult = nmiLegacyResult;
-                      success = nmiLegacyResult.success;
-                      
-                      if (!success) {
-                        console.error('❌ NMI (SMAX-stored card) scheduled payment failed:', nmiLegacyResult.responseText);
-                      }
-                    } catch (nmiSmaxError: any) {
-                      console.error('❌ NMI (SMAX-stored card) scheduled payment exception:', nmiSmaxError);
-                      paymentResult = { success: false, errorMessage: nmiSmaxError.message };
-                      success = false;
-                      failedPayments.push({
-                        scheduleId: schedule.id,
-                        accountId: schedule.accountId,
-                        reason: nmiSmaxError.message || 'NMI payment processing failed for SMAX-stored card'
-                      });
-                      continue;
-                    }
-                  }
-                } else {
-                  // ===== USAEPAY SCHEDULED PAYMENT =====
-                  console.log('🟢 Processing scheduled payment with USAePay');
-
-                  // Verify USAePay is configured
-                  if (!settings?.merchantApiKey || !settings?.merchantApiPin) {
-                    console.error(`USAePay not configured for tenant ${tenant.id}`);
-                    failedPayments.push({
-                      scheduleId: schedule.id,
-                      accountId: schedule.accountId,
-                      reason: 'USAePay credentials not configured'
-                    });
-                    try {
-                      await storage.createPaymentProcessingLog({
-                        tenantId: tenant.id,
-                        scheduleId: schedule.id,
-                        consumerId: consumer.id,
-                        accountId: schedule.accountId,
-                        consumerName: `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim(),
-                        accountNumber: scheduleAccount?.accountNumber || undefined,
-                        creditor: scheduleAccount?.creditor || undefined,
-                        amountCents: paymentAmountCents,
-                        status: 'failed',
-                        processor: 'usaepay',
-                        failureReason: 'USAePay credentials not configured',
-                        cardLast4: paymentMethod.cardLast4 || undefined,
-                        cardBrand: paymentMethod.cardBrand || undefined,
-                        runType,
-                      });
-                    } catch (logError) {
-                      console.error('Failed to log payment processing (failed - USAePay creds):', logError);
-                    }
-                    continue;
-                  }
-
-                  const usaepayBaseUrl = settings.useSandbox 
-                    ? "https://sandbox.usaepay.com/api/v2"
-                    : "https://secure.usaepay.com/api/v2";
-
-                  // Generate proper USAePay API v2 authentication header with hash
-                  const authHeader = generateUSAePayAuthHeader(settings.merchantApiKey, settings.merchantApiPin);
-
-                  // Process payment using saved token (USAePay v2 format)
-                  const paymentPayload = {
-                    amount: (paymentAmountCents / 100).toFixed(2),
-                    invoice: schedule.accountId,
-                    description: `Scheduled ${schedule.arrangementType} payment`,
-                    source: {
-                      key: paymentMethod.paymentToken
-                    },
-                    billingAddress: {
-                      firstName: paymentMethod.cardholderName?.split(' ')[0] || '',
-                      lastName: paymentMethod.cardholderName?.split(' ').slice(1).join(' ') || '',
-                      zip: paymentMethod.billingZip || '',
-                      street: '',
-                      city: ''
-                    }
+                const smaxArrangement = await smaxService.getPaymentArrangement(tenant.id, scheduleAccount.filenumber);
+                if (smaxArrangement) {
+                  const normalizeDate = (dateStr: string | null | undefined): string | null => {
+                    if (!dateStr) return null;
+                    try { const d = new Date(dateStr); return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0]; } catch { return null; }
                   };
-
-                  const paymentResponse = await fetch(`${usaepayBaseUrl}/transactions`, {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      'Authorization': authHeader
-                    },
-                    body: JSON.stringify(paymentPayload)
-                  });
-
-                  paymentResult = await paymentResponse.json();
-                  success = paymentResult.result === 'Approved' || paymentResult.status === 'Approved';
-                }
-
-                // Create payment record
-                // Support all three processors: NMI (transactionid), USAePay (refnum), Authorize.net (key)
-                const extractedTransactionId = paymentResult.transactionid || paymentResult.refnum || paymentResult.key || `tx_${Date.now()}`;
-                
-                await storage.createPayment({
-                  tenantId: tenant.id,
-                  consumerId: consumer.id,
-                  accountId: schedule.accountId,
-                  amountCents: paymentAmountCents,
-                  paymentMethod: 'credit_card',
-                  status: success ? 'completed' : 'failed',
-                  transactionId: extractedTransactionId,
-                  processorResponse: JSON.stringify(paymentResult),
-                  processedAt: success ? new Date() : null,
-                  notes: `Scheduled payment - ${paymentMethod.cardholderName} ending in ${paymentMethod.cardLast4}`,
-                });
-
-                if (success) {
-                  // Update account balance
-                  const account = await storage.getAccount(schedule.accountId);
-                  if (account) {
-                    const newBalance = Math.max(0, (account.balanceCents || 0) - paymentAmountCents);
-                    console.log('💰 Scheduled payment balance update:', {
-                      accountId: schedule.accountId,
-                      previousBalance: account.balanceCents,
-                      paymentAmount: paymentAmountCents,
-                      newBalance
-                    });
-                    await storage.updateAccount(schedule.accountId, { balanceCents: newBalance });
-
-                    // Create approval request for SMAX update
-                    // Note: The payment already exists in SMAX as PENDING (from when arrangement was created)
-                    // We need admin approval before updating it to COMPLETED
-                    if (account.filenumber) {
-                      try {
-                        // Prepare SMAX payment data for approval
-                        const smaxPaymentData = {
-                          paymentdate: today,
-                          paymentamount: (paymentAmountCents / 100).toString(),
-                          payorname: `${consumer.firstName} ${consumer.lastName}`.trim() || 'Consumer',
-                          paymentmethod: 'CREDIT CARD',
-                          cardtype: paymentMethod.cardBrand || 'Unknown',
-                          paymentstatus: 'COMPLETED',
-                          transactionid: extractedTransactionId,
-                        };
-
-                        // Create payment approval request instead of auto-updating SMAX
-                        await storage.createPaymentApproval({
-                          tenantId: tenant.id,
-                          approvalType: 'payment',
-                          scheduleId: schedule.id,
-                          accountId: schedule.accountId,
-                          consumerId: consumer.id,
-                          filenumber: account.filenumber,
-                          paymentDate: schedule.nextPaymentDate,
-                          amountCents: paymentAmountCents,
-                          transactionId: extractedTransactionId,
-                          paymentData: smaxPaymentData,
-                          status: 'pending',
-                        });
-
-                        console.log(`✅ Payment approval request created for filenumber: ${account.filenumber}, date: ${schedule.nextPaymentDate}`);
-                        console.log(`⏸️  SMAX update pending approval - admin must review before syncing to SMAX`);
-                      } catch (approvalError) {
-                        console.error(`❌ Failed to create payment approval request:`, approvalError);
-                        
-                        // Fallback: If approval creation fails, insert payment directly to SMAX (backwards compatibility)
-                        console.warn(`⚠️ Falling back to direct SMAX insert due to approval creation failure`);
-                        const smaxPaymentData = smaxService.createSmaxPaymentData({
-                          filenumber: account.filenumber,
-                          paymentamount: paymentAmountCents / 100,
-                          paymentdate: today,
-                          payorname: `${consumer.firstName} ${consumer.lastName}`.trim() || 'Consumer',
-                          paymentmethod: 'CREDIT CARD',
-                          cardtype: paymentMethod.cardBrand || 'Unknown',
-                          cardLast4: paymentMethod.cardLast4,
-                          transactionid: extractedTransactionId,
-                        });
-                        const smaxInserted = await smaxService.insertPayment(tenant.id, smaxPaymentData);
-                        if (smaxInserted) {
-                          console.log(`✅ SMAX payment inserted (fallback) for filenumber: ${account.filenumber}`);
-                          // Send note about successful scheduled payment
-                          await smaxService.sendPaymentNote(tenant.id, {
-                            filenumber: account.filenumber,
-                            status: 'processed',
-                            amount: paymentAmountCents / 100,
-                            transactionId: extractedTransactionId
-                          });
-                        }
-                      }
-
-                      // Insert payment attempt to SMAX
-                      try {
-                        await smaxService.insertAttempt(tenant.id, {
-                          filenumber: account.filenumber,
-                          attempttype: 'Payment',
-                          attemptdate: today,
-                          notes: `Scheduled payment of $${(paymentAmountCents / 100).toFixed(2)} processed successfully`,
-                          result: 'Success',
-                        });
-                      } catch (smaxError) {
-                        console.error('❌ Error sending payment attempt to SMAX:', smaxError);
-                        // Don't fail the whole payment if SMAX sync fails
-                      }
-                    } else {
-                      console.warn(`⚠️ No filenumber for account ${schedule.accountId} - skipping SMAX sync`);
-                    }
+                  if (normalizeDate(smaxArrangement.nextPaymentDate) === today) {
+                    console.log(`⚠️ SMAX has payment for today - skipping to prevent duplicate`);
+                    failedPayments.push({ scheduleId: schedule.id, accountId: schedule.accountId, reason: 'SMAX payment already scheduled for this date' });
+                    continue;
                   }
-
-                  // Update schedule for next payment
-                  const nextPayment = calculateNextPaymentDate(new Date(schedule.nextPaymentDate), schedule.frequency || 'monthly');
-                  
-                  const updatedRemainingPayments = schedule.remainingPayments !== null 
-                    ? schedule.remainingPayments - 1 
-                    : null;
-                  
-                  const scheduleStatus = updatedRemainingPayments === 0 ? 'completed' : 'active';
-
-                  await storage.updatePaymentSchedule(schedule.id, tenant.id, {
-                    nextPaymentDate: nextPayment.toISOString().split('T')[0],
-                    remainingPayments: updatedRemainingPayments,
-                    lastProcessedAt: new Date(),
-                    status: scheduleStatus,
-                    failedAttempts: 0,
-                  });
-
-                  // Update consumer payment status
-                  // Check if consumer has any other active schedules
-                  const allConsumerSchedules = await storage.getPaymentSchedulesByConsumer(consumer.id, tenant.id);
-                  const hasActiveSchedules = allConsumerSchedules.some(s => 
-                    s.id !== schedule.id && s.status === 'active'
-                  );
-                  
-                  // Update status based on schedule state
-                  if (hasActiveSchedules || scheduleStatus === 'active') {
-                    // Still has active payment schedules
-                    await storage.updateConsumer(consumer.id, { paymentStatus: 'pending_payment' });
-                  } else if (!hasActiveSchedules) {
-                    // No active schedules - check if account is fully paid
-                    const account = await storage.getAccount(schedule.accountId);
-                    const accountPaidOff = !account || account.balanceCents === 0;
-                    
-                    if (accountPaidOff) {
-                      // Account paid off, consumer is current
-                      await storage.updateConsumer(consumer.id, { paymentStatus: 'current' });
-                    } else {
-                      // Account still has balance but no payment plan
-                      await storage.updateConsumer(consumer.id, { paymentStatus: 'no_payment_plan' });
-                    }
-                  }
-
-                  // Send email notification to company contact
-                  try {
-                    const account = await storage.getAccount(schedule.accountId);
-                    await emailService.sendPaymentNotification({
-                      tenantId: tenant.id,
-                      consumerName: `${consumer.firstName} ${consumer.lastName}`,
-                      accountNumber: account?.accountNumber || 'N/A',
-                      amountCents: paymentAmountCents,
-                      paymentMethod: `Card ending in ${paymentMethod.cardLast4}`,
-                      transactionId: paymentResult.refnum || paymentResult.key || undefined,
-                      paymentType: 'scheduled',
-                    }).catch(err => console.error('Failed to send scheduled payment notification:', err));
-
-                    // Send receipt email to consumer
-                    if (consumer.email) {
-                      const paymentAmountFormatted = `$${(paymentAmountCents / 100).toFixed(2)}`;
-                      const consumerName = `${consumer.firstName} ${consumer.lastName}`;
-                      const nextPaymentFormatted = nextPayment.toLocaleDateString('en-US', {
-                        month: 'long',
-                        day: 'numeric',
-                        year: 'numeric'
-                      });
-                      
-                      // Check if there are remaining payments (guard against null)
-                      const hasRemainingPayments = updatedRemainingPayments !== null && updatedRemainingPayments > 0;
-                      const isFinalPayment = updatedRemainingPayments !== null && updatedRemainingPayments === 0;
-                      
-                      const emailSubject = 'Payment Received - Thank You';
-                      const emailBody = `
-                        <h2>Payment Received</h2>
-                        <p>Dear ${consumerName},</p>
-                        <p>Your scheduled payment has been successfully processed.</p>
-                        <h3>Payment Details:</h3>
-                        <ul>
-                          <li><strong>Amount Paid:</strong> ${paymentAmountFormatted}</li>
-                          <li><strong>Account:</strong> ${account?.creditor || 'Your Account'}</li>
-                          <li><strong>Payment Date:</strong> ${new Date().toLocaleDateString('en-US', { 
-                            month: 'long', 
-                            day: 'numeric', 
-                            year: 'numeric' 
-                          })}</li>
-                          <li><strong>Transaction ID:</strong> ${paymentResult.refnum || paymentResult.key || 'N/A'}</li>
-                          ${hasRemainingPayments ? `<li><strong>Next Payment:</strong> ${nextPaymentFormatted}</li>` : ''}
-                          ${hasRemainingPayments ? `<li><strong>Payments Remaining:</strong> ${updatedRemainingPayments}</li>` : ''}
-                        </ul>
-                        ${isFinalPayment ? '<p><strong>Congratulations!</strong> This was your final scheduled payment.</p>' : ''}
-                        <p>Thank you for your payment.</p>
-                        <p>Best regards,<br>${tenant.name}</p>
-                      `;
-                      
-                      await emailService.sendEmail({
-                        to: consumer.email,
-                        subject: emailSubject,
-                        html: emailBody,
-                        from: `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>`,
-                        tenantId: tenant.id,
-                      });
-                      console.log(`📧 Payment receipt sent to consumer: ${consumer.email}`);
-                    }
-                  } catch (notificationError) {
-                    console.error('Error sending scheduled payment notification:', notificationError);
-                  }
-
-                  processedPayments.push({ scheduleId: schedule.id, consumerId: consumer.id });
-                  try {
-                    await storage.createPaymentProcessingLog({
-                      tenantId: tenant.id,
-                      scheduleId: schedule.id,
-                      consumerId: consumer.id,
-                      accountId: schedule.accountId,
-                      consumerName: `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim(),
-                      accountNumber: scheduleAccount?.accountNumber || undefined,
-                      creditor: scheduleAccount?.creditor || undefined,
-                      amountCents: paymentAmountCents,
-                      status: 'success',
-                      processor: merchantProvider,
-                      transactionId: extractedTransactionId,
-                      cardLast4: paymentMethod.cardLast4 || undefined,
-                      cardBrand: paymentMethod.cardBrand || undefined,
-                      runType,
-                    });
-                  } catch (logError) {
-                    console.error('Failed to log payment processing (success):', logError);
-                  }
-                } else {
-                  // Payment failed - update failed attempts and store failure reason
-                  const failedAttempts = (schedule.failedAttempts || 0) + 1;
-                  const scheduleStatus = failedAttempts >= 3 ? 'failed' : 'active';
-                  const failureReason = paymentResult.error || paymentResult.result_code || 'Payment declined';
-                  
-                  // Get account details for comprehensive logging
-                  const failedAccount = await storage.getAccount(schedule.accountId);
-                  const consumerName = `${consumer.firstName} ${consumer.lastName}`.trim();
-                  const accountInfo = failedAccount 
-                    ? `Account: ${failedAccount.accountNumber || 'N/A'}, Creditor: ${failedAccount.creditor || 'N/A'}` 
-                    : 'Account details unavailable';
-                  
-                  // Log comprehensive payment failure details
-                  console.error(`❌ SCHEDULED PAYMENT FAILED:`);
-                  console.error(`   Consumer: ${consumerName} (ID: ${consumer.id})`);
-                  console.error(`   ${accountInfo}`);
-                  console.error(`   Amount: $${(paymentAmountCents / 100).toFixed(2)}`);
-                  console.error(`   Payment Method: ${paymentMethod.cardBrand || 'Card'} ending in ${paymentMethod.cardLast4}`);
-                  console.error(`   Failure Reason: ${failureReason}`);
-                  console.error(`   Failed Attempts: ${failedAttempts}/3`);
-                  console.error(`   Status: ${scheduleStatus}`);
-
-                  await storage.updatePaymentSchedule(schedule.id, tenant.id, {
-                    failedAttempts,
-                    status: scheduleStatus,
-                    lastFailureReason: failureReason,
-                    lastProcessedAt: new Date(),
-                  });
-
-                  // Update consumer status to payment_failed
-                  await storage.updateConsumer(consumer.id, { paymentStatus: 'payment_failed' });
-
-                  // Auto-change account status to "declined" when scheduled payment fails
-                  if (failedAccount && failedAccount.tenantId === tenant.id) {
-                    try {
-                      const currentStatus = failedAccount.status?.toLowerCase();
-                      // Only change if not already terminal status (recalled/closed)
-                      if (currentStatus !== 'recalled' && currentStatus !== 'closed') {
-                        await storage.updateAccount(schedule.accountId, { status: "declined" });
-                        console.log(`🔄 Auto-changed account ${schedule.accountId} status to "declined" (scheduled payment declined)`);
-                      }
-                    } catch (statusError) {
-                      console.error('Failed to auto-update account status on scheduled payment decline:', statusError);
-                    }
-                  }
-
-                  // Send note to SMAX about failed scheduled payment
-                  if (failedAccount?.filenumber) {
-                    try {
-                      await smaxService.sendPaymentNote(tenant.id, {
-                        filenumber: failedAccount.filenumber,
-                        status: 'declined',
-                        amount: paymentAmountCents / 100,
-                        reason: failureReason
-                      });
-                      console.log(`📝 SMAX note created for failed payment on account ${failedAccount.filenumber}`);
-                    } catch (smaxError) {
-                      console.error('Failed to send declined payment note to SMAX:', smaxError);
-                    }
-                  }
-
-                  // Send decline notification email to consumer
-                  if (consumer.email) {
-                    try {
-                      const paymentAmountFormatted = `$${(paymentAmountCents / 100).toFixed(2)}`;
-                      const emailSubject = 'Scheduled Payment Could Not Be Processed';
-                      const emailBody = `
-                        <h2>Payment Could Not Be Processed</h2>
-                        <p>Dear ${consumerName},</p>
-                        <p>We were unable to process your scheduled payment. Please review the details below.</p>
-                        <h3>Payment Details:</h3>
-                        <ul>
-                          <li><strong>Amount:</strong> ${paymentAmountFormatted}</li>
-                          <li><strong>Account:</strong> ${failedAccount?.creditor || 'Your Account'}</li>
-                          <li><strong>Date:</strong> ${new Date().toLocaleDateString('en-US', { 
-                            month: 'long', 
-                            day: 'numeric', 
-                            year: 'numeric' 
-                          })}</li>
-                          <li><strong>Reason:</strong> ${failureReason}</li>
-                        </ul>
-                        <p>Please log in to your account to update your payment method or contact us if you need assistance.</p>
-                        <p>Thank you,<br/>${tenant.name}</p>
-                      `;
-                      
-                      await emailService.sendEmail({
-                        to: consumer.email,
-                        subject: emailSubject,
-                        html: emailBody,
-                        from: `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>`,
-                        tenantId: tenant.id,
-                      });
-                      console.log(`📧 Decline notification sent to consumer: ${consumer.email}`);
-                    } catch (emailError) {
-                      console.error('Failed to send decline notification to consumer:', emailError);
-                    }
-                  }
-
-                  failedPayments.push({ 
-                    scheduleId: schedule.id, 
-                    consumerId: consumer.id,
-                    consumerName,
-                    accountNumber: failedAccount?.accountNumber || 'Unknown',
-                    creditor: failedAccount?.creditor || 'Unknown',
-                    amount: paymentAmountCents / 100,
-                    error: failureReason,
-                    attemptCount: failedAttempts
-                  });
-                  try {
-                    await storage.createPaymentProcessingLog({
-                      tenantId: tenant.id,
-                      scheduleId: schedule.id,
-                      consumerId: consumer.id,
-                      accountId: schedule.accountId,
-                      consumerName: consumerName || undefined,
-                      accountNumber: failedAccount?.accountNumber || undefined,
-                      creditor: failedAccount?.creditor || undefined,
-                      amountCents: paymentAmountCents,
-                      status: 'failed',
-                      processor: merchantProvider,
-                      failureReason,
-                      cardLast4: paymentMethod.cardLast4 || undefined,
-                      cardBrand: paymentMethod.cardBrand || undefined,
-                      runType,
-                    });
-                  } catch (logError) {
-                    console.error('Failed to log payment processing (failed):', logError);
+                  if (Array.isArray(smaxArrangement.futurePayments) && smaxArrangement.futurePayments.some((p: any) => normalizeDate(p.paymentDate || p.date || p.scheduledDate) === today)) {
+                    console.log(`⚠️ SMAX has future payment for today - skipping to prevent duplicate`);
+                    failedPayments.push({ scheduleId: schedule.id, accountId: schedule.accountId, reason: 'SMAX payment already scheduled for this date (future payments)' });
+                    continue;
                   }
                 }
-              } catch (err) {
-                console.error(`Error processing schedule ${schedule.id}:`, err);
-                failedPayments.push({ 
-                  scheduleId: schedule.id, 
-                  error: err instanceof Error ? err.message : 'Unknown error'
-                });
+              } catch (smaxError) {
+                console.warn('⚠️ SMAX preflight check failed (continuing):', smaxError);
               }
             }
-          }
-        }
-      }
 
-      // Cleanup: Mark expired payment schedules as completed
-      console.log('🧹 Cleaning up expired payment schedules...');
-      let cleanedUpCount = 0;
-      
-      for (const tenant of allTenants) {
-        const consumers = await storage.getConsumersByTenant(tenant.id);
-        
-        for (const consumer of consumers) {
-          const schedules = await storage.getPaymentSchedulesByConsumer(consumer.id, tenant.id);
-          
-          for (const schedule of schedules) {
-            // Skip if already completed or cancelled
-            if (schedule.status === 'completed' || schedule.status === 'cancelled') {
+            const paymentMethods = await storage.getPaymentMethodsByConsumer(consumer.id, tenant.id);
+            const paymentMethod = paymentMethods.find(pm => pm.id === schedule.paymentMethodId);
+            if (!paymentMethod) {
+              console.error(`Payment method not found for schedule ${schedule.id}`);
+              try { await storage.createPaymentProcessingLog({ tenantId: tenant.id, scheduleId: schedule.id, consumerId: consumer.id, accountId: schedule.accountId, consumerName, amountCents: schedule.amountCents, status: 'skipped', failureReason: 'Payment method not found', runType }); } catch (logError) { console.error('Failed to log:', logError); }
               continue;
             }
-            
-            let shouldComplete = false;
-            
-            // Check if endDate has passed
-            if (schedule.endDate) {
-              const endDate = new Date(schedule.endDate);
-              const today = new Date();
-              today.setHours(0, 0, 0, 0);
-              
-              if (endDate < today) {
-                shouldComplete = true;
-                console.log(`📅 Schedule ${schedule.id} has passed its end date (${schedule.endDate})`);
+
+            let paymentAmountCents = schedule.amountCents;
+            const isLastPayment = schedule.remainingPayments !== null && schedule.remainingPayments === 1;
+            if (isLastPayment) {
+              const acct = await storage.getAccount(schedule.accountId);
+              if (acct && acct.balanceCents > 0 && acct.balanceCents < schedule.amountCents) {
+                console.log(`💳 Final payment - using remaining balance: $${(acct.balanceCents / 100).toFixed(2)}`);
+                paymentAmountCents = acct.balanceCents;
               }
             }
-            
-            // Check if remainingPayments is 0
-            if (schedule.remainingPayments !== null && schedule.remainingPayments <= 0) {
-              shouldComplete = true;
-              console.log(`✅ Schedule ${schedule.id} has no remaining payments`);
-            }
-            
-            if (shouldComplete) {
-              await storage.updatePaymentSchedule(schedule.id, tenant.id, {
-                status: 'completed'
+
+            let success = false;
+            let paymentResult: any = null;
+
+            if (merchantProvider === 'authorize_net') {
+              if (!settings?.authnetApiLoginId || !settings?.authnetTransactionKey) {
+                failedPayments.push({ scheduleId: schedule.id, accountId: schedule.accountId, reason: 'Authorize.net credentials not configured' });
+                try { await storage.createPaymentProcessingLog({ tenantId: tenant.id, scheduleId: schedule.id, consumerId: consumer.id, accountId: schedule.accountId, consumerName, amountCents: paymentAmountCents, status: 'failed', processor: 'authorize_net', failureReason: 'Authorize.net credentials not configured', cardLast4: paymentMethod.cardLast4 || undefined, cardBrand: paymentMethod.cardBrand || undefined, runType }); } catch (logError) { console.error('Failed to log:', logError); }
+                continue;
+              }
+              console.log('🔵 Processing scheduled payment with Authorize.net');
+              const { AuthnetService } = await import('./authnetService');
+              const authnetService = new AuthnetService({ apiLoginId: settings.authnetApiLoginId.trim(), transactionKey: settings.authnetTransactionKey.trim(), useSandbox: settings.useSandbox ?? true });
+              const [customerProfileId, paymentProfileId] = paymentMethod.paymentToken.split('|');
+              if (!customerProfileId || !paymentProfileId) {
+                failedPayments.push({ scheduleId: schedule.id, accountId: schedule.accountId, reason: 'Invalid payment token format' });
+                continue;
+              }
+              const authnetResult = await authnetService.chargeCustomerProfile({ customerProfileId, paymentProfileId, amount: paymentAmountCents / 100, invoice: schedule.accountId.substring(0, 20), description: `Scheduled ${schedule.arrangementType} payment` });
+              paymentResult = authnetResult;
+              success = authnetResult.success;
+              if (!success) {
+                console.error('❌ Authorize.net scheduled payment failed:', authnetResult.errorMessage);
+                try { const acct = await storage.getAccount(schedule.accountId); if (acct && acct.tenantId === tenant.id && acct.status?.toLowerCase() !== 'recalled' && acct.status?.toLowerCase() !== 'closed') { await storage.updateAccount(schedule.accountId, { status: "declined" }); } } catch (e) {}
+              }
+            } else if (merchantProvider === 'nmi') {
+              const isNMIVaultToken = paymentMethod.paymentToken.startsWith('nmi_vault_');
+              if (!settings?.nmiSecurityKey) {
+                failedPayments.push({ scheduleId: schedule.id, accountId: schedule.accountId, reason: 'NMI credentials not configured' });
+                try { await storage.createPaymentProcessingLog({ tenantId: tenant.id, scheduleId: schedule.id, consumerId: consumer.id, accountId: schedule.accountId, consumerName, amountCents: paymentAmountCents, status: 'failed', processor: 'nmi', failureReason: 'NMI credentials not configured', cardLast4: paymentMethod.cardLast4 || undefined, cardBrand: paymentMethod.cardBrand || undefined, runType }); } catch (logError) { console.error('Failed to log:', logError); }
+                continue;
+              }
+              console.log(`🟣 Processing scheduled payment with NMI ${isNMIVaultToken ? '(Customer Vault)' : '(SMAX-stored card)'}`);
+              const vaultId = isNMIVaultToken ? paymentMethod.paymentToken.replace('nmi_vault_', '').trim() : paymentMethod.paymentToken.trim();
+              if (!vaultId) {
+                failedPayments.push({ scheduleId: schedule.id, accountId: schedule.accountId, reason: 'Invalid payment method token' });
+                continue;
+              }
+              try {
+                const { NMIService } = await import('./nmiService');
+                const nmiService = new NMIService({ securityKey: settings.nmiSecurityKey.trim() });
+                const nmiResult = await nmiService.chargeCustomerVault({ customerVaultId: vaultId, amount: parseFloat((paymentAmountCents / 100).toFixed(2)), orderid: schedule.accountId || `schedule_${schedule.id}` });
+                paymentResult = nmiResult;
+                success = nmiResult.success;
+                if (!success) {
+                  console.error('❌ NMI scheduled payment failed:', nmiResult.responseText);
+                  try { const acct = await storage.getAccount(schedule.accountId); if (acct && acct.tenantId === tenant.id && acct.status?.toLowerCase() !== 'recalled' && acct.status?.toLowerCase() !== 'closed') { await storage.updateAccount(schedule.accountId, { status: "declined" }); } } catch (e) {}
+                }
+              } catch (nmiError: any) {
+                console.error('❌ NMI scheduled payment exception:', nmiError);
+                paymentResult = { success: false, errorMessage: nmiError.message };
+                success = false;
+                failedPayments.push({ scheduleId: schedule.id, accountId: schedule.accountId, reason: nmiError.message || 'NMI payment processing failed' });
+                continue;
+              }
+            } else {
+              console.log('🟢 Processing scheduled payment with USAePay');
+              if (!settings?.merchantApiKey || !settings?.merchantApiPin) {
+                failedPayments.push({ scheduleId: schedule.id, accountId: schedule.accountId, reason: 'USAePay credentials not configured' });
+                try { await storage.createPaymentProcessingLog({ tenantId: tenant.id, scheduleId: schedule.id, consumerId: consumer.id, accountId: schedule.accountId, consumerName, amountCents: paymentAmountCents, status: 'failed', processor: 'usaepay', failureReason: 'USAePay credentials not configured', cardLast4: paymentMethod.cardLast4 || undefined, cardBrand: paymentMethod.cardBrand || undefined, runType }); } catch (logError) { console.error('Failed to log:', logError); }
+                continue;
+              }
+              const usaepayBaseUrl = settings.useSandbox ? "https://sandbox.usaepay.com/api/v2" : "https://secure.usaepay.com/api/v2";
+              const usaepayAuth = generateUSAePayAuthHeader(settings.merchantApiKey, settings.merchantApiPin);
+              const paymentPayload = {
+                amount: (paymentAmountCents / 100).toFixed(2),
+                invoice: schedule.accountId,
+                description: `Scheduled ${schedule.arrangementType} payment`,
+                source: { key: paymentMethod.paymentToken },
+                billingAddress: {
+                  firstName: paymentMethod.cardholderName?.split(' ')[0] || '',
+                  lastName: paymentMethod.cardholderName?.split(' ').slice(1).join(' ') || '',
+                  zip: paymentMethod.billingZip || '',
+                  street: '', city: ''
+                }
+              };
+              const paymentResponse = await fetch(`${usaepayBaseUrl}/transactions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': usaepayAuth },
+                body: JSON.stringify(paymentPayload)
               });
-              cleanedUpCount++;
-              console.log(`🧹 Marked schedule ${schedule.id} as completed`);
+              paymentResult = await paymentResponse.json();
+              success = paymentResult.result === 'Approved' || paymentResult.status === 'Approved';
             }
+
+            const extractedTransactionId = paymentResult.transactionid || paymentResult.refnum || paymentResult.key || `tx_${Date.now()}`;
+
+            await storage.createPayment({
+              tenantId: tenant.id,
+              consumerId: consumer.id,
+              accountId: schedule.accountId,
+              amountCents: paymentAmountCents,
+              paymentMethod: 'credit_card',
+              status: success ? 'completed' : 'failed',
+              transactionId: extractedTransactionId,
+              processorResponse: JSON.stringify(paymentResult),
+              processedAt: success ? new Date() : null,
+              notes: `Scheduled payment - ${paymentMethod.cardholderName} ending in ${paymentMethod.cardLast4}`,
+            });
+
+            if (success) {
+              const account = await storage.getAccount(schedule.accountId);
+              if (account) {
+                const newBalance = Math.max(0, (account.balanceCents || 0) - paymentAmountCents);
+                console.log('💰 Scheduled payment balance update:', { accountId: schedule.accountId, previousBalance: account.balanceCents, paymentAmount: paymentAmountCents, newBalance });
+                await storage.updateAccount(schedule.accountId, { balanceCents: newBalance });
+
+                if (account.filenumber) {
+                  try {
+                    const smaxPaymentData = {
+                      paymentdate: today,
+                      paymentamount: (paymentAmountCents / 100).toString(),
+                      payorname: consumerName || 'Consumer',
+                      paymentmethod: 'CREDIT CARD',
+                      cardtype: paymentMethod.cardBrand || 'Unknown',
+                      paymentstatus: 'COMPLETED',
+                      transactionid: extractedTransactionId,
+                    };
+                    await storage.createPaymentApproval({
+                      tenantId: tenant.id, approvalType: 'payment', scheduleId: schedule.id, accountId: schedule.accountId, consumerId: consumer.id, filenumber: account.filenumber, paymentDate: schedule.nextPaymentDate, amountCents: paymentAmountCents, transactionId: extractedTransactionId, paymentData: smaxPaymentData, status: 'pending',
+                    });
+                    console.log(`✅ Payment approval request created for filenumber: ${account.filenumber}`);
+                  } catch (approvalError) {
+                    console.error(`❌ Failed to create payment approval request:`, approvalError);
+                    console.warn(`⚠️ Falling back to direct SMAX insert`);
+                    const smaxPayData = smaxService.createSmaxPaymentData({ filenumber: account.filenumber, paymentamount: paymentAmountCents / 100, paymentdate: today, payorname: consumerName || 'Consumer', paymentmethod: 'CREDIT CARD', cardtype: paymentMethod.cardBrand || 'Unknown', cardLast4: paymentMethod.cardLast4, transactionid: extractedTransactionId });
+                    const smaxInserted = await smaxService.insertPayment(tenant.id, smaxPayData);
+                    if (smaxInserted) {
+                      console.log(`✅ SMAX payment inserted (fallback) for filenumber: ${account.filenumber}`);
+                      await smaxService.sendPaymentNote(tenant.id, { filenumber: account.filenumber, status: 'processed', amount: paymentAmountCents / 100, transactionId: extractedTransactionId });
+                    }
+                  }
+                  try {
+                    await smaxService.insertAttempt(tenant.id, { filenumber: account.filenumber, attempttype: 'Payment', attemptdate: today, notes: `Scheduled payment of $${(paymentAmountCents / 100).toFixed(2)} processed successfully`, result: 'Success' });
+                  } catch (smaxError) {
+                    console.error('❌ Error sending payment attempt to SMAX:', smaxError);
+                  }
+                }
+              }
+
+              const nextPayment = calculateNextPaymentDate(new Date(schedule.nextPaymentDate), schedule.frequency || 'monthly');
+              const updatedRemainingPayments = schedule.remainingPayments !== null ? schedule.remainingPayments - 1 : null;
+              const scheduleStatus = updatedRemainingPayments === 0 ? 'completed' : 'active';
+
+              await storage.updatePaymentSchedule(schedule.id, tenant.id, {
+                nextPaymentDate: nextPayment.toISOString().split('T')[0],
+                remainingPayments: updatedRemainingPayments,
+                lastProcessedAt: new Date(),
+                status: scheduleStatus,
+                failedAttempts: 0,
+              });
+
+              const allConsumerSchedules = await storage.getPaymentSchedulesByConsumer(consumer.id, tenant.id);
+              const hasActiveSchedules = allConsumerSchedules.some(s => s.id !== schedule.id && s.status === 'active');
+              if (hasActiveSchedules || scheduleStatus === 'active') {
+                await storage.updateConsumer(consumer.id, { paymentStatus: 'pending_payment' });
+              } else {
+                const acct = await storage.getAccount(schedule.accountId);
+                const accountPaidOff = !acct || acct.balanceCents === 0;
+                await storage.updateConsumer(consumer.id, { paymentStatus: accountPaidOff ? 'current' : 'no_payment_plan' });
+              }
+
+              try {
+                const acct = await storage.getAccount(schedule.accountId);
+                await emailService.sendPaymentNotification({
+                  tenantId: tenant.id, consumerName, accountNumber: acct?.accountNumber || 'N/A', amountCents: paymentAmountCents, paymentMethod: `Card ending in ${paymentMethod.cardLast4}`, transactionId: paymentResult.refnum || paymentResult.key || undefined, paymentType: 'scheduled',
+                }).catch(err => console.error('Failed to send scheduled payment notification:', err));
+
+                if (consumer.email) {
+                  const paymentAmountFormatted = `$${(paymentAmountCents / 100).toFixed(2)}`;
+                  const nextPaymentFormatted = nextPayment.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+                  const hasRemainingPayments = updatedRemainingPayments !== null && updatedRemainingPayments > 0;
+                  const isFinalPmt = updatedRemainingPayments !== null && updatedRemainingPayments === 0;
+                  await emailService.sendEmail({
+                    to: consumer.email,
+                    subject: 'Payment Received - Thank You',
+                    html: `<h2>Payment Received</h2><p>Dear ${consumerName},</p><p>Your scheduled payment has been successfully processed.</p><h3>Payment Details:</h3><ul><li><strong>Amount Paid:</strong> ${paymentAmountFormatted}</li><li><strong>Account:</strong> ${acct?.creditor || 'Your Account'}</li><li><strong>Payment Date:</strong> ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</li><li><strong>Transaction ID:</strong> ${extractedTransactionId}</li>${hasRemainingPayments ? `<li><strong>Next Payment:</strong> ${nextPaymentFormatted}</li><li><strong>Payments Remaining:</strong> ${updatedRemainingPayments}</li>` : ''}</ul>${isFinalPmt ? '<p><strong>Congratulations!</strong> This was your final scheduled payment.</p>' : ''}<p>Thank you for your payment.</p><p>Best regards,<br>${tenant.name}</p>`,
+                    from: `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>`,
+                    tenantId: tenant.id,
+                  });
+                  console.log(`📧 Payment receipt sent to consumer: ${consumer.email}`);
+                }
+              } catch (notificationError) {
+                console.error('Error sending scheduled payment notification:', notificationError);
+              }
+
+              processedPayments.push({ scheduleId: schedule.id, consumerId: consumer.id });
+              try { await storage.createPaymentProcessingLog({ tenantId: tenant.id, scheduleId: schedule.id, consumerId: consumer.id, accountId: schedule.accountId, consumerName, accountNumber: scheduleAccount?.accountNumber || undefined, creditor: scheduleAccount?.creditor || undefined, amountCents: paymentAmountCents, status: 'success', processor: merchantProvider, transactionId: extractedTransactionId, cardLast4: paymentMethod.cardLast4 || undefined, cardBrand: paymentMethod.cardBrand || undefined, runType }); } catch (logError) { console.error('Failed to log:', logError); }
+            } else {
+              const failedAttempts = (schedule.failedAttempts || 0) + 1;
+              const scheduleStatus = failedAttempts >= 3 ? 'failed' : 'active';
+              const failureReason = paymentResult?.error || paymentResult?.result_code || 'Payment declined';
+              const failedAccount = await storage.getAccount(schedule.accountId);
+
+              console.error(`❌ SCHEDULED PAYMENT FAILED:`);
+              console.error(`   Consumer: ${consumerName} (ID: ${consumer.id})`);
+              console.error(`   Account: ${failedAccount?.accountNumber || 'N/A'}, Creditor: ${failedAccount?.creditor || 'N/A'}`);
+              console.error(`   Amount: $${(paymentAmountCents / 100).toFixed(2)}, Reason: ${failureReason}, Attempts: ${failedAttempts}/3`);
+
+              await storage.updatePaymentSchedule(schedule.id, tenant.id, { failedAttempts, status: scheduleStatus, lastFailureReason: failureReason, lastProcessedAt: new Date() });
+              await storage.updateConsumer(consumer.id, { paymentStatus: 'payment_failed' });
+
+              if (failedAccount && failedAccount.tenantId === tenant.id) {
+                try { const st = failedAccount.status?.toLowerCase(); if (st !== 'recalled' && st !== 'closed') { await storage.updateAccount(schedule.accountId, { status: "declined" }); console.log(`🔄 Auto-changed account ${schedule.accountId} status to "declined"`); } } catch (statusError) { console.error('Failed to auto-update account status:', statusError); }
+              }
+
+              if (failedAccount?.filenumber) {
+                try { await smaxService.sendPaymentNote(tenant.id, { filenumber: failedAccount.filenumber, status: 'declined', amount: paymentAmountCents / 100, reason: failureReason }); } catch (smaxError) { console.error('Failed to send declined payment note to SMAX:', smaxError); }
+              }
+
+              if (consumer.email) {
+                try {
+                  await emailService.sendEmail({
+                    to: consumer.email,
+                    subject: 'Scheduled Payment Could Not Be Processed',
+                    html: `<h2>Payment Could Not Be Processed</h2><p>Dear ${consumerName},</p><p>We were unable to process your scheduled payment.</p><h3>Payment Details:</h3><ul><li><strong>Amount:</strong> $${(paymentAmountCents / 100).toFixed(2)}</li><li><strong>Account:</strong> ${failedAccount?.creditor || 'Your Account'}</li><li><strong>Date:</strong> ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</li><li><strong>Reason:</strong> ${failureReason}</li></ul><p>Please log in to your account to update your payment method or contact us.</p><p>Thank you,<br/>${tenant.name}</p>`,
+                    from: `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>`,
+                    tenantId: tenant.id,
+                  });
+                } catch (emailError) { console.error('Failed to send decline notification:', emailError); }
+              }
+
+              failedPayments.push({ scheduleId: schedule.id, consumerId: consumer.id, consumerName, accountNumber: failedAccount?.accountNumber || 'Unknown', creditor: failedAccount?.creditor || 'Unknown', amount: paymentAmountCents / 100, error: failureReason, attemptCount: failedAttempts });
+              try { await storage.createPaymentProcessingLog({ tenantId: tenant.id, scheduleId: schedule.id, consumerId: consumer.id, accountId: schedule.accountId, consumerName, accountNumber: failedAccount?.accountNumber || undefined, creditor: failedAccount?.creditor || undefined, amountCents: paymentAmountCents, status: 'failed', processor: merchantProvider, failureReason, cardLast4: paymentMethod.cardLast4 || undefined, cardBrand: paymentMethod.cardBrand || undefined, runType }); } catch (logError) { console.error('Failed to log:', logError); }
+            }
+          } catch (err) {
+            console.error(`Error processing schedule ${schedule.id}:`, err);
+            failedPayments.push({ scheduleId: schedule.id, error: err instanceof Error ? err.message : 'Unknown error' });
           }
         }
       }
-      
+
+      let cleanedUpCount = 0;
+      for (const tenant of tenantsToProcess) {
+        const expiredSchedules = await db
+          .select()
+          .from(paymentSchedulesTable)
+          .where(
+            and(
+              eq(paymentSchedulesTable.tenantId, tenant.id),
+              eq(paymentSchedulesTable.status, 'active'),
+              sql`(
+                (${paymentSchedulesTable.endDate} IS NOT NULL AND ${paymentSchedulesTable.endDate} < ${today}) OR
+                (${paymentSchedulesTable.remainingPayments} IS NOT NULL AND ${paymentSchedulesTable.remainingPayments} <= 0)
+              )`
+            )
+          );
+        for (const schedule of expiredSchedules) {
+          await storage.updatePaymentSchedule(schedule.id, tenant.id, { status: 'completed' });
+          cleanedUpCount++;
+          console.log(`🧹 Marked expired schedule ${schedule.id} as completed`);
+        }
+      }
       console.log(`✨ Cleanup complete: Marked ${cleanedUpCount} schedules as completed`);
 
       res.json({
