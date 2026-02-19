@@ -1089,8 +1089,8 @@ async function buildAgreementVariables(
     const plan = getPlanPricingForTenant(businessType as any, subscription.planId as MessagingPlanId);
     
     // Prefer subscription.priceCents for negotiated/custom rates, fallback to plan price
-    if (subscription.priceCents !== undefined && subscription.priceCents !== null) {
-      basePriceCents = subscription.priceCents;
+    if ((subscription as any).priceCents !== undefined && (subscription as any).priceCents !== null) {
+      basePriceCents = (subscription as any).priceCents;
     } else {
       basePriceCents = plan.price * 100;
     }
@@ -3303,12 +3303,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Build unsubscribe URL for compliance
-      const baseUrl = ensureBaseUrl();
+      const baseUrl = ensureBaseUrl(process.env.REPLIT_DOMAINS);
       const sanitizedBaseUrl = baseUrl ? baseUrl.replace(/^https?:\/\//, '') : '';
       const baseProtocol = baseUrl && baseUrl.startsWith('https') ? 'https://' : 'http://';
       const unsubscribeBase = sanitizedBaseUrl ? `${baseProtocol}${sanitizedBaseUrl}/unsubscribe` : '';
       const unsubscribeUrl = unsubscribeBase
-        ? `${unsubscribeBase}?email=${encodeURIComponent(to)}&tenant=${encodeURIComponent(tenant.id)}`
+        ? `${unsubscribeBase}?email=${encodeURIComponent(to)}&tenant=${encodeURIComponent(tenant?.id || '')}`
         : '';
       
       // Build message with compliance footer
@@ -3752,9 +3752,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Check if number is blocked
-      const blockedNumbers = await storage.getBlockedNumbers(tenantId);
+      const blockedNumbers = await storage.getSmsBlockedNumbers(tenantId);
       const normalizedPhone = targetPhone.replace(/\D/g, '');
-      const isBlocked = blockedNumbers.some(bn => bn.phoneNumber.replace(/\D/g, '') === normalizedPhone);
+      const isBlocked = blockedNumbers.some((bn: any) => bn.phoneNumber.replace(/\D/g, '') === normalizedPhone);
       if (isBlocked) {
         return res.status(400).json({ message: "This phone number is blocked from receiving SMS" });
       }
@@ -8940,9 +8940,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (existing) {
             // Update existing account with DMP data
             await storage.updateAccount(existing.id, {
-              balance: dmpAccount.balance,
+              balanceCents: dmpAccount.balance || 0,
               status: dmpAccount.status || existing.status,
-              creditorName: dmpAccount.creditorName || existing.creditorName,
+              creditor: dmpAccount.creditorName || existing.creditor,
             });
             results.updated++;
           } else {
@@ -8978,8 +8978,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               consumerId: consumer.id,
               accountNumber: dmpAccount.accountNumber || dmpAccount.filenumber,
               filenumber: dmpAccount.filenumber,
-              balance: dmpAccount.balance || 0,
-              creditorName: dmpAccount.creditorName || 'Unknown Creditor',
+              balanceCents: dmpAccount.balance || 0,
+              creditor: dmpAccount.creditorName || 'Unknown Creditor',
               status: dmpAccount.status || 'active',
               folderId: folderId || null,
             });
@@ -9031,25 +9031,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Get payment details
-      const payment = await storage.getPaymentById(paymentId);
+      const payment = await storage.getPaymentById(paymentId, tenantId);
       if (!payment) {
         return res.status(404).json({ success: false, message: "Payment not found" });
       }
 
       // Get account for filenumber
-      const account = await storage.getAccountById(payment.accountId);
+      const account = await storage.getAccount(payment.accountId!);
       if (!account) {
         return res.status(404).json({ success: false, message: "Account not found" });
       }
 
       // Post payment to DMP
       const result = await dmpService.postPayment(tenantId, {
-        filenumber: account.filenumber || account.accountNumber,
-        amount: payment.amount / 100, // Convert cents to dollars
-        date: payment.createdAt,
-        type: payment.type || 'payment',
+        filenumber: account.filenumber || account.accountNumber || '',
+        amount: payment.amountCents / 100,
+        date: payment.createdAt || new Date(),
+        type: 'payment',
         reference: payment.transactionId || `CHAIN-${payment.id}`,
-        status: payment.status,
+        status: payment.status || 'completed',
       });
 
       res.json(result);
@@ -9088,13 +9088,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Get account for filenumber
-      const account = await storage.getAccountById(accountId);
+      const account = await storage.getAccount(accountId);
       if (!account) {
         return res.status(404).json({ success: false, message: "Account not found" });
       }
 
       // Post note to DMP
-      const result = await dmpService.postNote(tenantId, account.filenumber || account.accountNumber, {
+      const result = await dmpService.postNote(tenantId, account.filenumber || account.accountNumber || '', {
         content,
         type: type || 'general',
         createdBy: req.user.username || 'Chain',
@@ -9136,13 +9136,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Get account for filenumber
-      const account = await storage.getAccountById(accountId);
+      const account = await storage.getAccount(accountId);
       if (!account) {
         return res.status(404).json({ success: false, message: "Account not found" });
       }
 
       // Log communication to DMP
-      const result = await dmpService.logCommunication(tenantId, account.filenumber || account.accountNumber, {
+      const result = await dmpService.logCommunication(tenantId, account.filenumber || account.accountNumber || '', {
         type: type as 'sms' | 'email',
         content,
         direction: direction || 'outbound',
@@ -10241,7 +10241,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (remainingAmountCents <= 0) {
         // Balance is already zero, just complete the schedule
-        await storage.updatePaymentSchedule(scheduleId, { 
+        await storage.updatePaymentSchedule(scheduleId, schedule.tenantId, { 
           status: 'completed',
           remainingPayments: 0
         });
@@ -10395,7 +10395,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       // Complete the payment schedule
-      await storage.updatePaymentSchedule(scheduleId, { 
+      await storage.updatePaymentSchedule(scheduleId, schedule.tenantId, { 
         status: 'completed',
         remainingPayments: 0
       });
@@ -10909,7 +10909,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const freshAccount = await storage.getAccount(accountId);
       if (freshAccount) {
         const previousBalance = freshAccount.balanceCents || 0;
-        const isSinglePaymentSettlement = arrangement?.planType === 'settlement' && (!arrangement.settlementPaymentCount || arrangement.settlementPaymentCount <= 1);
+        const isSinglePaymentSettlement = arrangement?.planType === 'settlement' && (!(arrangement as any).settlementPaymentCount || (arrangement as any).settlementPaymentCount <= 1);
         const newBalance = isSinglePaymentSettlement ? 0 : Math.max(0, previousBalance - amountCents);
         console.log('💰 [BALANCE UPDATE] Calculating:', {
           accountId,
@@ -11683,13 +11683,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           let endDate = null;
 
           // Check if this is a multi-payment settlement (hoist for later use)
-          const isMultiPaymentSettlement = arrangement.planType === 'settlement' && arrangement.settlementPaymentCount && arrangement.settlementPaymentCount > 1;
+          const isMultiPaymentSettlement = arrangement.planType === 'settlement' && (arrangement as any).settlementPaymentCount && (arrangement as any).settlementPaymentCount > 1;
 
           if (arrangement.planType === 'settlement') {
             
             if (isMultiPaymentSettlement) {
               // Multi-payment settlement - create a payment schedule
-              const settlementPaymentCount = Number(arrangement.settlementPaymentCount);
+              const settlementPaymentCount = Number((arrangement as any).settlementPaymentCount);
               const isImmediatePayment = !normalizedFirstPaymentDate || normalizedFirstPaymentDate.getTime() <= today.getTime();
               remainingPayments = isImmediatePayment ? settlementPaymentCount - 1 : settlementPaymentCount;
               endDate = new Date(paymentStartDate);
@@ -11879,9 +11879,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           try {
             const { smaxService } = await import('./smaxService');
             
-            await smaxService.insertPayment(tenantId, {
+            await smaxService.insertPayment(tenantId, smaxService.createSmaxPaymentData({
               filenumber: account.filenumber,
-              paymentamount: (amountCents / 100).toString(),
+              paymentamount: amountCents / 100,
               paymentdate: new Date().toISOString().split('T')[0],
               paymentmethod: 'Credit Card',
               cardLast4: cardLast4,
@@ -11891,7 +11891,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               billingzip: zipCode || undefined,
               cardexpirationmonth: expiryMonth || undefined,
               cardexpirationyear: expiryYear || undefined,
-            });
+            }));
 
             console.log('✅ Authorize.net payment synced to SMAX');
           } catch (smaxError) {
@@ -11967,9 +11967,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // Check if consumer already has a vault ID
           let existingVaultId: string | null = null;
-          const savedPaymentMethods = await storage.getPaymentMethods(consumerId);
-          const nmiVaultMethod = savedPaymentMethods.find(pm => 
-            pm.paymentType === 'credit_card' && pm.paymentToken?.startsWith('nmi_vault_')
+          const savedPaymentMethods = await storage.getPaymentMethodsByConsumer(consumerId, tenantId);
+          const nmiVaultMethod = savedPaymentMethods.find((pm: any) => 
+            pm.paymentToken?.startsWith('nmi_vault_')
           );
           
           if (nmiVaultMethod) {
@@ -11991,7 +11991,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
 
           if (!vaultResult.success || !vaultResult.customerVaultId) {
-            console.error('❌ Failed to add customer to NMI vault:', vaultResult.message);
+            console.error('❌ Failed to add customer to NMI vault:', vaultResult.errorMessage);
             return res.status(400).json({
               success: false,
               message: 'Unable to set up recurring payments. Please try again or contact support.',
@@ -12006,9 +12006,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           savedPaymentMethod = await storage.createPaymentMethod({
             consumerId,
             tenantId,
-            paymentType: 'credit_card',
             paymentToken: `nmi_vault_${customerVaultId}`,
-            last4: cardLast4,
+            cardLast4,
             cardBrand: cardBrand || 'unknown',
             expiryMonth,
             expiryYear,
@@ -12191,20 +12190,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const consumer = await storage.getConsumer(consumerId);
               
               if (consumer) {
-                const smaxTokenResult = await smaxService.createCardToken(tenantId, {
-                  filenumber: account.filenumber,
-                  ccnumber: cardNumber.replace(/\s/g, ''),
-                  ccexp: `${expiryMonth}${expiryYear.slice(-2)}`,
-                  cardholdername: cardName,
-                  billingzip: zipCode || '',
-                });
-                
-                if (smaxTokenResult && smaxTokenResult.cardtoken) {
-                  smaxCardToken = smaxTokenResult.cardtoken;
-                  console.log('✅ Card token stored in SMAX:', smaxCardToken);
-                } else {
-                  console.warn('⚠️ SMAX card tokenization failed, will save card info locally for manual processing');
-                }
+                console.log('ℹ️ SMAX enabled - card info will be synced via payment arrangement');
               }
             } catch (smaxError) {
               console.error('Failed to create SMAX card token:', smaxError);
@@ -12238,13 +12224,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           let remainingPayments = null;
           let endDate = null;
 
-          const isMultiPaymentSettlement = arrangement.planType === 'settlement' && arrangement.settlementPaymentCount && arrangement.settlementPaymentCount > 1;
+          const isMultiPaymentSettlement = arrangement.planType === 'settlement' && (arrangement as any).settlementPaymentCount && (arrangement as any).settlementPaymentCount > 1;
 
           if (arrangement.planType === 'settlement') {
             
             if (isMultiPaymentSettlement) {
               // Multi-payment settlement - create a payment schedule
-              const settlementPaymentCount = Number(arrangement.settlementPaymentCount);
+              const settlementPaymentCount = Number((arrangement as any).settlementPaymentCount);
               const isImmediatePayment = !normalizedFirstPaymentDate || normalizedFirstPaymentDate.getTime() <= today.getTime();
               remainingPayments = isImmediatePayment ? settlementPaymentCount - 1 : settlementPaymentCount;
               endDate = new Date(paymentStartDate);
@@ -12323,7 +12309,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.log('✅ Payment schedule created for NMI arrangement');
 
               // Send arrangement notification
-              if (consumer) {
+              const consumerForNotification = await storage.getConsumer(consumerId);
+              if (consumerForNotification) {
+                const consumer = consumerForNotification;
                 await notifyTenantAdmins({
                   tenantId,
                   subject: 'New Payment Arrangement Setup',
@@ -12371,13 +12359,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
                   await smaxService.insertNote(tenantId, {
                     filenumber: fileNumber,
-                    collectorname: consumer ? `${consumer.firstName} ${consumer.lastName}`.trim() || 'System' : 'System',
+                    collectorname: consumerForNotification ? `${consumerForNotification.firstName} ${consumerForNotification.lastName}`.trim() || 'System' : 'System',
                     logmessage: `Payment arrangement scheduled (${arrangementName}). First payment on ${firstPaymentDate} for $${amountDollars}.`,
                   });
 
                   const smaxArrangementSent = await smaxService.insertPaymentArrangement(tenantId, {
                     filenumber: fileNumber,
-                    payorname: consumer ? `${consumer.firstName} ${consumer.lastName}`.trim() || 'Consumer' : 'Consumer',
+                    payorname: consumerForNotification ? `${consumerForNotification.firstName} ${consumerForNotification.lastName}`.trim() || 'Consumer' : 'Consumer',
                     arrangementtype: arrangementName,
                     monthlypayment: parseFloat(amountDollars),
                     startdate: firstPaymentDate,
@@ -12830,7 +12818,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         today.setHours(0, 0, 0, 0);
 
         // Check if this is a multi-payment settlement (hoist for later use)
-        const isMultiPaymentSettlement = arrangement?.planType === 'settlement' && arrangement.settlementPaymentCount && arrangement.settlementPaymentCount > 1;
+        const isMultiPaymentSettlement = arrangement?.planType === 'settlement' && (arrangement as any).settlementPaymentCount && (arrangement as any).settlementPaymentCount > 1;
 
         // Determine number of payments based on arrangement or simplified flow
         let remainingPayments = null;
@@ -12909,8 +12897,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (arrangement.planType === 'settlement') {
             if (isMultiPaymentSettlement) {
               // Multi-payment settlement - create a payment schedule
-              console.log('💰 Multi-payment settlement detected, count:', arrangement.settlementPaymentCount);
-              const settlementPaymentCount = Number(arrangement.settlementPaymentCount);
+              console.log('💰 Multi-payment settlement detected, count:', (arrangement as any).settlementPaymentCount);
+              const settlementPaymentCount = Number((arrangement as any).settlementPaymentCount);
               remainingPayments = shouldSkipImmediateCharge ? settlementPaymentCount : settlementPaymentCount - 1; // Minus the one we just made
               endDate = new Date(paymentStartDate);
               
@@ -12972,7 +12960,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // 2. Multi-payment settlements (even with immediate first payment)
         // 3. One-time future payments (settlement with future date)
         // Skip for: one_time_payment type, or single-payment settlement that already charged
-        const shouldCreateSchedule = arrangementId && (
+        const shouldCreateSchedule = arrangementId && arrangement && (
           (arrangement.planType !== 'one_time_payment' && shouldSkipImmediateCharge) || // Future one-time payments
           (arrangement.planType === 'fixed_monthly' || arrangement.planType === 'range') || // Recurring payments
           isMultiPaymentSettlement // Multi-payment settlements (added to OR expression)
@@ -12981,9 +12969,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log('📅 Should create schedule?', {
           shouldCreateSchedule,
           arrangementId,
-          arrangementType: arrangement.planType,
+          arrangementType: arrangement?.planType,
           shouldSkipImmediateCharge,
-          isRecurring: arrangement.planType === 'fixed_monthly' || arrangement.planType === 'range'
+          isRecurring: arrangement?.planType === 'fixed_monthly' || arrangement?.planType === 'range'
         });
         
         if (shouldCreateSchedule) {
@@ -13005,9 +12993,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
               consumerId,
               accountId,
               paymentMethodId: savedPaymentMethod.id,
-              arrangementType: arrangement.planType,
+              arrangementType: arrangement?.planType,
               amountCents,
-              frequency: mainArrangementFrequency,
+              frequency: arrangement?.paymentFrequency || arrangement?.settlementPaymentFrequency || 'monthly',
               startDate: paymentStartDate.toISOString().split('T')[0],
               endDate: endDate ? endDate.toISOString().split('T')[0] : null,
               nextPaymentDate: shouldSkipImmediateCharge
@@ -13285,10 +13273,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.error('Failed to move account to "Payments Pending" folder:', folderError);
             }
           }
-        } else if (arrangement.planType === 'settlement' || arrangement.planType === 'one_time_payment') {
+        } else if (arrangement?.planType === 'settlement' || arrangement?.planType === 'one_time_payment') {
           // For single-payment settlements and one-time payments, set to current after successful payment
           // For multi-payment settlements, status is handled by the schedule creation above
-          const isMultiPaymentSettlement = arrangement.planType === 'settlement' && arrangement.settlementPaymentCount && arrangement.settlementPaymentCount > 1;
+          const isMultiPaymentSettlement = arrangement?.planType === 'settlement' && (arrangement as any).settlementPaymentCount && (arrangement as any).settlementPaymentCount > 1;
           if (success && !isMultiPaymentSettlement) {
             await storage.updateConsumer(consumerId, { paymentStatus: 'current' });
           }
@@ -13439,7 +13427,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Check if payment schedule was created (need to recalculate next payment date)
             if (setupRecurring && arrangement && arrangement.planType !== 'settlement' && arrangement.planType !== 'one_time_payment' && savedPaymentMethod) {
               const paymentStartDate = normalizedFirstPaymentDate ? new Date(normalizedFirstPaymentDate) : new Date();
-              const emailFrequency = mainArrangementFrequency || 'monthly';
+              const emailFrequency = arrangement?.paymentFrequency || arrangement?.settlementPaymentFrequency || 'monthly';
               const nextPaymentDate = calculateNextPaymentDate(paymentStartDate, emailFrequency);
 
               emailSubject = 'Payment Arrangement Confirmed';
@@ -14273,55 +14261,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     }
                   } else {
                     // ===== NMI via SMAX (legacy flow) =====
-                    console.log('🟣 Processing scheduled payment with NMI via SMAX');
+                    // SMAX-stored card tokens require NMI Security Key to process
+                    console.log('🟣 Processing scheduled payment with NMI (SMAX-stored card)');
 
-                    // NMI uses SMAX for card storage and recurring payments
-                    // Verify SMAX is enabled
-                    if (!settings?.smaxEnabled || !settings?.smaxApiKey) {
-                      console.error(`SMAX not configured for tenant ${tenant.id} (required for SMAX-based NMI payments)`);
+                    if (!settings?.nmiSecurityKey) {
+                      console.error(`NMI not configured for tenant ${tenant.id} (required to charge SMAX-stored cards)`);
                       failedPayments.push({
                         scheduleId: schedule.id,
                         accountId: schedule.accountId,
-                        reason: 'SMAX integration required for this payment method'
-                      });
-                      continue;
-                    }
-
-                    // Get account for filenumber
-                    const account = await storage.getAccount(schedule.accountId);
-                    if (!account || !account.filenumber) {
-                      console.error(`Account ${schedule.accountId} missing filenumber (required for SMAX)`);
-                      failedPayments.push({
-                        scheduleId: schedule.id,
-                        accountId: schedule.accountId,
-                        reason: 'Account missing SMAX filenumber'
+                        reason: 'NMI credentials required to process SMAX-stored card payments'
                       });
                       continue;
                     }
 
                     try {
-                      // Process payment via SMAX using stored card token
-                      const { smaxService } = await import('./smaxService');
-                      const smaxResult = await smaxService.processPaymentWithToken(tenant.id, {
-                        filenumber: account.filenumber,
-                        cardtoken: paymentMethod.paymentToken.trim(),
-                        amount: (paymentAmountCents / 100).toFixed(2),
+                      const { NMIService } = await import('./nmiService');
+                      const nmiServiceInstance = new NMIService({
+                        securityKey: settings.nmiSecurityKey.trim(),
                       });
 
-                      paymentResult = smaxResult;
-                      success = smaxResult.success;
+                      const nmiLegacyResult = await nmiServiceInstance.chargeCustomerVault({
+                        customerVaultId: paymentMethod.paymentToken.trim(),
+                        amount: parseFloat((paymentAmountCents / 100).toFixed(2)),
+                        orderid: schedule.accountId || `schedule_${schedule.id}`,
+                      });
+
+                      paymentResult = nmiLegacyResult;
+                      success = nmiLegacyResult.success;
                       
                       if (!success) {
-                        console.error('❌ SMAX scheduled payment failed:', smaxResult.errorMessage);
+                        console.error('❌ NMI (SMAX-stored card) scheduled payment failed:', nmiLegacyResult.responseText);
                       }
-                    } catch (smaxError: any) {
-                      console.error('❌ SMAX scheduled payment exception:', smaxError);
-                      paymentResult = { success: false, errorMessage: smaxError.message };
+                    } catch (nmiSmaxError: any) {
+                      console.error('❌ NMI (SMAX-stored card) scheduled payment exception:', nmiSmaxError);
+                      paymentResult = { success: false, errorMessage: nmiSmaxError.message };
                       success = false;
                       failedPayments.push({
                         scheduleId: schedule.id,
                         accountId: schedule.accountId,
-                        reason: smaxError.message || 'SMAX payment processing failed'
+                        reason: nmiSmaxError.message || 'NMI payment processing failed for SMAX-stored card'
                       });
                       continue;
                     }
@@ -14864,7 +14842,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         for (const payment of payments) {
           // Get account info for file number
-          const account = await storage.getAccount(payment.accountId);
+          const account = await storage.getAccount(payment.accountId || '');
           
           exportResults.push({
             tenantId: tenant.id,
@@ -14929,7 +14907,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const exportResults: any[] = [];
       
       for (const payment of payments) {
-        const account = await storage.getAccount(payment.accountId);
+        const account = await storage.getAccount(payment.accountId || '');
         
         exportResults.push({
           accountNumber: account?.accountNumber || '',
@@ -16017,7 +15995,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           nextPaymentDate: schedule.nextPaymentDate,
           remainingPayments: schedule.remainingPayments,
           totalPayments: schedule.totalPayments,
-          paymentsCompleted: schedule.paymentsCompleted,
+          paymentsCompleted: (schedule as any).paymentsCompleted || 0,
           status: schedule.status,
           source: schedule.source,
           processor: schedule.processor,
@@ -16028,7 +16006,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           startDate: schedule.startDate,
           endDate: schedule.endDate,
           createdAt: schedule.createdAt,
-          lastPaymentDate: schedule.lastPaymentDate,
+          lastPaymentDate: (schedule as any).lastPaymentDate || schedule.lastProcessedAt,
         };
       }));
 
@@ -16252,7 +16230,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (settings?.smaxEnabled && schedule.account?.accountNumber) {
         try {
-          const smaxService = new SmaxService();
+          const { smaxService } = await import('./smaxService');
           
           // Use update_payment_external to sync changes to SMAX
           await smaxService.updatePayment(tenantId, {
@@ -16719,7 +16697,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Admin payments use direct charge (no profile)
         const authnetResult = await authnetService.processPayment({
-          amount: (amountCents / 100).toString(),
+          amount: amountCents / 100,
           cardNumber: cardNumber.replace(/\s/g, ''),
           expirationDate: `${expiryYear}-${expiryMonth}`,
           cardCode: cvv,
@@ -16824,7 +16802,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         paymentMethod: 'credit_card',
         status: 'completed',
         transactionId: transactionId,
-        processorResponse: JSON.stringify(usaepayResult),
+        processorResponse: JSON.stringify(paymentResult),
         processedAt: new Date(),
         notes: `Admin payment - ${cardName} ending in ${cardLast4}`,
       });
@@ -17385,8 +17363,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         stats.usageCharges = usageCharges;
         stats.totalBill = totalBill;
         stats.planName = currentPlan.name;
-        stats.voipCosts = voipCosts;
-        stats.voipDetails = voipDetails;
+        (stats as any).voipCosts = voipCosts;
+        (stats as any).voipDetails = voipDetails;
       } else {
         // À la carte billing - calculate based on enabled services
         const enabledAddons = tenantSettings?.enabledAddons || [];
@@ -17400,8 +17378,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         stats.monthlyBase = aLaCarteBase;
         stats.usageCharges = usageCharges;
         stats.totalBill = Number((aLaCarteBase + (stats.addonFees || 0) + usageCharges + voipCosts).toFixed(2));
-        stats.voipCosts = voipCosts;
-        stats.voipDetails = voipDetails;
+        (stats as any).voipCosts = voipCosts;
+        (stats as any).voipDetails = voipDetails;
         
         // Update usage to show zero included
         stats.emailUsage = {
@@ -17997,8 +17975,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
               .set({
                 status: 'paid',
                 paidAt: new Date(),
-                paidAmountCents: Math.round(amount * 100),
-                paymentReference: paymentResult.transactionId,
               })
               .where(eq(invoices.id, invoiceId));
             console.log(`📄 Invoice ${invoiceId} marked as paid`);
@@ -20624,18 +20600,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const service = new AutoResponseService(matchedTenant.id);
         
         // Generate auto-response
-        const autoResponse = await service.generateResponse(
-          'email',
-          TextBody || HtmlBody || '',
-          consumer?.id
-        );
+        const autoResponse = await service.generateResponse({
+          messageType: 'email',
+          inboundMessage: TextBody || HtmlBody || '',
+          tenantId: matchedTenant.id,
+        });
         
         if (autoResponse) {
           // Send auto-response via email
           await emailService.sendEmail({
             to: fromEmail,
             subject: `Re: ${Subject || '(No Subject)'}`,
-            html: `<p>${autoResponse.replace(/\n/g, '<br>')}</p>`,
+            html: `<p>${autoResponse.response.replace(/\n/g, '<br>')}</p>`,
             tenantId: matchedTenant.id,
           });
           
@@ -21081,7 +21057,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Send SMS reply to SMAX as a note
       try {
         // Get tenant settings to check if SMAX is enabled
-        const settings = await storage.getSettings(matchedTenant.id);
+        const settings = await storage.getTenantSettings(matchedTenant.id);
         
         if (settings?.smaxEnabled) {
           let accountWithFilenumber = null;
@@ -21259,18 +21235,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const service = new AutoResponseService(matchedTenant.id);
           
           // Generate auto-response
-          const autoResponse = await service.generateResponse(
-            'email',
-            TextBody || HtmlBody || '',
-            consumer?.id
-          );
+          const autoResponse = await service.generateResponse({
+            messageType: 'email',
+            inboundMessage: TextBody || HtmlBody || '',
+            tenantId: matchedTenant.id,
+          });
           
           if (autoResponse) {
             // Send auto-response via email
             await emailService.sendEmail({
               to: fromEmail,
               subject: `Re: ${Subject || '(No Subject)'}`,
-              html: `<p>${autoResponse.replace(/\n/g, '<br>')}</p>`,
+              html: `<p>${autoResponse.response.replace(/\n/g, '<br>')}</p>`,
               tenantId: matchedTenant.id,
             });
             
@@ -22071,8 +22047,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Check VoIP access - owners/managers always have access, agents need voipAccess flag
-      const isOwner = user.role === 'owner' || user.role === 'manager';
-      if (!isOwner && !user.voipAccess) {
+      const isOwner = (user as any).role === 'owner' || (user as any).role === 'manager';
+      if (!isOwner && !(user as any).voipAccess) {
         return res.status(403).json({ message: "VoIP access not enabled for this user" });
       }
 
@@ -22253,7 +22229,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         areaCode,
         numberType: numberType || (areaCode.match(/^8(00|88|77|66|55|44|33)$/) ? 'toll_free' : 'local'),
         friendlyName: isPrimary ? 'Main Line' : null,
-        twilioPhoneSid: provisionedNumber.sid,
+        twilioPhoneSid: provisionedNumber!.sid,
         isPrimary,
         isActive: true,
         capabilities: { voice: true, sms: true },
@@ -22578,8 +22554,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Check VoIP access
-      const isOwner = user.role === 'owner' || user.role === 'manager';
-      if (!isOwner && !user.voipAccess) {
+      const isOwner = (user as any).role === 'owner' || (user as any).role === 'manager';
+      if (!isOwner && !(user as any).voipAccess) {
         return res.status(403).json({ message: "VoIP access not enabled for this user" });
       }
 
