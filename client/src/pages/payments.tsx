@@ -278,11 +278,7 @@ export default function Payments() {
   // Manual payment processor trigger mutation
   const processScheduledPaymentsMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch('/api/payments/process-scheduled', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ runType: 'manual' }),
-      });
+      const response = await apiRequest('POST', '/api/payments/process-scheduled', { runType: 'manual' });
       if (!response.ok) {
         throw new Error('Failed to process scheduled payments');
       }

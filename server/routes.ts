@@ -13870,12 +13870,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       let tenantsToProcess: any[] = [];
       
-      const manualTenantId = req.user?.tenantId || req.body?.tenantId;
       if (runType === 'manual') {
-        if (!manualTenantId) {
+        await new Promise<void>((resolve, reject) => {
+          authenticateUser(req, res, (err?: any) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+        
+        if (res.headersSent) return;
+        
+        const tenantId = req.user?.tenantId;
+        if (!tenantId) {
           return res.status(401).json({ message: 'Unauthorized: tenant context required for manual processing' });
         }
-        const requestingTenant = await storage.getTenant(manualTenantId);
+        const requestingTenant = await storage.getTenant(tenantId);
         if (requestingTenant) {
           tenantsToProcess = [requestingTenant];
           console.log(`🔧 Manual process triggered for tenant: ${requestingTenant.name} (${requestingTenant.id})`);
