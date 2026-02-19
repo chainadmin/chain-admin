@@ -13866,8 +13866,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Process scheduled payments (called by cron/scheduler)
   app.post('/api/payments/process-scheduled', async (req: any, res) => {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const todayET = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+      const today = todayET; // YYYY-MM-DD in Eastern Time (matches cron timezone)
       const runType = req.body?.runType || 'cron';
+      console.log(`📅 Payment processor running for date: ${today} (Eastern Time)`);
       
       let tenantsToProcess: any[] = [];
       
@@ -13918,17 +13920,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
             and(
               eq(paymentSchedulesTable.tenantId, tenant.id),
               eq(paymentSchedulesTable.status, 'active'),
-              eq(paymentSchedulesTable.nextPaymentDate, today),
+              lte(paymentSchedulesTable.nextPaymentDate, today),
               sql`COALESCE(${paymentSchedulesTable.source}, 'chain') != 'smax'`
             )
           );
 
-        console.log(`📋 Found ${todaySchedules.length} active schedules due today for tenant ${tenant.name}`);
+        console.log(`📋 Found ${todaySchedules.length} active schedules due today or overdue for tenant ${tenant.name}`);
 
         if (todaySchedules.length === 0) continue;
 
         for (const schedule of todaySchedules) {
           try {
+            if (schedule.lastProcessedAt) {
+              const lastProcessedDate = new Date(schedule.lastProcessedAt).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+              if (lastProcessedDate === today) {
+                console.log(`⏭️ Skipping schedule ${schedule.id} - already processed today (${lastProcessedDate})`);
+                continue;
+              }
+            }
+
             const consumer = await storage.getConsumer(schedule.consumerId);
             if (!consumer) {
               console.error(`Consumer not found for schedule ${schedule.id}`);
@@ -14132,13 +14142,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const updatedRemainingPayments = schedule.remainingPayments !== null ? schedule.remainingPayments - 1 : null;
               const scheduleStatus = updatedRemainingPayments === 0 ? 'completed' : 'active';
 
+              const nextPaymentDateStr = nextPayment.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
               await storage.updatePaymentSchedule(schedule.id, tenant.id, {
-                nextPaymentDate: nextPayment.toISOString().split('T')[0],
+                nextPaymentDate: nextPaymentDateStr,
                 remainingPayments: updatedRemainingPayments,
                 lastProcessedAt: new Date(),
                 status: scheduleStatus,
                 failedAttempts: 0,
               });
+              console.log(`📊 Schedule ${schedule.id} updated: remaining=${updatedRemainingPayments}, next=${nextPaymentDateStr}, status=${scheduleStatus}`);
 
               const allConsumerSchedules = await storage.getPaymentSchedulesByConsumer(consumer.id, tenant.id);
               const hasActiveSchedules = allConsumerSchedules.some(s => s.id !== schedule.id && s.status === 'active');
@@ -14153,7 +14165,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               try {
                 const acct = await storage.getAccount(schedule.accountId);
                 await emailService.sendPaymentNotification({
-                  tenantId: tenant.id, consumerName, accountNumber: acct?.accountNumber || 'N/A', amountCents: paymentAmountCents, paymentMethod: `Card ending in ${paymentMethod.cardLast4}`, transactionId: paymentResult.refnum || paymentResult.key || undefined, paymentType: 'scheduled',
+                  tenantId: tenant.id, consumerName, accountNumber: acct?.accountNumber || 'N/A', amountCents: paymentAmountCents, paymentMethod: `Card ending in ${paymentMethod.cardLast4}`, transactionId: extractedTransactionId, paymentType: 'scheduled',
                 }).catch(err => console.error('Failed to send scheduled payment notification:', err));
 
                 if (consumer.email) {
@@ -15436,7 +15448,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           nextPaymentDate: schedule.nextPaymentDate,
           remainingPayments: schedule.remainingPayments,
           totalPayments: schedule.totalPayments,
-          paymentsCompleted: (schedule as any).paymentsCompleted || 0,
+          paymentsCompleted: schedule.totalPayments !== null && schedule.remainingPayments !== null 
+            ? schedule.totalPayments - schedule.remainingPayments 
+            : 0,
           status: schedule.status,
           source: schedule.source,
           processor: schedule.processor,

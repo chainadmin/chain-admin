@@ -3413,6 +3413,9 @@ export class DatabaseStorage implements IStorage {
           consumer,
           account,
           paymentMethod,
+          paymentsCompleted: schedule.totalPayments !== null && schedule.remainingPayments !== null
+            ? schedule.totalPayments - schedule.remainingPayments
+            : 0,
         };
       })
     );
