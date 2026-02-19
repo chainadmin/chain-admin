@@ -13868,12 +13868,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const today = new Date().toISOString().split('T')[0];
       const runType = req.body?.runType || 'cron';
       
-      // Get all active payment schedules due today
-      const allTenants = await storage.getAllTenants();
+      let tenantsToProcess: any[] = [];
+      
+      const manualTenantId = req.user?.tenantId || req.body?.tenantId;
+      if (runType === 'manual') {
+        if (!manualTenantId) {
+          return res.status(401).json({ message: 'Unauthorized: tenant context required for manual processing' });
+        }
+        const requestingTenant = await storage.getTenant(manualTenantId);
+        if (requestingTenant) {
+          tenantsToProcess = [requestingTenant];
+          console.log(`🔧 Manual process triggered for tenant: ${requestingTenant.name} (${requestingTenant.id})`);
+        } else {
+          return res.status(404).json({ message: 'Tenant not found' });
+        }
+      } else {
+        tenantsToProcess = await storage.getAllTenants();
+        console.log(`⏰ Cron job processing all ${tenantsToProcess.length} tenants`);
+      }
+      
       const processedPayments = [];
       const failedPayments = [];
 
-      for (const tenant of allTenants) {
+      for (const tenant of tenantsToProcess) {
         const consumers = await storage.getConsumersByTenant(tenant.id);
         
         for (const consumer of consumers) {
