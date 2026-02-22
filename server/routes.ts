@@ -13966,7 +13966,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       for (const tenant of tenantsToProcess) {
         const settings = await storage.getTenantSettings(tenant.id);
-        const tenantDefaultProvider = settings?.merchantProvider || 'usaepay';
+        const tenantDefaultProvider = settings?.merchantProvider || 'not_configured';
         
         console.log(`💳 Processing tenant: ${tenant.name} (${tenant.id}), setting: ${tenantDefaultProvider}`);
 
