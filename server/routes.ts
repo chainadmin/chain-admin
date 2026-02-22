@@ -9487,7 +9487,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         allowSettlementRequests: settings?.allowSettlementRequests ?? true,
         forceArrangement: settings?.forceArrangement ?? false, // When true, disable one-time payments
         // Merchant provider settings (public info only - needed for Accept.js)
-        merchantProvider: settings?.merchantProvider || 'usaepay',
+        merchantProvider: detectProcessorForPayment(settings),
         authnetPublicClientKey: settings?.authnetPublicClientKey || null,
         authnetApiLoginId: settings?.authnetApiLoginId || null, // Needed for Accept.js tokenization
         useSandbox: settings?.useSandbox ?? true,
@@ -10262,7 +10262,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         cardLast4: paymentMethod.cardLast4
       });
 
-      const merchantProvider = settings?.merchantProvider || 'usaepay';
+      const merchantProvider = detectProcessorForPayment(settings, paymentMethod);
+      console.log(`🏦 Early payoff: detected processor='${merchantProvider}' for schedule ${scheduleId}`);
       let success = false;
       let paymentResult: any = null;
       let transactionId: string | null = null;
@@ -10781,6 +10782,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const authKey = Buffer.from(`${apiKey}:${apihash}`).toString('base64');
     
     return `Basic ${authKey}`;
+  }
+
+  function detectProcessorForPayment(settings: any, paymentMethod?: any): 'usaepay' | 'authorize_net' | 'nmi' {
+    const settingValue = settings?.merchantProvider || 'usaepay';
+
+    if (paymentMethod?.paymentToken) {
+      const token = paymentMethod.paymentToken;
+      if (token.startsWith('nmi_vault_')) {
+        if (settingValue !== 'nmi') {
+          console.warn(`⚠️ [PROCESSOR MISMATCH] Token is NMI vault but tenant merchantProvider='${settingValue}'. Using NMI for this payment method.`);
+        }
+        return 'nmi';
+      }
+      if (token.includes('|')) {
+        if (settingValue !== 'authorize_net') {
+          console.warn(`⚠️ [PROCESSOR MISMATCH] Token is Authorize.net format but tenant merchantProvider='${settingValue}'. Using Authorize.net for this payment method.`);
+        }
+        return 'authorize_net';
+      }
+    }
+
+    const hasUsaepay = !!(settings?.merchantApiKey?.trim() && settings?.merchantApiPin?.trim());
+    const hasAuthnet = !!(settings?.authnetApiLoginId?.trim() && settings?.authnetTransactionKey?.trim());
+    const hasNmi = !!settings?.nmiSecurityKey?.trim();
+
+    if (settingValue === 'nmi' && !hasNmi && hasUsaepay) {
+      console.warn(`⚠️ [PROCESSOR OVERRIDE] merchantProvider='nmi' but NO NMI key configured. USAePay credentials found. Using USAePay.`);
+      return 'usaepay';
+    }
+    if (settingValue === 'nmi' && !hasNmi && hasAuthnet) {
+      console.warn(`⚠️ [PROCESSOR OVERRIDE] merchantProvider='nmi' but NO NMI key configured. Authorize.net credentials found. Using Authorize.net.`);
+      return 'authorize_net';
+    }
+    if (settingValue === 'authorize_net' && !hasAuthnet && hasUsaepay) {
+      console.warn(`⚠️ [PROCESSOR OVERRIDE] merchantProvider='authorize_net' but NO Authnet credentials. USAePay credentials found. Using USAePay.`);
+      return 'usaepay';
+    }
+    if (settingValue === 'usaepay' && !hasUsaepay && hasNmi) {
+      console.warn(`⚠️ [PROCESSOR OVERRIDE] merchantProvider='usaepay' but NO USAePay credentials. NMI key found. Using NMI.`);
+      return 'nmi';
+    }
+    if (settingValue === 'usaepay' && !hasUsaepay && hasAuthnet) {
+      console.warn(`⚠️ [PROCESSOR OVERRIDE] merchantProvider='usaepay' but NO USAePay credentials. Authorize.net credentials found. Using Authorize.net.`);
+      return 'authorize_net';
+    }
+    if (settingValue === 'authorize_net' && !hasAuthnet && hasNmi) {
+      console.warn(`⚠️ [PROCESSOR OVERRIDE] merchantProvider='authorize_net' but NO Authnet credentials. NMI key found. Using NMI.`);
+      return 'nmi';
+    }
+
+    console.log(`🏦 [PROCESSOR] Using merchantProvider='${settingValue}' (credentials confirmed: USAePay=${hasUsaepay}, Authnet=${hasAuthnet}, NMI=${hasNmi})`);
+    return settingValue as 'usaepay' | 'authorize_net' | 'nmi';
   }
 
   // Helper function to process successful payment (unified for all processors)
@@ -11452,10 +11505,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Determine which merchant provider is configured
-      const merchantProvider = settings.merchantProvider || 'usaepay';
+      const merchantProvider = detectProcessorForPayment(settings);
       const useSandbox = settings.useSandbox;
 
-      console.log('🏦 Merchant provider:', merchantProvider);
+      console.log('🏦 Merchant provider (detected):', merchantProvider);
 
       // Validate merchant credentials are configured
       if (merchantProvider === 'authorize_net') {
@@ -13583,10 +13636,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "All card details are required" });
       }
 
-      // Get tenant settings for USAePay credentials
+      // Get tenant settings for payment processor credentials
       const settings = await storage.getTenantSettings(tenantId);
       if (!settings?.enableOnlinePayments) {
         return res.status(403).json({ message: "Online payments are currently disabled" });
+      }
+
+      const detectedProvider = detectProcessorForPayment(settings);
+      console.log(`🏦 Add payment method: detected processor='${detectedProvider}'`);
+
+      if (detectedProvider !== 'usaepay') {
+        return res.status(400).json({
+          message: "Adding a new card is not supported for your current payment processor. Please contact your agency for assistance."
+        });
       }
 
       const merchantApiKey = settings.merchantApiKey?.trim();
@@ -13904,9 +13966,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       for (const tenant of tenantsToProcess) {
         const settings = await storage.getTenantSettings(tenant.id);
-        const merchantProvider = settings?.merchantProvider || 'usaepay';
+        const tenantDefaultProvider = settings?.merchantProvider || 'usaepay';
         
-        console.log(`💳 Processing tenant: ${tenant.name} (${tenant.id}), provider: ${merchantProvider}`);
+        console.log(`💳 Processing tenant: ${tenant.name} (${tenant.id}), setting: ${tenantDefaultProvider}`);
 
         if (!tenant.paymentProcessingEnabled) {
           console.log(`⏭️ Skipping tenant ${tenant.name} - payment processing disabled (trial mode)`);
@@ -13988,6 +14050,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
               try { await storage.createPaymentProcessingLog({ tenantId: tenant.id, scheduleId: schedule.id, consumerId: consumer.id, accountId: schedule.accountId, consumerName, amountCents: schedule.amountCents, status: 'skipped', failureReason: 'Payment method not found', runType }); } catch (logError) { console.error('Failed to log:', logError); }
               continue;
             }
+
+            const merchantProvider = detectProcessorForPayment(settings, paymentMethod);
+            console.log(`🏦 Schedule ${schedule.id}: detected processor='${merchantProvider}' (tenant setting='${tenantDefaultProvider}', token='${paymentMethod.paymentToken?.substring(0, 12)}...')`);
 
             let paymentAmountCents = schedule.amountCents;
             const isLastPayment = schedule.remainingPayments !== null && schedule.remainingPayments === 1;
@@ -14212,10 +14277,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
               if (consumer.email) {
                 try {
+                  const consumerFriendlyReason = 'Your payment method could not be processed. Please verify your card details are up to date.';
                   await emailService.sendEmail({
                     to: consumer.email,
                     subject: 'Scheduled Payment Could Not Be Processed',
-                    html: `<h2>Payment Could Not Be Processed</h2><p>Dear ${consumerName},</p><p>We were unable to process your scheduled payment.</p><h3>Payment Details:</h3><ul><li><strong>Amount:</strong> $${(paymentAmountCents / 100).toFixed(2)}</li><li><strong>Account:</strong> ${failedAccount?.creditor || 'Your Account'}</li><li><strong>Date:</strong> ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</li><li><strong>Reason:</strong> ${failureReason}</li></ul><p>Please log in to your account to update your payment method or contact us.</p><p>Thank you,<br/>${tenant.name}</p>`,
+                    html: `<h2>Payment Could Not Be Processed</h2><p>Dear ${consumerName},</p><p>We were unable to process your scheduled payment.</p><h3>Payment Details:</h3><ul><li><strong>Amount:</strong> $${(paymentAmountCents / 100).toFixed(2)}</li><li><strong>Account:</strong> ${failedAccount?.creditor || 'Your Account'}</li><li><strong>Date:</strong> ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</li></ul><p>${consumerFriendlyReason}</p><p>Please log in to your account to update your payment method or contact us for assistance.</p><p>Thank you,<br/>${tenant.name}</p>`,
                     from: `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>`,
                     tenantId: tenant.id,
                   });
@@ -16029,7 +16095,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Determine which merchant provider is configured
-      const merchantProvider = settings?.merchantProvider;
+      const merchantProvider = detectProcessorForPayment(settings);
       const useSandbox = settings?.useSandbox;
 
       if (!merchantProvider) {
@@ -16039,6 +16105,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           message: "Payment processing is not configured. Please contact support." 
         });
       }
+      console.log(`🏦 Admin payment: detected processor='${merchantProvider}'`);
 
       // DUPLICATE PAYMENT PROTECTION: Check if a similar payment was processed recently
       // This prevents double-charges from network timeouts, double-clicks, or browser back/refresh
