@@ -2784,6 +2784,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { arrangementId, amountCents, paymentDate, status, notes } = req.body;
       if (!arrangementId || !amountCents || !paymentDate) return res.status(400).json({ message: "Arrangement ID, amount, and payment date are required" });
+      if (isNaN(Number(amountCents)) || Number(amountCents) <= 0) return res.status(400).json({ message: "Amount must be a positive number" });
 
       const [arrangement] = await db.select().from(manualArrangements).where(and(eq(manualArrangements.id, arrangementId), eq(manualArrangements.tenantId, tenantId)));
       if (!arrangement) return res.status(404).json({ message: "Arrangement not found" });
@@ -2834,6 +2835,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const oldStatus = existing.status;
       const newStatus = status || oldStatus;
 
+      if (amountCents !== undefined && (isNaN(Number(amountCents)) || Number(amountCents) <= 0)) {
+        return res.status(400).json({ message: "Amount must be a positive number" });
+      }
+
       const updates: any = { updatedAt: new Date() };
       if (status) updates.status = status;
       if (amountCents !== undefined) updates.amountCents = Math.round(Number(amountCents));
@@ -2854,6 +2859,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const restoredBalance = Number(account.balanceCents) + amount;
           await storage.updateAccount(existing.accountId, { balanceCents: restoredBalance });
           console.log(`🔄 Manual payment un-paid: restored $${(amount / 100).toFixed(2)} to account ${account.accountNumber || existing.accountId}, new balance: $${(restoredBalance / 100).toFixed(2)}`);
+        } else if (oldStatus === 'paid' && newStatus === 'paid' && amountCents !== undefined) {
+          const oldAmount = Number(existing.amountCents);
+          const newAmount = Math.round(Number(amountCents));
+          const delta = newAmount - oldAmount;
+          if (delta !== 0) {
+            const adjustedBalance = Math.max(0, Number(account.balanceCents) - delta);
+            await storage.updateAccount(existing.accountId, { balanceCents: adjustedBalance });
+            console.log(`💰 Manual payment amount adjusted while paid: delta $${(Math.abs(delta) / 100).toFixed(2)} ${delta > 0 ? 'additional deduction' : 'restored'} for account ${account.accountNumber || existing.accountId}, new balance: $${(adjustedBalance / 100).toFixed(2)}`);
+          }
         }
 
         if (newStatus === 'declined') {
