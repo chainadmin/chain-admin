@@ -778,6 +778,38 @@ export const paymentMethods = pgTable("payment_methods", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Manual arrangements - admin-created payment plans without card processing
+export const manualArrangements = pgTable("manual_arrangements", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "cascade" }).notNull(),
+  accountId: uuid("account_id").references(() => accounts.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  arrangementType: text("arrangement_type").notNull(),
+  totalAmountCents: bigint("total_amount_cents", { mode: "number" }),
+  status: text("status").default("active"),
+  notes: text("notes"),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Manual payments - individual payments posted by admin against manual arrangements
+export const manualPayments = pgTable("manual_payments", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  arrangementId: uuid("arrangement_id").references(() => manualArrangements.id, { onDelete: "cascade" }).notNull(),
+  consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "cascade" }).notNull(),
+  accountId: uuid("account_id").references(() => accounts.id, { onDelete: "cascade" }).notNull(),
+  amountCents: bigint("amount_cents", { mode: "number" }).notNull(),
+  paymentDate: date("payment_date").notNull(),
+  status: text("status").default("pending"),
+  notes: text("notes"),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Recurring payment schedules for arrangements
 export const paymentSchedules = pgTable("payment_schedules", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1688,6 +1720,8 @@ export const insertCommunicationSequenceStepSchema = createInsertSchema(communic
 export const insertCommunicationSequenceEnrollmentSchema = createInsertSchema(communicationSequenceEnrollments).omit({ id: true, createdAt: true, updatedAt: true, messagesSent: true, messagesOpened: true, messagesClicked: true });
 export const insertVoipPhoneNumberSchema = createInsertSchema(voipPhoneNumbers).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertVoipCallLogSchema = createInsertSchema(voipCallLogs).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertManualArrangementSchema = createInsertSchema(manualArrangements).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertManualPaymentSchema = createInsertSchema(manualPayments).omit({ id: true, createdAt: true, updatedAt: true });
 
 // Types
 export type UpsertUser = typeof users.$inferInsert;
@@ -1785,3 +1819,7 @@ export type VoipCallLog = typeof voipCallLogs.$inferSelect;
 export type InsertVoipCallLog = z.infer<typeof insertVoipCallLogSchema>;
 export type PaymentProcessingLog = typeof paymentProcessingLogs.$inferSelect;
 export type InsertPaymentProcessingLog = z.infer<typeof insertPaymentProcessingLogSchema>;
+export type ManualArrangement = typeof manualArrangements.$inferSelect;
+export type InsertManualArrangement = z.infer<typeof insertManualArrangementSchema>;
+export type ManualPayment = typeof manualPayments.$inferSelect;
+export type InsertManualPayment = z.infer<typeof insertManualPaymentSchema>;

@@ -376,7 +376,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 
                 {/* Search Results Dropdown */}
                 {showSearchResults && searchResults && (
-                  <div className="absolute top-full mt-2 w-full rounded-2xl border border-white/15 bg-slate-900/95 backdrop-blur shadow-2xl shadow-black/50 max-h-96 overflow-y-auto z-50">
+                  <div className="absolute top-full mt-2 w-full rounded-2xl border border-white/15 bg-[#0f172a] shadow-2xl shadow-black/50 max-h-96 overflow-y-auto z-50">
                     {searchResults.consumers?.length > 0 && (
                       <div className="p-2">
                         <div className="px-3 py-2 text-xs font-semibold text-blue-100/70 uppercase tracking-wide">

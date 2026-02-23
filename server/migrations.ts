@@ -1726,6 +1726,52 @@ export async function runMigrations() {
       console.log('  ⚠ payment_processing_logs table (already exists or error)');
     }
 
+    // Create manual_arrangements table
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS manual_arrangements (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          consumer_id UUID NOT NULL REFERENCES consumers(id) ON DELETE CASCADE,
+          account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          arrangement_type TEXT NOT NULL,
+          total_amount_cents BIGINT,
+          status TEXT DEFAULT 'active',
+          notes TEXT,
+          created_by TEXT,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      console.log('  ✓ manual_arrangements table');
+    } catch (err) {
+      console.log('  ⚠ manual_arrangements table (already exists or error)');
+    }
+
+    // Create manual_payments table
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS manual_payments (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          arrangement_id UUID NOT NULL REFERENCES manual_arrangements(id) ON DELETE CASCADE,
+          consumer_id UUID NOT NULL REFERENCES consumers(id) ON DELETE CASCADE,
+          account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+          amount_cents BIGINT NOT NULL,
+          payment_date DATE NOT NULL,
+          status TEXT DEFAULT 'pending',
+          notes TEXT,
+          created_by TEXT,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      console.log('  ✓ manual_payments table');
+    } catch (err) {
+      console.log('  ⚠ manual_payments table (already exists or error)');
+    }
+
     console.log('✅ Database migrations completed successfully');
   } catch (error: any) {
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {

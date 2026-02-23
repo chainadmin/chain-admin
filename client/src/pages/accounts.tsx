@@ -36,6 +36,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Badge } from "@/components/ui/badge";
 import { FolderOpen, Plus, Upload, Trash2, Mail, Phone, MapPin, Calendar, FileSignature, Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -107,6 +108,10 @@ export default function Accounts() {
     state: "",
     zipCode: "",
   });
+  const [showArrangementSection, setShowArrangementSection] = useState(false);
+  const [arrangementForm, setArrangementForm] = useState({ name: '', arrangementType: 'payment_plan', totalAmountCents: '', notes: '' });
+  const [manualPaymentForm, setManualPaymentForm] = useState({ amountCents: '', paymentDate: '', status: 'pending', notes: '' });
+  const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -138,6 +143,68 @@ export default function Accounts() {
     queryKey: ["/api/payment-methods/consumer", selectedAccount?.consumerId],
     enabled: !!selectedAccount?.consumerId && showViewModal,
   });
+
+  const { data: manualArrangement } = useQuery({
+    queryKey: ['/api/accounts', selectedAccount?.id, 'manual-arrangement'],
+    enabled: !!selectedAccount?.id && showEditModal,
+  });
+
+  const { data: manualPayments } = useQuery({
+    queryKey: ['/api/accounts', selectedAccount?.id, 'manual-payments'],
+    enabled: !!selectedAccount?.id && showEditModal,
+  });
+
+  const createArrangementMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("POST", `/api/accounts/${selectedAccount?.id}/manual-arrangement`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/accounts', selectedAccount?.id, 'manual-arrangement'] });
+      setArrangementForm({ name: '', arrangementType: 'payment_plan', totalAmountCents: '', notes: '' });
+      toast({ title: "Success", description: "Manual arrangement created successfully" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to create arrangement", variant: "destructive" });
+    },
+  });
+
+  const createManualPaymentMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("POST", `/api/accounts/${selectedAccount?.id}/manual-payment`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/accounts', selectedAccount?.id, 'manual-payments'] });
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
+      setManualPaymentForm({ amountCents: '', paymentDate: '', status: 'pending', notes: '' });
+      toast({ title: "Success", description: "Manual payment added successfully" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to add payment", variant: "destructive" });
+    },
+  });
+
+  const updateManualPaymentMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("PATCH", `/api/manual-payments/${editingPaymentId}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/accounts', selectedAccount?.id, 'manual-payments'] });
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
+      setManualPaymentForm({ amountCents: '', paymentDate: '', status: 'pending', notes: '' });
+      setEditingPaymentId(null);
+      toast({ title: "Success", description: "Payment updated successfully" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to update payment", variant: "destructive" });
+    },
+  });
+
+  const activeArrangement = Array.isArray(manualArrangement) && manualArrangement.length > 0
+    ? (manualArrangement as any[]).find((a: any) => a.status === 'active') || (manualArrangement as any[])[0]
+    : null;
 
   // Handle URL parameters to automatically open consumer/account view
   useEffect(() => {
@@ -1313,6 +1380,220 @@ export default function Accounts() {
               </Button>
             </div>
           </form>
+
+          <div className="border-t border-white/20 pt-4 mt-4">
+            <Button type="button" variant="ghost" className="text-white hover:bg-white/10 w-full justify-start" onClick={() => setShowArrangementSection(!showArrangementSection)}>
+              📋 Manual Arrangement {showArrangementSection ? '▼' : '▶'}
+            </Button>
+
+            {showArrangementSection && (
+              <div className="mt-4 space-y-4">
+                {!activeArrangement ? (
+                  <div className="space-y-3">
+                    <p className="text-sm text-white/70">Create a manual payment arrangement for this account.</p>
+                    <div>
+                      <Label className="text-white">Name *</Label>
+                      <Input
+                        value={arrangementForm.name}
+                        onChange={(e) => setArrangementForm({ ...arrangementForm, name: e.target.value })}
+                        placeholder="e.g. Monthly Payment Plan"
+                        className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-white">Arrangement Type *</Label>
+                      <Select value={arrangementForm.arrangementType} onValueChange={(value) => setArrangementForm({ ...arrangementForm, arrangementType: value })}>
+                        <SelectTrigger className="bg-white/10 border-white/20 text-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="payment_plan">Payment Plan</SelectItem>
+                          <SelectItem value="settlement">Settlement</SelectItem>
+                          <SelectItem value="hardship">Hardship</SelectItem>
+                          <SelectItem value="custom">Custom</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-white">Total Amount ($)</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={arrangementForm.totalAmountCents}
+                        onChange={(e) => setArrangementForm({ ...arrangementForm, totalAmountCents: e.target.value })}
+                        placeholder="Optional total amount"
+                        className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-white">Notes</Label>
+                      <Textarea
+                        value={arrangementForm.notes}
+                        onChange={(e) => setArrangementForm({ ...arrangementForm, notes: e.target.value })}
+                        placeholder="Optional notes"
+                        className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      className="bg-blue-600 text-white hover:bg-blue-700"
+                      disabled={!arrangementForm.name || createArrangementMutation.isPending}
+                      onClick={() => {
+                        createArrangementMutation.mutate({
+                          name: arrangementForm.name,
+                          arrangementType: arrangementForm.arrangementType,
+                          totalAmountCents: arrangementForm.totalAmountCents ? Math.round(parseFloat(arrangementForm.totalAmountCents) * 100) : undefined,
+                          notes: arrangementForm.notes || undefined,
+                        });
+                      }}
+                    >
+                      {createArrangementMutation.isPending ? "Creating..." : "Create Arrangement"}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="rounded-lg border border-white/20 bg-white/5 p-3">
+                      <p className="text-sm font-semibold text-white">{activeArrangement.name}</p>
+                      <p className="text-xs text-white/60">Type: {activeArrangement.arrangementType?.replace('_', ' ')} • Status: {activeArrangement.status || 'active'}</p>
+                      {activeArrangement.totalAmountCents && (
+                        <p className="text-xs text-white/60">Total: {(activeArrangement.totalAmountCents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-3">
+                      <p className="text-sm font-medium text-white">{editingPaymentId ? 'Edit Payment' : 'Add Payment'}</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label className="text-white">Amount ($) *</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={manualPaymentForm.amountCents}
+                            onChange={(e) => setManualPaymentForm({ ...manualPaymentForm, amountCents: e.target.value })}
+                            placeholder="0.00"
+                            className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-white">Date *</Label>
+                          <Input
+                            type="date"
+                            value={manualPaymentForm.paymentDate}
+                            onChange={(e) => setManualPaymentForm({ ...manualPaymentForm, paymentDate: e.target.value })}
+                            className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
+                            required
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label className="text-white">Status</Label>
+                          <Select value={manualPaymentForm.status} onValueChange={(value) => setManualPaymentForm({ ...manualPaymentForm, status: value })}>
+                            <SelectTrigger className="bg-white/10 border-white/20 text-white">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="pending">Pending</SelectItem>
+                              <SelectItem value="paid">Paid</SelectItem>
+                              <SelectItem value="declined">Declined</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-white">Notes</Label>
+                          <Input
+                            value={manualPaymentForm.notes}
+                            onChange={(e) => setManualPaymentForm({ ...manualPaymentForm, notes: e.target.value })}
+                            placeholder="Optional"
+                            className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          className="bg-blue-600 text-white hover:bg-blue-700"
+                          disabled={!manualPaymentForm.amountCents || !manualPaymentForm.paymentDate || createManualPaymentMutation.isPending || updateManualPaymentMutation.isPending}
+                          onClick={() => {
+                            const paymentData = {
+                              amountCents: Math.round(parseFloat(manualPaymentForm.amountCents) * 100),
+                              paymentDate: manualPaymentForm.paymentDate,
+                              status: manualPaymentForm.status,
+                              notes: manualPaymentForm.notes || undefined,
+                            };
+                            if (editingPaymentId) {
+                              updateManualPaymentMutation.mutate(paymentData);
+                            } else {
+                              createManualPaymentMutation.mutate({
+                                arrangementId: activeArrangement.id,
+                                ...paymentData,
+                              });
+                            }
+                          }}
+                        >
+                          {editingPaymentId
+                            ? (updateManualPaymentMutation.isPending ? "Updating..." : "Update Payment")
+                            : (createManualPaymentMutation.isPending ? "Adding..." : "Add Payment")}
+                        </Button>
+                        {editingPaymentId && (
+                          <button
+                            type="button"
+                            className="text-sm text-white/60 hover:text-white underline"
+                            onClick={() => {
+                              setEditingPaymentId(null);
+                              setManualPaymentForm({ amountCents: '', paymentDate: '', status: 'pending', notes: '' });
+                            }}
+                          >
+                            Cancel Edit
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {Array.isArray(manualPayments) && manualPayments.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium text-white/80">Payment History</p>
+                        {(manualPayments as any[])
+                          .sort((a: any, b: any) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime())
+                          .map((payment: any) => (
+                            <div key={payment.id} className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 p-2 text-sm">
+                              <div className="flex items-center gap-3">
+                                <span className="text-white/70">{new Date(payment.paymentDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                <span className="font-medium text-white">{(payment.amountCents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}</span>
+                                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                                  payment.status === 'paid' ? 'bg-emerald-500/20 text-emerald-300' :
+                                  payment.status === 'declined' ? 'bg-red-500/20 text-red-300' :
+                                  'bg-yellow-500/20 text-yellow-300'
+                                }`}>
+                                  {payment.status}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                className="text-xs text-blue-400 hover:text-blue-300 underline"
+                                onClick={() => {
+                                  setEditingPaymentId(payment.id);
+                                  setManualPaymentForm({
+                                    amountCents: (payment.amountCents / 100).toString(),
+                                    paymentDate: payment.paymentDate?.split('T')[0] || payment.paymentDate,
+                                    status: payment.status,
+                                    notes: payment.notes || '',
+                                  });
+                                }}
+                              >
+                                Edit
+                              </button>
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 

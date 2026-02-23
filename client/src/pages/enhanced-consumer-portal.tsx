@@ -71,6 +71,12 @@ export default function EnhancedConsumerPortal() {
     enabled: !!((data as any)?.accounts && arrangementsBaseUrl),
   });
 
+  const manualArrangementsUrl = encodedEmail && encodedTenantSlug ? `/api/consumer/manual-arrangements/${encodedEmail}${tenantQuery}` : "";
+  const { data: manualArrangements } = useQuery<any>({
+    queryKey: manualArrangementsUrl ? [manualArrangementsUrl] : ['consumer-manual-arrangements'],
+    enabled: !!manualArrangementsUrl,
+  });
+
   // Submit callback request mutation
   const callbackRequestMutation = useMutation({
     mutationFn: async (requestData: any) => {
@@ -561,21 +567,92 @@ export default function EnhancedConsumerPortal() {
           </TabsContent>
 
           <TabsContent value="payments" className="mt-6">
+            {manualArrangements && (manualArrangements as any[]).length > 0 && (
+              <div className="space-y-4 mb-6">
+                <h3 className="text-lg font-semibold text-gray-900">Your Payment Arrangements</h3>
+                {(manualArrangements as any[]).map((arr: any) => (
+                  <Card key={arr.id} className="border-blue-200 bg-blue-50/50">
+                    <CardContent className="pt-6">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <h4 className="font-semibold text-gray-900">{arr.name}</h4>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Badge variant={arr.status === 'active' ? 'default' : 'secondary'}>
+                              {arr.status === 'active' ? 'Active' : arr.status}
+                            </Badge>
+                            <span className="text-sm text-gray-500 capitalize">{arr.arrangementType?.replace(/_/g, ' ')}</span>
+                          </div>
+                        </div>
+                        {arr.totalAmountCents && (
+                          <div className="text-right">
+                            <p className="text-xs text-gray-500">Total Plan Amount</p>
+                            <p className="font-semibold text-gray-900">
+                              {(Number(arr.totalAmountCents) / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {arr.payments && arr.payments.length > 0 && (
+                        <div className="border-t pt-4">
+                          <p className="text-sm font-medium text-gray-700 mb-3">Payment History</p>
+                          <div className="space-y-2">
+                            {arr.payments.map((pmt: any) => (
+                              <div key={pmt.id} className="flex items-center justify-between py-2 px-3 rounded-lg bg-white border">
+                                <div className="flex items-center gap-3">
+                                  <span className="text-sm text-gray-600">
+                                    {new Date(pmt.paymentDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                  </span>
+                                  <span className="font-medium text-gray-900">
+                                    {(Number(pmt.amountCents) / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}
+                                  </span>
+                                </div>
+                                <Badge className={
+                                  pmt.status === 'paid' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
+                                  pmt.status === 'declined' ? 'bg-red-100 text-red-700 border-red-200' :
+                                  'bg-yellow-100 text-yellow-700 border-yellow-200'
+                                }>
+                                  {pmt.status === 'paid' ? 'Paid' : pmt.status === 'declined' ? 'Declined' : 'Pending'}
+                                </Badge>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="mt-3 pt-3 border-t flex justify-between text-sm">
+                            <span className="text-gray-600">Total Paid:</span>
+                            <span className="font-semibold text-emerald-700">
+                              {(arr.payments.filter((p: any) => p.status === 'paid').reduce((sum: number, p: any) => sum + Number(p.amountCents), 0) / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {(!arr.payments || arr.payments.length === 0) && (
+                        <p className="text-sm text-gray-500 italic">No payments recorded yet.</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+
             {!arrangements || (arrangements as any).length === 0 ? (
-              <Card>
-                <CardContent className="pt-6 text-center">
-                  <CreditCard className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Payment Plans Available</h3>
-                  <p className="text-gray-600">
-                    Contact your agency to discuss payment arrangement options.
-                  </p>
-                  <Button className="mt-4" onClick={() => setShowCallbackModal(true)}>
-                    Contact About Payment Plans
-                  </Button>
-                </CardContent>
-              </Card>
+              !manualArrangements || (manualArrangements as any[]).length === 0 ? (
+                <Card>
+                  <CardContent className="pt-6 text-center">
+                    <CreditCard className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Payment Plans Available</h3>
+                    <p className="text-gray-600">
+                      Contact your agency to discuss payment arrangement options.
+                    </p>
+                    <Button className="mt-4" onClick={() => setShowCallbackModal(true)}>
+                      Contact About Payment Plans
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : null
             ) : (
               <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900">Available Payment Plans</h3>
                 {(arrangements as any).map((arrangement: any) => (
                   <Card key={arrangement.id}>
                     <CardContent className="pt-6">

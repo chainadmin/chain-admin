@@ -29,6 +29,8 @@ import {
   autoResponseUsage,
   messagingUsageEvents,
   voipPhoneNumbers,
+  manualArrangements,
+  manualPayments,
   type Account,
   type Consumer,
   type Tenant,
@@ -2684,6 +2686,221 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting account:", error);
       res.status(500).json({ message: "Failed to delete account" });
+    }
+  });
+
+  // ============ Manual Arrangements & Payments ============
+
+  app.get('/api/accounts/:accountId/manual-arrangement', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) return res.status(403).json({ message: "No tenant access" });
+
+      const { accountId } = req.params;
+      const arrangements = await db.select().from(manualArrangements).where(and(eq(manualArrangements.accountId, accountId), eq(manualArrangements.tenantId, tenantId)));
+      res.json(arrangements);
+    } catch (error) {
+      console.error("Error fetching manual arrangements:", error);
+      res.status(500).json({ message: "Failed to fetch manual arrangements" });
+    }
+  });
+
+  app.post('/api/accounts/:accountId/manual-arrangement', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) return res.status(403).json({ message: "No tenant access" });
+
+      const { accountId } = req.params;
+      const account = await storage.getAccount(accountId);
+      if (!account || account.tenantId !== tenantId) return res.status(404).json({ message: "Account not found" });
+
+      const { name, arrangementType, totalAmountCents, notes } = req.body;
+      if (!name || !arrangementType) return res.status(400).json({ message: "Name and arrangement type are required" });
+
+      const [arrangement] = await db.insert(manualArrangements).values({
+        tenantId,
+        consumerId: account.consumerId,
+        accountId,
+        name,
+        arrangementType,
+        totalAmountCents: totalAmountCents || null,
+        notes: notes || null,
+        createdBy: req.user.username || req.user.email || 'admin',
+      }).returning();
+
+      res.status(201).json(arrangement);
+    } catch (error) {
+      console.error("Error creating manual arrangement:", error);
+      res.status(500).json({ message: "Failed to create manual arrangement" });
+    }
+  });
+
+  app.patch('/api/manual-arrangements/:arrangementId', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) return res.status(403).json({ message: "No tenant access" });
+
+      const { arrangementId } = req.params;
+      const { status, name, notes } = req.body;
+
+      const [existing] = await db.select().from(manualArrangements).where(and(eq(manualArrangements.id, arrangementId), eq(manualArrangements.tenantId, tenantId)));
+      if (!existing) return res.status(404).json({ message: "Arrangement not found" });
+
+      const updates: any = { updatedAt: new Date() };
+      if (status) updates.status = status;
+      if (name) updates.name = name;
+      if (notes !== undefined) updates.notes = notes;
+
+      const [updated] = await db.update(manualArrangements).set(updates).where(and(eq(manualArrangements.id, arrangementId), eq(manualArrangements.tenantId, tenantId))).returning();
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating manual arrangement:", error);
+      res.status(500).json({ message: "Failed to update manual arrangement" });
+    }
+  });
+
+  app.get('/api/accounts/:accountId/manual-payments', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) return res.status(403).json({ message: "No tenant access" });
+
+      const { accountId } = req.params;
+      const payments_list = await db.select().from(manualPayments).where(and(eq(manualPayments.accountId, accountId), eq(manualPayments.tenantId, tenantId))).orderBy(desc(manualPayments.paymentDate));
+      res.json(payments_list);
+    } catch (error) {
+      console.error("Error fetching manual payments:", error);
+      res.status(500).json({ message: "Failed to fetch manual payments" });
+    }
+  });
+
+  app.post('/api/accounts/:accountId/manual-payment', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) return res.status(403).json({ message: "No tenant access" });
+
+      const { accountId } = req.params;
+      const account = await storage.getAccount(accountId);
+      if (!account || account.tenantId !== tenantId) return res.status(404).json({ message: "Account not found" });
+
+      const { arrangementId, amountCents, paymentDate, status, notes } = req.body;
+      if (!arrangementId || !amountCents || !paymentDate) return res.status(400).json({ message: "Arrangement ID, amount, and payment date are required" });
+
+      const [arrangement] = await db.select().from(manualArrangements).where(and(eq(manualArrangements.id, arrangementId), eq(manualArrangements.tenantId, tenantId)));
+      if (!arrangement) return res.status(404).json({ message: "Arrangement not found" });
+
+      const paymentStatus = status || 'pending';
+
+      const [payment] = await db.insert(manualPayments).values({
+        tenantId,
+        arrangementId,
+        consumerId: account.consumerId,
+        accountId,
+        amountCents: Math.round(Number(amountCents)),
+        paymentDate,
+        status: paymentStatus,
+        notes: notes || null,
+        createdBy: req.user.username || req.user.email || 'admin',
+      }).returning();
+
+      if (paymentStatus === 'paid') {
+        const newBalance = Math.max(0, Number(account.balanceCents) - Math.round(Number(amountCents)));
+        await storage.updateAccount(accountId, { balanceCents: newBalance });
+        console.log(`💰 Manual payment posted: $${(Math.round(Number(amountCents)) / 100).toFixed(2)} for account ${account.accountNumber || accountId}, new balance: $${(newBalance / 100).toFixed(2)}`);
+      } else if (paymentStatus === 'declined') {
+        const st = account.status?.toLowerCase();
+        if (st !== 'recalled' && st !== 'closed') {
+          await storage.updateAccount(accountId, { status: "declined" });
+          console.log(`🔄 Manual payment declined: auto-changed account ${accountId} status to "declined"`);
+        }
+      }
+
+      res.status(201).json(payment);
+    } catch (error) {
+      console.error("Error creating manual payment:", error);
+      res.status(500).json({ message: "Failed to create manual payment" });
+    }
+  });
+
+  app.patch('/api/manual-payments/:paymentId', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) return res.status(403).json({ message: "No tenant access" });
+
+      const { paymentId } = req.params;
+      const [existing] = await db.select().from(manualPayments).where(and(eq(manualPayments.id, paymentId), eq(manualPayments.tenantId, tenantId)));
+      if (!existing) return res.status(404).json({ message: "Payment not found" });
+
+      const { status, amountCents, paymentDate, notes } = req.body;
+      const oldStatus = existing.status;
+      const newStatus = status || oldStatus;
+
+      const updates: any = { updatedAt: new Date() };
+      if (status) updates.status = status;
+      if (amountCents !== undefined) updates.amountCents = Math.round(Number(amountCents));
+      if (paymentDate) updates.paymentDate = paymentDate;
+      if (notes !== undefined) updates.notes = notes;
+
+      const [updated] = await db.update(manualPayments).set(updates).where(and(eq(manualPayments.id, paymentId), eq(manualPayments.tenantId, tenantId))).returning();
+
+      const account = await storage.getAccount(existing.accountId);
+      if (account && account.tenantId === tenantId) {
+        if (oldStatus !== 'paid' && newStatus === 'paid') {
+          const amount = amountCents !== undefined ? Math.round(Number(amountCents)) : Number(existing.amountCents);
+          const newBalance = Math.max(0, Number(account.balanceCents) - amount);
+          await storage.updateAccount(existing.accountId, { balanceCents: newBalance });
+          console.log(`💰 Manual payment marked paid: $${(amount / 100).toFixed(2)} for account ${account.accountNumber || existing.accountId}, new balance: $${(newBalance / 100).toFixed(2)}`);
+        } else if (oldStatus === 'paid' && newStatus !== 'paid') {
+          const amount = Number(existing.amountCents);
+          const restoredBalance = Number(account.balanceCents) + amount;
+          await storage.updateAccount(existing.accountId, { balanceCents: restoredBalance });
+          console.log(`🔄 Manual payment un-paid: restored $${(amount / 100).toFixed(2)} to account ${account.accountNumber || existing.accountId}, new balance: $${(restoredBalance / 100).toFixed(2)}`);
+        }
+
+        if (newStatus === 'declined') {
+          const st = account.status?.toLowerCase();
+          if (st !== 'recalled' && st !== 'closed') {
+            await storage.updateAccount(existing.accountId, { status: "declined" });
+            console.log(`🔄 Manual payment declined: auto-changed account ${existing.accountId} status to "declined"`);
+          }
+        }
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating manual payment:", error);
+      res.status(500).json({ message: "Failed to update manual payment" });
+    }
+  });
+
+  // Consumer portal - get manual arrangements for an account
+  app.get('/api/consumer/manual-arrangements/:email', authenticateConsumer, async (req: any, res) => {
+    try {
+      const { email } = req.params;
+      const { tenantSlug } = req.query;
+      const { id: consumerId, email: tokenEmail, tenantId } = req.consumer || {};
+
+      if (!consumerId) return res.status(401).json({ message: "No consumer access" });
+
+      const normalizedParamEmail = email?.toLowerCase?.().trim();
+      const normalizedTokenEmail = tokenEmail?.toLowerCase?.().trim();
+      if (!normalizedTokenEmail || normalizedParamEmail !== normalizedTokenEmail) return res.status(403).json({ message: "Access denied" });
+
+      let tenant = tenantId ? await storage.getTenant(tenantId) : undefined;
+      if (!tenant && tenantSlug) tenant = await storage.getTenantBySlug(tenantSlug as string);
+      if (!tenant) return res.status(404).json({ message: "Tenant not found" });
+
+      const arrangements = await db.select().from(manualArrangements).where(and(eq(manualArrangements.consumerId, consumerId), eq(manualArrangements.tenantId, tenant.id)));
+
+      const result = [];
+      for (const arr of arrangements) {
+        const pmts = await db.select().from(manualPayments).where(and(eq(manualPayments.arrangementId, arr.id), eq(manualPayments.tenantId, tenant.id))).orderBy(manualPayments.paymentDate);
+        result.push({ ...arr, payments: pmts });
+      }
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching consumer manual arrangements:", error);
+      res.status(500).json({ message: "Failed to fetch arrangements" });
     }
   });
 
