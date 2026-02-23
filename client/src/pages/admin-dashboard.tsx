@@ -258,7 +258,7 @@ export default function AdminDashboard() {
 
         {/* Active Business Modules Indicator */}
         {enabledModules.length > 0 && (
-          <section className="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-lg shadow-blue-900/20 backdrop-blur">
+          <section className="rounded-2xl border border-white/10 bg-[#111d35] p-5 shadow-lg shadow-blue-900/20">
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-sm font-medium text-blue-100/70">Active Modules:</span>
               {enabledModules.map((moduleId: string) => (
@@ -278,7 +278,7 @@ export default function AdminDashboard() {
           {statsLoading ? (
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
               {[...Array(4)].map((_, i) => (
-                <div key={i} className="h-full rounded-3xl border border-white/10 bg-white/10 p-6 shadow-lg shadow-blue-900/20 backdrop-blur animate-pulse">
+                <div key={i} className="h-full rounded-3xl border border-white/10 bg-[#111d35] p-6 shadow-lg shadow-blue-900/20 animate-pulse">
                   <div className="h-3 w-24 rounded-full bg-white/10" />
                   <div className="mt-6 h-8 w-28 rounded-full bg-white/10" />
                 </div>
@@ -316,7 +316,7 @@ export default function AdminDashboard() {
               {/* Payment Metrics Chart */}
               {(stats as any)?.paymentMetrics && (
                 <div className="mt-8 grid gap-6 lg:grid-cols-2">
-                  <Card className="border-white/10 bg-white/5 shadow-lg shadow-blue-900/20 backdrop-blur" data-testid="card-payment-chart">
+                  <Card className="border-white/10 bg-[#111d35] shadow-lg shadow-blue-900/20" data-testid="card-payment-chart">
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2 text-white">
                         <DollarSign className="h-5 w-5 text-emerald-400" />
@@ -358,7 +358,7 @@ export default function AdminDashboard() {
                   </Card>
 
                   {/* Email & SMS Communication Chart */}
-                  <Card className="border-white/10 bg-white/5 shadow-lg shadow-blue-900/20 backdrop-blur" data-testid="card-communication-chart">
+                  <Card className="border-white/10 bg-[#111d35] shadow-lg shadow-blue-900/20" data-testid="card-communication-chart">
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2 text-white">
                         <Send className="h-5 w-5 text-purple-400" />

@@ -729,7 +729,7 @@ export default function Accounts() {
           </div>
         </section>
 
-        <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-blue-900/20 backdrop-blur">
+        <section className="rounded-3xl border border-white/10 bg-[#111d35] p-6 shadow-lg shadow-blue-900/20">
           <div className="flex flex-col gap-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -836,7 +836,7 @@ export default function Accounts() {
           </div>
         </section>
 
-        <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-blue-900/20 backdrop-blur">
+        <section className="rounded-3xl border border-white/10 bg-[#111d35] p-6 shadow-lg shadow-blue-900/20">
           <div className="flex flex-col gap-6">
             <div>
               <h2 className="text-lg font-semibold text-white">Registration status</h2>
