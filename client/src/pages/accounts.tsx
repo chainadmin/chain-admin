@@ -144,9 +144,15 @@ export default function Accounts() {
     enabled: !!selectedAccount?.consumerId && showViewModal,
   });
 
+  const { data: tenantSettings } = useQuery<any>({
+    queryKey: ["/api/settings"],
+  });
+
+  const smaxEnabled = !!(tenantSettings as any)?.smax_enabled || !!(tenantSettings as any)?.smaxEnabled;
+
   const { data: manualArrangement } = useQuery({
     queryKey: ['/api/accounts', selectedAccount?.id, 'manual-arrangement'],
-    enabled: !!selectedAccount?.id && showEditModal,
+    enabled: !!selectedAccount?.id && showEditModal && !smaxEnabled,
   });
 
   const { data: manualPayments } = useQuery({
@@ -1381,6 +1387,7 @@ export default function Accounts() {
             </div>
           </form>
 
+          {!smaxEnabled && (
           <div className="border-t border-white/20 pt-4 mt-4">
             <Button type="button" variant="ghost" className="text-white hover:bg-white/10 w-full justify-start" onClick={() => setShowArrangementSection(!showArrangementSection)}>
               📋 Manual Arrangement {showArrangementSection ? '▼' : '▶'}
@@ -1594,6 +1601,7 @@ export default function Accounts() {
               </div>
             )}
           </div>
+          )}
         </DialogContent>
       </Dialog>
 
