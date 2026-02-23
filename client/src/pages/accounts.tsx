@@ -111,6 +111,9 @@ export default function Accounts() {
   const [showManualPayments, setShowManualPayments] = useState(false);
   const [manualPaymentForm, setManualPaymentForm] = useState({ amountCents: '', paymentDate: '', notes: '' });
   const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
+  const [recurringMode, setRecurringMode] = useState(false);
+  const [recurringFrequency, setRecurringFrequency] = useState('monthly');
+  const [recurringCount, setRecurringCount] = useState('2');
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -151,7 +154,7 @@ export default function Accounts() {
 
   const { data: manualPayments } = useQuery({
     queryKey: ['/api/accounts', selectedAccount?.id, 'manual-payments'],
-    enabled: !!selectedAccount?.id && showEditModal && !smaxEnabled,
+    enabled: !!selectedAccount?.id && (showEditModal || showViewModal) && !smaxEnabled,
   });
 
   const createManualPaymentMutation = useMutation({
@@ -184,6 +187,24 @@ export default function Accounts() {
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message || "Failed to update payment", variant: "destructive" });
+    },
+  });
+
+  const createBulkPaymentsMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("POST", `/api/accounts/${selectedAccount?.id}/manual-payments-bulk`, data);
+      return res.json();
+    },
+    onSuccess: (result: any) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/accounts', selectedAccount?.id, 'manual-payments'] });
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
+      setManualPaymentForm({ amountCents: '', paymentDate: '', notes: '' });
+      setRecurringMode(false);
+      setRecurringCount('2');
+      toast({ title: "Success", description: `${result.count || 'Multiple'} payments scheduled successfully` });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to create payments", variant: "destructive" });
     },
   });
 
@@ -1386,7 +1407,7 @@ export default function Accounts() {
                       />
                     </div>
                     <div>
-                      <Label className="text-white">Date *</Label>
+                      <Label className="text-white">{recurringMode ? 'Start Date *' : 'Date *'}</Label>
                       <Input
                         type="date"
                         value={manualPaymentForm.paymentDate}
@@ -1405,17 +1426,73 @@ export default function Accounts() {
                       className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
                     />
                   </div>
+
+                  {!editingPaymentId && (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="recurringMode"
+                        checked={recurringMode}
+                        onChange={(e) => setRecurringMode(e.target.checked)}
+                        className="rounded border-white/20"
+                      />
+                      <Label htmlFor="recurringMode" className="text-white text-sm cursor-pointer">Schedule recurring payments</Label>
+                    </div>
+                  )}
+
+                  {recurringMode && !editingPaymentId && (
+                    <div className="grid grid-cols-2 gap-3 rounded-lg border border-white/10 bg-white/5 p-3">
+                      <div>
+                        <Label className="text-white text-xs">Frequency</Label>
+                        <Select value={recurringFrequency} onValueChange={setRecurringFrequency}>
+                          <SelectTrigger className="bg-white/10 border-white/20 text-white h-9">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="weekly">Weekly</SelectItem>
+                            <SelectItem value="biweekly">Bi-Weekly</SelectItem>
+                            <SelectItem value="monthly">Monthly</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-white text-xs">Number of Payments</Label>
+                        <Input
+                          type="number"
+                          min="2"
+                          max="52"
+                          value={recurringCount}
+                          onChange={(e) => setRecurringCount(e.target.value)}
+                          className="bg-white/10 border-white/20 text-white h-9"
+                        />
+                      </div>
+                      {manualPaymentForm.amountCents && recurringCount && (
+                        <div className="col-span-2 text-xs text-blue-100/60">
+                          Total: {parseInt(recurringCount)} payments of {parseFloat(manualPaymentForm.amountCents).toLocaleString('en-US', { style: 'currency', currency: 'USD' })} = {(parseFloat(manualPaymentForm.amountCents) * parseInt(recurringCount || '0')).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div className="flex items-center gap-2">
                     <Button
                       type="button"
                       className="bg-blue-600 text-white hover:bg-blue-700"
-                      disabled={!manualPaymentForm.amountCents || !manualPaymentForm.paymentDate || createManualPaymentMutation.isPending}
+                      disabled={!manualPaymentForm.amountCents || !manualPaymentForm.paymentDate || createManualPaymentMutation.isPending || createBulkPaymentsMutation.isPending || (recurringMode && (!recurringCount || parseInt(recurringCount) < 2))}
                       onClick={() => {
                         if (editingPaymentId) {
                           updateManualPaymentMutation.mutate({
                             paymentId: editingPaymentId,
                             amountCents: Math.round(parseFloat(manualPaymentForm.amountCents) * 100),
                             paymentDate: manualPaymentForm.paymentDate,
+                            notes: manualPaymentForm.notes || undefined,
+                          });
+                        } else if (recurringMode) {
+                          createBulkPaymentsMutation.mutate({
+                            amountCents: Math.round(parseFloat(manualPaymentForm.amountCents) * 100),
+                            startDate: manualPaymentForm.paymentDate,
+                            frequency: recurringFrequency,
+                            count: parseInt(recurringCount),
                             notes: manualPaymentForm.notes || undefined,
                           });
                         } else {
@@ -1429,7 +1506,9 @@ export default function Accounts() {
                     >
                       {editingPaymentId
                         ? (updateManualPaymentMutation.isPending ? "Updating..." : "Update Payment")
-                        : (createManualPaymentMutation.isPending ? "Adding..." : "Add Payment")}
+                        : recurringMode
+                          ? (createBulkPaymentsMutation.isPending ? "Scheduling..." : `Schedule ${recurringCount} Payments`)
+                          : (createManualPaymentMutation.isPending ? "Adding..." : "Add Payment")}
                     </Button>
                     {editingPaymentId && (
                       <button
@@ -1450,7 +1529,7 @@ export default function Accounts() {
                   <div className="space-y-2">
                     <p className="text-sm font-medium text-white/80">Payment History</p>
                     {(manualPayments as any[])
-                      .sort((a: any, b: any) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime())
+                      .sort((a: any, b: any) => new Date(a.paymentDate).getTime() - new Date(b.paymentDate).getTime())
                       .map((payment: any) => (
                         <div key={payment.id} className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm">
                           <div className="flex items-center justify-between">
@@ -1634,6 +1713,37 @@ export default function Accounts() {
                   </div>
                 )}
               </div>
+
+              {!smaxEnabled && Array.isArray(manualPayments) && (manualPayments as any[]).length > 0 && (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-xs uppercase tracking-wide text-blue-100/60 mb-3">Manual Payments</p>
+                  <div className="space-y-2">
+                    {(manualPayments as any[])
+                      .sort((a: any, b: any) => new Date(a.paymentDate).getTime() - new Date(b.paymentDate).getTime())
+                      .map((payment: any) => (
+                        <div key={payment.id} className="flex items-center justify-between rounded-lg border border-white/10 bg-[#0c1630] p-3">
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm text-blue-100/70">{new Date(payment.paymentDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                            <span className="text-sm font-medium text-white">{(Number(payment.amountCents) / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}</span>
+                          </div>
+                          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                            payment.status === 'paid' ? 'bg-emerald-500/20 text-emerald-300' :
+                            payment.status === 'declined' ? 'bg-red-500/20 text-red-300' :
+                            'bg-yellow-500/20 text-yellow-300'
+                          }`}>
+                            {payment.status === 'paid' ? 'Paid' : payment.status === 'declined' ? 'Declined' : 'Pending'}
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-white/10 flex justify-between text-sm">
+                    <span className="text-blue-100/60">Total Paid:</span>
+                    <span className="font-semibold text-emerald-300">
+                      {((manualPayments as any[]).filter((p: any) => p.status === 'paid').reduce((sum: number, p: any) => sum + Number(p.amountCents), 0) / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}
+                    </span>
+                  </div>
+                </div>
+              )}
 
               <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                 <Button

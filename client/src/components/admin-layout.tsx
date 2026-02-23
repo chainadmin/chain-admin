@@ -346,7 +346,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         </div>
 
         {/* Main Content */}
-        <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex flex-1 flex-col overflow-hidden bg-[#0f172a]">
           <div className="relative z-10 flex h-20 flex-shrink-0 items-center border-b border-white/10 bg-[#0f172a] px-4">
             <button
               type="button"
@@ -522,7 +522,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             </div>
           )}
 
-          <main className="relative flex-1 overflow-y-auto bg-[#0f172a]/80">
+          <main className="relative flex-1 overflow-y-auto">
             {children}
           </main>
         </div>

@@ -2820,6 +2820,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post('/api/accounts/:accountId/manual-payments-bulk', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) return res.status(403).json({ message: "No tenant access" });
+
+      const { accountId } = req.params;
+      const account = await storage.getAccount(accountId);
+      if (!account || account.tenantId !== tenantId) return res.status(404).json({ message: "Account not found" });
+
+      const { amountCents, startDate, frequency, count, notes } = req.body;
+      if (!amountCents || !startDate || !frequency || !count) {
+        return res.status(400).json({ message: "Amount, start date, frequency, and count are required" });
+      }
+      if (isNaN(Number(amountCents)) || Number(amountCents) <= 0) {
+        return res.status(400).json({ message: "Amount must be a positive number" });
+      }
+      const parsedCount = parseInt(count);
+      if (isNaN(parsedCount) || parsedCount < 2) {
+        return res.status(400).json({ message: "Number of payments must be at least 2" });
+      }
+      const validFrequencies = ['weekly', 'biweekly', 'monthly'];
+      if (!validFrequencies.includes(frequency)) {
+        return res.status(400).json({ message: "Frequency must be weekly, biweekly, or monthly" });
+      }
+      const numCount = Math.min(parsedCount, 52);
+
+      const payments = [];
+      for (let i = 0; i < numCount; i++) {
+        const date = new Date(startDate);
+        if (frequency === 'weekly') {
+          date.setDate(date.getDate() + (i * 7));
+        } else if (frequency === 'biweekly') {
+          date.setDate(date.getDate() + (i * 14));
+        } else {
+          date.setMonth(date.getMonth() + i);
+        }
+        const paymentDate = date.toISOString().split('T')[0];
+
+        payments.push({
+          tenantId,
+          consumerId: account.consumerId,
+          accountId,
+          amountCents: Math.round(Number(amountCents)),
+          paymentDate,
+          status: 'pending',
+          notes: notes ? `${notes} (${i + 1}/${numCount})` : `Payment ${i + 1} of ${numCount}`,
+          createdBy: req.user.username || req.user.email || 'admin',
+        });
+      }
+
+      const created = await db.insert(manualPayments).values(payments).returning();
+      console.log(`📋 Bulk manual payments created: ${created.length} ${frequency} payments of $${(Math.round(Number(amountCents)) / 100).toFixed(2)} for account ${account.accountNumber || accountId}`);
+
+      res.status(201).json({ count: created.length, payments: created });
+    } catch (error) {
+      console.error("Error creating bulk manual payments:", error);
+      res.status(500).json({ message: "Failed to create bulk payments" });
+    }
+  });
+
   app.patch('/api/manual-payments/:paymentId', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
