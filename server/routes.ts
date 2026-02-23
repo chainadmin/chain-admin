@@ -2466,6 +2466,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         email,
         phone,
         accountNumber,
+        filenumber,
         creditor,
         balanceCents,
         folderId,
@@ -2496,6 +2497,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const accountUpdates: any = {};
       if (accountNumber !== undefined) accountUpdates.accountNumber = accountNumber || null;
+      if (filenumber !== undefined) accountUpdates.filenumber = filenumber || null;
       if (creditor !== undefined) accountUpdates.creditor = creditor;
       if (balanceCents !== undefined && !Number.isNaN(Number(balanceCents))) {
         accountUpdates.balanceCents = Number(balanceCents);

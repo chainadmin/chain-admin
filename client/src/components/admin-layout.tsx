@@ -266,7 +266,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         {/* Sidebar */}
         <div className="hidden md:flex md:flex-shrink-0">
           <div className="flex w-72 flex-col">
-            <div className="flex flex-col flex-grow overflow-y-auto border-r border-white/10 bg-white/10 pt-8 pb-6 backdrop-blur">
+            <div className="flex flex-col flex-grow overflow-y-auto border-r border-white/10 bg-[#0c1629] pt-8 pb-6">
               {/* Logo and Company */}
               <div className="px-6">
                 <div className="flex items-center gap-3">
@@ -522,7 +522,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             </div>
           )}
 
-          <main className="relative flex-1 overflow-y-auto">
+          <main className="relative flex-1 overflow-y-auto bg-[#0f172a]/80">
             {children}
           </main>
         </div>
