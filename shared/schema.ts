@@ -794,11 +794,11 @@ export const manualArrangements = pgTable("manual_arrangements", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// Manual payments - individual payments posted by admin against manual arrangements
+// Manual payments - individual payments posted by admin directly on accounts
 export const manualPayments = pgTable("manual_payments", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
-  arrangementId: uuid("arrangement_id").references(() => manualArrangements.id, { onDelete: "cascade" }).notNull(),
+  arrangementId: uuid("arrangement_id").references(() => manualArrangements.id, { onDelete: "cascade" }),
   consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "cascade" }).notNull(),
   accountId: uuid("account_id").references(() => accounts.id, { onDelete: "cascade" }).notNull(),
   amountCents: bigint("amount_cents", { mode: "number" }).notNull(),

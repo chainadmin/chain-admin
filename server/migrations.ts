@@ -1755,7 +1755,7 @@ export async function runMigrations() {
         CREATE TABLE IF NOT EXISTS manual_payments (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-          arrangement_id UUID NOT NULL REFERENCES manual_arrangements(id) ON DELETE CASCADE,
+          arrangement_id UUID REFERENCES manual_arrangements(id) ON DELETE CASCADE,
           consumer_id UUID NOT NULL REFERENCES consumers(id) ON DELETE CASCADE,
           account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
           amount_cents BIGINT NOT NULL,
@@ -1770,6 +1770,13 @@ export async function runMigrations() {
       console.log('  ✓ manual_payments table');
     } catch (err) {
       console.log('  ⚠ manual_payments table (already exists or error)');
+    }
+
+    try {
+      await client.query(`ALTER TABLE manual_payments ALTER COLUMN arrangement_id DROP NOT NULL`);
+      console.log('  ✓ manual_payments arrangement_id made nullable');
+    } catch (err) {
+      console.log('  ⚠ manual_payments arrangement_id (already nullable or error)');
     }
 
     console.log('✅ Database migrations completed successfully');

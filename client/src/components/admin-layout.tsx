@@ -347,7 +347,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
         {/* Main Content */}
         <div className="flex flex-1 flex-col overflow-hidden">
-          <div className="relative z-10 flex h-20 flex-shrink-0 items-center border-b border-white/10 bg-white/5 px-4 backdrop-blur">
+          <div className="relative z-10 flex h-20 flex-shrink-0 items-center border-b border-white/10 bg-[#0f172a] px-4">
             <button
               type="button"
               onClick={() => setIsMobileNavOpen(true)}

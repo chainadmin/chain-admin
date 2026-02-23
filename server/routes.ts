@@ -2782,18 +2782,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const account = await storage.getAccount(accountId);
       if (!account || account.tenantId !== tenantId) return res.status(404).json({ message: "Account not found" });
 
-      const { arrangementId, amountCents, paymentDate, status, notes } = req.body;
-      if (!arrangementId || !amountCents || !paymentDate) return res.status(400).json({ message: "Arrangement ID, amount, and payment date are required" });
+      const { amountCents, paymentDate, status, notes } = req.body;
+      if (!amountCents || !paymentDate) return res.status(400).json({ message: "Amount and payment date are required" });
       if (isNaN(Number(amountCents)) || Number(amountCents) <= 0) return res.status(400).json({ message: "Amount must be a positive number" });
-
-      const [arrangement] = await db.select().from(manualArrangements).where(and(eq(manualArrangements.id, arrangementId), eq(manualArrangements.tenantId, tenantId)));
-      if (!arrangement) return res.status(404).json({ message: "Arrangement not found" });
 
       const paymentStatus = status || 'pending';
 
       const [payment] = await db.insert(manualPayments).values({
         tenantId,
-        arrangementId,
         consumerId: account.consumerId,
         accountId,
         amountCents: Math.round(Number(amountCents)),
@@ -2886,8 +2882,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Consumer portal - get manual arrangements for an account
-  app.get('/api/consumer/manual-arrangements/:email', authenticateConsumer, async (req: any, res) => {
+  // Consumer portal - get manual payments for a consumer
+  app.get('/api/consumer/manual-payments/:email', authenticateConsumer, async (req: any, res) => {
     try {
       const { email } = req.params;
       const { tenantSlug } = req.query;
@@ -2903,18 +2899,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!tenant && tenantSlug) tenant = await storage.getTenantBySlug(tenantSlug as string);
       if (!tenant) return res.status(404).json({ message: "Tenant not found" });
 
-      const arrangements = await db.select().from(manualArrangements).where(and(eq(manualArrangements.consumerId, consumerId), eq(manualArrangements.tenantId, tenant.id)));
+      const payments = await db.select().from(manualPayments).where(and(eq(manualPayments.consumerId, consumerId), eq(manualPayments.tenantId, tenant.id))).orderBy(desc(manualPayments.paymentDate));
 
-      const result = [];
-      for (const arr of arrangements) {
-        const pmts = await db.select().from(manualPayments).where(and(eq(manualPayments.arrangementId, arr.id), eq(manualPayments.tenantId, tenant.id))).orderBy(manualPayments.paymentDate);
-        result.push({ ...arr, payments: pmts });
-      }
-
-      res.json(result);
+      res.json(payments);
     } catch (error) {
-      console.error("Error fetching consumer manual arrangements:", error);
-      res.status(500).json({ message: "Failed to fetch arrangements" });
+      console.error("Error fetching consumer manual payments:", error);
+      res.status(500).json({ message: "Failed to fetch payments" });
     }
   });
 
