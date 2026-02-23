@@ -157,7 +157,7 @@ export default function Accounts() {
 
   const { data: manualPayments } = useQuery({
     queryKey: ['/api/accounts', selectedAccount?.id, 'manual-payments'],
-    enabled: !!selectedAccount?.id && showEditModal,
+    enabled: !!selectedAccount?.id && showEditModal && !smaxEnabled,
   });
 
   const createArrangementMutation = useMutation({
