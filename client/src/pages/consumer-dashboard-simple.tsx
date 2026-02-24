@@ -1264,7 +1264,7 @@ export default function ConsumerDashboardSimple() {
             </TabsTrigger>
             <TabsTrigger value="arrangements" className="data-[state=active]:bg-white/20">
               <Calendar className="h-4 w-4 mr-2" />
-              Arrangements
+              Payment Plans
             </TabsTrigger>
             <TabsTrigger value="payment-methods" className="data-[state=active]:bg-white/20">
               <CreditCard className="h-4 w-4 mr-2" />
@@ -1540,9 +1540,9 @@ export default function ConsumerDashboardSimple() {
                 {(!paymentSchedules || !(paymentSchedules as any)?.length) ? (
                   <div className="text-center py-12">
                     <Calendar className="h-12 w-12 mx-auto mb-4 text-blue-400/30" />
-                    <p className="text-blue-100/70">No active payment arrangements</p>
+                    <p className="text-blue-100/70">No active payment plans</p>
                     <p className="text-sm text-blue-100/50 mt-2">
-                      Set up a payment arrangement when making a payment on any account
+                      Set up a payment plan when making a payment on any account
                     </p>
                   </div>
                 ) : (
@@ -1723,7 +1723,7 @@ export default function ConsumerDashboardSimple() {
                             size="sm"
                             className="w-full border-red-400/30 bg-red-500/10 text-red-200 hover:bg-red-500/20 hover:text-red-100"
                             onClick={async () => {
-                              if (!window.confirm('Are you sure you want to cancel this payment arrangement? This action cannot be undone.')) {
+                              if (!window.confirm('Are you sure you want to cancel this payment plan? This action cannot be undone.')) {
                                 return;
                               }
                               
@@ -1738,12 +1738,12 @@ export default function ConsumerDashboardSimple() {
                                 
                                 if (!response.ok) {
                                   const errorData = await response.json();
-                                  throw new Error(errorData.message || 'Failed to cancel payment arrangement');
+                                  throw new Error(errorData.message || 'Failed to cancel payment plan');
                                 }
                                 
                                 toast({
-                                  title: "Arrangement Cancelled",
-                                  description: "Your payment arrangement has been cancelled successfully.",
+                                  title: "Payment Plan Cancelled",
+                                  description: "Your payment plan has been cancelled successfully.",
                                 });
                                 
                                 // Refresh the schedules list
@@ -1751,10 +1751,10 @@ export default function ConsumerDashboardSimple() {
                                   queryKey: [`/api/consumer/payment-schedules/${session?.email}?tenantSlug=${session?.tenantSlug}`] 
                                 });
                               } catch (error: any) {
-                                console.error('Error cancelling arrangement:', error);
+                                console.error('Error cancelling payment plan:', error);
                                 toast({
                                   title: "Error",
-                                  description: error.message || "Failed to cancel payment arrangement. Please try again.",
+                                  description: error.message || "Failed to cancel payment plan. Please try again.",
                                   variant: "destructive",
                                 });
                               }
@@ -2072,9 +2072,9 @@ export default function ConsumerDashboardSimple() {
                       <div className="flex items-start gap-3">
                         <AlertCircle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
                         <div className="flex-1">
-                          <h4 className="font-semibold text-amber-200">Existing Payment Arrangement</h4>
+                          <h4 className="font-semibold text-amber-200">Existing Payment Plan</h4>
                           <p className="text-sm text-amber-100/70 mt-1">
-                            This account already has a payment arrangement on file in our collection system.
+                            This account already has a payment plan on file.
                           </p>
                           {selectedAccountSMAXArrangement.monthlyPayment && (
                             <p className="text-sm text-amber-100/70 mt-1">
@@ -2087,8 +2087,8 @@ export default function ConsumerDashboardSimple() {
                           <div className="mt-3 space-y-2">
                             <p className="text-sm font-medium text-amber-200">Your options:</p>
                             <ul className="text-sm text-amber-100/70 list-disc list-inside space-y-1">
-                              <li>Make a one-time payment below (does not change your existing arrangement)</li>
-                              <li>Contact us to request a change to your payment arrangement</li>
+                              <li>Make a one-time payment below (does not change your existing plan)</li>
+                              <li>Contact us to request a change to your payment plan</li>
                             </ul>
                           </div>
                         </div>
@@ -2105,7 +2105,7 @@ export default function ConsumerDashboardSimple() {
                   <div className="rounded-lg bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border-2 border-blue-400/30 p-4 backdrop-blur">
                     <div className="flex items-center gap-2 mb-3">
                       <DollarSign className="h-5 w-5 text-blue-400" />
-                      <Label className="text-base font-semibold text-blue-200">Pay My Arrangement</Label>
+                      <Label className="text-base font-semibold text-blue-200">Pay My Plan</Label>
                     </div>
                     <button
                       type="button"

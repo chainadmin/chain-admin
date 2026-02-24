@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -117,6 +118,7 @@ export default function Accounts() {
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [location] = useLocation();
   
   const { data: accounts, isLoading: accountsLoading } = useQuery({
     queryKey: ["/api/accounts"],
@@ -258,7 +260,7 @@ export default function Accounts() {
         });
       }
     }
-  }, [accounts, accountsLoading, showViewModal, selectedAccount, consumers, toast]);
+  }, [accounts, accountsLoading, showViewModal, selectedAccount, consumers, toast, location]);
 
   // Mutations
   const createAccountMutation = useMutation({
