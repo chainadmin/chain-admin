@@ -1086,8 +1086,8 @@ export default function Payments() {
                                 </div>
                                 <div>
                                   <span className="text-xs uppercase tracking-wide text-blue-200/80">Frequency</span>
-                                  <p className="mt-1 font-semibold capitalize text-blue-50">
-                                    {schedule.frequency?.replace("_", " ") || "N/A"}
+                                  <p className="mt-1 font-semibold text-blue-50">
+                                    {schedule.frequency === 'biweekly' ? 'Bi-Weekly' : schedule.frequency === 'weekly' ? 'Weekly' : schedule.frequency === 'monthly' ? 'Monthly' : schedule.frequency || 'N/A'}
                                   </p>
                                 </div>
                                 <div>
@@ -1095,8 +1095,8 @@ export default function Payments() {
                                   <p className="mt-1 font-semibold text-blue-50">
                                     {schedule.remainingPayments != null 
                                       ? schedule.remainingPayments 
-                                      : schedule.totalPayments != null && schedule.completedPayments != null
-                                        ? Math.max(0, schedule.totalPayments - schedule.completedPayments)
+                                      : schedule.totalPayments != null && schedule.paymentsCompleted != null
+                                        ? Math.max(0, schedule.totalPayments - schedule.paymentsCompleted)
                                         : schedule.totalPayments ?? "0"}
                                   </p>
                                 </div>
@@ -1373,8 +1373,8 @@ export default function Payments() {
                                 <p className="mt-1 font-semibold text-blue-50">
                                   {schedule.remainingPayments != null 
                                     ? schedule.remainingPayments 
-                                    : schedule.totalPayments != null && schedule.completedPayments != null
-                                      ? Math.max(0, schedule.totalPayments - schedule.completedPayments)
+                                    : schedule.totalPayments != null && schedule.paymentsCompleted != null
+                                      ? Math.max(0, schedule.totalPayments - schedule.paymentsCompleted)
                                       : schedule.totalPayments ?? "0"} payments
                                 </p>
                               </div>
@@ -1512,7 +1512,7 @@ export default function Payments() {
                                 <p className="mt-1 font-semibold text-blue-50">
                                   {formatCurrency(schedule.amountCents)}
                                 </p>
-                                <p className="text-xs text-blue-100/60 capitalize">{schedule.frequency || 'Monthly'}</p>
+                                <p className="text-xs text-blue-100/60">{schedule.frequency === 'biweekly' ? 'Bi-Weekly' : schedule.frequency === 'weekly' ? 'Weekly' : schedule.frequency === 'monthly' ? 'Monthly' : schedule.frequency || 'Monthly'}</p>
                               </div>
                               <div>
                                 <span className="text-xs uppercase tracking-wide text-blue-200/80">Next Payment</span>
