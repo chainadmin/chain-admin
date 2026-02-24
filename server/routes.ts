@@ -16736,22 +16736,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error('SMAX notification failed:', smaxError);
       }
 
-      // Send email notification to company contact
-      try {
-        const account = accountId ? await storage.getAccount(accountId) : null;
-        await emailService.sendPaymentNotification({
-          tenantId,
-          consumerName: `${consumer.firstName} ${consumer.lastName}`,
-          accountNumber: account?.accountNumber || 'N/A',
-          amountCents,
-          paymentMethod: paymentMethod || 'Manual',
-          transactionId,
-          paymentType: 'manual',
-        }).catch(err => console.error('Failed to send manual payment notification:', err));
-      } catch (notificationError) {
-        console.error('Error sending manual payment notification:', notificationError);
-      }
-
       res.json(payment);
     } catch (error) {
       console.error("Error recording manual payment:", error);
