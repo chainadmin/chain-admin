@@ -12921,14 +12921,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           result: usaepayResult.result
         });
 
-        // Log detailed error information for troubleshooting
-        if (!usaepayResponse.ok || usaepayResult.error || usaepayResult.errorcode) {
-          console.error('❌ USAePay Transaction Error:', {
-            status: usaepayResponse.status,
-            statusText: usaepayResponse.statusText,
+        // Log full response for any non-approved result (bank declines can come back
+        // with result:"Declined" and no error field, so we must not gate on error presence)
+        if (!usaepayResponse.ok || usaepayResult.result !== 'Approved') {
+          console.error('❌ USAePay Transaction Error / Decline:', {
+            httpStatus: usaepayResponse.status,
+            result: usaepayResult.result,
             error: usaepayResult.error,
             errorcode: usaepayResult.errorcode,
-            result: usaepayResult.result,
+            status: usaepayResult.status,
             fullResponse: JSON.stringify(usaepayResult)
           });
         }
@@ -12978,9 +12979,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
             metadata: { paymentId: payment.id, amountCents, error: usaepayResult.error || usaepayResult.errorcode }
           });
           
+          // Build the most informative decline message available.
+          // USAePay v2 puts the human-readable reason in .error; .result is "Declined"/"Error".
+          // Some bank declines return result:"Declined" with no .error field — fall back gracefully.
+          const declineReason = usaepayResult.error || usaepayResult.status || usaepayResult.result || 'Payment declined';
+          const declineCode = usaepayResult.errorcode ? ` (code ${usaepayResult.errorcode})` : '';
+          const declineMessage = `${declineReason}${declineCode}`;
+
           return res.status(400).json({
             success: false,
-            message: usaepayResult.error || usaepayResult.result || 'Payment declined',
+            message: declineMessage,
+            declineCode: usaepayResult.errorcode || null,
+            processorResult: usaepayResult.result || null,
           });
         }
 
@@ -14985,6 +14995,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
             if (template && targetConsumers.length > 0) {
               const phonesToSendSetting = (automation as any).phonesToSend || '1';
               
+              // ── DEDUP GUARD ────────────────────────────────────────────────────────
+              // Prevent the same automation from creating a second campaign on the same
+              // calendar day (e.g. automation processor fires again after a server crash).
+              const todayMidnight = new Date(now);
+              todayMidnight.setHours(0, 0, 0, 0);
+              const existingCampaigns = await storage.getSmsCampaignsByTenant(automation.tenantId);
+              const duplicateToday = existingCampaigns.find((c: any) =>
+                c.automationId === automation.id &&
+                c.createdAt &&
+                new Date(c.createdAt) >= todayMidnight
+              );
+              if (duplicateToday) {
+                console.warn(`⚠️ [Automation Dedup] Skipping automation "${automation.name}" — campaign "${duplicateToday.name}" (id: ${duplicateToday.id}) was already created today at ${duplicateToday.createdAt}. Use Resume to continue it.`);
+                continue;
+              }
+              // ── END DEDUP GUARD ────────────────────────────────────────────────────
+
               // Create campaign record with source='automation'
               const campaignName = `[Auto] ${automation.name} - ${now.toLocaleDateString()}`;
               console.log(`📱 Creating SMS campaign for automation "${automation.name}" with ${targetConsumers.length} recipients`);
