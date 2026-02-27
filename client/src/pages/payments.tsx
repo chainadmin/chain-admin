@@ -276,6 +276,39 @@ export default function Payments() {
   });
 
   // Manual payment processor trigger mutation
+  const [retryingScheduleId, setRetryingScheduleId] = React.useState<string | null>(null);
+
+  const retryScheduleMutation = useMutation({
+    mutationFn: async (scheduleId: string) => {
+      setRetryingScheduleId(scheduleId);
+      const response = await apiRequest('POST', `/api/payment-schedules/${scheduleId}/retry`, {});
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.message || 'Failed to retry payment');
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setRetryingScheduleId(null);
+      toast({
+        title: data.success ? "Payment Approved" : "Payment Declined Again",
+        description: data.message,
+        variant: data.success ? "default" : "destructive",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/payment-schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payment-processing-logs"] });
+    },
+    onError: (error: any) => {
+      setRetryingScheduleId(null);
+      toast({
+        title: "Retry Failed",
+        description: error.message || "Unable to retry payment. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const processScheduledPaymentsMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest('POST', '/api/payments/process-scheduled', { runType: 'manual' });
@@ -1397,6 +1430,20 @@ export default function Payments() {
                                 </div>
                               )}
                               
+                              {(schedule.status === 'failed' || schedule.status === 'declined' || schedule.lastFailureReason) && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="rounded-xl border border-amber-400/40 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20 w-full sm:w-auto"
+                                  disabled={retryingScheduleId === schedule.id}
+                                  onClick={() => retryScheduleMutation.mutate(schedule.id)}
+                                  data-testid={`button-retry-${schedule.id}`}
+                                >
+                                  <RefreshCw className={cn("w-4 h-4 mr-1", retryingScheduleId === schedule.id && "animate-spin")} />
+                                  {retryingScheduleId === schedule.id ? "Retrying..." : "Retry Payment"}
+                                </Button>
+                              )}
+
                               {(schedule.status === 'failed' || schedule.status === 'declined' || schedule.status === 'cancelled') && schedule.consumer && (
                                 <div className="flex gap-2">
                                   {schedule.consumer?.phone && (

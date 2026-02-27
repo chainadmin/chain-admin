@@ -14208,13 +14208,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Retry a specific declined/failed scheduled payment
+  app.post('/api/payment-schedules/:scheduleId/retry', authenticateUser, async (req: any, res) => {
+    try {
+      const { scheduleId } = req.params;
+      const tenantId = req.user?.tenantId;
+      if (!tenantId) return res.status(401).json({ message: 'Unauthorized' });
+
+      const [schedule] = await db
+        .select()
+        .from(paymentSchedulesTable)
+        .where(and(eq(paymentSchedulesTable.id, scheduleId), eq(paymentSchedulesTable.tenantId, tenantId)));
+
+      if (!schedule) return res.status(404).json({ message: 'Schedule not found' });
+
+      await storage.updatePaymentSchedule(scheduleId, tenantId, {
+        lastProcessedAt: null,
+        lastFailureReason: null,
+        failedAttempts: 0,
+        status: 'active',
+      } as any);
+
+      console.log(`🔁 Retry requested for schedule ${scheduleId} by tenant ${tenantId} — reset lastProcessedAt, failedAttempts, status→active`);
+
+      const baseUrl = `http://localhost:${process.env.PORT || 5000}`;
+      const processRes = await fetch(`${baseUrl}/api/payments/process-scheduled`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runType: 'cron', targetScheduleId: scheduleId }),
+      });
+      const processResult = await processRes.json();
+
+      const succeeded = processResult.processed > 0;
+      const failureReason = processResult.details?.failedPayments?.[0]?.error;
+
+      return res.json({
+        success: succeeded,
+        message: succeeded ? 'Payment retried successfully' : (failureReason || 'Payment retry failed — card may need to be updated'),
+        details: processResult,
+      });
+    } catch (error) {
+      console.error('Error retrying payment schedule:', error);
+      res.status(500).json({ message: 'Failed to retry payment' });
+    }
+  });
+
   // Process scheduled payments (called by cron/scheduler)
   app.post('/api/payments/process-scheduled', async (req: any, res) => {
     try {
       const todayET = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
       const today = todayET; // YYYY-MM-DD in Eastern Time (matches cron timezone)
       const runType = req.body?.runType || 'cron';
-      console.log(`📅 Payment processor running for date: ${today} (Eastern Time)`);
+      const targetScheduleId = req.body?.targetScheduleId || null;
+      console.log(`📅 Payment processor running for date: ${today} (Eastern Time)${targetScheduleId ? ` (targeting schedule ${targetScheduleId})` : ''}`);
       
       let tenantsToProcess: any[] = [];
       
@@ -14266,7 +14312,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               eq(paymentSchedulesTable.tenantId, tenant.id),
               eq(paymentSchedulesTable.status, 'active'),
               lte(paymentSchedulesTable.nextPaymentDate, today),
-              sql`COALESCE(${paymentSchedulesTable.source}, 'chain') != 'smax'`
+              sql`COALESCE(${paymentSchedulesTable.source}, 'chain') != 'smax'`,
+              ...(targetScheduleId ? [eq(paymentSchedulesTable.id, targetScheduleId)] : [])
             )
           );
 
@@ -14411,23 +14458,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const usaepayBaseUrl = settings.useSandbox ? "https://sandbox.usaepay.com/api/v2" : "https://secure.usaepay.com/api/v2";
               const usaepayAuth = generateUSAePayAuthHeader(settings.merchantApiKey, settings.merchantApiPin);
               const paymentPayload = {
+                command: "sale",
                 amount: (paymentAmountCents / 100).toFixed(2),
                 invoice: schedule.accountId,
                 description: `Scheduled ${schedule.arrangementType} payment`,
-                source: { key: paymentMethod.paymentToken },
-                billingAddress: {
-                  firstName: paymentMethod.cardholderName?.split(' ')[0] || '',
-                  lastName: paymentMethod.cardholderName?.split(' ').slice(1).join(' ') || '',
-                  zip: paymentMethod.billingZip || '',
-                  street: '', city: ''
+                creditcard: {
+                  number: paymentMethod.paymentToken,
+                  cardholder: paymentMethod.cardholderName || '',
+                  avs_street: '',
+                  avs_zip: paymentMethod.billingZip || ''
                 }
               };
+              console.log(`💳 Sending USAePay scheduled payment:`, {
+                command: paymentPayload.command,
+                amount: paymentPayload.amount,
+                tokenPrefix: paymentMethod.paymentToken?.substring(0, 8) + '...',
+                cardLast4: paymentMethod.cardLast4
+              });
               const paymentResponse = await fetch(`${usaepayBaseUrl}/transactions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': usaepayAuth },
                 body: JSON.stringify(paymentPayload)
               });
               paymentResult = await paymentResponse.json();
+              console.log(`💳 USAePay scheduled payment response:`, { result: paymentResult.result, status: paymentResult.status, error: paymentResult.error });
               success = paymentResult.result === 'Approved' || paymentResult.status === 'Approved';
             }
 
