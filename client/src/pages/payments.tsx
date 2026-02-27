@@ -276,7 +276,7 @@ export default function Payments() {
   });
 
   // Manual payment processor trigger mutation
-  const [retryingScheduleId, setRetryingScheduleId] = React.useState<string | null>(null);
+  const [retryingScheduleId, setRetryingScheduleId] = useState<string | null>(null);
 
   const retryScheduleMutation = useMutation({
     mutationFn: async (scheduleId: string) => {
