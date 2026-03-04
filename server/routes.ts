@@ -2972,6 +2972,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Consumer: fetch their active manual arrangements
+  app.get('/api/consumer/manual-arrangements', authenticateConsumer, async (req: any, res) => {
+    try {
+      const { id: consumerId, tenantId } = req.consumer || {};
+      if (!consumerId || !tenantId) return res.status(401).json({ message: "Unauthorized" });
+
+      const arrangements = await db.select()
+        .from(manualArrangements)
+        .where(and(
+          eq(manualArrangements.consumerId, consumerId),
+          eq(manualArrangements.tenantId, tenantId),
+          eq(manualArrangements.status, 'active')
+        ));
+
+      res.json(arrangements);
+    } catch (error) {
+      console.error("Error fetching consumer manual arrangements:", error);
+      res.status(500).json({ message: "Failed to fetch arrangements" });
+    }
+  });
+
   // Email template routes
   app.get('/api/email-templates', authenticateUser, async (req: any, res) => {
     try {
@@ -11451,6 +11472,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         customPaymentAmountCents,
         paymentDate, // For retrying failed SMAX payments with specific date
         simplifiedFlow, // New simplified arrangement flow data
+        manualArrangementId, // Consumer paying against an admin-created manual arrangement
         opaqueDataDescriptor, // Authorize.net tokenized data
         opaqueDataValue // Authorize.net tokenized data
       } = req.body;
@@ -11596,6 +11618,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+
+      // Look up manual arrangement if consumer is paying against one
+      let manualArrangement: any = null;
+      if (manualArrangementId) {
+        const [found] = await db.select().from(manualArrangements)
+          .where(and(
+            eq(manualArrangements.id, manualArrangementId),
+            eq(manualArrangements.consumerId, consumerId),
+            eq(manualArrangements.accountId, accountId),
+            eq(manualArrangements.tenantId, tenantId),
+            eq(manualArrangements.status, 'active')
+          ));
+        if (!found) {
+          return res.status(400).json({ success: false, message: "Manual payment plan not found or no longer active" });
+        }
+        manualArrangement = found;
+        console.log('📋 Manual arrangement found:', { id: found.id, name: found.name, totalAmountCents: found.totalAmountCents });
+      }
 
       // Get arrangement if specified
       let arrangement = null;
@@ -11811,8 +11851,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Force Arrangement guard: only settlement arrangements are allowed through
-      if (tenantSettings?.forceArrangement && arrangement?.planType !== 'settlement') {
+      // Handle manual arrangement payment amount
+      if (manualArrangement) {
+        if (customPaymentAmountCents && customPaymentAmountCents > 0) {
+          amountCents = customPaymentAmountCents;
+        } else if (manualArrangement.totalAmountCents && manualArrangement.totalAmountCents > 0) {
+          amountCents = manualArrangement.totalAmountCents;
+        }
+        console.log('💰 Manual arrangement payment amount:', { amountCents });
+      }
+
+      // Force Arrangement guard: only settlement arrangements or manual arrangements are allowed through
+      if (tenantSettings?.forceArrangement && arrangement?.planType !== 'settlement' && !manualArrangement) {
         console.log('❌ Force Arrangement enabled - blocking non-settlement payment. planType:', arrangement?.planType ?? 'none');
         return res.status(400).json({
           success: false,

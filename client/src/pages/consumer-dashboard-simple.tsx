@@ -199,6 +199,8 @@ export default function ConsumerDashboardSimple() {
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [customPaymentAmount, setCustomPaymentAmount] = useState<string>("");
   
+  const [selectedManualArrangement, setSelectedManualArrangement] = useState<any>(null);
+
   // New simplified payment flow state
   const [paymentMethod, setPaymentMethod] = useState<'term' | 'custom' | 'smax'>('term');
   const [selectedTerm, setSelectedTerm] = useState<3 | 6 | 12 | null>(null);
@@ -413,6 +415,18 @@ export default function ConsumerDashboardSimple() {
     enabled: !!session?.email && !!session?.tenantSlug && !!accountData?.accounts,
   });
 
+  // Fetch admin-created manual arrangements for this consumer
+  const { data: manualArrangementsList } = useQuery<any[]>({
+    queryKey: ['/api/consumer/manual-arrangements'],
+    queryFn: async () => {
+      const token = getStoredConsumerToken();
+      const response = await apiCall("GET", `/api/consumer/manual-arrangements`, null, token);
+      if (!response.ok) return [];
+      return response.json();
+    },
+    enabled: !!session?.email,
+  });
+
   // Fetch active payment schedules
   const { data: paymentSchedules } = useQuery({
     queryKey: [`/api/consumer/payment-schedules/${session?.email}?tenantSlug=${session?.tenantSlug}`],
@@ -570,6 +584,7 @@ export default function ConsumerDashboardSimple() {
     setCustomAmount('');
     setPaymentFrequency('biweekly');
     setCalculatedPayment(null);
+    setSelectedManualArrangement(null);
     setShowPaymentDialog(true);
   };
 
@@ -651,13 +666,16 @@ export default function ConsumerDashboardSimple() {
     ? // PRIORITY 1: If user entered a custom amount, always use it
       (customPaymentAmount && !isNaN(parseFloat(customPaymentAmount)) && parseFloat(customPaymentAmount) > 0)
         ? Math.round(parseFloat(customPaymentAmount) * 100)
-      // PRIORITY 2: If calculatedPayment was set (from arrangement/SMAX selection), use it
+      // PRIORITY 2: If calculatedPayment was set (from arrangement/SMAX/manual selection), use it
       : calculatedPayment !== null && calculatedPayment > 0
         ? calculatedPayment
-      // PRIORITY 3: If arrangement selected, calculate the payment
+      // PRIORITY 3: If a manual arrangement is selected, use its total amount
+      : selectedManualArrangement
+        ? (selectedManualArrangement.totalAmountCents || selectedAccount.balanceCents || 0)
+      // PRIORITY 4: If arrangement selected, calculate the payment
       : selectedArrangement
         ? calculateArrangementPayment(selectedArrangement, selectedAccount.balanceCents || 0)
-      // PRIORITY 4: Fall back to account balance
+      // PRIORITY 5: Fall back to account balance
       : selectedAccount.balanceCents || 0
     : 0;
 
@@ -801,6 +819,7 @@ export default function ConsumerDashboardSimple() {
       let paymentData: any = {
         accountId: selectedAccount.id,
         arrangementId: selectedArrangement?.id || null,
+        manualArrangementId: selectedManualArrangement?.id || null,
         settlementPaymentCount: selectedArrangement?.planType === 'settlement' ? (selectedArrangement?.settlementPaymentCount || 1) : undefined,
         cardName: paymentForm.cardName,
         zipCode: paymentForm.zipCode,
@@ -1531,10 +1550,10 @@ export default function ConsumerDashboardSimple() {
               <CardHeader className="border-b border-white/10">
                 <CardTitle className="flex items-center text-white">
                   <Calendar className="h-5 w-5 mr-2 text-blue-400" />
-                  Active Payment Arrangements
+                  Active Payment Plans
                 </CardTitle>
                 <p className="text-sm text-blue-100/70 mt-2">
-                  View your scheduled payment arrangements and upcoming payment dates
+                  View your scheduled payment plans and upcoming payment dates
                 </p>
               </CardHeader>
               <CardContent className="p-6">
@@ -1762,7 +1781,7 @@ export default function ConsumerDashboardSimple() {
                             }}
                             data-testid={`button-cancel-schedule-${schedule.id}`}
                           >
-                            Cancel Arrangement
+                            Cancel Plan
                           </Button>
                         </div>
                       </div>
@@ -2314,6 +2333,50 @@ export default function ConsumerDashboardSimple() {
                       </div>
                     </div>
                   )}
+
+                  {/* Manual Payment Plan - Admin-created arrangement for this account */}
+                  {(() => {
+                    const accountManualArrangement = manualArrangementsList?.find((ma: any) => ma.accountId === selectedAccount?.id);
+                    if (!accountManualArrangement) return null;
+                    const isSelected = selectedManualArrangement?.id === accountManualArrangement.id;
+                    return (
+                      <div className="space-y-3">
+                        <Label className="text-sm text-blue-100/70 block">Your Payment Plan</Label>
+                        <div
+                          onClick={() => {
+                            setSelectedManualArrangement(isSelected ? null : accountManualArrangement);
+                            setSelectedArrangement(null);
+                            setPaymentMethod('term');
+                            setCustomAmount('');
+                            setCustomPaymentAmount('');
+                            setCalculatedPayment(null);
+                          }}
+                          className={`cursor-pointer rounded-lg border-2 p-4 transition-all ${
+                            isSelected
+                              ? 'border-emerald-400 bg-emerald-500/20 backdrop-blur'
+                              : 'border-white/20 bg-white/5 hover:bg-white/10 hover:border-emerald-400/50'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-semibold text-white">{accountManualArrangement.name}</p>
+                              {accountManualArrangement.totalAmountCents > 0 && (
+                                <p className="text-sm text-emerald-200 mt-1">
+                                  Amount: {formatCurrency(accountManualArrangement.totalAmountCents)}
+                                </p>
+                              )}
+                              {accountManualArrangement.notes && (
+                                <p className="text-xs text-blue-100/60 mt-1">{accountManualArrangement.notes}</p>
+                              )}
+                            </div>
+                            {isSelected && (
+                              <Badge className="bg-emerald-500 text-white border-emerald-400/30 ml-3 shrink-0">Selected</Badge>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Payment Plan Options - Agency Configured */}
                   {applicableArrangements.filter((arr: any) => arr.planType !== 'settlement').length > 0 && (
