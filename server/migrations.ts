@@ -1779,6 +1779,65 @@ export async function runMigrations() {
       console.log('  ⚠ manual_payments arrangement_id (already nullable or error)');
     }
 
+    // Add campaign integration columns to tenant_settings
+    console.log('Adding campaign integration fields to tenant_settings...');
+    try {
+      await client.query(`ALTER TABLE tenant_settings ADD COLUMN IF NOT EXISTS external_api_key TEXT`);
+      console.log('  ✓ external_api_key column added to tenant_settings');
+    } catch (err: any) {
+      console.log(`  ⚠ external_api_key column (already exists or error): ${err.message}`);
+    }
+    try {
+      await client.query(`ALTER TABLE tenant_settings ADD COLUMN IF NOT EXISTS campaign_integration_enabled BOOLEAN DEFAULT false`);
+      console.log('  ✓ campaign_integration_enabled column added to tenant_settings');
+    } catch (err: any) {
+      console.log(`  ⚠ campaign_integration_enabled column (already exists or error): ${err.message}`);
+    }
+
+    // Create campaign_logs table
+    console.log('Creating campaign_logs table...');
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS campaign_logs (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          campaign_name TEXT NOT NULL,
+          template_id UUID,
+          campaign_type TEXT NOT NULL,
+          total_contacts INTEGER NOT NULL DEFAULT 0,
+          total_sent INTEGER NOT NULL DEFAULT 0,
+          total_failed INTEGER NOT NULL DEFAULT 0,
+          total_skipped INTEGER NOT NULL DEFAULT 0,
+          status TEXT NOT NULL DEFAULT 'pending',
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      console.log('  ✓ campaign_logs table');
+    } catch (err: any) {
+      console.log(`  ⚠ campaign_logs table (already exists or error): ${err.message}`);
+    }
+
+    // Create campaign_log_items table
+    console.log('Creating campaign_log_items table...');
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS campaign_log_items (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          campaign_log_id UUID NOT NULL REFERENCES campaign_logs(id) ON DELETE CASCADE,
+          file_number TEXT NOT NULL DEFAULT '',
+          contact_value TEXT NOT NULL,
+          contact_type TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          skip_reason TEXT,
+          error_message TEXT,
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      console.log('  ✓ campaign_log_items table');
+    } catch (err: any) {
+      console.log(`  ⚠ campaign_log_items table (already exists or error): ${err.message}`);
+    }
+
     console.log('✅ Database migrations completed successfully');
   } catch (error: any) {
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
