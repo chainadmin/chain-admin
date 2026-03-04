@@ -685,7 +685,8 @@ export default function ConsumerDashboardSimple() {
     if (!selectedAccount) return;
 
     // Validate payment selection
-    if (noArrangementsAvailable) {
+    // Manual arrangement always bypasses min-payment and force-arrangement checks
+    if (noArrangementsAvailable && !selectedManualArrangement) {
       // When no arrangements exist, require custom payment amount
       const amount = parseFloat(customPaymentAmount);
       const maxAmount = (selectedAccount.balanceCents || 0) / 100;
@@ -748,8 +749,8 @@ export default function ConsumerDashboardSimple() {
         });
         return;
       }
-    } else if (!selectedArrangement && calculatedPayment === null && paymentMethod !== 'smax') {
-      // When arrangements exist, require selection (but allow SMAX payments)
+    } else if (!selectedArrangement && calculatedPayment === null && paymentMethod !== 'smax' && !selectedManualArrangement) {
+      // When arrangements exist, require selection (but allow SMAX payments and manual arrangements)
       toast({
         title: "Select Payment Plan",
         description: "Please select a payment term or enter a custom amount",
