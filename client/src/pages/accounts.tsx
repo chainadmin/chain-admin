@@ -673,13 +673,13 @@ export default function Accounts() {
   const searchFilteredAccounts = accountSearchText.trim().length === 0
     ? fullyFilteredAccounts
     : fullyFilteredAccounts.filter((account: any) => {
-        const q = accountSearchText.toLowerCase();
-        const name = `${account.consumer?.firstName ?? ''} ${account.consumer?.lastName ?? ''}`.toLowerCase();
+        const q = accountSearchText.trim().toLowerCase();
+        const name = `${account.consumer?.firstName ?? ''} ${account.consumer?.lastName ?? ''}`.trim().toLowerCase();
         return (
           name.includes(q) ||
-          (account.accountNumber ?? '').toLowerCase().includes(q) ||
-          (account.filenumber ?? '').toLowerCase().includes(q) ||
-          (account.creditor ?? '').toLowerCase().includes(q)
+          String(account.accountNumber ?? '').toLowerCase().includes(q) ||
+          String(account.filenumber ?? '').toLowerCase().includes(q) ||
+          String(account.creditor ?? '').toLowerCase().includes(q)
         );
       });
 
