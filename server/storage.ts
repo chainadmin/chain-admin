@@ -45,6 +45,8 @@ import {
   autoResponseUsage,
   voipPhoneNumbers,
   voipCallLogs,
+  campaignLogs,
+  campaignLogItems,
   type User,
   type UpsertUser,
   type Tenant,
@@ -126,6 +128,10 @@ import {
   type InsertVoipPhoneNumber,
   type VoipCallLog,
   type InsertVoipCallLog,
+  type CampaignLog,
+  type InsertCampaignLog,
+  type CampaignLogItem,
+  type InsertCampaignLogItem,
 } from "@shared/schema";
 import { messagingPlans, EMAIL_OVERAGE_RATE_PER_EMAIL, SMS_OVERAGE_RATE_PER_SEGMENT, DOCUMENT_SIGNING_ADDON_PRICE, MOBILE_APP_BRANDING_MONTHLY, AI_AUTO_RESPONSE_ADDON_PRICE, AUTO_RESPONSE_INCLUDED_RESPONSES, AUTO_RESPONSE_OVERAGE_PER_RESPONSE, type MessagingPlanId } from "@shared/billing-plans";
 import { db } from "./db";
@@ -420,6 +426,14 @@ export interface IStorage {
   
   // Tenant settings operations
   getTenantSettings(tenantId: string): Promise<TenantSettings | undefined>;
+  getTenantByExternalApiKey(apiKey: string): Promise<{ tenantId: string } | undefined>;
+  createCampaignLog(data: InsertCampaignLog): Promise<CampaignLog>;
+  updateCampaignLog(id: string, data: Partial<CampaignLog>): Promise<CampaignLog>;
+  getCampaignLogs(tenantId: string, limit?: number): Promise<CampaignLog[]>;
+  getCampaignLog(id: string, tenantId: string): Promise<CampaignLog | undefined>;
+  createCampaignLogItem(data: InsertCampaignLogItem): Promise<CampaignLogItem>;
+  updateCampaignLogItem(id: string, data: Partial<CampaignLogItem>): Promise<CampaignLogItem>;
+  getCampaignLogItems(campaignLogId: string): Promise<CampaignLogItem[]>;
   upsertTenantSettings(settings: InsertTenantSettings): Promise<TenantSettings>;
   
   // Tenant setup (for fixing access issues)
@@ -2770,6 +2784,77 @@ export class DatabaseStorage implements IStorage {
       .returning();
 
     return deletedOptions.length > 0;
+  }
+
+  async getTenantByExternalApiKey(apiKey: string): Promise<{ tenantId: string } | undefined> {
+    if (!apiKey?.trim()) {
+      return undefined;
+    }
+
+    const [settings] = await db
+      .select({ tenantId: tenantSettings.tenantId })
+      .from(tenantSettings)
+      .where(eq(tenantSettings.externalApiKey, apiKey.trim()))
+      .limit(1);
+
+    return settings;
+  }
+
+  async createCampaignLog(data: InsertCampaignLog): Promise<CampaignLog> {
+    const [campaignLog] = await db.insert(campaignLogs).values(data).returning();
+    return campaignLog;
+  }
+
+  async updateCampaignLog(id: string, data: Partial<CampaignLog>): Promise<CampaignLog> {
+    const [campaignLog] = await db
+      .update(campaignLogs)
+      .set(data)
+      .where(eq(campaignLogs.id, id))
+      .returning();
+
+    return campaignLog;
+  }
+
+  async getCampaignLogs(tenantId: string, limit: number = 25): Promise<CampaignLog[]> {
+    return await db
+      .select()
+      .from(campaignLogs)
+      .where(eq(campaignLogs.tenantId, tenantId))
+      .orderBy(desc(campaignLogs.createdAt))
+      .limit(limit);
+  }
+
+  async getCampaignLog(id: string, tenantId: string): Promise<CampaignLog | undefined> {
+    const [campaignLog] = await db
+      .select()
+      .from(campaignLogs)
+      .where(and(eq(campaignLogs.id, id), eq(campaignLogs.tenantId, tenantId)))
+      .limit(1);
+
+    return campaignLog;
+  }
+
+  async createCampaignLogItem(data: InsertCampaignLogItem): Promise<CampaignLogItem> {
+    const [campaignLogItem] = await db.insert(campaignLogItems).values(data).returning();
+    return campaignLogItem;
+  }
+
+  async updateCampaignLogItem(id: string, data: Partial<CampaignLogItem>): Promise<CampaignLogItem> {
+    const [campaignLogItem] = await db
+      .update(campaignLogItems)
+      .set(data)
+      .where(eq(campaignLogItems.id, id))
+      .returning();
+
+    return campaignLogItem;
+  }
+
+  async getCampaignLogItems(campaignLogId: string): Promise<CampaignLogItem[]> {
+    return await db
+      .select()
+      .from(campaignLogItems)
+      .where(eq(campaignLogItems.campaignLogId, campaignLogId))
+      .orderBy(desc(campaignLogItems.createdAt));
   }
 
   // Tenant settings operations
