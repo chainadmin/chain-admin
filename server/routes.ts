@@ -50,6 +50,7 @@ import { smsService } from "./smsService";
 import { smaxService } from "./smaxService";
 import { eventService } from "./eventService";
 import { uploadLogo } from "./r2Storage";
+import externalApiRouter from "./external-api";
 import { AuthnetService } from "./authnetService";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -1139,6 +1140,7 @@ async function buildAgreementVariables(
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  app.use('/api/v2', externalApiRouter);
   // Request/Response logger - log all incoming requests and outgoing responses for debugging
   app.use((req, res, next) => {
     const startTime = Date.now();
@@ -8458,6 +8460,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         forceArrangement: z.boolean().optional(),
         // Collection Max integration
         collectionMaxEnabled: z.boolean().optional(),
+        campaignIntegrationEnabled: z.boolean().optional(),
       });
 
       const validatedData = settingsSchema.parse(req.body);
@@ -8660,6 +8663,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating settings:", error);
       res.status(500).json({ message: "Failed to update settings" });
+    }
+  });
+
+
+
+  app.post('/api/settings/generate-external-api-key', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user?.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: 'No tenant access' });
+      }
+
+      const externalApiKey = crypto.randomBytes(32).toString('hex');
+      await storage.upsertTenantSettings({ tenantId, externalApiKey });
+
+      res.json({ externalApiKey });
+    } catch (error) {
+      console.error('Error generating external API key:', error);
+      res.status(500).json({ message: 'Failed to generate external API key' });
+    }
+  });
+
+  app.get('/api/campaign-logs', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user?.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: 'No tenant access' });
+      }
+
+      const limit = Number(req.query.limit) > 0 ? Math.min(Number(req.query.limit), 100) : 25;
+      const logs = await storage.getCampaignLogs(tenantId, limit);
+      res.json(logs);
+    } catch (error) {
+      console.error('Error fetching campaign logs:', error);
+      res.status(500).json({ message: 'Failed to fetch campaign logs' });
+    }
+  });
+
+  app.get('/api/campaign-logs/:id', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user?.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: 'No tenant access' });
+      }
+
+      const log = await storage.getCampaignLog(req.params.id, tenantId);
+      if (!log) {
+        return res.status(404).json({ message: 'Campaign log not found' });
+      }
+
+      const items = await storage.getCampaignLogItems(log.id);
+      res.json({ ...log, items });
+    } catch (error) {
+      console.error('Error fetching campaign log detail:', error);
+      res.status(500).json({ message: 'Failed to fetch campaign log' });
     }
   });
 

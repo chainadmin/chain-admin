@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { Fragment, useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -159,6 +159,8 @@ export default function Settings() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showAddonConfirmDialog, setShowAddonConfirmDialog] = useState(false);
   const [newStatusInput, setNewStatusInput] = useState("");
+  const [showExternalApiKey, setShowExternalApiKey] = useState(false);
+  const [expandedCampaignLogId, setExpandedCampaignLogId] = useState<string | null>(null);
 
   const cardBaseClasses =
     "border border-white/10 bg-white/5 text-blue-50 shadow-lg shadow-blue-900/20 backdrop-blur";
@@ -172,9 +174,28 @@ export default function Settings() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user: authUser, isLoading: authLoading } = useAuth();
+  const tenantId = (authUser as any)?.tenantId || "";
 
   const { data: settings, isLoading: settingsLoading } = useQuery({
     queryKey: ["/api/settings"],
+  });
+
+  const { data: campaignLogs = [], isLoading: campaignLogsLoading } = useQuery<any[]>({
+    queryKey: ["/api/campaign-logs"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/campaign-logs?limit=20");
+      return response.json();
+    },
+    enabled: Boolean((localSettings as any)?.campaignIntegrationEnabled),
+  });
+
+  const { data: expandedCampaignLog } = useQuery<any>({
+    queryKey: ["/api/campaign-logs", expandedCampaignLogId],
+    queryFn: async () => {
+      const response = await apiRequest("GET", `/api/campaign-logs/${expandedCampaignLogId}`);
+      return response.json();
+    },
+    enabled: Boolean(expandedCampaignLogId && (localSettings as any)?.campaignIntegrationEnabled),
   });
 
   const { data: documents, isLoading: documentsLoading } = useQuery({
@@ -303,6 +324,28 @@ export default function Settings() {
       toast({
         title: "Update Failed",
         description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const generateExternalApiKeyMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/settings/generate-external-api-key", {});
+      return response.json();
+    },
+    onSuccess: (data: any) => {
+      handleSettingsUpdate("externalApiKey", data.externalApiKey);
+      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+      toast({
+        title: "API Key Generated",
+        description: "A new external API key has been generated.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Generation Failed",
+        description: error?.message || "Failed to generate external API key.",
         variant: "destructive",
       });
     },
@@ -2620,6 +2663,136 @@ export default function Settings() {
                       </Button>
                     </div>
                   )}
+
+                  <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-4">
+                    <div className="flex items-center justify-between space-x-4 rounded-xl border border-white/10 bg-white/5 p-4">
+                      <div className="flex-1">
+                        <Label className="text-base font-medium text-white">Campaign Integration</Label>
+                        <p className="text-sm text-blue-100/70">
+                          Allow Debt Manager Pro to push campaign sends into Chain.
+                        </p>
+                      </div>
+                      <Switch
+                        checked={(localSettings as any)?.campaignIntegrationEnabled || false}
+                        onCheckedChange={(checked) => handleSettingsUpdate('campaignIntegrationEnabled', checked)}
+                        data-testid="switch-dmp-campaign-integration-enabled"
+                      />
+                    </div>
+
+                    {(localSettings as any)?.campaignIntegrationEnabled && (
+                      <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-4">
+                        <div className="space-y-2">
+                          <Label className="text-white">Chain API Key — provide this to Debt Manager Pro so it can send campaigns to Chain</Label>
+                          <div className="flex items-center gap-2">
+                            <Input
+                              readOnly
+                              type={showExternalApiKey ? 'text' : 'password'}
+                              value={(localSettings as any)?.externalApiKey || ''}
+                              placeholder="Generate an API key"
+                              className={inputClasses}
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="border-white/20 bg-white/10 text-white hover:bg-white/20"
+                              onClick={() => setShowExternalApiKey((prev) => !prev)}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="border-white/20 bg-white/10 text-white hover:bg-white/20"
+                              onClick={async () => {
+                                const key = (localSettings as any)?.externalApiKey;
+                                if (!key) return;
+                                await navigator.clipboard.writeText(key);
+                                toast({ title: 'Copied', description: 'API key copied to clipboard.' });
+                              }}
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <Button
+                            type="button"
+                            onClick={async () => {
+                              const confirmed = window.confirm('Regenerate API key? Existing integrations will stop working until updated.');
+                              if (!confirmed) return;
+                              generateExternalApiKeyMutation.mutate();
+                            }}
+                            disabled={generateExternalApiKeyMutation.isPending}
+                            className="rounded-xl bg-gradient-to-r from-amber-500/80 to-orange-500/80 px-4 py-2 text-sm font-semibold text-white"
+                          >
+                            {generateExternalApiKeyMutation.isPending ? 'Regenerating...' : 'Regenerate Key'}
+                          </Button>
+                        </div>
+
+                        <div className="space-y-2">
+                          <h4 className="text-base font-medium text-white">Campaign History</h4>
+                          {campaignLogsLoading ? (
+                            <p className="text-xs text-blue-100/60">Loading campaign history...</p>
+                          ) : (
+                            <div className="overflow-x-auto rounded-lg border border-white/10">
+                              <table className="w-full text-left text-xs text-blue-100/80">
+                                <thead className="bg-white/5 text-blue-100/60">
+                                  <tr>
+                                    <th className="px-3 py-2">Campaign</th>
+                                    <th className="px-3 py-2">Type</th>
+                                    <th className="px-3 py-2">Date</th>
+                                    <th className="px-3 py-2">Sent</th>
+                                    <th className="px-3 py-2">Failed</th>
+                                    <th className="px-3 py-2">Skipped</th>
+                                    <th className="px-3 py-2">Status</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {campaignLogs.map((log: any) => (
+                                    <Fragment key={log.id}>
+                                      <tr
+                                        key={log.id}
+                                        className="cursor-pointer border-t border-white/10 hover:bg-white/5"
+                                        onClick={() => setExpandedCampaignLogId((prev) => prev === log.id ? null : log.id)}
+                                      >
+                                        <td className="px-3 py-2">{log.campaignName}</td>
+                                        <td className="px-3 py-2 uppercase">{log.campaignType}</td>
+                                        <td className="px-3 py-2">{new Date(log.createdAt).toLocaleString()}</td>
+                                        <td className="px-3 py-2">{log.totalSent}</td>
+                                        <td className="px-3 py-2">{log.totalFailed}</td>
+                                        <td className="px-3 py-2">{log.totalSkipped}</td>
+                                        <td className="px-3 py-2"><span className="rounded bg-white/10 px-2 py-1 uppercase">{log.status}</span></td>
+                                      </tr>
+                                      {expandedCampaignLogId === log.id && expandedCampaignLog?.items && (
+                                        <tr className="border-t border-white/10 bg-black/20">
+                                          <td colSpan={7} className="px-3 py-3">
+                                            <div className="space-y-2">
+                                              {expandedCampaignLog.items.map((item: any) => (
+                                                <div key={item.id} className="flex flex-wrap items-center gap-2 rounded border border-white/10 bg-white/5 p-2">
+                                                  <span className="font-mono text-[11px]">{item.fileNumber || '—'}</span>
+                                                  <span>{item.contactValue}</span>
+                                                  <span className="rounded bg-white/10 px-2 py-0.5 uppercase">{item.status}</span>
+                                                  {item.skipReason && <span className="text-amber-300">{item.skipReason}</span>}
+                                                  {item.errorMessage && <span className="text-rose-300">{item.errorMessage}</span>}
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      )}
+                                    </Fragment>
+                                  ))}
+                                  {!campaignLogs.length && (
+                                    <tr>
+                                      <td colSpan={7} className="px-3 py-4 text-center text-blue-100/50">No campaign history yet.</td>
+                                    </tr>
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
                   {/* DMP Features Info */}
                   <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-4">

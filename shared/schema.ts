@@ -707,8 +707,37 @@ export const tenantSettings = pgTable("tenant_settings", {
   dmpApiUrl: text("dmp_api_url"),
   dmpUsername: text("dmp_username"),
   dmpPassword: text("dmp_password"),
+  externalApiKey: text("external_api_key"), // Bearer token used by Debt Manager Pro to call Chain campaign APIs
+  campaignIntegrationEnabled: boolean("campaign_integration_enabled").default(false),
   blockedAccountStatuses: text("blocked_account_statuses").array().default(sql`ARRAY['inactive', 'recalled', 'closed']::text[]`), // Account statuses that block communications and payments
   forceArrangement: boolean("force_arrangement").default(false), // When true, consumers must set up payment arrangement (no one-time payments)
+});
+
+// External campaign integration log (Debt Manager Pro -> Chain)
+export const campaignLogs = pgTable("campaign_logs", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  campaignName: text("campaign_name").notNull(),
+  templateId: uuid("template_id"),
+  campaignType: text("campaign_type", { enum: ["sms", "email"] }).notNull(),
+  totalContacts: integer("total_contacts").notNull(),
+  totalSent: integer("total_sent").default(0).notNull(),
+  totalFailed: integer("total_failed").default(0).notNull(),
+  totalSkipped: integer("total_skipped").default(0).notNull(),
+  status: text("status", { enum: ["pending", "sending", "completed", "failed"] }).default("pending").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const campaignLogItems = pgTable("campaign_log_items", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  campaignLogId: uuid("campaign_log_id").references(() => campaignLogs.id, { onDelete: "cascade" }).notNull(),
+  fileNumber: text("file_number"),
+  contactValue: text("contact_value").notNull(),
+  contactType: text("contact_type", { enum: ["phone", "email"] }).notNull(),
+  status: text("status", { enum: ["pending", "sent", "failed", "skipped"] }).default("pending").notNull(),
+  skipReason: text("skip_reason"),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Consumer notifications (when accounts are added)
@@ -1722,6 +1751,8 @@ export const insertVoipPhoneNumberSchema = createInsertSchema(voipPhoneNumbers).
 export const insertVoipCallLogSchema = createInsertSchema(voipCallLogs).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertManualArrangementSchema = createInsertSchema(manualArrangements).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertManualPaymentSchema = createInsertSchema(manualPayments).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertCampaignLogSchema = createInsertSchema(campaignLogs).omit({ id: true, createdAt: true });
+export const insertCampaignLogItemSchema = createInsertSchema(campaignLogItems).omit({ id: true, createdAt: true });
 
 // Types
 export type UpsertUser = typeof users.$inferInsert;
@@ -1823,3 +1854,7 @@ export type ManualArrangement = typeof manualArrangements.$inferSelect;
 export type InsertManualArrangement = z.infer<typeof insertManualArrangementSchema>;
 export type ManualPayment = typeof manualPayments.$inferSelect;
 export type InsertManualPayment = z.infer<typeof insertManualPaymentSchema>;
+export type CampaignLog = typeof campaignLogs.$inferSelect;
+export type InsertCampaignLog = z.infer<typeof insertCampaignLogSchema>;
+export type CampaignLogItem = typeof campaignLogItems.$inferSelect;
+export type InsertCampaignLogItem = z.infer<typeof insertCampaignLogItemSchema>;
