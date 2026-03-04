@@ -807,14 +807,15 @@ export default function ConsumerDashboardSimple() {
         saveCard: saveCard || isSimplifiedFlow,
         setupRecurring: shouldSetupRecurring,
         firstPaymentDate: paymentDate,
-        // Only pass customPaymentAmountCents for:
-        // 1. Explicit custom amounts entered by user
+        // Pass customPaymentAmountCents when:
+        // 1. Explicit custom amounts entered by user (customPaymentAmount text field)
         // 2. SMAX one-time payments (no arrangement, just paying existing plan)
-        // For arrangement-driven payments, leave null so backend uses arrangement logic
+        // 3. Custom amount selected via range plan input (paymentMethod === 'custom', amount stored in calculatedPayment)
+        // For arrangement-driven term payments, leave null so backend uses arrangement logic
         customPaymentAmountCents: (customPaymentAmount && !isNaN(parseFloat(customPaymentAmount)) && parseFloat(customPaymentAmount) > 0)
           ? Math.round(parseFloat(customPaymentAmount) * 100)
-          : (paymentMethod === 'smax' && calculatedPayment !== null && calculatedPayment > 0)
-            ? calculatedPayment  // SMAX payments need the amount since there's no arrangement ID
+          : ((paymentMethod === 'smax' || paymentMethod === 'custom') && calculatedPayment !== null && calculatedPayment > 0)
+            ? calculatedPayment
             : null,
         // Simplified flow specific data
         simplifiedFlow: isSimplifiedFlow ? {
