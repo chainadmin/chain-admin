@@ -14535,8 +14535,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             if (success) {
               const account = await storage.getAccount(schedule.accountId);
               if (account) {
-                const newBalance = Math.max(0, (account.balanceCents || 0) - paymentAmountCents);
-                console.log('💰 Scheduled payment balance update:', { accountId: schedule.accountId, previousBalance: account.balanceCents, paymentAmount: paymentAmountCents, newBalance });
+                const isLastSettlementPayment = schedule.arrangementType === 'settlement' &&
+                  schedule.remainingPayments !== null &&
+                  schedule.remainingPayments - 1 === 0;
+                const newBalance = isLastSettlementPayment
+                  ? 0
+                  : Math.max(0, (account.balanceCents || 0) - paymentAmountCents);
+                console.log('💰 Scheduled payment balance update:', { accountId: schedule.accountId, previousBalance: account.balanceCents, paymentAmount: paymentAmountCents, newBalance, isLastSettlementPayment });
                 await storage.updateAccount(schedule.accountId, { balanceCents: newBalance });
 
                 if (account.filenumber) {
