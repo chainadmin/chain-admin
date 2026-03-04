@@ -2710,7 +2710,7 @@ export default function ConsumerDashboardSimple() {
                 {selectedArrangement && (selectedArrangement.planType === 'fixed_monthly' || selectedArrangement.planType === 'range') && selectedAccountSMAXArrangement && (
                   <div className="p-3 bg-amber-500/10 rounded-lg border border-amber-400/30 backdrop-blur">
                     <p className="text-sm text-amber-100/70">
-                      <strong className="text-amber-200">Note:</strong> Recurring payments cannot be set up because this account already has an existing arrangement. Please contact us to modify your payment arrangement.
+                      <strong className="text-amber-200">Note:</strong> Recurring payments cannot be set up because this account already has an existing payment plan. Please contact us to modify your payment plan.
                     </p>
                   </div>
                 )}

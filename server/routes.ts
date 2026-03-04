@@ -6145,17 +6145,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let existingConsumer = await storage.getConsumerByEmail(email);
       console.log("Existing consumer found by email:", !!existingConsumer);
 
-      // Fallback: if not found by email, try matching by name + tenant (same person, different email)
-      if (!existingConsumer && firstName && lastName) {
-        let tenantIdForLookup: string | undefined;
-        if (tenantSlug) {
-          const tenantForLookup = await storage.getTenantBySlug(tenantSlug);
-          tenantIdForLookup = tenantForLookup?.id;
-        }
-        const nameMatches = await storage.findConsumersByNameAndTenant(firstName, lastName, tenantIdForLookup);
-        if (nameMatches.length > 0) {
-          existingConsumer = nameMatches[0];
-          console.log(`Matched existing consumer by name "${firstName} ${lastName}" in tenant ${tenantIdForLookup} — updating email from ${existingConsumer.email} to ${email}`);
+      // Fallback: if not found by email, try matching by name + DOB + tenant (same person, different email)
+      if (!existingConsumer && firstName && lastName && dateOfBirth) {
+        const normalizedIncomingDOB = normalizeDateString(dateOfBirth);
+        if (normalizedIncomingDOB) {
+          let tenantIdForLookup: string | undefined;
+          if (tenantSlug) {
+            const tenantForLookup = await storage.getTenantBySlug(tenantSlug);
+            tenantIdForLookup = tenantForLookup?.id;
+          }
+          const nameMatches = await storage.findConsumersByNameAndTenant(firstName, lastName, tenantIdForLookup);
+          // Only link if DOB also matches — prevents false-positive linking of two people with the same name
+          const dobVerifiedMatch = nameMatches.find(candidate => {
+            const storedDOB = normalizeDateString(candidate.dateOfBirth);
+            return storedDOB && storedDOB === normalizedIncomingDOB;
+          });
+          if (dobVerifiedMatch) {
+            existingConsumer = dobVerifiedMatch;
+            console.log(`Matched existing consumer by name+DOB "${firstName} ${lastName}" in tenant ${tenantIdForLookup} — updating email from ${existingConsumer.email} to ${email}`);
+          }
         }
       }
 
