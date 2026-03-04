@@ -54,6 +54,7 @@ export default function Accounts() {
   const [showSendDocumentDialog, setShowSendDocumentDialog] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<any>(null);
   const [displayLimit, setDisplayLimit] = useState(50);
+  const [accountSearchText, setAccountSearchText] = useState("");
   const [sendDocumentForm, setSendDocumentForm] = useState({
     templateId: "",
     accountId: "",
@@ -668,9 +669,23 @@ export default function Accounts() {
     return true; // "all"
   });
   
+  // Apply text search filter
+  const searchFilteredAccounts = accountSearchText.trim().length === 0
+    ? fullyFilteredAccounts
+    : fullyFilteredAccounts.filter((account: any) => {
+        const q = accountSearchText.toLowerCase();
+        const name = `${account.consumer?.firstName ?? ''} ${account.consumer?.lastName ?? ''}`.toLowerCase();
+        return (
+          name.includes(q) ||
+          (account.accountNumber ?? '').toLowerCase().includes(q) ||
+          (account.filenumber ?? '').toLowerCase().includes(q) ||
+          (account.creditor ?? '').toLowerCase().includes(q)
+        );
+      });
+
   // Apply pagination
-  const paginatedAccounts = fullyFilteredAccounts.slice(0, displayLimit);
-  const hasMoreAccounts = fullyFilteredAccounts.length > displayLimit;
+  const paginatedAccounts = searchFilteredAccounts.slice(0, displayLimit);
+  const hasMoreAccounts = searchFilteredAccounts.length > displayLimit;
   
   const selectedFolder =
     selectedFolderId === "all"
@@ -908,6 +923,22 @@ export default function Accounts() {
         </section>
 
         <section>
+          <div className="mb-4">
+            <div className="relative">
+              <i className="fas fa-search pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-blue-100/50 text-sm" />
+              <Input
+                type="search"
+                placeholder="Search by name, account #, file #, or creditor…"
+                value={accountSearchText}
+                onChange={(e) => {
+                  setAccountSearchText(e.target.value);
+                  setDisplayLimit(50);
+                }}
+                className="pl-9 bg-white/5 border-white/10 text-white placeholder:text-blue-100/40 rounded-xl"
+                data-testid="input-accounts-search"
+              />
+            </div>
+          </div>
           <AccountsTable
             accounts={paginatedAccounts}
             isLoading={accountsLoading}
@@ -927,14 +958,14 @@ export default function Accounts() {
                 className="rounded-xl border-white/10 bg-white/5 px-6 py-2 text-blue-100 hover:bg-white/10"
                 data-testid="button-load-more"
               >
-                Load More ({fullyFilteredAccounts.length - displayLimit} remaining)
+                Load More ({searchFilteredAccounts.length - displayLimit} remaining)
               </Button>
             </div>
           )}
           
-          {!accountsLoading && fullyFilteredAccounts.length > 0 && (
+          {!accountsLoading && searchFilteredAccounts.length > 0 && (
             <div className="mt-4 text-center text-sm text-blue-100/60">
-              Showing {paginatedAccounts.length} of {fullyFilteredAccounts.length} accounts
+              Showing {paginatedAccounts.length} of {searchFilteredAccounts.length} accounts
             </div>
           )}
         </section>
