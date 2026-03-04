@@ -11596,28 +11596,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Check if Force Arrangement is enabled - reject one-time payments if so
-      // But allow SMAX arrangement payments (external arrangements from SMAX system)
-      if (tenantSettings?.forceArrangement) {
-        // Detect SMAX arrangement payments: filenumber-linked account with custom amount
-        const isSmaxArrangementPayment = !!account.filenumber && !!customPaymentAmountCents && !arrangementId && !simplifiedFlow;
-        
-        // If no arrangement is being set up AND not a SMAX arrangement payment, this is a standalone one-time payment
-        if (!arrangementId && !simplifiedFlow && !isSmaxArrangementPayment) {
-          console.log('❌ Force Arrangement enabled - rejecting one-time payment');
-          return res.status(400).json({
-            success: false,
-            message: "One-time payments are not available. Please set up a payment arrangement to proceed."
-          });
-        }
-        
-        if (isSmaxArrangementPayment) {
-          console.log('✅ Force Arrangement enabled but allowing SMAX arrangement payment:', {
-            filenumber: account.filenumber,
-            customPaymentAmountCents
-          });
-        }
-      }
 
       // Get arrangement if specified
       let arrangement = null;
@@ -11833,6 +11811,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      // Force Arrangement guard: only settlement arrangements are allowed through
+      if (tenantSettings?.forceArrangement && arrangement?.planType !== 'settlement') {
+        console.log('❌ Force Arrangement enabled - blocking non-settlement payment. planType:', arrangement?.planType ?? 'none');
+        return res.status(400).json({
+          success: false,
+          message: "A payment arrangement is required. Please select a payment plan to proceed."
+        });
+      }
+
       console.log('💵 Final payment amount:', {
         amountCents,
         amountDollars: (amountCents / 100).toFixed(2)
