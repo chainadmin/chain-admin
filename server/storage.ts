@@ -253,6 +253,7 @@ export interface IStorage {
   getConsumerByEmailAndTenant(email: string, tenantIdentifier: string): Promise<Consumer | undefined>;
   getConsumerByPhoneAndTenant(phone: string, tenantIdentifier: string): Promise<Consumer | undefined>;
   findConsumersByEmailAndDob(email: string, dateOfBirth: string): Promise<(Consumer & { tenant: Tenant })[]>;
+  findConsumersByNameAndTenant(firstName: string, lastName: string, tenantId?: string): Promise<Consumer[]>;
   createConsumer(consumer: InsertConsumer): Promise<Consumer>;
   updateConsumer(id: string, updates: Partial<Consumer>): Promise<Consumer>;
   findOrCreateConsumer(consumerData: InsertConsumer, options?: { clearExistingPhones?: boolean }): Promise<Consumer>;
@@ -962,6 +963,17 @@ export class DatabaseStorage implements IStorage {
       ...row.consumer,
       tenant: row.tenant
     }));
+  }
+
+  async findConsumersByNameAndTenant(firstName: string, lastName: string, tenantId?: string): Promise<Consumer[]> {
+    const conditions: any[] = [
+      sql`LOWER(TRIM(${consumers.firstName})) = LOWER(TRIM(${firstName}))`,
+      sql`LOWER(TRIM(${consumers.lastName})) = LOWER(TRIM(${lastName}))`,
+    ];
+    if (tenantId) {
+      conditions.push(eq(consumers.tenantId, tenantId));
+    }
+    return await db.select().from(consumers).where(and(...conditions));
   }
 
   async createConsumer(consumer: InsertConsumer): Promise<Consumer> {

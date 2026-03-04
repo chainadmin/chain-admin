@@ -6142,8 +6142,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // First, check if consumer already exists in any agency
       console.log("Checking for existing consumer with email:", email);
-      const existingConsumer = await storage.getConsumerByEmail(email);
-      console.log("Existing consumer found:", !!existingConsumer);
+      let existingConsumer = await storage.getConsumerByEmail(email);
+      console.log("Existing consumer found by email:", !!existingConsumer);
+
+      // Fallback: if not found by email, try matching by name + tenant (same person, different email)
+      if (!existingConsumer && firstName && lastName) {
+        let tenantIdForLookup: string | undefined;
+        if (tenantSlug) {
+          const tenantForLookup = await storage.getTenantBySlug(tenantSlug);
+          tenantIdForLookup = tenantForLookup?.id;
+        }
+        const nameMatches = await storage.findConsumersByNameAndTenant(firstName, lastName, tenantIdForLookup);
+        if (nameMatches.length > 0) {
+          existingConsumer = nameMatches[0];
+          console.log(`Matched existing consumer by name "${firstName} ${lastName}" in tenant ${tenantIdForLookup} — updating email from ${existingConsumer.email} to ${email}`);
+        }
+      }
 
       if (existingConsumer) {
         // Normalize DOB values for comparison. Missing stored DOB should not block registration.
@@ -6181,6 +6195,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
           
           // Update existing consumer with complete registration info
+          // If they registered with a different email (matched by name), update their email too
+          const emailChanged = existingConsumer.email?.toLowerCase().trim() !== email.toLowerCase().trim();
           const updateData: any = {
             firstName,
             lastName,
@@ -6189,6 +6205,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             state,
             zipCode,
             isRegistered: true,
+            ...(emailChanged && { email: email.toLowerCase().trim() }),
             ...(shouldUpdateTenant && { tenantId: existingConsumer.tenantId })
           };
 
