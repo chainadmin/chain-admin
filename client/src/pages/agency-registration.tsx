@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+
+declare function gtag(...args: any[]): void;
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -44,6 +46,10 @@ type RegistrationMutationResult = {
 export default function AgencyRegistration() {
   const { toast } = useToast();
   const [isSubmitted, setIsSubmitted] = useState(false);
+
+  useEffect(() => {
+    gtag('event', 'conversion', { send_to: 'AW-17856986512' });
+  }, []);
   const [successInfo, setSuccessInfo] = useState<RegistrationSuccessResponse | null>(null);
 
   const form = useForm<RegistrationWithCredentials>({
