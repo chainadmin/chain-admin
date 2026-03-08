@@ -973,6 +973,8 @@ export const invoices = pgTable("invoices", {
   totalAmountCents: bigint("total_amount_cents", { mode: "number" }).notNull(),
   dueDate: timestamp("due_date").notNull(),
   paidAt: timestamp("paid_at"),
+  stripePaymentIntentId: text("stripe_payment_intent_id"),
+  lineItems: jsonb("line_items").$type<Array<{ description: string; amountCents: number; quantity?: number; unitLabel?: string }>>(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

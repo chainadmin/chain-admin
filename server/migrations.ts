@@ -1838,6 +1838,22 @@ export async function runMigrations() {
       console.log(`  ⚠ campaign_log_items table (already exists or error): ${err.message}`);
     }
 
+    // Add Stripe payment intent ID to invoices
+    try {
+      await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS stripe_payment_intent_id text`);
+      console.log('  ✓ invoices.stripe_payment_intent_id column');
+    } catch (err: any) {
+      console.log(`  ⚠ invoices.stripe_payment_intent_id (already exists or error): ${err.message}`);
+    }
+
+    // Add line_items column to invoices
+    try {
+      await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS line_items jsonb`);
+      console.log('  ✓ invoices.line_items column');
+    } catch (err: any) {
+      console.log(`  ⚠ invoices.line_items (already exists or error): ${err.message}`);
+    }
+
     console.log('✅ Database migrations completed successfully');
   } catch (error: any) {
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {

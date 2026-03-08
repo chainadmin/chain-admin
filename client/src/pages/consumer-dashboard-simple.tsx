@@ -2170,7 +2170,7 @@ export default function ConsumerDashboardSimple() {
                       </div>
                     </button>
                     <p className="text-xs text-blue-100/50 mt-2">
-                      Click to make a payment on your payment arrangement. To modify your arrangement terms, please contact us.
+                      Click to make a payment on your payment plan. To modify your payment plan terms, please contact us.
                     </p>
                   </div>
 

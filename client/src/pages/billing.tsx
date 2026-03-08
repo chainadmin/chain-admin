@@ -48,8 +48,148 @@ import {
   Building2,
   Lock,
   Phone,
+  ChevronDown,
+  ChevronUp,
+  Receipt,
 } from "lucide-react";
 import { SiVisa, SiMastercard, SiAmericanexpress, SiDiscover } from "react-icons/si";
+import { loadStripe } from "@stripe/stripe-js";
+import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
+
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || "");
+
+function formatCurrencyStatic(amount?: number | null) {
+  if (amount === null || amount === undefined) return "$0.00";
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(amount);
+}
+
+function StripePayInvoiceForm({ totalBill, invoiceId, onSuccess }: { totalBill: number; invoiceId?: string; onSuccess: () => void }) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const { toast } = useToast();
+  const [cardholderName, setCardholderName] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "ach">("card");
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!stripe || !elements) return;
+    if (!totalBill || totalBill <= 0) {
+      toast({ title: "No balance due", description: "There is no outstanding balance to pay.", variant: "destructive" });
+      return;
+    }
+    if (!cardholderName.trim()) {
+      toast({ title: "Missing information", description: "Please enter the cardholder name.", variant: "destructive" });
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      const intentRes = await apiRequest("POST", "/api/billing/create-payment-intent", {
+        amountCents: Math.round(totalBill * 100),
+        invoiceId,
+      });
+      const { clientSecret, paymentIntentId } = await intentRes.json();
+
+      const cardElement = elements.getElement(CardElement);
+      const { error, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
+        payment_method: { card: cardElement!, billing_details: { name: cardholderName } },
+      });
+
+      if (error) {
+        toast({ title: "Payment failed", description: error.message, variant: "destructive" });
+        return;
+      }
+
+      await apiRequest("POST", "/api/billing/confirm-invoice-paid", { paymentIntentId: paymentIntent!.id });
+      toast({ title: "Payment successful!", description: "Thank you! Your invoice has been paid." });
+      onSuccess();
+    } catch (err: any) {
+      toast({ title: "Payment error", description: err.message || "Please try again or contact support.", variant: "destructive" });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex gap-2 mb-8">
+        <Button
+          type="button"
+          onClick={() => setPaymentMethod("card")}
+          className={cn("flex-1 py-4 rounded-xl text-sm font-semibold transition-all", paymentMethod === "card" ? "bg-gradient-to-r from-sky-600 to-blue-600 text-white shadow-lg shadow-sky-900/30" : "bg-white/10 text-blue-100 border border-white/20 hover:bg-white/15")}
+        >
+          <CreditCard className="h-5 w-5 mr-2" />
+          Credit / Debit Card
+        </Button>
+        <Button
+          type="button"
+          onClick={() => setPaymentMethod("ach")}
+          className={cn("flex-1 py-4 rounded-xl text-sm font-semibold transition-all", paymentMethod === "ach" ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-900/30" : "bg-white/10 text-blue-100 border border-white/20 hover:bg-white/15")}
+        >
+          <Building2 className="h-5 w-5 mr-2" />
+          Bank Account (ACH)
+        </Button>
+      </div>
+
+      {paymentMethod === "card" && (
+        <div className="space-y-6">
+          <div className="space-y-2">
+            <Label className="text-sm font-medium text-blue-100/80">Cardholder Name</Label>
+            <Input
+              placeholder="John Smith"
+              value={cardholderName}
+              onChange={(e) => setCardholderName(e.target.value)}
+              className="border-white/20 bg-white/10 text-blue-50 placeholder:text-blue-100/50 h-12 rounded-xl"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-sm font-medium text-blue-100/80">Card Details</Label>
+            <div className="rounded-xl border border-white/20 bg-white/10 px-4 py-4">
+              <CardElement
+                options={{
+                  style: {
+                    base: { fontSize: "16px", color: "#e0f2fe", fontFamily: "inherit", "::placeholder": { color: "#7dd3fc80" }, iconColor: "#7dd3fc" },
+                    invalid: { color: "#f87171", iconColor: "#f87171" },
+                  },
+                }}
+              />
+            </div>
+            <p className="text-xs text-blue-100/50 flex items-center gap-1 mt-1">
+              <Lock className="h-3 w-3" />
+              Card number, expiry, and CVC are handled securely by Stripe — never stored on our servers
+            </p>
+          </div>
+        </div>
+      )}
+
+      {paymentMethod === "ach" && (
+        <div className="rounded-xl bg-white/5 border border-white/10 p-8 text-center">
+          <Building2 className="h-10 w-10 mx-auto mb-3 text-blue-300/60" />
+          <h4 className="text-white font-semibold mb-2">ACH Bank Transfer</h4>
+          <p className="text-sm text-blue-100/70">Please contact Chain Software Group to arrange ACH payments.</p>
+          <p className="text-sm text-blue-100/70 mt-1">Call us at <strong className="text-white">(716) 534-3086</strong></p>
+        </div>
+      )}
+
+      <div className="mt-8 pt-6 border-t border-white/10">
+        <Button
+          onClick={handleSubmit}
+          disabled={isProcessing || paymentMethod === "ach" || !stripe}
+          className="w-full py-6 rounded-xl bg-gradient-to-r from-emerald-600 via-green-600 to-teal-600 text-white text-lg font-bold shadow-xl shadow-emerald-900/30 hover:from-emerald-500 hover:via-green-500 hover:to-teal-500 transition-all disabled:opacity-50"
+        >
+          {isProcessing ? (
+            <><Loader2 className="h-5 w-5 mr-2 animate-spin" />Processing...</>
+          ) : (
+            <><Lock className="h-5 w-5 mr-2" />Pay Now{totalBill > 0 && ` — ${formatCurrencyStatic(totalBill)}`}</>
+          )}
+        </Button>
+        <div className="flex items-center justify-center gap-2 mt-4 text-xs text-blue-100/60">
+          <Lock className="h-3 w-3" />
+          <span>Secured by Stripe — PCI DSS Compliant</span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Billing() {
   const { toast } = useToast();
@@ -63,29 +203,9 @@ export default function Billing() {
   const [showAutoResponseConfirmDialog, setShowAutoResponseConfirmDialog] = useState(false);
   const [showMobileAppBrandingConfirmDialog, setShowMobileAppBrandingConfirmDialog] = useState(false);
   
-  // Payment form state
-  const [paymentMethod, setPaymentMethod] = useState<'card' | 'ach'>('card');
-  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [customAmount, setCustomAmount] = useState<string>('');
   const [useCustomAmount, setUseCustomAmount] = useState(false);
-  const [paymentForm, setPaymentForm] = useState({
-    // Card fields
-    cardholderName: '',
-    cardNumber: '',
-    expiryMonth: '',
-    expiryYear: '',
-    cvv: '',
-    // Address fields
-    billingAddress: '',
-    billingCity: '',
-    billingState: '',
-    billingZip: '',
-    // ACH fields
-    accountHolderName: '',
-    routingNumber: '',
-    accountNumber: '',
-    confirmAccountNumber: '',
-  });
+  const [expandedInvoiceId, setExpandedInvoiceId] = useState<string | null>(null);
 
   // Check for tab query parameter and set active tab on mount
   const [activeTab, setActiveTab] = useState(() => {
@@ -1317,48 +1437,91 @@ export default function Billing() {
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {(invoices as any[]).map((invoice: any) => (
-                      <div
-                        key={invoice.id}
-                        className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/5 p-4 transition hover:bg-white/10 sm:flex-row sm:items-center sm:justify-between"
-                        data-testid={`invoice-${invoice.invoiceNumber}`}
-                      >
-                        <div className="flex items-center gap-4">
-                          <span className="rounded-2xl bg-white/10 p-3">
-                            {getStatusIcon(invoice.status)}
-                          </span>
-                          <div>
-                            <h4 className="text-sm font-semibold text-white">Invoice #{invoice.invoiceNumber}</h4>
-                            <p className="text-xs text-blue-100/70">
-                              {formatDate(invoice.periodStart)} – {formatDate(invoice.periodEnd)}
-                            </p>
+                  <div className="space-y-3">
+                    {(invoices as any[]).map((invoice: any) => {
+                      const isExpanded = expandedInvoiceId === invoice.id;
+                      const lineItems: Array<{ description: string; amountCents: number; quantity?: number; unitLabel?: string }> = invoice.lineItems || [];
+                      const hasLineItems = lineItems.length > 0;
+                      return (
+                        <div
+                          key={invoice.id}
+                          className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden transition"
+                          data-testid={`invoice-${invoice.invoiceNumber}`}
+                        >
+                          <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex items-center gap-4">
+                              <span className="rounded-2xl bg-white/10 p-3">
+                                {getStatusIcon(invoice.status)}
+                              </span>
+                              <div>
+                                <h4 className="text-sm font-semibold text-white">Invoice #{invoice.invoiceNumber}</h4>
+                                <p className="text-xs text-blue-100/70">
+                                  {formatDate(invoice.periodStart)} – {formatDate(invoice.periodEnd)}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:gap-4">
+                              <div className="text-right">
+                                <p className="text-sm font-semibold text-white">
+                                  {formatCurrency(invoice.totalAmountCents / 100)}
+                                </p>
+                                <Badge
+                                  className={cn("mt-2 inline-flex", getStatusColor(invoice.status))}
+                                  data-testid={`badge-status-${invoice.invoiceNumber}`}
+                                >
+                                  {invoice.status}
+                                </Badge>
+                              </div>
+                              <div className="flex gap-2">
+                                {hasLineItems && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setExpandedInvoiceId(isExpanded ? null : invoice.id)}
+                                    className="rounded-xl border border-white/20 bg-transparent px-3 py-2 text-xs font-semibold text-blue-100 transition hover:bg-white/10 hover:text-white"
+                                  >
+                                    <Receipt className="h-4 w-4 mr-1" />
+                                    Details
+                                    {isExpanded ? <ChevronUp className="h-3 w-3 ml-1" /> : <ChevronDown className="h-3 w-3 ml-1" />}
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  data-testid={`button-download-${invoice.invoiceNumber}`}
+                                  className="rounded-xl border border-white/20 bg-transparent px-4 py-2 text-xs font-semibold text-blue-100 transition hover:bg-white/10 hover:text-white"
+                                >
+                                  <Download className="mr-2 h-4 w-4" />
+                                  Download
+                                </Button>
+                              </div>
+                            </div>
                           </div>
+                          {isExpanded && hasLineItems && (
+                            <div className="border-t border-white/10 bg-white/5 px-4 py-3">
+                              <p className="text-xs font-semibold text-blue-100/70 uppercase tracking-wide mb-3">Invoice Breakdown</p>
+                              <div className="space-y-2">
+                                {lineItems.map((item, idx) => (
+                                  <div key={idx} className="flex items-center justify-between text-sm">
+                                    <span className="text-blue-100/80">
+                                      {item.description}
+                                      {item.quantity && item.unitLabel && (
+                                        <span className="text-blue-100/50 text-xs ml-1">({item.quantity} {item.unitLabel})</span>
+                                      )}
+                                    </span>
+                                    <span className="font-medium text-white">{formatCurrency(item.amountCents / 100)}</span>
+                                  </div>
+                                ))}
+                                <div className="flex items-center justify-between text-sm pt-2 mt-2 border-t border-white/10">
+                                  <span className="font-semibold text-white">Total</span>
+                                  <span className="font-bold text-emerald-300">{formatCurrency(invoice.totalAmountCents / 100)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:gap-4">
-                          <div className="text-right">
-                            <p className="text-sm font-semibold text-white">
-                              {formatCurrency(invoice.totalAmountCents / 100)}
-                            </p>
-                            <Badge
-                              className={cn("mt-2 inline-flex", getStatusColor(invoice.status))}
-                              data-testid={`badge-status-${invoice.invoiceNumber}`}
-                            >
-                              {invoice.status}
-                            </Badge>
-                          </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            data-testid={`button-download-${invoice.invoiceNumber}`}
-                            className="rounded-xl border border-white/20 bg-transparent px-4 py-2 text-xs font-semibold text-blue-100 transition hover:bg-white/10 hover:text-white"
-                          >
-                            <Download className="mr-2 h-4 w-4" />
-                            Download
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
@@ -1591,387 +1754,17 @@ export default function Billing() {
                 </div>
               </CardHeader>
               <CardContent className="pt-8">
-                {/* Payment Method Toggle */}
-                <div className="flex gap-2 mb-8">
-                  <Button
-                    type="button"
-                    onClick={() => setPaymentMethod('card')}
-                    className={cn(
-                      "flex-1 py-4 rounded-xl text-sm font-semibold transition-all",
-                      paymentMethod === 'card'
-                        ? "bg-gradient-to-r from-sky-600 to-blue-600 text-white shadow-lg shadow-sky-900/30"
-                        : "bg-white/10 text-blue-100 border border-white/20 hover:bg-white/15"
-                    )}
-                    data-testid="button-payment-card"
-                  >
-                    <CreditCard className="h-5 w-5 mr-2" />
-                    Credit / Debit Card
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={() => setPaymentMethod('ach')}
-                    className={cn(
-                      "flex-1 py-4 rounded-xl text-sm font-semibold transition-all",
-                      paymentMethod === 'ach'
-                        ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-900/30"
-                        : "bg-white/10 text-blue-100 border border-white/20 hover:bg-white/15"
-                    )}
-                    data-testid="button-payment-ach"
-                  >
-                    <Building2 className="h-5 w-5 mr-2" />
-                    Bank Account (ACH)
-                  </Button>
-                </div>
-
-                {/* Card Payment Form */}
-                {paymentMethod === 'card' && (
-                  <div className="space-y-6">
-                    <div className="space-y-2">
-                      <Label htmlFor="cardholder-name" className="text-sm font-medium text-blue-100/80">
-                        Cardholder Name
-                      </Label>
-                      <Input
-                        id="cardholder-name"
-                        placeholder="John Smith"
-                        value={paymentForm.cardholderName}
-                        onChange={(e) => setPaymentForm(prev => ({ ...prev, cardholderName: e.target.value }))}
-                        className="border-white/20 bg-white/10 text-blue-50 placeholder:text-blue-100/50 h-12 rounded-xl"
-                        data-testid="input-cardholder-name"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="card-number" className="text-sm font-medium text-blue-100/80">
-                        Card Number
-                      </Label>
-                      <div className="relative">
-                        <Input
-                          id="card-number"
-                          placeholder="1234 5678 9012 3456"
-                          value={paymentForm.cardNumber}
-                          onChange={(e) => {
-                            const value = e.target.value.replace(/\D/g, '').slice(0, 16);
-                            const formatted = value.replace(/(\d{4})(?=\d)/g, '$1 ');
-                            setPaymentForm(prev => ({ ...prev, cardNumber: formatted }));
-                          }}
-                          className="border-white/20 bg-white/10 text-blue-50 placeholder:text-blue-100/50 h-12 rounded-xl pr-12"
-                          data-testid="input-card-number"
-                        />
-                        <Lock className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-blue-100/40" />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="expiry-month" className="text-sm font-medium text-blue-100/80">
-                          Expiry Month
-                        </Label>
-                        <Input
-                          id="expiry-month"
-                          placeholder="MM"
-                          maxLength={2}
-                          value={paymentForm.expiryMonth}
-                          onChange={(e) => setPaymentForm(prev => ({ ...prev, expiryMonth: e.target.value.replace(/\D/g, '').slice(0, 2) }))}
-                          className="border-white/20 bg-white/10 text-blue-50 placeholder:text-blue-100/50 h-12 rounded-xl text-center"
-                          data-testid="input-expiry-month"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="expiry-year" className="text-sm font-medium text-blue-100/80">
-                          Expiry Year
-                        </Label>
-                        <Input
-                          id="expiry-year"
-                          placeholder="YY"
-                          maxLength={2}
-                          value={paymentForm.expiryYear}
-                          onChange={(e) => setPaymentForm(prev => ({ ...prev, expiryYear: e.target.value.replace(/\D/g, '').slice(0, 2) }))}
-                          className="border-white/20 bg-white/10 text-blue-50 placeholder:text-blue-100/50 h-12 rounded-xl text-center"
-                          data-testid="input-expiry-year"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="cvv" className="text-sm font-medium text-blue-100/80">
-                          CVV
-                        </Label>
-                        <Input
-                          id="cvv"
-                          placeholder="123"
-                          maxLength={4}
-                          type="password"
-                          value={paymentForm.cvv}
-                          onChange={(e) => setPaymentForm(prev => ({ ...prev, cvv: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
-                          className="border-white/20 bg-white/10 text-blue-50 placeholder:text-blue-100/50 h-12 rounded-xl text-center"
-                          data-testid="input-cvv"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Billing Address */}
-                    <div className="pt-4 border-t border-white/10">
-                      <h4 className="text-sm font-semibold text-white mb-4">Billing Address</h4>
-                      <div className="space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="billing-address" className="text-sm font-medium text-blue-100/80">
-                            Street Address
-                          </Label>
-                          <Input
-                            id="billing-address"
-                            placeholder="123 Main Street"
-                            value={paymentForm.billingAddress}
-                            onChange={(e) => setPaymentForm(prev => ({ ...prev, billingAddress: e.target.value }))}
-                            className="border-white/20 bg-white/10 text-blue-50 placeholder:text-blue-100/50 h-12 rounded-xl"
-                            data-testid="input-billing-address"
-                          />
-                        </div>
-                        <div className="grid grid-cols-3 gap-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="billing-city" className="text-sm font-medium text-blue-100/80">
-                              City
-                            </Label>
-                            <Input
-                              id="billing-city"
-                              placeholder="Buffalo"
-                              value={paymentForm.billingCity}
-                              onChange={(e) => setPaymentForm(prev => ({ ...prev, billingCity: e.target.value }))}
-                              className="border-white/20 bg-white/10 text-blue-50 placeholder:text-blue-100/50 h-12 rounded-xl"
-                              data-testid="input-billing-city"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="billing-state" className="text-sm font-medium text-blue-100/80">
-                              State
-                            </Label>
-                            <Input
-                              id="billing-state"
-                              placeholder="NY"
-                              maxLength={2}
-                              value={paymentForm.billingState}
-                              onChange={(e) => setPaymentForm(prev => ({ ...prev, billingState: e.target.value.toUpperCase().slice(0, 2) }))}
-                              className="border-white/20 bg-white/10 text-blue-50 placeholder:text-blue-100/50 h-12 rounded-xl text-center"
-                              data-testid="input-billing-state"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="billing-zip" className="text-sm font-medium text-blue-100/80">
-                              ZIP Code
-                            </Label>
-                            <Input
-                              id="billing-zip"
-                              placeholder="14201"
-                              maxLength={10}
-                              value={paymentForm.billingZip}
-                              onChange={(e) => setPaymentForm(prev => ({ ...prev, billingZip: e.target.value }))}
-                              className="border-white/20 bg-white/10 text-blue-50 placeholder:text-blue-100/50 h-12 rounded-xl text-center"
-                              data-testid="input-billing-zip"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* ACH Payment Form */}
-                {paymentMethod === 'ach' && (
-                  <div className="space-y-6">
-                    <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-4 mb-6">
-                      <p className="text-sm text-emerald-200">
-                        <Building2 className="h-4 w-4 inline mr-2" />
-                        ACH payments are processed directly from your bank account. No credit card fees apply.
-                      </p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="account-holder-name" className="text-sm font-medium text-blue-100/80">
-                        Account Holder Name
-                      </Label>
-                      <Input
-                        id="account-holder-name"
-                        placeholder="John Smith or Company Name"
-                        value={paymentForm.accountHolderName}
-                        onChange={(e) => setPaymentForm(prev => ({ ...prev, accountHolderName: e.target.value }))}
-                        className="border-white/20 bg-white/10 text-blue-50 placeholder:text-blue-100/50 h-12 rounded-xl"
-                        data-testid="input-account-holder-name"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="routing-number" className="text-sm font-medium text-blue-100/80">
-                        Routing Number (ABA)
-                      </Label>
-                      <Input
-                        id="routing-number"
-                        placeholder="021000021"
-                        maxLength={9}
-                        value={paymentForm.routingNumber}
-                        onChange={(e) => setPaymentForm(prev => ({ ...prev, routingNumber: e.target.value.replace(/\D/g, '').slice(0, 9) }))}
-                        className="border-white/20 bg-white/10 text-blue-50 placeholder:text-blue-100/50 h-12 rounded-xl"
-                        data-testid="input-routing-number"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="account-number" className="text-sm font-medium text-blue-100/80">
-                        Account Number
-                      </Label>
-                      <Input
-                        id="account-number"
-                        placeholder="Enter your account number"
-                        value={paymentForm.accountNumber}
-                        onChange={(e) => setPaymentForm(prev => ({ ...prev, accountNumber: e.target.value.replace(/\D/g, '') }))}
-                        className="border-white/20 bg-white/10 text-blue-50 placeholder:text-blue-100/50 h-12 rounded-xl"
-                        data-testid="input-account-number"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="confirm-account-number" className="text-sm font-medium text-blue-100/80">
-                        Confirm Account Number
-                      </Label>
-                      <Input
-                        id="confirm-account-number"
-                        placeholder="Re-enter your account number"
-                        value={paymentForm.confirmAccountNumber}
-                        onChange={(e) => setPaymentForm(prev => ({ ...prev, confirmAccountNumber: e.target.value.replace(/\D/g, '') }))}
-                        className="border-white/20 bg-white/10 text-blue-50 placeholder:text-blue-100/50 h-12 rounded-xl"
-                        data-testid="input-confirm-account-number"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Submit Button */}
-                <div className="mt-8 pt-6 border-t border-white/10">
-                  <Button
-                    onClick={async () => {
-                      // Validate amount first
-                      if (!stats.totalBill || stats.totalBill <= 0) {
-                        toast({
-                          title: "No balance due",
-                          description: "There is no outstanding balance to pay.",
-                          variant: "destructive",
-                        });
-                        return;
-                      }
-                      
-                      // Validate form based on payment method
-                      if (paymentMethod === 'card') {
-                        if (!paymentForm.cardholderName || !paymentForm.cardNumber || 
-                            !paymentForm.expiryMonth || !paymentForm.expiryYear || !paymentForm.cvv) {
-                          toast({
-                            title: "Missing information",
-                            description: "Please fill in all card details.",
-                            variant: "destructive",
-                          });
-                          return;
-                        }
-                      } else if (paymentMethod === 'ach') {
-                        if (!paymentForm.accountHolderName || !paymentForm.routingNumber || 
-                            !paymentForm.accountNumber || !paymentForm.confirmAccountNumber) {
-                          toast({
-                            title: "Missing information",
-                            description: "Please fill in all bank account details.",
-                            variant: "destructive",
-                          });
-                          return;
-                        }
-                        if (paymentForm.accountNumber !== paymentForm.confirmAccountNumber) {
-                          toast({
-                            title: "Account numbers don't match",
-                            description: "Please verify your account number.",
-                            variant: "destructive",
-                          });
-                          return;
-                        }
-                      }
-
-                      setIsProcessingPayment(true);
-                      try {
-                        const paymentData = {
-                          paymentMethod,
-                          amount: stats.totalBill || 0,
-                          // Card fields
-                          cardholderName: paymentForm.cardholderName,
-                          cardNumber: paymentForm.cardNumber,
-                          expiryMonth: paymentForm.expiryMonth,
-                          expiryYear: paymentForm.expiryYear,
-                          cvv: paymentForm.cvv,
-                          billingAddress: paymentForm.billingAddress,
-                          billingCity: paymentForm.billingCity,
-                          billingState: paymentForm.billingState,
-                          billingZip: paymentForm.billingZip,
-                          // ACH fields
-                          accountHolderName: paymentForm.accountHolderName,
-                          routingNumber: paymentForm.routingNumber,
-                          accountNumber: paymentForm.accountNumber,
-                        };
-
-                        const response = await apiRequest("POST", "/api/billing/platform-payment", paymentData);
-                        const result = await response.json();
-                        
-                        if (result.success) {
-                          toast({
-                            title: "Payment successful!",
-                            description: `Transaction ID: ${result.transactionId}`,
-                          });
-                          // Reset form
-                          setPaymentForm({
-                            cardholderName: '',
-                            cardNumber: '',
-                            expiryMonth: '',
-                            expiryYear: '',
-                            cvv: '',
-                            billingAddress: '',
-                            billingCity: '',
-                            billingState: '',
-                            billingZip: '',
-                            accountHolderName: '',
-                            routingNumber: '',
-                            accountNumber: '',
-                            confirmAccountNumber: '',
-                          });
-                          // Refresh billing data
-                          queryClient.invalidateQueries({ queryKey: ["/api/billing/stats"] });
-                          queryClient.invalidateQueries({ queryKey: ["/api/billing/invoices"] });
-                        } else {
-                          toast({
-                            title: "Payment failed",
-                            description: result.message || "Please try again.",
-                            variant: "destructive",
-                          });
-                        }
-                      } catch (error: any) {
-                        toast({
-                          title: "Payment error",
-                          description: error.message || "Please try again or contact support.",
-                          variant: "destructive",
-                        });
-                      } finally {
-                        setIsProcessingPayment(false);
-                      }
+                <Elements stripe={stripePromise}>
+                  <StripePayInvoiceForm
+                    totalBill={(stats as any).totalBill || 0}
+                    invoiceId={(currentInvoice as any)?.id}
+                    onSuccess={() => {
+                      queryClient.invalidateQueries({ queryKey: ["/api/billing/stats"] });
+                      queryClient.invalidateQueries({ queryKey: ["/api/billing/invoices"] });
+                      queryClient.invalidateQueries({ queryKey: ["/api/billing/current-invoice"] });
                     }}
-                    disabled={isProcessingPayment}
-                    className="w-full py-6 rounded-xl bg-gradient-to-r from-emerald-600 via-green-600 to-teal-600 text-white text-lg font-bold shadow-xl shadow-emerald-900/30 hover:from-emerald-500 hover:via-green-500 hover:to-teal-500 transition-all disabled:opacity-50"
-                    data-testid="button-submit-payment"
-                  >
-                    {isProcessingPayment ? (
-                      <>
-                        <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        <Lock className="h-5 w-5 mr-2" />
-                        Pay Now {stats.totalBill > 0 && `- ${formatCurrency(stats.totalBill)}`}
-                      </>
-                    )}
-                  </Button>
-                  <div className="flex items-center justify-center gap-2 mt-4 text-xs text-blue-100/60">
-                    <Lock className="h-3 w-3" />
-                    <span>Secured by Authorize.net - PCI DSS Compliant</span>
-                  </div>
-                </div>
+                  />
+                </Elements>
               </CardContent>
             </Card>
           </TabsContent>

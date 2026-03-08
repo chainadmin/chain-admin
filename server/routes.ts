@@ -16513,7 +16513,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         expiryDate, 
         cvv, 
         cardName, 
-        zipCode 
+        zipCode,
+        accountId: targetAccountId,
       } = req.body;
 
       if (!consumerEmail || !amountCents || !cardNumber || !expiryDate || !cvv || !cardName) {
@@ -16773,6 +16774,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const payment = await storage.createPayment({
         tenantId: tenantId,
         consumerId: consumer.id,
+        accountId: targetAccountId || null,
         amountCents,
         paymentMethod: 'credit_card',
         status: 'completed',
@@ -16781,6 +16783,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         processedAt: new Date(),
         notes: `Admin payment - ${cardName} ending in ${cardLast4}`,
       });
+
+      // Update account balance (T001/T003)
+      try {
+        const allAccounts = await storage.getAccountsByConsumer(consumer.id);
+        let balanceAccount = targetAccountId
+          ? allAccounts?.find((a: any) => a.id === targetAccountId)
+          : allAccounts?.find((a: any) => (a.balanceCents || 0) > 0);
+        if (balanceAccount) {
+          const prevBalance = balanceAccount.balanceCents || 0;
+          const newBalance = Math.max(0, prevBalance - amountCents);
+          await storage.updateAccount(balanceAccount.id, { balanceCents: newBalance });
+          console.log(`💰 [ADMIN BALANCE UPDATE] Account ${balanceAccount.id}: ${prevBalance} → ${newBalance} (payment: ${amountCents})`);
+        } else {
+          console.warn('⚠️ [ADMIN BALANCE UPDATE] No eligible account found for balance update');
+        }
+      } catch (balanceError) {
+        console.error('❌ [ADMIN BALANCE UPDATE] Failed to update balance:', balanceError);
+      }
 
       // Sync to SMAX if enabled
       try {
@@ -17614,6 +17634,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const dueDate = new Date();
           dueDate.setDate(dueDate.getDate() + 15); // Due in 15 days
           
+          // Build itemized line items
+          const lineItemsList: Array<{ description: string; amountCents: number; quantity?: number; unitLabel?: string }> = [];
+          lineItemsList.push({ description: `${subscription.planId ? subscription.planId.charAt(0).toUpperCase() + subscription.planId.slice(1) : 'Base'} Plan`, amountCents: Math.round(stats.monthlyBase * 100) });
+          if ((stats.addons as any)?.documentSigning) lineItemsList.push({ description: 'Document Signing Add-on', amountCents: Math.round((stats.addons as any).documentSigningFee * 100) });
+          if ((stats.addons as any)?.aiAutoResponse) lineItemsList.push({ description: 'AI Auto-Response Add-on', amountCents: Math.round((stats.addons as any).aiAutoResponseFee * 100) });
+          if ((stats.emailUsage as any)?.overage > 0) lineItemsList.push({ description: 'Email Overage', amountCents: Math.round((stats.emailUsage as any).overageCharge * 100), quantity: (stats.emailUsage as any).overage, unitLabel: 'emails' });
+          if ((stats.smsUsage as any)?.overage > 0) lineItemsList.push({ description: 'SMS Overage', amountCents: Math.round((stats.smsUsage as any).overageCharge * 100), quantity: (stats.smsUsage as any).overage, unitLabel: 'segments' });
+          if ((stats.aiAutoResponseUsage as any)?.overage > 0) lineItemsList.push({ description: 'AI Response Overage', amountCents: Math.round((stats.aiAutoResponseUsage as any).overageCharge * 100), quantity: (stats.aiAutoResponseUsage as any).overage, unitLabel: 'responses' });
+
           const [invoice] = await db.insert(invoices).values({
             tenantId: subscription.tenantId,
             subscriptionId: subscription.id,
@@ -17621,12 +17650,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             periodStart: subscription.currentPeriodStart,
             periodEnd: subscription.currentPeriodEnd,
             status: 'pending',
-            baseAmountCents: Math.round((stats.monthlyBase + stats.addonFees) * 100),
+            baseAmountCents: Math.round(stats.monthlyBase * 100),
             perConsumerCents: 0,
             consumerCount: stats.activeConsumers,
             totalAmountCents: Math.round(stats.totalBill * 100),
             dueDate,
             paidAt: null,
+            lineItems: lineItemsList,
           }).returning();
           
           // Send invoice email
@@ -17797,172 +17827,138 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ============================================
-  // Platform-Level Payment Processing (Chain's Own Authorize.net)
+  // Platform-Level Payment Processing (Chain's Stripe)
   // This is separate from tenant consumer payment processing
-  // Uses CHAIN_AUTHNET_API_LOGIN_ID and CHAIN_AUTHNET_TRANSACTION_KEY
   // ============================================
-  
-  app.post('/api/billing/platform-payment', authenticateUser, requireOwner, async (req: any, res) => {
+
+  // Step 1: Create a Stripe PaymentIntent for the invoice amount
+  app.post('/api/billing/create-payment-intent', authenticateUser, requireOwner, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
-      if (!tenantId) {
-        return res.status(401).json({ success: false, message: "Unauthorized" });
+      if (!tenantId) return res.status(401).json({ success: false, message: "Unauthorized" });
+
+      const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+      if (!stripeSecretKey) {
+        return res.status(503).json({ success: false, message: "Payment processing is not configured. Please contact Chain Software Group at (716) 534-3086." });
       }
 
-      // Get Chain's platform Authorize.net credentials from environment variables
-      const chainApiLoginId = process.env.CHAIN_AUTHNET_API_LOGIN_ID;
-      const chainTransactionKey = process.env.CHAIN_AUTHNET_TRANSACTION_KEY;
-      const chainUseSandbox = process.env.CHAIN_AUTHNET_SANDBOX !== 'false'; // Default to sandbox
-
-      console.log('🔐 Platform payment auth check:', {
-        hasApiLoginId: !!chainApiLoginId,
-        apiLoginIdLength: chainApiLoginId?.length || 0,
-        hasTransactionKey: !!chainTransactionKey,
-        transactionKeyLength: chainTransactionKey?.length || 0,
-        useSandbox: chainUseSandbox,
-        sandboxEnvValue: process.env.CHAIN_AUTHNET_SANDBOX,
-      });
-
-      if (!chainApiLoginId || !chainTransactionKey) {
-        console.log('⚠️ Platform payment credentials not configured');
-        return res.status(503).json({
-          success: false,
-          message: "Payment processing is not yet configured. Please contact Chain Software Group at (716) 534-3086.",
-        });
-      }
-
-      const {
-        paymentMethod,
-        amount,
-        // Card fields
-        cardholderName,
-        cardNumber,
-        expiryMonth,
-        expiryYear,
-        cvv,
-        billingAddress,
-        billingCity,
-        billingState,
-        billingZip,
-        // ACH fields
-        accountHolderName,
-        routingNumber,
-        accountNumber,
-        // Invoice reference
-        invoiceId,
-      } = req.body;
-
-      // Validate payment amount
-      if (!amount || amount <= 0) {
+      const { amountCents, invoiceId } = req.body;
+      if (!amountCents || amountCents < 50) {
         return res.status(400).json({ success: false, message: "Invalid payment amount" });
       }
 
-      // Get tenant info for logging
       const tenant = await storage.getTenant(tenantId);
       const tenantName = tenant?.name || 'Unknown';
 
-      console.log(`💳 Platform payment request from ${tenantName}:`, {
-        paymentMethod,
-        amount,
-        invoiceId: invoiceId || 'none',
-        hasCvv: !!cvv,
-        cvvLength: cvv?.length || 0,
-        hasCardNumber: !!cardNumber,
-        cardNumberLength: cardNumber?.replace(/\s/g, '').length || 0,
+      const Stripe = (await import('stripe')).default;
+      const stripe = new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' as any });
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amountCents,
+        currency: 'usd',
+        description: `Chain Software Group - Subscription invoice for ${tenantName}`,
+        metadata: { tenantId, invoiceId: invoiceId || '', tenantName },
       });
 
-      const authnetService = new AuthnetService({
-        apiLoginId: chainApiLoginId,
-        transactionKey: chainTransactionKey,
-        useSandbox: chainUseSandbox,
-      });
-
-      let paymentResult;
-
-      if (paymentMethod === 'card') {
-        // Validate card fields
-        if (!cardholderName || !cardNumber || !expiryMonth || !expiryYear || !cvv) {
-          return res.status(400).json({ success: false, message: "Missing required card information" });
+      // Attach the paymentIntentId to the invoice so the webhook can find it later
+      if (invoiceId) {
+        try {
+          await db.update(invoices)
+            .set({ stripePaymentIntentId: paymentIntent.id })
+            .where(eq(invoices.id, invoiceId));
+        } catch (err) {
+          console.error('⚠️ Could not store paymentIntentId on invoice:', err);
         }
-
-        // Format expiration date (MMYY)
-        const expirationDate = `${expiryMonth.padStart(2, '0')}${expiryYear.padStart(2, '0')}`;
-        
-        // Remove spaces from card number
-        const cleanCardNumber = cardNumber.replace(/\s/g, '');
-
-        // Process card payment directly
-        paymentResult = await authnetService.processPayment({
-          amount: amount,
-          cardNumber: cleanCardNumber,
-          expirationDate: expirationDate,
-          cvv: cvv,
-          cardholderName: cardholderName,
-          billingAddress: {
-            firstName: cardholderName.split(' ')[0] || '',
-            lastName: cardholderName.split(' ').slice(1).join(' ') || '',
-            address: billingAddress || '',
-            city: billingCity || '',
-            state: billingState || '',
-            zip: billingZip || '',
-          },
-          invoice: invoiceId || undefined,
-          description: `Chain Software Group - Payment for ${tenantName}`,
-        });
-      } else if (paymentMethod === 'ach') {
-        // ACH payments require a different API approach
-        // For now, return that ACH is coming soon
-        return res.status(400).json({
-          success: false,
-          message: "ACH payments are coming soon. Please use a credit or debit card, or contact us at (716) 534-3086.",
-        });
-      } else {
-        return res.status(400).json({ success: false, message: "Invalid payment method" });
       }
 
-      if (paymentResult.success) {
-        console.log(`✅ Platform payment successful for ${tenantName}:`, {
-          transactionId: paymentResult.transactionId,
-          amount: amount,
-          cardLast4: paymentResult.cardLast4,
-        });
-
-        // If invoiceId was provided, mark it as paid
-        if (invoiceId) {
-          try {
-            await db.update(invoices)
-              .set({
-                status: 'paid',
-                paidAt: new Date(),
-              })
-              .where(eq(invoices.id, invoiceId));
-            console.log(`📄 Invoice ${invoiceId} marked as paid`);
-          } catch (invErr) {
-            console.error('⚠️ Could not update invoice status:', invErr);
-          }
-        }
-
-        return res.json({
-          success: true,
-          message: "Payment processed successfully! Thank you.",
-          transactionId: paymentResult.transactionId,
-          authCode: paymentResult.authCode,
-          cardLast4: paymentResult.cardLast4,
-        });
-      } else {
-        console.error(`❌ Platform payment failed for ${tenantName}:`, paymentResult.errorMessage);
-        return res.status(400).json({
-          success: false,
-          message: paymentResult.errorMessage || "Payment could not be processed. Please verify your payment information and try again.",
-        });
-      }
+      console.log(`💳 PaymentIntent created for ${tenantName}: ${paymentIntent.id} ($${amountCents / 100})`);
+      return res.json({ success: true, clientSecret: paymentIntent.client_secret, paymentIntentId: paymentIntent.id });
     } catch (error: any) {
-      console.error("❌ Platform payment error:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Payment processing error. Please try again or contact support.",
-        error: error.message,
-      });
+      console.error("❌ create-payment-intent error:", error);
+      return res.status(500).json({ success: false, message: error.message || "Failed to initialize payment" });
+    }
+  });
+
+  // Step 2: Frontend calls this after stripe.confirmCardPayment succeeds to mark invoice paid
+  app.post('/api/billing/confirm-invoice-paid', authenticateUser, requireOwner, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) return res.status(401).json({ success: false, message: "Unauthorized" });
+
+      const { paymentIntentId } = req.body;
+      if (!paymentIntentId) return res.status(400).json({ success: false, message: "Missing paymentIntentId" });
+
+      const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+      if (!stripeSecretKey) return res.status(503).json({ success: false, message: "Stripe not configured" });
+
+      // Verify payment succeeded with Stripe before marking paid
+      const Stripe = (await import('stripe')).default;
+      const stripe = new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' as any });
+      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+      if (paymentIntent.status !== 'succeeded') {
+        return res.status(400).json({ success: false, message: `Payment not yet complete (status: ${paymentIntent.status})` });
+      }
+
+      // Ensure this payment belongs to this tenant
+      if (paymentIntent.metadata?.tenantId && paymentIntent.metadata.tenantId !== tenantId) {
+        return res.status(403).json({ success: false, message: "Access denied" });
+      }
+
+      // Mark the invoice as paid
+      const invoiceId = paymentIntent.metadata?.invoiceId;
+      if (invoiceId) {
+        await db.update(invoices)
+          .set({ status: 'paid', paidAt: new Date() })
+          .where(eq(invoices.id, invoiceId));
+        console.log(`✅ Invoice ${invoiceId} marked paid via Stripe PaymentIntent ${paymentIntentId}`);
+      }
+
+      return res.json({ success: true, message: "Payment confirmed. Thank you!" });
+    } catch (error: any) {
+      console.error("❌ confirm-invoice-paid error:", error);
+      return res.status(500).json({ success: false, message: error.message || "Failed to confirm payment" });
+    }
+  });
+
+  // Stripe webhook — marks invoice paid when Stripe fires payment_intent.succeeded
+  // This is a backup for the confirm-invoice-paid call above (e.g. browser closed mid-payment)
+  app.post('/api/billing/stripe-webhook', async (req, res) => {
+    try {
+      const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+      const Stripe = (await import('stripe')).default;
+      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', { apiVersion: '2024-06-20' as any });
+
+      let event: any;
+      if (webhookSecret) {
+        const sig = req.headers['stripe-signature'];
+        try {
+          event = stripe.webhooks.constructEvent(req.body, sig as string, webhookSecret);
+        } catch (err: any) {
+          console.error('❌ Stripe webhook signature verification failed:', err.message);
+          return res.status(400).json({ error: 'Webhook signature verification failed' });
+        }
+      } else {
+        // No webhook secret configured yet — parse the raw body
+        console.warn('⚠️ STRIPE_WEBHOOK_SECRET not set — skipping signature verification');
+        event = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+      }
+
+      if (event.type === 'payment_intent.succeeded') {
+        const paymentIntent = event.data.object;
+        const invoiceId = paymentIntent.metadata?.invoiceId;
+        if (invoiceId) {
+          await db.update(invoices)
+            .set({ status: 'paid', paidAt: new Date() })
+            .where(eq(invoices.id, invoiceId));
+          console.log(`✅ [Webhook] Invoice ${invoiceId} marked paid`);
+        }
+      }
+
+      return res.json({ received: true });
+    } catch (error: any) {
+      console.error("❌ Stripe webhook error:", error);
+      return res.status(500).json({ error: 'Webhook processing failed' });
     }
   });
 
