@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 declare function gtag(...args: any[]): void;
 import { useForm } from "react-hook-form";
@@ -46,6 +46,8 @@ type RegistrationMutationResult = {
 export default function AgencyRegistration() {
   const { toast } = useToast();
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [honeypot, setHoneypot] = useState("");
+  const pageLoadTime = useRef(Date.now());
 
   useEffect(() => {
     gtag('event', 'conversion', { send_to: 'AW-17856986512' });
@@ -174,11 +176,21 @@ export default function AgencyRegistration() {
   });
 
   const onSubmit = (data: RegistrationWithCredentials) => {
+    const elapsed = Date.now() - pageLoadTime.current;
+    if (elapsed < 4000) {
+      toast({
+        title: "Please take a moment to review the form",
+        description: "Make sure all your information is correct before submitting.",
+      });
+      return;
+    }
+
     const formattedData = {
       ...data,
       ownerDateOfBirth: data.ownerDateOfBirth,
       ownerSSN: data.ownerSSN.replace(/\D/g, ''),
       phoneNumber: data.phoneNumber.replace(/\D/g, ''),
+      website: honeypot,
     };
 
     setSuccessInfo(null);
@@ -535,6 +547,20 @@ export default function AgencyRegistration() {
                     <li>• We'll discuss your needs and recommend the best plan</li>
                     <li>• Features will be unlocked once you choose a plan</li>
                   </ul>
+                </div>
+
+                {/* Honeypot field — hidden from humans, bots will fill it */}
+                <div style={{ position: "absolute", left: "-9999px", opacity: 0, pointerEvents: "none" }} aria-hidden="true" tabIndex={-1}>
+                  <label htmlFor="website_url">Website</label>
+                  <input
+                    id="website_url"
+                    name="website_url"
+                    type="text"
+                    value={honeypot}
+                    onChange={(e) => setHoneypot(e.target.value)}
+                    tabIndex={-1}
+                    autoComplete="off"
+                  />
                 </div>
 
                 <Button 

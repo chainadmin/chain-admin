@@ -1139,6 +1139,21 @@ async function buildAgreementVariables(
   };
 }
 
+// IP-based rate limiter for agency registration (max 5 attempts per IP per hour)
+const registrationAttempts = new Map<string, { count: number; resetAt: number }>();
+
+function checkRegistrationRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = registrationAttempts.get(ip);
+  if (!entry || now > entry.resetAt) {
+    registrationAttempts.set(ip, { count: 1, resetAt: now + 60 * 60 * 1000 });
+    return true;
+  }
+  if (entry.count >= 5) return false;
+  entry.count++;
+  return true;
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/v2', externalApiRouter);
   // Request/Response logger - log all incoming requests and outgoing responses for debugging
@@ -6517,6 +6532,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Agency trial registration route (public)
   app.post('/api/agencies/register', async (req, res) => {
+    // Honeypot check — bots fill hidden fields, humans don't
+    if (req.body.website) {
+      console.log(`🤖 Bot registration blocked (honeypot filled) from IP: ${req.ip}`);
+      return res.json({ message: "Registration submitted successfully" });
+    }
+
+    // IP rate limiting — max 5 attempts per IP per hour
+    const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || 'unknown';
+    if (!checkRegistrationRateLimit(clientIp)) {
+      console.log(`🚫 Registration rate limit exceeded for IP: ${clientIp}`);
+      return res.status(429).json({ message: "Too many registration attempts. Please try again later." });
+    }
+
     console.log("Agency registration request received:", {
       email: req.body.email,
       businessName: req.body.businessName,
