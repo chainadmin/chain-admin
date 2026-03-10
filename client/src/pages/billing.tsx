@@ -1505,7 +1505,7 @@ export default function Billing() {
                                   <div key={idx} className="flex items-center justify-between text-sm">
                                     <span className="text-blue-100/80">
                                       {item.description}
-                                      {item.quantity && item.unitLabel && (
+                                      {item.quantity != null && item.unitLabel && (
                                         <span className="text-blue-100/50 text-xs ml-1">({item.quantity} {item.unitLabel})</span>
                                       )}
                                     </span>

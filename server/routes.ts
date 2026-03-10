@@ -18717,10 +18717,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: 'No subscription found for this tenant. Set billing dates first.' });
       }
 
-      // Pick the first subscription that does NOT already have an invoice for its period.
+      // Find the best subscription period to invoice:
+      // 1. Prefer periods with no invoice yet
+      // 2. If all periods have invoices, pick the most recent one that is still PENDING (can be replaced)
+      // 3. Only block if the most recent invoice is already PAID
       let subscription = null;
+      let existingPendingInvoiceId: string | null = null;
+
       for (const sub of allSubs) {
-        const existing = await db
+        const [existing] = await db
           .select()
           .from(invoices)
           .where(and(
@@ -18729,14 +18734,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
             eq(invoices.periodEnd, sub.currentPeriodEnd)
           ))
           .limit(1);
-        if (existing.length === 0) {
+
+        if (!existing) {
+          // No invoice yet — best choice
           subscription = sub;
+          existingPendingInvoiceId = null;
           break;
+        } else if (existing.status === 'paid') {
+          // Already paid — skip this period
+          continue;
+        } else {
+          // Pending invoice — can replace it with recalculated version
+          if (!subscription) {
+            subscription = sub;
+            existingPendingInvoiceId = existing.id;
+          }
         }
       }
 
       if (!subscription) {
-        return res.status(409).json({ message: 'Invoices already exist for all billing periods on this tenant.' });
+        return res.status(409).json({ message: 'All billing periods for this tenant have already been paid.' });
+      }
+
+      // If replacing a pending invoice, delete it first so we can create a fresh accurate one
+      if (existingPendingInvoiceId) {
+        await db.delete(invoices).where(eq(invoices.id, existingPendingInvoiceId));
+        console.log(`🗑️ Deleted pending invoice ${existingPendingInvoiceId} to replace with recalculated version`);
       }
 
       // Fetch the plan that was active for this subscription
@@ -18767,8 +18790,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const aiAutoResponseFee = hasAiAutoResponse ? AI_AUTO_RESPONSE_ADDON_PRICE : 0;
       const mobileAppFee = (hasMobileApp && !isEnterprisePlan) ? MOBILE_APP_BRANDING_MONTHLY : 0;
 
-      // Messaging usage during this period
-      const usageTotals = await storage.getMessagingUsageTotals(tenantId, periodStart, periodEnd);
+      // Messaging usage during this period.
+      // Pull from both sources and use whichever has more data:
+      //   1. messagingUsageEvents — event-level tracking (newer)
+      //   2. subscription.emailsUsedThisPeriod / smsUsedThisPeriod — direct counters (always maintained)
+      const eventTotals = await storage.getMessagingUsageTotals(tenantId, periodStart, periodEnd);
+      const emailFromCounters = subscription.emailsUsedThisPeriod ?? 0;
+      const smsFromCounters = subscription.smsUsedThisPeriod ?? 0;
+      const emailCount = Math.max(eventTotals.emailCount, emailFromCounters);
+      const smsSegments = Math.max(eventTotals.smsSegments, smsFromCounters);
+      const usageTotals = { emailCount, smsSegments };
+
       const includedEmails = dbPlan?.includedEmails ?? 0;
       const includedSms = dbPlan?.includedSms ?? 0;
 
