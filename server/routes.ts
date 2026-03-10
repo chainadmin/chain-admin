@@ -18779,9 +18779,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // AI auto-response overage
       let aiOverageCharge = 0;
+      let aiUsedCount = 0;
+      let aiIncluded = 0;
+      let aiOverage = 0;
       if (hasAiAutoResponse) {
         const planSlug = (dbPlan?.slug as MessagingPlanId) ?? 'launch';
-        const aiIncluded = AUTO_RESPONSE_INCLUDED_RESPONSES[planSlug] ?? 1000;
+        aiIncluded = AUTO_RESPONSE_INCLUDED_RESPONSES[planSlug] ?? 1000;
         const aiUsed = await db
           .select({ count: sql<number>`COUNT(*)::int` })
           .from(autoResponseUsage)
@@ -18791,22 +18794,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
             gte(autoResponseUsage.createdAt, periodStart),
             lte(autoResponseUsage.createdAt, periodEnd)
           ));
-        const aiUsedCount = aiUsed[0]?.count ?? 0;
-        const aiOverage = Math.max(0, aiUsedCount - aiIncluded);
+        aiUsedCount = aiUsed[0]?.count ?? 0;
+        aiOverage = Math.max(0, aiUsedCount - aiIncluded);
         aiOverageCharge = Number((aiOverage * AI_RESPONSE_OVERAGE_RATE).toFixed(2));
       }
 
       const totalBill = monthlyBase + documentSigningFee + aiAutoResponseFee + mobileAppFee + emailOverageCharge + smsOverageCharge + aiOverageCharge;
 
-      // Build line items
+      // Build line items — always include usage stats for full transparency
       const lineItemsList: Array<{ description: string; amountCents: number; quantity?: number; unitLabel?: string }> = [];
-      if (monthlyBase > 0) lineItemsList.push({ description: `${planName} - Monthly Subscription`, amountCents: Math.round(monthlyBase * 100) });
+
+      // Base plan
+      if (monthlyBase > 0) lineItemsList.push({ description: `${planName} — Monthly Subscription`, amountCents: Math.round(monthlyBase * 100) });
+
+      // Add-ons
       if (hasDocumentSigning && documentSigningFee > 0) lineItemsList.push({ description: 'Document Signing Add-on', amountCents: Math.round(documentSigningFee * 100) });
       if (hasAiAutoResponse && aiAutoResponseFee > 0) lineItemsList.push({ description: 'AI Auto-Response Add-on', amountCents: Math.round(aiAutoResponseFee * 100) });
       if (hasMobileApp && mobileAppFee > 0) lineItemsList.push({ description: 'Mobile App Branding Add-on', amountCents: Math.round(mobileAppFee * 100) });
-      if (emailOverage > 0) lineItemsList.push({ description: 'Email Overage', amountCents: Math.round(emailOverageCharge * 100), quantity: emailOverage, unitLabel: 'emails' });
-      if (smsOverage > 0) lineItemsList.push({ description: 'SMS Overage', amountCents: Math.round(smsOverageCharge * 100), quantity: smsOverage, unitLabel: 'segments' });
-      if (aiOverageCharge > 0) lineItemsList.push({ description: 'AI Response Overage', amountCents: Math.round(aiOverageCharge * 100), unitLabel: 'responses' });
+
+      // Email usage — always shown so agency can see what went out
+      lineItemsList.push({
+        description: emailOverage > 0 ? 'Emails Sent (within plan)' : 'Emails Sent',
+        amountCents: 0,
+        quantity: usageTotals.emailCount,
+        unitLabel: `of ${includedEmails} included`,
+      });
+      if (emailOverage > 0) {
+        lineItemsList.push({
+          description: 'Email Overage',
+          amountCents: Math.round(emailOverageCharge * 100),
+          quantity: emailOverage,
+          unitLabel: 'emails over limit',
+        });
+      }
+
+      // SMS usage — always shown
+      lineItemsList.push({
+        description: smsOverage > 0 ? 'SMS Segments Sent (within plan)' : 'SMS Segments Sent',
+        amountCents: 0,
+        quantity: usageTotals.smsSegments,
+        unitLabel: `of ${includedSms} included`,
+      });
+      if (smsOverage > 0) {
+        lineItemsList.push({
+          description: 'SMS Overage',
+          amountCents: Math.round(smsOverageCharge * 100),
+          quantity: smsOverage,
+          unitLabel: 'segments over limit',
+        });
+      }
+
+      // AI auto-response usage — shown if add-on is enabled
+      if (hasAiAutoResponse) {
+        lineItemsList.push({
+          description: aiOverage > 0 ? 'AI Responses (within plan)' : 'AI Responses',
+          amountCents: 0,
+          quantity: aiUsedCount,
+          unitLabel: `of ${aiIncluded} included`,
+        });
+        if (aiOverage > 0) {
+          lineItemsList.push({
+            description: 'AI Response Overage',
+            amountCents: Math.round(aiOverageCharge * 100),
+            quantity: aiOverage,
+            unitLabel: 'responses over limit',
+          });
+        }
+      }
 
       const activeConsumersResult = await db.select().from(consumers).where(eq(consumers.tenantId, tenantId));
       const activeConsumers = activeConsumersResult.length;
@@ -18831,10 +18885,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         lineItems: lineItemsList,
       }).returning();
 
-      // Only advance the billing period if this subscription is still active
+      // Advance the billing period for any subscription that isn't cancelled.
+      // Downgraded/paused/completed subs still need a next billing period.
       let newPeriodStart: Date | null = null;
       let newPeriodEnd: Date | null = null;
-      if (subscription.status === 'active') {
+      if (subscription.status !== 'cancelled') {
         newPeriodStart = new Date(periodEnd);
         newPeriodStart.setHours(0, 0, 0, 0);
         newPeriodEnd = new Date(newPeriodStart);
@@ -18856,19 +18911,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (tenant.email) {
           const periodStartStr = periodStart.toLocaleDateString();
           const periodEndStr = periodEnd.toLocaleDateString();
+          const lineItemRows = lineItemsList.map(item => `
+            <tr>
+              <td style="padding: 8px 0; color: #374151; border-bottom: 1px solid #e5e7eb;">
+                ${item.description}${item.quantity != null && item.unitLabel ? ` <span style="color:#6b7280; font-size:12px;">(${item.quantity} ${item.unitLabel})</span>` : ''}
+              </td>
+              <td style="padding: 8px 0; text-align: right; font-weight: 600; color: #111827; border-bottom: 1px solid #e5e7eb;">
+                ${item.amountCents === 0 ? '$0.00' : `$${(item.amountCents / 100).toFixed(2)}`}
+              </td>
+            </tr>
+          `).join('');
           const emailHtml = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <h2 style="color: #1e40af;">Invoice ${invoiceNumber}</h2>
               <p>Dear ${tenant.name},</p>
-              <p>Your invoice for Chain platform services is now available.</p>
-              <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <p><strong>Plan:</strong> ${planName}</p>
-                <p><strong>Billing Period:</strong> ${periodStartStr} - ${periodEndStr}</p>
-                <p><strong>Due Date:</strong> ${dueDate.toLocaleDateString()}</p>
-                <hr style="border: 0; border-top: 1px solid #ddd; margin: 15px 0;">
-                <p style="font-size: 18px;"><strong>Total Due:</strong> $${totalBill.toFixed(2)}</p>
+              <p>Your invoice for Chain platform services for the period <strong>${periodStartStr} – ${periodEndStr}</strong> is now available.</p>
+              <div style="background: #f9fafb; border: 1px solid #e5e7eb; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <p style="margin: 0 0 4px 0; color: #6b7280; font-size: 13px;">Plan</p>
+                <p style="margin: 0 0 16px 0; font-weight: 600;">${planName}</p>
+                <table style="width: 100%; border-collapse: collapse;">
+                  <thead>
+                    <tr>
+                      <th style="text-align: left; padding-bottom: 8px; color: #6b7280; font-size: 12px; text-transform: uppercase; border-bottom: 2px solid #e5e7eb;">Description</th>
+                      <th style="text-align: right; padding-bottom: 8px; color: #6b7280; font-size: 12px; text-transform: uppercase; border-bottom: 2px solid #e5e7eb;">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>${lineItemRows}</tbody>
+                  <tfoot>
+                    <tr>
+                      <td style="padding-top: 12px; font-weight: 700; font-size: 16px;">Total Due</td>
+                      <td style="padding-top: 12px; text-align: right; font-weight: 700; font-size: 16px; color: #1e40af;">$${totalBill.toFixed(2)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+                <p style="margin: 16px 0 0 0; color: #6b7280; font-size: 13px;"><strong>Due Date:</strong> ${dueDate.toLocaleDateString()}</p>
               </div>
-              <p>Log in to your billing dashboard to view details and pay.</p>
+              <p>Log in to your billing dashboard to view details and make a payment.</p>
             </div>
           `;
           await emailService.sendEmail({
