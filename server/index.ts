@@ -122,17 +122,18 @@ function setupScheduledTasks(port: number) {
     timezone: 'America/New_York'
   });
   
-  // Generate monthly invoices on the 1st of each month at 12:00 AM ET
-  cron.schedule('0 0 1 * *', async () => {
-    console.log('🕒 [CRON] Running monthly invoice generator...');
+  // Generate invoices for any tenant whose billing period has ended - runs daily at 1:00 AM ET
+  // Idempotent: skips tenants that already have an invoice for the current period
+  cron.schedule('0 1 * * *', async () => {
+    console.log('🕒 [CRON] Running invoice generator (daily check for ended billing periods)...');
     try {
       const response = await fetch(`${baseUrl}/api/billing/generate-monthly-invoices`, {
         method: 'POST'
       });
       const result = await response.json();
-      console.log('✅ [CRON] Monthly invoice generation complete:', result);
+      console.log('✅ [CRON] Invoice generation complete:', result);
     } catch (error) {
-      console.error('❌ [CRON] Monthly invoice generation failed:', error);
+      console.error('❌ [CRON] Invoice generation failed:', error);
     }
   }, {
     timezone: 'America/New_York'
@@ -174,7 +175,7 @@ function setupScheduledTasks(port: number) {
   console.log('   - Payment processor: Daily at 8:00 AM ET (America/New_York timezone)');
   console.log('   - Automation processor: Every 15 minutes');
   console.log('   - Subscription renewal processor: Daily at 12:00 AM ET (America/New_York timezone)');
-  console.log('   - Monthly invoice generator: 1st of each month at 12:00 AM ET (America/New_York timezone)');
+  console.log('   - Invoice generator (ended billing periods): Daily at 1:00 AM ET (America/New_York timezone)');
   console.log('   - Returned accounts cleanup: Daily at 2:00 AM ET (America/New_York timezone)');
   console.log('   - Tracking data cleanup: Daily at 3:00 AM ET (America/New_York timezone)');
 }

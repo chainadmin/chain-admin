@@ -17616,19 +17616,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Generate monthly invoices and send to all active tenants (called by monthly cron)
+  // Generate invoices for tenants whose billing period has ended - runs daily, idempotent
   app.post('/api/billing/generate-monthly-invoices', async (req, res) => {
     try {
-      console.log('📊 Generating monthly invoices for all active tenants...');
+      console.log('📊 Checking for tenants with ended billing periods to invoice...');
       let invoicesSent = 0;
       let errors = 0;
       let skipped = 0;
+      const now = new Date();
       
       // Get all active subscriptions
       const allSubscriptions = await db.select().from(subscriptions).where(eq(subscriptions.status, 'active'));
       
       for (const subscription of allSubscriptions) {
         try {
+          // Only generate invoice if billing period has ended
+          const periodEnd = new Date(subscription.currentPeriodEnd);
+          if (periodEnd > now) {
+            skipped++;
+            continue;
+          }
+
           // Check if invoice already exists for this billing period (idempotency)
           const existingInvoice = await db.select()
             .from(invoices)

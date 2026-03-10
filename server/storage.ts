@@ -3023,12 +3023,11 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async getPaymentsByConsumer(consumerId: string, tenantId: string): Promise<(Payment & { accountCreditor?: string; arrangementName?: string })[]> {
+  async getPaymentsByConsumer(consumerId: string, tenantId: string): Promise<(Payment & { accountCreditor?: string; accountNumber?: string })[]> {
     const result = await db
       .select()
       .from(payments)
       .leftJoin(accounts, eq(payments.accountId, accounts.id))
-      .leftJoin(paymentSchedules, eq(accounts.id, paymentSchedules.accountId))
       .where(and(
         eq(payments.consumerId, consumerId),
         eq(payments.tenantId, tenantId)
@@ -3038,7 +3037,7 @@ export class DatabaseStorage implements IStorage {
     return result.map(row => ({
       ...row.payments,
       accountCreditor: row.accounts?.creditor || undefined,
-      arrangementName: row.payment_schedules?.name || undefined,
+      accountNumber: row.accounts?.accountNumber || undefined,
     }));
   }
 

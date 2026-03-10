@@ -419,14 +419,14 @@ export default function GlobalAdmin() {
       setSelectedPlanId('');
       setWaiveSetupFee(false);
       toast({
-        title: "Plan Assigned",
-        description: "Subscription plan has been successfully assigned to the agency",
+        title: "Plan Updated",
+        description: "Subscription plan has been successfully changed",
       });
     },
     onError: () => {
       toast({
         title: "Error",
-        description: "Failed to assign plan",
+        description: "Failed to change plan",
         variant: "destructive",
       });
     }
@@ -3196,7 +3196,7 @@ export default function GlobalAdmin() {
                           data-testid={`button-manage-plan-${tenant.id}`}
                         >
                           <CreditCard className="h-4 w-4 mr-2" />
-                          Manage Plan
+                          Change Plan
                         </Button>
 
                         <Button
@@ -3835,17 +3835,17 @@ export default function GlobalAdmin() {
           <DialogHeader>
             <DialogTitle className="flex items-center">
               <CreditCard className="h-5 w-5 mr-2" />
-              Manage Subscription Plan
+              Change Subscription Plan
             </DialogTitle>
           </DialogHeader>
           {selectedTenantForPlan && (
             <div className="space-y-4">
               <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
                 <p className="text-sm text-blue-800">
-                  Assign a subscription plan to <strong>{selectedTenantForPlan.name}</strong>
+                  Change the subscription plan for <strong>{selectedTenantForPlan.name}</strong>
                 </p>
                 <p className="text-xs text-blue-600 mt-1">
-                  This will mark the agency as a paid account and deactivate trial mode.
+                  You can upgrade or downgrade to any available plan.
                 </p>
               </div>
 
@@ -4122,10 +4122,10 @@ export default function GlobalAdmin() {
                   {assignPlanMutation.isPending ? (
                     <>
                       <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2" />
-                      Assigning...
+                      Saving...
                     </>
                   ) : (
-                    'Assign Plan'
+                    'Save Plan Change'
                   )}
                 </Button>
               </div>
