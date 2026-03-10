@@ -18686,6 +18686,132 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Manually generate invoice for a tenant and advance their billing period (global admin)
+  app.post('/api/admin/tenants/:tenantId/generate-invoice', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const { tenantId } = req.params;
+
+      const tenant = await storage.getTenant(tenantId);
+      if (!tenant) {
+        return res.status(404).json({ message: 'Tenant not found' });
+      }
+
+      const [subscription] = await db
+        .select()
+        .from(subscriptions)
+        .where(and(eq(subscriptions.tenantId, tenantId), eq(subscriptions.status, 'active')))
+        .limit(1);
+
+      if (!subscription) {
+        return res.status(404).json({ message: 'No active subscription found for this tenant' });
+      }
+
+      // Idempotency: block if invoice already exists for this period
+      const existingInvoice = await db
+        .select()
+        .from(invoices)
+        .where(and(
+          eq(invoices.subscriptionId, subscription.id),
+          eq(invoices.periodStart, subscription.currentPeriodStart),
+          eq(invoices.periodEnd, subscription.currentPeriodEnd)
+        ))
+        .limit(1);
+
+      if (existingInvoice.length > 0) {
+        return res.status(409).json({ message: 'Invoice already exists for this billing period' });
+      }
+
+      // Build invoice
+      const stats = await storage.getBillingStats(tenantId);
+      const invoiceNumber = `INV-${tenantId.substring(0, 8)}-${Date.now()}`;
+
+      const lineItemsList: Array<{ description: string; amountCents: number; quantity?: number; unitLabel?: string }> = [];
+      lineItemsList.push({ description: `${subscription.planId ? subscription.planId.charAt(0).toUpperCase() + subscription.planId.slice(1) : 'Base'} Plan`, amountCents: Math.round(stats.monthlyBase * 100) });
+      if ((stats.addons as any)?.documentSigning) lineItemsList.push({ description: 'Document Signing Add-on', amountCents: Math.round((stats.addons as any).documentSigningFee * 100) });
+      if ((stats.addons as any)?.aiAutoResponse) lineItemsList.push({ description: 'AI Auto-Response Add-on', amountCents: Math.round((stats.addons as any).aiAutoResponseFee * 100) });
+      if ((stats.emailUsage as any)?.overage > 0) lineItemsList.push({ description: 'Email Overage', amountCents: Math.round((stats.emailUsage as any).overageCharge * 100), quantity: (stats.emailUsage as any).overage, unitLabel: 'emails' });
+      if ((stats.smsUsage as any)?.overage > 0) lineItemsList.push({ description: 'SMS Overage', amountCents: Math.round((stats.smsUsage as any).overageCharge * 100), quantity: (stats.smsUsage as any).overage, unitLabel: 'segments' });
+      if ((stats.aiAutoResponseUsage as any)?.overage > 0) lineItemsList.push({ description: 'AI Response Overage', amountCents: Math.round((stats.aiAutoResponseUsage as any).overageCharge * 100), quantity: (stats.aiAutoResponseUsage as any).overage, unitLabel: 'responses' });
+
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + 15);
+
+      const [invoice] = await db.insert(invoices).values({
+        tenantId,
+        subscriptionId: subscription.id,
+        invoiceNumber,
+        periodStart: subscription.currentPeriodStart,
+        periodEnd: subscription.currentPeriodEnd,
+        status: 'pending',
+        baseAmountCents: Math.round(stats.monthlyBase * 100),
+        perConsumerCents: 0,
+        consumerCount: stats.activeConsumers,
+        totalAmountCents: Math.round(stats.totalBill * 100),
+        dueDate,
+        paidAt: null,
+        lineItems: lineItemsList,
+      }).returning();
+
+      // Advance billing period (30 days) and reset usage counters
+      const newPeriodStart = new Date(subscription.currentPeriodEnd);
+      newPeriodStart.setHours(0, 0, 0, 0);
+      const newPeriodEnd = new Date(newPeriodStart);
+      newPeriodEnd.setDate(newPeriodEnd.getDate() + 30);
+      newPeriodEnd.setHours(23, 59, 59, 999);
+
+      await db.update(subscriptions)
+        .set({
+          currentPeriodStart: newPeriodStart,
+          currentPeriodEnd: newPeriodEnd,
+          emailsUsedThisPeriod: 0,
+          smsUsedThisPeriod: 0,
+        })
+        .where(eq(subscriptions.id, subscription.id));
+
+      // Send invoice email
+      try {
+        if (tenant.email) {
+          const periodStartStr = new Date(subscription.currentPeriodStart).toLocaleDateString();
+          const periodEndStr = new Date(subscription.currentPeriodEnd).toLocaleDateString();
+          const emailHtml = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #1e40af;">Invoice ${invoiceNumber}</h2>
+              <p>Dear ${tenant.name},</p>
+              <p>Your invoice for Chain platform services is now available.</p>
+              <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <p><strong>Billing Period:</strong> ${periodStartStr} - ${periodEndStr}</p>
+                <p><strong>Due Date:</strong> ${dueDate.toLocaleDateString()}</p>
+                <hr style="border: 0; border-top: 1px solid #ddd; margin: 15px 0;">
+                <p style="font-size: 18px;"><strong>Total Due:</strong> $${stats.totalBill.toFixed(2)}</p>
+              </div>
+              <p>Log in to your billing dashboard to view details and pay.</p>
+            </div>
+          `;
+          await emailService.sendEmail({
+            to: tenant.email,
+            subject: `Chain Invoice ${invoiceNumber} - $${stats.totalBill.toFixed(2)} Due ${dueDate.toLocaleDateString()}`,
+            html: emailHtml,
+            tenantId,
+          });
+        }
+      } catch (emailErr) {
+        console.error(`❌ Failed to send invoice email for tenant ${tenantId}:`, emailErr);
+      }
+
+      console.log(`✅ Manual invoice generated for tenant ${tenantId}: ${invoiceNumber} ($${stats.totalBill.toFixed(2)})`);
+      res.json({
+        success: true,
+        invoice,
+        newPeriodStart,
+        newPeriodEnd,
+        message: `Invoice ${invoiceNumber} generated. Billing period advanced to ${newPeriodStart.toLocaleDateString()} - ${newPeriodEnd.toLocaleDateString()}.`,
+      });
+    } catch (error) {
+      console.error('❌ Failed to manually generate invoice:', error);
+      res.status(500).json({ message: 'Failed to generate invoice', error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
   // Update subscription billing dates (global admin)
   app.put('/api/admin/tenants/:tenantId/billing-dates', isPlatformAdmin, async (req: any, res) => {
     console.log('📅 Billing dates endpoint hit - user:', req.user);

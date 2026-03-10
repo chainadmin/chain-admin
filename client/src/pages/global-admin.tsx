@@ -675,6 +675,39 @@ export default function GlobalAdmin() {
     enabled: isPlatformAdmin
   });
 
+  // Mutation to manually generate invoice for a tenant
+  const generateInvoiceMutation = useMutation({
+    mutationFn: async (tenantId: string) => {
+      const token = sessionStorage.getItem('admin_token');
+      const response = await fetch(`/api/admin/tenants/${tenantId}/generate-invoice`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      const data = await response.json();
+      if (!response.ok) throw { status: response.status, message: data.message };
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants'] });
+      toast({
+        title: "Invoice Generated",
+        description: data.message || "Invoice created and billing period advanced.",
+      });
+    },
+    onError: (error: any) => {
+      const is409 = error?.status === 409;
+      toast({
+        title: is409 ? "Invoice Already Exists" : "Error",
+        description: error?.message || "Failed to generate invoice",
+        variant: is409 ? "default" : "destructive",
+      });
+    },
+  });
+
   // Mutation to mark invoice as paid
   const markInvoicePaidMutation = useMutation({
     mutationFn: async ({ invoiceId, notes }: { invoiceId: string; notes?: string }) => {
@@ -3208,6 +3241,22 @@ export default function GlobalAdmin() {
                         >
                           <Repeat className="h-4 w-4 mr-2" />
                           Billing Dates
+                        </Button>
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-green-400 text-green-700 hover:bg-green-50"
+                          disabled={generateInvoiceMutation.isPending}
+                          onClick={() => generateInvoiceMutation.mutate(tenant.id)}
+                          data-testid={`button-generate-invoice-${tenant.id}`}
+                        >
+                          {generateInvoiceMutation.isPending ? (
+                            <div className="animate-spin w-4 h-4 border-2 border-green-600 border-t-transparent rounded-full mr-2" />
+                          ) : (
+                            <FileText className="h-4 w-4 mr-2" />
+                          )}
+                          Generate Invoice
                         </Button>
                         
                         <Button
