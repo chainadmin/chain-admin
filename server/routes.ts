@@ -60,9 +60,15 @@ import {
   messagingPlanList,
   messagingPlans,
   EMAIL_OVERAGE_RATE_PER_THOUSAND,
+  EMAIL_OVERAGE_RATE_PER_EMAIL,
   SMS_OVERAGE_RATE_PER_SEGMENT,
+  DOCUMENT_SIGNING_ADDON_PRICE,
+  AI_AUTO_RESPONSE_ADDON_PRICE,
+  MOBILE_APP_BRANDING_MONTHLY,
+  AUTO_RESPONSE_INCLUDED_RESPONSES,
   type MessagingPlanId,
 } from "@shared/billing-plans";
+
 import { listConsumers, updateConsumer, deleteConsumers, ConsumerNotFoundError } from "@shared/server/consumers";
 import { resolveConsumerPortalUrl } from "@shared/utils/consumerPortal";
 import { finalizeEmailHtml } from "@shared/utils/emailTemplate";
@@ -1153,6 +1159,8 @@ function checkRegistrationRateLimit(ip: string): boolean {
   entry.count++;
   return true;
 }
+
+const AI_RESPONSE_OVERAGE_RATE = 0.08; // $0.08 per additional AI response
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/v2', externalApiRouter);
@@ -18696,43 +18704,114 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: 'Tenant not found' });
       }
 
-      const [subscription] = await db
+      // Find ALL subscriptions for this tenant, most recently ended first.
+      // This covers: active subs whose period ended, downgraded subs (old plan),
+      // cancelled subs, and à la carte tenants.
+      const allSubs = await db
         .select()
         .from(subscriptions)
-        .where(and(eq(subscriptions.tenantId, tenantId), eq(subscriptions.status, 'active')))
-        .limit(1);
+        .where(eq(subscriptions.tenantId, tenantId))
+        .orderBy(desc(subscriptions.currentPeriodEnd));
+
+      if (allSubs.length === 0) {
+        return res.status(404).json({ message: 'No subscription found for this tenant. Set billing dates first.' });
+      }
+
+      // Pick the first subscription that does NOT already have an invoice for its period.
+      let subscription = null;
+      for (const sub of allSubs) {
+        const existing = await db
+          .select()
+          .from(invoices)
+          .where(and(
+            eq(invoices.subscriptionId, sub.id),
+            eq(invoices.periodStart, sub.currentPeriodStart),
+            eq(invoices.periodEnd, sub.currentPeriodEnd)
+          ))
+          .limit(1);
+        if (existing.length === 0) {
+          subscription = sub;
+          break;
+        }
+      }
 
       if (!subscription) {
-        return res.status(404).json({ message: 'No active subscription found for this tenant' });
+        return res.status(409).json({ message: 'Invoices already exist for all billing periods on this tenant.' });
       }
 
-      // Idempotency: block if invoice already exists for this period
-      const existingInvoice = await db
-        .select()
-        .from(invoices)
-        .where(and(
-          eq(invoices.subscriptionId, subscription.id),
-          eq(invoices.periodStart, subscription.currentPeriodStart),
-          eq(invoices.periodEnd, subscription.currentPeriodEnd)
-        ))
-        .limit(1);
-
-      if (existingInvoice.length > 0) {
-        return res.status(409).json({ message: 'Invoice already exists for this billing period' });
+      // Fetch the plan that was active for this subscription
+      let dbPlan: any = null;
+      if (subscription.planId) {
+        const [planResult] = await db
+          .select()
+          .from(subscriptionPlans)
+          .where(eq(subscriptionPlans.id, subscription.planId));
+        dbPlan = planResult;
       }
 
-      // Build invoice
-      const stats = await storage.getBillingStats(tenantId);
-      const invoiceNumber = `INV-${tenantId.substring(0, 8)}-${Date.now()}`;
+      const periodStart = new Date(subscription.currentPeriodStart);
+      const periodEnd = new Date(subscription.currentPeriodEnd);
 
+      // Base plan fee from the plan record (works for regular plans AND à la carte)
+      const monthlyBase = dbPlan ? Number(dbPlan.monthlyPriceCents) / 100 : 0;
+      const planName = dbPlan?.name ?? 'Base Plan';
+
+      // Add-ons enabled during this period
+      const enabledAddons = await storage.getEnabledAddons(tenantId);
+      const hasDocumentSigning = enabledAddons.includes('document_signing');
+      const hasAiAutoResponse = enabledAddons.includes('ai_auto_response');
+      const isEnterprisePlan = dbPlan?.slug === 'scale';
+      const hasMobileApp = enabledAddons.includes('mobile_app_branding');
+
+      const documentSigningFee = hasDocumentSigning ? DOCUMENT_SIGNING_ADDON_PRICE : 0;
+      const aiAutoResponseFee = hasAiAutoResponse ? AI_AUTO_RESPONSE_ADDON_PRICE : 0;
+      const mobileAppFee = (hasMobileApp && !isEnterprisePlan) ? MOBILE_APP_BRANDING_MONTHLY : 0;
+
+      // Messaging usage during this period
+      const usageTotals = await storage.getMessagingUsageTotals(tenantId, periodStart, periodEnd);
+      const includedEmails = dbPlan?.includedEmails ?? 0;
+      const includedSms = dbPlan?.includedSms ?? 0;
+
+      const emailOverage = Math.max(0, usageTotals.emailCount - includedEmails);
+      const smsOverage = Math.max(0, usageTotals.smsSegments - includedSms);
+      const emailOverageCharge = Number((emailOverage * EMAIL_OVERAGE_RATE_PER_EMAIL).toFixed(2));
+      const smsOverageCharge = Number((smsOverage * SMS_OVERAGE_RATE_PER_SEGMENT).toFixed(2));
+
+      // AI auto-response overage
+      let aiOverageCharge = 0;
+      if (hasAiAutoResponse) {
+        const planSlug = (dbPlan?.slug as MessagingPlanId) ?? 'launch';
+        const aiIncluded = AUTO_RESPONSE_INCLUDED_RESPONSES[planSlug] ?? 1000;
+        const aiUsed = await db
+          .select({ count: sql<number>`COUNT(*)::int` })
+          .from(autoResponseUsage)
+          .where(and(
+            eq(autoResponseUsage.tenantId, tenantId),
+            eq(autoResponseUsage.testMode, false),
+            gte(autoResponseUsage.createdAt, periodStart),
+            lte(autoResponseUsage.createdAt, periodEnd)
+          ));
+        const aiUsedCount = aiUsed[0]?.count ?? 0;
+        const aiOverage = Math.max(0, aiUsedCount - aiIncluded);
+        aiOverageCharge = Number((aiOverage * AI_RESPONSE_OVERAGE_RATE).toFixed(2));
+      }
+
+      const totalBill = monthlyBase + documentSigningFee + aiAutoResponseFee + mobileAppFee + emailOverageCharge + smsOverageCharge + aiOverageCharge;
+
+      // Build line items
       const lineItemsList: Array<{ description: string; amountCents: number; quantity?: number; unitLabel?: string }> = [];
-      lineItemsList.push({ description: `${subscription.planId ? subscription.planId.charAt(0).toUpperCase() + subscription.planId.slice(1) : 'Base'} Plan`, amountCents: Math.round(stats.monthlyBase * 100) });
-      if ((stats.addons as any)?.documentSigning) lineItemsList.push({ description: 'Document Signing Add-on', amountCents: Math.round((stats.addons as any).documentSigningFee * 100) });
-      if ((stats.addons as any)?.aiAutoResponse) lineItemsList.push({ description: 'AI Auto-Response Add-on', amountCents: Math.round((stats.addons as any).aiAutoResponseFee * 100) });
-      if ((stats.emailUsage as any)?.overage > 0) lineItemsList.push({ description: 'Email Overage', amountCents: Math.round((stats.emailUsage as any).overageCharge * 100), quantity: (stats.emailUsage as any).overage, unitLabel: 'emails' });
-      if ((stats.smsUsage as any)?.overage > 0) lineItemsList.push({ description: 'SMS Overage', amountCents: Math.round((stats.smsUsage as any).overageCharge * 100), quantity: (stats.smsUsage as any).overage, unitLabel: 'segments' });
-      if ((stats.aiAutoResponseUsage as any)?.overage > 0) lineItemsList.push({ description: 'AI Response Overage', amountCents: Math.round((stats.aiAutoResponseUsage as any).overageCharge * 100), quantity: (stats.aiAutoResponseUsage as any).overage, unitLabel: 'responses' });
+      if (monthlyBase > 0) lineItemsList.push({ description: `${planName} - Monthly Subscription`, amountCents: Math.round(monthlyBase * 100) });
+      if (hasDocumentSigning && documentSigningFee > 0) lineItemsList.push({ description: 'Document Signing Add-on', amountCents: Math.round(documentSigningFee * 100) });
+      if (hasAiAutoResponse && aiAutoResponseFee > 0) lineItemsList.push({ description: 'AI Auto-Response Add-on', amountCents: Math.round(aiAutoResponseFee * 100) });
+      if (hasMobileApp && mobileAppFee > 0) lineItemsList.push({ description: 'Mobile App Branding Add-on', amountCents: Math.round(mobileAppFee * 100) });
+      if (emailOverage > 0) lineItemsList.push({ description: 'Email Overage', amountCents: Math.round(emailOverageCharge * 100), quantity: emailOverage, unitLabel: 'emails' });
+      if (smsOverage > 0) lineItemsList.push({ description: 'SMS Overage', amountCents: Math.round(smsOverageCharge * 100), quantity: smsOverage, unitLabel: 'segments' });
+      if (aiOverageCharge > 0) lineItemsList.push({ description: 'AI Response Overage', amountCents: Math.round(aiOverageCharge * 100), unitLabel: 'responses' });
 
+      const activeConsumersResult = await db.select().from(consumers).where(eq(consumers.tenantId, tenantId));
+      const activeConsumers = activeConsumersResult.length;
+
+      const invoiceNumber = `INV-${tenantId.substring(0, 8)}-${Date.now()}`;
       const dueDate = new Date();
       dueDate.setDate(dueDate.getDate() + 15);
 
@@ -18740,56 +18819,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tenantId,
         subscriptionId: subscription.id,
         invoiceNumber,
-        periodStart: subscription.currentPeriodStart,
-        periodEnd: subscription.currentPeriodEnd,
+        periodStart,
+        periodEnd,
         status: 'pending',
-        baseAmountCents: Math.round(stats.monthlyBase * 100),
+        baseAmountCents: Math.round(monthlyBase * 100),
         perConsumerCents: 0,
-        consumerCount: stats.activeConsumers,
-        totalAmountCents: Math.round(stats.totalBill * 100),
+        consumerCount: activeConsumers,
+        totalAmountCents: Math.round(totalBill * 100),
         dueDate,
         paidAt: null,
         lineItems: lineItemsList,
       }).returning();
 
-      // Advance billing period (30 days) and reset usage counters
-      const newPeriodStart = new Date(subscription.currentPeriodEnd);
-      newPeriodStart.setHours(0, 0, 0, 0);
-      const newPeriodEnd = new Date(newPeriodStart);
-      newPeriodEnd.setDate(newPeriodEnd.getDate() + 30);
-      newPeriodEnd.setHours(23, 59, 59, 999);
+      // Only advance the billing period if this subscription is still active
+      let newPeriodStart: Date | null = null;
+      let newPeriodEnd: Date | null = null;
+      if (subscription.status === 'active') {
+        newPeriodStart = new Date(periodEnd);
+        newPeriodStart.setHours(0, 0, 0, 0);
+        newPeriodEnd = new Date(newPeriodStart);
+        newPeriodEnd.setDate(newPeriodEnd.getDate() + 30);
+        newPeriodEnd.setHours(23, 59, 59, 999);
 
-      await db.update(subscriptions)
-        .set({
-          currentPeriodStart: newPeriodStart,
-          currentPeriodEnd: newPeriodEnd,
-          emailsUsedThisPeriod: 0,
-          smsUsedThisPeriod: 0,
-        })
-        .where(eq(subscriptions.id, subscription.id));
+        await db.update(subscriptions)
+          .set({
+            currentPeriodStart: newPeriodStart,
+            currentPeriodEnd: newPeriodEnd,
+            emailsUsedThisPeriod: 0,
+            smsUsedThisPeriod: 0,
+          })
+          .where(eq(subscriptions.id, subscription.id));
+      }
 
       // Send invoice email
       try {
         if (tenant.email) {
-          const periodStartStr = new Date(subscription.currentPeriodStart).toLocaleDateString();
-          const periodEndStr = new Date(subscription.currentPeriodEnd).toLocaleDateString();
+          const periodStartStr = periodStart.toLocaleDateString();
+          const periodEndStr = periodEnd.toLocaleDateString();
           const emailHtml = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <h2 style="color: #1e40af;">Invoice ${invoiceNumber}</h2>
               <p>Dear ${tenant.name},</p>
               <p>Your invoice for Chain platform services is now available.</p>
               <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <p><strong>Plan:</strong> ${planName}</p>
                 <p><strong>Billing Period:</strong> ${periodStartStr} - ${periodEndStr}</p>
                 <p><strong>Due Date:</strong> ${dueDate.toLocaleDateString()}</p>
                 <hr style="border: 0; border-top: 1px solid #ddd; margin: 15px 0;">
-                <p style="font-size: 18px;"><strong>Total Due:</strong> $${stats.totalBill.toFixed(2)}</p>
+                <p style="font-size: 18px;"><strong>Total Due:</strong> $${totalBill.toFixed(2)}</p>
               </div>
               <p>Log in to your billing dashboard to view details and pay.</p>
             </div>
           `;
           await emailService.sendEmail({
             to: tenant.email,
-            subject: `Chain Invoice ${invoiceNumber} - $${stats.totalBill.toFixed(2)} Due ${dueDate.toLocaleDateString()}`,
+            subject: `Chain Invoice ${invoiceNumber} - $${totalBill.toFixed(2)} Due ${dueDate.toLocaleDateString()}`,
             html: emailHtml,
             tenantId,
           });
@@ -18798,13 +18882,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error(`❌ Failed to send invoice email for tenant ${tenantId}:`, emailErr);
       }
 
-      console.log(`✅ Manual invoice generated for tenant ${tenantId}: ${invoiceNumber} ($${stats.totalBill.toFixed(2)})`);
+      const advanceMsg = (newPeriodStart && newPeriodEnd)
+        ? ` Billing period advanced to ${newPeriodStart.toLocaleDateString()} - ${newPeriodEnd.toLocaleDateString()}.`
+        : '';
+
+      console.log(`✅ Manual invoice generated for tenant ${tenantId}: ${invoiceNumber} ($${totalBill.toFixed(2)})`);
       res.json({
         success: true,
         invoice,
         newPeriodStart,
         newPeriodEnd,
-        message: `Invoice ${invoiceNumber} generated. Billing period advanced to ${newPeriodStart.toLocaleDateString()} - ${newPeriodEnd.toLocaleDateString()}.`,
+        message: `Invoice ${invoiceNumber} generated for ${planName} ($${totalBill.toFixed(2)}).${advanceMsg}`,
       });
     } catch (error) {
       console.error('❌ Failed to manually generate invoice:', error);
