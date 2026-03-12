@@ -125,6 +125,10 @@ export default function GlobalAdmin() {
   const [selectedTenantForAgreement, setSelectedTenantForAgreement] = useState('');
   const [selectedAgreementTemplate, setSelectedAgreementTemplate] = useState('');
 
+  // Tenant documents dialog state
+  const [tenantDocumentsDialogOpen, setTenantDocumentsDialogOpen] = useState(false);
+  const [selectedTenantForDocuments, setSelectedTenantForDocuments] = useState<any>(null);
+
   // SMS Compliance state
   const [smsComplianceTenantId, setSmsComplianceTenantId] = useState('');
   const [syncDaysBack, setSyncDaysBack] = useState(90);
@@ -3258,6 +3262,20 @@ export default function GlobalAdmin() {
                           )}
                           Generate Invoice
                         </Button>
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-violet-300 text-violet-700 hover:bg-violet-50"
+                          onClick={() => {
+                            setSelectedTenantForDocuments(tenant);
+                            setTenantDocumentsDialogOpen(true);
+                          }}
+                          data-testid={`button-documents-${tenant.id}`}
+                        >
+                          <FileText className="h-4 w-4 mr-2" />
+                          Documents
+                        </Button>
                         
                         <Button
                           variant="outline"
@@ -4350,6 +4368,96 @@ export default function GlobalAdmin() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Tenant Documents Dialog */}
+      <Dialog open={tenantDocumentsDialogOpen} onOpenChange={setTenantDocumentsDialogOpen}>
+        <DialogContent className="sm:max-w-[680px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <FileText className="h-5 w-5 mr-2" />
+              Documents — {selectedTenantForDocuments?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <TenantDocumentsDialogContent tenantId={selectedTenantForDocuments?.id} />
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function TenantDocumentsDialogContent({ tenantId }: { tenantId: string | undefined }) {
+  const { data: agreements, isLoading } = useQuery({
+    queryKey: ['/api/admin/tenants', tenantId, 'agreements'],
+    queryFn: async () => {
+      const token = sessionStorage.getItem('admin_token');
+      const response = await fetch(`/api/admin/tenants/${tenantId}/agreements`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      });
+      if (!response.ok) throw new Error('Failed to fetch agreements');
+      return response.json();
+    },
+    enabled: !!tenantId,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-10">
+        <div className="animate-spin w-6 h-6 border-4 border-blue-600 border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  if (!agreements || agreements.length === 0) {
+    return (
+      <div className="py-8 text-center text-gray-500">
+        <FileText className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+        <p className="text-sm">No documents have been sent to this company yet.</p>
+      </div>
+    );
+  }
+
+  const statusColor = (status: string) => {
+    if (status === 'agreed') return 'text-green-700 bg-green-50 border-green-200';
+    if (status === 'declined') return 'text-red-700 bg-red-50 border-red-200';
+    if (status === 'viewed') return 'text-blue-700 bg-blue-50 border-blue-200';
+    return 'text-yellow-700 bg-yellow-50 border-yellow-200';
+  };
+
+  return (
+    <div className="space-y-3 max-h-[480px] overflow-y-auto pt-2">
+      {(agreements as any[]).map((ag: any) => (
+        <div key={ag.id} className="border border-gray-200 rounded-lg p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-gray-900 truncate">{ag.title}</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Sent: {new Date(ag.createdAt).toLocaleDateString()}
+                {ag.agreedAt && ` · Accepted: ${new Date(ag.agreedAt).toLocaleDateString()}`}
+                {ag.declinedAt && ` · Declined: ${new Date(ag.declinedAt).toLocaleDateString()}`}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold capitalize ${statusColor(ag.status)}`}>
+                {ag.status}
+              </span>
+              <a
+                href={`/tenant-agreement/${ag.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                <Eye className="h-3.5 w-3.5" />
+                View
+              </a>
+            </div>
+          </div>
+          {ag.declineReason && (
+            <p className="mt-2 text-xs text-red-600 bg-red-50 rounded p-2">
+              <strong>Decline reason:</strong> {ag.declineReason}
+            </p>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

@@ -561,9 +561,10 @@ export default function Billing() {
     (subscription as any)?.planId || stats.planId || (subscription as any)?.plan || null;
   const currentPlanName =
     (subscription as any)?.planName || stats.planName || (subscription as any)?.plan || null;
-  const currentPlanPrice = Number(
-    (subscription as any)?.planPrice ?? stats.monthlyBase ?? ((subscription as any)?.monthlyBaseCents ?? 0) / 100
-  );
+  const isALaCarte = currentPlanId === 'a-la-carte';
+  const currentPlanPrice = isALaCarte
+    ? Number(stats.monthlyBase ?? 0)
+    : Number((subscription as any)?.planPrice ?? stats.monthlyBase ?? ((subscription as any)?.monthlyBaseCents ?? 0) / 100);
 
   return (
     <AdminLayout>
@@ -735,6 +736,7 @@ export default function Billing() {
               </Card>
             </div>
 
+            {(!isALaCarte || (stats.emailUsage?.used > 0) || (stats.smsUsage?.used > 0) || (stats.emailUsage?.included > 0) || (stats.smsUsage?.included > 0)) && (
             <Card className="rounded-3xl border-white/10 bg-white/5 text-blue-50 shadow-lg shadow-blue-900/20">
               <CardHeader className="border-b border-white/10 pb-4">
                 <CardTitle className="text-lg font-semibold text-white">Messaging usage</CardTitle>
@@ -742,11 +744,12 @@ export default function Billing() {
               </CardHeader>
               <CardContent className="pt-6">
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                  {renderUsageSummary("Email", stats.emailUsage)}
-                  {renderUsageSummary("SMS segments", stats.smsUsage)}
+                  {(!isALaCarte || stats.emailUsage?.used > 0 || stats.emailUsage?.included > 0) && renderUsageSummary("Email", stats.emailUsage)}
+                  {(!isALaCarte || stats.smsUsage?.used > 0 || stats.smsUsage?.included > 0) && renderUsageSummary("SMS segments", stats.smsUsage)}
                 </div>
               </CardContent>
             </Card>
+            )}
 
             {/* Add-ons & Features */}
             {(stats.addonFees > 0 || stats.voipCosts > 0) && (

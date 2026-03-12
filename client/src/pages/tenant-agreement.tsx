@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { CheckCircle2, XCircle, FileText, Clock, Eye, AlertCircle } from 'lucide-react';
+import { CheckCircle2, XCircle, FileText, Clock, Eye, AlertCircle, CreditCard, Building } from 'lucide-react';
 import { queryClient } from '@/lib/queryClient';
 import { replaceGlobalDocumentVariables } from '@shared/globalDocumentHelpers';
 
@@ -22,6 +22,12 @@ export default function TenantAgreement() {
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [showForm, setShowForm] = useState(true);
+
+  // Payment method step state
+  const [paymentMethodType, setPaymentMethodType] = useState<'card' | 'ach' | null>(null);
+  const [paymentMethodData, setPaymentMethodData] = useState<Record<string, string>>({});
+  const [paymentMethodErrors, setPaymentMethodErrors] = useState<Record<string, string>>({});
+  const [showPaymentStep, setShowPaymentStep] = useState(true);
 
   const { data: agreement, isLoading } = useQuery({
     queryKey: ['/api/tenant-agreement', agreementId],
@@ -45,7 +51,13 @@ export default function TenantAgreement() {
 
   const agreeMutation = useMutation({
     mutationFn: async () => {
-      const body = agreement?.interactiveFields ? { interactiveFieldValues: formData } : {};
+      const paymentFields = paymentMethodType
+        ? { paymentMethodType, ...paymentMethodData }
+        : {};
+      const allFields = { ...formData, ...paymentFields };
+      const body = (agreement?.interactiveFields || isPaymentAuthAgreement)
+        ? { interactiveFieldValues: allFields }
+        : {};
       const response = await fetch(`/api/tenant-agreement/${agreementId}/agree`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -130,9 +142,19 @@ export default function TenantAgreement() {
   const isPlainObject = (val: any): val is Record<string, any> => 
     typeof val === 'object' && val !== null && !Array.isArray(val) && Object.getPrototypeOf(val) === Object.prototype;
 
+  // Detect if this is a payment authorization agreement
+  const isPaymentAuthAgreement =
+    agreement.title?.toLowerCase().includes('payment auth') ||
+    agreement.title?.toLowerCase().includes('payment authorization') ||
+    agreement.templateSlug?.toLowerCase().includes('payment_auth') ||
+    agreement.templateSlug?.toLowerCase().includes('payment-auth');
+
   // Check if agreement has interactive fields that need to be filled
   const hasInteractiveFields = agreement.interactiveFields && Array.isArray(agreement.interactiveFields) && agreement.interactiveFields.length > 0;
   const needsFormCompletion = hasInteractiveFields && showForm;
+
+  // Payment step: for payment auth agreements show payment method step first
+  const needsPaymentStep = isPaymentAuthAgreement && showPaymentStep;
 
   // Merge form data with metadata for rendering
   const mergedMetadata = isPlainObject(agreement.metadata) 
@@ -149,11 +171,10 @@ export default function TenantAgreement() {
                         !declineMutation.isPending &&
                         !isSubmitting;
 
-  // Handle form submission
+  // Handle interactive form submission
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validate required fields
     const errors: Record<string, string> = {};
     const fields = agreement.interactiveFields as Array<{ name: string; type: string; required?: boolean; label?: string }>;
     
@@ -168,16 +189,53 @@ export default function TenantAgreement() {
       return;
     }
 
-    // Clear errors and hide form
     setFormErrors({});
     setShowForm(false);
   };
 
+  // Handle payment method step submission
+  const handlePaymentMethodSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const errors: Record<string, string> = {};
+
+    if (!paymentMethodType) {
+      errors.paymentMethodType = 'Please select a payment method';
+    } else if (paymentMethodType === 'card') {
+      if (!paymentMethodData.cardNumber?.trim()) errors.cardNumber = 'Card number is required';
+      if (!paymentMethodData.cardExpiry?.trim()) errors.cardExpiry = 'Expiration date is required';
+      if (!paymentMethodData.cardCvv?.trim()) errors.cardCvv = 'CVV is required';
+      if (!paymentMethodData.cardName?.trim()) errors.cardName = 'Name on card is required';
+    } else if (paymentMethodType === 'ach') {
+      if (!paymentMethodData.bankName?.trim()) errors.bankName = 'Bank name is required';
+      if (!paymentMethodData.routingNumber?.trim()) errors.routingNumber = 'Routing number is required';
+      if (!paymentMethodData.accountNumber?.trim()) errors.accountNumber = 'Account number is required';
+      if (!paymentMethodData.accountType) errors.accountType = 'Account type is required';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setPaymentMethodErrors(errors);
+      return;
+    }
+
+    setPaymentMethodErrors({});
+    setShowPaymentStep(false);
+  };
+
   const handleFieldChange = (name: string, value: any) => {
     setFormData(prev => ({ ...prev, [name]: value }));
-    // Clear error for this field
     if (formErrors[name]) {
       setFormErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[name];
+        return newErrors;
+      });
+    }
+  };
+
+  const handlePaymentFieldChange = (name: string, value: string) => {
+    setPaymentMethodData(prev => ({ ...prev, [name]: value }));
+    if (paymentMethodErrors[name]) {
+      setPaymentMethodErrors(prev => {
         const newErrors = { ...prev };
         delete newErrors[name];
         return newErrors;
@@ -196,7 +254,7 @@ export default function TenantAgreement() {
           </p>
           <div className="bg-green-50 border border-green-200 rounded-lg p-6">
             <p className="text-sm text-green-800">
-              <strong>{agreement.tenantName}</strong> has been notified of your acceptance.
+              <strong>Chain Software Group</strong> has been notified of your acceptance.
               You'll receive further instructions via email shortly.
             </p>
             {agreement.agreedAt && (
@@ -221,7 +279,7 @@ export default function TenantAgreement() {
           </p>
           <div className="bg-red-50 border border-red-200 rounded-lg p-6">
             <p className="text-sm text-red-800">
-              <strong>{agreement.tenantName}</strong> has been notified.
+              <strong>Chain Software Group</strong> has been notified.
               {agreement.declineReason && (
                 <span className="block mt-2">
                   <strong>Reason:</strong> {agreement.declineReason}
@@ -253,7 +311,7 @@ export default function TenantAgreement() {
             <div className="mt-4 flex items-center space-x-4 text-sm">
               <div className="flex items-center space-x-1">
                 <Eye className="h-4 w-4" />
-                <span>From: {agreement.tenantName}</span>
+                <span>From: Chain Software Group</span>
               </div>
               <div className="flex items-center space-x-1">
                 <Clock className="h-4 w-4" />
@@ -263,8 +321,189 @@ export default function TenantAgreement() {
           </div>
         </div>
 
-        {/* Interactive Form (if needed) */}
-        {needsFormCompletion && (
+        {/* Step 1: Payment Method (for payment authorization agreements) */}
+        {needsPaymentStep && (
+          <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
+            <div className="mb-6">
+              <CreditCard className="h-12 w-12 text-blue-600 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold text-gray-900 text-center mb-2">Payment Method</h2>
+              <p className="text-gray-600 text-center">Please enter your payment details before reviewing the agreement.</p>
+            </div>
+
+            <form onSubmit={handlePaymentMethodSubmit} className="space-y-6">
+              {/* Payment Type Selection */}
+              <div className="space-y-3">
+                <Label className="text-sm font-semibold text-gray-800">Payment Type <span className="text-red-500">*</span></Label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => { setPaymentMethodType('card'); setPaymentMethodErrors({}); }}
+                    className={`flex items-center justify-center gap-2 rounded-xl border-2 p-4 text-sm font-medium transition-all ${
+                      paymentMethodType === 'card'
+                        ? 'border-blue-600 bg-blue-50 text-blue-700'
+                        : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                    }`}
+                  >
+                    <CreditCard className="h-5 w-5" />
+                    Credit / Debit Card
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setPaymentMethodType('ach'); setPaymentMethodErrors({}); }}
+                    className={`flex items-center justify-center gap-2 rounded-xl border-2 p-4 text-sm font-medium transition-all ${
+                      paymentMethodType === 'ach'
+                        ? 'border-blue-600 bg-blue-50 text-blue-700'
+                        : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                    }`}
+                  >
+                    <Building className="h-5 w-5" />
+                    ACH / Bank Account
+                  </button>
+                </div>
+                {paymentMethodErrors.paymentMethodType && (
+                  <p className="text-red-500 text-sm">{paymentMethodErrors.paymentMethodType}</p>
+                )}
+              </div>
+
+              {/* Card Fields */}
+              {paymentMethodType === 'card' && (
+                <div className="space-y-4 rounded-xl bg-gray-50 p-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="cardName" className="text-sm font-medium">Name on Card <span className="text-red-500">*</span></Label>
+                    <Input
+                      id="cardName"
+                      type="text"
+                      placeholder="John Smith"
+                      value={paymentMethodData.cardName || ''}
+                      onChange={(e) => handlePaymentFieldChange('cardName', e.target.value)}
+                      data-testid="input-card-name"
+                    />
+                    {paymentMethodErrors.cardName && <p className="text-red-500 text-sm">{paymentMethodErrors.cardName}</p>}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="cardNumber" className="text-sm font-medium">Card Number <span className="text-red-500">*</span></Label>
+                    <Input
+                      id="cardNumber"
+                      type="text"
+                      placeholder="1234 5678 9012 3456"
+                      maxLength={19}
+                      value={paymentMethodData.cardNumber || ''}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, '').slice(0, 16);
+                        const formatted = val.replace(/(.{4})/g, '$1 ').trim();
+                        handlePaymentFieldChange('cardNumber', formatted);
+                      }}
+                      data-testid="input-card-number"
+                    />
+                    {paymentMethodErrors.cardNumber && <p className="text-red-500 text-sm">{paymentMethodErrors.cardNumber}</p>}
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="cardExpiry" className="text-sm font-medium">Expiration (MM/YY) <span className="text-red-500">*</span></Label>
+                      <Input
+                        id="cardExpiry"
+                        type="text"
+                        placeholder="MM/YY"
+                        maxLength={5}
+                        value={paymentMethodData.cardExpiry || ''}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+                          const formatted = val.length >= 3 ? `${val.slice(0, 2)}/${val.slice(2)}` : val;
+                          handlePaymentFieldChange('cardExpiry', formatted);
+                        }}
+                        data-testid="input-card-expiry"
+                      />
+                      {paymentMethodErrors.cardExpiry && <p className="text-red-500 text-sm">{paymentMethodErrors.cardExpiry}</p>}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="cardCvv" className="text-sm font-medium">CVV <span className="text-red-500">*</span></Label>
+                      <Input
+                        id="cardCvv"
+                        type="text"
+                        placeholder="123"
+                        maxLength={4}
+                        value={paymentMethodData.cardCvv || ''}
+                        onChange={(e) => handlePaymentFieldChange('cardCvv', e.target.value.replace(/\D/g, '').slice(0, 4))}
+                        data-testid="input-card-cvv"
+                      />
+                      {paymentMethodErrors.cardCvv && <p className="text-red-500 text-sm">{paymentMethodErrors.cardCvv}</p>}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ACH Fields */}
+              {paymentMethodType === 'ach' && (
+                <div className="space-y-4 rounded-xl bg-gray-50 p-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="bankName" className="text-sm font-medium">Bank Name <span className="text-red-500">*</span></Label>
+                    <Input
+                      id="bankName"
+                      type="text"
+                      placeholder="First National Bank"
+                      value={paymentMethodData.bankName || ''}
+                      onChange={(e) => handlePaymentFieldChange('bankName', e.target.value)}
+                      data-testid="input-bank-name"
+                    />
+                    {paymentMethodErrors.bankName && <p className="text-red-500 text-sm">{paymentMethodErrors.bankName}</p>}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="routingNumber" className="text-sm font-medium">Routing Number <span className="text-red-500">*</span></Label>
+                    <Input
+                      id="routingNumber"
+                      type="text"
+                      placeholder="021000021"
+                      maxLength={9}
+                      value={paymentMethodData.routingNumber || ''}
+                      onChange={(e) => handlePaymentFieldChange('routingNumber', e.target.value.replace(/\D/g, '').slice(0, 9))}
+                      data-testid="input-routing-number"
+                    />
+                    {paymentMethodErrors.routingNumber && <p className="text-red-500 text-sm">{paymentMethodErrors.routingNumber}</p>}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="accountNumber" className="text-sm font-medium">Account Number <span className="text-red-500">*</span></Label>
+                    <Input
+                      id="accountNumber"
+                      type="text"
+                      placeholder="123456789"
+                      value={paymentMethodData.accountNumber || ''}
+                      onChange={(e) => handlePaymentFieldChange('accountNumber', e.target.value.replace(/\D/g, ''))}
+                      data-testid="input-account-number"
+                    />
+                    {paymentMethodErrors.accountNumber && <p className="text-red-500 text-sm">{paymentMethodErrors.accountNumber}</p>}
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Account Type <span className="text-red-500">*</span></Label>
+                    <Select
+                      value={paymentMethodData.accountType || ''}
+                      onValueChange={(v) => handlePaymentFieldChange('accountType', v)}
+                    >
+                      <SelectTrigger data-testid="input-account-type">
+                        <SelectValue placeholder="Select account type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="checking">Checking</SelectItem>
+                        <SelectItem value="savings">Savings</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {paymentMethodErrors.accountType && <p className="text-red-500 text-sm">{paymentMethodErrors.accountType}</p>}
+                  </div>
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-6 text-lg font-semibold"
+                data-testid="button-continue-to-agreement"
+              >
+                Continue to Agreement
+              </Button>
+            </form>
+          </div>
+        )}
+
+        {/* Step 2: Interactive Form (if needed and not payment step) */}
+        {!needsPaymentStep && needsFormCompletion && (
           <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
             <div className="mb-6">
               <AlertCircle className="h-12 w-12 text-blue-600 mx-auto mb-4" />
@@ -335,7 +574,7 @@ export default function TenantAgreement() {
         )}
 
         {/* Agreement Content */}
-        {!needsFormCompletion && (
+        {!needsPaymentStep && !needsFormCompletion && (
           <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
             <div 
               className="prose max-w-none prose-headings:text-gray-900 prose-p:text-gray-700"
@@ -345,7 +584,7 @@ export default function TenantAgreement() {
         )}
 
         {/* Actions */}
-        {!needsFormCompletion && (
+        {!needsPaymentStep && !needsFormCompletion && (
           <div className="bg-white rounded-2xl shadow-xl p-8">
             {!showDeclineForm ? (
               <div className="space-y-4">
