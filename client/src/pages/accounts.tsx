@@ -2048,7 +2048,7 @@ export default function Accounts() {
                 sendEmailMutation.mutate({
                   to: selectedAccount?.consumer?.email,
                   subject: composeEmailForm.subject,
-                  body: composeEmailForm.body,
+                  message: composeEmailForm.body,
                   templateId: composeEmailForm.templateId || undefined,
                 })
               }

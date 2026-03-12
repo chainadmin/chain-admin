@@ -6674,6 +6674,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Don't fail the registration if email fails
       }
 
+      // Send welcome email to the registering company
+      try {
+        const { emailService } = await import('./emailService');
+        await emailService.sendEmail({
+          to: data.email,
+          subject: 'Thank you for registering with Chain Software Group',
+          html: `
+            <p>Hello,</p>
+
+            <p>Thank you for registering with Chain Software Group.</p>
+
+            <p>We're excited to learn more about your business and how our platform may be able to support your operations. Our system is designed to help companies manage communications, payments, and customer interactions in a streamlined way.</p>
+
+            <p>As part of the setup process, we can also help secure a custom domain and build a branded portal or website for your organization. This allows your customers to access your services through a professional, fully customized site that reflects your company's branding.</p>
+
+            <p>If you'd like assistance with setting up a domain or customizing your portal, please let us know and we would be happy to guide you through the process.</p>
+
+            <p>We look forward to working with you.</p>
+
+            <p>
+              Best regards,<br/>
+              Chain Software Group<br/>
+              support@chainsoftwaregroup.com<br/>
+              chainsoftwaregroup.com
+            </p>
+          `,
+          tag: 'welcome-email',
+        });
+        console.log(`✅ Welcome email sent to new agency: ${data.email}`);
+      } catch (emailError) {
+        console.error('Failed to send welcome email to new agency:', emailError);
+        // Don't fail the registration if email fails
+      }
+
       res.status(201).json({
         message: "Trial account created successfully! You can now log in with your username and password.",
         tenantId: tenant.id,
