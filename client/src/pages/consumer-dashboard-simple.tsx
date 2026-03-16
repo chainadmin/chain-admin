@@ -2119,6 +2119,109 @@ export default function ConsumerDashboardSimple() {
                 </>
               )}
 
+              {/* Settlement Offers Section */}
+              {applicableArrangements.some((arr: any) => arr.planType === 'settlement') && (
+                <div className="rounded-lg bg-gradient-to-r from-emerald-500/10 to-green-500/10 border-2 border-emerald-400/30 p-4 backdrop-blur">
+                  <div className="flex items-center gap-2 mb-3">
+                    <TrendingUp className="h-5 w-5 text-emerald-400" />
+                    <Label className="text-base font-semibold text-emerald-200">Special Settlement Offers</Label>
+                  </div>
+                  <div className="space-y-2">
+                    {applicableArrangements
+                      .filter((arr: any) => arr.planType === 'settlement')
+                      .map((arrangement: any) => {
+                        const summary = getArrangementSummary(arrangement);
+                        // Create unique key combining id and payment count for expanded settlement options
+                        const uniqueKey = `${arrangement.id}-${arrangement.settlementPaymentCount || 'default'}`;
+                        const isSelected = selectedArrangement?.id === arrangement.id && 
+                          selectedArrangement?.settlementPaymentCount === arrangement.settlementPaymentCount;
+                        return (
+                          <div
+                            key={uniqueKey}
+                            onClick={() => {
+                              setSelectedArrangement(arrangement);
+                              const amount = calculateArrangementPayment(arrangement, selectedAccount?.balanceCents || 0);
+                              setCalculatedPayment(amount);
+                              setCustomPaymentAmount(''); // Clear custom amount when selecting arrangement
+                            }}
+                            className={`cursor-pointer rounded-lg border-2 p-3 transition-all ${
+                              isSelected
+                                ? 'border-emerald-400 bg-emerald-500/20 backdrop-blur'
+                                : 'border-emerald-400/30 bg-white/5 hover:bg-white/10 hover:border-emerald-400/50'
+                            }`}
+                            data-testid={`option-settlement-${uniqueKey}`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <p className="font-medium text-emerald-200">{summary.headline}</p>
+                                {summary.detail && (
+                                  <p className="text-sm text-emerald-100/70 mt-1">{summary.detail}</p>
+                                )}
+                              </div>
+                              <Badge className="bg-emerald-500 text-white border-emerald-400/30">Save Money</Badge>
+                            </div>
+                            
+                            {/* Show payment schedule breakdown for multi-payment settlements when selected */}
+                            {isSelected && arrangement.settlementPaymentCount && arrangement.settlementPaymentCount > 1 && (
+                              <div className="mt-3 pt-3 border-t border-emerald-400/20">
+                                <div className="text-xs text-emerald-100/70 mb-2 font-medium">Payment Schedule:</div>
+                                <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                                  {(() => {
+                                    const paymentAmount = calculateArrangementPayment(arrangement, selectedAccount?.balanceCents || 0);
+                                    const frequency = arrangement.settlementPaymentFrequency || 'monthly';
+                                    const paymentCount = arrangement.settlementPaymentCount;
+                                    const payments = [];
+                                    
+                                    // Use the selected first payment date or default to today
+                                    const startDate = firstPaymentDate || new Date();
+                                    
+                                    for (let i = 0; i < paymentCount; i++) {
+                                      const paymentDate = new Date(startDate);
+                                      
+                                      // Calculate payment date based on frequency
+                                      if (frequency === 'weekly') {
+                                        paymentDate.setDate(paymentDate.getDate() + (i * 7));
+                                      } else if (frequency === 'biweekly') {
+                                        paymentDate.setDate(paymentDate.getDate() + (i * 14));
+                                      } else {
+                                        // Monthly
+                                        paymentDate.setMonth(paymentDate.getMonth() + i);
+                                      }
+                                      
+                                      payments.push({
+                                        number: i + 1,
+                                        date: paymentDate,
+                                        amount: paymentAmount,
+                                      });
+                                    }
+                                    
+                                    return payments.map((payment) => (
+                                      <div 
+                                        key={payment.number}
+                                        className="flex items-center justify-between rounded bg-emerald-500/10 px-2 py-1.5"
+                                      >
+                                        <span className="text-xs text-emerald-100/80">
+                                          Payment {payment.number} - {payment.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                        </span>
+                                        <span className="text-xs text-emerald-200 font-semibold">
+                                          {formatCurrency(payment.amount)}
+                                        </span>
+                                      </div>
+                                    ));
+                                  })()}
+                                </div>
+                                <div className="mt-2 text-xs text-emerald-100/60 italic">
+                                  {firstPaymentDate ? `First payment on ${firstPaymentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : 'First payment due today'}, remaining payments auto-scheduled
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+
               {/* Payment Options - Always show, but simplified when existing arrangement */}
               {selectedAccountSMAXArrangement ? (
                 <div className="space-y-4">
@@ -2232,109 +2335,6 @@ export default function ConsumerDashboardSimple() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {/* Settlement Offers Section */}
-                  {applicableArrangements.some((arr: any) => arr.planType === 'settlement') && (
-                    <div className="rounded-lg bg-gradient-to-r from-emerald-500/10 to-green-500/10 border-2 border-emerald-400/30 p-4 backdrop-blur">
-                      <div className="flex items-center gap-2 mb-3">
-                        <TrendingUp className="h-5 w-5 text-emerald-400" />
-                        <Label className="text-base font-semibold text-emerald-200">Special Settlement Offers</Label>
-                      </div>
-                      <div className="space-y-2">
-                        {applicableArrangements
-                          .filter((arr: any) => arr.planType === 'settlement')
-                          .map((arrangement: any) => {
-                            const summary = getArrangementSummary(arrangement);
-                            // Create unique key combining id and payment count for expanded settlement options
-                            const uniqueKey = `${arrangement.id}-${arrangement.settlementPaymentCount || 'default'}`;
-                            const isSelected = selectedArrangement?.id === arrangement.id && 
-                              selectedArrangement?.settlementPaymentCount === arrangement.settlementPaymentCount;
-                            return (
-                              <div
-                                key={uniqueKey}
-                                onClick={() => {
-                                  setSelectedArrangement(arrangement);
-                                  const amount = calculateArrangementPayment(arrangement, selectedAccount?.balanceCents || 0);
-                                  setCalculatedPayment(amount);
-                                  setCustomPaymentAmount(''); // Clear custom amount when selecting arrangement
-                                }}
-                                className={`cursor-pointer rounded-lg border-2 p-3 transition-all ${
-                                  isSelected
-                                    ? 'border-emerald-400 bg-emerald-500/20 backdrop-blur'
-                                    : 'border-emerald-400/30 bg-white/5 hover:bg-white/10 hover:border-emerald-400/50'
-                                }`}
-                                data-testid={`option-settlement-${uniqueKey}`}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <div className="flex-1">
-                                    <p className="font-medium text-emerald-200">{summary.headline}</p>
-                                    {summary.detail && (
-                                      <p className="text-sm text-emerald-100/70 mt-1">{summary.detail}</p>
-                                    )}
-                                  </div>
-                                  <Badge className="bg-emerald-500 text-white border-emerald-400/30">Save Money</Badge>
-                                </div>
-                                
-                                {/* Show payment schedule breakdown for multi-payment settlements when selected */}
-                                {isSelected && arrangement.settlementPaymentCount && arrangement.settlementPaymentCount > 1 && (
-                                  <div className="mt-3 pt-3 border-t border-emerald-400/20">
-                                    <div className="text-xs text-emerald-100/70 mb-2 font-medium">Payment Schedule:</div>
-                                    <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                                      {(() => {
-                                        const paymentAmount = calculateArrangementPayment(arrangement, selectedAccount?.balanceCents || 0);
-                                        const frequency = arrangement.settlementPaymentFrequency || 'monthly';
-                                        const paymentCount = arrangement.settlementPaymentCount;
-                                        const payments = [];
-                                        
-                                        // Use the selected first payment date or default to today
-                                        const startDate = firstPaymentDate || new Date();
-                                        
-                                        for (let i = 0; i < paymentCount; i++) {
-                                          const paymentDate = new Date(startDate);
-                                          
-                                          // Calculate payment date based on frequency
-                                          if (frequency === 'weekly') {
-                                            paymentDate.setDate(paymentDate.getDate() + (i * 7));
-                                          } else if (frequency === 'biweekly') {
-                                            paymentDate.setDate(paymentDate.getDate() + (i * 14));
-                                          } else {
-                                            // Monthly
-                                            paymentDate.setMonth(paymentDate.getMonth() + i);
-                                          }
-                                          
-                                          payments.push({
-                                            number: i + 1,
-                                            date: paymentDate,
-                                            amount: paymentAmount,
-                                          });
-                                        }
-                                        
-                                        return payments.map((payment) => (
-                                          <div 
-                                            key={payment.number}
-                                            className="flex items-center justify-between rounded bg-emerald-500/10 px-2 py-1.5"
-                                          >
-                                            <span className="text-xs text-emerald-100/80">
-                                              Payment {payment.number} - {payment.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                                            </span>
-                                            <span className="text-xs text-emerald-200 font-semibold">
-                                              {formatCurrency(payment.amount)}
-                                            </span>
-                                          </div>
-                                        ));
-                                      })()}
-                                    </div>
-                                    <div className="mt-2 text-xs text-emerald-100/60 italic">
-                                      {firstPaymentDate ? `First payment on ${firstPaymentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : 'First payment due today'}, remaining payments auto-scheduled
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                      </div>
-                    </div>
-                  )}
-
                   {/* Manual Payment Plan - Admin-created arrangement for this account */}
                   {(() => {
                     const accountManualArrangement = manualArrangementsList?.find((ma: any) => ma.accountId === selectedAccount?.id);
