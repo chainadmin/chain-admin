@@ -3546,6 +3546,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
 
           console.log(`📬 Campaign "${campaign.name}" sending complete: ${emailResults.successful} sent, ${emailResults.failed} failed`);
+
+          try {
+            const campaignTenantSettings = await storage.getTenantSettings(tenantId);
+            if ((campaignTenantSettings as any)?.dmpEnabled) {
+              const { dmpService } = await import('./dmpService');
+              for (const email of processedEmails) {
+                const filenumber = email.metadata?.filenumber;
+                if (filenumber) {
+                  await dmpService.sendEmail(tenantId, {
+                    filenumber,
+                    email_address: email.to,
+                    subject: email.subject,
+                    body: email.html || '',
+                    direction: 'outbound',
+                    status: 'sent',
+                  }).catch(e => console.error('[DMP] sendEmail failed:', e));
+                }
+              }
+              console.log(`[DMP] Logged ${processedEmails.filter(e => e.metadata?.filenumber).length} email campaign sends`);
+            }
+          } catch (dmpCampaignError) {
+            console.error('[DMP] Campaign email logging failed (non-blocking):', dmpCampaignError);
+          }
         } catch (bgError) {
           console.error(`❌ Background email sending failed for campaign "${campaign.name}":`, bgError);
           try {
@@ -4695,6 +4718,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             message: processedMessage,
             consumerId: consumer.id,
             accountId: consumerAccount?.id,
+            filenumber: consumerAccount?.filenumber || null,
           }));
         });
 
@@ -4753,6 +4777,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.log(
               `✅ SMS campaign "${campaign.name}" completed: ${smsResults.totalSent} sent, ${smsResults.totalFailed} failed`
             );
+
+            try {
+              const smsCampaignSettings = await storage.getTenantSettings(tenantId);
+              if ((smsCampaignSettings as any)?.dmpEnabled) {
+                const { dmpService } = await import('./dmpService');
+                const dmpMessages = processedMessages.filter((m: any) => m.filenumber);
+                for (const msg of dmpMessages) {
+                  await dmpService.sendText(tenantId, {
+                    filenumber: msg.filenumber,
+                    phone_number: msg.to,
+                    message: msg.message,
+                    direction: 'outbound',
+                    status: 'sent',
+                  }).catch(e => console.error('[DMP] sendText failed:', e));
+                }
+                console.log(`[DMP] Logged ${dmpMessages.length} SMS campaign sends`);
+              }
+            } catch (dmpSmsCampaignError) {
+              console.error('[DMP] Campaign SMS logging failed (non-blocking):', dmpSmsCampaignError);
+            }
           } catch (error) {
             console.error(`❌ Error in background SMS campaign send for ${campaign.id}:`, error);
             console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
@@ -7230,6 +7274,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.log(`✅ SMAX login note added for consumer ${consumer.id}, filenumber ${accountWithFileNumber.filenumber}`);
             } else {
               console.log(`ℹ️ SMAX login note not sent (SMAX may not be configured)`);
+            }
+
+            const loginTenantSettings = await storage.getTenantSettings(consumer.tenantId);
+            if ((loginTenantSettings as any)?.dmpEnabled) {
+              try {
+                const { dmpService } = await import('./dmpService');
+                await dmpService.postNote(consumer.tenantId, accountWithFileNumber.filenumber.trim(), {
+                  content: `Consumer ${consumer.firstName || ''} ${consumer.lastName || ''} logged into online portal. Email: ${consumer.email}${consumer.phone ? `, Phone: ${consumer.phone}` : ''}`,
+                  createdBy: 'System',
+                }).catch(e => console.error('DMP login note failed:', e));
+              } catch (dmpError) {
+                console.error('Failed to send DMP login note:', dmpError);
+              }
             }
           } else {
             console.log(`ℹ️ Skipping SMAX login note for consumer ${consumer.id} - no filenumber found`);
@@ -10374,7 +10431,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Return both calculated Chain template options AND existing SMAX arrangements
+      const tenantSettings = await storage.getTenantSettings(tenant.id);
+      if ((tenantSettings as any)?.dmpEnabled) {
+        for (const account of consumerAccounts) {
+          if (account.filenumber) {
+            try {
+              const { dmpService } = await import('./dmpService');
+              const dmpAccount = await dmpService.getAccount(tenant.id, account.filenumber);
+              if (dmpAccount) {
+                smaxArrangements.push({
+                  id: `dmp_${account.filenumber}`,
+                  source: 'dmp',
+                  name: 'Existing DMP Payment Arrangement',
+                  accountFileNumber: account.filenumber,
+                  accountId: account.id,
+                  planType: 'existing_dmp',
+                  monthlyPayment: dmpAccount.monthlyPayment || dmpAccount.paymentAmount,
+                  nextPaymentDate: dmpAccount.nextPaymentDate,
+                  remainingPayments: dmpAccount.remainingPayments,
+                  totalBalance: dmpAccount.balance ? dmpAccount.balance / 100 : undefined,
+                  isExisting: true,
+                  details: dmpAccount,
+                });
+              }
+            } catch (dmpError) {
+              console.error('Failed to fetch DMP account (non-blocking):', account.filenumber, dmpError);
+            }
+          }
+        }
+      }
+
       res.json({
         templateOptions: calculatedOptions,
         existingArrangements: smaxArrangements,
@@ -12370,6 +12456,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 }
               }
 
+              if ((settings as any)?.dmpEnabled && account.filenumber) {
+                try {
+                  const { dmpService } = await import('./dmpService');
+                  const fileNumber = account.filenumber;
+                  const arrangementName = arrangement.name || arrangement.planType;
+                  const firstPaymentDate = paymentStartDate.toISOString().split('T')[0];
+                  const amountDollars = (amountCents / 100).toFixed(2);
+                  const consumerName = consumer ? `${consumer.firstName} ${consumer.lastName}`.trim() : '';
+
+                  await dmpService.insertAttempt(tenantId, {
+                    filenumber: fileNumber,
+                    attempttype: 'Promise To Pay',
+                    attemptdate: firstPaymentDate,
+                    notes: `Arrangement: ${arrangementName} | Amount: $${amountDollars} | Frequency: ${arrangementFrequency.charAt(0).toUpperCase() + arrangementFrequency.slice(1)}`,
+                    result: 'SCHEDULED',
+                  }).catch(e => console.error('DMP attempt log failed:', e));
+
+                  await dmpService.postNote(tenantId, fileNumber, {
+                    content: `Payment arrangement scheduled (${arrangementName}). First payment ${firstPaymentDate} for $${amountDollars}.`,
+                    createdBy: consumerName || 'Consumer',
+                  }).catch(e => console.error('DMP note log failed:', e));
+                } catch (dmpError) {
+                  console.error('Failed to sync arrangement to DMP (non-blocking):', dmpError);
+                }
+              }
+
               // Move to Payments Pending folder
               try {
                 const paymentsPendingFolder = await storage.getPaymentsPendingFolder(tenantId);
@@ -13759,6 +13871,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.error('Failed to sync payment arrangement to SMAX:', smaxError);
             }
 
+            if ((settings as any)?.dmpEnabled && (account as any)?.filenumber) {
+              try {
+                const { dmpService } = await import('./dmpService');
+                const fileNumber = (account as any).filenumber;
+                const arrangementName = arrangement.name || arrangement.planType;
+                const amountDollars = (amountCents / 100).toFixed(2);
+                const scheduleRecord = createdSchedule as any;
+                const firstPaymentDate = scheduleRecord?.startDate || paymentStartDate.toISOString().split('T')[0];
+                const consumerNameRaw = `${consumerForSmax?.firstName || ''} ${consumerForSmax?.lastName || ''}`.trim();
+
+                await dmpService.insertAttempt(tenantId, {
+                  filenumber: fileNumber,
+                  attempttype: 'Promise To Pay',
+                  attemptdate: firstPaymentDate,
+                  notes: `Arrangement: ${arrangementName} | Amount: $${amountDollars} | Frequency: ${(mainArrangementFrequency || 'monthly').charAt(0).toUpperCase() + (mainArrangementFrequency || 'monthly').slice(1)}`,
+                  result: 'SCHEDULED',
+                }).catch(e => console.error('DMP attempt log failed:', e));
+
+                await dmpService.postNote(tenantId, fileNumber, {
+                  content: `Payment arrangement scheduled (${arrangementName}). First payment ${firstPaymentDate} for $${amountDollars}.`,
+                  createdBy: consumerNameRaw || 'Consumer',
+                }).catch(e => console.error('DMP note log failed:', e));
+              } catch (dmpError) {
+                console.error('Failed to sync arrangement to DMP (non-blocking):', dmpError);
+              }
+            }
+
             // Move account to "Payments Pending" folder after arrangement is created
             try {
               const paymentsPendingFolder = await storage.getPaymentsPendingFolder(tenantId);
@@ -14706,6 +14845,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   } catch (smaxError) {
                     console.error('❌ Error sending payment attempt to SMAX:', smaxError);
                   }
+                  if ((settings as any)?.dmpEnabled) {
+                    try {
+                      const { dmpService } = await import('./dmpService');
+                      await dmpService.insertAttempt(tenant.id, { filenumber: account.filenumber, attempttype: 'Payment', attemptdate: today, notes: `Scheduled payment of $${(paymentAmountCents / 100).toFixed(2)} processed successfully`, result: 'Success' }).catch(e => console.error('DMP cron attempt log failed:', e));
+                    } catch (dmpError) {
+                      console.error('❌ Error sending payment attempt to DMP:', dmpError);
+                    }
+                  }
                 }
               }
 
@@ -14826,6 +14973,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       console.log(`✨ Cleanup complete: Marked ${cleanedUpCount} schedules as completed`);
+
+      if (runType === 'cron') {
+        for (const tenant of tenantsToProcess) {
+          try {
+            const tenantSettings = await storage.getTenantSettings(tenant.id);
+            if ((tenantSettings as any)?.dmpEnabled) {
+              const { dmpService } = await import('./dmpService');
+              const dmpAccounts = await dmpService.getAccounts(tenant.id);
+              if (dmpAccounts && dmpAccounts.length > 0) {
+                const existingAccounts = await storage.getAccountsByTenant(tenant.id);
+                let synced = 0, created = 0;
+                for (const dmpAccount of dmpAccounts) {
+                  try {
+                    const existing = existingAccounts.find(a =>
+                      a.filenumber === dmpAccount.filenumber ||
+                      a.accountNumber === dmpAccount.accountNumber
+                    );
+                    if (existing) {
+                      await storage.updateAccount(existing.id, {
+                        balanceCents: dmpAccount.balance || 0,
+                        status: dmpAccount.status || existing.status,
+                        creditor: dmpAccount.creditorName || existing.creditor,
+                      });
+                      synced++;
+                    } else if ((tenantSettings as any)?.dmpAutoImport) {
+                      let consumer = null;
+                      if (dmpAccount.consumerEmail || dmpAccount.consumerPhone) {
+                        const consumers = await storage.getConsumersByTenant(tenant.id);
+                        consumer = consumers.find((c: any) =>
+                          (dmpAccount.consumerEmail && c.email === dmpAccount.consumerEmail) ||
+                          (dmpAccount.consumerPhone && c.phone === dmpAccount.consumerPhone)
+                        );
+                      }
+                      if (!consumer) {
+                        consumer = await storage.createConsumer({
+                          tenantId: tenant.id,
+                          firstName: dmpAccount.firstName || 'Unknown',
+                          lastName: dmpAccount.lastName || 'Consumer',
+                          email: dmpAccount.consumerEmail || null,
+                          phone: dmpAccount.consumerPhone || null,
+                          address: dmpAccount.address || null,
+                          city: dmpAccount.city || null,
+                          state: dmpAccount.state || null,
+                          zipCode: dmpAccount.zipCode || null,
+                        });
+                      }
+                      await storage.createAccount({
+                        tenantId: tenant.id,
+                        consumerId: consumer.id,
+                        accountNumber: dmpAccount.accountNumber || dmpAccount.filenumber,
+                        filenumber: dmpAccount.filenumber,
+                        balanceCents: dmpAccount.balance || 0,
+                        creditor: dmpAccount.creditorName || 'Unknown Creditor',
+                        status: dmpAccount.status || 'active',
+                      });
+                      created++;
+                    }
+                  } catch (accErr) {
+                    console.error(`[DMP Sync] Error processing account ${dmpAccount.filenumber}:`, accErr);
+                  }
+                }
+                console.log(`[DMP Sync] Tenant ${tenant.name}: ${synced} updated, ${created} created from ${dmpAccounts.length} DMP accounts`);
+              }
+            }
+          } catch (dmpSyncError) {
+            console.error(`[DMP Sync] Failed for tenant ${tenant.name} (non-blocking):`, dmpSyncError);
+          }
+        }
+      }
 
       res.json({
         success: true,
@@ -15168,6 +15384,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   
                   sentCount++;
                   console.log(`✉️ Sent email to ${consumer.email}`);
+
+                  if ((tenantSettings as any)?.dmpEnabled && consumerAccount?.filenumber) {
+                    try {
+                      const { dmpService } = await import('./dmpService');
+                      await dmpService.sendEmail(automation.tenantId, {
+                        filenumber: consumerAccount.filenumber,
+                        email_address: consumer.email || '',
+                        subject,
+                        body: html,
+                        direction: 'outbound',
+                        status: 'sent',
+                      }).catch(e => console.error('[DMP] automation sendEmail failed:', e));
+                    } catch (dmpAutoError) {
+                      console.error('[DMP] Automation email logging failed:', dmpAutoError);
+                    }
+                  }
                   
                 } else if (automation.type === 'sms') {
                   // SMS automations now create real campaigns for visibility and tracking
@@ -15300,7 +15532,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       phone,
                       message,
                       automation.tenantId,
-                      campaign.id, // Link to campaign for tracking
+                      campaign.id,
                       consumer.id,
                       { 
                         automationId: automation.id,
@@ -15310,6 +15542,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     );
                     campaignSentCount++;
                     sentCount++;
+
+                    if ((tenantSettings as any)?.dmpEnabled && consumerAccount?.filenumber) {
+                      try {
+                        const { dmpService } = await import('./dmpService');
+                        await dmpService.sendText(automation.tenantId, {
+                          filenumber: consumerAccount.filenumber,
+                          phone_number: phone,
+                          message,
+                          direction: 'outbound',
+                          status: 'sent',
+                        }).catch(e => console.error('[DMP] automation sendText failed:', e));
+                      } catch (dmpAutoSmsError) {
+                        console.error('[DMP] Automation SMS logging failed:', dmpAutoSmsError);
+                      }
+                    }
                     
                     // Update campaign progress periodically
                     if (campaignSentCount % 10 === 0) {

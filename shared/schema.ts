@@ -704,6 +704,7 @@ export const tenantSettings = pgTable("tenant_settings", {
   collectionMaxEnabled: boolean("collection_max_enabled").default(false),
   // Debt Manager Pro integration fields (completely separate from SMAX)
   dmpEnabled: boolean("dmp_enabled").default(false),
+  dmpAutoImport: boolean("dmp_auto_import").default(false),
   dmpApiUrl: text("dmp_api_url"),
   dmpUsername: text("dmp_username"),
   dmpPassword: text("dmp_password"),

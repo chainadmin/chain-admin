@@ -1854,6 +1854,14 @@ export async function runMigrations() {
       console.log(`  ⚠ invoices.line_items (already exists or error): ${err.message}`);
     }
 
+    // Add dmp_auto_import column to tenant_settings
+    try {
+      await client.query(`ALTER TABLE tenant_settings ADD COLUMN IF NOT EXISTS dmp_auto_import boolean DEFAULT false`);
+      console.log('  ✓ tenant_settings.dmp_auto_import column');
+    } catch (err: any) {
+      console.log(`  ⚠ tenant_settings.dmp_auto_import (already exists or error): ${err.message}`);
+    }
+
     console.log('✅ Database migrations completed successfully');
   } catch (error: any) {
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {

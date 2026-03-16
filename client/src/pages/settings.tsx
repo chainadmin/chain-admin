@@ -2617,6 +2617,23 @@ export default function Settings() {
                     </div>
                   )}
 
+                  {/* DMP Auto Import Toggle - Only show when enabled */}
+                  {(localSettings as any)?.dmpEnabled && (
+                    <div className="flex items-center justify-between space-x-4 rounded-xl border border-white/10 bg-white/5 p-4">
+                      <div className="flex-1">
+                        <Label className="text-base font-medium text-white">Auto-Sync DMP Accounts</Label>
+                        <p className="text-sm text-blue-100/70">
+                          Automatically import and sync DMP accounts to Chain during daily processing. Existing accounts are always updated; new accounts are only created when this is enabled.
+                        </p>
+                      </div>
+                      <Switch
+                        checked={(localSettings as any)?.dmpAutoImport || false}
+                        onCheckedChange={(checked) => handleSettingsUpdate('dmpAutoImport', checked)}
+                        data-testid="switch-dmp-auto-import"
+                      />
+                    </div>
+                  )}
+
                   {/* DMP Import Accounts - Only show when enabled */}
                   {(localSettings as any)?.dmpEnabled && (
                     <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-4">
