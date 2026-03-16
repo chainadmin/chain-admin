@@ -615,9 +615,9 @@ export default function ConsumerDashboardSimple() {
       // Calculate what the payment would be for this arrangement
       const calculatedPaymentAmount = calculateArrangementPayment(arr, selectedAccount.balanceCents || 0);
       
-      // Filter out arrangements where the calculated payment is less than the minimum
-      // Exception: pay_in_full is always allowed (consumer paying their entire balance)
-      if (arr.planType !== 'pay_in_full' && calculatedPaymentAmount < minimumMonthlyPaymentCents) {
+      // Filter out arrangements where the calculated payment is less than the minimum.
+      // Exceptions: pay_in_full and settlement plans should always remain available.
+      if (arr.planType !== 'pay_in_full' && arr.planType !== 'settlement' && calculatedPaymentAmount < minimumMonthlyPaymentCents) {
         return false;
       }
       
@@ -2414,7 +2414,7 @@ export default function ConsumerDashboardSimple() {
                                     data-testid={`option-plan-${arrangement.id}`}
                                   >
                                     <div className="flex items-center justify-between">
-                                      <p className="font-medium text-white">{arrangement.name}</p>
+                                      <p className="font-medium text-white">Arrangement Options</p>
                                       {isSelected && (
                                         <Badge className="bg-blue-500 text-white border-blue-400/30">Selected</Badge>
                                       )}
