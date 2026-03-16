@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Bell, Phone, Mail, MessageSquare, Download, Building2, CreditCard, FileText, AlertCircle, TrendingUp } from "lucide-react";
-import { getArrangementSummary, getPlanTypeLabel, formatCurrencyFromCents } from "@/lib/arrangements";
+import { getArrangementSummary, getPlanTypeLabel, formatCurrencyFromCents, calculateArrangementPayment } from "@/lib/arrangements";
 
 export default function EnhancedConsumerPortal() {
   const { tenantSlug, email } = useParams();
@@ -638,6 +638,14 @@ export default function EnhancedConsumerPortal() {
                         {settlementOptions.map((arrangement: any) => {
                           const summary = getArrangementSummary(arrangement);
                           const uniqueKey = `${arrangement.id}-${arrangement.settlementPaymentCount || 'default'}`;
+                          const settlementAmountCents = calculateArrangementPayment(arrangement, totalBalanceForQuery);
+                          const totalSettlementCents = arrangement.payoffPercentageBasisPoints
+                            ? Math.round(totalBalanceForQuery * arrangement.payoffPercentageBasisPoints / 10000)
+                            : totalBalanceForQuery;
+                          const payoffPct = arrangement.payoffPercentageBasisPoints
+                            ? (arrangement.payoffPercentageBasisPoints / 100)
+                            : null;
+                          const paymentCount = arrangement.settlementPaymentCount || 1;
                           return (
                             <Card key={uniqueKey} className="border-emerald-200 bg-white/80">
                               <CardContent className="pt-5">
@@ -651,6 +659,26 @@ export default function EnhancedConsumerPortal() {
                                       <p className="text-sm text-gray-600 mt-1">{arrangement.description}</p>
                                     )}
                                     <div className="mt-3 space-y-1.5">
+                                      {payoffPct && (
+                                        <p className="text-sm text-emerald-600 font-medium">
+                                          Settle for {payoffPct}% of your balance
+                                        </p>
+                                      )}
+                                      <div className="flex justify-between text-sm">
+                                        <span className="text-gray-600">Settlement Amount:</span>
+                                        <span className="font-semibold text-emerald-700">
+                                          {formatCurrencyFromCents(totalSettlementCents)}
+                                        </span>
+                                      </div>
+                                      {paymentCount > 1 && (
+                                        <div className="flex justify-between text-sm">
+                                          <span className="text-gray-600">Payment Plan:</span>
+                                          <span className="font-medium text-gray-800">
+                                            {paymentCount} payments of {formatCurrencyFromCents(settlementAmountCents)}
+                                            {arrangement.settlementPaymentFrequency && ` (${arrangement.settlementPaymentFrequency})`}
+                                          </span>
+                                        </div>
+                                      )}
                                       <p className="font-medium text-emerald-700">{summary.headline}</p>
                                       {summary.detail && <p className="text-sm text-gray-500">{summary.detail}</p>}
                                       <div className="flex justify-between text-sm">
@@ -664,9 +692,16 @@ export default function EnhancedConsumerPortal() {
                                   <div className="ml-6">
                                     <Button
                                       className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                                      onClick={() => setShowCallbackModal(true)}
+                                      onClick={() => {
+                                        setCallbackForm(prev => ({
+                                          ...prev,
+                                          subject: `Settlement Request: ${arrangement.name}`,
+                                          message: `I am interested in the settlement offer "${arrangement.name}" — ${payoffPct ? `${payoffPct}% of balance` : 'settlement'}, ${paymentCount > 1 ? `${paymentCount} payments of ${formatCurrencyFromCents(settlementAmountCents)}` : `one payment of ${formatCurrencyFromCents(totalSettlementCents)}`}.`,
+                                        }));
+                                        setShowCallbackModal(true);
+                                      }}
                                     >
-                                      Request Settlement
+                                      Request This Settlement
                                     </Button>
                                   </div>
                                 </div>
