@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Bell, Phone, Mail, MessageSquare, Download, Building2, CreditCard, FileText, AlertCircle } from "lucide-react";
+import { Bell, Phone, Mail, MessageSquare, Download, Building2, CreditCard, FileText, AlertCircle, TrendingUp } from "lucide-react";
 import { getArrangementSummary, getPlanTypeLabel, formatCurrencyFromCents } from "@/lib/arrangements";
 
 export default function EnhancedConsumerPortal() {
@@ -454,7 +454,7 @@ export default function EnhancedConsumerPortal() {
               <Card>
                 <CardContent className="pt-6 text-center">
                   <div className="text-2xl font-bold text-green-600">
-                    {arrangements?.length || 0}
+                    {(Array.isArray(arrangements) ? arrangements : (arrangements as any)?.templateOptions)?.length || 0}
                   </div>
                   <div className="text-sm text-gray-500">Payment Plans Available</div>
                 </CardContent>
@@ -503,7 +503,7 @@ export default function EnhancedConsumerPortal() {
                         </div>
                         <div>
                           <div className="text-lg font-medium text-blue-600">
-                            {arrangements?.length || 0}
+                            {(Array.isArray(arrangements) ? arrangements : (arrangements as any)?.templateOptions)?.length || 0}
                           </div>
                           <div className="text-xs text-gray-500">Plans Available</div>
                         </div>
@@ -604,61 +604,123 @@ export default function EnhancedConsumerPortal() {
               </div>
             )}
 
-            {!arrangements || (arrangements as any).length === 0 ? (
-              !consumerManualPayments || (consumerManualPayments as any[]).length === 0 ? (
-                <Card>
-                  <CardContent className="pt-6 text-center">
-                    <CreditCard className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Payment Plans Available</h3>
-                    <p className="text-gray-600">
-                      Contact your agency to discuss your payment options.
-                    </p>
-                    <Button className="mt-4" onClick={() => setShowCallbackModal(true)}>
-                      Contact About Payment Plans
-                    </Button>
-                  </CardContent>
-                </Card>
-              ) : null
-            ) : (
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-gray-900">Available Payment Plans</h3>
-                {(arrangements as any).map((arrangement: any) => (
-                  <Card key={arrangement.id}>
-                    <CardContent className="pt-6">
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <h3 className="text-lg font-semibold text-gray-900">{arrangement.name}</h3>
-                          <p className="text-gray-600 mt-2">{arrangement.description}</p>
-                          {(() => {
-                            const summary = getArrangementSummary(arrangement);
-                            return (
-                              <div className="mt-4 space-y-2">
-                                <div className="flex items-center gap-2 text-sm">
-                                  <Badge variant="secondary">{getPlanTypeLabel(arrangement.planType)}</Badge>
-                                  <span className="font-medium text-gray-700">{summary.headline}</span>
-                                </div>
-                                {summary.detail && <p className="text-sm text-gray-500">{summary.detail}</p>}
-                                <div className="flex justify-between text-sm">
-                                  <span className="text-gray-600">Eligible Balance Range:</span>
-                                  <span className="font-medium">
-                                    {formatCurrencyFromCents(arrangement.minBalance)} - {formatCurrencyFromCents(arrangement.maxBalance)}
-                                  </span>
-                                </div>
-                              </div>
-                            );
-                          })()}
-                        </div>
-                        <div className="ml-6">
-                          <Button onClick={() => setShowCallbackModal(true)}>
-                            Request This Plan
-                          </Button>
-                        </div>
-                      </div>
+            {(() => {
+              const templateOptions = Array.isArray(arrangements) ? arrangements : (arrangements as any)?.templateOptions || [];
+              const settlementOptions = templateOptions.filter((arr: any) => arr.planType === 'settlement');
+              const regularOptions = templateOptions.filter((arr: any) => arr.planType !== 'settlement');
+
+              if (templateOptions.length === 0 && (!consumerManualPayments || (consumerManualPayments as any[]).length === 0)) {
+                return (
+                  <Card>
+                    <CardContent className="pt-6 text-center">
+                      <CreditCard className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">No Payment Plans Available</h3>
+                      <p className="text-gray-600">
+                        Contact your agency to discuss your payment options.
+                      </p>
+                      <Button className="mt-4" onClick={() => setShowCallbackModal(true)}>
+                        Contact About Payment Plans
+                      </Button>
                     </CardContent>
                   </Card>
-                ))}
-              </div>
-            )}
+                );
+              }
+
+              return (
+                <div className="space-y-6">
+                  {settlementOptions.length > 0 && (
+                    <div className="rounded-xl border-2 border-emerald-200 bg-gradient-to-r from-emerald-50 to-green-50 p-5">
+                      <div className="flex items-center gap-2 mb-4">
+                        <TrendingUp className="h-5 w-5 text-emerald-600" />
+                        <h3 className="text-lg font-semibold text-emerald-800">Special Settlement Offers</h3>
+                      </div>
+                      <div className="space-y-3">
+                        {settlementOptions.map((arrangement: any) => {
+                          const summary = getArrangementSummary(arrangement);
+                          const uniqueKey = `${arrangement.id}-${arrangement.settlementPaymentCount || 'default'}`;
+                          return (
+                            <Card key={uniqueKey} className="border-emerald-200 bg-white/80">
+                              <CardContent className="pt-5">
+                                <div className="flex justify-between items-start">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <h4 className="text-base font-semibold text-emerald-800">{arrangement.name}</h4>
+                                      <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Save Money</Badge>
+                                    </div>
+                                    {arrangement.description && (
+                                      <p className="text-sm text-gray-600 mt-1">{arrangement.description}</p>
+                                    )}
+                                    <div className="mt-3 space-y-1.5">
+                                      <p className="font-medium text-emerald-700">{summary.headline}</p>
+                                      {summary.detail && <p className="text-sm text-gray-500">{summary.detail}</p>}
+                                      <div className="flex justify-between text-sm">
+                                        <span className="text-gray-600">Eligible Balance Range:</span>
+                                        <span className="font-medium">
+                                          {formatCurrencyFromCents(arrangement.minBalance)} - {formatCurrencyFromCents(arrangement.maxBalance)}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="ml-6">
+                                    <Button
+                                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                                      onClick={() => setShowCallbackModal(true)}
+                                    >
+                                      Request Settlement
+                                    </Button>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {regularOptions.length > 0 && (
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold text-gray-900">Available Payment Plans</h3>
+                      {regularOptions.map((arrangement: any) => (
+                        <Card key={arrangement.id}>
+                          <CardContent className="pt-6">
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <h3 className="text-lg font-semibold text-gray-900">{arrangement.name}</h3>
+                                <p className="text-gray-600 mt-2">{arrangement.description}</p>
+                                {(() => {
+                                  const summary = getArrangementSummary(arrangement);
+                                  return (
+                                    <div className="mt-4 space-y-2">
+                                      <div className="flex items-center gap-2 text-sm">
+                                        <Badge variant="secondary">{getPlanTypeLabel(arrangement.planType)}</Badge>
+                                        <span className="font-medium text-gray-700">{summary.headline}</span>
+                                      </div>
+                                      {summary.detail && <p className="text-sm text-gray-500">{summary.detail}</p>}
+                                      <div className="flex justify-between text-sm">
+                                        <span className="text-gray-600">Eligible Balance Range:</span>
+                                        <span className="font-medium">
+                                          {formatCurrencyFromCents(arrangement.minBalance)} - {formatCurrencyFromCents(arrangement.maxBalance)}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                              <div className="ml-6">
+                                <Button onClick={() => setShowCallbackModal(true)}>
+                                  Request This Plan
+                                </Button>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </TabsContent>
 
           <TabsContent value="documents" className="mt-6">
