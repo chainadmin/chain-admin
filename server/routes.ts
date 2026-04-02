@@ -11977,13 +11977,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log('💰 Manual arrangement payment amount:', { amountCents });
       }
 
-      // Force Arrangement guard: only settlement arrangements or manual arrangements are allowed through
-      if (tenantSettings?.forceArrangement && arrangement?.planType !== 'settlement' && !manualArrangement) {
-        console.log('❌ Force Arrangement enabled - blocking non-settlement payment. planType:', arrangement?.planType ?? 'none');
-        return res.status(400).json({
-          success: false,
-          message: "A payment arrangement is required. Please select a payment plan to proceed."
-        });
+      // Force Arrangement guard: only settlement arrangements, manual arrangements, or simplified-flow
+      // (consumer-created plan) payments are allowed through when forceArrangement is enabled.
+      // Additionally, accounts that already have manual payment records entered by an admin should
+      // not be blocked — those records indicate an existing payment relationship and must not
+      // prevent the consumer from making further online payments.
+      if (tenantSettings?.forceArrangement && arrangement?.planType !== 'settlement' && !manualArrangement && !isSimplifiedFlow) {
+        // Check whether this account already has admin-recorded manual payments
+        const existingManualPayments = await db
+          .select({ id: manualPayments.id })
+          .from(manualPayments)
+          .where(
+            and(
+              eq(manualPayments.accountId, accountId),
+              eq(manualPayments.consumerId, consumerId),
+              eq(manualPayments.tenantId, tenantId)
+            )
+          )
+          .limit(1);
+
+        if (existingManualPayments.length === 0) {
+          console.log('❌ Force Arrangement enabled - blocking non-settlement payment. planType:', arrangement?.planType ?? 'none');
+          return res.status(400).json({
+            success: false,
+            message: "A payment arrangement is required. Please contact us to set up a payment plan before making an online payment."
+          });
+        }
+
+        console.log('✅ Force Arrangement: account has existing manual payment history — allowing online payment');
       }
 
       console.log('💵 Final payment amount:', {
