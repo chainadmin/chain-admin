@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -57,9 +57,16 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const [location, navigate] = useLocation();
   const { agencySlug, buildAgencyUrl } = useAgencyContext();
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
@@ -135,10 +142,12 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     return location === href;
   };
 
-  // Search functionality
+  // Search functionality — debounced query prevents excessive API calls;
+  // keepPreviousData keeps results visible while a new fetch is in flight
   const { data: searchResults } = useQuery<SearchResults>({
-    queryKey: [`/api/search?q=${searchQuery}`],
-    enabled: searchQuery.length >= 2,
+    queryKey: [`/api/search?q=${debouncedQuery}`],
+    enabled: debouncedQuery.length >= 2,
+    placeholderData: keepPreviousData,
   });
 
   // Close search results when clicking outside
@@ -160,14 +169,17 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
   const handleResultClick = (type: string, id: string) => {
     setSearchQuery("");
+    setDebouncedQuery("");
     setShowSearchResults(false);
     
     // Build the base path first, then append query parameters
     const basePath = buildNavHref('/accounts');
     const queryParam = type === 'consumer' ? `?consumerId=${id}` : `?accountId=${id}`;
     
-    // Navigate using the complete path
-    navigate(`${basePath}${queryParam}`);
+    // Use window.location.href so the accounts page always re-reads
+    // the URL query params — wouter's navigate() only watches the
+    // pathname, so it silently no-ops when already on /accounts.
+    window.location.href = `${basePath}${queryParam}`;
   };
 
   // Quick send mutations
