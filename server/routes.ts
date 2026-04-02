@@ -3546,29 +3546,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
 
           console.log(`📬 Campaign "${campaign.name}" sending complete: ${emailResults.successful} sent, ${emailResults.failed} failed`);
-
-          try {
-            const campaignTenantSettings = await storage.getTenantSettings(tenantId);
-            if ((campaignTenantSettings as any)?.dmpEnabled) {
-              const { dmpService } = await import('./dmpService');
-              for (const email of processedEmails) {
-                const filenumber = email.metadata?.filenumber;
-                if (filenumber) {
-                  await dmpService.sendEmail(tenantId, {
-                    filenumber,
-                    email_address: email.to,
-                    subject: email.subject,
-                    body: email.html || '',
-                    direction: 'outbound',
-                    status: 'sent',
-                  }).catch(e => console.error('[DMP] sendEmail failed:', e));
-                }
-              }
-              console.log(`[DMP] Logged ${processedEmails.filter(e => e.metadata?.filenumber).length} email campaign sends`);
-            }
-          } catch (dmpCampaignError) {
-            console.error('[DMP] Campaign email logging failed (non-blocking):', dmpCampaignError);
-          }
+          // DMP email logging is handled per-recipient inside emailService.sendBulkEmails
+          // on successful sends only — no duplicate logging needed here.
         } catch (bgError) {
           console.error(`❌ Background email sending failed for campaign "${campaign.name}":`, bgError);
           try {
@@ -4777,26 +4756,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.log(
               `✅ SMS campaign "${campaign.name}" completed: ${smsResults.totalSent} sent, ${smsResults.totalFailed} failed`
             );
-
-            try {
-              const smsCampaignSettings = await storage.getTenantSettings(tenantId);
-              if ((smsCampaignSettings as any)?.dmpEnabled) {
-                const { dmpService } = await import('./dmpService');
-                const dmpMessages = processedMessages.filter((m: any) => m.filenumber);
-                for (const msg of dmpMessages) {
-                  await dmpService.sendText(tenantId, {
-                    filenumber: msg.filenumber,
-                    phone_number: msg.to,
-                    message: msg.message,
-                    direction: 'outbound',
-                    status: 'sent',
-                  }).catch(e => console.error('[DMP] sendText failed:', e));
-                }
-                console.log(`[DMP] Logged ${dmpMessages.length} SMS campaign sends`);
-              }
-            } catch (dmpSmsCampaignError) {
-              console.error('[DMP] Campaign SMS logging failed (non-blocking):', dmpSmsCampaignError);
-            }
+            // DMP SMS logging is handled per-recipient inside smsService on successful sends only.
           } catch (error) {
             console.error(`❌ Error in background SMS campaign send for ${campaign.id}:`, error);
             console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
@@ -14986,10 +14946,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 let synced = 0, created = 0;
                 for (const dmpAccount of dmpAccounts) {
                   try {
-                    const existing = existingAccounts.find(a =>
-                      a.filenumber === dmpAccount.filenumber ||
-                      a.accountNumber === dmpAccount.accountNumber
-                    );
+                    // Only match by filenumber — accountNumber is not DMP-specific
+                    // and could accidentally update unrelated Chain accounts.
+                    const existing = dmpAccount.filenumber
+                      ? existingAccounts.find(a => a.filenumber === dmpAccount.filenumber)
+                      : null;
                     if (existing) {
                       await storage.updateAccount(existing.id, {
                         balanceCents: dmpAccount.balance || 0,
