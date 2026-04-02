@@ -217,19 +217,21 @@ export class EmailService {
               }
             }
             
-            // Log email communication to DMP if enabled
+            // Log email to DMP via sendEmail API if enabled (filenumber required)
             if (originalEmail.metadata?.filenumber && originalEmail.tenantId && !isInternalNotification) {
               try {
                 const tenantSettings = await storage.getTenantSettings(originalEmail.tenantId);
                 if ((tenantSettings as any)?.dmpEnabled) {
                   const { dmpService } = await import('./dmpService');
-                  await dmpService.logCommunication(originalEmail.tenantId, String(originalEmail.metadata.filenumber), {
-                    type: 'email',
-                    content: originalEmail.subject,
+                  await dmpService.sendEmail(originalEmail.tenantId, {
+                    filenumber: String(originalEmail.metadata.filenumber),
+                    email_address: originalEmail.to,
+                    subject: originalEmail.subject,
+                    body: originalEmail.html || originalEmail.text || '',
                     direction: 'outbound',
                     status: 'sent',
                   });
-                  console.log(`📝 DMP communication logged for email to account ${originalEmail.metadata.filenumber}`);
+                  console.log(`📝 DMP sendEmail logged for email to account ${originalEmail.metadata.filenumber}`);
                 }
               } catch (dmpError) {
                 console.error('Error logging email to DMP (non-blocking):', dmpError);

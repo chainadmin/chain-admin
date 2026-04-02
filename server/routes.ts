@@ -14957,6 +14957,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
                         status: dmpAccount.status || existing.status,
                         creditor: dmpAccount.creditorName || existing.creditor,
                       });
+                      // Also sync DMP contact details to the linked consumer
+                      if (existing.consumerId && (dmpAccount.consumerEmail || dmpAccount.consumerPhone || dmpAccount.address)) {
+                        try {
+                          const consumerUpdates: Record<string, any> = {};
+                          if (dmpAccount.consumerEmail) consumerUpdates.email = dmpAccount.consumerEmail;
+                          if (dmpAccount.consumerPhone) consumerUpdates.phone = dmpAccount.consumerPhone;
+                          if (dmpAccount.address) consumerUpdates.address = dmpAccount.address;
+                          if (dmpAccount.city) consumerUpdates.city = dmpAccount.city;
+                          if (dmpAccount.state) consumerUpdates.state = dmpAccount.state;
+                          if (dmpAccount.zipCode) consumerUpdates.zipCode = dmpAccount.zipCode;
+                          if (Object.keys(consumerUpdates).length > 0) {
+                            await storage.updateConsumer(existing.consumerId, consumerUpdates);
+                          }
+                        } catch (consumerSyncErr) {
+                          console.error(`[DMP Sync] Consumer contact sync error for filenumber ${dmpAccount.filenumber}:`, consumerSyncErr);
+                        }
+                      }
                       synced++;
                     } else if ((tenantSettings as any)?.dmpAutoImport) {
                       let consumer = null;

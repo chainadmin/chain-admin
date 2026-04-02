@@ -411,22 +411,22 @@ class SmsService {
         }
       }
 
-      // Log communication to DMP if enabled
+      // Log communication to DMP via sendText API if enabled and account has a filenumber
       if (accountId) {
         try {
           const tenantSettings = await storage.getTenantSettings(tenantId);
           if ((tenantSettings as any)?.dmpEnabled) {
             const account = await storage.getAccount(accountId);
-            const identifier = account?.filenumber || account?.accountNumber;
-            if (account && identifier) {
+            if (account?.filenumber) {
               const { dmpService } = await import('./dmpService');
-              await dmpService.logCommunication(tenantId, identifier, {
-                type: 'sms',
-                content: message,
+              await dmpService.sendText(tenantId, {
+                filenumber: account.filenumber,
+                phone_number: to,
+                message,
                 direction: 'outbound',
                 status: 'sent',
               });
-              console.log(`📝 DMP communication logged for SMS to account ${identifier}`);
+              console.log(`📝 DMP sendText logged for SMS to account ${account.filenumber}`);
             }
           }
         } catch (dmpError) {
