@@ -14975,7 +14975,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                         }
                       }
                       synced++;
-                    } else if ((tenantSettings as any)?.dmpAutoImport) {
+                    } else if ((tenantSettings as any)?.dmpAutoImport && dmpAccount.filenumber) {
                       let consumer = null;
                       if (dmpAccount.consumerEmail || dmpAccount.consumerPhone) {
                         const consumers = await storage.getConsumersByTenant(tenant.id);
