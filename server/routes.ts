@@ -2969,6 +2969,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete('/api/manual-payments/:paymentId', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) return res.status(403).json({ message: "No tenant access" });
+
+      const { paymentId } = req.params;
+      const [existing] = await db.select().from(manualPayments).where(and(eq(manualPayments.id, paymentId), eq(manualPayments.tenantId, tenantId)));
+      if (!existing) return res.status(404).json({ message: "Payment not found" });
+
+      // If the payment was marked paid, restore the balance before deleting
+      if (existing.status === 'paid') {
+        const account = await storage.getAccount(existing.accountId);
+        if (account && account.tenantId === tenantId) {
+          const restoredBalance = Number(account.balanceCents) + Number(existing.amountCents);
+          await storage.updateAccount(existing.accountId, { balanceCents: restoredBalance });
+          console.log(`🔄 Manual payment deleted (was paid): restored $${(Number(existing.amountCents) / 100).toFixed(2)} to account ${account.accountNumber || existing.accountId}`);
+        }
+      }
+
+      await db.delete(manualPayments).where(and(eq(manualPayments.id, paymentId), eq(manualPayments.tenantId, tenantId)));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting manual payment:", error);
+      res.status(500).json({ message: "Failed to delete manual payment" });
+    }
+  });
+
   // Consumer portal - get manual payments for a consumer
   app.get('/api/consumer/manual-payments/:email', authenticateConsumer, async (req: any, res) => {
     try {

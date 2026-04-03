@@ -193,6 +193,21 @@ export default function Accounts() {
     },
   });
 
+  const deleteManualPaymentMutation = useMutation({
+    mutationFn: async (paymentId: string) => {
+      const res = await apiRequest("DELETE", `/api/manual-payments/${paymentId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/accounts', selectedAccount?.id, 'manual-payments'] });
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
+      toast({ title: "Success", description: "Payment deleted successfully" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to delete payment", variant: "destructive" });
+    },
+  });
+
   const createBulkPaymentsMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiRequest("POST", `/api/accounts/${selectedAccount?.id}/manual-payments-bulk`, data);
@@ -1595,6 +1610,7 @@ export default function Accounts() {
                                 className="text-xs text-blue-400 hover:text-blue-300 underline"
                                 onClick={() => {
                                   setEditingPaymentId(payment.id);
+                                  setShowManualPayments(true);
                                   setManualPaymentForm({
                                     amountCents: (Number(payment.amountCents) / 100).toString(),
                                     paymentDate: payment.paymentDate?.split('T')[0] || payment.paymentDate,
@@ -1603,6 +1619,18 @@ export default function Accounts() {
                                 }}
                               >
                                 Edit
+                              </button>
+                              <button
+                                type="button"
+                                className="text-xs text-red-400 hover:text-red-300 underline"
+                                disabled={deleteManualPaymentMutation.isPending}
+                                onClick={() => {
+                                  if (window.confirm(`Delete this ${payment.status === 'paid' ? 'paid ' : ''}payment of ${(Number(payment.amountCents) / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}?${payment.status === 'paid' ? ' The account balance will be restored.' : ''}`)) {
+                                    deleteManualPaymentMutation.mutate(payment.id);
+                                  }
+                                }}
+                              >
+                                Delete
                               </button>
                             </div>
                           </div>
