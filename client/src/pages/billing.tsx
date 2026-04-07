@@ -1756,10 +1756,37 @@ export default function Billing() {
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="pt-8">
+              <CardContent className="pt-8 space-y-6">
+                {(currentInvoice as any)?.id && (
+                  <div className="rounded-2xl border border-emerald-400/20 bg-emerald-900/20 p-5 space-y-3">
+                    <p className="text-xs uppercase tracking-widest text-emerald-300/80 font-semibold">Invoice Summary</p>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div>
+                        <p className="text-xs text-blue-100/60">Invoice #</p>
+                        <p className="text-sm font-semibold text-white mt-0.5">{(currentInvoice as any).invoiceNumber}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-blue-100/60">Billing Period</p>
+                        <p className="text-sm font-semibold text-white mt-0.5">
+                          {formatDate((currentInvoice as any).periodStart)} – {formatDate((currentInvoice as any).periodEnd)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-blue-100/60">Amount Due</p>
+                        <p className="text-lg font-bold text-emerald-300 mt-0.5">
+                          {formatCurrency((currentInvoice as any).totalAmountCents / 100)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-blue-100/60">Due Date</p>
+                        <p className="text-sm font-semibold text-white mt-0.5">{formatDate((currentInvoice as any).dueDate)}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <Elements stripe={stripePromise}>
                   <StripePayInvoiceForm
-                    totalBill={(stats as any).totalBill || 0}
+                    totalBill={(currentInvoice as any)?.totalAmountCents ? (currentInvoice as any).totalAmountCents / 100 : ((stats as any).totalBill || 0)}
                     invoiceId={(currentInvoice as any)?.id}
                     onSuccess={() => {
                       queryClient.invalidateQueries({ queryKey: ["/api/billing/stats"] });

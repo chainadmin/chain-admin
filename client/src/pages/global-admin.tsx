@@ -695,7 +695,7 @@ export default function GlobalAdmin() {
       return data;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/invoices'] });
+      queryClient.refetchQueries({ queryKey: ['/api/admin/invoices'] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants'] });
       toast({
         title: "Invoice Generated",

@@ -17841,7 +17841,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   perConsumerCents: 0,
                   consumerCount: stats.activeConsumers,
                   totalAmountCents: Math.round(stats.totalBill * 100),
-                  dueDate: newPeriodEnd,
+                  dueDate: periodEnd,
                   paidAt: null,
                 }).returning();
                 invoicesCreated++;
@@ -19206,8 +19206,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const activeConsumers = activeConsumersResult.length;
 
       const invoiceNumber = `INV-${tenantId.substring(0, 8)}-${Date.now()}`;
-      const dueDate = new Date();
-      dueDate.setDate(dueDate.getDate() + 15);
+      const dueDate = new Date(periodEnd);
 
       const [invoice] = await db.insert(invoices).values({
         tenantId,
