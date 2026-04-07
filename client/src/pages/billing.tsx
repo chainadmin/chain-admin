@@ -561,7 +561,7 @@ export default function Billing() {
     (subscription as any)?.planId || stats.planId || (subscription as any)?.plan || null;
   const currentPlanName =
     (subscription as any)?.planName || stats.planName || (subscription as any)?.plan || null;
-  const isALaCarte = currentPlanId === 'a-la-carte';
+  const isALaCarte = !currentPlanId || currentPlanId === 'a-la-carte';
   const currentPlanPrice = isALaCarte
     ? Number(stats.monthlyBase ?? 0)
     : Number((subscription as any)?.planPrice ?? stats.monthlyBase ?? ((subscription as any)?.monthlyBaseCents ?? 0) / 100);
@@ -601,7 +601,11 @@ export default function Billing() {
                 <p className="text-xs uppercase tracking-wide text-blue-100/70">Current plan</p>
                 <div className="mt-2 flex items-center gap-2">
                   <p className="text-lg font-semibold text-white">
-                    {currentPlanName || (enabledAddons.length > 0 ? `À la carte (${enabledAddons.length} service${enabledAddons.length !== 1 ? 's' : ''} active)` : "Not selected")}
+                    {isALaCarte
+                      ? (enabledAddons.length > 0
+                          ? `${enabledAddons.length} active service${enabledAddons.length !== 1 ? 's' : ''}`
+                          : 'No active services')
+                      : (currentPlanName || 'Not selected')}
                   </p>
                   {isTrialAccount && (
                     <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-200 text-xs">
@@ -610,9 +614,11 @@ export default function Billing() {
                   )}
                 </div>
                 <p className="mt-1 text-sm text-blue-100/70">
-                  {currentPlanName ? `${formatCurrency(currentPlanPrice)} per month` : 
-                   enabledAddons.length > 0 ? `${formatCurrency(enabledAddons.length * 125)} per month (${enabledAddons.length} × $125)` : 
-                   'No active services'}
+                  {isALaCarte
+                    ? (enabledAddons.length > 0
+                        ? `${formatCurrency(enabledAddons.length * 125)} per month (${enabledAddons.length} × $125)`
+                        : 'Contact your platform administrator')
+                    : `${formatCurrency(currentPlanPrice)} per month`}
                 </p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-[#101c3c]/60 p-5 shadow-lg shadow-blue-900/20">
@@ -689,7 +695,7 @@ export default function Billing() {
                     <p className="mt-2 text-2xl font-semibold text-white" data-testid="text-monthly-base">
                       {formatCurrency(stats.monthlyBase)}
                     </p>
-                    {currentPlanName && (
+                    {!isALaCarte && currentPlanName && (
                       <p className="mt-2 text-xs text-blue-100/70">Plan: {currentPlanName}</p>
                     )}
                   </div>
@@ -859,7 +865,7 @@ export default function Billing() {
                         {formatDate(stats.billingPeriod.start)} – {formatDate(stats.billingPeriod.end)}
                       </p>
                     )}
-                    {currentPlanName && (
+                    {!isALaCarte && currentPlanName && (
                       <p className="mt-3 text-sm text-blue-100/70">
                         Plan: {currentPlanName} · {formatCurrency(currentPlanPrice)}
                       </p>
@@ -1683,16 +1689,24 @@ export default function Billing() {
                       <p className="text-xs uppercase tracking-wide text-blue-100/70">Plan</p>
                       <div className="mt-2 flex items-center gap-2">
                         <Badge className="border border-white/20 bg-white/10 text-blue-100 capitalize" data-testid="badge-current-plan">
-                          {currentPlanName || (enabledAddons.length > 0 ? `À la carte (${enabledAddons.length} service${enabledAddons.length !== 1 ? 's' : ''})` : "Not selected")}
+                          {isALaCarte
+                            ? (enabledAddons.length > 0 ? `À la carte (${enabledAddons.length} service${enabledAddons.length !== 1 ? 's' : ''})` : 'À la carte')
+                            : (currentPlanName || 'Not selected')}
                         </Badge>
-                        <Badge
-                          className={cn("border border-white/20 bg-white/10 text-blue-100", getStatusColor((subscription as any).status))}
-                          data-testid="badge-subscription-status"
-                        >
-                          {(subscription as any).status}
-                        </Badge>
+                        {!isALaCarte && (subscription as any)?.status && (
+                          <Badge
+                            className={cn("border border-white/20 bg-white/10 text-blue-100", getStatusColor((subscription as any).status))}
+                            data-testid="badge-subscription-status"
+                          >
+                            {(subscription as any).status}
+                          </Badge>
+                        )}
                       </div>
-                      <p className="mt-3 text-sm text-blue-100/70">{formatCurrency(currentPlanPrice)} per month</p>
+                      <p className="mt-3 text-sm text-blue-100/70">
+                        {isALaCarte
+                          ? (enabledAddons.length > 0 ? `${formatCurrency(enabledAddons.length * 125)} per month (${enabledAddons.length} × $125)` : 'No active services')
+                          : `${formatCurrency(currentPlanPrice)} per month`}
+                      </p>
                     </div>
                     <div>
                       <p className="text-xs uppercase tracking-wide text-blue-100/70">Billing email</p>

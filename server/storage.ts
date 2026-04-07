@@ -3595,7 +3595,12 @@ export class DatabaseStorage implements IStorage {
 
   // Billing operations
   async getSubscriptionByTenant(tenantId: string): Promise<Subscription | undefined> {
-    const [subscription] = await db.select().from(subscriptions).where(eq(subscriptions.tenantId, tenantId));
+    const [subscription] = await db.select().from(subscriptions).where(
+      and(
+        eq(subscriptions.tenantId, tenantId),
+        eq(subscriptions.status, 'active')
+      )
+    );
     return subscription;
   }
 

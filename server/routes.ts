@@ -19361,17 +19361,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Tenant not found" });
       }
       
-      // Get tenant's active subscription OR create one if it doesn't exist (for à la carte tenants)
+      // Get tenant's subscription - tenantId is unique so at most one record exists
       let [subscription] = await db
         .select()
         .from(subscriptions)
-        .where(and(
-          eq(subscriptions.tenantId, tenantId),
-          eq(subscriptions.status, 'active')
-        ))
+        .where(eq(subscriptions.tenantId, tenantId))
         .limit(1);
       
-      // If no subscription exists, create an à la carte subscription
+      // If no subscription record at all, create an à la carte one
       if (!subscription) {
         console.log(`📦 Creating à la carte subscription for tenant ${tenantId}`);
         
@@ -19383,13 +19380,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .limit(1);
         
         if (!alaCartePlan) {
-          // Create the À La Carte plan if it doesn't exist
           [alaCartePlan] = await db
             .insert(subscriptionPlans)
             .values({
               name: 'À La Carte',
               slug: 'a-la-carte',
-              monthlyPriceCents: 0, // No base fee
+              monthlyPriceCents: 0,
               setupFeeCents: 0,
               includedEmails: 0,
               includedSms: 0,
@@ -19402,7 +19398,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .returning();
         }
         
-        // Create subscription for this tenant
+        // Create subscription (unique per tenant — only reaches here if truly none exists)
         [subscription] = await db
           .insert(subscriptions)
           .values({
@@ -19646,33 +19642,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get all subscription plans for admin - uses billing-plans.ts for accurate pricing
+  // Get all subscription plans for admin - syncs billing-plans.ts to DB and returns real UUIDs
   app.get('/api/admin/subscription-plans', isPlatformAdmin, async (req: any, res) => {
     try {
       const { getPlanListForBusinessType, DOCUMENT_SIGNING_ADDON_PRICE, AI_AUTO_RESPONSE_ADDON_PRICE } = await import('../shared/billing-plans');
       
-      // Get businessType from query param, default to call_center
       const businessType = (req.query.businessType as string) || 'call_center';
-      
-      // Get plans for this business type from billing-plans.ts
       const billingPlans = getPlanListForBusinessType(businessType as any);
       
-      // Convert to the expected format (matching subscriptionPlans table structure)
-      const plans = billingPlans.map((plan, index) => ({
-        id: plan.id,
-        name: plan.name,
-        monthlyPriceCents: plan.price * 100, // Convert dollars to cents
-        setupFeeCents: 0, // No setup fee for base plans
-        includedEmails: plan.includedEmails,
-        includedSmsSegments: plan.includedSmsSegments,
-        displayOrder: index,
-        isActive: true,
-        // Include add-on pricing info
-        addons: {
-          document_signing: DOCUMENT_SIGNING_ADDON_PRICE * 100,
-          ai_auto_response: AI_AUTO_RESPONSE_ADDON_PRICE * 100
+      // Fetch all existing DB plans by slug
+      const allDbPlans = await db.select().from(subscriptionPlans);
+      const dbPlanBySlug = new Map(allDbPlans.map((p: any) => [p.slug, p]));
+      
+      // Ensure each plan exists in DB, creating if missing
+      for (const plan of billingPlans) {
+        if (!dbPlanBySlug.has(plan.id)) {
+          const [created] = await db.insert(subscriptionPlans).values({
+            name: plan.name,
+            slug: plan.id,
+            monthlyPriceCents: plan.price * 100,
+            setupFeeCents: 10000,
+            includedEmails: plan.includedEmails,
+            includedSms: plan.includedSmsSegments,
+            isActive: true,
+            displayOrder: ['launch', 'growth', 'pro', 'scale'].indexOf(plan.id),
+          }).returning();
+          dbPlanBySlug.set(plan.id, created);
         }
-      }));
+      }
+      
+      // Ensure À La Carte plan exists in DB
+      if (!dbPlanBySlug.has('a-la-carte')) {
+        const [created] = await db.insert(subscriptionPlans).values({
+          name: 'À La Carte',
+          slug: 'a-la-carte',
+          monthlyPriceCents: 0,
+          setupFeeCents: 0,
+          includedEmails: 0,
+          includedSms: 0,
+          features: JSON.stringify(['Pay per use', 'No monthly commitment', 'Flexible service selection']),
+          isActive: true,
+          displayOrder: 999,
+        }).returning();
+        dbPlanBySlug.set('a-la-carte', created);
+      }
+      
+      // Return plans with real DB UUIDs so assign-plan endpoint works correctly
+      const plans = [
+        ...billingPlans.map((plan, index) => {
+          const dbPlan = dbPlanBySlug.get(plan.id) as any;
+          return {
+            id: dbPlan.id,          // Real DB UUID used by assign-plan endpoint
+            slug: plan.id,
+            name: plan.name,
+            monthlyPriceCents: plan.price * 100,
+            setupFeeCents: dbPlan.setupFeeCents ?? 10000,
+            includedEmails: plan.includedEmails,
+            includedSmsSegments: plan.includedSmsSegments,
+            displayOrder: index,
+            isActive: true,
+            addons: {
+              document_signing: DOCUMENT_SIGNING_ADDON_PRICE * 100,
+              ai_auto_response: AI_AUTO_RESPONSE_ADDON_PRICE * 100,
+            },
+          };
+        }),
+        // À La Carte option — lets admin move a tenant off a subscription plan
+        {
+          id: (dbPlanBySlug.get('a-la-carte') as any).id,
+          slug: 'a-la-carte',
+          name: 'À La Carte (Individual Services)',
+          monthlyPriceCents: 0,
+          setupFeeCents: 0,
+          includedEmails: 0,
+          includedSmsSegments: 0,
+          displayOrder: 999,
+          isActive: true,
+          addons: {},
+        },
+      ];
 
       res.json(plans);
     } catch (error) {
@@ -19705,21 +19753,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Subscription plan not found" });
       }
 
-      // Check if tenant already has an active subscription
+      // Check if tenant already has ANY subscription (tenantId is unique in subscriptions table)
       const [existingSubscription] = await db
         .select()
         .from(subscriptions)
-        .where(and(
-          eq(subscriptions.tenantId, tenantId),
-          eq(subscriptions.status, 'active')
-        ))
+        .where(eq(subscriptions.tenantId, tenantId))
         .limit(1);
 
       let subscription;
       if (existingSubscription) {
-        // Update existing subscription
+        // Update existing subscription (reactivate if cancelled)
         subscription = await storage.updateSubscription(existingSubscription.id, {
           planId: planId,
+          status: 'active',
           approvedBy: adminEmail,
           approvedAt: new Date(),
           setupFeeWaived: setupFeeWaived ?? false,
