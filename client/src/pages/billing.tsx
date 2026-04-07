@@ -1786,7 +1786,7 @@ export default function Billing() {
                 )}
                 <Elements stripe={stripePromise}>
                   <StripePayInvoiceForm
-                    totalBill={(currentInvoice as any)?.totalAmountCents ? (currentInvoice as any).totalAmountCents / 100 : ((stats as any).totalBill || 0)}
+                    totalBill={(currentInvoice as any)?.totalAmountCents != null ? (currentInvoice as any).totalAmountCents / 100 : ((stats as any).totalBill || 0)}
                     invoiceId={(currentInvoice as any)?.id}
                     onSuccess={() => {
                       queryClient.invalidateQueries({ queryKey: ["/api/billing/stats"] });

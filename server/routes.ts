@@ -17853,7 +17853,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   if (tenant?.email) {
                     const periodStartStr = new Date(subscription.currentPeriodStart).toLocaleDateString();
                     const periodEndStr = new Date(subscription.currentPeriodEnd).toLocaleDateString();
-                    const dueDate = newPeriodEnd.toLocaleDateString();
+                    const dueDate = periodEnd.toLocaleDateString();
                     
                     const emailHtml = `
                       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
