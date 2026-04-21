@@ -132,6 +132,9 @@ import {
   type InsertCampaignLog,
   type CampaignLogItem,
   type InsertCampaignLogItem,
+  proposedArrangements,
+  type ProposedArrangement,
+  type InsertProposedArrangement,
 } from "@shared/schema";
 import { messagingPlans, EMAIL_OVERAGE_RATE_PER_EMAIL, SMS_OVERAGE_RATE_PER_SEGMENT, DOCUMENT_SIGNING_ADDON_PRICE, MOBILE_APP_BRANDING_MONTHLY, AI_AUTO_RESPONSE_ADDON_PRICE, AUTO_RESPONSE_INCLUDED_RESPONSES, AUTO_RESPONSE_OVERAGE_PER_RESPONSE, type MessagingPlanId } from "@shared/billing-plans";
 import { db } from "./db";
@@ -140,6 +143,7 @@ import {
   ensureArrangementOptionsSchema,
   ensureDocumentsSchema,
   ensureTenantSettingsSchema,
+  ensureProposedArrangementsSchema,
 } from "@shared/schemaFixes";
 
 type DocumentWithAccount = Document & {
@@ -424,6 +428,12 @@ export interface IStorage {
     option: Partial<InsertArrangementOption>,
   ): Promise<ArrangementOption | undefined>;
   deleteArrangementOption(id: string, tenantId: string): Promise<boolean>;
+
+  // Proposed arrangement operations
+  createOrUpdateProposedArrangement(data: InsertProposedArrangement): Promise<ProposedArrangement>;
+  getProposedArrangementByAccount(accountId: string): Promise<ProposedArrangement | undefined>;
+  getProposedArrangementById(id: string): Promise<ProposedArrangement | undefined>;
+  acceptProposedArrangement(id: string): Promise<ProposedArrangement | undefined>;
   
   // Tenant settings operations
   getTenantSettings(tenantId: string): Promise<TenantSettings | undefined>;
@@ -2796,6 +2806,88 @@ export class DatabaseStorage implements IStorage {
       .returning();
 
     return deletedOptions.length > 0;
+  }
+
+  async createOrUpdateProposedArrangement(data: InsertProposedArrangement): Promise<ProposedArrangement> {
+    await ensureProposedArrangementsSchema(db);
+
+    const existing = await db
+      .select()
+      .from(proposedArrangements)
+      .where(
+        and(
+          eq(proposedArrangements.accountId, data.accountId),
+          eq(proposedArrangements.status, 'proposed'),
+        )
+      )
+      .limit(1);
+
+    if (existing.length > 0) {
+      const [updated] = await db
+        .update(proposedArrangements)
+        .set({
+          frequency: data.frequency,
+          numberOfPayments: data.numberOfPayments,
+          perPaymentAmountCents: data.perPaymentAmountCents,
+          balanceAtCreationCents: data.balanceAtCreationCents,
+          expiresAt: data.expiresAt,
+          updatedAt: new Date(),
+        })
+        .where(eq(proposedArrangements.id, existing[0].id))
+        .returning();
+      return updated;
+    }
+
+    const [created] = await db.insert(proposedArrangements).values(data).returning();
+    return created;
+  }
+
+  async getProposedArrangementByAccount(accountId: string): Promise<ProposedArrangement | undefined> {
+    await ensureProposedArrangementsSchema(db);
+
+    const now = new Date();
+    const [result] = await db
+      .select()
+      .from(proposedArrangements)
+      .where(
+        and(
+          eq(proposedArrangements.accountId, accountId),
+          eq(proposedArrangements.status, 'proposed'),
+          gte(proposedArrangements.expiresAt, now),
+        )
+      )
+      .orderBy(desc(proposedArrangements.createdAt))
+      .limit(1);
+
+    return result;
+  }
+
+  async getProposedArrangementById(id: string): Promise<ProposedArrangement | undefined> {
+    await ensureProposedArrangementsSchema(db);
+
+    const [result] = await db
+      .select()
+      .from(proposedArrangements)
+      .where(eq(proposedArrangements.id, id))
+      .limit(1);
+
+    return result;
+  }
+
+  async acceptProposedArrangement(id: string): Promise<ProposedArrangement | undefined> {
+    await ensureProposedArrangementsSchema(db);
+
+    const [updated] = await db
+      .update(proposedArrangements)
+      .set({
+        status: 'accepted',
+        acceptedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(proposedArrangements.id, id))
+      .returning();
+
+    return updated;
   }
 
   async getTenantByExternalApiKey(apiKey: string): Promise<{ tenantId: string } | undefined> {

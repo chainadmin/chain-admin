@@ -77,6 +77,49 @@ export default function EnhancedConsumerPortal() {
     enabled: !!manualPaymentsUrl,
   });
 
+  // Fetch proposed arrangements for each account
+  const consumerAccounts: any[] = (data as any)?.accounts || [];
+  const primaryAccountId = consumerAccounts[0]?.id;
+  const { data: proposedArrangement, refetch: refetchProposed } = useQuery<any>({
+    queryKey: primaryAccountId ? ['/api/consumer/proposed-arrangement', primaryAccountId] : ['no-proposed-arr'],
+    queryFn: primaryAccountId ? () => fetch(`/api/consumer/proposed-arrangement/${primaryAccountId}`, {
+      credentials: 'include',
+    }).then(r => r.ok ? r.json() : null) : () => Promise.resolve(null),
+    enabled: !!primaryAccountId,
+  });
+
+  // Accept proposed arrangement mutation
+  const acceptProposedMutation = useMutation({
+    mutationFn: async (arrangementId: string) => {
+      const res = await apiRequest("POST", `/api/consumer/proposed-arrangement/${arrangementId}/accept`, {});
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      if (data?.requiresPaymentMethod) {
+        toast({
+          title: "Payment Method Required",
+          description: "Please add a payment method first, then come back to activate this plan.",
+          variant: "destructive",
+        });
+      } else if (data?.success) {
+        toast({
+          title: "Plan Activated",
+          description: "Your payment plan is now active. Your first payment will be processed on the scheduled date.",
+        });
+        queryClient.invalidateQueries({ queryKey: ['/api/consumer/payment-schedules'] });
+        refetchProposed();
+        queryClient.invalidateQueries({ queryKey: ['/api/consumer/proposed-arrangement', primaryAccountId] });
+      }
+    },
+    onError: () => {
+      toast({
+        title: "Could not accept offer",
+        description: "Please try again or contact your agency.",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Submit callback request mutation
   const callbackRequestMutation = useMutation({
     mutationFn: async (requestData: any) => {
@@ -628,6 +671,46 @@ export default function EnhancedConsumerPortal() {
 
               return (
                 <div className="space-y-6">
+                  {/* Personalised payment offer from agent campaign */}
+                  {proposedArrangement && proposedArrangement.status === 'proposed' && (
+                    <div className="rounded-xl border-2 border-blue-400 bg-gradient-to-r from-blue-50 to-indigo-50 p-5 shadow-md">
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-3 py-1 text-xs font-semibold text-white">
+                          ✨ Your Personalised Offer
+                        </span>
+                      </div>
+                      <h3 className="text-lg font-bold text-blue-900 mb-1">Personalised Payment Offer</h3>
+                      <p className="text-sm text-blue-700 mb-4">
+                        We put together this payment plan based on your balance. Accept it in one click to get started.
+                      </p>
+                      <div className="flex items-center justify-between gap-4 flex-wrap">
+                        <div className="space-y-1">
+                          <div className="text-2xl font-bold text-blue-900">
+                            {formatCurrencyFromCents(proposedArrangement.perPaymentAmountCents)}
+                            <span className="text-base font-normal text-blue-600 ml-1">
+                              / {proposedArrangement.frequency === 'biweekly' ? 'bi-week' : proposedArrangement.frequency}
+                            </span>
+                          </div>
+                          <div className="text-sm text-blue-700">
+                            {proposedArrangement.numberOfPayments} {proposedArrangement.frequency === 'biweekly' ? 'bi-weekly' : proposedArrangement.frequency} payment{proposedArrangement.numberOfPayments !== 1 ? 's' : ''}
+                          </div>
+                          {proposedArrangement.expiresAt && (
+                            <div className="text-xs text-blue-500">
+                              Offer valid until {new Date(proposedArrangement.expiresAt).toLocaleDateString()}
+                            </div>
+                          )}
+                        </div>
+                        <Button
+                          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-lg shadow"
+                          disabled={acceptProposedMutation.isPending}
+                          onClick={() => acceptProposedMutation.mutate(proposedArrangement.id)}
+                        >
+                          {acceptProposedMutation.isPending ? "Accepting..." : "Accept This Offer"}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
                   {settlementOptions.length > 0 && (
                     <div className="rounded-xl border-2 border-emerald-200 bg-gradient-to-r from-emerald-50 to-green-50 p-5">
                       <div className="flex items-center gap-2 mb-4">

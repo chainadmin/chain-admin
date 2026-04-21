@@ -735,6 +735,19 @@ export default function Communications() {
     { label: "Consumer Portal Link", value: "{{consumerPortalLink}}", category: "links" },
     { label: "App Download Link", value: "{{appDownloadLink}}", category: "links" },
     { label: "Payment Link", value: "{{paymentLink}}", category: "links" },
+    { label: "Weekly Plan (3 payments)", value: "{{weeklyArrangement3}}", category: "smart_plans" },
+    { label: "Weekly Plan (4 payments)", value: "{{weeklyArrangement4}}", category: "smart_plans" },
+    { label: "Weekly Plan (6 payments)", value: "{{weeklyArrangement6}}", category: "smart_plans" },
+    { label: "Bi-weekly Plan (3 payments)", value: "{{biweeklyArrangement3}}", category: "smart_plans" },
+    { label: "Bi-weekly Plan (6 payments)", value: "{{biweeklyArrangement6}}", category: "smart_plans" },
+    { label: "Bi-weekly Plan (9 payments)", value: "{{biweeklyArrangement9}}", category: "smart_plans" },
+    { label: "Bi-weekly Plan (12 payments)", value: "{{biweeklyArrangement12}}", category: "smart_plans" },
+    { label: "Monthly Plan (3 payments)", value: "{{monthlyArrangement3}}", category: "smart_plans" },
+    { label: "Monthly Plan (6 payments)", value: "{{monthlyArrangement6}}", category: "smart_plans" },
+    { label: "Monthly Plan (9 payments)", value: "{{monthlyArrangement9}}", category: "smart_plans" },
+    { label: "Monthly Plan (12 payments)", value: "{{monthlyArrangement12}}", category: "smart_plans" },
+    { label: "Monthly Plan (18 payments)", value: "{{monthlyArrangement18}}", category: "smart_plans" },
+    { label: "Monthly Plan (24 payments)", value: "{{monthlyArrangement24}}", category: "smart_plans" },
     { label: "Agency Name", value: "{{agencyName}}", category: "agency" },
     { label: "Agency Email", value: "{{agencyEmail}}", category: "agency" },
     { label: "Agency Phone", value: "{{agencyPhone}}", category: "agency" },
@@ -1100,6 +1113,13 @@ export default function Communications() {
     // Link aliases
     output = output.replace(/\{\{\s*paymentLink\s*\}\}/gi, context.resolvedConsumerPortalUrl);
     output = output.replace(/\{\{\s*portalLink\s*\}\}/gi, context.resolvedConsumerPortalUrl);
+
+    // Smart arrangement variables — show illustrative sample values
+    output = output.replace(/\{\{\s*(weekly|biweekly|monthly)Arrangement(\d+)\s*\}\}/gi, (_match, freq, num) => {
+      const freqLabel = freq.toLowerCase() === 'biweekly' ? 'bi-weekly' : freq.toLowerCase();
+      const sampleAmount = freq.toLowerCase() === 'monthly' ? '$83.33' : freq.toLowerCase() === 'biweekly' ? '$38.46' : '$19.23';
+      return italic(`${num} ${freqLabel} payment${Number(num) !== 1 ? 's' : ''} of ${sampleAmount} (calculated per recipient's balance)`);
+    });
 
     return output;
   };

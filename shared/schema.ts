@@ -824,6 +824,23 @@ export const manualArrangements = pgTable("manual_arrangements", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Proposed arrangements - payment plan proposals generated when a smart arrangement variable is sent
+export const proposedArrangements = pgTable("proposed_arrangements", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "cascade" }).notNull(),
+  accountId: uuid("account_id").references(() => accounts.id, { onDelete: "cascade" }).notNull(),
+  frequency: text("frequency").notNull(), // "weekly", "biweekly", "monthly"
+  numberOfPayments: integer("number_of_payments").notNull(),
+  perPaymentAmountCents: bigint("per_payment_amount_cents", { mode: "number" }).notNull(),
+  balanceAtCreationCents: bigint("balance_at_creation_cents", { mode: "number" }).notNull(),
+  status: text("status").default("proposed").notNull(), // "proposed", "accepted", "expired"
+  expiresAt: timestamp("expires_at").notNull(),
+  acceptedAt: timestamp("accepted_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Manual payments - individual payments posted by admin directly on accounts
 export const manualPayments = pgTable("manual_payments", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1756,6 +1773,7 @@ export const insertManualArrangementSchema = createInsertSchema(manualArrangemen
 export const insertManualPaymentSchema = createInsertSchema(manualPayments).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertCampaignLogSchema = createInsertSchema(campaignLogs).omit({ id: true, createdAt: true });
 export const insertCampaignLogItemSchema = createInsertSchema(campaignLogItems).omit({ id: true, createdAt: true });
+export const insertProposedArrangementSchema = createInsertSchema(proposedArrangements).omit({ id: true, createdAt: true, updatedAt: true });
 
 // Types
 export type UpsertUser = typeof users.$inferInsert;
@@ -1861,3 +1879,5 @@ export type CampaignLog = typeof campaignLogs.$inferSelect;
 export type InsertCampaignLog = z.infer<typeof insertCampaignLogSchema>;
 export type CampaignLogItem = typeof campaignLogItems.$inferSelect;
 export type InsertCampaignLogItem = z.infer<typeof insertCampaignLogItemSchema>;
+export type ProposedArrangement = typeof proposedArrangements.$inferSelect;
+export type InsertProposedArrangement = z.infer<typeof insertProposedArrangementSchema>;

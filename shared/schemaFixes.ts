@@ -7,6 +7,7 @@ type DrizzleDatabase = {
 let arrangementOptionsSchemaPromise: Promise<void> | null = null;
 let documentsSchemaPromise: Promise<void> | null = null;
 let tenantSettingsSchemaPromise: Promise<void> | null = null;
+let proposedArrangementsSchemaPromise: Promise<void> | null = null;
 
 const runWithRetryReset = (fn: () => Promise<void>, assign: (value: Promise<void> | null) => void) => {
   return fn().catch(error => {
@@ -144,8 +145,37 @@ export function ensureTenantSettingsSchema(db: DrizzleDatabase): Promise<void> {
   return tenantSettingsSchemaPromise;
 }
 
+export function ensureProposedArrangementsSchema(db: DrizzleDatabase): Promise<void> {
+  if (!proposedArrangementsSchemaPromise) {
+    proposedArrangementsSchemaPromise = runWithRetryReset(async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS proposed_arrangements (
+          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          consumer_id uuid NOT NULL REFERENCES consumers(id) ON DELETE CASCADE,
+          account_id uuid NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+          frequency text NOT NULL,
+          number_of_payments integer NOT NULL,
+          per_payment_amount_cents bigint NOT NULL,
+          balance_at_creation_cents bigint NOT NULL,
+          status text NOT NULL DEFAULT 'proposed',
+          expires_at timestamp NOT NULL,
+          accepted_at timestamp,
+          created_at timestamp DEFAULT now(),
+          updated_at timestamp DEFAULT now()
+        )
+      `);
+    }, (value) => {
+      proposedArrangementsSchemaPromise = value;
+    });
+  }
+
+  return proposedArrangementsSchemaPromise;
+}
+
 export async function ensureCoreSchema(db: DrizzleDatabase): Promise<void> {
   await ensureTenantSettingsSchema(db);
   await ensureDocumentsSchema(db);
   await ensureArrangementOptionsSchema(db);
+  await ensureProposedArrangementsSchema(db);
 }

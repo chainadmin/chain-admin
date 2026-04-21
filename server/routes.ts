@@ -640,7 +640,124 @@ function replaceTemplateVariables(
     }
   });
 
+  // Resolve smart arrangement variables: {{weeklyArrangement6}}, {{biweeklyArrangement12}}, {{monthlyArrangement3}}, etc.
+  const smartArrangementPattern = /\{\{\s*(weekly|biweekly|monthly)Arrangement(\d+)\s*\}\}/gi;
+  const globalMinCents = (tenant as any)?.minimumMonthlyPayment || (tenantSettings as any)?.minimumMonthlyPayment || 0;
+  // Pre-compute arrangement option floor from any pre-fetched options stored on the tenant context
+  const arrangementOptions: any[] = (tenant as any)?._arrangementOptions || [];
+  let arrangementOptionFloorCents = 0;
+  if (arrangementOptions.length > 0 && balanceCents != null && balanceCents > 0) {
+    const matchingOption = arrangementOptions.find((opt: any) =>
+      balanceCents >= (opt.minBalance || 0) && balanceCents <= (opt.maxBalance || Number.MAX_SAFE_INTEGER) && opt.isActive !== false
+    );
+    if (matchingOption) {
+      arrangementOptionFloorCents = matchingOption.fixedMonthlyPayment || matchingOption.monthlyPaymentMin || 0;
+    }
+  }
+  const effectiveMinCents = Math.max(globalMinCents, arrangementOptionFloorCents);
+  processedTemplate = processedTemplate.replace(smartArrangementPattern, (_match, freq, numStr) => {
+    const numPayments = parseInt(numStr, 10);
+    if (!numPayments || numPayments <= 0 || balanceCents == null || balanceCents <= 0) return '';
+    const rawAmount = Math.ceil(balanceCents / numPayments);
+    const perPaymentCents = Math.max(rawAmount, effectiveMinCents);
+    const freqLabel = freq.toLowerCase() === 'biweekly' ? 'bi-weekly' : freq.toLowerCase();
+    return `${numPayments} ${freqLabel} payment${numPayments !== 1 ? 's' : ''} of ${formatCurrency(perPaymentCents)}`;
+  });
+
   return processedTemplate;
+}
+
+// Helper to detect smart arrangement variables in a template and extract their parameters
+function detectSmartArrangementVars(template: string): Array<{ frequency: string; numberOfPayments: number }> {
+  const pattern = /\{\{\s*(weekly|biweekly|monthly)Arrangement(\d+)\s*\}\}/gi;
+  const detected: Array<{ frequency: string; numberOfPayments: number }> = [];
+  const seen = new Set<string>();
+  let match;
+  while ((match = pattern.exec(template)) !== null) {
+    const freq = match[1].toLowerCase();
+    const num = parseInt(match[2], 10);
+    const key = `${freq}-${num}`;
+    if (!seen.has(key) && num > 0) {
+      seen.add(key);
+      detected.push({ frequency: freq, numberOfPayments: num });
+    }
+  }
+  return detected;
+}
+
+// Save proposed arrangements to DB for all smart arrangement variables detected in a template
+async function processSmartArrangementSave(
+  template: string,
+  consumer: any,
+  account: any,
+  tenantId: string,
+  globalMinCents: number,
+  expiryDays: number = 30
+): Promise<void> {
+  if (!account?.id || !consumer?.id) return;
+  const balanceCents = account?.balanceCents;
+  if (balanceCents == null || balanceCents <= 0) return;
+
+  const detected = detectSmartArrangementVars(template);
+  if (detected.length === 0) return;
+
+  // Check if consumer already has an active payment schedule — don't overwrite
+  try {
+    const activeSchedules = await storage.getActivePaymentSchedulesByConsumerAndAccount(
+      consumer.id,
+      account.id,
+      tenantId
+    );
+    if (activeSchedules && activeSchedules.length > 0) {
+      return; // Active arrangement exists, don't propose a new one
+    }
+  } catch (_err) {
+    // Ignore errors checking active schedules
+  }
+
+  // Look up tenant arrangement options to enforce configured tiers/floors
+  let arrangementOptionFloorCents = 0;
+  try {
+    const options = await storage.getArrangementOptionsByTenant(tenantId);
+    // Find an option whose balance range covers this consumer's balance
+    const matchingOption = options.find(opt =>
+      balanceCents >= (opt.minBalance || 0) && balanceCents <= (opt.maxBalance || Number.MAX_SAFE_INTEGER) && opt.isActive
+    );
+    if (matchingOption) {
+      // Use the configured floor: fixedMonthlyPayment > monthlyPaymentMin > 0
+      arrangementOptionFloorCents = matchingOption.fixedMonthlyPayment ||
+        matchingOption.monthlyPaymentMin ||
+        0;
+    }
+  } catch (_err) {
+    // Non-critical: fall back to global minimum only
+  }
+
+  // Use the first detected variable as the proposed arrangement
+  const { frequency, numberOfPayments } = detected[0];
+  const rawAmount = Math.ceil(balanceCents / numberOfPayments);
+  // Apply floors: global setting minimum AND matching arrangement option floor
+  const effectiveFloor = Math.max(globalMinCents, arrangementOptionFloorCents);
+  const perPaymentAmountCents = Math.max(rawAmount, effectiveFloor);
+
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + expiryDays);
+
+  try {
+    await storage.createOrUpdateProposedArrangement({
+      tenantId,
+      consumerId: consumer.id,
+      accountId: account.id,
+      frequency,
+      numberOfPayments,
+      perPaymentAmountCents,
+      balanceAtCreationCents: balanceCents,
+      status: 'proposed',
+      expiresAt,
+    });
+  } catch (err) {
+    console.error('[SmartArrangement] Failed to save proposed arrangement:', err);
+  }
 }
 
   async function notifyTenantAdmins(options: {
@@ -888,12 +1005,17 @@ function replaceTemplateVariables(
       ...(((tenantSettings?.customBranding as any) || {})),
     };
 
+    // Pre-fetch arrangement options so replaceTemplateVariables can apply tier-based floors
+    const _arrangementOptions = await storage.getArrangementOptionsByTenant(tenantId).catch(() => []);
+
     const tenantWithSettings = {
       ...tenant,
       contactEmail: tenantSettings?.contactEmail,
       contactPhone: tenantSettings?.contactPhone,
       consumerPortalSettings: tenantSettings?.consumerPortalSettings,
       customBranding: tenantBranding,
+      minimumMonthlyPayment: tenantSettings?.minimumMonthlyPayment,
+      _arrangementOptions,
     };
 
     return { tenant, tenantSettings, tenantBranding, tenantWithSettings };
@@ -3621,6 +3743,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tenant: tenantContext.tenant,
       });
 
+      // Save proposed arrangements for smart arrangement variables (non-blocking)
+      // Combine subject + body so variables in either location are detected
+      const emailCampaignFullTemplate = (template.subject || '') + ' ' + (template.html || '');
+      if (detectSmartArrangementVars(emailCampaignFullTemplate).length > 0) {
+        const tenantGlobalMin = (tenantContext.tenantWithSettings as any)?.minimumMonthlyPayment || 0;
+        Promise.allSettled(
+          targetedConsumers.map(consumer => {
+            const account = accountsData.find(a => a.consumerId === consumer.id);
+            return processSmartArrangementSave(
+              emailCampaignFullTemplate,
+              consumer,
+              account,
+              tenantId,
+              tenantGlobalMin
+            );
+          })
+        ).catch(e => console.error('[SmartArrangement] Email campaign save error:', e));
+      }
+
       await storage.updateEmailCampaign(campaign.id, {
         status: 'sending',
         totalRecipients: targetedConsumers.length,
@@ -4699,11 +4840,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get tenant settings for contact info (email/phone)
       const tenantSettings = await storage.getTenantSettings(tenantId);
+      const _arrangementOptions = await storage.getArrangementOptionsByTenant(tenantId).catch(() => []);
       const tenantWithSettings = {
         ...tenant,
         contactEmail: tenantSettings?.contactEmail,
         contactPhone: tenantSettings?.contactPhone,
         consumerPortalSettings: tenantSettings?.consumerPortalSettings,
+        minimumMonthlyPayment: tenantSettings?.minimumMonthlyPayment,
+        _arrangementOptions,
       };
 
       // Handle individual targeting separately, otherwise use shared audience resolution
@@ -4808,6 +4952,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
             filenumber: consumerAccount?.filenumber || null,
           }));
         });
+
+      // Save proposed arrangements for smart arrangement variables (non-blocking)
+      if (detectSmartArrangementVars(template.message || '').length > 0) {
+        const tenantGlobalMin = (tenantWithSettings as any)?.minimumMonthlyPayment || 0;
+        Promise.allSettled(
+          targetedConsumers.map(consumer => {
+            const account = accountsData.find(a => a.consumerId === consumer.id);
+            return processSmartArrangementSave(template.message || '', consumer, account, tenantId, tenantGlobalMin);
+          })
+        ).catch(e => console.error('[SmartArrangement] SMS campaign save error:', e));
+      }
 
       // Update campaign status to sending
       const updatedCampaign = await storage.updateSmsCampaign(campaign.id, {
@@ -10540,6 +10695,123 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get proposed arrangement for a specific account (consumer portal)
+  app.get('/api/consumer/proposed-arrangement/:accountId', authenticateConsumer, async (req: any, res) => {
+    try {
+      const { accountId } = req.params;
+      const { id: consumerId, tenantId } = req.consumer || {};
+
+      if (!consumerId || !tenantId) {
+        return res.status(401).json({ message: "No consumer access" });
+      }
+
+      // Verify account belongs to this consumer
+      const account = await storage.getAccount(accountId);
+      if (!account || account.consumerId !== consumerId || account.tenantId !== tenantId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const proposed = await storage.getProposedArrangementByAccount(accountId);
+      if (!proposed) {
+        return res.json(null);
+      }
+
+      res.json(proposed);
+    } catch (error) {
+      console.error("Error fetching proposed arrangement:", error);
+      res.status(500).json({ message: "Failed to fetch proposed arrangement" });
+    }
+  });
+
+  // Accept a proposed arrangement (consumer portal)
+  app.post('/api/consumer/proposed-arrangement/:id/accept', authenticateConsumer, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { id: consumerId, tenantId } = req.consumer || {};
+
+      if (!consumerId || !tenantId) {
+        return res.status(401).json({ message: "No consumer access" });
+      }
+
+      // Fetch WITHOUT modifying first so we can verify ownership before any mutation
+      const proposed = await storage.getProposedArrangementById(id);
+      if (!proposed) {
+        return res.status(404).json({ message: "Proposed arrangement not found" });
+      }
+
+      // Authorization check BEFORE any mutation
+      if (proposed.tenantId !== tenantId || proposed.consumerId !== consumerId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      // Validate status and expiry
+      if (proposed.status !== 'proposed') {
+        return res.status(400).json({ message: "This arrangement has already been accepted or is no longer available" });
+      }
+      if (proposed.expiresAt && new Date(proposed.expiresAt) < new Date()) {
+        return res.status(400).json({ message: "This offer has expired" });
+      }
+
+      // Check consumer's payment methods BEFORE modifying anything
+      const paymentMethods = await storage.getPaymentMethodsByConsumer(consumerId, tenantId);
+      const defaultMethod = paymentMethods.find(pm => (pm as any).isDefault) || paymentMethods[0];
+
+      if (!defaultMethod) {
+        // Consumer has no payment method on file — don't accept yet, require card first
+        return res.json({ success: false, requiresPaymentMethod: true });
+      }
+
+      // Calculate start/next/end payment dates
+      const today = new Date();
+      const nextPaymentDate = new Date(today);
+      if (proposed.frequency === 'weekly') {
+        nextPaymentDate.setDate(today.getDate() + 7);
+      } else if (proposed.frequency === 'biweekly') {
+        nextPaymentDate.setDate(today.getDate() + 14);
+      } else {
+        nextPaymentDate.setMonth(today.getMonth() + 1);
+      }
+      const startDateStr = today.toISOString().split('T')[0];
+      const nextDateStr = nextPaymentDate.toISOString().split('T')[0];
+      const endDate = new Date(today);
+      if (proposed.frequency === 'weekly') {
+        endDate.setDate(today.getDate() + (proposed.numberOfPayments - 1) * 7);
+      } else if (proposed.frequency === 'biweekly') {
+        endDate.setDate(today.getDate() + (proposed.numberOfPayments - 1) * 14);
+      } else {
+        endDate.setMonth(today.getMonth() + (proposed.numberOfPayments - 1));
+      }
+      const endDateStr = endDate.toISOString().split('T')[0];
+
+      // Create payment schedule FIRST — if this fails, keep proposal as 'proposed' (don't accept)
+      await storage.createPaymentSchedule({
+        tenantId,
+        consumerId,
+        accountId: proposed.accountId,
+        paymentMethodId: defaultMethod.id,
+        arrangementType: 'smart_arrangement',
+        amountCents: proposed.perPaymentAmountCents,
+        frequency: proposed.frequency,
+        startDate: startDateStr,
+        endDate: endDateStr,
+        nextPaymentDate: nextDateStr,
+        remainingPayments: proposed.numberOfPayments - 1,
+        totalPayments: proposed.numberOfPayments,
+        status: 'active',
+        source: 'chain',
+        smaxSynced: false,
+      });
+
+      // Schedule created successfully — now mark the proposal as accepted
+      await storage.acceptProposedArrangement(id);
+
+      res.json({ success: true, scheduleCreated: true, requiresPaymentMethod: false });
+    } catch (error) {
+      console.error("Error accepting proposed arrangement:", error);
+      res.status(500).json({ message: "Failed to accept proposed arrangement" });
+    }
+  });
+
   // Get consumer's active payment schedules with details
   app.get('/api/consumer/payment-schedules/:email', authenticateConsumer, async (req: any, res) => {
     try {
@@ -15426,6 +15698,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // Get all accounts for consumers (for variable replacement)
           const allAccounts = await storage.getAccountsByTenant(automation.tenantId);
+          // Pre-fetch arrangement options once so replaceTemplateVariables can apply tier-based floors
+          const autoArrangementOptions = await storage.getArrangementOptionsByTenant(automation.tenantId).catch(() => []);
           
           // Send to each consumer
           for (const consumer of targetConsumers) {
@@ -15457,6 +15731,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     ...tenant,
                     contactEmail: tenantSettings?.contactEmail,
                     contactPhone: tenantSettings?.contactPhone,
+                    minimumMonthlyPayment: (tenantSettings as any)?.minimumMonthlyPayment,
+                    _arrangementOptions: autoArrangementOptions,
                   };
                   
                   // Use the full replaceTemplateVariables function to support ALL fields including CSV additionalData
@@ -15472,6 +15748,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     consumerAccount,
                     tenantWithSettings
                   );
+
+                  // Save proposed arrangement if template contains smart arrangement variables (non-blocking)
+                  // Combine subject + body so variables in either location are detected
+                  const autoEmailGlobalMin = (tenantSettings as any)?.minimumMonthlyPayment || 0;
+                  const autoEmailFullTemplate = (template.subject || '') + ' ' + (template.html || '');
+                  processSmartArrangementSave(
+                    autoEmailFullTemplate,
+                    consumer,
+                    consumerAccount,
+                    automation.tenantId,
+                    autoEmailGlobalMin
+                  ).catch(e => console.error('[SmartArrangement] Automation email save error:', e));
                   
                   // Send email via broadcast stream (marketing emails)
                   const { emailService } = await import('./emailService');
@@ -15569,10 +15857,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
               // Get tenant context for variable replacement
               const tenant = await storage.getTenant(automation.tenantId);
               const tenantSettings = await storage.getTenantSettings(automation.tenantId);
+              const smsAutoArrangementOptions = await storage.getArrangementOptionsByTenant(automation.tenantId).catch(() => []);
               const tenantWithSettings = {
                 ...tenant,
                 contactEmail: tenantSettings?.contactEmail,
                 contactPhone: tenantSettings?.contactPhone,
+                minimumMonthlyPayment: (tenantSettings as any)?.minimumMonthlyPayment,
+                _arrangementOptions: smsAutoArrangementOptions,
               };
               
               // Send SMS using campaign tracking
@@ -15590,6 +15881,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   consumerAccount,
                   tenantWithSettings
                 );
+
+                // Save proposed arrangement if template contains smart arrangement variables (non-blocking)
+                const autoSmsGlobalMin = (tenantSettings as any)?.minimumMonthlyPayment || 0;
+                processSmartArrangementSave(
+                  template.message || '',
+                  consumer,
+                  consumerAccount,
+                  automation.tenantId,
+                  autoSmsGlobalMin
+                ).catch(e => console.error('[SmartArrangement] Automation SMS save error:', e));
                 
                 // Extract phone numbers
                 const phones: string[] = [];
