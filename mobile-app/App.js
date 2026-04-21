@@ -113,47 +113,57 @@ export default function App() {
     }
   };
 
+  const safeToken = biometricToken ? JSON.stringify(biometricToken) : null;
+  const safePlatform = JSON.stringify(Platform.OS);
+
   const injectedJavaScript = `
-    window.isExpoApp = true;
-    window.platform = '${Platform.OS}';
-    
-    window.sendToNative = function(data) {
-      window.ReactNativeWebView.postMessage(JSON.stringify(data));
-    };
-    
-    window.hapticFeedback = function(style) {
-      window.sendToNative({ type: 'HAPTIC_FEEDBACK', style: style || 'light' });
-    };
-    
-    window.saveToken = function(token) {
-      window.sendToNative({ type: 'SAVE_TOKEN', token });
-    };
-    
-    window.enableBiometric = function() {
-      window.sendToNative({ type: 'ENABLE_BIOMETRIC' });
-    };
-    
-    window.disableBiometric = function() {
-      window.sendToNative({ type: 'DISABLE_BIOMETRIC' });
-    };
-    
-    window.checkBiometric = function() {
-      window.sendToNative({ type: 'CHECK_BIOMETRIC' });
-    };
-    
-    window.authenticateBiometric = function(reason) {
-      window.sendToNative({ type: 'AUTHENTICATE_BIOMETRIC', reason });
-    };
-    
-    window.logout = function() {
-      window.sendToNative({ type: 'LOGOUT' });
-    };
-    
-    ${biometricToken ? `
-      localStorage.setItem('consumerAuth', JSON.stringify({ token: '${biometricToken}' }));
-      window.location.href = '/consumer/dashboard';
-    ` : ''}
-    
+    (function() {
+      try {
+        window.isExpoApp = true;
+        window.platform = ${safePlatform};
+
+        window.sendToNative = function(data) {
+          if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify(data));
+          }
+        };
+
+        window.hapticFeedback = function(style) {
+          window.sendToNative({ type: 'HAPTIC_FEEDBACK', style: style || 'light' });
+        };
+        window.saveToken = function(token) {
+          window.sendToNative({ type: 'SAVE_TOKEN', token: token });
+        };
+        window.enableBiometric = function() {
+          window.sendToNative({ type: 'ENABLE_BIOMETRIC' });
+        };
+        window.disableBiometric = function() {
+          window.sendToNative({ type: 'DISABLE_BIOMETRIC' });
+        };
+        window.checkBiometric = function() {
+          window.sendToNative({ type: 'CHECK_BIOMETRIC' });
+        };
+        window.authenticateBiometric = function(reason) {
+          window.sendToNative({ type: 'AUTHENTICATE_BIOMETRIC', reason: reason });
+        };
+        window.logout = function() {
+          window.sendToNative({ type: 'LOGOUT' });
+        };
+
+        ${safeToken ? `
+          try {
+            localStorage.setItem('consumerAuth', JSON.stringify({ token: ${safeToken} }));
+          } catch (e) {}
+          if (window.location.pathname.indexOf('/consumer/dashboard') === -1) {
+            window.location.replace('/consumer/dashboard');
+          }
+        ` : ''}
+      } catch (e) {
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'JS_ERROR', message: String(e) }));
+        }
+      }
+    })();
     true;
   `;
 
