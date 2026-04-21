@@ -53,7 +53,6 @@ export default function Accounts() {
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
   const [showSendDocumentDialog, setShowSendDocumentDialog] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<any>(null);
-  const [displayLimit, setDisplayLimit] = useState(50);
   const [accountSearchText, setAccountSearchText] = useState("");
   const [sendDocumentForm, setSendDocumentForm] = useState({
     templateId: "",
@@ -698,9 +697,6 @@ export default function Accounts() {
         );
       });
 
-  // Apply pagination
-  const paginatedAccounts = searchFilteredAccounts.slice(0, displayLimit);
-  const hasMoreAccounts = searchFilteredAccounts.length > displayLimit;
   
   const selectedFolder =
     selectedFolderId === "all"
@@ -955,7 +951,7 @@ export default function Accounts() {
             </div>
           </div>
           <AccountsTable
-            accounts={paginatedAccounts}
+            accounts={searchFilteredAccounts}
             isLoading={accountsLoading}
             onView={handleView}
             onContact={handleContact}
@@ -965,24 +961,6 @@ export default function Accounts() {
             showDeleteButton
           />
           
-          {!accountsLoading && hasMoreAccounts && (
-            <div className="mt-6 flex justify-center">
-              <Button
-                variant="outline"
-                onClick={() => setDisplayLimit(prev => prev + 50)}
-                className="rounded-xl border-white/10 bg-white/5 px-6 py-2 text-blue-100 hover:bg-white/10"
-                data-testid="button-load-more"
-              >
-                Load More ({searchFilteredAccounts.length - displayLimit} remaining)
-              </Button>
-            </div>
-          )}
-          
-          {!accountsLoading && searchFilteredAccounts.length > 0 && (
-            <div className="mt-4 text-center text-sm text-blue-100/60">
-              Showing {paginatedAccounts.length} of {searchFilteredAccounts.length} accounts
-            </div>
-          )}
         </section>
       </div>
 
@@ -1350,8 +1328,9 @@ export default function Accounts() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="overdue">Overdue</SelectItem>
+                    <SelectItem value="settled">Settled</SelectItem>
                     <SelectItem value="inactive">Inactive</SelectItem>
-                    <SelectItem value="paid">Paid</SelectItem>
                     <SelectItem value="closed">Closed</SelectItem>
                   </SelectContent>
                 </Select>

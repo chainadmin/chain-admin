@@ -2470,6 +2470,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch('/api/accounts/bulk-update-status', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { ids, status } = req.body ?? {};
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "Account IDs array is required" });
+      }
+      
+      if (!status || !['active', 'inactive', 'recalled', 'closed', 'overdue', 'settled'].includes(status)) {
+        return res.status(400).json({ message: "Valid status is required (active, inactive, recalled, closed, overdue, or settled)" });
+      }
+
+      // Get all accounts for this tenant
+      const allAccounts = await storage.getAccountsByTenant(tenantId);
+      const accountsToUpdate = allAccounts.filter(acc => ids.includes(acc.id));
+      
+      if (accountsToUpdate.length === 0) {
+        return res.status(404).json({ message: "No accounts found to update" });
+      }
+
+      // Update each account's status
+      let updatedCount = 0;
+      for (const account of accountsToUpdate) {
+        await storage.updateAccount(account.id, { status });
+        updatedCount++;
+      }
+
+      console.log(`📝 Bulk status update: ${updatedCount} accounts set to "${status}" by tenant ${tenantId}`);
+
+      return res.status(200).json({
+        success: true,
+        message: `${updatedCount} accounts updated to status: ${status}`,
+        updatedCount,
+      });
+    } catch (error) {
+      console.error("Error bulk updating account status:", error);
+      return res.status(500).json({ message: "Failed to update account status" });
+    }
+  });
+
   app.patch('/api/accounts/:id', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = await getTenantId(req, storage);
@@ -2652,50 +2696,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error cleaning up tracking data:", error);
       return res.status(500).json({ message: "Failed to cleanup tracking data" });
-    }
-  });
-
-  app.patch('/api/accounts/bulk-update-status', authenticateUser, async (req: any, res) => {
-    try {
-      const tenantId = req.user.tenantId;
-      if (!tenantId) {
-        return res.status(403).json({ message: "No tenant access" });
-      }
-
-      const { ids, status } = req.body ?? {};
-      if (!Array.isArray(ids) || ids.length === 0) {
-        return res.status(400).json({ message: "Account IDs array is required" });
-      }
-      
-      if (!status || !['active', 'inactive', 'recalled', 'closed'].includes(status)) {
-        return res.status(400).json({ message: "Valid status is required (active, inactive, recalled, or closed)" });
-      }
-
-      // Get all accounts for this tenant
-      const allAccounts = await storage.getAccountsByTenant(tenantId);
-      const accountsToUpdate = allAccounts.filter(acc => ids.includes(acc.id));
-      
-      if (accountsToUpdate.length === 0) {
-        return res.status(404).json({ message: "No accounts found to update" });
-      }
-
-      // Update each account's status
-      let updatedCount = 0;
-      for (const account of accountsToUpdate) {
-        await storage.updateAccount(account.id, { status });
-        updatedCount++;
-      }
-
-      console.log(`📝 Bulk status update: ${updatedCount} accounts set to "${status}" by tenant ${tenantId}`);
-
-      return res.status(200).json({
-        success: true,
-        message: `${updatedCount} accounts updated to status: ${status}`,
-        updatedCount,
-      });
-    } catch (error) {
-      console.error("Error bulk updating account status:", error);
-      return res.status(500).json({ message: "Failed to update account status" });
     }
   });
 
