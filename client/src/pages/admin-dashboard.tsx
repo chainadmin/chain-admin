@@ -241,6 +241,12 @@ export default function AdminDashboard() {
               <Button
                 variant="ghost"
                 className="rounded-xl border border-white/15 bg-white/10 px-6 py-2 text-sm font-semibold text-blue-100 transition hover:bg-white/20"
+                onClick={() =>
+                  toast({
+                    title: "Coming soon",
+                    description: "Export snapshot is not yet available.",
+                  })
+                }
               >
                 <i className="fas fa-download mr-2 text-base"></i>
                 Export snapshot
@@ -408,9 +414,9 @@ export default function AdminDashboard() {
                           </p>
                         </div>
                         <div>
-                          <p className="text-xs text-blue-100/70">Click Rate</p>
-                          <p className="text-sm font-semibold text-amber-400" data-testid="text-email-click-rate">
-                            {(stats as any)?.emailMetrics?.clickRate || 0}%
+                          <p className="text-xs text-blue-100/70">Bounced</p>
+                          <p className="text-sm font-semibold text-amber-400" data-testid="text-email-bounced">
+                            {(stats as any)?.emailMetrics?.bounced?.toLocaleString() || "0"}
                           </p>
                         </div>
                       </div>
@@ -701,7 +707,7 @@ export default function AdminDashboard() {
                 <Select
                   value={composeEmailForm.templateId}
                   onValueChange={(value) => {
-                    if (!value) {
+                    if (value === "none") {
                       setComposeEmailForm((prev) => ({ ...prev, templateId: "" }));
                       return;
                     }
@@ -719,7 +725,7 @@ export default function AdminDashboard() {
                     <SelectValue placeholder="Select a template" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No template</SelectItem>
+                    <SelectItem value="none">No template</SelectItem>
                     {emailTemplates?.map((template: any) => (
                       <SelectItem key={template.id} value={template.id}>
                         {template.name}
