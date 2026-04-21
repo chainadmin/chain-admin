@@ -655,10 +655,14 @@ export default function Payments() {
                 <Calendar className="w-4 h-4 mr-2" />
                 Today's Payments
                 {paymentSchedules && (() => {
-                  const today = new Date().toISOString().split('T')[0];
-                  const todayCount = (paymentSchedules as any[]).filter((s: any) => 
-                    s.nextPaymentDate && new Date(s.nextPaymentDate).toISOString().split('T')[0] === today
-                  ).length;
+                  const now = new Date();
+                  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                  const todayCount = (paymentSchedules as any[]).filter((s: any) => {
+                    if (!s.nextPaymentDate) return false;
+                    const d = new Date(s.nextPaymentDate);
+                    const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                    return dStr === todayStr;
+                  }).length;
                   return todayCount > 0 ? (
                     <Badge className="ml-2 bg-sky-500 text-white">{todayCount}</Badge>
                   ) : null;
@@ -1315,10 +1319,14 @@ export default function Payments() {
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <CardTitle className="text-lg font-semibold text-blue-50">
                     Today's Scheduled Payments ({(() => {
-                      const today = new Date().toISOString().split('T')[0];
-                      return (paymentSchedules as any[])?.filter((s: any) => 
-                        s.nextPaymentDate && new Date(s.nextPaymentDate).toISOString().split('T')[0] === today
-                      ).length || 0;
+                      const now = new Date();
+                      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                      return (paymentSchedules as any[])?.filter((s: any) => {
+                        if (!s.nextPaymentDate) return false;
+                        const d = new Date(s.nextPaymentDate);
+                        const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                        return dStr === todayStr;
+                      }).length || 0;
                     })()})
                   </CardTitle>
                   <div className="text-sm text-blue-100/70">
@@ -1330,10 +1338,14 @@ export default function Payments() {
                 {schedulesLoading ? (
                   <div className="text-center text-blue-100/70 py-8">Loading today's payments...</div>
                 ) : (() => {
-                  const today = new Date().toISOString().split('T')[0];
-                  const todaySchedules = (paymentSchedules as any[])?.filter((s: any) => 
-                    s.nextPaymentDate && new Date(s.nextPaymentDate).toISOString().split('T')[0] === today
-                  ) || [];
+                  const now = new Date();
+                  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                  const todaySchedules = (paymentSchedules as any[])?.filter((s: any) => {
+                    if (!s.nextPaymentDate) return false;
+                    const d = new Date(s.nextPaymentDate);
+                    const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                    return dStr === todayStr;
+                  }) || [];
                   
                   if (todaySchedules.length === 0) {
                     return (
@@ -1616,16 +1628,18 @@ export default function Payments() {
                                   <Edit className="w-4 h-4 mr-1" />
                                   Edit
                                 </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="rounded-xl border border-rose-400/40 bg-rose-500/10 text-rose-100 hover:bg-rose-500/20"
-                                  onClick={() => setShowDirectCancelDialog(schedule.id)}
-                                  data-testid={`button-cancel-${schedule.id}`}
-                                >
-                                  <XCircle className="w-4 h-4 mr-1" />
-                                  Cancel
-                                </Button>
+                                {['active', 'pending_approval', 'failed', 'declined'].includes(schedule.status) && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="rounded-xl border border-rose-400/40 bg-rose-500/10 text-rose-100 hover:bg-rose-500/20"
+                                    onClick={() => setShowDirectCancelDialog(schedule.id)}
+                                    data-testid={`button-cancel-${schedule.id}`}
+                                  >
+                                    <XCircle className="w-4 h-4 mr-1" />
+                                    Cancel
+                                  </Button>
+                                )}
                                 
                                 {/* Contact buttons for failed/declined/cancelled */}
                                 {(schedule.status === 'failed' || schedule.status === 'declined' || schedule.status === 'cancelled') && (
@@ -1706,7 +1720,7 @@ export default function Payments() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="weekly">Weekly</SelectItem>
-                        <SelectItem value="bi_weekly">Bi-Weekly</SelectItem>
+                        <SelectItem value="biweekly">Bi-Weekly</SelectItem>
                         <SelectItem value="monthly">Monthly</SelectItem>
                       </SelectContent>
                     </Select>

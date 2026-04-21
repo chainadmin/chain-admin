@@ -17506,24 +17506,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Delete payment
-  app.delete('/api/payments/:id', authenticateUser, async (req: any, res) => {
-    try {
-      const tenantId = req.user.tenantId;
-      if (!tenantId) {
-        return res.status(403).json({ message: "No tenant access" });
-      }
-
-      const paymentId = req.params.id;
-      await storage.deletePayment(paymentId, tenantId);
-      
-      res.status(204).send();
-    } catch (error) {
-      console.error("Error deleting payment:", error);
-      res.status(500).json({ message: "Failed to delete payment" });
-    }
-  });
-
   // Bulk delete payments
   app.delete('/api/payments/bulk-delete', authenticateUser, async (req: any, res) => {
     try {
@@ -17551,6 +17533,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error bulk deleting payments:", error);
       return res.status(500).json({ message: "Failed to delete payments" });
+    }
+  });
+
+  // Delete payment
+  app.delete('/api/payments/:id', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const paymentId = req.params.id;
+      await storage.deletePayment(paymentId, tenantId);
+      
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting payment:", error);
+      res.status(500).json({ message: "Failed to delete payment" });
     }
   });
 
