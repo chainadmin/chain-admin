@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { getStoredConsumerToken } from "@/lib/consumer-auth";
+import { apiCall } from "@/lib/api";
 import { useAgencyContext } from "@/hooks/useAgencyContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,18 +47,36 @@ export default function EnhancedConsumerPortal() {
   // Fetch consumer data
   const { data, isLoading, error } = useQuery<any>({
     queryKey: accountsUrl ? ["consumer-accounts", encodedEmail] : ['enhanced-consumer-accounts'],
+    queryFn: async () => {
+      const token = getStoredConsumerToken();
+      const response = await apiCall("GET", accountsUrl, null, token);
+      if (!response.ok) throw new Error("Failed to fetch accounts");
+      return response.json();
+    },
     enabled: !!accountsUrl,
   });
 
   // Fetch notifications
   const { data: notifications } = useQuery<any>({
     queryKey: notificationsUrl ? [notificationsUrl] : ['enhanced-consumer-notifications'],
+    queryFn: async () => {
+      const token = getStoredConsumerToken();
+      const response = await apiCall("GET", notificationsUrl, null, token);
+      if (!response.ok) throw new Error("Failed to fetch notifications");
+      return response.json();
+    },
     enabled: !!notificationsUrl,
   });
 
   // Fetch documents
   const { data: documents } = useQuery<any>({
     queryKey: documentsUrl ? [documentsUrl] : ['enhanced-consumer-documents'],
+    queryFn: async () => {
+      const token = getStoredConsumerToken();
+      const response = await apiCall("GET", documentsUrl, null, token);
+      if (!response.ok) throw new Error("Failed to fetch documents");
+      return response.json();
+    },
     enabled: !!documentsUrl,
   });
 

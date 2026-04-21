@@ -82,13 +82,7 @@ export function clearConsumerAuth(): void {
 }
 
 export function getStoredConsumerToken(): string | null {
-  const token = getFirstValue(CONSUMER_TOKEN_KEY);
-  console.log('🔐 Getting stored consumer token:', {
-    hasToken: !!token,
-    tokenLength: token?.length || 0,
-    storageAvailable: getStorages().length
-  });
-  return token;
+  return getFirstValue(CONSUMER_TOKEN_KEY);
 }
 
 export function getStoredConsumerSession(): ConsumerSession | null {

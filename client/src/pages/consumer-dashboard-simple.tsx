@@ -471,10 +471,23 @@ export default function ConsumerDashboardSimple() {
     },
   });
 
+  // Fetch payment methods for use in payment schedule dropdown
+  const { data: consumerPaymentMethods } = useQuery({
+    queryKey: ['consumer-payment-methods', session?.email],
+    queryFn: async () => {
+      const token = getStoredConsumerToken();
+      const response = await apiCall("GET", "/api/consumer/payment-methods", null, token);
+      if (!response.ok) throw new Error("Failed to fetch payment methods");
+      return response.json();
+    },
+    enabled: !!session?.email && !!getStoredConsumerToken(),
+  });
+
   // Document upload mutation
   const uploadMutation = useMutation({
     mutationFn: async (formData: FormData) => {
-      const response = await apiCall('POST', '/api/consumer/documents/upload', formData);
+      const token = getStoredConsumerToken();
+      const response = await apiCall('POST', '/api/consumer/documents/upload', formData, token);
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.message || 'Failed to upload document');
@@ -1638,12 +1651,12 @@ export default function ConsumerDashboardSimple() {
                                 </SelectValue>
                               </SelectTrigger>
                               <SelectContent>
-                                {accountData?.paymentMethods?.map((method: any) => (
+                                {consumerPaymentMethods?.map((method: any) => (
                                   <SelectItem key={method.id} value={method.id}>
                                     <div className="flex items-center gap-2">
                                       <CreditCard className="h-4 w-4" />
                                       <span>
-                                        {method.cardBrand || 'Card'} ending in {method.lastFour}
+                                        {method.cardBrand || 'Card'} ending in {method.cardLast4}
                                         {method.isDefault && <span className="ml-2 text-xs text-emerald-400">(Default)</span>}
                                       </span>
                                     </div>
@@ -1695,7 +1708,7 @@ export default function ConsumerDashboardSimple() {
                                 }
                                 
                                 try {
-                                  const token = localStorage.getItem('consumerToken');
+                                  const token = getStoredConsumerToken();
                                   const response = await apiCall(
                                     "POST",
                                     `/api/consumer/payment-schedule/${schedule.id}/payoff`,
@@ -1749,7 +1762,7 @@ export default function ConsumerDashboardSimple() {
                               }
                               
                               try {
-                                const token = localStorage.getItem('consumerToken');
+                                const token = getStoredConsumerToken();
                                 const response = await apiCall(
                                   "POST",
                                   `/api/consumer/payment-schedule/${schedule.id}/cancel`,
