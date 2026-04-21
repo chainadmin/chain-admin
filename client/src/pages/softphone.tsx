@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Phone, PhoneCall, PhoneOff, PhoneOutgoing, PhoneIncoming, Mic, MicOff, Volume2, VolumeX, History, LogOut, EyeOff, Building2 } from "lucide-react";
+import { Link } from "wouter";
+import { Loader2, Phone, PhoneCall, PhoneOff, PhoneOutgoing, PhoneIncoming, Mic, MicOff, Volume2, VolumeX, History, LogOut, EyeOff, Building2, Download } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 interface VoipCallLog {
@@ -342,6 +343,14 @@ export default function SoftphonePage() {
                 )}
               </Button>
             </form>
+            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 text-center">
+              <Link href="/install">
+                <a className="inline-flex items-center gap-1.5 text-sm text-blue-600 dark:text-blue-400 hover:underline">
+                  <Download className="h-3.5 w-3.5" />
+                  Install app on your phone
+                </a>
+              </Link>
+            </div>
           </CardContent>
         </Card>
       </div>
