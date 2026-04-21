@@ -38,6 +38,7 @@ import {
   Settings,
   ExternalLink,
   DollarSign,
+  Info,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -126,12 +127,12 @@ export default function PhonesPage() {
     mutationFn: async (enabled: boolean) => {
       return apiRequest('POST', '/api/voip/enable', { enabled });
     },
-    onSuccess: () => {
+    onSuccess: (_data, enabled) => {
       queryClient.invalidateQueries({ queryKey: ["/api/voip/billing-summary"] });
       queryClient.invalidateQueries({ queryKey: ["/api/voip/phone-numbers"] });
       toast({
         title: "VoIP Updated",
-        description: billingSummary?.voipEnabled ? "VoIP has been disabled" : "VoIP has been enabled. Add phone numbers from the Numbers tab.",
+        description: enabled ? "VoIP has been enabled. Add phone numbers from the Numbers tab." : "VoIP has been disabled.",
       });
     },
     onError: (error: any) => {
@@ -582,13 +583,21 @@ export default function PhonesPage() {
                                 Always Enabled
                               </Badge>
                             ) : (
-                              <Switch
-                                checked={member.voipAccess}
-                                onCheckedChange={(checked) => 
-                                  updateVoipAccessMutation.mutate({ memberId: member.id, voipAccess: checked })
-                                }
-                                disabled={updateVoipAccessMutation.isPending || !billingSummary?.voipEnabled}
-                              />
+                              <div className="flex items-center gap-2">
+                                <Switch
+                                  checked={member.voipAccess}
+                                  onCheckedChange={(checked) => 
+                                    updateVoipAccessMutation.mutate({ memberId: member.id, voipAccess: checked })
+                                  }
+                                  disabled={updateVoipAccessMutation.isPending || !billingSummary?.voipEnabled}
+                                />
+                                {!billingSummary?.voipEnabled && (
+                                  <span className="flex items-center gap-1 text-xs text-amber-300/70" title="Enable VoIP in Settings to manage user access">
+                                    <Info className="h-3 w-3" />
+                                    VoIP disabled
+                                  </span>
+                                )}
+                              </div>
                             )}
                           </TableCell>
                         </TableRow>

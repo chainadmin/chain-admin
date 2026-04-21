@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import { Loader2, Phone, PhoneCall, PhoneOff, PhoneOutgoing, PhoneIncoming, Mic, MicOff, Volume2, VolumeX, History, LogOut, EyeOff, Building2, Download } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { Device, Call } from "@twilio/voice-sdk";
 
 interface VoipCallLog {
   id: string;
@@ -64,9 +65,12 @@ export default function SoftphonePage() {
   const [agentStatus, setAgentStatus] = useState<"available" | "busy" | "away">("available");
   const [callerIdMode, setCallerIdMode] = useState<"auto" | "private" | "office">("auto");
 
+  const [inboundCall, setInboundCall] = useState<Call | null>(null);
+  const [inboundCallerNumber, setInboundCallerNumber] = useState<string>("");
+
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const deviceRef = useRef<any>(null);
-  const activeCallRef = useRef<any>(null);
+  const deviceRef = useRef<Device | null>(null);
+  const activeCallRef = useRef<Call | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem("softphone_token");
@@ -86,6 +90,13 @@ export default function SoftphonePage() {
         localStorage.removeItem("softphone_user");
       }
     }
+
+    return () => {
+      if (deviceRef.current) {
+        deviceRef.current.destroy();
+        deviceRef.current = null;
+      }
+    };
   }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -135,6 +146,10 @@ export default function SoftphonePage() {
   };
 
   const handleLogout = () => {
+    if (deviceRef.current) {
+      deviceRef.current.destroy();
+      deviceRef.current = null;
+    }
     localStorage.removeItem("softphone_token");
     localStorage.removeItem("softphone_user");
     setIsAuthenticated(false);
@@ -193,8 +208,95 @@ export default function SoftphonePage() {
     },
   });
 
+  useEffect(() => {
+    if (!voiceToken?.token) return;
+
+    if (deviceRef.current) {
+      deviceRef.current.updateToken(voiceToken.token);
+      return;
+    }
+
+    const device = new Device(voiceToken.token, {
+      logLevel: 1,
+      codecPreferences: [Call.Codec.Opus, Call.Codec.PCMU],
+    });
+
+    device.on("registered", () => {
+      console.log("Twilio Device registered");
+    });
+
+    device.on("error", (error) => {
+      console.error("Twilio Device error:", error);
+      toast({
+        title: "Phone system error",
+        description: error.message || "An error occurred with the phone system",
+        variant: "destructive",
+      });
+    });
+
+    device.on("incoming", (call: Call) => {
+      const callerNumber = call.parameters.From || "Unknown";
+      setInboundCallerNumber(callerNumber);
+      setInboundCall(call);
+
+      call.on("cancel", () => {
+        setInboundCall(null);
+        setInboundCallerNumber("");
+      });
+
+      call.on("disconnect", () => {
+        setInboundCall(null);
+        setInboundCallerNumber("");
+        activeCallRef.current = null;
+        setCallState("ended");
+        setTimeout(() => {
+          setCallState("idle");
+          setDialpadNumber("");
+          setIsMuted(false);
+        }, 2000);
+        queryClient.invalidateQueries({ queryKey: ["/api/voip/call-logs"] });
+      });
+    });
+
+    device.register();
+    deviceRef.current = device;
+
+    return () => {
+      device.destroy();
+      deviceRef.current = null;
+    };
+  }, [voiceToken?.token]);
+
+  useEffect(() => {
+    if (activeCallRef.current) {
+      activeCallRef.current.mute(isMuted);
+    }
+  }, [isMuted]);
+
+  const handleAcceptInbound = () => {
+    if (!inboundCall) return;
+
+    inboundCall.accept();
+    activeCallRef.current = inboundCall;
+    setDialpadNumber(inboundCallerNumber);
+    setCallState("in-call");
+    setInboundCall(null);
+    setInboundCallerNumber("");
+  };
+
+  const handleRejectInbound = () => {
+    if (!inboundCall) return;
+    inboundCall.reject();
+    setInboundCall(null);
+    setInboundCallerNumber("");
+  };
+
   const initiateCallMutation = useMutation({
     mutationFn: async (toNumber: string) => {
+      if (!deviceRef.current) {
+        throw new Error("Phone device not initialized. Please wait a moment and try again.");
+      }
+
       const response = await fetch("/api/voip/call", {
         method: "POST",
         headers: {
@@ -207,14 +309,64 @@ export default function SoftphonePage() {
         handleAuthError();
         throw new Error("Access denied");
       }
-      if (!response.ok) throw new Error("Failed to initiate call");
-      return response.json();
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || "Failed to initiate call");
+      }
+      const callInfo: { actualFromNumber: string; toNumber: string; isPrivate: boolean } = await response.json();
+
+      const connectParams: Record<string, string> = {
+        To: callInfo.toNumber,
+      };
+      if (!callInfo.isPrivate && callInfo.actualFromNumber) {
+        connectParams.From = callInfo.actualFromNumber;
+      }
+
+      const call = await deviceRef.current.connect({ params: connectParams });
+
+      activeCallRef.current = call;
+
+      call.on("ringing", () => {
+        setCallState("ringing");
+      });
+
+      call.on("accept", () => {
+        setCallState("in-call");
+      });
+
+      call.on("disconnect", () => {
+        activeCallRef.current = null;
+        setCallState("ended");
+        setTimeout(() => {
+          setCallState("idle");
+          setDialpadNumber("");
+          setIsMuted(false);
+        }, 2000);
+        queryClient.invalidateQueries({ queryKey: ["/api/voip/call-logs"] });
+      });
+
+      call.on("error", (twilioError: Error) => {
+        console.error("Call error:", twilioError);
+        toast({
+          title: "Call error",
+          description: twilioError.message || "An error occurred during the call",
+          variant: "destructive",
+        });
+        activeCallRef.current = null;
+        setCallState("ended");
+        setTimeout(() => {
+          setCallState("idle");
+          setDialpadNumber("");
+          setIsMuted(false);
+        }, 2000);
+      });
+
+      return call;
     },
     onSuccess: () => {
       setCallState("connecting");
-      queryClient.invalidateQueries({ queryKey: ["/api/voip/call-logs"] });
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast({
         title: "Call failed",
         description: error.message || "Could not initiate call",
@@ -271,7 +423,22 @@ export default function SoftphonePage() {
     setTimeout(() => {
       setCallState("idle");
       setDialpadNumber("");
+      setIsMuted(false);
     }, 2000);
+  };
+
+  const handleToggleSpeaker = () => {
+    const newSpeakerOn = !isSpeakerOn;
+    setIsSpeakerOn(newSpeakerOn);
+
+    const audioHelper = deviceRef.current?.audio;
+    if (audioHelper && audioHelper.isOutputSelectionSupported) {
+      if (newSpeakerOn) {
+        audioHelper.speakerDevices.set("default").catch(() => {});
+      } else {
+        audioHelper.speakerDevices.set("").catch(() => {});
+      }
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -359,6 +526,40 @@ export default function SoftphonePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4">
+      {/* Inbound call overlay */}
+      {inboundCall && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <Card className="w-full max-w-sm mx-4 shadow-2xl">
+            <CardHeader className="text-center pb-2">
+              <div className="mx-auto w-20 h-20 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center mb-4 animate-pulse">
+                <PhoneIncoming className="h-10 w-10 text-green-600 dark:text-green-400" />
+              </div>
+              <CardTitle className="text-xl">Incoming Call</CardTitle>
+              <CardDescription className="text-lg font-mono font-medium text-gray-900 dark:text-white">
+                {inboundCallerNumber || "Unknown"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex gap-4 pt-4">
+              <Button
+                size="lg"
+                className="flex-1 h-14 bg-green-600 hover:bg-green-700 text-white"
+                onClick={handleAcceptInbound}
+              >
+                <Phone className="h-6 w-6 mr-2" /> Accept
+              </Button>
+              <Button
+                size="lg"
+                variant="destructive"
+                className="flex-1 h-14"
+                onClick={handleRejectInbound}
+              >
+                <PhoneOff className="h-6 w-6 mr-2" /> Reject
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
@@ -524,7 +725,7 @@ export default function SoftphonePage() {
                       variant="outline"
                       size="lg"
                       className={!isSpeakerOn ? "bg-red-100 dark:bg-red-900" : ""}
-                      onClick={() => setIsSpeakerOn(!isSpeakerOn)}
+                      onClick={handleToggleSpeaker}
                     >
                       {isSpeakerOn ? (
                         <Volume2 className="h-5 w-5" />

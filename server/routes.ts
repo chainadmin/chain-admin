@@ -23191,6 +23191,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Set primary VoIP phone number
+  app.put('/api/voip/phone-numbers/:id/primary', authenticateUser, requireOwner, async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { id } = req.params;
+
+      // Unset any existing primary
+      const existingPrimary = await voipStorage.getPrimaryVoipPhoneNumber(user.tenantId);
+      if (existingPrimary && existingPrimary.id !== id) {
+        await voipStorage.updateVoipPhoneNumber(existingPrimary.id, user.tenantId, { isPrimary: false });
+      }
+
+      const updated = await voipStorage.updateVoipPhoneNumber(id, user.tenantId, { isPrimary: true });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error setting primary phone number:", error);
+      res.status(500).json({ message: "Failed to set primary phone number" });
+    }
+  });
+
   // Delete VoIP phone number
   app.delete('/api/voip/phone-numbers/:id', authenticateUser, requireOwner, async (req, res) => {
     try {
