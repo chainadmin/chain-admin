@@ -105,6 +105,20 @@ function setupScheduledTasks(port: number) {
       console.error('❌ [CRON] Automation processing failed:', error);
     }
   });
+
+  // Process sequence enrollments every 15 minutes
+  cron.schedule('*/15 * * * *', async () => {
+    console.log('🕒 [CRON] Running sequence processor...');
+    try {
+      const response = await fetch(`${baseUrl}/api/sequences/process`, {
+        method: 'POST'
+      });
+      const result = await response.json();
+      console.log('✅ [CRON] Sequence processing complete:', result);
+    } catch (error) {
+      console.error('❌ [CRON] Sequence processing failed:', error);
+    }
+  });
   
   // Process subscription renewals daily at 12:00 AM ET
   cron.schedule('0 0 * * *', async () => {

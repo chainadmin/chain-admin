@@ -357,6 +357,56 @@ function replaceTemplateVariables(
   const arrangementStartIso = activeArrangement?.startDate ? new Date(activeArrangement.startDate).toISOString().split('T')[0] : '';
   const arrangementNextPayment = activeArrangement?.nextPaymentDate ? new Date(activeArrangement.nextPaymentDate).toLocaleDateString() : '';
   const arrangementPaymentFrequency = activeArrangement?.frequency || '';
+
+  // Arrangement end date — use stored field if present, otherwise calculate from start + payments
+  let arrangementEndDate = '';
+  if (activeArrangement?.endDate) {
+    arrangementEndDate = new Date(activeArrangement.endDate).toLocaleDateString();
+  } else if (activeArrangement?.startDate && activeArrangement?.numberOfPayments && activeArrangement?.frequency) {
+    try {
+      const endDateCalc = new Date(activeArrangement.startDate);
+      const freq = String(activeArrangement.frequency).toLowerCase();
+      const n = Number(activeArrangement.numberOfPayments) - 1;
+      if ((freq.includes('bi') && freq.includes('week')) || freq.includes('biweek') || freq.includes('bi-week')) endDateCalc.setDate(endDateCalc.getDate() + n * 14);
+      else if (freq.includes('week')) endDateCalc.setDate(endDateCalc.getDate() + n * 7);
+      else if (freq.includes('month')) endDateCalc.setMonth(endDateCalc.getMonth() + n);
+      else if (freq.includes('year')) endDateCalc.setFullYear(endDateCalc.getFullYear() + n);
+      else endDateCalc.setMonth(endDateCalc.getMonth() + n);
+      arrangementEndDate = endDateCalc.toLocaleDateString();
+    } catch (_) {}
+  }
+
+  // Payment method from arrangement or account additionalData
+  const arrangementPaymentMethod = activeArrangement?.paymentMethodType
+    || activeArrangement?.paymentMethod
+    || accountData?.paymentMethod
+    || accountData?.payment_method
+    || '';
+
+  // Total paid — sum of paidAmountCents or completedPayments on the account if available
+  let totalPaidValue = '';
+  const completedPayments: any[] = (account as any)?.completedPayments || (account as any)?.payments?.filter((p: any) => p.status === 'completed') || [];
+  if (completedPayments.length > 0) {
+    const sumCents = completedPayments.reduce((sum: number, p: any) => sum + (p.amountCents || p.amount || 0), 0);
+    if (sumCents > 0) totalPaidValue = formatCurrency(sumCents);
+  } else if ((account as any)?.totalPaidCents != null) {
+    totalPaidValue = formatCurrency((account as any).totalPaidCents);
+  }
+
+  // Human-readable payment arrangement summary
+  let paymentArrangementSummary = '';
+  if (activeArrangement) {
+    const parts: string[] = [];
+    if (numberOfPayments) parts.push(`${numberOfPayments} payment${Number(numberOfPayments) !== 1 ? 's' : ''}`);
+    if (monthlyPayment) parts.push(`of ${monthlyPayment}`);
+    if (arrangementPaymentFrequency) parts.push(arrangementPaymentFrequency);
+    if (arrangementStart) parts.push(`starting ${arrangementStart}`);
+    paymentArrangementSummary = parts.join(' ');
+  }
+
+  // Date format aliases
+  const currentDateLong = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  const currentDateShort = now.toLocaleDateString('en-US', { year: '2-digit', month: 'numeric', day: 'numeric' });
   
   // Calculate balance divisions for flexible payment plans
   const balanceDiv2 = (balanceCents !== null && balanceCents !== undefined) ? formatCurrency(Math.round(balanceCents / 2)) : '';
@@ -460,7 +510,22 @@ function replaceTemplateVariables(
     arrangementStartIso,
     arrangementNextPayment,
     arrangementPaymentFrequency,
-    
+
+    // New variable aliases for frontend template variables
+    currentDate: todaysDate,
+    currentDateLong,
+    currentDateShort,
+    arrangementStartDate: arrangementStart,
+    arrangementEndDate,
+    nextPaymentDate: arrangementNextPayment,
+    paymentArrangement: paymentArrangementSummary,
+    paymentMethod: arrangementPaymentMethod,
+    totalPaid: totalPaidValue,
+    remainingBalance: formattedBalance,
+    settlementOffer: balance50,
+    settlementExpires: settlementOfferExpiresDate,
+    paymentLink: consumerPortalUrl,
+
     // Snake_case aliases for all variables to match email/SMS templates
     first_name: firstName,
     last_name: lastName,
@@ -528,6 +593,21 @@ function replaceTemplateVariables(
     arrangement_start_iso: arrangementStartIso,
     arrangement_next_payment: arrangementNextPayment,
     arrangement_payment_frequency: arrangementPaymentFrequency,
+
+    // Snake_case aliases for new variables
+    current_date: todaysDate,
+    current_date_long: currentDateLong,
+    current_date_short: currentDateShort,
+    arrangement_start_date: arrangementStart,
+    arrangement_end_date: arrangementEndDate,
+    next_payment_date: arrangementNextPayment,
+    payment_arrangement: paymentArrangementSummary,
+    payment_method: arrangementPaymentMethod,
+    total_paid: totalPaidValue,
+    remaining_balance: formattedBalance,
+    settlement_offer: balance50,
+    settlement_expires: settlementOfferExpiresDate,
+    payment_link: consumerPortalUrl,
   };
 
   let processedTemplate = template;
@@ -15807,6 +15887,155 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error processing automations:", error);
       res.status(500).json({ message: "Failed to process automations" });
+    }
+  });
+
+  // Process due sequence enrollments — called by the cron scheduler every 15 minutes
+  app.post('/api/sequences/process', async (req: any, res) => {
+    try {
+      const now = new Date();
+      console.log(`🔀 [Sequences] Processing due enrollments at ${now.toISOString()}`);
+
+      // Get all active enrollments across all tenants where nextMessageAt is in the past
+      const allEnrollments = await storage.getActiveEnrollments();
+      const dueEnrollments = allEnrollments.filter(
+        (e: any) => e.nextMessageAt && new Date(e.nextMessageAt) <= now
+      );
+
+      console.log(`📋 [Sequences] Found ${dueEnrollments.length} due enrollments out of ${allEnrollments.length} active`);
+
+      let sentCount = 0;
+      let failedCount = 0;
+      let completedCount = 0;
+
+      for (const enrollment of dueEnrollments) {
+        // Non-blocking per-enrollment error handling
+        try {
+          const sequence = (enrollment as any).sequence;
+          if (!sequence) { failedCount++; continue; }
+
+          const tenantId = sequence.tenantId;
+          const consumer = (enrollment as any).consumer;
+          if (!consumer) { failedCount++; continue; }
+
+          // Get all steps for this sequence ordered by stepOrder
+          const steps = await storage.getSequenceSteps(sequence.id);
+          if (!steps || steps.length === 0) {
+            await storage.updateEnrollment(enrollment.id, { status: 'completed', completedAt: new Date() });
+            completedCount++;
+            continue;
+          }
+
+          // Find the current step
+          const currentStepOrder = enrollment.currentStepOrder || 1;
+          const currentStep = steps.find((s: any) => s.stepOrder === currentStepOrder)
+            || steps[0];
+
+          if (!currentStep) {
+            await storage.updateEnrollment(enrollment.id, { status: 'completed', completedAt: new Date() });
+            completedCount++;
+            continue;
+          }
+
+          // Get tenant context for variable replacement
+          const tenant = await storage.getTenant(tenantId);
+          if (!tenant) { failedCount++; continue; }
+          const tenantSettings = await storage.getTenantSettings(tenantId);
+          const tenantWithSettings = { ...tenant, contactEmail: (tenantSettings as any)?.contactEmail, contactPhone: (tenantSettings as any)?.contactPhone };
+
+          // Get the consumer's primary account for variable replacement
+          const allAccounts = await storage.getAccountsByTenant(tenantId);
+          const consumerAccount = allAccounts.find((acc: any) => acc.consumerId === consumer.id);
+
+          // Send the message based on step type; track success so advancement is gated on delivery
+          let stepSent = false;
+
+          if (currentStep.stepType === 'email') {
+            const emailTemplatesList = await storage.getEmailTemplatesByTenant(tenantId);
+            const template = emailTemplatesList.find((t: any) => t.id === currentStep.templateId);
+            if (template && consumer.email) {
+              const subject = replaceTemplateVariables(template.subject || '', consumer, consumerAccount, tenantWithSettings);
+              const html = replaceTemplateVariables(template.html || '', consumer, consumerAccount, tenantWithSettings);
+              const { emailService } = await import('./emailService');
+              await emailService.sendEmail({
+                to: consumer.email,
+                subject,
+                html,
+                tenantId,
+                tag: 'sequence',
+                useBroadcastStream: true,
+                metadata: { sequenceId: sequence.id, enrollmentId: enrollment.id, consumerId: consumer.id, stepOrder: currentStepOrder },
+              });
+              stepSent = true;
+              sentCount++;
+              console.log(`✉️ [Sequences] Sent email step ${currentStepOrder} to ${consumer.email}`);
+            } else {
+              console.warn(`⚠️ [Sequences] Skipping email step ${currentStepOrder} for enrollment ${enrollment.id} — missing template or email`);
+            }
+          } else if (currentStep.stepType === 'sms') {
+            const smsTemplatesList = await storage.getSmsTemplatesByTenant(tenantId);
+            const template = smsTemplatesList.find((t: any) => t.id === currentStep.templateId);
+            const phone = consumer.phone || (consumer as any).phoneNumber || '';
+            if (template && phone) {
+              const message = replaceTemplateVariables(template.message || '', consumer, consumerAccount, tenantWithSettings);
+              const { smsService } = await import('./smsService');
+              const smsResult = await smsService.sendSms(
+                phone,
+                message,
+                tenantId,
+                undefined,
+                consumer.id,
+                { source: 'sequence' }
+              );
+              if (smsResult.success) {
+                stepSent = true;
+                sentCount++;
+                console.log(`📱 [Sequences] Sent SMS step ${currentStepOrder} to ${phone}`);
+              } else {
+                console.warn(`⚠️ [Sequences] SMS step ${currentStepOrder} failed for enrollment ${enrollment.id}: ${smsResult.error}`);
+                failedCount++;
+              }
+            } else {
+              console.warn(`⚠️ [Sequences] Skipping SMS step ${currentStepOrder} for enrollment ${enrollment.id} — missing template or phone`);
+            }
+          }
+
+          // Only advance/complete enrollment if the message was sent successfully
+          if (!stepSent) continue;
+
+          // Advance to the next step or complete
+          const nextStep = steps.find((s: any) => s.stepOrder === currentStepOrder + 1);
+          if (nextStep) {
+            const delayMs = ((nextStep.delayDays || 0) * 24 * 60 * 60 * 1000) + ((nextStep.delayHours || 0) * 60 * 60 * 1000);
+            const nextMessageAt = new Date(now.getTime() + (delayMs > 0 ? delayMs : 0));
+            await storage.updateEnrollment(enrollment.id, {
+              currentStepId: nextStep.id,
+              currentStepOrder: nextStep.stepOrder as number,
+              nextMessageAt,
+              lastMessageSentAt: now,
+              messagesSent: ((enrollment.messagesSent || 0) as number) + 1,
+            });
+          } else {
+            // No more steps — mark as completed
+            await storage.updateEnrollment(enrollment.id, {
+              status: 'completed',
+              completedAt: now,
+              lastMessageSentAt: now,
+              messagesSent: ((enrollment.messagesSent || 0) as number) + 1,
+            });
+            completedCount++;
+          }
+        } catch (enrollmentError) {
+          console.error(`❌ [Sequences] Error processing enrollment ${enrollment.id}:`, enrollmentError);
+          failedCount++;
+        }
+      }
+
+      console.log(`✅ [Sequences] Done — sent: ${sentCount}, completed: ${completedCount}, failed: ${failedCount}`);
+      res.json({ success: true, sent: sentCount, completed: completedCount, failed: failedCount });
+    } catch (error) {
+      console.error('❌ [Sequences] Failed to process enrollments:', error);
+      res.status(500).json({ message: 'Failed to process sequence enrollments' });
     }
   });
 

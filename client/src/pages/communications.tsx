@@ -1071,6 +1071,36 @@ export default function Communications() {
     output = output.replace(/\{\{\s*ssnLast4\s*\}\}/gi, italic("Last 4 of SSN auto-fills for each recipient"));
     output = output.replace(/\{\{\s*unsubscribeLink\s*\}\}/gi, context.sampleUnsubscribeUrl);
     output = output.replace(/\{\{\s*unsubscribeUrl\s*\}\}/gi, context.sampleUnsubscribeUrl);
+
+    // Date aliases
+    const todayLong = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+    const todayShort = new Date().toLocaleDateString("en-US", { year: "2-digit", month: "numeric", day: "numeric" });
+    const todayDefault = new Date().toLocaleDateString();
+    output = output.replace(/\{\{\s*currentDate\s*\}\}/gi, todayDefault);
+    output = output.replace(/\{\{\s*currentDateLong\s*\}\}/gi, todayLong);
+    output = output.replace(/\{\{\s*currentDateShort\s*\}\}/gi, todayShort);
+    output = output.replace(/\{\{\s*todaysDate\s*\}\}/gi, todayDefault);
+    output = output.replace(/\{\{\s*currentMonth\s*\}\}/gi, new Date().toLocaleDateString("en-US", { month: "long" }));
+    output = output.replace(/\{\{\s*currentYear\s*\}\}/gi, String(new Date().getFullYear()));
+
+    // Payment / arrangement aliases
+    output = output.replace(/\{\{\s*arrangementStartDate\s*\}\}/gi, italic("Arrangement start date auto-fills for each recipient"));
+    output = output.replace(/\{\{\s*arrangementEndDate\s*\}\}/gi, italic("Arrangement end date auto-fills for each recipient"));
+    output = output.replace(/\{\{\s*nextPaymentDate\s*\}\}/gi, italic("Next payment date auto-fills for each recipient"));
+    output = output.replace(/\{\{\s*paymentArrangement\s*\}\}/gi, italic("Payment arrangement summary auto-fills for each recipient"));
+    output = output.replace(/\{\{\s*paymentMethod\s*\}\}/gi, italic("Payment method auto-fills for each recipient"));
+    output = output.replace(/\{\{\s*totalPaid\s*\}\}/gi, italic("Total paid auto-fills for each recipient"));
+    output = output.replace(/\{\{\s*remainingBalance\s*\}\}/gi, italic("Remaining balance auto-fills for each recipient"));
+    output = output.replace(/\{\{\s*settlementOffer\s*\}\}/gi, italic("Settlement offer (50%) auto-fills for each recipient"));
+    output = output.replace(/\{\{\s*settlementExpires\s*\}\}/gi, italic("Settlement expiry date auto-fills for each recipient"));
+    output = output.replace(/\{\{\s*monthlyPayment\s*\}\}/gi, italic("Monthly payment auto-fills for each recipient"));
+    output = output.replace(/\{\{\s*arrangementStart\s*\}\}/gi, italic("Arrangement start date auto-fills for each recipient"));
+    output = output.replace(/\{\{\s*arrangementNextPayment\s*\}\}/gi, italic("Next payment date auto-fills for each recipient"));
+
+    // Link aliases
+    output = output.replace(/\{\{\s*paymentLink\s*\}\}/gi, context.resolvedConsumerPortalUrl);
+    output = output.replace(/\{\{\s*portalLink\s*\}\}/gi, context.resolvedConsumerPortalUrl);
+
     return output;
   };
 
