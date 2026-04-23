@@ -12,7 +12,7 @@ import { getArrangementSummary, formatCurrencyFromCents } from "@/lib/arrangemen
 import { useAgencyContext } from "@/hooks/useAgencyContext";
 import { getTerminology, type BusinessType } from "@shared/terminology";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient } from "@/lib/queryClient";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Upload } from "lucide-react";
 
 export default function ConsumerPortal() {
@@ -29,6 +29,11 @@ export default function ConsumerPortal() {
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadDescription, setUploadDescription] = useState('');
   const [uploadAccountId, setUploadAccountId] = useState<string>('');
+
+  // Contact modal state
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [contactSubject, setContactSubject] = useState('');
+  const [contactMessage, setContactMessage] = useState('');
 
   const { encodedEmail, accountsUrl, documentsUrl, arrangementsUrl } = useMemo(() => {
     const safeEmail = email ? encodeURIComponent(email) : "";
@@ -118,6 +123,28 @@ export default function ConsumerPortal() {
 
     uploadMutation.mutate(formData);
   };
+
+  const contactRequestMutation = useMutation({
+    mutationFn: async (data: any) => {
+      await apiRequest("POST", "/api/callback-request", data);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Request Submitted",
+        description: "Your request has been submitted. We'll be in touch soon.",
+      });
+      setShowContactModal(false);
+      setContactSubject('');
+      setContactMessage('');
+    },
+    onError: () => {
+      toast({
+        title: "Submission Failed",
+        description: "Unable to send your request. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
 
   if (isLoading) {
     return (
@@ -470,13 +497,65 @@ export default function ConsumerPortal() {
           </div>
         ) : null}
 
+        {/* Contact Modal */}
+        <Dialog open={showContactModal} onOpenChange={setShowContactModal}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Contact {tenant?.name || 'Agency'}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label>Subject</Label>
+                <Input
+                  value={contactSubject}
+                  onChange={(e) => setContactSubject(e.target.value)}
+                  placeholder="Brief description of your request"
+                />
+              </div>
+              <div>
+                <Label>Message</Label>
+                <Textarea
+                  value={contactMessage}
+                  onChange={(e) => setContactMessage(e.target.value)}
+                  placeholder="Please describe your inquiry..."
+                  rows={4}
+                />
+              </div>
+              <div className="flex justify-end space-x-2">
+                <Button variant="outline" onClick={() => setShowContactModal(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  className="bg-blue-600 hover:bg-blue-700"
+                  disabled={contactRequestMutation.isPending}
+                  onClick={() => contactRequestMutation.mutate({
+                    requestType: 'payment_plan',
+                    subject: contactSubject,
+                    message: contactMessage,
+                    emailAddress: consumer?.email || email,
+                  })}
+                >
+                  {contactRequestMutation.isPending ? 'Sending...' : 'Send Request'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {/* Payment Arrangements Section */}
-        {(templateOptions.length > 0 || existingArrangements.length > 0) && (
+        {(() => {
+          const visibleTemplateOptions = templateOptions.filter(
+            (arr: any) => tenantSettings?.allowSettlementRequests !== false || arr.planType !== 'settlement'
+          );
+          if (tenantSettings?.showPaymentPlans === false) return null;
+          if (visibleTemplateOptions.length === 0 && existingArrangements.length === 0) return null;
+          return (
           <div className="max-w-2xl mx-auto mt-8">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Available Payment Plans</h2>
             <div className="space-y-3">
               {/* Template Options (Calculated from tenant settings) */}
-              {templateOptions.map((arrangement: any) => (
+              {visibleTemplateOptions
+                .map((arrangement: any) => (
                 <div key={arrangement.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4" data-testid={`arrangement-option-${arrangement.id}`}>
                   <div className="flex items-center justify-between">
                     <div>
@@ -492,7 +571,15 @@ export default function ConsumerPortal() {
                         );
                       })()}
                     </div>
-                    <Button className="bg-blue-600 hover:bg-blue-700" data-testid={`button-select-plan-${arrangement.id}`}>
+                    <Button
+                      className="bg-blue-600 hover:bg-blue-700"
+                      data-testid={`button-select-plan-${arrangement.id}`}
+                      onClick={() => {
+                        setContactSubject(`Payment Plan Request: ${arrangement.name}`);
+                        setContactMessage('');
+                        setShowContactModal(true);
+                      }}
+                    >
                       Select Plan
                     </Button>
                   </div>
@@ -529,7 +616,8 @@ export default function ConsumerPortal() {
               ))}
             </div>
           </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* Footer */}

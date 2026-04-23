@@ -80,6 +80,7 @@ export default function Settings() {
   };
 
   const [documentForm, setDocumentForm] = useState<DocumentFormState>({ ...emptyDocumentForm });
+  const [selectedDocumentFile, setSelectedDocumentFile] = useState<File | null>(null);
 
   type DocTemplateFormState = {
     name: string;
@@ -400,6 +401,7 @@ export default function Settings() {
       queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
       setShowDocumentModal(false);
       setDocumentForm({ ...emptyDocumentForm });
+      setSelectedDocumentFile(null);
     },
     onError: (error) => {
       toast({
@@ -597,18 +599,15 @@ export default function Settings() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // For demo purposes, we'll create a mock file URL
-    // In a real app, you'd upload to a file storage service
-    const mockFileUrl = `https://storage.example.com/documents/${file.name}`;
-    
-    setDocumentForm({
-      ...documentForm,
-      title: documentForm.title || file.name,
+    setSelectedDocumentFile(file);
+    setDocumentForm((prev) => ({
+      ...prev,
+      title: prev.title || file.name,
       fileName: file.name,
-      fileUrl: mockFileUrl,
+      fileUrl: '',
       fileSize: file.size,
       mimeType: file.type,
-    });
+    }));
   };
 
   const handleOpenDocTemplateDialog = (template?: any) => {
@@ -924,8 +923,8 @@ export default function Settings() {
     return output;
   };
 
-  const handleSubmitDocument = () => {
-    if (!documentForm.title || !documentForm.fileName || !documentForm.fileUrl) {
+  const handleSubmitDocument = async () => {
+    if (!documentForm.title || !documentForm.fileName || !selectedDocumentFile) {
       toast({
         title: "Missing Information",
         description: "Please provide a title and select a file to upload.",
@@ -943,12 +942,41 @@ export default function Settings() {
       return;
     }
 
-    const payload = {
-      ...documentForm,
-      accountId: documentForm.isPublic ? null : documentForm.accountId,
-    };
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedDocumentFile);
 
-    createDocumentMutation.mutate(payload);
+      const uploadResponse = await fetch('/api/upload/document', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
+
+      if (!uploadResponse.ok) {
+        const errData = await uploadResponse.json().catch(() => ({}));
+        throw new Error(errData.message || 'File upload failed');
+      }
+
+      const uploadResult = await uploadResponse.json();
+
+      const payload = {
+        ...documentForm,
+        fileUrl: uploadResult.fileUrl,
+        fileName: uploadResult.fileName,
+        fileSize: uploadResult.fileSize,
+        mimeType: uploadResult.mimeType,
+        accountId: documentForm.isPublic ? null : documentForm.accountId,
+      };
+
+      createDocumentMutation.mutate(payload);
+      setSelectedDocumentFile(null);
+    } catch (err: any) {
+      toast({
+        title: "Upload Failed",
+        description: err?.message || "Could not upload the file. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const parseCurrencyInput = (value: string): number | null => {
@@ -1181,6 +1209,8 @@ export default function Settings() {
       }
 
       payload.oneTimePaymentMin = oneTimeMin;
+      payload.maxTermMonths = null;
+    } else if (planType === "pay_in_full") {
       payload.maxTermMonths = null;
     }
 
@@ -2868,6 +2898,7 @@ export default function Settings() {
                         setShowDocumentModal(open);
                         if (!open) {
                           setDocumentForm({ ...emptyDocumentForm });
+                          setSelectedDocumentFile(null);
                         }
                       }}
                     >
@@ -2969,6 +3000,7 @@ export default function Settings() {
                               onClick={() => {
                                 setShowDocumentModal(false);
                                 setDocumentForm({ ...emptyDocumentForm });
+                                setSelectedDocumentFile(null);
                               }}
                               className="border-white/20 bg-white/5 text-blue-50 transition hover:bg-white/10"
                             >
@@ -3793,7 +3825,7 @@ export default function Settings() {
                     >
                       <DialogTrigger asChild>
                         <Button className="rounded-xl bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 transition hover:from-sky-400/80 hover:to-indigo-400/80">
-                          <i className="fas fa-plus mr-2"></i>
+                          <Plus className="h-4 w-4 mr-2" />
                           Add Arrangement
                         </Button>
                       </DialogTrigger>
@@ -4039,6 +4071,15 @@ export default function Settings() {
                             </div>
                           )}
 
+                          {arrangementForm.planType === "pay_in_full" && (
+                            <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                              <p className="text-sm font-medium text-white mb-1">Pay Balance in Full</p>
+                              <p className="text-xs text-blue-100/70">
+                                Consumers will be presented with an option to pay their entire outstanding balance in a single payment. No additional configuration is required.
+                              </p>
+                            </div>
+                          )}
+
                           {(arrangementForm.planType === "range" || arrangementForm.planType === "fixed_monthly") && (
                             <div>
                               <Label className="text-white">Max Number of Payments</Label>
@@ -4129,7 +4170,7 @@ export default function Settings() {
                             onClick={() => deleteArrangementMutation.mutate(option.id)}
                             className="rounded-xl border border-transparent px-3 py-1 text-red-300 transition hover:border-red-300/40 hover:bg-red-500/10 hover:text-red-200"
                           >
-                            <i className="fas fa-trash"></i>
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
                       ))}

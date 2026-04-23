@@ -10207,6 +10207,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Generic admin document file upload — uploads to R2 and returns a URL for use with /api/documents
+  app.post('/api/upload/document', authenticateUser, documentUpload.single('file'), async (req: any, res) => {
+    try {
+      const tenantId = await getTenantId(req, storage);
+
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const file = req.file;
+
+      if (!file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+
+      const uploadResult = await uploadLogo(file.buffer, tenantId, file.mimetype);
+
+      if (!uploadResult) {
+        return res.status(500).json({ message: "Failed to upload file to storage" });
+      }
+
+      res.json({
+        fileUrl: uploadResult.url,
+        fileName: file.originalname,
+        fileSize: file.size,
+        mimeType: file.mimetype,
+      });
+    } catch (error) {
+      console.error("Error uploading document file:", error);
+      res.status(500).json({ message: "Failed to upload file" });
+    }
+  });
+
   // Consumer portal enhanced routes
   // Get tenant settings for consumer (public settings only)
   app.get('/api/consumer/tenant-settings', authenticateConsumer, async (req: any, res) => {

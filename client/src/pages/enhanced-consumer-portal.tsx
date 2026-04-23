@@ -471,7 +471,7 @@ export default function EnhancedConsumerPortal() {
       {/* Main Content */}
       <div className="max-w-4xl mx-auto px-4 py-6">
         <Tabs defaultValue="accounts" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className={`grid w-full ${tenantSettings?.showPaymentPlans !== false ? 'grid-cols-4' : 'grid-cols-3'}`}>
             <TabsTrigger value="accounts" className="flex items-center">
               <CreditCard className="h-4 w-4 mr-2" />
               Accounts
@@ -485,10 +485,12 @@ export default function EnhancedConsumerPortal() {
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="payments" className="flex items-center">
-              <CreditCard className="h-4 w-4 mr-2" />
-              Payment Plans
-            </TabsTrigger>
+            {tenantSettings?.showPaymentPlans !== false && (
+              <TabsTrigger value="payments" className="flex items-center">
+                <CreditCard className="h-4 w-4 mr-2" />
+                Payment Plans
+              </TabsTrigger>
+            )}
             <TabsTrigger value="documents" className="flex items-center">
               <FileText className="h-4 w-4 mr-2" />
               Documents
@@ -669,10 +671,12 @@ export default function EnhancedConsumerPortal() {
 
             {(() => {
               const templateOptions = Array.isArray(arrangements) ? arrangements : (arrangements as any)?.templateOptions || [];
-              const settlementOptions = templateOptions.filter((arr: any) => arr.planType === 'settlement');
+              const allowSettlements = tenantSettings?.allowSettlementRequests !== false;
+              const settlementOptions = allowSettlements ? templateOptions.filter((arr: any) => arr.planType === 'settlement') : [];
               const regularOptions = templateOptions.filter((arr: any) => arr.planType !== 'settlement');
 
-              if (templateOptions.length === 0 && (!consumerManualPayments || (consumerManualPayments as any[]).length === 0)) {
+              const visibleOptionsCount = settlementOptions.length + regularOptions.length;
+              if (visibleOptionsCount === 0 && (!consumerManualPayments || (consumerManualPayments as any[]).length === 0)) {
                 return (
                   <Card>
                     <CardContent className="pt-6 text-center">
@@ -784,10 +788,15 @@ export default function EnhancedConsumerPortal() {
                                       )}
                                       <p className="font-medium text-emerald-700">{summary.headline}</p>
                                       {summary.detail && <p className="text-sm text-gray-500">{summary.detail}</p>}
+                                      {arrangement.settlementOfferExpiresDate && (
+                                        <p className="text-sm text-amber-600 font-medium">
+                                          Expires: {new Date(arrangement.settlementOfferExpiresDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                                        </p>
+                                      )}
                                       <div className="flex justify-between text-sm">
                                         <span className="text-gray-600">Eligible Balance Range:</span>
                                         <span className="font-medium">
-                                          {formatCurrencyFromCents(arrangement.minBalance)} - {formatCurrencyFromCents(arrangement.maxBalance)}
+                                          {formatCurrencyFromCents(arrangement.minBalance)}{arrangement.maxBalance != null ? ` - ${formatCurrencyFromCents(arrangement.maxBalance)}` : '+'}
                                         </span>
                                       </div>
                                     </div>
@@ -838,7 +847,7 @@ export default function EnhancedConsumerPortal() {
                                       <div className="flex justify-between text-sm">
                                         <span className="text-gray-600">Eligible Balance Range:</span>
                                         <span className="font-medium">
-                                          {formatCurrencyFromCents(arrangement.minBalance)} - {formatCurrencyFromCents(arrangement.maxBalance)}
+                                          {formatCurrencyFromCents(arrangement.minBalance)}{arrangement.maxBalance != null ? ` - ${formatCurrencyFromCents(arrangement.maxBalance)}` : '+'}
                                         </span>
                                       </div>
                                     </div>
@@ -846,7 +855,13 @@ export default function EnhancedConsumerPortal() {
                                 })()}
                               </div>
                               <div className="ml-6">
-                                <Button onClick={() => setShowCallbackModal(true)}>
+                                <Button onClick={() => {
+                                  setCallbackForm(prev => ({
+                                    ...prev,
+                                    subject: `Payment Plan Request: ${arrangement.name}`,
+                                  }));
+                                  setShowCallbackModal(true);
+                                }}>
                                   Request This Plan
                                 </Button>
                               </div>
