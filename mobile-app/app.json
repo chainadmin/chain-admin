@@ -10,7 +10,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.chainsoftware.platform",
-      "buildNumber": "5",
+      "buildNumber": "6",
       "newArchEnabled": false,
       "infoPlist": {
         "NSFaceIDUsageDescription": "Use Face ID to quickly and securely log in to your account",
@@ -19,7 +19,7 @@
     },
     "android": {
       "newArchEnabled": false,
-      "versionCode": 5,
+      "versionCode": 6,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
