@@ -1364,6 +1364,17 @@ function checkRegistrationRateLimit(ip: string): boolean {
 
 const AI_RESPONSE_OVERAGE_RATE = 0.08; // $0.08 per additional AI response
 
+// Module-level helper for safely interpolating untrusted strings into HTML email bodies
+function escapeHtml(unsafe: any): string {
+  if (unsafe == null) return '';
+  return String(unsafe)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/v2', externalApiRouter);
   // Request/Response logger - log all incoming requests and outgoing responses for debugging
@@ -18341,7 +18352,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Get usage data for the completed period
           const stats = await storage.getBillingStats(subscription.tenantId);
           
-          // Create invoice for the completed period (with idempotency check)
+          // Create invoice for the completed period. We only roll the subscription
+          // forward if either the invoice was successfully created OR an invoice
+          // for this period already exists. Otherwise we leave the period alone so
+          // tomorrow's cron can retry (no silent skipped billing cycles).
+          let invoiceReady = false;
           if (stats) {
             try {
               // Check if invoice already exists for this period
@@ -18358,8 +18373,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
               
               if (existingInvoice.length > 0) {
                 console.log(`⏭️  Invoice already exists for tenant ${subscription.tenantId} (${existingInvoice[0].invoiceNumber}) - skipping creation`);
+                invoiceReady = true;
               } else {
                 const invoiceNumber = `INV-${subscription.tenantId.substring(0, 8)}-${Date.now()}`;
+                const dueDate = new Date();
+                dueDate.setDate(dueDate.getDate() + 15); // Due in 15 days
+
+                // Build itemized line items so the billing UI can show a breakdown
+                const lineItemsList: Array<{ description: string; amountCents: number; quantity?: number; unitLabel?: string }> = [];
+                lineItemsList.push({
+                  description: `${subscription.planId ? subscription.planId.charAt(0).toUpperCase() + subscription.planId.slice(1) : 'Base'} Plan`,
+                  amountCents: Math.round(stats.monthlyBase * 100),
+                });
+                if ((stats.addons as any)?.documentSigning) {
+                  lineItemsList.push({ description: 'Document Signing Add-on', amountCents: Math.round((stats.addons as any).documentSigningFee * 100) });
+                }
+                if ((stats.addons as any)?.aiAutoResponse) {
+                  lineItemsList.push({ description: 'AI Auto-Response Add-on', amountCents: Math.round((stats.addons as any).aiAutoResponseFee * 100) });
+                }
+                if ((stats.emailUsage as any)?.overage > 0) {
+                  lineItemsList.push({ description: 'Email Overage', amountCents: Math.round((stats.emailUsage as any).overageCharge * 100), quantity: (stats.emailUsage as any).overage, unitLabel: 'emails' });
+                }
+                if ((stats.smsUsage as any)?.overage > 0) {
+                  lineItemsList.push({ description: 'SMS Overage', amountCents: Math.round((stats.smsUsage as any).overageCharge * 100), quantity: (stats.smsUsage as any).overage, unitLabel: 'segments' });
+                }
+                if ((stats.aiAutoResponseUsage as any)?.overage > 0) {
+                  lineItemsList.push({ description: 'AI Response Overage', amountCents: Math.round((stats.aiAutoResponseUsage as any).overageCharge * 100), quantity: (stats.aiAutoResponseUsage as any).overage, unitLabel: 'responses' });
+                }
+
                 const [invoice] = await db.insert(invoices).values({
                   tenantId: subscription.tenantId,
                   subscriptionId: subscription.id,
@@ -18367,41 +18408,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   periodStart: subscription.currentPeriodStart,
                   periodEnd: subscription.currentPeriodEnd,
                   status: 'pending',
-                  baseAmountCents: Math.round((stats.monthlyBase + stats.addonFees) * 100),
+                  baseAmountCents: Math.round(stats.monthlyBase * 100),
                   perConsumerCents: 0,
                   consumerCount: stats.activeConsumers,
                   totalAmountCents: Math.round(stats.totalBill * 100),
-                  dueDate: periodEnd,
+                  dueDate,
                   paidAt: null,
+                  lineItems: lineItemsList,
                 }).returning();
                 invoicesCreated++;
+                invoiceReady = true;
                 console.log(`✅ Invoice created for tenant ${subscription.tenantId}: $${stats.totalBill} (${invoiceNumber})`);
                 
-                // Send invoice email to company
+                // Send invoice email to company (failure here does not block the period rollover)
                 try {
                   const tenant = await storage.getTenant(subscription.tenantId);
                   if (tenant?.email) {
                     const periodStartStr = new Date(subscription.currentPeriodStart).toLocaleDateString();
                     const periodEndStr = new Date(subscription.currentPeriodEnd).toLocaleDateString();
-                    const dueDate = periodEnd.toLocaleDateString();
-                    
+                    const dueDateStr = dueDate.toLocaleDateString();
+                    const safeName = escapeHtml(tenant.name || 'Customer');
+
                     const emailHtml = `
                       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                         <h2>Monthly Invoice</h2>
-                        <p>Dear ${tenant.name},</p>
+                        <p>Dear ${safeName},</p>
                         <p>Your monthly invoice for Chain platform services is now available.</p>
                         
                         <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
                           <h3 style="margin-top: 0;">Invoice #${invoiceNumber}</h3>
                           <p><strong>Billing Period:</strong> ${periodStartStr} - ${periodEndStr}</p>
-                          <p><strong>Due Date:</strong> ${dueDate}</p>
+                          <p><strong>Due Date:</strong> ${dueDateStr}</p>
                           <hr style="border: 0; border-top: 1px solid #ddd; margin: 15px 0;">
                           <p><strong>Monthly Base Fee:</strong> $${stats.monthlyBase.toFixed(2)}</p>
                           ${stats.addonFees > 0 ? `<p><strong>Add-on Fees:</strong> $${stats.addonFees.toFixed(2)}</p>` : ''}
                           ${stats.addons.documentSigning ? `<p style="margin-left: 20px;">• Document Signing: $${stats.addons.documentSigningFee.toFixed(2)}</p>` : ''}
+                          ${stats.addons.aiAutoResponse ? `<p style="margin-left: 20px;">• AI Auto-Response: $${stats.addons.aiAutoResponseFee.toFixed(2)}</p>` : ''}
                           ${stats.usageCharges > 0 ? `<p><strong>Usage Overage Charges:</strong> $${stats.usageCharges.toFixed(2)}</p>` : ''}
                           ${stats.emailUsage.overage > 0 ? `<p style="margin-left: 20px;">• Email Overage: ${stats.emailUsage.overage} emails @ $${stats.emailUsage.overageCharge.toFixed(2)}</p>` : ''}
                           ${stats.smsUsage.overage > 0 ? `<p style="margin-left: 20px;">• SMS Overage: ${stats.smsUsage.overage} segments @ $${stats.smsUsage.overageCharge.toFixed(2)}</p>` : ''}
+                          ${stats.aiAutoResponseUsage.overage > 0 ? `<p style="margin-left: 20px;">• AI Response Overage: ${stats.aiAutoResponseUsage.overage} responses @ $${stats.aiAutoResponseUsage.overageCharge.toFixed(2)}</p>` : ''}
                           <hr style="border: 0; border-top: 2px solid #333; margin: 15px 0;">
                           <p style="font-size: 18px;"><strong>Total Due:</strong> $${stats.totalBill.toFixed(2)}</p>
                         </div>
@@ -18413,11 +18459,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     
                     await emailService.sendEmail({
                       to: tenant.email,
-                      subject: `Chain Invoice ${invoiceNumber} - $${stats.totalBill.toFixed(2)} Due ${dueDate}`,
+                      subject: `Chain Invoice ${invoiceNumber} - $${stats.totalBill.toFixed(2)} Due ${dueDateStr}`,
                       html: emailHtml,
                       tenantId: subscription.tenantId,
                     });
                     console.log(`📧 Invoice email sent to ${tenant.email}`);
+                  } else {
+                    console.log(`⚠️  No email on file for tenant ${subscription.tenantId} - invoice created but email not sent`);
                   }
                 } catch (emailError) {
                   console.error(`❌ Failed to send invoice email for tenant ${subscription.tenantId}:`, emailError);
@@ -18428,6 +18476,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           }
           
+          if (!invoiceReady) {
+            console.log(`⏸️  Skipping period rollover for tenant ${subscription.tenantId} - invoice was not created (will retry tomorrow)`);
+            continue;
+          }
+
           // Update subscription to next period and reset usage
           await db.update(subscriptions)
             .set({
@@ -18546,10 +18599,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const periodEndStr = new Date(subscription.currentPeriodEnd).toLocaleDateString();
           const dueDateStr = dueDate.toLocaleDateString();
           
+          const safeName = escapeHtml(tenant.name || 'Customer');
           const emailHtml = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <h2 style="color: #1e40af;">Monthly Invoice</h2>
-              <p>Dear ${tenant.name},</p>
+              <p>Dear ${safeName},</p>
               <p>Your monthly invoice for Chain platform services is now available.</p>
               
               <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
