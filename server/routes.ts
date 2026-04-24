@@ -1600,6 +1600,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get consumer's accounts
       let accountsList = await storage.getAccountsByConsumer(consumer.id);
 
+      // SELF-HEAL: If this consumer has no accounts but a duplicate consumer record
+      // exists in the same tenant (same email/phone/name) that DOES have accounts,
+      // re-link those accounts to the registered consumer so the dashboard isn't blank.
+      if (accountsList.length === 0 && consumer.tenantId) {
+        try {
+          const tenantConsumers = await storage.getConsumersByTenant(consumer.tenantId);
+          const normalizedEmail = (consumer.email || '').trim().toLowerCase();
+          const normalizedPhone = (consumer.phone || '').replace(/\D/g, '').slice(-10);
+          const normalizedFirst = (consumer.firstName || '').trim().toLowerCase();
+          const normalizedLast = (consumer.lastName || '').trim().toLowerCase();
+
+          const duplicates = tenantConsumers.filter((other) => {
+            if (other.id === consumer.id) return false;
+            const otherEmail = (other.email || '').trim().toLowerCase();
+            const otherPhone = (other.phone || '').replace(/\D/g, '').slice(-10);
+            const otherFirst = (other.firstName || '').trim().toLowerCase();
+            const otherLast = (other.lastName || '').trim().toLowerCase();
+
+            const emailMatch = !!normalizedEmail && otherEmail === normalizedEmail;
+            const phoneMatch = !!normalizedPhone && normalizedPhone.length >= 10 && otherPhone === normalizedPhone;
+            const nameMatch = !!normalizedFirst && !!normalizedLast &&
+              otherFirst === normalizedFirst && otherLast === normalizedLast;
+
+            return emailMatch || phoneMatch || nameMatch;
+          });
+
+          if (duplicates.length > 0) {
+            const duplicateIds = duplicates.map((d) => d.id);
+            console.log(`🔗 Self-heal: consumer ${consumer.id} (email ${consumer.email}) has no accounts but ${duplicates.length} duplicate consumer record(s) found in tenant. Re-linking accounts from:`, duplicateIds);
+
+            for (const dup of duplicates) {
+              const dupAccounts = await storage.getAccountsByConsumer(dup.id);
+              for (const acc of dupAccounts) {
+                try {
+                  await storage.updateAccount(acc.id, { consumerId: consumer.id });
+                  console.log(`  ✓ Re-linked account ${acc.accountNumber || acc.id} from consumer ${dup.id} → ${consumer.id}`);
+                } catch (relinkErr) {
+                  console.error(`  ✗ Failed to re-link account ${acc.id}:`, relinkErr);
+                }
+              }
+            }
+
+            // Re-fetch accounts after self-heal
+            accountsList = await storage.getAccountsByConsumer(consumer.id);
+            console.log(`✅ Self-heal complete: consumer ${consumer.id} now has ${accountsList.length} accounts`);
+          }
+        } catch (selfHealError) {
+          console.error('⚠️ Self-heal accounts re-link failed (non-blocking):', selfHealError);
+        }
+      }
+
       // Get tenant info for display
       const tenant = tenantId
         ? await storage.getTenant(tenantId)
@@ -6462,10 +6513,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Name, email, date of birth, and address are required" });
       }
 
-      // First, check if consumer already exists in any agency
+      // First, check if consumer already exists. Prefer a tenant-scoped lookup so we
+      // don't accidentally pick a record from another agency when the consumer is
+      // registering for a specific tenant (which would orphan their accounts).
       console.log("Checking for existing consumer with email:", email);
-      let existingConsumer = await storage.getConsumerByEmail(email);
-      console.log("Existing consumer found by email:", !!existingConsumer);
+      let existingConsumer = undefined as Awaited<ReturnType<typeof storage.getConsumerByEmail>>;
+      if (tenantSlug) {
+        existingConsumer = await storage.getConsumerByEmailAndTenant(email, tenantSlug);
+        console.log("Existing consumer found by email+tenant:", !!existingConsumer);
+      }
+      if (!existingConsumer) {
+        existingConsumer = await storage.getConsumerByEmail(email);
+        console.log("Existing consumer found by email (any tenant):", !!existingConsumer);
+      }
 
       // Fallback: if not found by email, try matching by name + DOB + tenant (same person, different email)
       if (!existingConsumer && firstName && lastName && dateOfBirth) {
@@ -9696,14 +9756,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
             results.updated++;
           } else {
             // Create new consumer and account
-            // First check if consumer exists
-            let consumer = null;
-            if (dmpAccount.consumerEmail || dmpAccount.consumerPhone) {
-              const consumers = await storage.getConsumersByTenant(tenantId);
-              consumer = consumers.find(c => 
-                (dmpAccount.consumerEmail && c.email === dmpAccount.consumerEmail) ||
-                (dmpAccount.consumerPhone && c.phone === dmpAccount.consumerPhone)
-              );
+            // First check if consumer exists (case-insensitive email match, then name+phone fallback)
+            let consumer: any = null;
+            if (dmpAccount.consumerEmail) {
+              consumer = await storage.getConsumerByEmailAndTenant(dmpAccount.consumerEmail, tenantId) || null;
+            }
+            if (!consumer && dmpAccount.consumerPhone) {
+              consumer = await storage.getConsumerByPhoneAndTenant(dmpAccount.consumerPhone, tenantId) || null;
+            }
+            if (!consumer && dmpAccount.firstName && dmpAccount.lastName) {
+              const nameMatches = await storage.findConsumersByNameAndTenant(dmpAccount.firstName, dmpAccount.lastName, tenantId);
+              consumer = nameMatches[0] || null;
             }
 
             if (!consumer) {
@@ -15421,13 +15484,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       }
                       synced++;
                     } else if ((tenantSettings as any)?.dmpAutoImport && dmpAccount.filenumber) {
-                      let consumer = null;
-                      if (dmpAccount.consumerEmail || dmpAccount.consumerPhone) {
-                        const consumers = await storage.getConsumersByTenant(tenant.id);
-                        consumer = consumers.find((c: any) =>
-                          (dmpAccount.consumerEmail && c.email === dmpAccount.consumerEmail) ||
-                          (dmpAccount.consumerPhone && c.phone === dmpAccount.consumerPhone)
-                        );
+                      let consumer: any = null;
+                      if (dmpAccount.consumerEmail) {
+                        consumer = await storage.getConsumerByEmailAndTenant(dmpAccount.consumerEmail, tenant.id) || null;
+                      }
+                      if (!consumer && dmpAccount.consumerPhone) {
+                        consumer = await storage.getConsumerByPhoneAndTenant(dmpAccount.consumerPhone, tenant.id) || null;
+                      }
+                      if (!consumer && dmpAccount.firstName && dmpAccount.lastName) {
+                        const nameMatches = await storage.findConsumersByNameAndTenant(dmpAccount.firstName, dmpAccount.lastName, tenant.id);
+                        consumer = nameMatches[0] || null;
                       }
                       if (!consumer) {
                         consumer = await storage.createConsumer({

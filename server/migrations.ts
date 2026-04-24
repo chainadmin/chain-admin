@@ -1862,6 +1862,66 @@ export async function runMigrations() {
       console.log(`  ⚠ tenant_settings.dmp_auto_import (already exists or error): ${err.message}`);
     }
 
+    // Self-heal duplicate consumer records within the same tenant.
+    // Cause: legacy DMP integration paths that did strict-case email matching
+    // could create a second consumer row in the same tenant when an account
+    // was imported under a slightly different email casing than the registered
+    // consumer. This left the consumer's dashboard blank because login matched
+    // one consumer record while the accounts were attached to the other.
+    // Fix: re-link any orphaned accounts to the registered consumer (or the
+    // most recent consumer if none registered) and remove the empty duplicates.
+    console.log('Deduplicating consumer records within tenants...');
+    try {
+      const dupGroups = await client.query(`
+        SELECT
+          tenant_id,
+          LOWER(TRIM(email)) AS norm_email,
+          array_agg(id ORDER BY is_registered DESC NULLS LAST, created_at DESC) AS ids
+        FROM consumers
+        WHERE tenant_id IS NOT NULL
+          AND email IS NOT NULL
+          AND TRIM(email) <> ''
+        GROUP BY tenant_id, LOWER(TRIM(email))
+        HAVING COUNT(*) > 1
+      `);
+
+      let mergedConsumers = 0;
+      let relinkedAccounts = 0;
+      for (const row of dupGroups.rows) {
+        const ids: string[] = row.ids;
+        const primary = ids[0];
+        const dups = ids.slice(1);
+        for (const dupId of dups) {
+          const upd = await client.query(
+            `UPDATE accounts SET consumer_id = $1 WHERE consumer_id = $2`,
+            [primary, dupId]
+          );
+          relinkedAccounts += upd.rowCount || 0;
+          await client.query(`DELETE FROM consumers WHERE id = $1`, [dupId]);
+          mergedConsumers++;
+        }
+      }
+      if (mergedConsumers > 0 || relinkedAccounts > 0) {
+        console.log(`  ✓ Merged ${mergedConsumers} duplicate consumer records, re-linked ${relinkedAccounts} accounts`);
+      } else {
+        console.log('  ✓ No duplicate consumer records found');
+      }
+    } catch (err: any) {
+      console.log(`  ⚠ Consumer dedup skipped (non-fatal): ${err.message}`);
+    }
+
+    // Add a partial unique index so duplicates can never be created again.
+    try {
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS consumers_tenant_email_unique_idx
+        ON consumers (tenant_id, LOWER(TRIM(email)))
+        WHERE email IS NOT NULL AND TRIM(email) <> '' AND tenant_id IS NOT NULL
+      `);
+      console.log('  ✓ consumers (tenant_id, lower(trim(email))) unique index');
+    } catch (err: any) {
+      console.log(`  ⚠ consumers unique index (already exists or duplicates remain): ${err.message}`);
+    }
+
     console.log('✅ Database migrations completed successfully');
   } catch (error: any) {
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
