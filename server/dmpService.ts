@@ -291,6 +291,23 @@ class DebtManagerProService {
     });
   }
 
+  // Search DMP for accounts matching the given email (case-insensitive).
+  // Returns null if DMP is not enabled for the tenant. Uses the existing
+  // getAccounts() helper so we benefit from its portfolio iteration logic.
+  async searchByEmail(tenantId: string, email: string): Promise<any[] | null> {
+    const config = await this.getDmpConfig(tenantId);
+    if (!config) return null;
+
+    const normalizedEmail = (email || '').trim().toLowerCase();
+    if (!normalizedEmail) return [];
+
+    const allAccounts = await this.getAccounts(tenantId);
+    return allAccounts.filter(acc => {
+      const accEmail = (acc.consumerEmail || '').trim().toLowerCase();
+      return accEmail === normalizedEmail;
+    });
+  }
+
   async getPhones(tenantId: string, filenumber: string): Promise<any[] | null> {
     const config = await this.getDmpConfig(tenantId);
     if (!config) return null;
@@ -580,6 +597,7 @@ class DebtManagerProService {
         accountNumber: acc.accountnumber || acc.filenumber,
         firstName: acc.debtor_firstname,
         lastName: acc.debtor_lastname,
+        dateOfBirth: acc.debtor_dob,
         address: acc.debtor_address,
         city: acc.debtor_city,
         state: acc.debtor_state,
@@ -607,6 +625,7 @@ class DebtManagerProService {
           accountNumber: acc.accountnumber || acc.filenumber,
           firstName: acc.debtor_firstname,
           lastName: acc.debtor_lastname,
+          dateOfBirth: acc.debtor_dob,
           address: acc.debtor_address,
           city: acc.debtor_city,
           state: acc.debtor_state,

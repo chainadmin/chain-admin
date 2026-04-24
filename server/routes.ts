@@ -1210,6 +1210,87 @@ function datesMatch(provided: string, stored?: string | null): boolean {
   return Boolean(digitsProvided && digitsStored && digitsProvided === digitsStored);
 }
 
+// Lazy-fetch a consumer's accounts from DMP when Chain has no local record yet.
+// Only runs when DMP is enabled for the tenant. Matches by email + DOB to prevent
+// pulling the wrong person's accounts. Uses canonical findOrCreateConsumer /
+// findOrCreateAccount helpers so created records flow through the standard
+// dedup logic and unique constraints. Returns the local consumer (or null).
+async function lazyImportConsumerFromDmp(
+  tenantId: string,
+  email: string,
+  dateOfBirth: string,
+  options?: { firstName?: string; lastName?: string; isRegistered?: boolean; folderId?: string | null }
+): Promise<{ consumer: any; accountsCreated: number } | null> {
+  if (!tenantId || !email || !dateOfBirth) return null;
+
+  // Verify DMP is enabled for this tenant before doing anything
+  const settings = await storage.getTenantSettings(tenantId);
+  if (!(settings as any)?.dmpEnabled) return null;
+
+  const normalizedRequestedDob = normalizeDateString(dateOfBirth);
+  if (!normalizedRequestedDob) return null;
+
+  try {
+    const { dmpService } = await import('./dmpService');
+    const dmpAccounts = await dmpService.searchByEmail(tenantId, email);
+    if (!dmpAccounts || dmpAccounts.length === 0) return null;
+
+    // Filter DMP results: only those whose DOB matches the requested DOB.
+    // Use the tolerant datesMatch helper so varied formats and digit-only
+    // fallbacks are handled consistently across DMP / Chain DOB strings.
+    const matched = dmpAccounts.filter((acc: any) => {
+      return acc.dateOfBirth && datesMatch(dateOfBirth, acc.dateOfBirth);
+    });
+
+    if (matched.length === 0) {
+      console.log(`[DMP Lazy Import] Found ${dmpAccounts.length} DMP accounts for email ${email} but DOB did not match - skipping`);
+      return null;
+    }
+
+    // Take consumer info from the first matching account
+    const primary = matched[0];
+    const consumer = await storage.findOrCreateConsumer({
+      tenantId,
+      firstName: options?.firstName || primary.firstName || 'Unknown',
+      lastName: options?.lastName || primary.lastName || 'Consumer',
+      email,
+      dateOfBirth: normalizedRequestedDob,
+      phone: primary.consumerPhone || null,
+      address: primary.address || null,
+      city: primary.city || null,
+      state: primary.state || null,
+      zipCode: primary.zipCode || null,
+      isRegistered: options?.isRegistered ?? false,
+      folderId: options?.folderId ?? null,
+    } as any);
+
+    let accountsCreated = 0;
+    for (const acc of matched) {
+      try {
+        await storage.findOrCreateAccount({
+          tenantId,
+          consumerId: consumer.id,
+          accountNumber: acc.accountNumber || acc.filenumber || null,
+          filenumber: acc.filenumber,
+          balanceCents: acc.balance || 0,
+          creditor: acc.creditorName || 'Unknown Creditor',
+          status: acc.status || 'active',
+          folderId: options?.folderId ?? null,
+        } as any);
+        accountsCreated++;
+      } catch (acctErr) {
+        console.error(`[DMP Lazy Import] Failed to create account ${acc.filenumber}:`, acctErr);
+      }
+    }
+
+    console.log(`[DMP Lazy Import] Created/linked consumer ${consumer.id} with ${accountsCreated} account(s) from DMP for ${email}`);
+    return { consumer, accountsCreated };
+  } catch (err) {
+    console.error('[DMP Lazy Import] Failed (non-blocking):', err);
+    return null;
+  }
+}
+
 // Helper function to get tenantId from JWT auth
 async function getTenantId(req: any, storage: IStorage): Promise<string | null> {
   // JWT auth - tenantId is directly in the token
@@ -1648,6 +1729,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         } catch (selfHealError) {
           console.error('⚠️ Self-heal accounts re-link failed (non-blocking):', selfHealError);
+        }
+      }
+
+      // LAZY DMP IMPORT: If consumer still has no accounts and DMP is enabled
+      // for this tenant, query DMP by email + DOB and create local records.
+      // Gated by dmpEnabled inside lazyImportConsumerFromDmp - safe no-op for
+      // tenants without DMP. Allows consumers to access accounts that exist in
+      // DMP without requiring a CSV import.
+      if (accountsList.length === 0 && consumer.tenantId && consumer.dateOfBirth) {
+        try {
+          const lazyResult = await lazyImportConsumerFromDmp(
+            consumer.tenantId,
+            consumer.email || tokenEmail,
+            consumer.dateOfBirth,
+            { firstName: consumer.firstName || undefined, lastName: consumer.lastName || undefined, isRegistered: !!consumer.isRegistered }
+          );
+          if (lazyResult && lazyResult.consumer) {
+            // findOrCreateConsumer matches by tenant+email and may resolve to
+            // a different existing consumer record than the logged-in one
+            // (e.g., legacy duplicate). If so, re-link any newly created
+            // accounts to the logged-in consumer so the dashboard reflects
+            // them in this same response.
+            if (lazyResult.consumer.id !== consumer.id) {
+              const newAccounts = await storage.getAccountsByConsumer(lazyResult.consumer.id);
+              for (const acc of newAccounts) {
+                try {
+                  await storage.updateAccount(acc.id, { consumerId: consumer.id });
+                } catch (relinkErr) {
+                  console.error(`⚠️ DMP lazy-import account re-link failed for ${acc.id}:`, relinkErr);
+                }
+              }
+              console.log(`🔗 DMP lazy-import re-linked ${newAccounts.length} account(s) from consumer ${lazyResult.consumer.id} → ${consumer.id}`);
+            }
+            accountsList = await storage.getAccountsByConsumer(consumer.id);
+            console.log(`✅ DMP lazy import complete: consumer ${consumer.id} now has ${accountsList.length} accounts`);
+          }
+        } catch (lazyErr) {
+          console.error('⚠️ DMP lazy import failed (non-blocking):', lazyErr);
         }
       }
 
@@ -6741,35 +6860,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.ensureDefaultFolders(tenantId);
       const portalFolder = await storage.getPortalRegistrationsFolder(tenantId);
       console.log(`📁 Portal Registrations folder found:`, portalFolder ? `ID: ${portalFolder.id}` : 'NOT FOUND');
-      
-      // Build the consumer object with required fields
-      const consumerData: any = {
-        firstName,
-        lastName,
+
+      // LAZY DMP IMPORT: If DMP is enabled for this tenant, check whether DMP
+      // already has accounts for this person (matched by email + DOB). If so,
+      // create the local consumer + accounts from DMP data and skip the
+      // generic createConsumer call below. Gated by dmpEnabled inside helper -
+      // safe no-op for tenants without DMP. This lets agencies on DMP onboard
+      // consumers without first importing a CSV.
+      const lazyDmpResult = await lazyImportConsumerFromDmp(
+        tenantId,
         email,
         dateOfBirth,
-        address,
-        city,
-        state,
-        zipCode,
-        isRegistered: true,
-        tenantId, // Always include tenantId since it's now required
-        folderId: portalFolder?.id || null // Assign to Portal Registrations folder
-      };
-      
-      // Only add optional fields if they're supported
-      // Don't add tenantId if it's null (let database handle the default)
-      // Only add registrationDate if the field exists in the schema
-      try {
-        consumerData.registrationDate = new Date();
-      } catch (e) {
-        // Field might not exist in production yet
-        console.log("Note: registrationDate field not available");
+        { firstName, lastName, isRegistered: true, folderId: portalFolder?.id || null }
+      );
+
+      let newConsumer;
+      if (lazyDmpResult && lazyDmpResult.consumer) {
+        // Update the consumer with the registration address fields (DMP may
+        // have stale or missing data) and ensure isRegistered is true.
+        newConsumer = await storage.updateConsumer(lazyDmpResult.consumer.id, {
+          firstName,
+          lastName,
+          address,
+          city,
+          state,
+          zipCode,
+          isRegistered: true,
+          ...(portalFolder?.id ? { folderId: portalFolder.id } : {}),
+        });
+        console.log(`✅ Registration linked to DMP-imported consumer ${newConsumer.id} with ${lazyDmpResult.accountsCreated} account(s)`);
+      } else {
+        // Build the consumer object with required fields
+        const consumerData: any = {
+          firstName,
+          lastName,
+          email,
+          dateOfBirth,
+          address,
+          city,
+          state,
+          zipCode,
+          isRegistered: true,
+          tenantId, // Always include tenantId since it's now required
+          folderId: portalFolder?.id || null // Assign to Portal Registrations folder
+        };
+
+        // Only add optional fields if they're supported
+        // Don't add tenantId if it's null (let database handle the default)
+        // Only add registrationDate if the field exists in the schema
+        try {
+          consumerData.registrationDate = new Date();
+        } catch (e) {
+          // Field might not exist in production yet
+          console.log("Note: registrationDate field not available");
+        }
+
+        console.log("Creating new consumer with data:", JSON.stringify(consumerData));
+        newConsumer = await storage.createConsumer(consumerData);
+        console.log("New consumer created successfully:", newConsumer.id);
       }
-      
-      console.log("Creating new consumer with data:", JSON.stringify(consumerData));
-      const newConsumer = await storage.createConsumer(consumerData);
-      console.log("New consumer created successfully:", newConsumer.id);
 
       // Move all consumer's accounts to the Portal Registrations folder
       if (portalFolder) {
