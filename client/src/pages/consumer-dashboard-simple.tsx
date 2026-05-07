@@ -2427,7 +2427,7 @@ export default function ConsumerDashboardSimple() {
                                     data-testid={`option-plan-${arrangement.id}`}
                                   >
                                     <div className="flex items-center justify-between">
-                                      <p className="font-medium text-white">Arrangement Options</p>
+                                      <p className="font-medium text-white">{arrangement.name || 'Payment Plan'}</p>
                                       {isSelected && (
                                         <Badge className="bg-blue-500 text-white border-blue-400/30">Selected</Badge>
                                       )}

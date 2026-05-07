@@ -634,7 +634,7 @@ export default function EnhancedConsumerPortal() {
           <TabsContent value="payments" className="mt-6">
             {consumerManualPayments && (consumerManualPayments as any[]).length > 0 && (
               <div className="space-y-4 mb-6">
-                <h3 className="text-lg font-semibold text-gray-900">Payment History</h3>
+                <h3 className="text-lg font-semibold text-gray-900">Scheduled Payments</h3>
                 <Card className="border-blue-200 bg-blue-50/50">
                   <CardContent className="pt-6">
                     <div className="space-y-2">
