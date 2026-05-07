@@ -86,11 +86,21 @@ export default function DashboardScreen() {
         </View>
 
         {walletQ.data ? (
-          <Card style={{ borderColor: colors.primary + '55' }}>
-            <Small>Wallet balance</Small>
-            <H1 style={{ marginTop: 4, color: colors.primary }}>
-              {formatCurrency(walletQ.data.balanceCents)}
-            </H1>
+          <Card style={{
+            borderColor: walletQ.data.lowBalance ? colors.warning : colors.primary + '55',
+            borderWidth: walletQ.data.lowBalance ? 2 : 1,
+          }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <View>
+                <Small>Wallet balance</Small>
+                <H1 style={{ marginTop: 4, color: walletQ.data.lowBalance ? colors.warning : colors.primary }}>
+                  {formatCurrency(walletQ.data.balanceCents)}
+                </H1>
+              </View>
+              {walletQ.data.lowBalance ? (
+                <Muted style={{ color: colors.warning, fontWeight: '600' }}>Low — top up soon</Muted>
+              ) : null}
+            </View>
           </Card>
         ) : null}
 

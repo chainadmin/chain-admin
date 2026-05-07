@@ -4,12 +4,25 @@ import { Button, Field, H1, Muted, Screen, Small } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
 import { extractErrorMessage } from '@/navigation/types';
 import { colors, spacing } from '@/theme/colors';
+import SignupChooserScreen from './SignupChooserScreen';
 
 export default function LoginScreen() {
   const { login } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showSignup, setShowSignup] = useState(false);
+
+  if (showSignup) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.bg }}>
+        <SignupChooserScreen />
+        <View style={{ padding: spacing.lg }}>
+          <Button title="Back to sign in" variant="ghost" fullWidth onPress={() => setShowSignup(false)} />
+        </View>
+      </View>
+    );
+  }
 
   const onSubmit = async () => {
     if (!username || !password) {
@@ -65,6 +78,19 @@ export default function LoginScreen() {
             <Small style={{ textAlign: 'center', marginTop: spacing.md }}>
               Use the same credentials as the Chain web admin.
             </Small>
+
+            <View style={{ marginTop: spacing.lg, gap: spacing.sm }}>
+              <Muted style={{ textAlign: 'center' }}>New to Chain?</Muted>
+              <Button
+                title="Create an account"
+                variant="ghost"
+                fullWidth
+                onPress={() => setShowSignup(true)}
+              />
+              <Small style={{ textAlign: 'center' }}>
+                You'll choose Pay-as-you-go (Wallet) or Subscription on the next screen.
+              </Small>
+            </View>
           </View>
         </Screen>
       </ScrollView>

@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Link } from "wouter";
 import AdminLayout from "@/components/admin-layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -61,6 +61,187 @@ const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 
 function formatCurrencyStatic(amount?: number | null) {
   if (amount === null || amount === undefined) return "$0.00";
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(amount);
+}
+
+function StripeWalletTopupForm({ amountCents, onSuccess }: { amountCents: number; onSuccess: () => void }) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const { toast } = useToast();
+  const [cardholderName, setCardholderName] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const handleTopup = async () => {
+    if (!stripe || !elements) return;
+    if (!amountCents || amountCents < 100) {
+      toast({ title: "Minimum top-up is $1.00", variant: "destructive" });
+      return;
+    }
+    if (!cardholderName.trim()) {
+      toast({ title: "Cardholder name is required", variant: "destructive" });
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      const intentRes = await apiRequest("POST", "/api/wallet/topup-request", { amountCents });
+      const { clientSecret, paymentIntentId } = await intentRes.json();
+      if (!clientSecret) throw new Error("Top-up could not be initialized (Stripe not configured)");
+
+      const cardElement = elements.getElement(CardElement);
+      const { error, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
+        payment_method: { card: cardElement!, billing_details: { name: cardholderName } },
+      });
+      if (error) {
+        toast({ title: "Top-up failed", description: error.message, variant: "destructive" });
+        return;
+      }
+      // Server-side verify + credit
+      await apiRequest("POST", "/api/wallet/topup", {
+        amountCents,
+        paymentIntentId: paymentIntent?.id || paymentIntentId,
+      });
+      toast({ title: "Wallet topped up", description: `$${(amountCents / 100).toFixed(2)} added to your wallet.` });
+      onSuccess();
+    } catch (err: any) {
+      toast({ title: "Top-up error", description: err?.message || "Please try again.", variant: "destructive" });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <Label className="text-sm text-blue-100/80">Cardholder name</Label>
+        <Input
+          value={cardholderName}
+          onChange={(e) => setCardholderName(e.target.value)}
+          placeholder="Jane Doe"
+          className="mt-1 border-white/20 bg-white/10 text-white"
+          data-testid="input-wallet-topup-name"
+        />
+      </div>
+      <div>
+        <Label className="text-sm text-blue-100/80">Card details</Label>
+        <div className="mt-1 rounded-xl border border-white/20 bg-white/10 px-4 py-3">
+          <CardElement options={{ style: { base: { fontSize: "16px", color: "#e0f2fe", "::placeholder": { color: "#7dd3fc80" } }, invalid: { color: "#f87171" } } }} />
+        </div>
+      </div>
+      <Button
+        onClick={handleTopup}
+        disabled={isProcessing || !stripe || amountCents < 100}
+        className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white"
+        data-testid="button-wallet-topup-confirm"
+      >
+        {isProcessing ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Processing…</> : <>Add ${(amountCents / 100).toFixed(2)} to wallet</>}
+      </Button>
+      <p className="text-xs text-blue-100/60 flex items-center gap-1"><Lock className="h-3 w-3" /> Card secured by Stripe — never stored on our servers.</p>
+    </div>
+  );
+}
+
+function WalletAutoReloadCard() {
+  const { toast } = useToast();
+  const { data, refetch } = useQuery<{
+    enabled: boolean;
+    thresholdCents: number;
+    amountCents: number;
+    hasPaymentMethod: boolean;
+    lowBalanceThresholdCents: number;
+  }>({ queryKey: ["/api/wallet/auto-reload"] });
+
+  const [enabled, setEnabled] = useState<boolean>(false);
+  const [thresholdDollars, setThresholdDollars] = useState<string>("10");
+  const [amountDollars, setAmountDollars] = useState<string>("25");
+
+  useEffect(() => {
+    if (!data) return;
+    setEnabled(!!data.enabled);
+    setThresholdDollars(((data.thresholdCents ?? 500) / 100).toFixed(2));
+    setAmountDollars(((data.amountCents ?? 2500) / 100).toFixed(2));
+  }, [data]);
+
+  const saveMut = useMutation({
+    mutationFn: async () => {
+      const body: any = {
+        enabled,
+        thresholdCents: Math.max(100, Math.round(parseFloat(thresholdDollars || "0") * 100)),
+        amountCents: Math.max(100, Math.round(parseFloat(amountDollars || "0") * 100)),
+      };
+      const res = await apiRequest("POST", "/api/wallet/auto-reload", body);
+      return await res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Auto-reload settings saved" });
+      refetch();
+    },
+    onError: (e: any) => toast({
+      title: "Could not save auto-reload",
+      description: e?.message || "Add a saved card via top-up first.",
+      variant: "destructive",
+    }),
+  });
+
+  return (
+    <div className="rounded-2xl bg-white/5 p-5 space-y-4" data-testid="card-wallet-auto-reload">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h4 className="text-white font-semibold">Auto-reload</h4>
+          <p className="text-sm text-blue-100/70 mt-1">
+            When your balance drops below the threshold, we'll automatically charge your saved card to top up.
+          </p>
+        </div>
+        <label className="flex items-center gap-2 text-sm text-white whitespace-nowrap">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(e) => setEnabled(e.target.checked)}
+            disabled={!data?.hasPaymentMethod}
+            data-testid="checkbox-auto-reload-enabled"
+          />
+          {enabled ? "Enabled" : "Disabled"}
+        </label>
+      </div>
+      {!data?.hasPaymentMethod ? (
+        <p className="text-xs text-amber-300">
+          Top up once with a card above to save a payment method, then return to enable auto-reload.
+        </p>
+      ) : null}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div>
+          <Label className="text-blue-100/80 text-sm">Trigger threshold (USD)</Label>
+          <Input
+            type="number"
+            min="1"
+            step="1"
+            value={thresholdDollars}
+            onChange={(e) => setThresholdDollars(e.target.value)}
+            className="mt-1 border-white/20 bg-white/10 text-white"
+            data-testid="input-auto-reload-threshold"
+          />
+        </div>
+        <div>
+          <Label className="text-blue-100/80 text-sm">Reload amount (USD)</Label>
+          <Input
+            type="number"
+            min="1"
+            step="1"
+            value={amountDollars}
+            onChange={(e) => setAmountDollars(e.target.value)}
+            className="mt-1 border-white/20 bg-white/10 text-white"
+            data-testid="input-auto-reload-amount"
+          />
+        </div>
+      </div>
+      <Button
+        onClick={() => saveMut.mutate()}
+        disabled={saveMut.isPending || (enabled && !data?.hasPaymentMethod)}
+        className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white"
+        data-testid="button-save-auto-reload"
+      >
+        {saveMut.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving…</> : "Save auto-reload settings"}
+      </Button>
+    </div>
+  );
 }
 
 function StripePayInvoiceForm({ totalBill, invoiceId, onSuccess }: { totalBill: number; invoiceId?: string; onSuccess: () => void }) {
@@ -265,6 +446,109 @@ export default function Billing() {
     queryKey: ["/api/service-activation-requests"],
   });
   const serviceRequests = (serviceRequestsData as any)?.requests || [];
+
+  // ---- Wallet + à la carte add-ons (Task #47) ----
+  const { data: tenantInfo } = useQuery<{ id: string; billingMode?: 'subscription' | 'wallet' }>({
+    queryKey: ["/api/auth/user"],
+  });
+  const billingMode: 'subscription' | 'wallet' = (tenantInfo as any)?.tenant?.billingMode || (tenantInfo as any)?.billingMode || 'subscription';
+  const isWalletMode = billingMode === 'wallet';
+
+  const { data: walletBalance, refetch: refetchWalletBalance } = useQuery<{
+    balanceCents: number;
+    balanceDollars: number;
+    lowBalance: boolean;
+    smsRateCents: number;
+    emailRateCents: number;
+    smsRateMicros: number;
+    emailRateMicros: number;
+    lowBalanceThresholdCents: number;
+  }>({
+    queryKey: ["/api/wallet/balance"],
+    enabled: isWalletMode,
+    retry: false,
+  });
+
+  const { data: walletLedgerData } = useQuery<{ entries: any[] }>({
+    queryKey: ["/api/wallet/ledger"],
+    enabled: isWalletMode,
+    retry: false,
+  });
+
+  const { data: addonCatalogData } = useQuery<{ addons: any[] }>({
+    queryKey: ["/api/addons"],
+  });
+  const { data: tenantAddonsData, refetch: refetchTenantAddons } = useQuery<{ tenantAddons: any[] }>({
+    queryKey: ["/api/tenant/addons"],
+  });
+
+  const [topupAmount, setTopupAmount] = useState<string>(() => {
+    if (typeof window === 'undefined') return "25";
+    const cents = parseInt(new URLSearchParams(window.location.search).get('walletTopup') || '', 10);
+    return Number.isFinite(cents) && cents >= 100 ? (cents / 100).toFixed(2) : "25";
+  });
+  const topupMutation = useMutation({
+    mutationFn: async (amountDollars: number) => {
+      // Owner-initiated top-up: records a request only. The wallet is credited
+      // by the platform once payment is verified (Stripe PaymentIntent) or by
+      // a platform admin via /api/wallet/topup with adminCredit=true.
+      return await apiRequest("POST", "/api/wallet/topup-request", {
+        amountCents: Math.round(amountDollars * 100),
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Top-up request received",
+        description: "Complete payment to credit your wallet. Your balance will update automatically.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet/balance"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet/ledger"] });
+      refetchWalletBalance();
+    },
+    onError: (err: any) => {
+      toast({ title: "Top-up failed", description: err?.message || "Please try again.", variant: "destructive" });
+    },
+  });
+
+  const billingModeMutation = useMutation({
+    mutationFn: async (mode: 'subscription' | 'wallet') => {
+      return await apiRequest("PATCH", "/api/tenant/billing-mode", { billingMode: mode });
+    },
+    onSuccess: () => {
+      toast({ title: "Billing mode updated" });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet/balance"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to update billing mode", description: err?.message || "Please try again.", variant: "destructive" });
+    },
+  });
+
+  const activateAddonMutation = useMutation({
+    mutationFn: async (addonCode: string) => {
+      return await apiRequest("POST", "/api/tenant/addons", { addonCode });
+    },
+    onSuccess: () => {
+      toast({ title: "Add-on activated" });
+      queryClient.invalidateQueries({ queryKey: ["/api/tenant/addons"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet/balance"] });
+      refetchTenantAddons();
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to activate add-on", description: err?.message || "Please try again.", variant: "destructive" });
+    },
+  });
+
+  const cancelAddonMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("DELETE", `/api/tenant/addons/${id}`);
+    },
+    onSuccess: () => {
+      toast({ title: "Add-on cancelled" });
+      queryClient.invalidateQueries({ queryKey: ["/api/tenant/addons"] });
+      refetchTenantAddons();
+    },
+  });
 
   // Mutation to activate à la carte services (creates pending request)
   const activateServiceMutation = useMutation({
@@ -648,6 +932,38 @@ export default function Billing() {
           </div>
         </section>
 
+        <Card className="rounded-2xl border-white/10 bg-[#101c3c]/70 text-blue-50 mb-6" data-testid="card-billing-mode">
+          <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-white font-semibold">Billing mode</div>
+              <div className="text-sm text-blue-100/70">
+                {isWalletMode
+                  ? "Pay-as-you-go — funds are deducted from your wallet per send."
+                  : "Subscription — fixed monthly plan with included message quotas."}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant={!isWalletMode ? "default" : "outline"}
+                onClick={() => billingModeMutation.mutate('subscription')}
+                disabled={!isWalletMode || billingModeMutation.isPending}
+                data-testid="button-billing-mode-subscription"
+              >
+                Subscription
+              </Button>
+              <Button
+                size="sm"
+                variant={isWalletMode ? "default" : "outline"}
+                onClick={() => billingModeMutation.mutate('wallet')}
+                disabled={isWalletMode || billingModeMutation.isPending}
+                data-testid="button-billing-mode-wallet"
+              >
+                Pay-as-you-go (wallet)
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-8">
           <TabsList className="flex w-full flex-wrap items-center gap-2 p-1 sm:w-auto">
             <TabsTrigger value="overview" data-testid="tab-overview" className="px-4 py-2">
@@ -665,6 +981,16 @@ export default function Billing() {
             <TabsTrigger value="pay-invoice" data-testid="tab-pay-invoice" className="px-4 py-2">
               <CreditCard className="h-4 w-4 mr-1.5" />
               Pay Invoice
+            </TabsTrigger>
+            {isWalletMode && (
+            <TabsTrigger value="wallet" data-testid="tab-wallet" className="px-4 py-2">
+              <DollarSign className="h-4 w-4 mr-1.5" />
+              Wallet
+            </TabsTrigger>
+            )}
+            <TabsTrigger value="addons" data-testid="tab-addons" className="px-4 py-2">
+              <Bot className="h-4 w-4 mr-1.5" />
+              Add-ons
             </TabsTrigger>
           </TabsList>
 
@@ -1809,6 +2135,218 @@ export default function Billing() {
                     }}
                   />
                 </Elements>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {isWalletMode && (
+          <TabsContent value="wallet" className="space-y-6">
+            <Card className="rounded-3xl border-white/10 bg-[#101c3c]/70 text-blue-50 shadow-lg shadow-blue-900/20">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <DollarSign className="h-5 w-5" /> Wallet (Pay-as-you-go)
+                </CardTitle>
+                <CardDescription className="text-blue-100/70">
+                  Top up funds and pay per send. {isWalletMode ? "You're currently on wallet billing." : "Switch to wallet billing to enable per-send pricing."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    variant={isWalletMode ? "default" : "outline"}
+                    onClick={() => billingModeMutation.mutate('wallet')}
+                    disabled={isWalletMode || billingModeMutation.isPending}
+                    data-testid="button-set-wallet-mode"
+                  >
+                    Use Wallet (Pay-as-you-go)
+                  </Button>
+                  <Button
+                    variant={!isWalletMode ? "default" : "outline"}
+                    onClick={() => billingModeMutation.mutate('subscription')}
+                    disabled={!isWalletMode || billingModeMutation.isPending}
+                    data-testid="button-set-subscription-mode"
+                  >
+                    Use Subscription
+                  </Button>
+                </div>
+
+                {isWalletMode && (
+                  <>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                      <div className="rounded-2xl bg-white/5 p-5">
+                        <p className="text-xs uppercase tracking-wide text-blue-100/70">Current balance</p>
+                        <p className="mt-2 text-3xl font-semibold text-white" data-testid="text-wallet-balance">
+                          ${(walletBalance?.balanceDollars ?? 0).toFixed(2)}
+                        </p>
+                        {walletBalance?.lowBalance && (
+                          <p className="mt-1 text-xs text-amber-300">Low balance — top up soon</p>
+                        )}
+                      </div>
+                      <div className="rounded-2xl bg-white/5 p-5">
+                        <p className="text-xs uppercase tracking-wide text-blue-100/70">SMS rate</p>
+                        <p className="mt-2 text-2xl font-semibold text-white">
+                          ${((walletBalance?.smsRateMicros ?? 0) / 1_000_000).toFixed(6)} <span className="text-sm text-blue-100/70">/segment</span>
+                        </p>
+                      </div>
+                      <div className="rounded-2xl bg-white/5 p-5">
+                        <p className="text-xs uppercase tracking-wide text-blue-100/70">Email rate</p>
+                        <p className="mt-2 text-2xl font-semibold text-white">
+                          ${((walletBalance?.emailRateMicros ?? 0) / 1_000_000).toFixed(6)} <span className="text-sm text-blue-100/70">/email</span>
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl bg-white/5 p-5 space-y-4">
+                      <h4 className="text-white font-semibold">Top up wallet</h4>
+                      <div className="flex flex-wrap items-end gap-3">
+                        <div>
+                          <Label htmlFor="topup-amount" className="text-blue-100/80 text-sm">Amount (USD)</Label>
+                          <Input
+                            id="topup-amount"
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={topupAmount}
+                            onChange={(e) => setTopupAmount(e.target.value)}
+                            className="w-32 mt-1 border-white/20 bg-white/10 text-white"
+                            data-testid="input-topup-amount"
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          {[25, 50, 100, 250].map((preset) => (
+                            <Button
+                              key={preset}
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setTopupAmount(String(preset))}
+                              data-testid={`button-topup-preset-${preset}`}
+                            >
+                              ${preset}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                      <Elements stripe={stripePromise}>
+                        <StripeWalletTopupForm
+                          amountCents={Math.max(0, Math.round((parseFloat(topupAmount) || 0) * 100))}
+                          onSuccess={() => {
+                            queryClient.invalidateQueries({ queryKey: ["/api/wallet/balance"] });
+                            queryClient.invalidateQueries({ queryKey: ["/api/wallet/ledger"] });
+                            refetchWalletBalance();
+                          }}
+                        />
+                      </Elements>
+                    </div>
+
+                    <WalletAutoReloadCard />
+
+                    <div className="rounded-2xl bg-white/5 p-5">
+                      <h4 className="text-white font-semibold mb-3">Recent activity</h4>
+                      {(walletLedgerData?.entries?.length ?? 0) === 0 ? (
+                        <p className="text-sm text-blue-100/70">No wallet activity yet.</p>
+                      ) : (
+                        <div className="space-y-2 max-h-96 overflow-y-auto">
+                          {walletLedgerData!.entries.map((entry: any) => {
+                            const cents = Number(entry.amountCents) || 0;
+                            const isCredit = cents > 0;
+                            return (
+                              <div key={entry.id} className="flex items-center justify-between border-b border-white/5 py-2 text-sm" data-testid={`wallet-ledger-${entry.id}`}>
+                                <div>
+                                  <div className="text-white">{entry.description || entry.entryType}</div>
+                                  <div className="text-xs text-blue-100/60">
+                                    {new Date(entry.createdAt).toLocaleString()} · {entry.entryType}
+                                  </div>
+                                </div>
+                                <div className={`font-semibold ${isCredit ? 'text-emerald-300' : 'text-rose-300'}`}>
+                                  {isCredit ? '+' : ''}${(cents / 100).toFixed(2)}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+          )}
+
+          <TabsContent value="addons" className="space-y-6">
+            <Card className="rounded-3xl border-white/10 bg-[#101c3c]/70 text-blue-50 shadow-lg shadow-blue-900/20">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <Bot className="h-5 w-5" /> À la carte add-ons
+                </CardTitle>
+                <CardDescription className="text-blue-100/70">
+                  Layer additional services onto your account. Monthly fees are billed via wallet (wallet mode) or invoice (subscription mode).
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div>
+                  <h4 className="text-white font-semibold mb-3">Active add-ons</h4>
+                  {(tenantAddonsData?.tenantAddons?.length ?? 0) === 0 ? (
+                    <p className="text-sm text-blue-100/70">No active add-ons.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {tenantAddonsData!.tenantAddons.map((ta: any) => (
+                        <div key={ta.id} className="flex items-center justify-between rounded-xl bg-white/5 p-4" data-testid={`active-addon-${ta.id}`}>
+                          <div>
+                            <div className="text-white font-medium">{ta.addon?.name || ta.addonCode}</div>
+                            <div className="text-xs text-blue-100/60">
+                              Status: {ta.status}
+                              {ta.activatedAt && ` · Activated ${new Date(ta.activatedAt).toLocaleDateString()}`}
+                            </div>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => cancelAddonMutation.mutate(ta.id)}
+                            disabled={cancelAddonMutation.isPending}
+                            data-testid={`button-cancel-addon-${ta.id}`}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <h4 className="text-white font-semibold mb-3">Available add-ons</h4>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    {(addonCatalogData?.addons || []).map((addon: any) => {
+                      const active = (tenantAddonsData?.tenantAddons || []).some(
+                        (ta: any) => ta.addonCode === addon.code && ta.status === 'active'
+                      );
+                      return (
+                        <div key={addon.code} className="rounded-2xl bg-white/5 p-5 flex flex-col gap-3" data-testid={`addon-card-${addon.code}`}>
+                          <div>
+                            <div className="text-white font-semibold">{addon.name}</div>
+                            <div className="text-xs text-blue-100/70 mt-1">{addon.description}</div>
+                          </div>
+                          <div className="text-sm text-blue-100/80">
+                            {addon.monthlyPriceCents > 0 && (
+                              <div>${(addon.monthlyPriceCents / 100).toFixed(2)}/month</div>
+                            )}
+                            {addon.perUsePriceCents > 0 && (
+                              <div>${(addon.perUsePriceCents / 100).toFixed(4)} per use</div>
+                            )}
+                          </div>
+                          <Button
+                            onClick={() => activateAddonMutation.mutate(addon.code)}
+                            disabled={active || activateAddonMutation.isPending}
+                            data-testid={`button-activate-addon-${addon.code}`}
+                          >
+                            {active ? 'Active' : 'Activate'}
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

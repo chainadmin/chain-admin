@@ -192,6 +192,20 @@ function setupScheduledTasks(port: number) {
   console.log('   - Invoice generator (ended billing periods): Daily at 1:00 AM ET (America/New_York timezone)');
   console.log('   - Returned accounts cleanup: Daily at 2:00 AM ET (America/New_York timezone)');
   console.log('   - Tracking data cleanup: Daily at 3:00 AM ET (America/New_York timezone)');
+
+  // Wallet add-on monthly renewal: 1st of every month at 4:00 AM ET.
+  // Charges any active tenant_addons whose nextChargeAt is on or before today.
+  cron.schedule('0 4 1 * *', async () => {
+    console.log('🕒 [CRON] Running wallet add-on monthly renewal (1st of month)...');
+    try {
+      const { runAddonRenewalCron } = await import('./walletRoutes');
+      const stats = await runAddonRenewalCron();
+      console.log('✅ [CRON] Add-on renewal complete:', stats);
+    } catch (error) {
+      console.error('❌ [CRON] Add-on renewal failed:', error);
+    }
+  }, { timezone: 'America/New_York' });
+  console.log('   - Wallet add-on renewals: Monthly on 1st at 4:00 AM ET (America/New_York timezone)');
 }
 
 // Start the server in both development and production

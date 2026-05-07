@@ -36,6 +36,7 @@ export type MoreStackParamList = {
   MoreHome: undefined;
   Profile: undefined;
   Wallet: undefined;
+  AddOns: undefined;
   TenantSwitcher: undefined;
 };
 

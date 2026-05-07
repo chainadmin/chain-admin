@@ -167,9 +167,21 @@ export async function impersonateTenant(tenantId: string): Promise<LoginResponse
   };
 }
 
-export async function fetchWalletBalance() {
+export type WalletBalanceResponse = {
+  balanceCents: number;
+  balanceDollars?: number;
+  lowBalance?: boolean;
+  smsRateMicros?: number;
+  emailRateMicros?: number;
+  smsRateCents?: number;
+  emailRateCents?: number;
+  lowBalanceThresholdCents?: number;
+  planQuota?: unknown;
+};
+
+export async function fetchWalletBalance(): Promise<WalletBalanceResponse | null> {
   try {
-    const res = await api.get<{ balanceCents: number; planQuota?: unknown }>('/api/wallet/balance');
+    const res = await api.get<WalletBalanceResponse>('/api/wallet/balance');
     return res.data;
   } catch (e) {
     if ((e as AxiosError).response?.status === 404) return null;
@@ -177,13 +189,75 @@ export async function fetchWalletBalance() {
   }
 }
 
-export async function fetchWalletLedger() {
+export type WalletLedgerEntry = {
+  id?: string;
+  description?: string | null;
+  type?: string | null;
+  kind?: string | null;
+  entryType?: string | null;
+  amountCents?: number;
+  amountMicros?: number;
+  createdAt?: string | null;
+};
+
+export async function fetchWalletLedger(): Promise<WalletLedgerEntry[]> {
   try {
-    const res = await api.get<unknown[]>('/api/wallet/ledger');
-    return res.data;
+    // Server returns `{ entries: [...] }` (404 if wallet mode is disabled).
+    // Older shape was a bare array — fall back to that for forward-compat.
+    const res = await api.get<{ entries?: WalletLedgerEntry[] } | WalletLedgerEntry[]>('/api/wallet/ledger');
+    if (Array.isArray(res.data)) return res.data;
+    return res.data?.entries ?? [];
   } catch (e) {
     if ((e as AxiosError).response?.status === 404) return [];
     throw e;
+  }
+}
+
+export async function estimateWalletCost(payload: {
+  channel: 'sms' | 'email';
+  recipientCount: number;
+  message?: string;
+}): Promise<{ totalCents: number; perUnitCents?: number; segments?: number } | null> {
+  try {
+    // Send both `units` and `recipientCount` so the call works whether the
+    // server requires the legacy or new field name.
+    const res = await api.post<{
+      totalCents?: number;
+      estimateCents?: number;
+      perUnitCents?: number;
+      segments?: number;
+    }>('/api/wallet/estimate', {
+      channel: payload.channel,
+      units: payload.recipientCount,
+      recipientCount: payload.recipientCount,
+      message: payload.message,
+      // Always include the tenant's daily prorated add-on cost so the
+      // pre-send preview matches what the server actually gates on.
+      includeAddons: true,
+    });
+    const totalCents = res.data.totalCents ?? res.data.estimateCents ?? 0;
+    return { totalCents, perUnitCents: res.data.perUnitCents, segments: res.data.segments };
+  } catch (e) {
+    if ((e as AxiosError).response?.status === 404) return null;
+    throw e;
+  }
+}
+
+export async function requestWalletTopup(amountCents: number) {
+  const res = await api.post<{ paymentIntentId?: string; clientSecret?: string }>(
+    '/api/wallet/topup-request',
+    { amountCents },
+  );
+  return res.data;
+}
+
+export async function fetchTenantBillingMode(): Promise<'wallet' | 'subscription'> {
+  try {
+    const res = await api.get<{ tenant?: { billingMode?: string }; billingMode?: string }>('/api/auth/user');
+    const mode = (res.data?.tenant?.billingMode || res.data?.billingMode) as string | undefined;
+    return mode === 'wallet' ? 'wallet' : 'subscription';
+  } catch {
+    return 'subscription';
   }
 }
 

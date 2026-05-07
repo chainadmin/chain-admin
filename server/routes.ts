@@ -53,6 +53,8 @@ import { smaxService } from "./smaxService";
 import { eventService } from "./eventService";
 import { uploadLogo } from "./r2Storage";
 import externalApiRouter from "./external-api";
+import { registerWalletRoutes } from "./walletRoutes";
+import { walletService, InsufficientFundsError } from "./walletService";
 import { AuthnetService } from "./authnetService";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -3958,6 +3960,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       targetedConsumers = audience.targetedConsumers;
       const { accountsData } = audience;
 
+      // Wallet billing gate (Task #47): reserve estimated cost up-front so funds
+      // are atomically held; the campaign send pipeline can later commit the
+      // actual amount via walletService.commitReservation when sends complete,
+      // or refundReservation if the campaign is aborted.
+      const emailWalletMode = await walletService.isWalletMode(tenantId);
+      if (emailWalletMode && targetedConsumers.length > 0) {
+        const rates = await walletService.getRates(tenantId);
+        const estimateCents = walletService.computeChargeCents(rates.emailRateMicros, targetedConsumers.length);
+        try {
+          await walletService.reserveFunds(
+            tenantId,
+            estimateCents,
+            `Email campaign reservation: ${campaign.name} (${targetedConsumers.length} recipients)`,
+            { campaignId: campaign.id, channel: 'email', recipients: targetedConsumers.length, rateMicros: rates.emailRateMicros },
+          );
+          // Reservation id is recoverable by querying wallet_ledger by
+          // metadata->>campaignId — used by the send-completion reconciler.
+        } catch (e: any) {
+          if (e instanceof InsufficientFundsError) {
+            return res.status(402).json({
+              message: `Insufficient wallet balance to send to ${targetedConsumers.length} recipients. Please top up your wallet.`,
+              neededCents: e.neededCents,
+              availableCents: e.availableCents,
+            });
+          }
+          throw e;
+        }
+      }
+
       const processedEmails = buildCampaignEmails({
         campaignId: campaign.id,
         tenantId,
@@ -4020,6 +4051,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
             completedAt: new Date(),
           });
 
+          // Reconcile wallet reservation: commit at the actual successful count.
+          try {
+            if (await walletService.isWalletMode(tenantId)) {
+              const reservation = await walletService.findOpenCampaignReservation(tenantId, campaign.id);
+              if (reservation) {
+                const rates = await walletService.getRates(tenantId);
+                const actualCents = walletService.computeChargeCents(rates.emailRateMicros, emailResults.successful);
+                await walletService.commitReservation(reservation.id, actualCents, 'email_send',
+                  `Email campaign "${campaign.name}": ${emailResults.successful} sent`,
+                  { campaignId: campaign.id, sent: emailResults.successful, failed: emailResults.failed });
+                walletService.maybeAutoReload(tenantId).catch(() => {});
+              }
+            }
+          } catch (e) {
+            console.error('[wallet] email-campaign reconciliation failed', e);
+          }
+
           console.log(`📬 Campaign "${campaign.name}" sending complete: ${emailResults.successful} sent, ${emailResults.failed} failed`);
           // DMP email logging is handled per-recipient inside emailService.sendBulkEmails
           // on successful sends only — no duplicate logging needed here.
@@ -4033,6 +4081,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
           } catch (updateError) {
             console.error('Error updating campaign status after background failure:', updateError);
+          }
+          // Refund the wallet reservation in full on hard failure
+          try {
+            if (await walletService.isWalletMode(tenantId)) {
+              const reservation = await walletService.findOpenCampaignReservation(tenantId, campaign.id);
+              if (reservation) {
+                await walletService.refundReservation(reservation.id,
+                  `Refund for failed email campaign "${campaign.name}" (campaign ${campaign.id})`);
+              }
+            }
+          } catch (e) {
+            console.error('[wallet] email-campaign refund failed', e);
           }
         }
       })();
@@ -4084,6 +4144,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Production email sending route (for individual emails to consumers)
   app.post('/api/send-email', authenticateUser, async (req: any, res) => {
+    let walletReservation: any = null;
     try {
       const tenantId = req.user.tenantId;
       if (!tenantId) { 
@@ -4097,7 +4158,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const tenant = await storage.getTenant(tenantId);
-      
+
+      // Wallet billing gate (Task #47): atomic reserve-then-send-then-commit/refund.
+      const walletMode = await walletService.isWalletMode(tenantId);
+      let walletReservedCents = 0;
+      if (walletMode) {
+        const rates = await walletService.getRates(tenantId);
+        walletReservedCents = walletService.computeChargeCents(rates.emailRateMicros, 1);
+        if (walletReservedCents > 0) {
+          try {
+            walletReservation = await walletService.reserveFunds(
+              tenantId,
+              walletReservedCents,
+              `Reservation for individual email to ${to}`,
+              { type: 'email_send', to },
+            );
+          } catch (e: any) {
+            if (e instanceof InsufficientFundsError) {
+              return res.status(402).json({
+                message: "Insufficient wallet balance to send email. Please top up your wallet.",
+                neededCents: e.neededCents,
+                availableCents: e.availableCents,
+              });
+            }
+            throw e;
+          }
+        }
+      }
+
       // Get tenant branding for email template
       const tenantBranding = (tenant as any)?.brand || {};
       
@@ -4156,8 +4244,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tenantId: tenantId, // Track email usage by tenant
       });
 
+      // Commit the reservation now that send succeeded.
+      if (walletReservation) {
+        try {
+          await walletService.commitReservation(
+            walletReservation.id,
+            walletReservedCents,
+            'email_send',
+            `Individual email to ${to}`,
+          );
+          // Fire auto-reload check (no-op until processor wired up)
+          walletService.maybeAutoReload(tenantId).catch((e) =>
+            console.error("auto-reload check failed:", e)
+          );
+        } catch (e) {
+          console.error("Wallet commit failed after email send:", e);
+        }
+      }
+
       res.json(result);
     } catch (error) {
+      // Refund the reservation if the send blew up.
+      try {
+        if (walletReservation) {
+          await walletService.refundReservation(walletReservation.id, "email send failed");
+        }
+      } catch (refundErr) {
+        console.error("Failed to refund wallet reservation:", refundErr);
+      }
       console.error("Error sending email:", error);
       res.status(500).json({ message: "Failed to send email" });
     }
@@ -4566,15 +4680,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "This phone number is blocked from receiving SMS" });
       }
 
+      // Wallet billing gate (Task #47): atomic reserve → send → commit/refund.
+      const walletMode = await walletService.isWalletMode(tenantId);
+      let walletReservation: any = null;
+      let walletReservedCents = 0;
+      let walletEstSegments = 1;
+      if (walletMode) {
+        const rates = await walletService.getRates(tenantId);
+        walletEstSegments = Math.max(1, Math.ceil((message?.length || 1) / 160));
+        walletReservedCents = walletService.computeChargeCents(rates.smsRateMicros, walletEstSegments);
+        if (walletReservedCents > 0) {
+          try {
+            walletReservation = await walletService.reserveFunds(
+              tenantId,
+              walletReservedCents,
+              `Reservation for SMS to ${targetPhone}`,
+              { type: 'sms_send', to: targetPhone, consumerId: targetConsumerId, estSegments: walletEstSegments },
+            );
+          } catch (e: any) {
+            if (e instanceof InsufficientFundsError) {
+              return res.status(402).json({
+                message: "Insufficient wallet balance to send SMS. Please top up your wallet.",
+                neededCents: e.neededCents,
+                availableCents: e.availableCents,
+              });
+            }
+            throw e;
+          }
+        }
+      }
+
       // Send the SMS
       const { smsService } = await import('./smsService');
-      const result = await smsService.sendSms(
-        targetPhone,
-        message,
-        tenantId,
-        undefined, // campaignId
-        targetConsumerId || undefined
-      );
+      let result: any;
+      try {
+        result = await smsService.sendSms(
+          targetPhone,
+          message,
+          tenantId,
+          undefined, // campaignId
+          targetConsumerId || undefined
+        );
+      } catch (sendErr) {
+        if (walletReservation) {
+          try { await walletService.refundReservation(walletReservation.id, "sms send failed"); }
+          catch (e) { console.error("Failed to refund wallet reservation:", e); }
+        }
+        throw sendErr;
+      }
+
+      // Commit reservation using actual segment count from Twilio when available.
+      if (walletReservation) {
+        try {
+          const actualSegments = Math.max(1, Number(result?.segments) || walletEstSegments);
+          const rates = await walletService.getRates(tenantId);
+          const actualCents = walletService.computeChargeCents(rates.smsRateMicros, actualSegments);
+          await walletService.commitReservation(
+            walletReservation.id,
+            actualCents,
+            'sms_send',
+            `Quick SMS to ${targetPhone} (${actualSegments} seg)`,
+            { actualSegments },
+          );
+          walletService.maybeAutoReload(tenantId).catch((e) =>
+            console.error("auto-reload check failed:", e)
+          );
+        } catch (e) {
+          console.error("Wallet commit failed after SMS send:", e);
+        }
+      }
 
       res.json({ 
         message: 'SMS sent successfully',
@@ -5105,6 +5279,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
         accountsData = audience.accountsData;
       }
 
+      // Wallet billing gate (Task #47): reserve estimated cost. The send loop
+      // can later reconcile via walletService.commitReservation with the actual
+      // segment count, and walletService.refundReservation on abort.
+      const smsWalletMode = await walletService.isWalletMode(tenantId);
+      if (smsWalletMode && targetedConsumers.length > 0) {
+        const rates = await walletService.getRates(tenantId);
+        // Segment-aware estimate: ceil(messageLen/160) per recipient. Reconciler
+        // commits the actual sum of segments from sms_tracking after send.
+        const sampleMsg = template?.message || '';
+        const estSegmentsPerRecipient = Math.max(1, Math.ceil(sampleMsg.length / 160));
+        const totalEstSegments = estSegmentsPerRecipient * targetedConsumers.length;
+        const estimateCents = walletService.computeChargeCents(rates.smsRateMicros, totalEstSegments);
+        try {
+          await walletService.reserveFunds(
+            tenantId,
+            estimateCents,
+            `SMS campaign reservation: ${campaign.name} (${targetedConsumers.length} recipients × ${estSegmentsPerRecipient} seg)`,
+            { campaignId: campaign.id, channel: 'sms', recipients: targetedConsumers.length, segmentsPerRecipient: estSegmentsPerRecipient, totalSegments: totalEstSegments, rateMicros: rates.smsRateMicros },
+          );
+        } catch (e: any) {
+          if (e instanceof InsufficientFundsError) {
+            campaignProcessingLocks.delete(id);
+            return res.status(402).json({
+              message: `Insufficient wallet balance to send to ${targetedConsumers.length} recipients. Please top up your wallet.`,
+              neededCents: e.neededCents,
+              availableCents: e.availableCents,
+            });
+          }
+          throw e;
+        }
+      }
+
       // Extract phone numbers for each consumer based on phonesToSend setting
       // phonesToSend can be '1', '2', '3', or 'all'
       const extractPhoneNumbers = (consumer: any): string[] => {
@@ -5245,6 +5451,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.log(
               `✅ SMS campaign "${campaign.name}" completed: ${smsResults.totalSent} sent, ${smsResults.totalFailed} failed`
             );
+
+            // Reconcile wallet reservation: commit at the actual cost using
+            // sum of segments from sms_tracking (more accurate than counts).
+            try {
+              if (await walletService.isWalletMode(tenantId)) {
+                const reservation = await walletService.findOpenCampaignReservation(tenantId, campaign.id);
+                if (reservation) {
+                  const segRows = await db
+                    .select({ total: sql<number>`COALESCE(SUM(COALESCE(segments,1)),0)::int` })
+                    .from(smsTracking)
+                    .where(and(eq(smsTracking.tenantId, tenantId), eq(smsTracking.campaignId, campaign.id), eq(smsTracking.status, 'sent')));
+                  const totalSegments = segRows[0]?.total ?? smsResults.totalSent;
+                  const rates = await walletService.getRates(tenantId);
+                  const actualCents = walletService.computeChargeCents(rates.smsRateMicros, totalSegments);
+                  await walletService.commitReservation(reservation.id, actualCents, 'sms_send',
+                    `SMS campaign "${campaign.name}": ${smsResults.totalSent} sent (${totalSegments} segments)`,
+                    { campaignId: campaign.id, sent: smsResults.totalSent, failed: smsResults.totalFailed, segments: totalSegments });
+                  walletService.maybeAutoReload(tenantId).catch(() => {});
+                }
+              }
+            } catch (e) {
+              console.error('[wallet] sms-campaign reconciliation failed', e);
+            }
             // DMP SMS logging is handled per-recipient inside smsService on successful sends only.
           } catch (error) {
             console.error(`❌ Error in background SMS campaign send for ${campaign.id}:`, error);
@@ -5260,6 +5489,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.log(`✅ Campaign ${campaign.id} marked as failed`);
             } catch (updateError) {
               console.error(`❌ CRITICAL: Could not update campaign ${campaign.id} status after failure:`, updateError);
+            }
+            // Refund the wallet reservation on hard failure
+            try {
+              if (await walletService.isWalletMode(tenantId)) {
+                const reservation = await walletService.findOpenCampaignReservation(tenantId, campaign.id);
+                if (reservation) {
+                  await walletService.refundReservation(reservation.id,
+                    `Refund for failed SMS campaign "${campaign.name}" (campaign ${campaign.id})`);
+                }
+              }
+            } catch (e) {
+              console.error('[wallet] sms-campaign refund failed', e);
             }
           } finally {
             // Release the processing lock and clean up cancelled set
@@ -5568,6 +5809,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
             lastSentIndex: allMessages.length,
           });
           console.log(`✅ Resumed campaign ${id} completed successfully`);
+
+          // Reconcile wallet reservation for resumed sends as well
+          try {
+            if (await walletService.isWalletMode(tenantId)) {
+              const reservation = await walletService.findOpenCampaignReservation(tenantId, id);
+              if (reservation) {
+                const segRows = await db
+                  .select({ total: sql<number>`COALESCE(SUM(COALESCE(segments,1)),0)::int` })
+                  .from(smsTracking)
+                  .where(and(eq(smsTracking.tenantId, tenantId), eq(smsTracking.campaignId, id), eq(smsTracking.status, 'sent')));
+                const totalSegments = segRows[0]?.total ?? smsResults.totalSent;
+                const rates = await walletService.getRates(tenantId);
+                const actualCents = walletService.computeChargeCents(rates.smsRateMicros, totalSegments);
+                await walletService.commitReservation(reservation.id, actualCents, 'sms_send',
+                  `SMS campaign resume: ${smsResults.totalSent} sent (${totalSegments} segments)`,
+                  { campaignId: id, sent: smsResults.totalSent, failed: smsResults.totalFailed, segments: totalSegments, resumed: true });
+                walletService.maybeAutoReload(tenantId).catch(() => {});
+              }
+            }
+          } catch (e) {
+            console.error('[wallet] sms-campaign resume reconciliation failed', e);
+          }
         } catch (error) {
           console.error(`❌ Error in resumed SMS campaign send for ${id}:`, error);
           try {
@@ -7171,6 +7434,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         username: z.string().min(3).max(50),
         password: z.string().min(8).max(100),
         businessType: z.enum(['call_center', 'billing_service', 'subscription_provider', 'freelancer_consultant', 'property_management']).optional().default('call_center'),
+        billingMode: z.enum(['subscription', 'wallet']).optional().default('subscription'),
       });
       
       // Validate the request body
@@ -7221,6 +7485,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         name: data.businessName,
         slug,
         businessType: data.businessType || 'call_center',
+        billingMode: data.billingMode || 'subscription',
         ownerFirstName: data.ownerFirstName,
         ownerLastName: data.ownerLastName,
         ownerDateOfBirth: data.ownerDateOfBirth,
@@ -7229,6 +7494,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         phoneNumber: data.phoneNumber,
         email: data.email,
       });
+
+      // Initialize wallet if signing up as wallet tenant
+      if ((data.billingMode || 'subscription') === 'wallet') {
+        try {
+          await walletService.getOrCreateWallet(tenant.id);
+        } catch (e) {
+          console.error("Failed to initialize wallet for new tenant:", e);
+        }
+      }
 
       // Hash the password
       console.log("Hashing password for username:", data.username);
@@ -24946,6 +25220,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to end call" });
     }
   });
+
+  registerWalletRoutes(app);
 
   const httpServer = createServer(app);
   return httpServer;

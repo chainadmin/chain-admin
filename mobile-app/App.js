@@ -150,6 +150,20 @@ export default function App() {
           window.sendToNative({ type: 'LOGOUT' });
         };
 
+        // ---- Wallet & add-on bridges (Task #47) ----
+        // The web app's billing page already renders the wallet, top-up,
+        // auto-reload, and add-on UIs inside this WebView. These helpers let
+        // the in-page wallet code trigger native UX cues:
+        //  - notifyLowBalance(): haptic warning when balance dips below threshold
+        //  - notifyWalletCharged(): light tap when a successful debit posts
+        // Both are no-ops on the web build.
+        window.notifyLowBalance = function() {
+          window.sendToNative({ type: 'HAPTIC_FEEDBACK', style: 'heavy' });
+        };
+        window.notifyWalletCharged = function() {
+          window.sendToNative({ type: 'HAPTIC_FEEDBACK', style: 'light' });
+        };
+
         ${safeToken ? `
           try {
             localStorage.setItem('consumerAuth', JSON.stringify({ token: ${safeToken} }));

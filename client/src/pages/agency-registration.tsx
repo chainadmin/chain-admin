@@ -21,6 +21,7 @@ const registrationWithCredentialsSchema = agencyTrialRegistrationSchema.extend({
   password: z.string().min(8, "Password must be at least 8 characters").max(100),
   confirmPassword: z.string(),
   businessType: z.enum(['call_center', 'billing_service', 'subscription_provider', 'freelancer_consultant', 'property_management']).default('call_center'),
+  billingMode: z.enum(['subscription', 'wallet']).default('subscription'),
 }).refine(data => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
@@ -54,6 +55,14 @@ export default function AgencyRegistration() {
   }, []);
   const [successInfo, setSuccessInfo] = useState<RegistrationSuccessResponse | null>(null);
 
+  // Allow mobile/web deep-links like /agency-registration?billingMode=wallet
+  // to preselect the billing mode chooser.
+  const initialBillingMode: 'subscription' | 'wallet' = (() => {
+    if (typeof window === 'undefined') return 'subscription';
+    const param = new URLSearchParams(window.location.search).get('billingMode');
+    return param === 'wallet' ? 'wallet' : 'subscription';
+  })();
+
   const form = useForm<RegistrationWithCredentials>({
     resolver: zodResolver(registrationWithCredentialsSchema),
     defaultValues: {
@@ -63,6 +72,7 @@ export default function AgencyRegistration() {
       ownerSSN: "",
       businessName: "",
       businessType: "call_center",
+      billingMode: initialBillingMode,
       phoneNumber: "",
       email: "",
       username: "",
@@ -407,6 +417,55 @@ export default function AgencyRegistration() {
                         </Select>
                         <FormDescription>
                           Choose the type that best describes your business. This customizes the platform terminology for your needs.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="billingMode"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center">
+                          <CreditCard className="mr-2 h-4 w-4" />
+                          Billing Mode
+                        </FormLabel>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+                          <button
+                            type="button"
+                            data-testid="billing-mode-subscription"
+                            onClick={() => field.onChange('subscription')}
+                            className={`text-left rounded-lg border-2 p-4 transition-all ${
+                              field.value === 'subscription'
+                                ? 'border-blue-600 bg-blue-50'
+                                : 'border-gray-200 bg-white hover:border-gray-300'
+                            }`}
+                          >
+                            <div className="font-semibold text-gray-900">Subscription</div>
+                            <div className="text-sm text-gray-600 mt-1">
+                              Monthly plan with included SMS / email quotas. Best for predictable, high-volume sending.
+                            </div>
+                          </button>
+                          <button
+                            type="button"
+                            data-testid="billing-mode-wallet"
+                            onClick={() => field.onChange('wallet')}
+                            className={`text-left rounded-lg border-2 p-4 transition-all ${
+                              field.value === 'wallet'
+                                ? 'border-blue-600 bg-blue-50'
+                                : 'border-gray-200 bg-white hover:border-gray-300'
+                            }`}
+                          >
+                            <div className="font-semibold text-gray-900">Pay-as-you-go (Wallet)</div>
+                            <div className="text-sm text-gray-600 mt-1">
+                              Top up funds and pay per send. No monthly commitment. Layer on à la carte add-ons as needed.
+                            </div>
+                          </button>
+                        </div>
+                        <FormDescription className="mt-2">
+                          You can switch billing modes later from the billing page.
                         </FormDescription>
                         <FormMessage />
                       </FormItem>

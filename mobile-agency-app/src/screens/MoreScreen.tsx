@@ -23,6 +23,9 @@ export default function MoreScreen() {
   };
 
   const isPlatformAdmin = user?.role === 'platform_admin';
+  // Wallet & à la carte add-ons only apply in pay-as-you-go (wallet) mode.
+  // Subscription tenants get quotas and shouldn't see these entry points.
+  const isWalletMode = (tenant as any)?.billingMode === 'wallet';
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ paddingBottom: spacing.xxl }}>
@@ -46,10 +49,20 @@ export default function MoreScreen() {
           <Button variant="ghost" title="View profile" onPress={() => nav.navigate('Profile')} />
         </Card>
 
-        <Card>
-          <H3>Wallet</H3>
-          <Button variant="ghost" title="Open wallet" onPress={() => nav.navigate('Wallet')} />
-        </Card>
+        {isWalletMode ? (
+          <>
+            <Card>
+              <H3>Wallet</H3>
+              <Button variant="ghost" title="Open wallet" onPress={() => nav.navigate('Wallet')} />
+            </Card>
+
+            <Card>
+              <H3>Add-ons</H3>
+              <Muted style={{ marginTop: 4 }}>Manage à la carte features (dedicated number, etc.)</Muted>
+              <Button variant="ghost" title="Manage add-ons" onPress={() => nav.navigate('AddOns')} style={{ marginTop: 8 }} />
+            </Card>
+          </>
+        ) : null}
 
         <Card>
           <H3>Settings</H3>

@@ -1,47 +1,78 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Alert, FlatList, RefreshControl, View } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as WebBrowser from 'expo-web-browser';
 import {
-  Body, Button, Card, EmptyState, formatCurrency, H1, H3, Loader, Muted, Pill, Screen, Small,
+  Body, Button, Card, EmptyState, Field, formatCurrency, H1, H3, Loader, Muted, Pill, Screen, Small,
 } from '@/components/ui';
-import { fetchWalletBalance, fetchWalletLedger, getApiBaseUrl } from '@/lib/api';
+import {
+  fetchWalletBalance,
+  fetchWalletLedger,
+  fetchTenantBillingMode,
+  getApiBaseUrl,
+  type WalletLedgerEntry,
+} from '@/lib/api';
 import { extractErrorMessage } from '@/navigation/types';
 import { colors, spacing } from '@/theme/colors';
 
-type LedgerEntry = {
-  id?: string;
-  description?: string | null;
-  kind?: string | null;
-  amountCents?: number;
-  createdAt?: string | null;
-};
-
-type PlanQuota = {
-  emailUsed?: number | null;
-  emailLimit?: number | null;
-  smsUsed?: number | null;
-  smsLimit?: number | null;
-};
+type LedgerEntry = WalletLedgerEntry;
 
 export default function WalletScreen() {
-  const balanceQ = useQuery({ queryKey: ['wallet', 'balance'], queryFn: fetchWalletBalance });
-  const ledgerQ = useQuery({ queryKey: ['wallet', 'ledger'], queryFn: fetchWalletLedger });
+  const qc = useQueryClient();
+  const modeQ = useQuery({ queryKey: ['tenant', 'billing-mode'], queryFn: fetchTenantBillingMode });
+  const isWalletMode = modeQ.data === 'wallet';
 
-  const ledger = (ledgerQ.data as LedgerEntry[] | undefined) ?? [];
-  const planQuota = (balanceQ.data?.planQuota as PlanQuota | undefined) || undefined;
+  const balanceQ = useQuery({
+    queryKey: ['wallet', 'balance'],
+    queryFn: fetchWalletBalance,
+    enabled: isWalletMode,
+  });
+  const ledgerQ = useQuery({
+    queryKey: ['wallet', 'ledger'],
+    queryFn: fetchWalletLedger,
+    enabled: isWalletMode,
+  });
 
-  const openTopUp = async () => {
+  const [topupAmount, setTopupAmount] = useState('25');
+
+  // Top-up is completed in the secure web checkout (Stripe Elements lives
+  // on the web /billing page). We just deep-link there with the desired
+  // amount; the server credits the wallet once Stripe confirms.
+  const openTopupCheckout = async (amountDollars: number) => {
+    const cents = Math.round(amountDollars * 100);
+    if (!(cents > 0)) return;
     try {
-      await WebBrowser.openBrowserAsync(`${getApiBaseUrl()}/billing#wallet`);
-      balanceQ.refetch();
-      ledgerQ.refetch();
+      await WebBrowser.openBrowserAsync(
+        `${getApiBaseUrl()}/billing?walletTopup=${cents}#wallet`,
+      );
     } catch (e) {
-      Alert.alert('Could not open browser', extractErrorMessage(e) || 'Try again');
+      Alert.alert('Could not open billing', extractErrorMessage(e) || 'Try again');
+      return;
     }
+    qc.invalidateQueries({ queryKey: ['wallet', 'balance'] });
+    qc.invalidateQueries({ queryKey: ['wallet', 'ledger'] });
+    balanceQ.refetch();
+    ledgerQ.refetch();
   };
 
-  if (balanceQ.isLoading) return <Loader />;
+  if (modeQ.isLoading) return <Loader />;
+
+  if (!isWalletMode) {
+    return (
+      <Screen style={{ paddingTop: spacing.lg, gap: spacing.lg }}>
+        <H1>Wallet</H1>
+        <Card>
+          <H3>You're on a subscription plan</H3>
+          <Muted style={{ marginTop: 4 }}>
+            Wallet billing is only available for pay-as-you-go tenants. Switch billing mode in the web billing page to enable a wallet.
+          </Muted>
+        </Card>
+      </Screen>
+    );
+  }
+
+  const ledger: LedgerEntry[] = ledgerQ.data ?? [];
+  const balance = balanceQ.data;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -62,44 +93,67 @@ export default function WalletScreen() {
         ListHeaderComponent={
           <Screen style={{ paddingHorizontal: 0, gap: spacing.lg, paddingBottom: spacing.lg }}>
             <H1>Wallet</H1>
-            <Card style={{ borderColor: colors.primary + '55', borderWidth: 2 }}>
+            <Card style={{
+              borderColor: balance?.lowBalance ? colors.warning : colors.primary + '55',
+              borderWidth: 2,
+            }}>
               <Small>Current balance</Small>
-              <H1 style={{ color: colors.primary, marginTop: 4 }}>
-                {formatCurrency(balanceQ.data?.balanceCents)}
+              <H1 style={{ color: balance?.lowBalance ? colors.warning : colors.primary, marginTop: 4 }}>
+                {formatCurrency(balance?.balanceCents ?? 0)}
               </H1>
-              {planQuota ? (
-                <View style={{ marginTop: 12, gap: 4 }}>
-                  <Small>Plan quota usage</Small>
-                  <Muted>
-                    Email {planQuota.emailUsed ?? 0} / {planQuota.emailLimit ?? '∞'} ·
-                    SMS {planQuota.smsUsed ?? 0} / {planQuota.smsLimit ?? '∞'}
-                  </Muted>
-                </View>
+              {balance?.lowBalance ? (
+                <Pill color={colors.warning}>Low balance — top up to keep sending</Pill>
               ) : null}
-              <Button title="Add funds" onPress={openTopUp} style={{ marginTop: 16 }} />
-              <Pill color={colors.info}>Top up via secure web browser — no in-app purchases</Pill>
+              <View style={{ marginTop: spacing.md, gap: 4 }}>
+                <Small>SMS rate</Small>
+                <Muted>${((balance?.smsRateMicros ?? 0) / 1_000_000).toFixed(6)} per segment</Muted>
+                <Small style={{ marginTop: 6 }}>Email rate</Small>
+                <Muted>${((balance?.emailRateMicros ?? 0) / 1_000_000).toFixed(6)} per email</Muted>
+              </View>
             </Card>
-            {balanceQ.data === null ? (
-              <Card>
-                <H3>Wallet not yet active</H3>
-                <Muted style={{ marginTop: 4 }}>
-                  Wallet billing isn't enabled for this tenant yet. Once it's turned on by Chain support, your balance and
-                  transaction history will appear here.
-                </Muted>
-              </Card>
-            ) : (
-              <H3>Transaction history</H3>
-            )}
+
+            <Card>
+              <H3>Add funds</H3>
+              <Field
+                label="Amount (USD)"
+                value={topupAmount}
+                onChangeText={setTopupAmount}
+                keyboardType="decimal-pad"
+              />
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: spacing.md }}>
+                {[25, 50, 100, 250].map((v) => (
+                  <Pill key={v} color={colors.info}>
+                    <Body
+                      onPress={() => setTopupAmount(String(v))}
+                      style={{ color: '#fff' }}
+                    >
+                      ${v}
+                    </Body>
+                  </Pill>
+                ))}
+              </View>
+              <Button
+                title={`Top up $${parseFloat(topupAmount || '0').toFixed(2)}`}
+                fullWidth
+                disabled={!(parseFloat(topupAmount) > 0)}
+                onPress={() => { void openTopupCheckout(parseFloat(topupAmount)); }}
+              />
+              <Muted style={{ marginTop: spacing.sm, fontSize: 12 }}>
+                Payment is completed in a secure browser. Your wallet is credited automatically when Stripe confirms.
+              </Muted>
+            </Card>
+
+            <H3>Transaction history</H3>
           </Screen>
         }
-        ListEmptyComponent={balanceQ.data === null ? null : <EmptyState title="No transactions yet" />}
+        ListEmptyComponent={<EmptyState title="No transactions yet" />}
         renderItem={({ item }) => {
           const positive = (item.amountCents || 0) > 0;
           return (
             <Card>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                 <View style={{ flex: 1 }}>
-                  <Body style={{ fontWeight: '600' }}>{item.description || item.kind || 'Transaction'}</Body>
+                  <Body style={{ fontWeight: '600' }}>{item.description || item.type || item.entryType || item.kind || 'Transaction'}</Body>
                   <Small>{item.createdAt ? new Date(item.createdAt).toLocaleString() : ''}</Small>
                 </View>
                 <Body style={{ color: positive ? colors.success : colors.danger, fontWeight: '700' }}>

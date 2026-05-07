@@ -1944,6 +1944,97 @@ export async function runMigrations() {
       console.log(`  ⚠ consumers unique index (already exists or duplicates remain): ${err.message}`);
     }
 
+    // Wallet + à la carte billing (Task #47)
+    try {
+      await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS billing_mode TEXT DEFAULT 'subscription'`);
+      await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS wallet_sms_rate_cents INTEGER DEFAULT 1`);
+      await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS wallet_email_rate_cents INTEGER DEFAULT 1`);
+      await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS wallet_low_balance_threshold_cents INTEGER DEFAULT 500`);
+      console.log('  ✓ tenants billing_mode + wallet rate columns');
+    } catch (err: any) {
+      console.log(`  ⚠ tenants wallet columns: ${err.message}`);
+    }
+
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS wallets (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID NOT NULL UNIQUE REFERENCES tenants(id) ON DELETE CASCADE,
+          balance_cents BIGINT NOT NULL DEFAULT 0,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS wallet_ledger (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          wallet_id UUID NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+          amount_cents BIGINT NOT NULL,
+          balance_after_cents BIGINT NOT NULL,
+          type TEXT NOT NULL,
+          description TEXT,
+          metadata JSONB DEFAULT '{}'::jsonb,
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS wallet_ledger_tenant_created_idx ON wallet_ledger (tenant_id, created_at DESC)`);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS addons (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          code TEXT UNIQUE NOT NULL,
+          name TEXT NOT NULL,
+          description TEXT,
+          monthly_price_cents INTEGER NOT NULL DEFAULT 0,
+          per_unit_price_cents INTEGER DEFAULT 0,
+          is_active BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS tenant_addons (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          addon_id UUID NOT NULL REFERENCES addons(id) ON DELETE CASCADE,
+          status TEXT NOT NULL DEFAULT 'active',
+          quantity INTEGER NOT NULL DEFAULT 1,
+          activated_at TIMESTAMP DEFAULT NOW(),
+          cancelled_at TIMESTAMP,
+          last_charged_at TIMESTAMP,
+          metadata JSONB DEFAULT '{}'::jsonb
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS tenant_addons_tenant_idx ON tenant_addons (tenant_id, status)`);
+
+      // Seed default add-on catalog
+      await client.query(`
+        INSERT INTO addons (code, name, description, monthly_price_cents, per_unit_price_cents)
+        VALUES
+          ('dedicated_number', 'Dedicated Phone Number', 'A dedicated 10DLC SMS-enabled phone number for your tenant.', 1000, 0),
+          ('document_signing', 'Document Signing', 'E-signature add-on with ESIGN compliance.', 4900, 0),
+          ('ai_auto_response', 'AI Auto-Response', 'AI-powered automatic email replies.', 4900, 8)
+        ON CONFLICT (code) DO NOTHING
+      `);
+      console.log('  ✓ wallets, wallet_ledger, addons, tenant_addons tables + seed');
+    } catch (err: any) {
+      console.log(`  ⚠ wallet/addon tables: ${err.message}`);
+    }
+
+    // Wallet billing additions: micros pricing, auto-reload, ledger parent, tenant_addons.next_charge_at
+    try {
+      await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS wallet_sms_rate_micros INTEGER DEFAULT 9500`);
+      await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS wallet_email_rate_micros INTEGER DEFAULT 800`);
+      await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS wallet_auto_reload_enabled BOOLEAN DEFAULT FALSE`);
+      await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS wallet_auto_reload_threshold_cents INTEGER DEFAULT 500`);
+      await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS wallet_auto_reload_amount_cents INTEGER DEFAULT 2500`);
+      await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS wallet_payment_method_token TEXT`);
+      await client.query(`ALTER TABLE wallet_ledger ADD COLUMN IF NOT EXISTS parent_entry_id UUID`);
+      await client.query(`ALTER TABLE tenant_addons ADD COLUMN IF NOT EXISTS next_charge_at TIMESTAMP`);
+      console.log('  ✓ wallet micros + auto-reload + parent/next_charge columns');
+    } catch (err: any) {
+      console.log(`  ⚠ wallet micros/auto-reload columns: ${err.message}`);
+    }
+
     console.log('✅ Database migrations completed successfully');
   } catch (error: any) {
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {

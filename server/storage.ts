@@ -195,6 +195,7 @@ export interface IStorage {
     name: string;
     slug: string;
     businessType?: string;
+    billingMode?: 'subscription' | 'wallet';
     ownerFirstName: string;
     ownerLastName: string;
     ownerDateOfBirth: string;
@@ -683,6 +684,7 @@ export class DatabaseStorage implements IStorage {
     name: string;
     slug: string;
     businessType?: string;
+    billingMode?: 'subscription' | 'wallet';
     ownerFirstName: string;
     ownerLastName: string;
     ownerDateOfBirth: string;
@@ -695,6 +697,7 @@ export class DatabaseStorage implements IStorage {
       name: data.name,
       slug: data.slug,
       businessType: data.businessType || 'call_center',
+      billingMode: data.billingMode || 'subscription',
       isTrialAccount: true,
       isPaidAccount: false,
       ownerFirstName: data.ownerFirstName,

@@ -13,6 +13,7 @@ import PaymentsScreen from '@/screens/PaymentsScreen';
 import PostPaymentScreen from '@/screens/PostPaymentScreen';
 import MoreScreen from '@/screens/MoreScreen';
 import WalletScreen from '@/screens/WalletScreen';
+import AddOnsScreen from '@/screens/AddOnsScreen';
 import ProfileScreen from '@/screens/ProfileScreen';
 import TenantSwitcherScreen from '@/screens/TenantSwitcherScreen';
 import { Text } from 'react-native';
@@ -79,6 +80,7 @@ function MoreStack() {
       <MoreNav.Screen name="MoreHome" component={MoreScreen} options={{ headerShown: false }} />
       <MoreNav.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profile' }} />
       <MoreNav.Screen name="Wallet" component={WalletScreen} options={{ title: 'Wallet' }} />
+      <MoreNav.Screen name="AddOns" component={AddOnsScreen} options={{ title: 'Add-ons' }} />
       <MoreNav.Screen name="TenantSwitcher" component={TenantSwitcherScreen} options={{ title: 'Tenant switcher' }} />
     </MoreNav.Navigator>
   );

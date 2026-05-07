@@ -90,7 +90,75 @@ export const tenants = pgTable("tenants", {
   voipUserPrice: integer("voip_user_price").default(8000), // Price per VoIP user in cents ($80.00)
   voipLocalDidPrice: integer("voip_local_did_price").default(500), // Price per local DID in cents ($5.00)
   voipTollFreePrice: integer("voip_toll_free_price").default(1000), // Price per toll-free number in cents ($10.00)
+  // Billing mode: subscription (legacy quota) or wallet (pay-as-you-go)
+  billingMode: text("billing_mode", { enum: ['subscription', 'wallet'] }).default('subscription'),
+  // Wallet à la carte rates (deprecated cent-rounded versions kept for backward compat)
+  walletSmsRateCents: integer("wallet_sms_rate_cents").default(1),
+  walletEmailRateCents: integer("wallet_email_rate_cents").default(1),
+  // Sub-cent precision rates in micros (1 micro = 1 millionth USD = 1/10000 cent).
+  // Defaults: SMS $0.0095/segment = 9500 micros; Email $0.0008 = 800 micros.
+  walletSmsRateMicros: integer("wallet_sms_rate_micros").default(9500),
+  walletEmailRateMicros: integer("wallet_email_rate_micros").default(800),
+  walletLowBalanceThresholdCents: integer("wallet_low_balance_threshold_cents").default(500), // Warn under $5
+  // Auto-reload settings (enabled when a payment method token is on file)
+  walletAutoReloadEnabled: boolean("wallet_auto_reload_enabled").default(false),
+  walletAutoReloadThresholdCents: integer("wallet_auto_reload_threshold_cents").default(500),
+  walletAutoReloadAmountCents: integer("wallet_auto_reload_amount_cents").default(2500),
+  walletPaymentMethodToken: text("wallet_payment_method_token"), // Stored payment method id (Stripe/AuthNet/etc.)
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Wallet (one per tenant when billingMode='wallet')
+export const wallets = pgTable("wallets", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull().unique(),
+  balanceCents: bigint("balance_cents", { mode: "number" }).notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Wallet ledger - immutable transactions
+export const walletLedger = pgTable("wallet_ledger", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  walletId: uuid("wallet_id").references(() => wallets.id, { onDelete: "cascade" }).notNull(),
+  // Positive = credit (top-up, refund); negative = debit (sends, addons)
+  amountCents: bigint("amount_cents", { mode: "number" }).notNull(),
+  balanceAfterCents: bigint("balance_after_cents", { mode: "number" }).notNull(),
+  type: text("type", {
+    enum: ['topup', 'sms_send', 'email_send', 'addon_charge', 'campaign_estimate', 'reservation', 'refund', 'adjustment']
+  }).notNull(),
+  // For refunds/commits, the original reservation entry id this entry adjusts
+  parentEntryId: uuid("parent_entry_id"),
+  description: text("description"),
+  metadata: jsonb("metadata").default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Add-on catalog (platform-level)
+export const addons = pgTable("addons", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: text("code").unique().notNull(), // e.g. 'dedicated_number', 'document_signing'
+  name: text("name").notNull(),
+  description: text("description"),
+  monthlyPriceCents: integer("monthly_price_cents").notNull().default(0),
+  perUnitPriceCents: integer("per_unit_price_cents").default(0), // For metered add-ons
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Tenant-activated add-ons
+export const tenantAddons = pgTable("tenant_addons", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  addonId: uuid("addon_id").references(() => addons.id, { onDelete: "cascade" }).notNull(),
+  status: text("status", { enum: ['active', 'cancelled'] }).notNull().default('active'),
+  quantity: integer("quantity").notNull().default(1),
+  activatedAt: timestamp("activated_at").defaultNow(),
+  cancelledAt: timestamp("cancelled_at"),
+  lastChargedAt: timestamp("last_charged_at"),
+  nextChargeAt: timestamp("next_charge_at"), // When the next monthly fee is due
+  metadata: jsonb("metadata").default(sql`'{}'::jsonb`),
 });
 
 // Agency credentials (for username/password auth)
@@ -1774,6 +1842,10 @@ export const insertManualPaymentSchema = createInsertSchema(manualPayments).omit
 export const insertCampaignLogSchema = createInsertSchema(campaignLogs).omit({ id: true, createdAt: true });
 export const insertCampaignLogItemSchema = createInsertSchema(campaignLogItems).omit({ id: true, createdAt: true });
 export const insertProposedArrangementSchema = createInsertSchema(proposedArrangements).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertWalletSchema = createInsertSchema(wallets).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertWalletLedgerSchema = createInsertSchema(walletLedger).omit({ id: true, createdAt: true });
+export const insertAddonSchema = createInsertSchema(addons).omit({ id: true, createdAt: true });
+export const insertTenantAddonSchema = createInsertSchema(tenantAddons).omit({ id: true, activatedAt: true, cancelledAt: true, lastChargedAt: true });
 
 // Types
 export type UpsertUser = typeof users.$inferInsert;
@@ -1881,3 +1953,11 @@ export type CampaignLogItem = typeof campaignLogItems.$inferSelect;
 export type InsertCampaignLogItem = z.infer<typeof insertCampaignLogItemSchema>;
 export type ProposedArrangement = typeof proposedArrangements.$inferSelect;
 export type InsertProposedArrangement = z.infer<typeof insertProposedArrangementSchema>;
+export type Wallet = typeof wallets.$inferSelect;
+export type InsertWallet = z.infer<typeof insertWalletSchema>;
+export type WalletLedgerEntry = typeof walletLedger.$inferSelect;
+export type InsertWalletLedgerEntry = z.infer<typeof insertWalletLedgerSchema>;
+export type Addon = typeof addons.$inferSelect;
+export type InsertAddon = z.infer<typeof insertAddonSchema>;
+export type TenantAddon = typeof tenantAddons.$inferSelect;
+export type InsertTenantAddon = z.infer<typeof insertTenantAddonSchema>;
