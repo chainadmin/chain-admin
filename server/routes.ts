@@ -1,6 +1,7 @@
 import type { Express, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage, type IStorage } from "./storage";
+import { ACCOUNT_STATUSES, isAccountStatus } from "../shared/constants";
 import { voipStorage } from "./voipStorage";
 import { authenticateUser, authenticateConsumer, getCurrentUser, requireEmailService, requireSmsService, requirePortalAccess, requirePaymentProcessing, requireOwner, requireServiceAccess } from "./authMiddleware";
 import { postmarkServerService } from "./postmarkServerService";
@@ -2865,8 +2866,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Account IDs array is required" });
       }
       
-      if (!status || !['active', 'inactive', 'recalled', 'closed', 'overdue', 'settled'].includes(status)) {
-        return res.status(400).json({ message: "Valid status is required (active, inactive, recalled, closed, overdue, or settled)" });
+      if (!status || !isAccountStatus(status)) {
+        return res.status(400).json({ message: `Valid status is required (${ACCOUNT_STATUSES.join(', ')})` });
       }
 
       // Get all accounts for this tenant

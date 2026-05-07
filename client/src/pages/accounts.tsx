@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
+import { ACCOUNT_STATUSES, ACCOUNT_STATUS_LABELS } from "@shared/constants";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -1327,11 +1328,9 @@ export default function Accounts() {
                     <SelectValue placeholder="Select status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="overdue">Overdue</SelectItem>
-                    <SelectItem value="settled">Settled</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
-                    <SelectItem value="closed">Closed</SelectItem>
+                    {ACCOUNT_STATUSES.map((s) => (
+                      <SelectItem key={s} value={s}>{ACCOUNT_STATUS_LABELS[s]}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

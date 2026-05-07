@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ACCOUNT_STATUSES, ACCOUNT_STATUS_LABELS, isAccountStatus, type AccountStatus } from "@shared/constants";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -161,17 +162,19 @@ export default function AccountsTable({
     }
   };
 
+  const STATUS_COLOR_MAP: Partial<Record<AccountStatus, string>> = {
+    active: 'border border-emerald-400/30 bg-emerald-500/10 text-emerald-200',
+    overdue: 'border border-rose-400/30 bg-rose-500/10 text-rose-200',
+    settled: 'border border-slate-400/30 bg-slate-500/10 text-slate-200',
+    inactive: 'border border-slate-400/30 bg-slate-500/10 text-slate-300',
+    closed: 'border border-sky-400/30 bg-sky-500/10 text-sky-200',
+    recalled: 'border border-amber-400/30 bg-amber-500/10 text-amber-200',
+  };
+
   const getStatusColor = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case 'active':
-        return 'border border-emerald-400/30 bg-emerald-500/10 text-emerald-200';
-      case 'overdue':
-        return 'border border-rose-400/30 bg-rose-500/10 text-rose-200';
-      case 'settled':
-        return 'border border-slate-400/30 bg-slate-500/10 text-slate-200';
-      default:
-        return 'border border-amber-400/30 bg-amber-500/10 text-amber-200';
-    }
+    const lower = status?.toLowerCase();
+    return (isAccountStatus(lower) ? STATUS_COLOR_MAP[lower] : undefined)
+      ?? 'border border-amber-400/30 bg-amber-500/10 text-amber-200';
   };
 
   const getInitials = (firstName?: string, lastName?: string) => {
@@ -239,11 +242,9 @@ export default function AccountsTable({
                   <SelectValue placeholder="Change status" />
                 </SelectTrigger>
                 <SelectContent className="border border-white/10 bg-[#0f1a3c] text-blue-100">
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="overdue">Overdue</SelectItem>
-                  <SelectItem value="settled">Settled</SelectItem>
-                  <SelectItem value="inactive">Inactive</SelectItem>
-                  <SelectItem value="closed">Closed</SelectItem>
+                  {ACCOUNT_STATUSES.map((s) => (
+                    <SelectItem key={s} value={s}>{ACCOUNT_STATUS_LABELS[s]}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Button
@@ -266,9 +267,9 @@ export default function AccountsTable({
             </SelectTrigger>
             <SelectContent className="border border-white/10 bg-[#0f1a3c] text-blue-100">
               <SelectItem value="all">All status</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="overdue">Overdue</SelectItem>
-              <SelectItem value="settled">Settled</SelectItem>
+              {ACCOUNT_STATUSES.map((s) => (
+                <SelectItem key={s} value={s}>{ACCOUNT_STATUS_LABELS[s]}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
