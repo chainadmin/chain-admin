@@ -980,7 +980,7 @@ export const subscriptions = pgTable("subscriptions", {
 export const invoices = pgTable("invoices", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
-  subscriptionId: uuid("subscription_id").references(() => subscriptions.id, { onDelete: "cascade" }).notNull(),
+  subscriptionId: uuid("subscription_id").references(() => subscriptions.id, { onDelete: "cascade" }),
   invoiceNumber: text("invoice_number").notNull().unique(),
   status: text("status").default("pending"), // "pending", "paid", "overdue", "cancelled"
   periodStart: timestamp("period_start").notNull(),

@@ -603,6 +603,28 @@ export async function runMigrations() {
       console.log('  ⚠ invoices unique constraint (already exists)');
     }
 
+    // Allow null subscription_id for à la carte tenants (add-ons only, no base subscription)
+    console.log('Making invoices.subscription_id nullable for à la carte tenants...');
+    try {
+      await client.query(`ALTER TABLE invoices ALTER COLUMN subscription_id DROP NOT NULL`);
+      console.log('  ✓ invoices.subscription_id is now nullable');
+    } catch (err) {
+      console.log('  ⚠ invoices.subscription_id nullable (already nullable or error)');
+    }
+
+    // Add unique constraint for à la carte invoices (no subscription) on (tenant_id, period_start, period_end)
+    console.log('Adding à la carte invoices unique constraint...');
+    try {
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_tenant_period_alacarte
+        ON invoices(tenant_id, period_start, period_end)
+        WHERE subscription_id IS NULL
+      `);
+      console.log('  ✓ à la carte invoices unique constraint (tenant_id, period_start, period_end)');
+    } catch (err) {
+      console.log('  ⚠ à la carte invoices unique constraint (already exists)');
+    }
+
     try {
       await client.query(`
         CREATE TABLE IF NOT EXISTS document_templates (
