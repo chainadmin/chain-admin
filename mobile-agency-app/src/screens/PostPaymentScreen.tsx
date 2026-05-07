@@ -1,19 +1,26 @@
 import React, { useMemo, useState } from 'react';
 import { Alert, ScrollView, View } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
   Body, Button, Card, EmptyState, Field, formatCurrency, H1, H3, Loader, Muted, Pill, Screen, Small,
 } from '@/components/ui';
 import { fetchAccounts, processPayment } from '@/lib/api';
+import type { Account } from '@/types/api';
+import type { AccountsStackParamList } from '@/navigation/types';
+import { extractErrorMessage } from '@/navigation/types';
 import { colors, spacing } from '@/theme/colors';
 
+type Nav = NativeStackNavigationProp<AccountsStackParamList, 'PostPayment'>;
+type Route = RouteProp<AccountsStackParamList, 'PostPayment'>;
+
 export default function PostPaymentScreen() {
-  const nav = useNavigation<any>();
-  const route = useRoute<any>();
+  const nav = useNavigation<Nav>();
+  const route = useRoute<Route>();
   const qc = useQueryClient();
 
-  const accountsQ = useQuery({ queryKey: ['accounts'], queryFn: fetchAccounts });
+  const accountsQ = useQuery<Account[]>({ queryKey: ['accounts'], queryFn: fetchAccounts });
   const [accountId, setAccountId] = useState<string>(route.params?.accountId || '');
   const [search, setSearch] = useState('');
   const [amount, setAmount] = useState('');
@@ -24,17 +31,17 @@ export default function PostPaymentScreen() {
   const [cvv, setCvv] = useState('');
   const [zipCode, setZipCode] = useState('');
 
-  const account = useMemo(
-    () => accountsQ.data?.find((a: any) => a.id === accountId),
+  const account = useMemo<Account | undefined>(
+    () => accountsQ.data?.find((a) => a.id === accountId),
     [accountsQ.data, accountId]
   );
 
-  const filtered = useMemo(() => {
+  const filtered = useMemo<Account[]>(() => {
     const arr = accountsQ.data ?? [];
     if (!search) return arr.slice(0, 25);
     const q = search.toLowerCase();
     return arr
-      .filter((a: any) =>
+      .filter((a) =>
         [a.consumer?.firstName, a.consumer?.lastName, a.accountNumber, a.consumer?.email]
           .filter(Boolean)
           .join(' ')
@@ -71,8 +78,8 @@ export default function PostPaymentScreen() {
       Alert.alert('Payment posted', 'The payment has been submitted.');
       nav.goBack();
     },
-    onError: (e: any) =>
-      Alert.alert('Payment failed', e?.response?.data?.message || e?.message || 'Try again'),
+    onError: (e) =>
+      Alert.alert('Payment failed', extractErrorMessage(e) || 'Try again'),
   });
 
   if (accountsQ.isLoading) return <Loader />;
@@ -100,7 +107,7 @@ export default function PostPaymentScreen() {
             {filtered.length === 0 ? (
               <EmptyState title="No matching accounts" />
             ) : (
-              filtered.map((a: any) => (
+              filtered.map((a) => (
                 <Card key={a.id} style={{ paddingVertical: 12 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                     <View style={{ flex: 1 }}>
@@ -140,12 +147,7 @@ export default function PostPaymentScreen() {
             />
             <View style={{ flexDirection: 'row', gap: 12 }}>
               <View style={{ flex: 1 }}>
-                <Field
-                  label="Expiry (MM/YY)"
-                  value={expiryDate}
-                  onChangeText={setExpiryDate}
-                  placeholder="12/27"
-                />
+                <Field label="Expiry (MM/YY)" value={expiryDate} onChangeText={setExpiryDate} placeholder="12/27" />
               </View>
               <View style={{ flex: 1 }}>
                 <Field

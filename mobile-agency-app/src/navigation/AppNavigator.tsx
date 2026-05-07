@@ -3,6 +3,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as Notifications from 'expo-notifications';
 import { navigateDeepLink } from '@/navigation/navigationRef';
+import { deepLinkRouteFromPayload, handleColdStartNotification, registerForPushNotificationsAsync } from '@/lib/push';
 import DashboardScreen from '@/screens/DashboardScreen';
 import AccountsScreen from '@/screens/AccountsScreen';
 import AccountDetailScreen from '@/screens/AccountDetailScreen';
@@ -16,10 +17,19 @@ import ProfileScreen from '@/screens/ProfileScreen';
 import TenantSwitcherScreen from '@/screens/TenantSwitcherScreen';
 import { Text } from 'react-native';
 import { colors } from '@/theme/colors';
-import { registerForPushNotificationsAsync } from '@/lib/push';
+import type {
+  AccountsStackParamList,
+  MessagingStackParamList,
+  MoreStackParamList,
+  PaymentsStackParamList,
+  RootTabParamList,
+} from '@/navigation/types';
 
-const Tab = createBottomTabNavigator();
-const Stack = createNativeStackNavigator();
+const Tab = createBottomTabNavigator<RootTabParamList>();
+const AccountsNav = createNativeStackNavigator<AccountsStackParamList>();
+const MessagingNav = createNativeStackNavigator<MessagingStackParamList>();
+const PaymentsNav = createNativeStackNavigator<PaymentsStackParamList>();
+const MoreNav = createNativeStackNavigator<MoreStackParamList>();
 
 const screenOptions = {
   headerStyle: { backgroundColor: colors.bgElevated },
@@ -36,73 +46,53 @@ function tabIcon(label: string) {
 
 function AccountsStack() {
   return (
-    <Stack.Navigator screenOptions={screenOptions}>
-      <Stack.Screen name="AccountsList" component={AccountsScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="AccountDetail" component={AccountDetailScreen} options={{ title: 'Account' }} />
-      <Stack.Screen name="Compose" component={ComposeMessageScreen} options={{ title: 'Compose' }} />
-      <Stack.Screen name="PostPayment" component={PostPaymentScreen} options={{ title: 'Post payment' }} />
-    </Stack.Navigator>
+    <AccountsNav.Navigator screenOptions={screenOptions}>
+      <AccountsNav.Screen name="AccountsList" component={AccountsScreen} options={{ headerShown: false }} />
+      <AccountsNav.Screen name="AccountDetail" component={AccountDetailScreen} options={{ title: 'Account' }} />
+      <AccountsNav.Screen name="Compose" component={ComposeMessageScreen} options={{ title: 'Compose' }} />
+      <AccountsNav.Screen name="PostPayment" component={PostPaymentScreen} options={{ title: 'Post payment' }} />
+    </AccountsNav.Navigator>
   );
 }
 
 function MessagingStack() {
   return (
-    <Stack.Navigator screenOptions={screenOptions}>
-      <Stack.Screen name="MessagingList" component={MessagingScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="Compose" component={ComposeMessageScreen} options={{ title: 'Compose' }} />
-    </Stack.Navigator>
+    <MessagingNav.Navigator screenOptions={screenOptions}>
+      <MessagingNav.Screen name="MessagingList" component={MessagingScreen} options={{ headerShown: false }} />
+      <MessagingNav.Screen name="Compose" component={ComposeMessageScreen} options={{ title: 'Compose' }} />
+    </MessagingNav.Navigator>
   );
 }
 
 function PaymentsStack() {
   return (
-    <Stack.Navigator screenOptions={screenOptions}>
-      <Stack.Screen name="PaymentsList" component={PaymentsScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="PostPayment" component={PostPaymentScreen} options={{ title: 'Post payment' }} />
-    </Stack.Navigator>
+    <PaymentsNav.Navigator screenOptions={screenOptions}>
+      <PaymentsNav.Screen name="PaymentsList" component={PaymentsScreen} options={{ headerShown: false }} />
+      <PaymentsNav.Screen name="PostPayment" component={PostPaymentScreen} options={{ title: 'Post payment' }} />
+    </PaymentsNav.Navigator>
   );
 }
 
 function MoreStack() {
   return (
-    <Stack.Navigator screenOptions={screenOptions}>
-      <Stack.Screen name="MoreHome" component={MoreScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profile' }} />
-      <Stack.Screen name="Wallet" component={WalletScreen} options={{ title: 'Wallet' }} />
-      <Stack.Screen name="TenantSwitcher" component={TenantSwitcherScreen} options={{ title: 'Tenant switcher' }} />
-    </Stack.Navigator>
+    <MoreNav.Navigator screenOptions={screenOptions}>
+      <MoreNav.Screen name="MoreHome" component={MoreScreen} options={{ headerShown: false }} />
+      <MoreNav.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profile' }} />
+      <MoreNav.Screen name="Wallet" component={WalletScreen} options={{ title: 'Wallet' }} />
+      <MoreNav.Screen name="TenantSwitcher" component={TenantSwitcherScreen} options={{ title: 'Tenant switcher' }} />
+    </MoreNav.Navigator>
   );
-}
-
-type PushPayload = {
-  type?: 'payment' | 'callback' | 'reply' | 'account';
-  accountId?: string;
-  consumerId?: string;
-};
-
-function deepLinkRoute(payload: PushPayload | undefined): { tab: string; screen?: string; params?: Record<string, unknown> } | null {
-  if (!payload || typeof payload !== 'object') return null;
-  switch (payload.type) {
-    case 'payment':
-      return { tab: 'Payments' };
-    case 'callback':
-    case 'reply':
-      return { tab: 'Messaging' };
-    case 'account':
-      return payload.accountId
-        ? { tab: 'Accounts', screen: 'AccountDetail', params: { accountId: payload.accountId } }
-        : { tab: 'Accounts' };
-    default:
-      return null;
-  }
 }
 
 export default function AppNavigator() {
   useEffect(() => {
     registerForPushNotificationsAsync().catch(() => undefined);
+    // Cold-start: route immediately if the app launched via notification tap.
+    handleColdStartNotification();
+    // Warm: route on subsequent taps.
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data as PushPayload | undefined;
-      const route = deepLinkRoute(data);
+      const data = response.notification.request.content.data as Parameters<typeof deepLinkRouteFromPayload>[0];
+      const route = deepLinkRouteFromPayload(data);
       if (route) navigateDeepLink(route);
     });
     return () => sub.remove();

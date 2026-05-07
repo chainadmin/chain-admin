@@ -1,14 +1,20 @@
 import React, { useState } from 'react';
 import { Alert, Pressable, ScrollView, View } from 'react-native';
 import { useMutation } from '@tanstack/react-query';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Body, Button, Field, H1, H3, Muted, Pill, Screen } from '@/components/ui';
 import { sendEmail, sendSms } from '@/lib/api';
 import { colors, radius, spacing } from '@/theme/colors';
+import type { AccountsStackParamList } from '@/navigation/types';
+import { extractErrorMessage } from '@/navigation/types';
+
+type Nav = NativeStackNavigationProp<AccountsStackParamList, 'Compose'>;
+type Route = RouteProp<AccountsStackParamList, 'Compose'>;
 
 export default function ComposeMessageScreen() {
-  const nav = useNavigation<any>();
-  const route = useRoute<any>();
+  const nav = useNavigation<Nav>();
+  const route = useRoute<Route>();
   const params = route.params || {};
   const initialChannel: 'email' | 'sms' = params.email ? 'email' : params.phone ? 'sms' : 'email';
   const [channel, setChannel] = useState<'email' | 'sms'>(initialChannel);
@@ -31,7 +37,7 @@ export default function ComposeMessageScreen() {
       Alert.alert('Sent', 'Your message was sent.');
       nav.goBack();
     },
-    onError: (e: any) => Alert.alert('Error', e?.response?.data?.message || 'Failed to send'),
+    onError: (e) => Alert.alert('Error', extractErrorMessage(e) || 'Failed to send'),
   });
 
   const switchChannel = (c: 'email' | 'sms') => {
@@ -83,9 +89,7 @@ export default function ComposeMessageScreen() {
           keyboardType={channel === 'email' ? 'email-address' : 'phone-pad'}
         />
 
-        {channel === 'email' ? (
-          <Field label="Subject" value={subject} onChangeText={setSubject} />
-        ) : null}
+        {channel === 'email' ? <Field label="Subject" value={subject} onChangeText={setSubject} /> : null}
 
         <Field
           label="Message"
@@ -106,7 +110,11 @@ export default function ComposeMessageScreen() {
           title={`Send ${channel.toUpperCase()}`}
           fullWidth
           loading={send.isPending}
-          disabled={!message || (channel === 'email' && (!to || !subject)) || (channel === 'sms' && !to && !params.consumerId)}
+          disabled={
+            !message ||
+            (channel === 'email' && (!to || !subject)) ||
+            (channel === 'sms' && !to && !params.consumerId)
+          }
           onPress={() => send.mutate()}
         />
       </Screen>

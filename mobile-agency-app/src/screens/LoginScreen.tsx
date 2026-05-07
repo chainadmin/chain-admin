@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Alert, Image, KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
 import { Button, Field, H1, Muted, Screen, Small } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
+import { extractErrorMessage } from '@/navigation/types';
 import { colors, spacing } from '@/theme/colors';
 
 export default function LoginScreen() {
@@ -18,8 +19,8 @@ export default function LoginScreen() {
     setBusy(true);
     try {
       await login(username.trim(), password);
-    } catch (e: any) {
-      const msg = e?.response?.data?.message || e?.message || 'Login failed';
+    } catch (e) {
+      const msg = extractErrorMessage(e) || 'Login failed';
       Alert.alert('Login failed', msg);
     } finally {
       setBusy(false);

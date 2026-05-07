@@ -1,12 +1,16 @@
 import React from 'react';
 import { Alert, ScrollView, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Body, Button, Card, H1, H3, Muted, Pill, Screen, Small } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
+import type { MoreStackParamList } from '@/navigation/types';
 import { colors, spacing } from '@/theme/colors';
 
+type Nav = NativeStackNavigationProp<MoreStackParamList, 'MoreHome'>;
+
 export default function MoreScreen() {
-  const nav = useNavigation<any>();
+  const nav = useNavigation<Nav>();
   const { user, tenant, logout, biometricEnabled, enableBiometric, disableBiometric } = useAuth();
 
   const onToggleBiometric = async () => {

@@ -3,6 +3,7 @@ import { Alert, Linking, ScrollView, View } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { RouteProp } from '@react-navigation/native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ACCOUNT_STATUSES, ACCOUNT_STATUS_LABELS, type AccountStatus } from '@shared/constants';
 import {
   Body, Button, Card, EmptyState, formatCurrency, H1, H3, Loader, Muted, Pill, Screen, Small,
@@ -14,13 +15,16 @@ import {
   patchAccount,
 } from '@/lib/api';
 import type { Account, Conversation, ManualPayment } from '@/types/api';
+import type { AccountsStackParamList } from '@/navigation/types';
+import { extractErrorMessage } from '@/navigation/types';
 import { colors, spacing, statusColor } from '@/theme/colors';
 
-type ParamList = { AccountDetail: { accountId: string } };
+type Nav = NativeStackNavigationProp<AccountsStackParamList, 'AccountDetail'>;
+type Route = RouteProp<AccountsStackParamList, 'AccountDetail'>;
 
 export default function AccountDetailScreen() {
-  const route = useRoute<RouteProp<ParamList, 'AccountDetail'>>();
-  const nav = useNavigation<{ navigate: (name: string, params?: Record<string, unknown>) => void }>() as any;
+  const route = useRoute<Route>();
+  const nav = useNavigation<Nav>();
   const qc = useQueryClient();
   const accountId = route.params?.accountId;
 
@@ -50,8 +54,7 @@ export default function AccountDetailScreen() {
       qc.invalidateQueries({ queryKey: ['accounts'] });
       Alert.alert('Updated', 'Account status updated');
     },
-    onError: (e: unknown) =>
-      Alert.alert('Error', extractErrorMessage(e) || 'Failed to update status'),
+    onError: (e) => Alert.alert('Error', extractErrorMessage(e) || 'Failed to update status'),
     onSettled: () => setSavingStatus(null),
   });
 
@@ -189,12 +192,4 @@ export default function AccountDetailScreen() {
       </Screen>
     </ScrollView>
   );
-}
-
-function extractErrorMessage(e: unknown): string | undefined {
-  if (typeof e === 'object' && e && 'response' in e) {
-    const r = (e as { response?: { data?: { message?: string } } }).response;
-    return r?.data?.message;
-  }
-  return undefined;
 }

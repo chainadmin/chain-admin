@@ -2,17 +2,20 @@ import React, { useState } from 'react';
 import { FlatList, Pressable, RefreshControl, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
   Body, Button, Card, EmptyState, H1, Loader, Muted, Screen, Small,
 } from '@/components/ui';
 import { fetchEmailReplies, fetchSmsReplies } from '@/lib/api';
 import type { EmailReply, SmsReply } from '@/types/api';
+import type { MessagingStackParamList } from '@/navigation/types';
 import { colors, radius, spacing } from '@/theme/colors';
 
 type Tab = 'email' | 'sms';
+type Nav = NativeStackNavigationProp<MessagingStackParamList, 'MessagingList'>;
 
 export default function MessagingScreen() {
-  const nav = useNavigation<{ navigate: (n: string, p?: Record<string, unknown>) => void }>() as any;
+  const nav = useNavigation<Nav>();
   const [tab, setTab] = useState<Tab>('email');
 
   const emailQ = useQuery<EmailReply[]>({

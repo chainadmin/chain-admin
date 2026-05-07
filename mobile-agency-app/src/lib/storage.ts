@@ -19,7 +19,7 @@ export async function clearAuthToken(): Promise<void> {
   await SecureStore.deleteItemAsync(KEYS.authToken);
 }
 
-export async function getStoredUser<T = any>(): Promise<T | null> {
+export async function getStoredUser<T = unknown>(): Promise<T | null> {
   const raw = await SecureStore.getItemAsync(KEYS.user);
   return raw ? (JSON.parse(raw) as T) : null;
 }
@@ -32,7 +32,7 @@ export async function clearStoredUser(): Promise<void> {
   await SecureStore.deleteItemAsync(KEYS.user);
 }
 
-export async function getStoredTenant<T = any>(): Promise<T | null> {
+export async function getStoredTenant<T = unknown>(): Promise<T | null> {
   const raw = await SecureStore.getItemAsync(KEYS.tenant);
   return raw ? (JSON.parse(raw) as T) : null;
 }

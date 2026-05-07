@@ -2,17 +2,20 @@ import React, { useState } from 'react';
 import { FlatList, Pressable, RefreshControl, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
   Body, Button, Card, EmptyState, formatCurrency, H1, Loader, Muted, Pill, Screen, Small,
 } from '@/components/ui';
 import { fetchPayments, fetchPaymentSchedules, fetchWalletBalance } from '@/lib/api';
 import type { Payment, PaymentSchedule } from '@/types/api';
+import type { PaymentsStackParamList } from '@/navigation/types';
 import { colors, radius, spacing } from '@/theme/colors';
 
 type Tab = 'payments' | 'arrangements';
+type Nav = NativeStackNavigationProp<PaymentsStackParamList, 'PaymentsList'>;
 
 export default function PaymentsScreen() {
-  const nav = useNavigation<{ navigate: (n: string, p?: Record<string, unknown>) => void }>() as any;
+  const nav = useNavigation<Nav>();
   const [tab, setTab] = useState<Tab>('payments');
   const paymentsQ = useQuery<Payment[]>({ queryKey: ['payments'], queryFn: fetchPayments, enabled: tab === 'payments' });
   const schedulesQ = useQuery<PaymentSchedule[]>({

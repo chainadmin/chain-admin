@@ -2,26 +2,31 @@ import React, { useMemo, useState } from 'react';
 import { Alert, FlatList, View } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
   Body, Button, Card, EmptyState, Field, H1, Loader, Muted, Pill, Screen, Small,
 } from '@/components/ui';
-import { fetchTenants, impersonateTenant } from '@/lib/api';
+import { fetchTenants, impersonateTenant, type Tenant } from '@/lib/api';
+import type { MoreStackParamList } from '@/navigation/types';
+import { extractErrorMessage } from '@/navigation/types';
 import { colors, spacing } from '@/theme/colors';
 import { useAuth } from '@/context/AuthContext';
 
+type Nav = NativeStackNavigationProp<MoreStackParamList, 'TenantSwitcher'>;
+
 export default function TenantSwitcherScreen() {
-  const nav = useNavigation<any>();
+  const nav = useNavigation<Nav>();
   const qc = useQueryClient();
   const { tenant: currentTenant, applyImpersonation } = useAuth();
   const [search, setSearch] = useState('');
 
-  const tenantsQ = useQuery({ queryKey: ['admin', 'tenants'], queryFn: fetchTenants });
+  const tenantsQ = useQuery<Tenant[]>({ queryKey: ['admin', 'tenants'], queryFn: fetchTenants });
 
-  const filtered = useMemo(() => {
+  const filtered = useMemo<Tenant[]>(() => {
     const arr = tenantsQ.data ?? [];
     if (!search) return arr;
     const q = search.toLowerCase();
-    return arr.filter((t: any) =>
+    return arr.filter((t) =>
       [t.name, t.slug, t.id].filter(Boolean).join(' ').toLowerCase().includes(q)
     );
   }, [tenantsQ.data, search]);
@@ -34,8 +39,8 @@ export default function TenantSwitcherScreen() {
       Alert.alert('Tenant switched', `Now viewing ${res.tenant.name}.`);
       nav.goBack();
     },
-    onError: (e: any) =>
-      Alert.alert('Could not switch', e?.response?.data?.message || 'Make sure you have platform admin access.'),
+    onError: (e) =>
+      Alert.alert('Could not switch', extractErrorMessage(e) || 'Make sure you have platform admin access.'),
   });
 
   if (tenantsQ.isLoading) return <Loader />;
@@ -44,10 +49,7 @@ export default function TenantSwitcherScreen() {
     return (
       <Screen style={{ paddingTop: spacing.lg }}>
         <H1>Tenant switcher</H1>
-        <EmptyState
-          title="Unable to load tenants"
-          message="Make sure your account has platform admin access."
-        />
+        <EmptyState title="Unable to load tenants" message="Make sure your account has platform admin access." />
       </Screen>
     );
   }
@@ -59,12 +61,12 @@ export default function TenantSwitcherScreen() {
         <Muted>Issue a 4-hour impersonation token and view another tenant's dashboard.</Muted>
         <Field placeholder="Search tenants…" value={search} onChangeText={setSearch} autoCapitalize="none" />
       </Screen>
-      <FlatList
+      <FlatList<Tenant>
         data={filtered}
-        keyExtractor={(t: any) => t.id}
+        keyExtractor={(t) => t.id}
         contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl }}
         ListEmptyComponent={<EmptyState title="No tenants" />}
-        renderItem={({ item }: any) => {
+        renderItem={({ item }) => {
           const selected = item.id === currentTenant?.id;
           const busy = switchTo.isPending && switchTo.variables === item.id;
           return (
