@@ -417,6 +417,13 @@ export default function Communications() {
   const [previewTemplate, setPreviewTemplate] = useState<any>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<any>(null);
+
+  // Preview with real account data
+  const [showAccountPreviewModal, setShowAccountPreviewModal] = useState(false);
+  const [accountPreviewSearch, setAccountPreviewSearch] = useState("");
+  const [accountPreviewSelectedId, setAccountPreviewSelectedId] = useState<string | null>(null);
+  const [accountPreviewSelectedLabel, setAccountPreviewSelectedLabel] = useState("");
+  const [accountPreviewResult, setAccountPreviewResult] = useState<string | null>(null);
   const smsTextareaRef = useRef<HTMLTextAreaElement>(null);
   
   // Refs for all email template fields to enable variable insertion
@@ -504,6 +511,61 @@ export default function Communications() {
     },
     enabled: smsSearchQuery.length >= 2,
   });
+
+  // Search query for "Preview with account" modal
+  const { data: accountPreviewSearchResults, isLoading: isSearchingForPreview } = useQuery({
+    queryKey: ["/api/search", "account-preview", accountPreviewSearch],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/search?q=${encodeURIComponent(accountPreviewSearch)}`);
+      return res.json();
+    },
+    enabled: accountPreviewSearch.length >= 2,
+  });
+
+  const [accountPreviewSubjectResult, setAccountPreviewSubjectResult] = useState<string | null>(null);
+
+  // Mutation to render a template with a real account's data
+  const previewWithAccountMutation = useMutation({
+    mutationFn: async ({ template, accountId, subject }: { template: string; accountId: string; subject?: string }) => {
+      const res = await apiRequest("POST", "/api/templates/preview", { template, accountId, subject });
+      return res.json();
+    },
+    onSuccess: (data: { rendered: string; renderedSubject?: string }) => {
+      setAccountPreviewResult(data.rendered);
+      setAccountPreviewSubjectResult(data.renderedSubject ?? null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Preview failed",
+        description: error.message || "Could not render preview with this account.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const openAccountPreviewModal = () => {
+    setAccountPreviewSearch("");
+    setAccountPreviewSelectedId(null);
+    setAccountPreviewSelectedLabel("");
+    setAccountPreviewResult(null);
+    setAccountPreviewSubjectResult(null);
+    setShowAccountPreviewModal(true);
+  };
+
+  const handlePreviewAccountSelect = (id: string, label: string) => {
+    setAccountPreviewSelectedId(id);
+    setAccountPreviewSelectedLabel(label);
+    setAccountPreviewResult(null);
+    setAccountPreviewSubjectResult(null);
+    setAccountPreviewSearch("");
+  };
+
+  const handleRenderPreviewWithAccount = () => {
+    if (!accountPreviewSelectedId) return;
+    const template = communicationType === "email" ? emailTemplateForm.html : smsTemplateForm.message;
+    const subject = communicationType === "email" ? emailTemplateForm.subject : undefined;
+    previewWithAccountMutation.mutate({ template, accountId: accountPreviewSelectedId, subject });
+  };
 
   // Parse query params on mount to pre-fill send email/sms forms
   useEffect(() => {
@@ -3325,10 +3387,24 @@ export default function Communications() {
                           </div>
 
                           <div className="border border-white/20 rounded-lg p-4 bg-white/5">
-                            <Label className="text-sm font-medium flex items-center gap-2 mb-3 text-blue-100">
-                              <Eye className="h-4 w-4" />
-                              Preview
-                            </Label>
+                            <div className="flex items-center justify-between mb-3">
+                              <Label className="text-sm font-medium flex items-center gap-2 text-blue-100">
+                                <Eye className="h-4 w-4" />
+                                Preview
+                              </Label>
+                              {emailTemplateForm.html && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={openAccountPreviewModal}
+                                  className="text-xs h-7 px-3 border-blue-400/40 bg-blue-500/10 text-blue-200 hover:bg-blue-500/20 hover:text-white"
+                                >
+                                  <Search className="h-3 w-3 mr-1" />
+                                  Preview with account
+                                </Button>
+                              )}
+                            </div>
                             <div className="border border-white/20 rounded-lg overflow-auto bg-white p-4 max-h-96">
                               {emailTemplateForm.html ? (
                                 <div className="bg-white">
@@ -3757,9 +3833,23 @@ export default function Communications() {
                               required
                               className="font-mono text-sm h-80 resize-none bg-white/10 border-white/20 text-white placeholder:text-blue-200/50"
                             />
-                            <p className="text-sm text-blue-100/70">
-                              {smsTemplateForm.message.length}/1600 characters
-                            </p>
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm text-blue-100/70">
+                                {smsTemplateForm.message.length}/1600 characters
+                              </p>
+                              {smsTemplateForm.message && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={openAccountPreviewModal}
+                                  className="text-xs h-7 px-3 border-blue-400/40 bg-blue-500/10 text-blue-200 hover:bg-blue-500/20 hover:text-white"
+                                >
+                                  <Search className="h-3 w-3 mr-1" />
+                                  Preview with account
+                                </Button>
+                              )}
+                            </div>
                           </div>
                         </div>
                         
@@ -3787,6 +3877,129 @@ export default function Communications() {
                       </form>
                     </>
                   )}
+                </DialogContent>
+              </Dialog>
+
+              {/* Preview with Real Account Dialog */}
+              <Dialog open={showAccountPreviewModal} onOpenChange={(open) => {
+                setShowAccountPreviewModal(open);
+                if (!open) {
+                  setAccountPreviewSearch("");
+                  setAccountPreviewSelectedId(null);
+                  setAccountPreviewSelectedLabel("");
+                  setAccountPreviewResult(null);
+                  setAccountPreviewSubjectResult(null);
+                }
+              }}>
+                <DialogContent className="max-w-2xl rounded-3xl border border-white/20 bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] text-white">
+                  <DialogHeader className="pb-4 border-b border-white/20">
+                    <DialogTitle className="flex items-center gap-2 text-white">
+                      <Search className="h-5 w-5 text-blue-400" />
+                      Preview with real account
+                    </DialogTitle>
+                    <p className="text-sm text-blue-100/70">
+                      Search for any account to see exactly how your template will look with real data.
+                    </p>
+                  </DialogHeader>
+
+                  <div className="space-y-4 py-2">
+                    {/* Account search */}
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium text-blue-100">Search for an account</Label>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-300" />
+                        <Input
+                          value={accountPreviewSearch}
+                          onChange={(e) => setAccountPreviewSearch(e.target.value)}
+                          placeholder="Search by name, account number, or creditor..."
+                          className="pl-9 bg-white/10 border-white/20 text-white placeholder:text-blue-200/50"
+                        />
+                      </div>
+
+                      {/* Search results */}
+                      {accountPreviewSearch.length >= 2 && (
+                        <div className="border border-white/20 rounded-lg bg-white/5 max-h-48 overflow-y-auto">
+                          {isSearchingForPreview ? (
+                            <div className="p-3 text-sm text-blue-200/60 text-center">Searching...</div>
+                          ) : (accountPreviewSearchResults as any)?.accounts?.length > 0 ? (
+                            (accountPreviewSearchResults as any).accounts.map((acct: any) => {
+                              const label = [
+                                acct.firstName || acct.lastName ? `${acct.firstName ?? ""} ${acct.lastName ?? ""}`.trim() : null,
+                                acct.accountNumber,
+                                acct.creditor,
+                              ].filter(Boolean).join(" · ");
+                              return (
+                                <button
+                                  key={acct.id}
+                                  type="button"
+                                  onClick={() => handlePreviewAccountSelect(acct.id, label)}
+                                  className={`w-full text-left px-4 py-2.5 text-sm border-b border-white/10 last:border-0 transition hover:bg-white/10 ${accountPreviewSelectedId === acct.id ? "bg-blue-600/20 text-blue-100" : "text-blue-50"}`}
+                                >
+                                  <div className="font-medium">{acct.firstName || acct.lastName ? `${acct.firstName ?? ""} ${acct.lastName ?? ""}`.trim() : "Unknown consumer"}</div>
+                                  <div className="text-xs text-blue-200/60">{acct.accountNumber} {acct.creditor ? `· ${acct.creditor}` : ""}</div>
+                                </button>
+                              );
+                            })
+                          ) : (
+                            <div className="p-3 text-sm text-blue-200/60 text-center">No accounts found</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Selected account + render button */}
+                    {accountPreviewSelectedId && (
+                      <div className="flex items-center justify-between rounded-lg border border-blue-400/30 bg-blue-500/10 px-4 py-3">
+                        <div>
+                          <p className="text-xs text-blue-300 uppercase tracking-wide mb-0.5">Selected account</p>
+                          <p className="text-sm font-medium text-white">{accountPreviewSelectedLabel}</p>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={handleRenderPreviewWithAccount}
+                          disabled={previewWithAccountMutation.isPending}
+                          className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          {previewWithAccountMutation.isPending ? (
+                            <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Rendering...</>
+                          ) : (
+                            <><Eye className="h-3.5 w-3.5 mr-1.5" />Render preview</>
+                          )}
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Rendered preview result */}
+                    {accountPreviewResult !== null && (
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium text-blue-100 flex items-center gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-400" />
+                          Rendered preview
+                        </Label>
+                        {communicationType === "email" ? (
+                          <div className="border border-white/20 rounded-lg overflow-hidden bg-white">
+                            {accountPreviewSubjectResult && (
+                              <div className="px-4 pt-3 pb-2 border-b border-gray-100 bg-gray-50">
+                                <div className="text-xs text-gray-500 mb-0.5 font-medium uppercase tracking-wide">Subject</div>
+                                <div className="text-sm font-semibold text-gray-900">{accountPreviewSubjectResult}</div>
+                              </div>
+                            )}
+                            <div className="p-4 overflow-auto max-h-72">
+                              <div
+                                className="prose prose-sm max-w-none text-gray-900"
+                                dangerouslySetInnerHTML={{ __html: accountPreviewResult }}
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="border border-white/20 rounded-lg bg-white/5 p-4 max-h-60 overflow-auto">
+                            <p className="text-sm text-white whitespace-pre-wrap font-mono">{accountPreviewResult}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </DialogContent>
               </Dialog>
             </div>

@@ -3429,6 +3429,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Template variable preview with real account data
+  app.post('/api/templates/preview', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = await getTenantId(req, storage);
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { template, accountId, subject } = req.body;
+
+      if (!template || !accountId) {
+        return res.status(400).json({ message: "template and accountId are required" });
+      }
+
+      const account = await storage.getAccount(accountId);
+      if (!account || account.tenantId !== tenantId) {
+        return res.status(404).json({ message: "Account not found" });
+      }
+
+      const tenant = await storage.getTenant(tenantId);
+      const tenantSettings = await storage.getTenantSettings(tenantId);
+
+      const tenantWithSettings = {
+        ...tenant,
+        settings: tenantSettings,
+        tenantSettings,
+      };
+
+      const consumer = account.consumer || {};
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+
+      const rendered = replaceTemplateVariables(template, consumer, account, tenantWithSettings, baseUrl);
+      const renderedSubject = subject
+        ? replaceTemplateVariables(subject, consumer, account, tenantWithSettings, baseUrl)
+        : undefined;
+
+      return res.json({ rendered, renderedSubject });
+    } catch (error) {
+      console.error("Error previewing template:", error);
+      res.status(500).json({ message: "Failed to render preview" });
+    }
+  });
+
   // Email template routes
   app.get('/api/email-templates', authenticateUser, async (req: any, res) => {
     try {
