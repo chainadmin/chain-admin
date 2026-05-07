@@ -191,7 +191,7 @@ class SmsService {
     tenantId: string,
     campaignId?: string,
     consumerId?: string,
-    metadata?: { automationId?: string; automationName?: string; source?: string }
+    metadata?: { automationId?: string; automationName?: string; source?: string; sequenceId?: string; sequenceStepOrder?: number }
   ): Promise<{ success: boolean; messageId?: string; error?: string; queued?: boolean; blocked?: boolean }> {
     // SMS COMPLIANCE: Pre-send check for opted-out consumers and blocked numbers
     // This prevents sending to consumers who have replied STOP or have undeliverable numbers
@@ -266,7 +266,7 @@ class SmsService {
     campaignId?: string,
     consumerId?: string,
     accountId?: string,
-    metadata?: { automationId?: string; automationName?: string; source?: string }
+    metadata?: { automationId?: string; automationName?: string; source?: string; sequenceId?: string; sequenceStepOrder?: number }
   ): Promise<{ success: boolean; messageId?: string; error?: string }> {
     try {
       // CRITICAL: Final check - verify campaign is still active before sending
@@ -362,7 +362,10 @@ class SmsService {
         segments: segmentCount, // Store calculated segment count
         status: result.status || 'queued', // Use Twilio's actual status (queued, accepted, etc.)
         sentAt: new Date(),
-        trackingData: { twilioSid: result.sid },
+        trackingData: {
+          twilioSid: result.sid,
+          ...(metadata?.sequenceId ? { sequenceId: metadata.sequenceId, sequenceStepOrder: metadata.sequenceStepOrder } : {}),
+        },
       });
       
       console.log(`📱 SMS tracking created: tenant=${tenantId}, sid=${result.sid}, segments=${segmentCount}, campaign=${campaignId || 'none'}`);

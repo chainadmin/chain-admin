@@ -88,6 +88,8 @@ import {
   Ban,
   RefreshCw,
   Search,
+  History,
+  CheckCircle,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 
@@ -558,6 +560,8 @@ export default function Communications() {
   const [showSequenceModal, setShowSequenceModal] = useState(false);
   const [editingSequence, setEditingSequence] = useState<any>(null);
   const [viewingEnrollmentsSequenceId, setViewingEnrollmentsSequenceId] = useState<number | null>(null);
+  const [viewingHistorySequenceId, setViewingHistorySequenceId] = useState<string | null>(null);
+  const [viewingHistorySequenceName, setViewingHistorySequenceName] = useState<string>('');
   const [sequenceSteps, setSequenceSteps] = useState<any[]>([]);
   const [sequenceForm, setSequenceForm] = useState({
     name: '',
@@ -662,6 +666,11 @@ export default function Communications() {
   const { data: sequenceEnrollments } = useQuery({
     queryKey: ['/api/sequences', viewingEnrollmentsSequenceId, 'enrollments'],
     enabled: viewingEnrollmentsSequenceId !== null,
+  });
+
+  const { data: sequenceHistory, isLoading: sequenceHistoryLoading } = useQuery({
+    queryKey: ['/api/sequences', viewingHistorySequenceId, 'history'],
+    enabled: viewingHistorySequenceId !== null,
   });
 
   // Blocked SMS numbers for compliance
@@ -5550,6 +5559,19 @@ export default function Communications() {
                               size="sm"
                               variant="outline"
                               onClick={() => {
+                                setViewingHistorySequenceId(sequence.id);
+                                setViewingHistorySequenceName(sequence.name);
+                              }}
+                              className="border-white/20 text-white hover:bg-white/10"
+                              data-testid={`button-view-history-${sequence.id}`}
+                            >
+                              <History className="mr-1 h-3 w-3" />
+                              Sent History
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
                                 setEditingSequence(sequence);
                                 setSequenceForm({
                                   name: sequence.name,
@@ -5809,6 +5831,101 @@ export default function Communications() {
                   <Users className="mx-auto mb-3 h-10 w-10 text-blue-200/60" />
                   <p className="font-semibold">No enrollments found</p>
                   <p className="text-sm text-blue-100/60">This sequence has no active or completed enrollments yet.</p>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Sequence Sent History Dialog */}
+        <Dialog open={viewingHistorySequenceId !== null} onOpenChange={(open) => !open && setViewingHistorySequenceId(null)}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-900 text-white border-white/20">
+            <DialogHeader>
+              <DialogTitle className="text-blue-50 flex items-center gap-2">
+                <History className="h-5 w-5 text-blue-300" />
+                Sent History — {viewingHistorySequenceName}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              {sequenceHistoryLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-blue-200/60" />
+                </div>
+              ) : sequenceHistory && (sequenceHistory as any[]).length > 0 ? (
+                <>
+                  <div className="text-sm text-blue-100/70 mb-2">
+                    {(sequenceHistory as any[]).length} message{(sequenceHistory as any[]).length !== 1 ? 's' : ''} sent by this sequence
+                  </div>
+                  <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+                    {(sequenceHistory as any[]).map((item: any) => {
+                      const isEmail = item.type === 'email';
+                      const statusColor =
+                        item.status === 'delivered' || item.status === 'sent' ? 'text-green-400' :
+                        item.status === 'failed' || item.status === 'bounced' ? 'text-red-400' :
+                        item.status === 'opened' ? 'text-blue-400' :
+                        'text-yellow-400';
+                      const statusIcon =
+                        item.status === 'delivered' || item.status === 'sent' || item.status === 'opened' ? (
+                          <CheckCircle className="h-4 w-4" />
+                        ) : item.status === 'failed' || item.status === 'bounced' ? (
+                          <XCircle className="h-4 w-4" />
+                        ) : (
+                          <Clock className="h-4 w-4" />
+                        );
+
+                      return (
+                        <div
+                          key={item.id}
+                          className="flex items-start gap-4 rounded-xl border border-white/10 bg-white/5 p-4"
+                        >
+                          <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full ${isEmail ? 'bg-blue-500/20' : 'bg-emerald-500/20'}`}>
+                            {isEmail ? (
+                              <Mail className={`h-4 w-4 ${isEmail ? 'text-blue-400' : 'text-emerald-400'}`} />
+                            ) : (
+                              <MessageSquare className="h-4 w-4 text-emerald-400" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-semibold text-blue-50 text-sm">
+                                {item.consumerFirstName || item.consumerLastName
+                                  ? `${item.consumerFirstName || ''} ${item.consumerLastName || ''}`.trim()
+                                  : 'Unknown Consumer'}
+                              </span>
+                              <Badge variant="outline" className={`text-xs border-white/20 ${isEmail ? 'text-blue-300' : 'text-emerald-300'}`}>
+                                {isEmail ? 'Email' : 'SMS'}
+                              </Badge>
+                              {item.stepOrder && (
+                                <Badge variant="outline" className="text-xs border-white/20 text-blue-100/60">
+                                  Step {item.stepOrder}
+                                </Badge>
+                              )}
+                              <span className={`flex items-center gap-1 text-xs font-medium ${statusColor}`}>
+                                {statusIcon}
+                                {item.status}
+                              </span>
+                            </div>
+                            <p className="mt-0.5 text-xs text-blue-100/60 truncate">
+                              {isEmail ? item.toAddress : item.toAddress}
+                              {isEmail && item.subject ? ` — ${item.subject}` : ''}
+                            </p>
+                          </div>
+                          <div className="flex-shrink-0 text-xs text-blue-100/50 text-right">
+                            {item.sentAt ? new Date(item.sentAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : ''}
+                            <div className="mt-0.5">
+                              {item.sentAt ? new Date(item.sentAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : ''}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                <div className="rounded-xl border border-dashed border-white/15 bg-white/5 py-10 text-center text-blue-100/70">
+                  <History className="mx-auto mb-3 h-10 w-10 text-blue-200/60" />
+                  <p className="font-semibold">No messages sent yet</p>
+                  <p className="text-sm text-blue-100/60">Messages auto-sent by this sequence will appear here.</p>
                 </div>
               )}
             </div>

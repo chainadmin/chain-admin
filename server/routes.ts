@@ -24,6 +24,7 @@ import {
   subscriptions,
   invoices,
   emailLogs,
+  smsTracking,
   emailCampaigns,
   serviceActivationRequests,
   autoResponseConfig,
@@ -6436,6 +6437,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching sequence enrollments:", error);
       res.status(500).json({ message: "Failed to fetch sequence enrollments" });
+    }
+  });
+
+  app.get('/api/sequences/:sequenceId/history', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { sequenceId } = req.params;
+
+      // Query email logs for this sequence (sequenceId stored in metadata JSONB)
+      const emailHistory = await db
+        .select({
+          id: emailLogs.id,
+          type: sql<string>`'email'`,
+          toAddress: emailLogs.toEmail,
+          subject: emailLogs.subject,
+          status: emailLogs.status,
+          sentAt: emailLogs.sentAt,
+          consumerId: emailLogs.consumerId,
+          stepOrder: sql<number>`(${emailLogs.metadata}->>'stepOrder')::int`,
+          consumerFirstName: consumers.firstName,
+          consumerLastName: consumers.lastName,
+        })
+        .from(emailLogs)
+        .leftJoin(consumers, eq(emailLogs.consumerId, consumers.id))
+        .where(
+          and(
+            eq(emailLogs.tenantId, tenantId),
+            sql`${emailLogs.metadata}->>'sequenceId' = ${sequenceId}`
+          )
+        )
+        .orderBy(desc(emailLogs.sentAt))
+        .limit(500);
+
+      // Query SMS tracking for this sequence (sequenceId stored in trackingData JSONB)
+      const smsHistory = await db
+        .select({
+          id: smsTracking.id,
+          type: sql<string>`'sms'`,
+          toAddress: smsTracking.phoneNumber,
+          subject: sql<string | null>`NULL`,
+          status: smsTracking.status,
+          sentAt: smsTracking.sentAt,
+          consumerId: smsTracking.consumerId,
+          stepOrder: sql<number>`(${smsTracking.trackingData}->>'sequenceStepOrder')::int`,
+          consumerFirstName: consumers.firstName,
+          consumerLastName: consumers.lastName,
+        })
+        .from(smsTracking)
+        .leftJoin(consumers, eq(smsTracking.consumerId, consumers.id))
+        .where(
+          and(
+            eq(smsTracking.tenantId, tenantId),
+            sql`${smsTracking.trackingData}->>'sequenceId' = ${sequenceId}`
+          )
+        )
+        .orderBy(desc(smsTracking.sentAt))
+        .limit(500);
+
+      // Merge and sort by sentAt descending
+      const combined = [...emailHistory, ...smsHistory].sort((a, b) => {
+        const aTime = a.sentAt ? new Date(a.sentAt).getTime() : 0;
+        const bTime = b.sentAt ? new Date(b.sentAt).getTime() : 0;
+        return bTime - aTime;
+      });
+
+      res.json(combined);
+    } catch (error) {
+      console.error("Error fetching sequence history:", error);
+      res.status(500).json({ message: "Failed to fetch sequence history" });
     }
   });
 
@@ -16546,7 +16620,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 tenantId,
                 undefined,
                 consumer.id,
-                { source: 'sequence' }
+                { source: 'sequence', sequenceId: sequence.id, sequenceStepOrder: currentStepOrder }
               );
               if (smsResult.success) {
                 stepSent = true;
