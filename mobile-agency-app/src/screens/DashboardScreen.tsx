@@ -1,0 +1,117 @@
+import React, { useCallback } from 'react';
+import { RefreshControl, ScrollView, View } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
+import { Card, EmptyState, formatCurrency, H1, H3, Loader, Muted, Small, Screen } from '@/components/ui';
+import { useAuth } from '@/context/AuthContext';
+import { fetchStats, fetchWalletBalance } from '@/lib/api';
+import { colors, spacing } from '@/theme/colors';
+
+function StatTile({ label, value, accent = colors.primary }: { label: string; value: string; accent?: string }) {
+  return (
+    <Card style={{ flex: 1, minWidth: '47%', borderLeftWidth: 3, borderLeftColor: accent }}>
+      <Small>{label}</Small>
+      <H3 style={{ marginTop: 6, color: '#fff' }}>{value}</H3>
+    </Card>
+  );
+}
+
+export default function DashboardScreen() {
+  const { user, tenant } = useAuth();
+
+  const statsQ = useQuery({ queryKey: ['stats'], queryFn: fetchStats });
+  const walletQ = useQuery({ queryKey: ['wallet', 'balance'], queryFn: fetchWalletBalance });
+
+  const onRefresh = useCallback(() => {
+    statsQ.refetch();
+    walletQ.refetch();
+  }, [statsQ, walletQ]);
+
+  return (
+    <ScrollView
+      style={{ flex: 1, backgroundColor: colors.bg }}
+      contentContainerStyle={{ paddingBottom: spacing.xxl }}
+      refreshControl={<RefreshControl tintColor="#fff" refreshing={statsQ.isRefetching} onRefresh={onRefresh} />}
+    >
+      <Screen style={{ paddingTop: spacing.lg, gap: spacing.lg }}>
+        <View>
+          <Small>Welcome back</Small>
+          <H1 style={{ marginTop: 4 }}>
+            {user?.firstName || user?.username || 'Agency'}{' '}
+            <Muted style={{ fontSize: 18 }}>· {tenant?.name}</Muted>
+          </H1>
+        </View>
+
+        {walletQ.data ? (
+          <Card style={{ borderColor: colors.primary + '55' }}>
+            <Small>Wallet balance</Small>
+            <H1 style={{ marginTop: 4, color: colors.primary }}>
+              {formatCurrency(walletQ.data.balanceCents)}
+            </H1>
+          </Card>
+        ) : null}
+
+        {statsQ.isLoading ? (
+          <Loader />
+        ) : statsQ.error ? (
+          <EmptyState title="Couldn't load metrics" message="Pull to refresh and try again." />
+        ) : (
+          <>
+            <View style={{ flexDirection: 'row', gap: spacing.md, flexWrap: 'wrap' }}>
+              <StatTile
+                label="Total consumers"
+                value={(statsQ.data?.totalConsumers ?? 0).toLocaleString()}
+                accent={colors.info}
+              />
+              <StatTile
+                label="Active accounts"
+                value={(statsQ.data?.activeAccounts ?? 0).toLocaleString()}
+                accent={colors.success}
+              />
+              <StatTile
+                label="Total balance"
+                value={`$${(statsQ.data?.totalBalance ?? 0).toLocaleString()}`}
+                accent={colors.accent}
+              />
+              <StatTile
+                label="Collection rate"
+                value={`${statsQ.data?.collectionRate ?? 0}%`}
+                accent={colors.warning}
+              />
+            </View>
+
+            {statsQ.data?.paymentMetrics ? (
+              <Card>
+                <H3>Payments</H3>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.md }}>
+                  <View><Small>Total collected</Small><H3 style={{ color: colors.success }}>
+                    ${(statsQ.data.paymentMetrics.totalCollected ?? 0).toLocaleString()}
+                  </H3></View>
+                  <View><Small>Monthly</Small><H3 style={{ color: colors.info }}>
+                    ${(statsQ.data.paymentMetrics.monthlyCollected ?? 0).toLocaleString()}
+                  </H3></View>
+                </View>
+              </Card>
+            ) : null}
+
+            {statsQ.data?.emailMetrics || statsQ.data?.smsMetrics ? (
+              <Card>
+                <H3>Communications</H3>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.md }}>
+                  <View><Small>Emails sent</Small><H3>
+                    {(statsQ.data?.emailMetrics?.totalSent ?? 0).toLocaleString()}
+                  </H3></View>
+                  <View><Small>SMS sent</Small><H3>
+                    {(statsQ.data?.smsMetrics?.totalSent ?? 0).toLocaleString()}
+                  </H3></View>
+                  <View><Small>Open rate</Small><H3>
+                    {statsQ.data?.emailMetrics?.openRate ?? 0}%
+                  </H3></View>
+                </View>
+              </Card>
+            ) : null}
+          </>
+        )}
+      </Screen>
+    </ScrollView>
+  );
+}
