@@ -16,7 +16,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Trash2, FileSignature } from "lucide-react";
+import { Trash2, FileSignature, RefreshCw } from "lucide-react";
 
 interface AccountsTableProps {
   accounts: any[];
@@ -92,6 +92,33 @@ export default function AccountsTable({
       });
     },
   });
+
+  const bulkUpdateStatusMutation = useMutation({
+    mutationFn: ({ ids, status }: { ids: string[]; status: string }) =>
+      apiRequest("PATCH", "/api/accounts/bulk-update-status", { ids, status }),
+    onSuccess: (_data, { ids, status }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/consumers"] });
+      setSelectedAccounts(new Set());
+      toast({
+        title: "Success",
+        description: `${ids.length} account${ids.length > 1 ? 's' : ''} updated to "${status}"`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update account statuses",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleBulkStatusChange = (status: string) => {
+    if (selectedAccounts.size > 0) {
+      bulkUpdateStatusMutation.mutate({ ids: Array.from(selectedAccounts), status });
+    }
+  };
 
   const filteredAccounts = accounts.filter(account => {
     if (statusFilter === "all") return true;
@@ -199,15 +226,36 @@ export default function AccountsTable({
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           {selectedAccounts.size > 0 && (
-            <Button
-              variant="destructive"
-              onClick={() => setShowBulkDeleteDialog(true)}
-              data-testid="button-delete-selected"
-              className="order-2 rounded-xl border border-rose-400/30 bg-rose-500/20 text-rose-100 hover:bg-rose-500/30 sm:order-1"
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete selected ({selectedAccounts.size})
-            </Button>
+            <>
+              <Select
+                onValueChange={handleBulkStatusChange}
+                disabled={bulkUpdateStatusMutation.isPending}
+              >
+                <SelectTrigger
+                  className="order-1 w-44 rounded-xl border border-sky-400/30 bg-sky-500/20 text-sky-100 focus:border-sky-400/60 focus:ring-0 sm:order-1"
+                  data-testid="select-bulk-status"
+                >
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  <SelectValue placeholder="Change status" />
+                </SelectTrigger>
+                <SelectContent className="border border-white/10 bg-[#0f1a3c] text-blue-100">
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="overdue">Overdue</SelectItem>
+                  <SelectItem value="settled">Settled</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                  <SelectItem value="closed">Closed</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                variant="destructive"
+                onClick={() => setShowBulkDeleteDialog(true)}
+                data-testid="button-delete-selected"
+                className="order-2 rounded-xl border border-rose-400/30 bg-rose-500/20 text-rose-100 hover:bg-rose-500/30 sm:order-2"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete selected ({selectedAccounts.size})
+              </Button>
+            </>
           )}
           <Select value={statusFilter} onValueChange={handleFilterChange}>
             <SelectTrigger
