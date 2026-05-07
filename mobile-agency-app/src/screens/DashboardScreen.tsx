@@ -1,12 +1,26 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { Card, EmptyState, formatCurrency, H1, H3, Loader, Muted, Small, Screen } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
-import { fetchStats, fetchWalletBalance } from '@/lib/api';
+import {
+  fetchCallbackRequests,
+  fetchPayments,
+  fetchStats,
+  fetchWalletBalance,
+} from '@/lib/api';
+import type { CallbackRequest, Payment, TenantStats } from '@/types/api';
 import { colors, spacing } from '@/theme/colors';
 
-function StatTile({ label, value, accent = colors.primary }: { label: string; value: string; accent?: string }) {
+function StatTile({
+  label,
+  value,
+  accent = colors.primary,
+}: {
+  label: string;
+  value: string;
+  accent?: string;
+}) {
   return (
     <Card style={{ flex: 1, minWidth: '47%', borderLeftWidth: 3, borderLeftColor: accent }}>
       <Small>{label}</Small>
@@ -18,13 +32,43 @@ function StatTile({ label, value, accent = colors.primary }: { label: string; va
 export default function DashboardScreen() {
   const { user, tenant } = useAuth();
 
-  const statsQ = useQuery({ queryKey: ['stats'], queryFn: fetchStats });
+  const statsQ = useQuery<TenantStats>({ queryKey: ['stats'], queryFn: fetchStats });
   const walletQ = useQuery({ queryKey: ['wallet', 'balance'], queryFn: fetchWalletBalance });
+  const paymentsQ = useQuery<Payment[]>({ queryKey: ['payments'], queryFn: fetchPayments });
+  const callbacksQ = useQuery<CallbackRequest[]>({
+    queryKey: ['callback-requests'],
+    queryFn: fetchCallbackRequests,
+  });
 
   const onRefresh = useCallback(() => {
     statsQ.refetch();
     walletQ.refetch();
-  }, [statsQ, walletQ]);
+    paymentsQ.refetch();
+    callbacksQ.refetch();
+  }, [statsQ, walletQ, paymentsQ, callbacksQ]);
+
+  const today = useMemo(() => {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    return start.getTime();
+  }, []);
+
+  const todaysPayments = useMemo(() => {
+    const list = paymentsQ.data ?? [];
+    const successful = list.filter((p) => {
+      const status = (p.status || '').toLowerCase();
+      if (status !== 'completed' && status !== 'success' && status !== 'succeeded') return false;
+      const ts = p.paymentDate || p.createdAt;
+      return !!ts && new Date(ts).getTime() >= today;
+    });
+    const cents = successful.reduce((sum, p) => sum + (p.amountCents || 0), 0);
+    return { count: successful.length, cents };
+  }, [paymentsQ.data, today]);
+
+  const pendingCallbacks = useMemo(() => {
+    const list = callbacksQ.data ?? [];
+    return list.filter((c) => (c.status || 'pending').toLowerCase() === 'pending').length;
+  }, [callbacksQ.data]);
 
   return (
     <ScrollView
@@ -58,6 +102,16 @@ export default function DashboardScreen() {
           <>
             <View style={{ flexDirection: 'row', gap: spacing.md, flexWrap: 'wrap' }}>
               <StatTile
+                label="Today's payments"
+                value={`${formatCurrency(todaysPayments.cents)} · ${todaysPayments.count}`}
+                accent={colors.success}
+              />
+              <StatTile
+                label="Pending callbacks"
+                value={pendingCallbacks.toLocaleString()}
+                accent={colors.warning}
+              />
+              <StatTile
                 label="Total consumers"
                 value={(statsQ.data?.totalConsumers ?? 0).toLocaleString()}
                 accent={colors.info}
@@ -69,7 +123,7 @@ export default function DashboardScreen() {
               />
               <StatTile
                 label="Total balance"
-                value={`$${(statsQ.data?.totalBalance ?? 0).toLocaleString()}`}
+                value={`$${(statsQ.data?.totalBalance ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
                 accent={colors.accent}
               />
               <StatTile
@@ -81,14 +135,24 @@ export default function DashboardScreen() {
 
             {statsQ.data?.paymentMetrics ? (
               <Card>
-                <H3>Payments</H3>
+                <H3>Payments (lifetime)</H3>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.md }}>
-                  <View><Small>Total collected</Small><H3 style={{ color: colors.success }}>
-                    ${(statsQ.data.paymentMetrics.totalCollected ?? 0).toLocaleString()}
-                  </H3></View>
-                  <View><Small>Monthly</Small><H3 style={{ color: colors.info }}>
-                    ${(statsQ.data.paymentMetrics.monthlyCollected ?? 0).toLocaleString()}
-                  </H3></View>
+                  <View>
+                    <Small>Total collected</Small>
+                    <H3 style={{ color: colors.success }}>
+                      ${(statsQ.data.paymentMetrics.totalCollected ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </H3>
+                  </View>
+                  <View>
+                    <Small>Last 30 days</Small>
+                    <H3 style={{ color: colors.info }}>
+                      ${(statsQ.data.paymentMetrics.monthlyCollected ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </H3>
+                  </View>
+                  <View>
+                    <Small>Declined</Small>
+                    <H3 style={{ color: colors.danger }}>{statsQ.data.paymentMetrics.declinedPayments ?? 0}</H3>
+                  </View>
                 </View>
               </Card>
             ) : null}
@@ -97,15 +161,18 @@ export default function DashboardScreen() {
               <Card>
                 <H3>Communications</H3>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.md }}>
-                  <View><Small>Emails sent</Small><H3>
-                    {(statsQ.data?.emailMetrics?.totalSent ?? 0).toLocaleString()}
-                  </H3></View>
-                  <View><Small>SMS sent</Small><H3>
-                    {(statsQ.data?.smsMetrics?.totalSent ?? 0).toLocaleString()}
-                  </H3></View>
-                  <View><Small>Open rate</Small><H3>
-                    {statsQ.data?.emailMetrics?.openRate ?? 0}%
-                  </H3></View>
+                  <View>
+                    <Small>Emails sent</Small>
+                    <H3>{(statsQ.data?.emailMetrics?.totalSent ?? 0).toLocaleString()}</H3>
+                  </View>
+                  <View>
+                    <Small>SMS sent</Small>
+                    <H3>{(statsQ.data?.smsMetrics?.totalSent ?? 0).toLocaleString()}</H3>
+                  </View>
+                  <View>
+                    <Small>Open rate</Small>
+                    <H3>{statsQ.data?.emailMetrics?.openRate ?? 0}%</H3>
+                  </View>
                 </View>
               </Card>
             ) : null}

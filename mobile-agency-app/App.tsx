@@ -1,6 +1,7 @@
 import React from 'react';
 import { ActivityIndicator, StatusBar, View } from 'react-native';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
+import { navigationRef } from '@/navigation/navigationRef';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
@@ -38,7 +39,7 @@ function Root() {
     );
   }
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer ref={navigationRef} theme={navTheme}>
       {isAuthenticated ? <AppNavigator /> : <LoginScreen />}
     </NavigationContainer>
   );

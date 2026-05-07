@@ -1,10 +1,21 @@
 import axios, { AxiosError, AxiosInstance } from 'axios';
 import Constants from 'expo-constants';
 import { getAuthToken } from './storage';
+import type {
+  Account,
+  CallbackRequest,
+  Conversation,
+  EmailReply,
+  ManualPayment,
+  Payment,
+  PaymentSchedule,
+  SmsReply,
+  TenantStats,
+} from '@/types/api';
 
 const fallbackBaseUrl = 'https://chain-admin-production.up.railway.app';
 const apiBaseUrl: string =
-  (Constants.expoConfig?.extra as any)?.apiBaseUrl || fallbackBaseUrl;
+  ((Constants.expoConfig?.extra as { apiBaseUrl?: string } | undefined)?.apiBaseUrl) || fallbackBaseUrl;
 
 let onUnauthorized: (() => void) | null = null;
 export function setUnauthorizedHandler(fn: (() => void) | null) {
@@ -21,7 +32,7 @@ api.interceptors.request.use(async (config) => {
   const token = await getAuthToken();
   if (token) {
     config.headers = config.headers || {};
-    (config.headers as any).Authorization = `Bearer ${token}`;
+    (config.headers as Record<string, string>).Authorization = `Bearer ${token}`;
   }
   return config;
 });
@@ -59,32 +70,39 @@ export type LoginResponse = {
   tenant: Tenant;
 };
 
-export async function loginAgency(
-  username: string,
-  password: string
-): Promise<LoginResponse> {
-  const res = await api.post('/api/agency/login', { username, password });
+export async function loginAgency(username: string, password: string): Promise<LoginResponse> {
+  const res = await api.post<LoginResponse>('/api/agency/login', { username, password });
   return res.data;
 }
 
-export async function fetchStats() {
-  const res = await api.get('/api/stats');
+export async function fetchStats(): Promise<TenantStats> {
+  const res = await api.get<TenantStats>('/api/stats');
   return res.data;
 }
 
-export async function fetchAccounts() {
-  const res = await api.get('/api/accounts');
-  return res.data as any[];
+export async function fetchAccounts(): Promise<Account[]> {
+  const res = await api.get<Account[]>('/api/accounts');
+  return res.data;
 }
 
-export async function fetchAccountManualPayments(accountId: string) {
-  const res = await api.get(`/api/accounts/${accountId}/manual-payments`);
-  return res.data as any[];
+export async function fetchAccountManualPayments(accountId: string): Promise<ManualPayment[]> {
+  const res = await api.get<ManualPayment[]>(`/api/accounts/${accountId}/manual-payments`);
+  return res.data;
 }
 
-export async function fetchPayments() {
-  const res = await api.get('/api/payments');
-  return res.data as any[];
+export async function fetchPayments(): Promise<Payment[]> {
+  const res = await api.get<Payment[]>('/api/payments');
+  return res.data;
+}
+
+export async function fetchPaymentSchedules(): Promise<PaymentSchedule[]> {
+  const res = await api.get<PaymentSchedule[]>('/api/payment-schedules');
+  return res.data;
+}
+
+export async function fetchCallbackRequests(): Promise<CallbackRequest[]> {
+  const res = await api.get<CallbackRequest[]>('/api/callback-requests');
+  return res.data;
 }
 
 export type ProcessPaymentInput = {
@@ -100,55 +118,48 @@ export type ProcessPaymentInput = {
 
 export async function processPayment(payload: ProcessPaymentInput) {
   const res = await api.post('/api/payments/process', payload);
+  return res.data as { success: boolean; message?: string; payment?: Payment };
+}
+
+export async function patchAccount(id: string, body: Partial<Account>): Promise<Account> {
+  const res = await api.patch<Account>(`/api/accounts/${id}`, body);
   return res.data;
 }
 
-export async function patchAccount(id: string, body: any) {
-  const res = await api.patch(`/api/accounts/${id}`, body);
+export async function fetchConsumerConversation(consumerId: string): Promise<Conversation> {
+  const res = await api.get<Conversation>(`/api/consumers/${consumerId}/conversation`);
   return res.data;
 }
 
-export async function fetchConsumerConversation(consumerId: string) {
-  const res = await api.get(`/api/consumers/${consumerId}/conversation`);
-  return res.data;
-}
-
-export async function sendEmail(payload: {
-  to: string;
-  subject: string;
-  message: string;
-}) {
+export async function sendEmail(payload: { to: string; subject: string; message: string }) {
   const res = await api.post('/api/send-email', payload);
-  return res.data;
+  return res.data as { success: boolean; message?: string };
 }
 
-export async function sendSms(payload: {
-  message: string;
-  consumerId?: string;
-  phoneNumber?: string;
-}) {
+export async function sendSms(payload: { message: string; consumerId?: string; phoneNumber?: string }) {
   const res = await api.post('/api/sms/quick', payload);
+  return res.data as { success: boolean; message?: string };
+}
+
+export async function fetchEmailReplies(): Promise<EmailReply[]> {
+  const res = await api.get<EmailReply[]>('/api/email-replies');
   return res.data;
 }
 
-export async function fetchEmailReplies() {
-  const res = await api.get('/api/email-replies');
-  return res.data as any[];
+export async function fetchSmsReplies(): Promise<SmsReply[]> {
+  const res = await api.get<SmsReply[]>('/api/sms-replies');
+  return res.data;
 }
 
-export async function fetchSmsReplies() {
-  const res = await api.get('/api/sms-replies');
-  return res.data as any[];
-}
-
-export async function fetchTenants() {
-  const res = await api.get('/api/admin/tenants');
-  return res.data as any[];
+export async function fetchTenants(): Promise<Tenant[]> {
+  const res = await api.get<Tenant[]>('/api/admin/tenants');
+  return res.data;
 }
 
 export async function impersonateTenant(tenantId: string): Promise<LoginResponse> {
-  const res = await api.post(`/api/admin/impersonate-tenant/${tenantId}`);
-  // Server returns: { success, token, tenant, ... }
+  const res = await api.post<{ token: string; tenant: Tenant; user?: AgencyUser }>(
+    `/api/admin/impersonate-tenant/${tenantId}`
+  );
   return {
     token: res.data.token,
     tenant: res.data.tenant,
@@ -158,20 +169,20 @@ export async function impersonateTenant(tenantId: string): Promise<LoginResponse
 
 export async function fetchWalletBalance() {
   try {
-    const res = await api.get('/api/wallet/balance');
-    return res.data as { balanceCents: number; planQuota?: any };
-  } catch (e: any) {
-    if (e?.response?.status === 404) return null;
+    const res = await api.get<{ balanceCents: number; planQuota?: unknown }>('/api/wallet/balance');
+    return res.data;
+  } catch (e) {
+    if ((e as AxiosError).response?.status === 404) return null;
     throw e;
   }
 }
 
 export async function fetchWalletLedger() {
   try {
-    const res = await api.get('/api/wallet/ledger');
-    return res.data as any[];
-  } catch (e: any) {
-    if (e?.response?.status === 404) return [];
+    const res = await api.get<unknown[]>('/api/wallet/ledger');
+    return res.data;
+  } catch (e) {
+    if ((e as AxiosError).response?.status === 404) return [];
     throw e;
   }
 }
@@ -186,8 +197,8 @@ export async function registerPushDevice(payload: {
   try {
     const res = await api.post('/api/agency/push-devices/register', payload);
     return res.data;
-  } catch (e: any) {
-    if (e?.response?.status === 404) return null;
+  } catch (e) {
+    if ((e as AxiosError).response?.status === 404) return null;
     throw e;
   }
 }

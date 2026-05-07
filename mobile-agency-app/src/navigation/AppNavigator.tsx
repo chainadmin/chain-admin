@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as Notifications from 'expo-notifications';
+import { navigateDeepLink } from '@/navigation/navigationRef';
 import DashboardScreen from '@/screens/DashboardScreen';
 import AccountsScreen from '@/screens/AccountsScreen';
 import AccountDetailScreen from '@/screens/AccountDetailScreen';
@@ -73,11 +74,36 @@ function MoreStack() {
   );
 }
 
+type PushPayload = {
+  type?: 'payment' | 'callback' | 'reply' | 'account';
+  accountId?: string;
+  consumerId?: string;
+};
+
+function deepLinkRoute(payload: PushPayload | undefined): { tab: string; screen?: string; params?: Record<string, unknown> } | null {
+  if (!payload || typeof payload !== 'object') return null;
+  switch (payload.type) {
+    case 'payment':
+      return { tab: 'Payments' };
+    case 'callback':
+    case 'reply':
+      return { tab: 'Messaging' };
+    case 'account':
+      return payload.accountId
+        ? { tab: 'Accounts', screen: 'AccountDetail', params: { accountId: payload.accountId } }
+        : { tab: 'Accounts' };
+    default:
+      return null;
+  }
+}
+
 export default function AppNavigator() {
   useEffect(() => {
     registerForPushNotificationsAsync().catch(() => undefined);
-    const sub = Notifications.addNotificationResponseReceivedListener(() => {
-      // Future: deep-link based on data.type
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data as PushPayload | undefined;
+      const route = deepLinkRoute(data);
+      if (route) navigateDeepLink(route);
     });
     return () => sub.remove();
   }, []);

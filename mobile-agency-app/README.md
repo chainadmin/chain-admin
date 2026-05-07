@@ -94,6 +94,19 @@ Bundle identifier: **`com.chainsoftware.agency`** (peer of the consumer app's
   This endpoint does not yet exist on the backend (`push_devices` is currently
   consumer-scoped). The client fails soft on 404 so the app still works
   end-to-end; once a staff push endpoint ships, no client change is required.
+- Notification taps deep-link based on the `data.type` payload:
+  - `payment` → Payments tab
+  - `callback` / `reply` → Messaging tab
+  - `account` (with `accountId`) → Accounts → Account Detail
+  Routing goes through a shared `navigationRef` so it works from both
+  cold-start and warm-foreground notifications.
+
+## Shared constants
+
+The app imports `ACCOUNT_STATUSES` and `ACCOUNT_STATUS_LABELS` directly from
+the workspace `shared/constants.ts` (via the `@shared/*` path alias). Metro
+is configured (`metro.config.js`) to watch `../shared` and resolve the alias
+so we never duplicate status enums on the mobile side.
 
 ## Wallet
 

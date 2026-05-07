@@ -3,22 +3,25 @@ import { FlatList, Pressable, RefreshControl, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { ACCOUNT_STATUSES, ACCOUNT_STATUS_LABELS, type AccountStatus } from '@shared/constants';
 import { Body, Card, EmptyState, Field, formatCurrency, H1, Loader, Muted, Pill, Screen, Small } from '@/components/ui';
 import { fetchAccounts } from '@/lib/api';
+import type { Account } from '@/types/api';
 import { colors, radius, spacing, statusColor } from '@/theme/colors';
 
-const STATUSES = ['all', 'active', 'overdue', 'settled', 'inactive', 'closed', 'recalled'] as const;
+type Filter = 'all' | AccountStatus;
+const FILTERS: readonly Filter[] = ['all', ...ACCOUNT_STATUSES] as const;
 
 export default function AccountsScreen() {
-  const nav = useNavigation<NativeStackNavigationProp<any>>();
-  const accountsQ = useQuery({ queryKey: ['accounts'], queryFn: fetchAccounts });
+  const nav = useNavigation<NativeStackNavigationProp<{ AccountDetail: { accountId: string } }>>();
+  const accountsQ = useQuery<Account[]>({ queryKey: ['accounts'], queryFn: fetchAccounts });
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState<(typeof STATUSES)[number]>('all');
+  const [filter, setFilter] = useState<Filter>('all');
 
-  const filtered = useMemo(() => {
+  const filtered = useMemo<Account[]>(() => {
     const arr = accountsQ.data ?? [];
-    return arr.filter((a: any) => {
-      if (status !== 'all' && (a.status || '').toLowerCase() !== status) return false;
+    return arr.filter((a) => {
+      if (filter !== 'all' && (a.status || '').toLowerCase() !== filter) return false;
       if (!search) return true;
       const hay = [
         a.consumer?.firstName,
@@ -33,7 +36,9 @@ export default function AccountsScreen() {
         .toLowerCase();
       return hay.includes(search.toLowerCase());
     });
-  }, [accountsQ.data, status, search]);
+  }, [accountsQ.data, filter, search]);
+
+  const labelFor = (f: Filter) => (f === 'all' ? 'All' : ACCOUNT_STATUS_LABELS[f]);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -47,16 +52,16 @@ export default function AccountsScreen() {
           autoCorrect={false}
         />
         <FlatList
-          data={STATUSES as readonly string[]}
+          data={FILTERS as readonly Filter[]}
           horizontal
           keyExtractor={(s) => s}
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
           renderItem={({ item }) => {
-            const active = item === status;
+            const active = item === filter;
             return (
               <Pressable
-                onPress={() => setStatus(item as any)}
+                onPress={() => setFilter(item)}
                 style={{
                   paddingHorizontal: 14,
                   paddingVertical: 8,
@@ -66,9 +71,7 @@ export default function AccountsScreen() {
                   borderWidth: 1,
                 }}
               >
-                <Body style={{ fontSize: 13, color: active ? '#fff' : colors.textMuted, textTransform: 'capitalize' }}>
-                  {item}
-                </Body>
+                <Body style={{ fontSize: 13, color: active ? '#fff' : colors.textMuted }}>{labelFor(item)}</Body>
               </Pressable>
             );
           }}
@@ -78,9 +81,9 @@ export default function AccountsScreen() {
       {accountsQ.isLoading ? (
         <Loader />
       ) : (
-        <FlatList
+        <FlatList<Account>
           data={filtered}
-          keyExtractor={(a: any) => a.id}
+          keyExtractor={(a) => a.id}
           contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl }}
           refreshControl={
             <RefreshControl tintColor="#fff" refreshing={accountsQ.isRefetching} onRefresh={() => accountsQ.refetch()} />

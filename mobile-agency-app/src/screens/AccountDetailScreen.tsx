@@ -2,49 +2,56 @@ import React, { useMemo, useState } from 'react';
 import { Alert, Linking, ScrollView, View } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { RouteProp } from '@react-navigation/native';
-import { useRoute, useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { ACCOUNT_STATUSES, ACCOUNT_STATUS_LABELS, type AccountStatus } from '@shared/constants';
 import {
   Body, Button, Card, EmptyState, formatCurrency, H1, H3, Loader, Muted, Pill, Screen, Small,
 } from '@/components/ui';
 import {
-  fetchAccountManualPayments, fetchAccounts, fetchConsumerConversation, patchAccount,
+  fetchAccountManualPayments,
+  fetchAccounts,
+  fetchConsumerConversation,
+  patchAccount,
 } from '@/lib/api';
+import type { Account, Conversation, ManualPayment } from '@/types/api';
 import { colors, spacing, statusColor } from '@/theme/colors';
-
-const STATUSES = ['active', 'overdue', 'settled', 'inactive', 'closed', 'recalled'];
 
 type ParamList = { AccountDetail: { accountId: string } };
 
 export default function AccountDetailScreen() {
   const route = useRoute<RouteProp<ParamList, 'AccountDetail'>>();
-  const nav = useNavigation<any>();
+  const nav = useNavigation<{ navigate: (name: string, params?: Record<string, unknown>) => void }>() as any;
   const qc = useQueryClient();
   const accountId = route.params?.accountId;
 
-  const accountsQ = useQuery({ queryKey: ['accounts'], queryFn: fetchAccounts });
-  const account = useMemo(() => accountsQ.data?.find((a: any) => a.id === accountId), [accountsQ.data, accountId]);
+  const accountsQ = useQuery<Account[]>({ queryKey: ['accounts'], queryFn: fetchAccounts });
+  const account = useMemo<Account | undefined>(
+    () => accountsQ.data?.find((a) => a.id === accountId),
+    [accountsQ.data, accountId]
+  );
 
-  const paymentsQ = useQuery({
+  const paymentsQ = useQuery<ManualPayment[]>({
     queryKey: ['accounts', accountId, 'manual-payments'],
     queryFn: () => fetchAccountManualPayments(accountId),
     enabled: !!accountId,
   });
 
-  const conversationQ = useQuery({
+  const conversationQ = useQuery<Conversation>({
     queryKey: ['consumers', account?.consumer?.id, 'conversation'],
     queryFn: () => fetchConsumerConversation(account!.consumer!.id),
     enabled: !!account?.consumer?.id,
   });
 
-  const [savingStatus, setSavingStatus] = useState<string | null>(null);
+  const [savingStatus, setSavingStatus] = useState<AccountStatus | null>(null);
 
   const updateStatus = useMutation({
-    mutationFn: (status: string) => patchAccount(accountId, { status }),
+    mutationFn: (status: AccountStatus) => patchAccount(accountId, { status }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['accounts'] });
       Alert.alert('Updated', 'Account status updated');
     },
-    onError: (e: any) => Alert.alert('Error', e?.response?.data?.message || 'Failed to update status'),
+    onError: (e: unknown) =>
+      Alert.alert('Error', extractErrorMessage(e) || 'Failed to update status'),
     onSettled: () => setSavingStatus(null),
   });
 
@@ -71,9 +78,7 @@ export default function AccountDetailScreen() {
 
         <Card>
           <H3>Balance</H3>
-          <H1 style={{ color: colors.primary, marginTop: 4 }}>
-            {formatCurrency(typeof account.balanceCents === 'number' ? account.balanceCents : Number(account.balanceCents ?? 0))}
-          </H1>
+          <H1 style={{ color: colors.primary, marginTop: 4 }}>{formatCurrency(account.balanceCents)}</H1>
           <Muted style={{ marginTop: 4 }}>Creditor: {account.creditor || '—'}</Muted>
         </Card>
 
@@ -83,15 +88,15 @@ export default function AccountDetailScreen() {
             {account.consumer?.email ? (
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Body>{account.consumer.email}</Body>
-                <Button size="sm" variant="ghost" title="Email" onPress={() => emailTo(account.consumer.email)} />
+                <Button size="sm" variant="ghost" title="Email" onPress={() => emailTo(account.consumer!.email!)} />
               </View>
             ) : null}
             {account.consumer?.phone ? (
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Body>{account.consumer.phone}</Body>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <Button size="sm" variant="ghost" title="Call" onPress={() => callPhone(account.consumer.phone)} />
-                  <Button size="sm" variant="ghost" title="SMS" onPress={() => smsPhone(account.consumer.phone)} />
+                  <Button size="sm" variant="ghost" title="Call" onPress={() => callPhone(account.consumer!.phone!)} />
+                  <Button size="sm" variant="ghost" title="SMS" onPress={() => smsPhone(account.consumer!.phone!)} />
                 </View>
               </View>
             ) : null}
@@ -101,11 +106,11 @@ export default function AccountDetailScreen() {
         <Card>
           <H3>Update status</H3>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: spacing.sm }}>
-            {STATUSES.map((s) => (
+            {ACCOUNT_STATUSES.map((s) => (
               <Button
                 key={s}
                 size="sm"
-                title={s}
+                title={ACCOUNT_STATUS_LABELS[s]}
                 variant={account.status === s ? 'primary' : 'secondary'}
                 loading={savingStatus === s}
                 onPress={() => {
@@ -121,7 +126,7 @@ export default function AccountDetailScreen() {
           <H3>Recent payments</H3>
           {paymentsQ.isLoading ? <Loader /> : null}
           {paymentsQ.data && paymentsQ.data.length > 0 ? (
-            paymentsQ.data.slice(0, 5).map((p: any) => (
+            paymentsQ.data.slice(0, 5).map((p) => (
               <View key={p.id} style={{ paddingVertical: 8, borderBottomColor: colors.cardBorder, borderBottomWidth: 1 }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                   <Body>{formatCurrency(p.amountCents)}</Body>
@@ -139,11 +144,13 @@ export default function AccountDetailScreen() {
           <H3>Recent communications</H3>
           {conversationQ.isLoading ? <Loader /> : null}
           {conversationQ.data?.messages && conversationQ.data.messages.length > 0 ? (
-            conversationQ.data.messages.slice(0, 8).map((m: any, i: number) => (
+            conversationQ.data.messages.slice(0, 12).map((m, i) => (
               <View key={i} style={{ paddingVertical: 6, borderBottomColor: colors.cardBorder, borderBottomWidth: 1 }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Small>{(m.channel || '').toUpperCase()} · {m.direction || ''}</Small>
-                  <Small>{m.createdAt ? new Date(m.createdAt).toLocaleString() : ''}</Small>
+                  <Small>
+                    {m.channel.toUpperCase()} · {m.direction}
+                  </Small>
+                  <Small>{m.timestamp ? new Date(m.timestamp).toLocaleString() : ''}</Small>
                 </View>
                 <Body numberOfLines={2}>{m.subject || m.body || m.message || '—'}</Body>
               </View>
@@ -182,4 +189,12 @@ export default function AccountDetailScreen() {
       </Screen>
     </ScrollView>
   );
+}
+
+function extractErrorMessage(e: unknown): string | undefined {
+  if (typeof e === 'object' && e && 'response' in e) {
+    const r = (e as { response?: { data?: { message?: string } } }).response;
+    return r?.data?.message;
+  }
+  return undefined;
 }
