@@ -2,7 +2,7 @@
   "expo": {
     "name": "Chain",
     "slug": "chain",
-    "version": "1.1.1",
+    "version": "1.1.2",
     "scheme": "chain",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -10,8 +10,31 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.chainsoftware.platform",
-      "buildNumber": "6",
+      "buildNumber": "7",
       "newArchEnabled": false,
+      "privacyManifests": {
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPITypeReasons": ["CA92.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryFileTimestamp",
+            "NSPrivacyAccessedAPITypeReasons": ["C617.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategorySystemBootTime",
+            "NSPrivacyAccessedAPITypeReasons": ["35F9.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryDiskSpace",
+            "NSPrivacyAccessedAPITypeReasons": ["E174.1"]
+          }
+        ],
+        "NSPrivacyTracking": false,
+        "NSPrivacyTrackingDomains": [],
+        "NSPrivacyCollectedDataTypes": []
+      },
       "infoPlist": {
         "NSFaceIDUsageDescription": "Use Face ID to quickly and securely log in to your account",
         "ITSAppUsesNonExemptEncryption": false
@@ -19,7 +42,7 @@
     },
     "android": {
       "newArchEnabled": false,
-      "versionCode": 6,
+      "versionCode": 7,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -27,9 +50,7 @@
       "package": "com.chainsoftware.platform",
       "permissions": [
         "USE_BIOMETRIC",
-        "USE_FINGERPRINT",
-        "android.permission.USE_BIOMETRIC",
-        "android.permission.USE_FINGERPRINT"
+        "USE_FINGERPRINT"
       ]
     },
     "plugins": [

@@ -1,111 +1,163 @@
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, View, ActivityIndicator, Platform } from 'react-native';
+import {
+  StyleSheet,
+  View,
+  ActivityIndicator,
+  Platform,
+  Text,
+  Pressable,
+  Image,
+} from 'react-native';
 import { WebView } from 'react-native-webview';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as Haptics from 'expo-haptics';
 import * as SecureStore from 'expo-secure-store';
-import { useEffect, useState, useRef } from 'react';
+import * as SplashScreen from 'expo-splash-screen';
+import {
+  SafeAreaProvider,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
+import { useEffect, useState, useRef, useCallback } from 'react';
 
 const API_BASE_URL = 'https://chain-admin-production.up.railway.app';
+const LOAD_TIMEOUT_MS = 15000;
 
-export default function App() {
-  const [isLoading, setIsLoading] = useState(true);
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
+function ChainApp() {
+  const insets = useSafeAreaInsets();
+  const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [biometricToken, setBiometricToken] = useState(null);
+  const [status, setStatus] = useState('loading');
+  const [reloadKey, setReloadKey] = useState(0);
   const webViewRef = useRef(null);
+  const loadTimerRef = useRef(null);
+  const redirectedRef = useRef(false);
 
   useEffect(() => {
-    checkBiometricLogin();
-  }, []);
+    let cancelled = false;
+    (async () => {
+      try {
+        const savedToken = await SecureStore.getItemAsync('consumerToken');
+        const biometricEnabled = await SecureStore.getItemAsync('biometricEnabled');
 
-  const checkBiometricLogin = async () => {
-    try {
-      const savedToken = await SecureStore.getItemAsync('consumerToken');
-      const biometricEnabled = await SecureStore.getItemAsync('biometricEnabled');
-      
-      if (savedToken && biometricEnabled === 'true') {
-        const hasHardware = await LocalAuthentication.hasHardwareAsync();
-        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-        
-        if (hasHardware && isEnrolled) {
-          const result = await LocalAuthentication.authenticateAsync({
-            promptMessage: 'Log in to Chain',
-            cancelLabel: 'Cancel',
-            disableDeviceFallback: false,
-          });
-          
-          if (result.success) {
-            setBiometricToken(savedToken);
+        if (savedToken && biometricEnabled === 'true') {
+          const hasHardware = await LocalAuthentication.hasHardwareAsync();
+          const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
+          if (hasHardware && isEnrolled) {
+            const result = await LocalAuthentication.authenticateAsync({
+              promptMessage: 'Log in to Chain',
+              cancelLabel: 'Cancel',
+              disableDeviceFallback: false,
+            });
+
+            if (!cancelled && result.success) {
+              setBiometricToken(savedToken);
+            }
           }
         }
+      } catch (error) {
+        console.log('Biometric check error:', error);
+      } finally {
+        if (!cancelled) {
+          setIsBootstrapping(false);
+          SplashScreen.hideAsync().catch(() => {});
+        }
       }
-    } catch (error) {
-      console.log('Biometric check error:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const sendToWeb = useCallback((payload) => {
+    if (!webViewRef.current) return;
+    const json = JSON.stringify(payload);
+    const escaped = json.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    webViewRef.current.injectJavaScript(
+      `(function(){try{window.dispatchEvent(new MessageEvent('message',{data:'${escaped}'}));}catch(e){}})();true;`
+    );
+  }, []);
 
   const handleMessage = async (event) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
-      
+
       switch (data.type) {
-        case 'HAPTIC_FEEDBACK':
-          const style = data.style === 'heavy' ? Haptics.ImpactFeedbackStyle.Heavy :
-                       data.style === 'medium' ? Haptics.ImpactFeedbackStyle.Medium :
-                       Haptics.ImpactFeedbackStyle.Light;
+        case 'HAPTIC_FEEDBACK': {
+          const style =
+            data.style === 'heavy'
+              ? Haptics.ImpactFeedbackStyle.Heavy
+              : data.style === 'medium'
+              ? Haptics.ImpactFeedbackStyle.Medium
+              : Haptics.ImpactFeedbackStyle.Light;
           await Haptics.impactAsync(style);
           break;
-          
+        }
+
         case 'SAVE_TOKEN':
           await SecureStore.setItemAsync('consumerToken', data.token);
           break;
-          
+
         case 'ENABLE_BIOMETRIC':
           await SecureStore.setItemAsync('biometricEnabled', 'true');
           break;
-          
+
         case 'DISABLE_BIOMETRIC':
           await SecureStore.deleteItemAsync('biometricEnabled');
           await SecureStore.deleteItemAsync('consumerToken');
           break;
-          
-        case 'CHECK_BIOMETRIC':
+
+        case 'CHECK_BIOMETRIC': {
           const hasHardware = await LocalAuthentication.hasHardwareAsync();
           const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-          const supportedTypes = await LocalAuthentication.supportedAuthenticationTypesAsync();
-          
+          const supportedTypes =
+            await LocalAuthentication.supportedAuthenticationTypesAsync();
+
           let biometryType = 'none';
-          if (supportedTypes.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
+          if (
+            supportedTypes.includes(
+              LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION
+            )
+          ) {
             biometryType = Platform.OS === 'ios' ? 'faceId' : 'faceRecognition';
-          } else if (supportedTypes.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
+          } else if (
+            supportedTypes.includes(
+              LocalAuthentication.AuthenticationType.FINGERPRINT
+            )
+          ) {
             biometryType = Platform.OS === 'ios' ? 'touchId' : 'fingerprint';
           }
-          
-          webViewRef.current?.postMessage(JSON.stringify({
+
+          sendToWeb({
             type: 'BIOMETRIC_STATUS',
             available: hasHardware && isEnrolled,
-            biometryType
-          }));
+            biometryType,
+          });
           break;
-          
-        case 'AUTHENTICATE_BIOMETRIC':
+        }
+
+        case 'AUTHENTICATE_BIOMETRIC': {
           const authResult = await LocalAuthentication.authenticateAsync({
             promptMessage: data.reason || 'Authenticate to continue',
             cancelLabel: 'Cancel',
             disableDeviceFallback: false,
           });
-          
-          webViewRef.current?.postMessage(JSON.stringify({
+
+          sendToWeb({
             type: 'BIOMETRIC_RESULT',
             success: authResult.success,
-            error: authResult.error
-          }));
+            error: authResult.error,
+          });
           break;
-          
+        }
+
         case 'LOGOUT':
           await SecureStore.deleteItemAsync('consumerToken');
           await SecureStore.deleteItemAsync('biometricEnabled');
+          redirectedRef.current = false;
+          setBiometricToken(null);
           break;
       }
     } catch (error) {
@@ -113,7 +165,6 @@ export default function App() {
     }
   };
 
-  const safeToken = biometricToken ? JSON.stringify(biometricToken) : null;
   const safePlatform = JSON.stringify(Platform.OS);
 
   const injectedJavaScript = `
@@ -149,29 +200,12 @@ export default function App() {
         window.logout = function() {
           window.sendToNative({ type: 'LOGOUT' });
         };
-
-        // ---- Wallet & add-on bridges (Task #47) ----
-        // The web app's billing page already renders the wallet, top-up,
-        // auto-reload, and add-on UIs inside this WebView. These helpers let
-        // the in-page wallet code trigger native UX cues:
-        //  - notifyLowBalance(): haptic warning when balance dips below threshold
-        //  - notifyWalletCharged(): light tap when a successful debit posts
-        // Both are no-ops on the web build.
         window.notifyLowBalance = function() {
           window.sendToNative({ type: 'HAPTIC_FEEDBACK', style: 'heavy' });
         };
         window.notifyWalletCharged = function() {
           window.sendToNative({ type: 'HAPTIC_FEEDBACK', style: 'light' });
         };
-
-        ${safeToken ? `
-          try {
-            localStorage.setItem('consumerAuth', JSON.stringify({ token: ${safeToken} }));
-          } catch (e) {}
-          if (window.location.pathname.indexOf('/consumer/dashboard') === -1) {
-            window.location.replace('/consumer/dashboard');
-          }
-        ` : ''}
       } catch (e) {
         if (window.ReactNativeWebView) {
           window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'JS_ERROR', message: String(e) }));
@@ -181,7 +215,69 @@ export default function App() {
     true;
   `;
 
-  if (isLoading) {
+  const clearLoadTimer = () => {
+    if (loadTimerRef.current) {
+      clearTimeout(loadTimerRef.current);
+      loadTimerRef.current = null;
+    }
+  };
+
+  const startLoadTimer = () => {
+    clearLoadTimer();
+    loadTimerRef.current = setTimeout(() => {
+      setStatus((prev) => (prev === 'loading' ? 'error' : prev));
+    }, LOAD_TIMEOUT_MS);
+  };
+
+  const onWebViewLoadStart = () => {
+    setStatus('loading');
+    startLoadTimer();
+  };
+
+  const onWebViewLoadEnd = () => {
+    clearLoadTimer();
+    setStatus('ok');
+
+    if (biometricToken && !redirectedRef.current && webViewRef.current) {
+      redirectedRef.current = true;
+      const tokenJson = JSON.stringify(biometricToken);
+      const escaped = tokenJson.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      webViewRef.current.injectJavaScript(`
+        (function(){
+          try {
+            localStorage.setItem('consumerAuth', JSON.stringify({ token: ${escaped} }));
+          } catch(e){}
+          try {
+            if (window.location.pathname.indexOf('/consumer/dashboard') === -1) {
+              window.location.replace('/consumer/dashboard');
+            }
+          } catch(e){}
+        })();
+        true;
+      `);
+    }
+  };
+
+  const onWebViewError = () => {
+    clearLoadTimer();
+    setStatus('error');
+  };
+
+  const onWebViewHttpError = (syntheticEvent) => {
+    const { nativeEvent } = syntheticEvent;
+    if (nativeEvent && nativeEvent.statusCode >= 500) {
+      clearLoadTimer();
+      setStatus('error');
+    }
+  };
+
+  const onRetry = () => {
+    setStatus('loading');
+    redirectedRef.current = false;
+    setReloadKey((k) => k + 1);
+  };
+
+  if (isBootstrapping) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#3b82f6" />
@@ -191,9 +287,10 @@ export default function App() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar style="dark" />
       <WebView
+        key={reloadKey}
         ref={webViewRef}
         source={{ uri: `${API_BASE_URL}/consumer/login` }}
         style={styles.webview}
@@ -207,14 +304,48 @@ export default function App() {
             <ActivityIndicator size="large" color="#3b82f6" />
           </View>
         )}
-        onError={(syntheticEvent) => {
-          const { nativeEvent } = syntheticEvent;
-          console.warn('WebView error:', nativeEvent);
-        }}
+        onLoadStart={onWebViewLoadStart}
+        onLoadEnd={onWebViewLoadEnd}
+        onError={onWebViewError}
+        onHttpError={onWebViewHttpError}
         allowsBackForwardNavigationGestures={true}
         sharedCookiesEnabled={true}
+        originWhitelist={['https://*', 'http://localhost*']}
       />
+      {status === 'error' && (
+        <View style={styles.errorOverlay}>
+          <View style={styles.errorCard}>
+            <Image
+              source={require('./assets/icon.png')}
+              style={styles.errorLogo}
+              resizeMode="contain"
+            />
+            <Text style={styles.errorTitle}>Couldn't reach Chain</Text>
+            <Text style={styles.errorBody}>
+              We couldn't connect right now. Please check your internet connection
+              and try again.
+            </Text>
+            <Pressable
+              onPress={onRetry}
+              style={({ pressed }) => [
+                styles.retryButton,
+                pressed && styles.retryButtonPressed,
+              ]}
+            >
+              <Text style={styles.retryButtonText}>Try again</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
     </View>
+  );
+}
+
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <ChainApp />
+    </SafeAreaProvider>
   );
 }
 
@@ -231,7 +362,6 @@ const styles = StyleSheet.create({
   },
   webview: {
     flex: 1,
-    marginTop: Platform.OS === 'ios' ? 44 : 0,
   },
   loadingOverlay: {
     position: 'absolute',
@@ -242,5 +372,57 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#ffffff',
+  },
+  errorOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 24,
+  },
+  errorCard: {
+    width: '100%',
+    maxWidth: 360,
+    alignItems: 'center',
+  },
+  errorLogo: {
+    width: 80,
+    height: 80,
+    borderRadius: 18,
+    marginBottom: 20,
+  },
+  errorTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  errorBody: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: '#4b5563',
+    textAlign: 'center',
+    marginBottom: 28,
+  },
+  retryButton: {
+    backgroundColor: '#3b82f6',
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    borderRadius: 12,
+    minWidth: 160,
+    alignItems: 'center',
+  },
+  retryButtonPressed: {
+    backgroundColor: '#2563eb',
+  },
+  retryButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
