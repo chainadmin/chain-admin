@@ -265,7 +265,8 @@ function ChainApp() {
 
   const onWebViewHttpError = (syntheticEvent) => {
     const { nativeEvent } = syntheticEvent;
-    if (nativeEvent && nativeEvent.statusCode >= 500) {
+    const code = nativeEvent && nativeEvent.statusCode;
+    if (typeof code === 'number' && (code < 200 || code >= 400)) {
       clearLoadTimer();
       setStatus('error');
     }

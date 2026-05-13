@@ -11,13 +11,19 @@ biometric login, haptics, and secure token storage.
 
 ```bash
 cd mobile-app
-npm install
-npm run ios       # or: npm run android
+npm install        # regenerates package-lock.json on first install
+npm run ios        # or: npm run android
 ```
 
 The Replit container has no iOS / Android simulators. Run the commands above
 from a Mac (Xcode) or a machine with Android Studio. Or use Expo Go on a
 physical device with `npx expo start --tunnel`.
+
+> **Lockfile note:** `package-lock.json` is intentionally not committed in this
+> repo — EAS Build (and local installs) regenerates it from `package.json` on
+> every install, which is the standard Expo workflow. If your release pipeline
+> requires a committed lockfile for reproducibility, run `npm install` here
+> once and commit the resulting `package-lock.json`.
 
 ## Pre-submission checklist
 
