@@ -2,7 +2,7 @@
   "expo": {
     "name": "Chain Agency",
     "slug": "chain-agency",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "scheme": "chainagency",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -10,8 +10,31 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.chainsoftware.agency",
-      "buildNumber": "1",
+      "buildNumber": "2",
       "newArchEnabled": false,
+      "privacyManifests": {
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPITypeReasons": ["CA92.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryFileTimestamp",
+            "NSPrivacyAccessedAPITypeReasons": ["C617.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategorySystemBootTime",
+            "NSPrivacyAccessedAPITypeReasons": ["35F9.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryDiskSpace",
+            "NSPrivacyAccessedAPITypeReasons": ["E174.1"]
+          }
+        ],
+        "NSPrivacyTracking": false,
+        "NSPrivacyTrackingDomains": [],
+        "NSPrivacyCollectedDataTypes": []
+      },
       "infoPlist": {
         "NSFaceIDUsageDescription": "Use Face ID to quickly and securely log in to your agency account",
         "ITSAppUsesNonExemptEncryption": false
@@ -19,7 +42,7 @@
     },
     "android": {
       "newArchEnabled": false,
-      "versionCode": 1,
+      "versionCode": 2,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0f1a3c"
@@ -27,9 +50,7 @@
       "package": "com.chainsoftware.agency",
       "permissions": [
         "USE_BIOMETRIC",
-        "USE_FINGERPRINT",
-        "android.permission.USE_BIOMETRIC",
-        "android.permission.USE_FINGERPRINT"
+        "USE_FINGERPRINT"
       ]
     },
     "plugins": [
