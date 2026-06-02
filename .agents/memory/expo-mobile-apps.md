@@ -13,6 +13,32 @@ They cannot be built/installed in the Replit container (no simulators, npm insta
 blocked for subfolders). EAS Build on Expo's cloud is the only build path; `package.json`
 is the source of truth.
 
+## Do NOT force the OLD architecture off in SDK 54 — it crashes on launch
+
+**Rule:** leave the New Architecture enabled (the SDK 54 default). Do NOT set
+`newArchEnabled: false` in `app.json` (`ios`/`android`) or in the
+`expo-build-properties` plugin.
+
+**Why:** SDK 54 / RN 0.81 default to the New Architecture, and the libraries these
+apps use — especially `react-native-safe-area-context` v5, which wraps the whole app
+via `SafeAreaProvider` at the root — are built/tested for the New Architecture.
+Forcing old-arch makes that root native view fail to instantiate, so the app dies the
+instant it launches, on BOTH iOS and Android. This was misdiagnosed as a dependency
+problem for a long time; the real trigger was the old-arch override. The combination
+that works is *new-arch + SDK-matched deps*.
+
+**How to apply:** if an app crashes immediately with clean deps and a clean JS bundle,
+check for `newArchEnabled: false` first and flip it to `true` (all three places). A
+clean `npx expo export` proves the JS/bundle is fine and points the finger at native
+config like this.
+
+## Diagnosing an immediate crash without device logs
+
+`npx expo export --platform ios` (node_modules must be installed in the app folder)
+runs the full Metro graph + Hermes compile. If it succeeds, JS/imports/syntax are NOT
+the cause — the crash is native (arch flag, native module version, or config). This is
+the fastest way to split JS-vs-native blame from inside Replit (no simulator needed).
+
 ## Native module versions MUST match the Expo SDK, or the app crashes instantly
 
 **Rule:** every React-Native native module (safe-area-context, screens, gesture-handler,
