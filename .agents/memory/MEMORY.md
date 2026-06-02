@@ -1,0 +1,1 @@
+- [Expo mobile apps](expo-mobile-apps.md) — native module versions must match the Expo SDK or the app crashes instantly; EAS lockfile + iOS privacy manifest required; run `npx expo install --fix`.
