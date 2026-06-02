@@ -10,7 +10,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.chainsoftware.platform",
-      "buildNumber": "9",
+      "buildNumber": "10",
       "newArchEnabled": false,
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [
@@ -42,7 +42,7 @@
     },
     "android": {
       "newArchEnabled": false,
-      "versionCode": 9,
+      "versionCode": 10,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
