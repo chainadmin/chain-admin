@@ -4,8 +4,8 @@ declare global {
     platform?: 'ios' | 'android';
     sendToNative?: (data: any) => void;
     hapticFeedback?: (style?: 'light' | 'medium' | 'heavy') => void;
-    saveToken?: (token: string) => void;
-    enableBiometric?: () => void;
+    saveToken?: (token: string, session?: string) => void;
+    enableBiometric?: (token?: string, session?: string) => void;
     disableBiometric?: () => void;
     checkBiometric?: () => void;
     authenticateBiometric?: (reason?: string) => void;
@@ -37,15 +37,15 @@ export const hapticFeedback = (style: 'light' | 'medium' | 'heavy' = 'light'): v
   }
 };
 
-export const saveAuthToken = (token: string): void => {
+export const saveAuthToken = (token: string, session?: string): void => {
   if (isExpoApp() && window.saveToken) {
-    window.saveToken(token);
+    window.saveToken(token, session);
   }
 };
 
-export const enableBiometricLogin = (): void => {
+export const enableBiometricLogin = (token?: string, session?: string): void => {
   if (isExpoApp() && window.enableBiometric) {
-    window.enableBiometric();
+    window.enableBiometric(token, session);
   }
 };
 
