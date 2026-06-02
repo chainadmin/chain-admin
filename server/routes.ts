@@ -70,8 +70,11 @@ import {
   AI_AUTO_RESPONSE_ADDON_PRICE,
   MOBILE_APP_BRANDING_MONTHLY,
   AUTO_RESPONSE_INCLUDED_RESPONSES,
+  AUTO_RESPONSE_OVERAGE_PER_RESPONSE,
+  A_LA_CARTE_SERVICE_PRICE,
   type MessagingPlanId,
 } from "@shared/billing-plans";
+import { computeALaCarteBill, computeSubscriptionBill, generateInvoiceNumber } from "./billing";
 
 import { listConsumers, updateConsumer, deleteConsumers, ConsumerNotFoundError } from "@shared/server/consumers";
 import { resolveConsumerPortalUrl } from "@shared/utils/consumerPortal";
@@ -1447,7 +1450,7 @@ function checkRegistrationRateLimit(ip: string): boolean {
   return true;
 }
 
-const AI_RESPONSE_OVERAGE_RATE = 0.08; // $0.08 per additional AI response
+// AI auto-response overage rate is centralized as AUTO_RESPONSE_OVERAGE_PER_RESPONSE in shared/billing-plans
 
 // Module-level helper for safely interpolating untrusted strings into HTML email bodies
 function escapeHtml(unsafe: any): string {
@@ -1458,6 +1461,77 @@ function escapeHtml(unsafe: any): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+// Shared invoice email sender (subscription + à la carte). Failures are logged but
+// never block invoice persistence or period rollover.
+async function sendChainInvoiceEmail(params: {
+  tenantId: string;
+  tenantName?: string | null;
+  tenantEmail?: string | null;
+  invoiceNumber: string;
+  planName: string;
+  periodStart: Date;
+  periodEnd: Date;
+  dueDate: Date;
+  totalBill: number;
+  lineItems: Array<{ description: string; amountCents: number; quantity?: number; unitLabel?: string }>;
+}): Promise<void> {
+  try {
+    if (!params.tenantEmail) {
+      console.log(`⚠️  No email on file for tenant ${params.tenantId} - invoice ${params.invoiceNumber} created but email not sent`);
+      return;
+    }
+    const periodStartStr = params.periodStart.toLocaleDateString();
+    const periodEndStr = params.periodEnd.toLocaleDateString();
+    const lineItemRows = params.lineItems.map(item => `
+      <tr>
+        <td style="padding: 8px 0; color: #374151; border-bottom: 1px solid #e5e7eb;">
+          ${escapeHtml(item.description)}${item.quantity != null && item.unitLabel ? ` <span style="color:#6b7280; font-size:12px;">(${item.quantity} ${escapeHtml(item.unitLabel)})</span>` : ''}
+        </td>
+        <td style="padding: 8px 0; text-align: right; font-weight: 600; color: #111827; border-bottom: 1px solid #e5e7eb;">
+          ${item.amountCents === 0 ? '$0.00' : `$${(item.amountCents / 100).toFixed(2)}`}
+        </td>
+      </tr>
+    `).join('');
+    const emailHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #1e40af;">Invoice ${escapeHtml(params.invoiceNumber)}</h2>
+        <p>Dear ${escapeHtml(params.tenantName || 'Customer')},</p>
+        <p>Your invoice for Chain platform services for the period <strong>${periodStartStr} – ${periodEndStr}</strong> is now available.</p>
+        <div style="background: #f9fafb; border: 1px solid #e5e7eb; padding: 20px; border-radius: 8px; margin: 20px 0;">
+          <p style="margin: 0 0 4px 0; color: #6b7280; font-size: 13px;">Plan</p>
+          <p style="margin: 0 0 16px 0; font-weight: 600;">${escapeHtml(params.planName)}</p>
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr>
+                <th style="text-align: left; padding-bottom: 8px; color: #6b7280; font-size: 12px; text-transform: uppercase; border-bottom: 2px solid #e5e7eb;">Description</th>
+                <th style="text-align: right; padding-bottom: 8px; color: #6b7280; font-size: 12px; text-transform: uppercase; border-bottom: 2px solid #e5e7eb;">Amount</th>
+              </tr>
+            </thead>
+            <tbody>${lineItemRows}</tbody>
+            <tfoot>
+              <tr>
+                <td style="padding-top: 12px; font-weight: 700; font-size: 16px;">Total Due</td>
+                <td style="padding-top: 12px; text-align: right; font-weight: 700; font-size: 16px; color: #1e40af;">$${params.totalBill.toFixed(2)}</td>
+              </tr>
+            </tfoot>
+          </table>
+          <p style="margin: 16px 0 0 0; color: #6b7280; font-size: 13px;"><strong>Due Date:</strong> ${params.dueDate.toLocaleDateString()}</p>
+        </div>
+        <p>Log in to your billing dashboard to view details and make a payment.</p>
+      </div>
+    `;
+    await emailService.sendEmail({
+      to: params.tenantEmail,
+      subject: `Chain Invoice ${params.invoiceNumber} - $${params.totalBill.toFixed(2)} Due ${params.dueDate.toLocaleDateString()}`,
+      html: emailHtml,
+      tenantId: params.tenantId,
+    });
+    console.log(`📧 Invoice email sent to ${params.tenantEmail} (${params.invoiceNumber})`);
+  } catch (emailErr) {
+    console.error(`❌ Failed to send invoice email for tenant ${params.tenantId}:`, emailErr);
+  }
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -18870,35 +18944,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         (stats as any).voipCosts = voipCosts;
         (stats as any).voipDetails = voipDetails;
       } else {
-        // À la carte billing - calculate based on enabled services
-        const enabledAddons = tenantSettings?.enabledAddons || [];
-        const aLaCarteBase = enabledAddons.length * 125;
-        
-        // For à la carte, no included email/SMS, so all usage is overage
-        const emailOverageCharge = Number((stats.emailUsage.used * (EMAIL_OVERAGE_RATE_PER_THOUSAND / 1000)).toFixed(2));
-        const smsOverageCharge = Number((stats.smsUsage.used * SMS_OVERAGE_RATE_PER_SEGMENT).toFixed(2));
-        const usageCharges = Number((emailOverageCharge + smsOverageCharge).toFixed(2));
-        
-        stats.monthlyBase = aLaCarteBase;
-        stats.usageCharges = usageCharges;
-        stats.totalBill = Number((aLaCarteBase + (stats.addonFees || 0) + usageCharges + voipCosts).toFixed(2));
-        (stats as any).voipCosts = voipCosts;
-        (stats as any).voipDetails = voipDetails;
-        
-        // Update usage to show zero included
-        stats.emailUsage = {
-          used: stats.emailUsage.used,
-          included: 0,
-          overage: stats.emailUsage.used,
-          overageCharge: emailOverageCharge,
-        };
-        
-        stats.smsUsage = {
-          used: stats.smsUsage.used,
-          included: 0,
-          overage: stats.smsUsage.used,
-          overageCharge: smsOverageCharge,
-        };
+        // À la carte billing - single source of truth (computeALaCarteBill).
+        // Usage is measured month-to-date over the current calendar month.
+        const now = new Date();
+        const periodStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+        const bill = await computeALaCarteBill(tenantId, periodStart, now);
+
+        stats.monthlyBase = bill.monthlyBase;
+        stats.addonFees = bill.addonFees;
+        stats.usageCharges = bill.usageCharges;
+        stats.totalBill = bill.totalBill;
+        stats.emailUsage = bill.emailUsage;
+        stats.smsUsage = bill.smsUsage;
+        (stats as any).voipCosts = bill.voipCosts;
+        (stats as any).voipDetails = bill.voipDetails;
       }
       
       // Enhanced logging for SMS usage debugging
@@ -18968,175 +19027,150 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/billing/process-renewals', async (req, res) => {
     try {
       console.log('🔄 Processing subscription renewals...');
+      const { addMonths } = await import('date-fns');
       const now = new Date();
       let renewedCount = 0;
       let invoicesCreated = 0;
-      
+
       // Get all active subscriptions
       const allSubscriptions = await db.select().from(subscriptions).where(eq(subscriptions.status, 'active'));
-      
+
+      // Cache plans so we can detect à la carte ($0) subscription rows
+      const planCache = new Map<string, typeof subscriptionPlans.$inferSelect | undefined>();
+      const getPlan = async (planId: string) => {
+        if (!planCache.has(planId)) {
+          const [plan] = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.id, planId)).limit(1);
+          planCache.set(planId, plan);
+        }
+        return planCache.get(planId);
+      };
+
       for (const subscription of allSubscriptions) {
-        const periodEnd = new Date(subscription.currentPeriodEnd);
-        
-        // Check if period has ended
-        if (periodEnd <= now) {
-          console.log(`📅 Renewing subscription for tenant ${subscription.tenantId}`);
-          
-          // Calculate next period (30 days)
-          const newPeriodStart = new Date(periodEnd);
-          newPeriodStart.setHours(0, 0, 0, 0);
-          const newPeriodEnd = new Date(newPeriodStart);
-          newPeriodEnd.setDate(newPeriodEnd.getDate() + 30);
-          newPeriodEnd.setHours(23, 59, 59, 999);
-          
-          // Get usage data for the completed period
-          const stats = await storage.getBillingStats(subscription.tenantId);
-          
-          // Create invoice for the completed period. We only roll the subscription
-          // forward if either the invoice was successfully created OR an invoice
-          // for this period already exists. Otherwise we leave the period alone so
-          // tomorrow's cron can retry (no silent skipped billing cycles).
-          let invoiceReady = false;
-          if (stats) {
-            try {
-              // Check if invoice already exists for this period
-              const existingInvoice = await db.select()
-                .from(invoices)
-                .where(
-                  and(
-                    eq(invoices.subscriptionId, subscription.id),
-                    eq(invoices.periodStart, subscription.currentPeriodStart),
-                    eq(invoices.periodEnd, subscription.currentPeriodEnd)
-                  )
-                )
-                .limit(1);
-              
-              if (existingInvoice.length > 0) {
-                console.log(`⏭️  Invoice already exists for tenant ${subscription.tenantId} (${existingInvoice[0].invoiceNumber}) - skipping creation`);
-                invoiceReady = true;
-              } else {
-                const invoiceNumber = `INV-${subscription.tenantId.substring(0, 8)}-${Date.now()}`;
-                const dueDate = new Date();
-                dueDate.setDate(dueDate.getDate() + 15); // Due in 15 days
+        try {
+          const tenant = await storage.getTenant(subscription.tenantId);
+          if (!tenant) continue;
 
-                // Build itemized line items so the billing UI can show a breakdown
-                const lineItemsList: Array<{ description: string; amountCents: number; quantity?: number; unitLabel?: string }> = [];
-                lineItemsList.push({
-                  description: `${subscription.planId ? subscription.planId.charAt(0).toUpperCase() + subscription.planId.slice(1) : 'Base'} Plan`,
-                  amountCents: Math.round(stats.monthlyBase * 100),
-                });
-                if ((stats.addons as any)?.documentSigning) {
-                  lineItemsList.push({ description: 'Document Signing Add-on', amountCents: Math.round((stats.addons as any).documentSigningFee * 100) });
-                }
-                if ((stats.addons as any)?.aiAutoResponse) {
-                  lineItemsList.push({ description: 'AI Auto-Response Add-on', amountCents: Math.round((stats.addons as any).aiAutoResponseFee * 100) });
-                }
-                if ((stats.emailUsage as any)?.overage > 0) {
-                  lineItemsList.push({ description: 'Email Overage', amountCents: Math.round((stats.emailUsage as any).overageCharge * 100), quantity: (stats.emailUsage as any).overage, unitLabel: 'emails' });
-                }
-                if ((stats.smsUsage as any)?.overage > 0) {
-                  lineItemsList.push({ description: 'SMS Overage', amountCents: Math.round((stats.smsUsage as any).overageCharge * 100), quantity: (stats.smsUsage as any).overage, unitLabel: 'segments' });
-                }
-                if ((stats.aiAutoResponseUsage as any)?.overage > 0) {
-                  lineItemsList.push({ description: 'AI Response Overage', amountCents: Math.round((stats.aiAutoResponseUsage as any).overageCharge * 100), quantity: (stats.aiAutoResponseUsage as any).overage, unitLabel: 'responses' });
-                }
+          // Wallet (pay-as-you-go) tenants are not billed via subscription invoices
+          if (tenant.billingMode === 'wallet') continue;
 
-                const [invoice] = await db.insert(invoices).values({
+          const plan = await getPlan(subscription.planId);
+          // À la carte subscription rows are billed by generate-monthly-invoices, not here
+          if (plan?.slug === 'a-la-carte') continue;
+
+          let periodStart = new Date(subscription.currentPeriodStart);
+          let periodEnd = new Date(subscription.currentPeriodEnd);
+          let firstIteration = true;
+          let safety = 0;
+
+          // Catch-up loop: bill every elapsed period exactly once. Period advances by
+          // one calendar month (addMonths) so renewal dates never drift, and missed
+          // months are never skipped.
+          while (periodEnd <= now && safety < 36) {
+            safety++;
+            const counters = firstIteration
+              ? { emailsUsed: subscription.emailsUsedThisPeriod ?? 0, smsUsed: subscription.smsUsedThisPeriod ?? 0 }
+              : undefined;
+            const loopPeriodStart = periodStart;
+            const loopPeriodEnd = periodEnd;
+
+            // Transaction: lock the subscription row, verify the period hasn't been
+            // advanced by a concurrent run, create the invoice if absent, then advance.
+            const result = await db.transaction(async (tx) => {
+              const [locked] = await tx.select().from(subscriptions).where(eq(subscriptions.id, subscription.id)).for('update');
+              if (!locked) return { state: 'gone' as const };
+
+              const lockedStart = new Date(locked.currentPeriodStart);
+              const lockedEnd = new Date(locked.currentPeriodEnd);
+              if (lockedStart.getTime() !== loopPeriodStart.getTime() || lockedEnd.getTime() !== loopPeriodEnd.getTime()) {
+                // Another worker advanced this subscription; resync and retry
+                return { state: 'resync' as const, nextStart: lockedStart, nextEnd: lockedEnd };
+              }
+
+              const existing = await tx.select().from(invoices).where(and(
+                eq(invoices.subscriptionId, subscription.id),
+                eq(invoices.periodStart, locked.currentPeriodStart),
+                eq(invoices.periodEnd, locked.currentPeriodEnd),
+              )).limit(1);
+
+              let invoiceInfo: { invoiceNumber: string; dueDate: Date; bill: Awaited<ReturnType<typeof computeSubscriptionBill>> } | null = null;
+
+              if (existing.length === 0) {
+                const bill = await computeSubscriptionBill(subscription.tenantId, plan ?? null, loopPeriodStart, loopPeriodEnd, counters);
+                const invoiceNumber = generateInvoiceNumber(subscription.tenantId);
+                const dueDate = new Date(now);
+                dueDate.setDate(dueDate.getDate() + 15);
+
+                await tx.insert(invoices).values({
                   tenantId: subscription.tenantId,
                   subscriptionId: subscription.id,
                   invoiceNumber,
-                  periodStart: subscription.currentPeriodStart,
-                  periodEnd: subscription.currentPeriodEnd,
+                  periodStart: locked.currentPeriodStart,
+                  periodEnd: locked.currentPeriodEnd,
                   status: 'pending',
-                  baseAmountCents: Math.round(stats.monthlyBase * 100),
+                  baseAmountCents: Math.round(bill.monthlyBase * 100),
                   perConsumerCents: 0,
-                  consumerCount: stats.activeConsumers,
-                  totalAmountCents: Math.round(stats.totalBill * 100),
+                  consumerCount: bill.consumerCount,
+                  totalAmountCents: Math.round(bill.totalBill * 100),
                   dueDate,
                   paidAt: null,
-                  lineItems: lineItemsList,
-                }).returning();
-                invoicesCreated++;
-                invoiceReady = true;
-                console.log(`✅ Invoice created for tenant ${subscription.tenantId}: $${stats.totalBill} (${invoiceNumber})`);
-                
-                // Send invoice email to company (failure here does not block the period rollover)
-                try {
-                  const tenant = await storage.getTenant(subscription.tenantId);
-                  if (tenant?.email) {
-                    const periodStartStr = new Date(subscription.currentPeriodStart).toLocaleDateString();
-                    const periodEndStr = new Date(subscription.currentPeriodEnd).toLocaleDateString();
-                    const dueDateStr = dueDate.toLocaleDateString();
-                    const safeName = escapeHtml(tenant.name || 'Customer');
-
-                    const emailHtml = `
-                      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                        <h2>Monthly Invoice</h2>
-                        <p>Dear ${safeName},</p>
-                        <p>Your monthly invoice for Chain platform services is now available.</p>
-                        
-                        <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                          <h3 style="margin-top: 0;">Invoice #${invoiceNumber}</h3>
-                          <p><strong>Billing Period:</strong> ${periodStartStr} - ${periodEndStr}</p>
-                          <p><strong>Due Date:</strong> ${dueDateStr}</p>
-                          <hr style="border: 0; border-top: 1px solid #ddd; margin: 15px 0;">
-                          <p><strong>Monthly Base Fee:</strong> $${stats.monthlyBase.toFixed(2)}</p>
-                          ${stats.addonFees > 0 ? `<p><strong>Add-on Fees:</strong> $${stats.addonFees.toFixed(2)}</p>` : ''}
-                          ${stats.addons.documentSigning ? `<p style="margin-left: 20px;">• Document Signing: $${stats.addons.documentSigningFee.toFixed(2)}</p>` : ''}
-                          ${stats.addons.aiAutoResponse ? `<p style="margin-left: 20px;">• AI Auto-Response: $${stats.addons.aiAutoResponseFee.toFixed(2)}</p>` : ''}
-                          ${stats.usageCharges > 0 ? `<p><strong>Usage Overage Charges:</strong> $${stats.usageCharges.toFixed(2)}</p>` : ''}
-                          ${stats.emailUsage.overage > 0 ? `<p style="margin-left: 20px;">• Email Overage: ${stats.emailUsage.overage} emails @ $${stats.emailUsage.overageCharge.toFixed(2)}</p>` : ''}
-                          ${stats.smsUsage.overage > 0 ? `<p style="margin-left: 20px;">• SMS Overage: ${stats.smsUsage.overage} segments @ $${stats.smsUsage.overageCharge.toFixed(2)}</p>` : ''}
-                          ${stats.aiAutoResponseUsage.overage > 0 ? `<p style="margin-left: 20px;">• AI Response Overage: ${stats.aiAutoResponseUsage.overage} responses @ $${stats.aiAutoResponseUsage.overageCharge.toFixed(2)}</p>` : ''}
-                          <hr style="border: 0; border-top: 2px solid #333; margin: 15px 0;">
-                          <p style="font-size: 18px;"><strong>Total Due:</strong> $${stats.totalBill.toFixed(2)}</p>
-                        </div>
-                        
-                        <p>This invoice is available in your billing dashboard. Log in to view details and payment history.</p>
-                        <p>Thank you for using Chain!</p>
-                      </div>
-                    `;
-                    
-                    await emailService.sendEmail({
-                      to: tenant.email,
-                      subject: `Chain Invoice ${invoiceNumber} - $${stats.totalBill.toFixed(2)} Due ${dueDateStr}`,
-                      html: emailHtml,
-                      tenantId: subscription.tenantId,
-                    });
-                    console.log(`📧 Invoice email sent to ${tenant.email}`);
-                  } else {
-                    console.log(`⚠️  No email on file for tenant ${subscription.tenantId} - invoice created but email not sent`);
-                  }
-                } catch (emailError) {
-                  console.error(`❌ Failed to send invoice email for tenant ${subscription.tenantId}:`, emailError);
-                }
+                  lineItems: bill.lineItems,
+                });
+                invoiceInfo = { invoiceNumber, dueDate, bill };
+              } else {
+                console.log(`⏭️  Invoice already exists for tenant ${subscription.tenantId} (${existing[0].invoiceNumber}) - skipping creation`);
               }
-            } catch (invoiceError) {
-              console.error(`❌ Failed to create invoice for tenant ${subscription.tenantId}:`, invoiceError);
-            }
-          }
-          
-          if (!invoiceReady) {
-            console.log(`⏸️  Skipping period rollover for tenant ${subscription.tenantId} - invoice was not created (will retry tomorrow)`);
-            continue;
-          }
 
-          // Update subscription to next period and reset usage
-          await db.update(subscriptions)
-            .set({
-              currentPeriodStart: newPeriodStart,
-              currentPeriodEnd: newPeriodEnd,
-              emailsUsedThisPeriod: 0,
-              smsUsedThisPeriod: 0,
-            })
-            .where(eq(subscriptions.id, subscription.id));
-          
-          renewedCount++;
-          console.log(`✅ Subscription renewed for tenant ${subscription.tenantId}: ${newPeriodStart.toLocaleDateString()} - ${newPeriodEnd.toLocaleDateString()}`);
+              const newStart = addMonths(loopPeriodStart, 1);
+              const newEnd = addMonths(loopPeriodEnd, 1);
+              await tx.update(subscriptions).set({
+                currentPeriodStart: newStart,
+                currentPeriodEnd: newEnd,
+                emailsUsedThisPeriod: 0,
+                smsUsedThisPeriod: 0,
+                updatedAt: new Date(),
+              }).where(eq(subscriptions.id, subscription.id));
+
+              return { state: 'advanced' as const, invoiceInfo, newStart, newEnd };
+            });
+
+            if (result.state === 'gone') break;
+            if (result.state === 'resync') {
+              periodStart = result.nextStart;
+              periodEnd = result.nextEnd;
+              firstIteration = false;
+              continue;
+            }
+
+            renewedCount++;
+            if (result.invoiceInfo) {
+              invoicesCreated++;
+              console.log(`✅ Invoice created for tenant ${subscription.tenantId}: $${result.invoiceInfo.bill.totalBill} (${result.invoiceInfo.invoiceNumber})`);
+              // Send email AFTER commit (never inside the transaction)
+              await sendChainInvoiceEmail({
+                tenantId: subscription.tenantId,
+                tenantName: tenant.name,
+                tenantEmail: tenant.email,
+                invoiceNumber: result.invoiceInfo.invoiceNumber,
+                planName: plan?.name ?? 'Subscription',
+                periodStart: loopPeriodStart,
+                periodEnd: loopPeriodEnd,
+                dueDate: result.invoiceInfo.dueDate,
+                totalBill: result.invoiceInfo.bill.totalBill,
+                lineItems: result.invoiceInfo.bill.lineItems,
+              });
+            }
+
+            periodStart = result.newStart;
+            periodEnd = result.newEnd;
+            firstIteration = false;
+            console.log(`✅ Subscription period advanced for tenant ${subscription.tenantId}: ${result.newStart.toLocaleDateString()} - ${result.newEnd.toLocaleDateString()}`);
+          }
+        } catch (subError) {
+          console.error(`❌ Failed to process renewal for tenant ${subscription.tenantId}:`, subError);
         }
       }
-      
-      const message = `Subscription renewal complete: ${renewedCount} subscriptions renewed, ${invoicesCreated} invoices created`;
+
+      const message = `Subscription renewal complete: ${renewedCount} periods renewed, ${invoicesCreated} invoices created`;
       console.log(`✅ ${message}`);
       
       res.json({
@@ -19166,313 +19200,173 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Get all active subscriptions
       const allSubscriptions = await db.select().from(subscriptions).where(eq(subscriptions.status, 'active'));
-      
+
+      // Cache plans to detect à la carte ($0) subscription rows
+      const planCache = new Map<string, typeof subscriptionPlans.$inferSelect | undefined>();
+      const getPlan = async (planId: string) => {
+        if (!planCache.has(planId)) {
+          const [plan] = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.id, planId)).limit(1);
+          planCache.set(planId, plan);
+        }
+        return planCache.get(planId);
+      };
+
+      // Tenants that have a REAL (non-à-la-carte) active subscription. The à la carte
+      // block below must NOT double-bill these.
+      const tenantIdsWithRealSub = new Set<string>();
+
+      // ---- SUBSCRIPTION SAFETY NET ----
+      // process-renewals is the primary path (with catch-up + period advance). This loop
+      // is an idempotent backstop that bills the current ended period without advancing it.
       for (const subscription of allSubscriptions) {
         try {
-          // Only generate invoice if billing period has ended
-          const periodEnd = new Date(subscription.currentPeriodEnd);
-          if (periodEnd > now) {
-            skipped++;
-            continue;
-          }
-
-          // Check if invoice already exists for this billing period (idempotency)
-          const existingInvoice = await db.select()
-            .from(invoices)
-            .where(
-              and(
-                eq(invoices.subscriptionId, subscription.id),
-                eq(invoices.periodStart, subscription.currentPeriodStart),
-                eq(invoices.periodEnd, subscription.currentPeriodEnd)
-              )
-            )
-            .limit(1);
-          
-          if (existingInvoice.length > 0) {
-            console.log(`⏭️  Invoice already exists for tenant ${subscription.tenantId} (period ${new Date(subscription.currentPeriodStart).toLocaleDateString()} - ${new Date(subscription.currentPeriodEnd).toLocaleDateString()})`);
-            skipped++;
-            continue;
-          }
-          
-          // Get billing stats for this tenant
-          const stats = await storage.getBillingStats(subscription.tenantId);
           const tenant = await storage.getTenant(subscription.tenantId);
-          
-          if (!tenant?.email) {
-            console.log(`⚠️ Skipping tenant ${subscription.tenantId} - no email address`);
-            skipped++;
-            continue;
-          }
-          
-          // Create invoice record
-          const invoiceNumber = `INV-${subscription.tenantId.substring(0, 8)}-${Date.now()}`;
-          const dueDate = new Date();
-          dueDate.setDate(dueDate.getDate() + 15); // Due in 15 days
-          
-          // Build itemized line items
-          const lineItemsList: Array<{ description: string; amountCents: number; quantity?: number; unitLabel?: string }> = [];
-          lineItemsList.push({ description: `${subscription.planId ? subscription.planId.charAt(0).toUpperCase() + subscription.planId.slice(1) : 'Base'} Plan`, amountCents: Math.round(stats.monthlyBase * 100) });
-          if ((stats.addons as any)?.documentSigning) lineItemsList.push({ description: 'Document Signing Add-on', amountCents: Math.round((stats.addons as any).documentSigningFee * 100) });
-          if ((stats.addons as any)?.aiAutoResponse) lineItemsList.push({ description: 'AI Auto-Response Add-on', amountCents: Math.round((stats.addons as any).aiAutoResponseFee * 100) });
-          if ((stats.emailUsage as any)?.overage > 0) lineItemsList.push({ description: 'Email Overage', amountCents: Math.round((stats.emailUsage as any).overageCharge * 100), quantity: (stats.emailUsage as any).overage, unitLabel: 'emails' });
-          if ((stats.smsUsage as any)?.overage > 0) lineItemsList.push({ description: 'SMS Overage', amountCents: Math.round((stats.smsUsage as any).overageCharge * 100), quantity: (stats.smsUsage as any).overage, unitLabel: 'segments' });
-          if ((stats.aiAutoResponseUsage as any)?.overage > 0) lineItemsList.push({ description: 'AI Response Overage', amountCents: Math.round((stats.aiAutoResponseUsage as any).overageCharge * 100), quantity: (stats.aiAutoResponseUsage as any).overage, unitLabel: 'responses' });
+          if (!tenant) { skipped++; continue; }
+          // Wallet (pay-as-you-go) tenants are not billed via subscription invoices
+          if (tenant.billingMode === 'wallet') { skipped++; continue; }
 
-          const [invoice] = await db.insert(invoices).values({
-            tenantId: subscription.tenantId,
-            subscriptionId: subscription.id,
-            invoiceNumber,
-            periodStart: subscription.currentPeriodStart,
-            periodEnd: subscription.currentPeriodEnd,
-            status: 'pending',
-            baseAmountCents: Math.round(stats.monthlyBase * 100),
-            perConsumerCents: 0,
-            consumerCount: stats.activeConsumers,
-            totalAmountCents: Math.round(stats.totalBill * 100),
-            dueDate,
-            paidAt: null,
-            lineItems: lineItemsList,
-          }).returning();
-          
-          // Send invoice email
-          const periodStartStr = new Date(subscription.currentPeriodStart).toLocaleDateString();
-          const periodEndStr = new Date(subscription.currentPeriodEnd).toLocaleDateString();
-          const dueDateStr = dueDate.toLocaleDateString();
-          
-          const safeName = escapeHtml(tenant.name || 'Customer');
-          const emailHtml = `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #1e40af;">Monthly Invoice</h2>
-              <p>Dear ${safeName},</p>
-              <p>Your monthly invoice for Chain platform services is now available.</p>
-              
-              <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <h3 style="margin-top: 0; color: #1e40af;">Invoice #${invoiceNumber}</h3>
-                <p><strong>Billing Period:</strong> ${periodStartStr} - ${periodEndStr}</p>
-                <p><strong>Due Date:</strong> ${dueDateStr}</p>
-                <hr style="border: 0; border-top: 1px solid #ddd; margin: 15px 0;">
-                <p><strong>Monthly Base Fee:</strong> $${stats.monthlyBase.toFixed(2)}</p>
-                ${stats.addonFees > 0 ? `
-                  <p><strong>Add-on Fees:</strong> $${stats.addonFees.toFixed(2)}</p>
-                  ${stats.addons.documentSigning ? `<p style="margin-left: 20px; color: #666;">• Document Signing: $${stats.addons.documentSigningFee.toFixed(2)}</p>` : ''}
-                  ${stats.addons.aiAutoResponse ? `<p style="margin-left: 20px; color: #666;">• AI Auto-Response: $${stats.addons.aiAutoResponseFee.toFixed(2)}</p>` : ''}
-                ` : ''}
-                ${stats.usageCharges > 0 ? `
-                  <p><strong>Usage Overage Charges:</strong> $${stats.usageCharges.toFixed(2)}</p>
-                  ${stats.emailUsage.overage > 0 ? `<p style="margin-left: 20px; color: #666;">• Email Overage: ${stats.emailUsage.overage} emails - $${stats.emailUsage.overageCharge.toFixed(2)}</p>` : ''}
-                  ${stats.smsUsage.overage > 0 ? `<p style="margin-left: 20px; color: #666;">• SMS Overage: ${stats.smsUsage.overage} segments - $${stats.smsUsage.overageCharge.toFixed(2)}</p>` : ''}
-                  ${stats.aiAutoResponseUsage.overage > 0 ? `<p style="margin-left: 20px; color: #666;">• AI Response Overage: ${stats.aiAutoResponseUsage.overage} responses - $${stats.aiAutoResponseUsage.overageCharge.toFixed(2)}</p>` : ''}
-                ` : ''}
-                <hr style="border: 0; border-top: 2px solid #333; margin: 15px 0;">
-                <p style="font-size: 18px;"><strong>Total Due:</strong> $${stats.totalBill.toFixed(2)}</p>
-              </div>
-              
-              <p>This invoice is available in your billing dashboard. Log in to view details and payment history.</p>
-              <p style="color: #666; font-size: 12px; margin-top: 30px;">Thank you for using Chain!</p>
-            </div>
-          `;
-          
-          await emailService.sendEmail({
-            to: tenant.email,
-            subject: `Chain Invoice ${invoiceNumber} - $${stats.totalBill.toFixed(2)} Due ${dueDateStr}`,
-            html: emailHtml,
-            tenantId: subscription.tenantId,
+          const plan = await getPlan(subscription.planId);
+          // À la carte subscription rows are handled by the à la carte block below
+          if (plan?.slug === 'a-la-carte') { continue; }
+
+          tenantIdsWithRealSub.add(subscription.tenantId);
+
+          if (new Date(subscription.currentPeriodEnd) > now) { skipped++; continue; }
+
+          const counters = { emailsUsed: subscription.emailsUsedThisPeriod ?? 0, smsUsed: subscription.smsUsedThisPeriod ?? 0 };
+
+          const created = await db.transaction(async (tx) => {
+            const [locked] = await tx.select().from(subscriptions).where(eq(subscriptions.id, subscription.id)).for('update');
+            if (!locked) return null;
+            const lockedStart = new Date(locked.currentPeriodStart);
+            const lockedEnd = new Date(locked.currentPeriodEnd);
+            // If the period was already advanced (by process-renewals), nothing to bill here
+            if (lockedEnd > now) return null;
+            const existing = await tx.select().from(invoices).where(and(
+              eq(invoices.subscriptionId, subscription.id),
+              eq(invoices.periodStart, locked.currentPeriodStart),
+              eq(invoices.periodEnd, locked.currentPeriodEnd),
+            )).limit(1);
+            if (existing.length > 0) return null;
+
+            const bill = await computeSubscriptionBill(subscription.tenantId, plan ?? null, lockedStart, lockedEnd, counters);
+            const invoiceNumber = generateInvoiceNumber(subscription.tenantId);
+            const dueDate = new Date(now);
+            dueDate.setDate(dueDate.getDate() + 15);
+            await tx.insert(invoices).values({
+              tenantId: subscription.tenantId,
+              subscriptionId: subscription.id,
+              invoiceNumber,
+              periodStart: locked.currentPeriodStart,
+              periodEnd: locked.currentPeriodEnd,
+              status: 'pending',
+              baseAmountCents: Math.round(bill.monthlyBase * 100),
+              perConsumerCents: 0,
+              consumerCount: bill.consumerCount,
+              totalAmountCents: Math.round(bill.totalBill * 100),
+              dueDate,
+              paidAt: null,
+              lineItems: bill.lineItems,
+            });
+            return { invoiceNumber, dueDate, bill, periodStart: lockedStart, periodEnd: lockedEnd };
           });
-          
+
+          if (!created) { skipped++; continue; }
+
           invoicesSent++;
-          console.log(`✅ Invoice sent to ${tenant.name} (${tenant.email}): $${stats.totalBill.toFixed(2)}`);
+          console.log(`✅ Invoice generated for ${tenant.name}: $${created.bill.totalBill.toFixed(2)} (${created.invoiceNumber})`);
+          await sendChainInvoiceEmail({
+            tenantId: subscription.tenantId,
+            tenantName: tenant.name,
+            tenantEmail: tenant.email,
+            invoiceNumber: created.invoiceNumber,
+            planName: plan?.name ?? 'Subscription',
+            periodStart: created.periodStart,
+            periodEnd: created.periodEnd,
+            dueDate: created.dueDate,
+            totalBill: created.bill.totalBill,
+            lineItems: created.bill.lineItems,
+          });
         } catch (error) {
           errors++;
           console.error(`❌ Failed to generate invoice for tenant ${subscription.tenantId}:`, error);
         }
       }
 
-      // ---- À LA CARTE TENANTS (add-ons enabled, no active subscription) ----
-      // Bill these on a calendar-month basis. Generate invoice for the previous
-      // completed calendar month if one doesn't already exist for that period.
-      const billableAddons = ['document_signing', 'ai_auto_response', 'mobile_app_branding'];
-
-      // Previous calendar month period
+      // ---- À LA CARTE TENANTS ----
+      // Any tenant without a real active subscription that has at least one billable
+      // service or usage for the period. Billed on a calendar-month basis for the
+      // previous completed calendar month. Uses the shared computeALaCarteBill helper.
       const alaCartePeriodStart = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
       const alaCartePeriodEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
 
-      // Find all tenants with at least one billable add-on enabled
-      const settingsRows = await db
-        .select()
-        .from(tenantSettings)
-        .where(sql`${tenantSettings.enabledAddons} && ARRAY[${sql.raw(billableAddons.map(a => `'${a}'`).join(','))}]::text[]`);
+      const allTenants = await db.select().from(tenants);
 
-      // Find tenants that already have an ACTIVE subscription — these are billed via the loop above
-      const tenantIdsWithActiveSub = new Set(allSubscriptions.map(s => s.tenantId));
-
-      for (const settings of settingsRows) {
+      for (const tenant of allTenants) {
         try {
-          if (tenantIdsWithActiveSub.has(settings.tenantId)) {
-            // Already handled by subscription-based generator above
+          // Real-subscription tenants are billed by the loop above
+          if (tenantIdsWithRealSub.has(tenant.id)) continue;
+          // Wallet (pay-as-you-go) tenants are not invoiced
+          if (tenant.billingMode === 'wallet') continue;
+
+          const bill = await computeALaCarteBill(tenant.id, alaCartePeriodStart, alaCartePeriodEnd);
+          if (!bill.hasBillableActivity || bill.totalBill <= 0) {
             continue;
           }
 
-          // Idempotency: invoice already exists for this tenant + period (à la carte)
-          const existingAlaCarte = await db
-            .select()
-            .from(invoices)
-            .where(and(
-              eq(invoices.tenantId, settings.tenantId),
+          const created = await db.transaction(async (tx) => {
+            // Lock the tenant row to serialize concurrent invoice generation
+            const [locked] = await tx.select().from(tenants).where(eq(tenants.id, tenant.id)).for('update');
+            if (!locked) return null;
+
+            const existing = await tx.select().from(invoices).where(and(
+              eq(invoices.tenantId, tenant.id),
               eq(invoices.periodStart, alaCartePeriodStart),
               eq(invoices.periodEnd, alaCartePeriodEnd),
               isNull(invoices.subscriptionId),
-            ))
-            .limit(1);
+            )).limit(1);
+            if (existing.length > 0) return null;
 
-          if (existingAlaCarte.length > 0) {
-            skipped++;
-            continue;
-          }
-
-          const tenant = await storage.getTenant(settings.tenantId);
-          if (!tenant?.email) {
-            console.log(`⚠️ Skipping à la carte tenant ${settings.tenantId} - no email address`);
-            skipped++;
-            continue;
-          }
-
-          const enabledAddons = settings.enabledAddons || [];
-          const hasDocumentSigning = enabledAddons.includes('document_signing');
-          const hasAiAutoResponse = enabledAddons.includes('ai_auto_response');
-          const hasMobileApp = enabledAddons.includes('mobile_app_branding');
-
-          // À la carte tenants have no plan, so Mobile App Branding is always charged when enabled
-          const documentSigningFee = hasDocumentSigning ? DOCUMENT_SIGNING_ADDON_PRICE : 0;
-          const aiAutoResponseFee = hasAiAutoResponse ? AI_AUTO_RESPONSE_ADDON_PRICE : 0;
-          const mobileAppFee = hasMobileApp ? MOBILE_APP_BRANDING_MONTHLY : 0;
-          const addonFees = documentSigningFee + aiAutoResponseFee + mobileAppFee;
-
-          if (addonFees === 0) {
-            // No billable add-ons after filtering — skip
-            skipped++;
-            continue;
-          }
-
-          // AI auto-response overage (no plan = launch tier quota)
-          let aiOverageCharge = 0;
-          let aiUsedCount = 0;
-          let aiOverage = 0;
-          const aiIncluded = AUTO_RESPONSE_INCLUDED_RESPONSES['launch'] ?? 1000;
-          if (hasAiAutoResponse) {
-            const aiUsed = await db
-              .select({ count: sql<number>`COUNT(*)::int` })
-              .from(autoResponseUsage)
-              .where(and(
-                eq(autoResponseUsage.tenantId, settings.tenantId),
-                eq(autoResponseUsage.testMode, false),
-                gte(autoResponseUsage.createdAt, alaCartePeriodStart),
-                lte(autoResponseUsage.createdAt, alaCartePeriodEnd),
-              ));
-            aiUsedCount = aiUsed[0]?.count ?? 0;
-            aiOverage = Math.max(0, aiUsedCount - aiIncluded);
-            aiOverageCharge = Number((aiOverage * AI_RESPONSE_OVERAGE_RATE).toFixed(2));
-          }
-
-          const totalBill = addonFees + aiOverageCharge;
-
-          // Build line items
-          const lineItemsList: Array<{ description: string; amountCents: number; quantity?: number; unitLabel?: string }> = [];
-          if (hasDocumentSigning) lineItemsList.push({ description: 'Document Signing Add-on', amountCents: Math.round(documentSigningFee * 100) });
-          if (hasAiAutoResponse) lineItemsList.push({ description: 'AI Auto-Response Add-on', amountCents: Math.round(aiAutoResponseFee * 100) });
-          if (hasMobileApp) lineItemsList.push({ description: 'Mobile App Branding Add-on', amountCents: Math.round(mobileAppFee * 100) });
-          if (hasAiAutoResponse) {
-            lineItemsList.push({
-              description: aiOverage > 0 ? 'AI Responses (within plan)' : 'AI Responses',
-              amountCents: 0,
-              quantity: aiUsedCount,
-              unitLabel: `of ${aiIncluded} included`,
+            const invoiceNumber = generateInvoiceNumber(tenant.id);
+            const dueDate = new Date(now);
+            dueDate.setDate(dueDate.getDate() + 15);
+            await tx.insert(invoices).values({
+              tenantId: tenant.id,
+              subscriptionId: null,
+              invoiceNumber,
+              periodStart: alaCartePeriodStart,
+              periodEnd: alaCartePeriodEnd,
+              status: 'pending',
+              baseAmountCents: Math.round(bill.monthlyBase * 100),
+              perConsumerCents: 0,
+              consumerCount: bill.consumerCount,
+              totalAmountCents: Math.round(bill.totalBill * 100),
+              dueDate,
+              paidAt: null,
+              lineItems: bill.lineItems,
             });
-            if (aiOverage > 0) {
-              lineItemsList.push({
-                description: 'AI Response Overage',
-                amountCents: Math.round(aiOverageCharge * 100),
-                quantity: aiOverage,
-                unitLabel: 'responses over limit',
-              });
-            }
-          }
-
-          const invoiceNumber = `INV-${settings.tenantId.substring(0, 8)}-${Date.now()}`;
-          const dueDate = new Date();
-          dueDate.setDate(dueDate.getDate() + 15);
-
-          const activeConsumersResult = await db.select().from(consumers).where(eq(consumers.tenantId, settings.tenantId));
-          const activeConsumersCount = activeConsumersResult.length;
-
-          await db.insert(invoices).values({
-            tenantId: settings.tenantId,
-            subscriptionId: null,
-            invoiceNumber,
-            periodStart: alaCartePeriodStart,
-            periodEnd: alaCartePeriodEnd,
-            status: 'pending',
-            baseAmountCents: 0,
-            perConsumerCents: 0,
-            consumerCount: activeConsumersCount,
-            totalAmountCents: Math.round(totalBill * 100),
-            dueDate,
-            paidAt: null,
-            lineItems: lineItemsList,
+            return { invoiceNumber, dueDate };
           });
 
-          // Send invoice email
-          const periodStartStr = alaCartePeriodStart.toLocaleDateString();
-          const periodEndStr = alaCartePeriodEnd.toLocaleDateString();
-          const dueDateStr = dueDate.toLocaleDateString();
-          const safeName = escapeHtml(tenant.name || 'Customer');
-          const lineItemRows = lineItemsList.map(item => `
-            <tr>
-              <td style="padding: 8px 0; color: #374151; border-bottom: 1px solid #e5e7eb;">
-                ${escapeHtml(item.description)}${item.quantity != null && item.unitLabel ? ` <span style="color:#6b7280; font-size:12px;">(${item.quantity} ${escapeHtml(item.unitLabel)})</span>` : ''}
-              </td>
-              <td style="padding: 8px 0; text-align: right; font-weight: 600; color: #111827; border-bottom: 1px solid #e5e7eb;">
-                ${item.amountCents === 0 ? '$0.00' : `$${(item.amountCents / 100).toFixed(2)}`}
-              </td>
-            </tr>
-          `).join('');
-          const emailHtml = `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #1e40af;">Invoice ${invoiceNumber}</h2>
-              <p>Dear ${safeName},</p>
-              <p>Your invoice for Chain platform add-on services for the period <strong>${periodStartStr} – ${periodEndStr}</strong> is now available.</p>
-              <div style="background: #f9fafb; border: 1px solid #e5e7eb; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <table style="width: 100%; border-collapse: collapse;">
-                  <thead>
-                    <tr>
-                      <th style="text-align: left; padding-bottom: 8px; color: #6b7280; font-size: 12px; text-transform: uppercase; border-bottom: 2px solid #e5e7eb;">Description</th>
-                      <th style="text-align: right; padding-bottom: 8px; color: #6b7280; font-size: 12px; text-transform: uppercase; border-bottom: 2px solid #e5e7eb;">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>${lineItemRows}</tbody>
-                  <tfoot>
-                    <tr>
-                      <td style="padding-top: 12px; font-weight: 700; font-size: 16px;">Total Due</td>
-                      <td style="padding-top: 12px; text-align: right; font-weight: 700; font-size: 16px; color: #1e40af;">$${totalBill.toFixed(2)}</td>
-                    </tr>
-                  </tfoot>
-                </table>
-                <p style="margin: 16px 0 0 0; color: #6b7280; font-size: 13px;"><strong>Due Date:</strong> ${dueDateStr}</p>
-              </div>
-              <p>Log in to your billing dashboard to view details and make a payment.</p>
-            </div>
-          `;
-          await emailService.sendEmail({
-            to: tenant.email,
-            subject: `Chain Invoice ${invoiceNumber} - $${totalBill.toFixed(2)} Due ${dueDateStr}`,
-            html: emailHtml,
-            tenantId: settings.tenantId,
-          });
+          if (!created) { skipped++; continue; }
 
           invoicesSent++;
-          console.log(`✅ À la carte invoice sent to ${tenant.name} (${tenant.email}): $${totalBill.toFixed(2)}`);
+          console.log(`✅ À la carte invoice generated for ${tenant.name}: $${bill.totalBill.toFixed(2)} (${created.invoiceNumber})`);
+          await sendChainInvoiceEmail({
+            tenantId: tenant.id,
+            tenantName: tenant.name,
+            tenantEmail: tenant.email,
+            invoiceNumber: created.invoiceNumber,
+            planName: 'À La Carte',
+            periodStart: alaCartePeriodStart,
+            periodEnd: alaCartePeriodEnd,
+            dueDate: created.dueDate,
+            totalBill: bill.totalBill,
+            lineItems: bill.lineItems,
+          });
         } catch (error) {
           errors++;
-          console.error(`❌ Failed to generate à la carte invoice for tenant ${settings.tenantId}:`, error);
+          console.error(`❌ Failed to generate à la carte invoice for tenant ${tenant.id}:`, error);
         }
       }
 
@@ -20434,28 +20328,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(eq(subscriptions.tenantId, tenantId))
         .orderBy(desc(subscriptions.currentPeriodEnd));
 
-      // À LA CARTE PATH: tenant has no subscriptions but may have billable add-ons.
-      // Generate an invoice for the previous calendar month using add-on fees only.
-      if (allSubs.length === 0) {
-        const enabledAddons = await storage.getEnabledAddons(tenantId);
-        const hasDocumentSigning = enabledAddons.includes('document_signing');
-        const hasAiAutoResponse = enabledAddons.includes('ai_auto_response');
-        const hasMobileApp = enabledAddons.includes('mobile_app_branding');
+      // Load the plans referenced by these subscriptions so we can distinguish
+      // a REAL subscription from an à la carte ($0) subscription row.
+      const planById = new Map<string, typeof subscriptionPlans.$inferSelect>();
+      const subPlanIds = Array.from(new Set(allSubs.map(s => s.planId).filter((p): p is string => !!p)));
+      for (const pid of subPlanIds) {
+        const [p] = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.id, pid)).limit(1);
+        if (p) planById.set(pid, p);
+      }
+      const realSubs = allSubs.filter(s => {
+        const p = s.planId ? planById.get(s.planId) : undefined;
+        return !!p && p.slug !== 'a-la-carte';
+      });
 
-        const documentSigningFee = hasDocumentSigning ? DOCUMENT_SIGNING_ADDON_PRICE : 0;
-        const aiAutoResponseFee = hasAiAutoResponse ? AI_AUTO_RESPONSE_ADDON_PRICE : 0;
-        const mobileAppFee = hasMobileApp ? MOBILE_APP_BRANDING_MONTHLY : 0;
-        const addonFees = documentSigningFee + aiAutoResponseFee + mobileAppFee;
-
-        if (addonFees === 0) {
-          return res.status(404).json({
-            message: 'Tenant has no subscription and no billable add-ons enabled. Nothing to invoice.',
-          });
-        }
-
+      // À LA CARTE PATH: no real subscription (tenant has no subs, or only à la
+      // carte subscription rows). Bill the previous calendar month using the shared
+      // computeALaCarteBill helper so this matches the cron exactly.
+      if (realSubs.length === 0) {
         const nowDt = new Date();
         const acPeriodStart = new Date(nowDt.getFullYear(), nowDt.getMonth() - 1, 1, 0, 0, 0, 0);
         const acPeriodEnd = new Date(nowDt.getFullYear(), nowDt.getMonth(), 0, 23, 59, 59, 999);
+
+        const bill = await computeALaCarteBill(tenantId, acPeriodStart, acPeriodEnd);
+        if (!bill.hasBillableActivity || bill.totalBill <= 0) {
+          return res.status(404).json({
+            message: 'Tenant has no subscription and no billable services or add-ons enabled. Nothing to invoice.',
+          });
+        }
 
         // Idempotency / replace-pending: check existing à la carte invoice for this period
         const [existing] = await db
@@ -20478,53 +20377,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log(`🗑️ Deleted pending à la carte invoice ${existing.id} to replace with recalculated version`);
         }
 
-        // AI auto-response overage (à la carte = launch-tier quota)
-        let aiUsedCount = 0;
-        let aiOverage = 0;
-        let aiOverageCharge = 0;
-        const aiIncluded = AUTO_RESPONSE_INCLUDED_RESPONSES['launch'] ?? 1000;
-        if (hasAiAutoResponse) {
-          const aiUsed = await db
-            .select({ count: sql<number>`COUNT(*)::int` })
-            .from(autoResponseUsage)
-            .where(and(
-              eq(autoResponseUsage.tenantId, tenantId),
-              eq(autoResponseUsage.testMode, false),
-              gte(autoResponseUsage.createdAt, acPeriodStart),
-              lte(autoResponseUsage.createdAt, acPeriodEnd),
-            ));
-          aiUsedCount = aiUsed[0]?.count ?? 0;
-          aiOverage = Math.max(0, aiUsedCount - aiIncluded);
-          aiOverageCharge = Number((aiOverage * AI_RESPONSE_OVERAGE_RATE).toFixed(2));
-        }
-
-        const totalBill = addonFees + aiOverageCharge;
-
-        const lineItemsList: Array<{ description: string; amountCents: number; quantity?: number; unitLabel?: string }> = [];
-        if (hasDocumentSigning) lineItemsList.push({ description: 'Document Signing Add-on', amountCents: Math.round(documentSigningFee * 100) });
-        if (hasAiAutoResponse) lineItemsList.push({ description: 'AI Auto-Response Add-on', amountCents: Math.round(aiAutoResponseFee * 100) });
-        if (hasMobileApp) lineItemsList.push({ description: 'Mobile App Branding Add-on', amountCents: Math.round(mobileAppFee * 100) });
-        if (hasAiAutoResponse) {
-          lineItemsList.push({
-            description: aiOverage > 0 ? 'AI Responses (within plan)' : 'AI Responses',
-            amountCents: 0,
-            quantity: aiUsedCount,
-            unitLabel: `of ${aiIncluded} included`,
-          });
-          if (aiOverage > 0) {
-            lineItemsList.push({
-              description: 'AI Response Overage',
-              amountCents: Math.round(aiOverageCharge * 100),
-              quantity: aiOverage,
-              unitLabel: 'responses over limit',
-            });
-          }
-        }
-
-        const activeConsumersResult = await db.select().from(consumers).where(eq(consumers.tenantId, tenantId));
-        const activeConsumersCount = activeConsumersResult.length;
-
-        const invoiceNumber = `INV-${tenantId.substring(0, 8)}-${Date.now()}`;
+        const invoiceNumber = generateInvoiceNumber(tenantId);
         const dueDate = new Date();
         dueDate.setDate(dueDate.getDate() + 15);
 
@@ -20535,73 +20388,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
           periodStart: acPeriodStart,
           periodEnd: acPeriodEnd,
           status: 'pending',
-          baseAmountCents: 0,
+          baseAmountCents: Math.round(bill.monthlyBase * 100),
           perConsumerCents: 0,
-          consumerCount: activeConsumersCount,
-          totalAmountCents: Math.round(totalBill * 100),
+          consumerCount: bill.consumerCount,
+          totalAmountCents: Math.round(bill.totalBill * 100),
           dueDate,
           paidAt: null,
-          lineItems: lineItemsList,
+          lineItems: bill.lineItems,
         }).returning();
 
-        // Send email (best-effort)
-        try {
-          if (tenant.email) {
-            const periodStartStr = acPeriodStart.toLocaleDateString();
-            const periodEndStr = acPeriodEnd.toLocaleDateString();
-            const lineItemRows = lineItemsList.map(item => `
-              <tr>
-                <td style="padding: 8px 0; color: #374151; border-bottom: 1px solid #e5e7eb;">
-                  ${item.description}${item.quantity != null && item.unitLabel ? ` <span style="color:#6b7280; font-size:12px;">(${item.quantity} ${item.unitLabel})</span>` : ''}
-                </td>
-                <td style="padding: 8px 0; text-align: right; font-weight: 600; color: #111827; border-bottom: 1px solid #e5e7eb;">
-                  ${item.amountCents === 0 ? '$0.00' : `$${(item.amountCents / 100).toFixed(2)}`}
-                </td>
-              </tr>
-            `).join('');
-            const emailHtml = `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #1e40af;">Invoice ${invoiceNumber}</h2>
-                <p>Dear ${tenant.name},</p>
-                <p>Your invoice for Chain platform add-on services for the period <strong>${periodStartStr} – ${periodEndStr}</strong> is now available.</p>
-                <div style="background: #f9fafb; border: 1px solid #e5e7eb; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                  <table style="width: 100%; border-collapse: collapse;">
-                    <thead>
-                      <tr>
-                        <th style="text-align: left; padding-bottom: 8px; color: #6b7280; font-size: 12px; text-transform: uppercase; border-bottom: 2px solid #e5e7eb;">Description</th>
-                        <th style="text-align: right; padding-bottom: 8px; color: #6b7280; font-size: 12px; text-transform: uppercase; border-bottom: 2px solid #e5e7eb;">Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody>${lineItemRows}</tbody>
-                    <tfoot>
-                      <tr>
-                        <td style="padding-top: 12px; font-weight: 700; font-size: 16px;">Total Due</td>
-                        <td style="padding-top: 12px; text-align: right; font-weight: 700; font-size: 16px; color: #1e40af;">$${totalBill.toFixed(2)}</td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                  <p style="margin: 16px 0 0 0; color: #6b7280; font-size: 13px;"><strong>Due Date:</strong> ${dueDate.toLocaleDateString()}</p>
-                </div>
-              </div>
-            `;
-            await emailService.sendEmail({
-              to: tenant.email,
-              subject: `Chain Invoice ${invoiceNumber} - $${totalBill.toFixed(2)} Due ${dueDate.toLocaleDateString()}`,
-              html: emailHtml,
-              tenantId,
-            });
-          }
-        } catch (emailErr) {
-          console.error(`❌ Failed to send à la carte invoice email for tenant ${tenantId}:`, emailErr);
-        }
+        await sendChainInvoiceEmail({
+          tenantId,
+          tenantName: tenant.name,
+          tenantEmail: tenant.email,
+          invoiceNumber,
+          planName: 'À La Carte',
+          periodStart: acPeriodStart,
+          periodEnd: acPeriodEnd,
+          dueDate,
+          totalBill: bill.totalBill,
+          lineItems: bill.lineItems,
+        });
 
-        console.log(`✅ Manual à la carte invoice generated for tenant ${tenantId}: ${invoiceNumber} ($${totalBill.toFixed(2)})`);
+        console.log(`✅ Manual à la carte invoice generated for tenant ${tenantId}: ${invoiceNumber} ($${bill.totalBill.toFixed(2)})`);
         return res.json({
           success: true,
           invoice: acInvoice,
           newPeriodStart: null,
           newPeriodEnd: null,
-          message: `À la carte invoice ${invoiceNumber} generated ($${totalBill.toFixed(2)}).`,
+          message: `À la carte invoice ${invoiceNumber} generated ($${bill.totalBill.toFixed(2)}).`,
         });
       }
 
@@ -20612,7 +20427,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let subscription = null;
       let existingPendingInvoiceId: string | null = null;
 
-      for (const sub of allSubs) {
+      for (const sub of realSubs) {
         const [existing] = await db
           .select()
           .from(invoices)
@@ -20650,142 +20465,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`🗑️ Deleted pending invoice ${existingPendingInvoiceId} to replace with recalculated version`);
       }
 
-      // Fetch the plan that was active for this subscription
-      let dbPlan: any = null;
-      if (subscription.planId) {
-        const [planResult] = await db
-          .select()
-          .from(subscriptionPlans)
-          .where(eq(subscriptionPlans.id, subscription.planId));
-        dbPlan = planResult;
-      }
+      // Plan for the chosen subscription (already loaded into planById above)
+      const dbPlan = subscription.planId ? (planById.get(subscription.planId) ?? null) : null;
+      const planName = dbPlan?.name ?? 'Base Plan';
 
       const periodStart = new Date(subscription.currentPeriodStart);
       const periodEnd = new Date(subscription.currentPeriodEnd);
 
-      // Base plan fee from the plan record (works for regular plans AND à la carte)
-      const monthlyBase = dbPlan ? Number(dbPlan.monthlyPriceCents) / 100 : 0;
-      const planName = dbPlan?.name ?? 'Base Plan';
-
-      // Add-ons enabled during this period
-      const enabledAddons = await storage.getEnabledAddons(tenantId);
-      const hasDocumentSigning = enabledAddons.includes('document_signing');
-      const hasAiAutoResponse = enabledAddons.includes('ai_auto_response');
-      const isEnterprisePlan = dbPlan?.slug === 'scale';
-      const hasMobileApp = enabledAddons.includes('mobile_app_branding');
-
-      const documentSigningFee = hasDocumentSigning ? DOCUMENT_SIGNING_ADDON_PRICE : 0;
-      const aiAutoResponseFee = hasAiAutoResponse ? AI_AUTO_RESPONSE_ADDON_PRICE : 0;
-      const mobileAppFee = (hasMobileApp && !isEnterprisePlan) ? MOBILE_APP_BRANDING_MONTHLY : 0;
-
-      // Messaging usage during this period.
-      // Pull from both sources and use whichever has more data:
-      //   1. messagingUsageEvents — event-level tracking (newer)
-      //   2. subscription.emailsUsedThisPeriod / smsUsedThisPeriod — direct counters (always maintained)
-      const eventTotals = await storage.getMessagingUsageTotals(tenantId, periodStart, periodEnd);
-      const emailFromCounters = subscription.emailsUsedThisPeriod ?? 0;
-      const smsFromCounters = subscription.smsUsedThisPeriod ?? 0;
-      const emailCount = Math.max(eventTotals.emailCount, emailFromCounters);
-      const smsSegments = Math.max(eventTotals.smsSegments, smsFromCounters);
-      const usageTotals = { emailCount, smsSegments };
-
-      const includedEmails = dbPlan?.includedEmails ?? 0;
-      const includedSms = dbPlan?.includedSms ?? 0;
-
-      const emailOverage = Math.max(0, usageTotals.emailCount - includedEmails);
-      const smsOverage = Math.max(0, usageTotals.smsSegments - includedSms);
-      const emailOverageCharge = Number((emailOverage * EMAIL_OVERAGE_RATE_PER_EMAIL).toFixed(2));
-      const smsOverageCharge = Number((smsOverage * SMS_OVERAGE_RATE_PER_SEGMENT).toFixed(2));
-
-      // AI auto-response overage
-      let aiOverageCharge = 0;
-      let aiUsedCount = 0;
-      let aiIncluded = 0;
-      let aiOverage = 0;
-      if (hasAiAutoResponse) {
-        const planSlug = (dbPlan?.slug as MessagingPlanId) ?? 'launch';
-        aiIncluded = AUTO_RESPONSE_INCLUDED_RESPONSES[planSlug] ?? 1000;
-        const aiUsed = await db
-          .select({ count: sql<number>`COUNT(*)::int` })
-          .from(autoResponseUsage)
-          .where(and(
-            eq(autoResponseUsage.tenantId, tenantId),
-            eq(autoResponseUsage.testMode, false),
-            gte(autoResponseUsage.createdAt, periodStart),
-            lte(autoResponseUsage.createdAt, periodEnd)
-          ));
-        aiUsedCount = aiUsed[0]?.count ?? 0;
-        aiOverage = Math.max(0, aiUsedCount - aiIncluded);
-        aiOverageCharge = Number((aiOverage * AI_RESPONSE_OVERAGE_RATE).toFixed(2));
-      }
-
-      const totalBill = monthlyBase + documentSigningFee + aiAutoResponseFee + mobileAppFee + emailOverageCharge + smsOverageCharge + aiOverageCharge;
-
-      // Build line items — always include usage stats for full transparency
-      const lineItemsList: Array<{ description: string; amountCents: number; quantity?: number; unitLabel?: string }> = [];
-
-      // Base plan
-      if (monthlyBase > 0) lineItemsList.push({ description: `${planName} — Monthly Subscription`, amountCents: Math.round(monthlyBase * 100) });
-
-      // Add-ons
-      if (hasDocumentSigning && documentSigningFee > 0) lineItemsList.push({ description: 'Document Signing Add-on', amountCents: Math.round(documentSigningFee * 100) });
-      if (hasAiAutoResponse && aiAutoResponseFee > 0) lineItemsList.push({ description: 'AI Auto-Response Add-on', amountCents: Math.round(aiAutoResponseFee * 100) });
-      if (hasMobileApp && mobileAppFee > 0) lineItemsList.push({ description: 'Mobile App Branding Add-on', amountCents: Math.round(mobileAppFee * 100) });
-
-      // Email usage — always shown so agency can see what went out
-      lineItemsList.push({
-        description: emailOverage > 0 ? 'Emails Sent (within plan)' : 'Emails Sent',
-        amountCents: 0,
-        quantity: usageTotals.emailCount,
-        unitLabel: `of ${includedEmails} included`,
+      // Compute the subscription bill via the shared helper (single source of truth).
+      // Counters are passed so the current period reflects usage even if events lag.
+      const bill = await computeSubscriptionBill(tenantId, dbPlan, periodStart, periodEnd, {
+        emailsUsed: subscription.emailsUsedThisPeriod ?? 0,
+        smsUsed: subscription.smsUsedThisPeriod ?? 0,
       });
-      if (emailOverage > 0) {
-        lineItemsList.push({
-          description: 'Email Overage',
-          amountCents: Math.round(emailOverageCharge * 100),
-          quantity: emailOverage,
-          unitLabel: 'emails over limit',
-        });
-      }
 
-      // SMS usage — always shown
-      lineItemsList.push({
-        description: smsOverage > 0 ? 'SMS Segments Sent (within plan)' : 'SMS Segments Sent',
-        amountCents: 0,
-        quantity: usageTotals.smsSegments,
-        unitLabel: `of ${includedSms} included`,
-      });
-      if (smsOverage > 0) {
-        lineItemsList.push({
-          description: 'SMS Overage',
-          amountCents: Math.round(smsOverageCharge * 100),
-          quantity: smsOverage,
-          unitLabel: 'segments over limit',
-        });
-      }
-
-      // AI auto-response usage — shown if add-on is enabled
-      if (hasAiAutoResponse) {
-        lineItemsList.push({
-          description: aiOverage > 0 ? 'AI Responses (within plan)' : 'AI Responses',
-          amountCents: 0,
-          quantity: aiUsedCount,
-          unitLabel: `of ${aiIncluded} included`,
-        });
-        if (aiOverage > 0) {
-          lineItemsList.push({
-            description: 'AI Response Overage',
-            amountCents: Math.round(aiOverageCharge * 100),
-            quantity: aiOverage,
-            unitLabel: 'responses over limit',
-          });
-        }
-      }
-
-      const activeConsumersResult = await db.select().from(consumers).where(eq(consumers.tenantId, tenantId));
-      const activeConsumers = activeConsumersResult.length;
-
-      const invoiceNumber = `INV-${tenantId.substring(0, 8)}-${Date.now()}`;
+      const invoiceNumber = generateInvoiceNumber(tenantId);
       const dueDate = new Date(periodEnd);
 
       const [invoice] = await db.insert(invoices).values({
@@ -20795,13 +20489,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         periodStart,
         periodEnd,
         status: 'pending',
-        baseAmountCents: Math.round(monthlyBase * 100),
+        baseAmountCents: Math.round(bill.monthlyBase * 100),
         perConsumerCents: 0,
-        consumerCount: activeConsumers,
-        totalAmountCents: Math.round(totalBill * 100),
+        consumerCount: bill.consumerCount,
+        totalAmountCents: Math.round(bill.totalBill * 100),
         dueDate,
         paidAt: null,
-        lineItems: lineItemsList,
+        lineItems: bill.lineItems,
       }).returning();
 
       // Advance the billing period for any subscription that isn't cancelled.
@@ -20809,11 +20503,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let newPeriodStart: Date | null = null;
       let newPeriodEnd: Date | null = null;
       if (subscription.status !== 'cancelled') {
-        newPeriodStart = new Date(periodEnd);
-        newPeriodStart.setHours(0, 0, 0, 0);
-        newPeriodEnd = new Date(newPeriodStart);
-        newPeriodEnd.setDate(newPeriodEnd.getDate() + 30);
-        newPeriodEnd.setHours(23, 59, 59, 999);
+        // Advance by one calendar month (addMonths) so renewal dates never drift,
+        // matching the process-renewals cron semantics.
+        const { addMonths } = await import('date-fns');
+        newPeriodStart = addMonths(periodStart, 1);
+        newPeriodEnd = addMonths(periodEnd, 1);
 
         await db.update(subscriptions)
           .set({
@@ -20825,71 +20519,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .where(eq(subscriptions.id, subscription.id));
       }
 
-      // Send invoice email
-      try {
-        if (tenant.email) {
-          const periodStartStr = periodStart.toLocaleDateString();
-          const periodEndStr = periodEnd.toLocaleDateString();
-          const lineItemRows = lineItemsList.map(item => `
-            <tr>
-              <td style="padding: 8px 0; color: #374151; border-bottom: 1px solid #e5e7eb;">
-                ${item.description}${item.quantity != null && item.unitLabel ? ` <span style="color:#6b7280; font-size:12px;">(${item.quantity} ${item.unitLabel})</span>` : ''}
-              </td>
-              <td style="padding: 8px 0; text-align: right; font-weight: 600; color: #111827; border-bottom: 1px solid #e5e7eb;">
-                ${item.amountCents === 0 ? '$0.00' : `$${(item.amountCents / 100).toFixed(2)}`}
-              </td>
-            </tr>
-          `).join('');
-          const emailHtml = `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #1e40af;">Invoice ${invoiceNumber}</h2>
-              <p>Dear ${tenant.name},</p>
-              <p>Your invoice for Chain platform services for the period <strong>${periodStartStr} – ${periodEndStr}</strong> is now available.</p>
-              <div style="background: #f9fafb; border: 1px solid #e5e7eb; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <p style="margin: 0 0 4px 0; color: #6b7280; font-size: 13px;">Plan</p>
-                <p style="margin: 0 0 16px 0; font-weight: 600;">${planName}</p>
-                <table style="width: 100%; border-collapse: collapse;">
-                  <thead>
-                    <tr>
-                      <th style="text-align: left; padding-bottom: 8px; color: #6b7280; font-size: 12px; text-transform: uppercase; border-bottom: 2px solid #e5e7eb;">Description</th>
-                      <th style="text-align: right; padding-bottom: 8px; color: #6b7280; font-size: 12px; text-transform: uppercase; border-bottom: 2px solid #e5e7eb;">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>${lineItemRows}</tbody>
-                  <tfoot>
-                    <tr>
-                      <td style="padding-top: 12px; font-weight: 700; font-size: 16px;">Total Due</td>
-                      <td style="padding-top: 12px; text-align: right; font-weight: 700; font-size: 16px; color: #1e40af;">$${totalBill.toFixed(2)}</td>
-                    </tr>
-                  </tfoot>
-                </table>
-                <p style="margin: 16px 0 0 0; color: #6b7280; font-size: 13px;"><strong>Due Date:</strong> ${dueDate.toLocaleDateString()}</p>
-              </div>
-              <p>Log in to your billing dashboard to view details and make a payment.</p>
-            </div>
-          `;
-          await emailService.sendEmail({
-            to: tenant.email,
-            subject: `Chain Invoice ${invoiceNumber} - $${totalBill.toFixed(2)} Due ${dueDate.toLocaleDateString()}`,
-            html: emailHtml,
-            tenantId,
-          });
-        }
-      } catch (emailErr) {
-        console.error(`❌ Failed to send invoice email for tenant ${tenantId}:`, emailErr);
-      }
+      // Send invoice email via the shared helper
+      await sendChainInvoiceEmail({
+        tenantId,
+        tenantName: tenant.name,
+        tenantEmail: tenant.email,
+        invoiceNumber,
+        planName,
+        periodStart,
+        periodEnd,
+        dueDate,
+        totalBill: bill.totalBill,
+        lineItems: bill.lineItems,
+      });
 
       const advanceMsg = (newPeriodStart && newPeriodEnd)
         ? ` Billing period advanced to ${newPeriodStart.toLocaleDateString()} - ${newPeriodEnd.toLocaleDateString()}.`
         : '';
 
-      console.log(`✅ Manual invoice generated for tenant ${tenantId}: ${invoiceNumber} ($${totalBill.toFixed(2)})`);
+      console.log(`✅ Manual invoice generated for tenant ${tenantId}: ${invoiceNumber} ($${bill.totalBill.toFixed(2)})`);
       res.json({
         success: true,
         invoice,
         newPeriodStart,
         newPeriodEnd,
-        message: `Invoice ${invoiceNumber} generated for ${planName} ($${totalBill.toFixed(2)}).${advanceMsg}`,
+        message: `Invoice ${invoiceNumber} generated for ${planName} ($${bill.totalBill.toFixed(2)}).${advanceMsg}`,
       });
     } catch (error) {
       console.error('❌ Failed to manually generate invoice:', error);

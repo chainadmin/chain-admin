@@ -21,6 +21,19 @@ export const AUTO_RESPONSE_OVERAGE_PER_RESPONSE = 0.08; // $0.08 per response ov
 export const MOBILE_APP_BRANDING_SETUP_FEE = 150; // $150 one-time setup fee
 export const MOBILE_APP_BRANDING_MONTHLY = 50; // $50/month maintenance
 
+// À la carte pricing
+export const A_LA_CARTE_SERVICE_PRICE = 125; // $125/month per enabled core service
+// Core à la carte services billed at A_LA_CARTE_SERVICE_PRICE each
+export const A_LA_CARTE_CORE_SERVICES = ['email_service', 'sms_service', 'portal_processing'] as const;
+// Optional feature add-ons billed at their own monthly fee (NOT the $125 base)
+export const A_LA_CARTE_FEATURE_ADDONS = ['document_signing', 'ai_auto_response', 'mobile_app_branding'] as const;
+// Human-readable labels for à la carte core services (used on invoice line items)
+export const A_LA_CARTE_SERVICE_LABELS: Record<string, string> = {
+  email_service: 'Email Service',
+  sms_service: 'SMS Service',
+  portal_processing: 'Portal + Processing',
+};
+
 // Auto-response included responses by plan tier
 export const AUTO_RESPONSE_INCLUDED_RESPONSES: Record<MessagingPlanId, number> = {
   launch: 1_000,    // 1,000 AI responses/month
