@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiCall } from "@/lib/api";
 import { persistConsumerAuth } from "@/lib/consumer-auth";
 import { biometricAuth } from "@/lib/biometric-auth";
+import { enableBiometricLogin, saveAuthToken } from "@/lib/expo-bridge";
 import { pushNotificationService } from "@/lib/push-notifications";
 
 interface AgencyContext {
@@ -130,14 +131,17 @@ export default function MobileAppLogin() {
       const data = await response.json();
 
       if (data.token && data.tenant) {
+        const session = {
+          email: savedEmail,
+          tenantSlug: data.tenant.slug,
+          consumerData: data.consumer,
+        };
+
         persistConsumerAuth({
-          session: {
-            email: savedEmail,
-            tenantSlug: data.tenant.slug,
-            consumerData: data.consumer,
-          },
+          session,
           token: data.token,
         });
+        saveAuthToken(data.token, JSON.stringify(session));
 
         // Push notifications disabled - will be enabled after Firebase setup
         // await pushNotificationService.registerPendingToken();
@@ -227,19 +231,23 @@ export default function MobileAppLogin() {
       // Handle successful login
       if (data.token && data.tenant) {
         // Store auth and redirect
+        const session = {
+          email,
+          tenantSlug: data.tenant.slug,
+          consumerData: data.consumer,
+        };
+
         persistConsumerAuth({
-          session: {
-            email,
-            tenantSlug: data.tenant.slug,
-            consumerData: data.consumer,
-          },
+          session,
           token: data.token,
         });
+        saveAuthToken(data.token, JSON.stringify(session));
 
         // Save credentials for biometric authentication
         if (biometricAvailable) {
           localStorage.setItem('biometric_email', email);
           localStorage.setItem('biometric_dob', dateOfBirth);
+          enableBiometricLogin(data.token, JSON.stringify(session));
         }
 
         // Push notifications disabled - will be enabled after Firebase setup

@@ -17,7 +17,7 @@ import {
   SafeAreaProvider,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 
 const API_BASE_URL = 'https://chain-admin-production.up.railway.app';
 const LOAD_TIMEOUT_MS = 15000;
@@ -27,7 +27,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 function ChainApp() {
   const insets = useSafeAreaInsets();
   const [isBootstrapping, setIsBootstrapping] = useState(true);
-  const [biometricToken, setBiometricToken] = useState(null);
+  const [biometricAuth, setBiometricAuth] = useState(null);
   const [status, setStatus] = useState('loading');
   const [reloadKey, setReloadKey] = useState(0);
   const webViewRef = useRef(null);
@@ -39,9 +39,10 @@ function ChainApp() {
     (async () => {
       try {
         const savedToken = await SecureStore.getItemAsync('consumerToken');
+        const savedSession = await SecureStore.getItemAsync('consumerSession');
         const biometricEnabled = await SecureStore.getItemAsync('biometricEnabled');
 
-        if (savedToken && biometricEnabled === 'true') {
+        if (savedToken && savedSession && biometricEnabled === 'true') {
           const hasHardware = await LocalAuthentication.hasHardwareAsync();
           const isEnrolled = await LocalAuthentication.isEnrolledAsync();
 
@@ -53,7 +54,7 @@ function ChainApp() {
             });
 
             if (!cancelled && result.success) {
-              setBiometricToken(savedToken);
+              setBiometricAuth({ token: savedToken, session: savedSession });
             }
           }
         }
@@ -97,16 +98,28 @@ function ChainApp() {
         }
 
         case 'SAVE_TOKEN':
-          await SecureStore.setItemAsync('consumerToken', data.token);
+          if (typeof data.token === 'string' && data.token.length > 0) {
+            await SecureStore.setItemAsync('consumerToken', data.token);
+          }
+          if (typeof data.session === 'string' && data.session.length > 0) {
+            await SecureStore.setItemAsync('consumerSession', data.session);
+          }
           break;
 
         case 'ENABLE_BIOMETRIC':
           await SecureStore.setItemAsync('biometricEnabled', 'true');
+          if (typeof data.token === 'string' && data.token.length > 0) {
+            await SecureStore.setItemAsync('consumerToken', data.token);
+          }
+          if (typeof data.session === 'string' && data.session.length > 0) {
+            await SecureStore.setItemAsync('consumerSession', data.session);
+          }
           break;
 
         case 'DISABLE_BIOMETRIC':
           await SecureStore.deleteItemAsync('biometricEnabled');
           await SecureStore.deleteItemAsync('consumerToken');
+          await SecureStore.deleteItemAsync('consumerSession');
           break;
 
         case 'CHECK_BIOMETRIC': {
@@ -155,9 +168,10 @@ function ChainApp() {
 
         case 'LOGOUT':
           await SecureStore.deleteItemAsync('consumerToken');
+          await SecureStore.deleteItemAsync('consumerSession');
           await SecureStore.deleteItemAsync('biometricEnabled');
           redirectedRef.current = false;
-          setBiometricToken(null);
+          setBiometricAuth(null);
           break;
       }
     } catch (error) {
@@ -167,7 +181,7 @@ function ChainApp() {
 
   const safePlatform = JSON.stringify(Platform.OS);
 
-  const injectedJavaScript = `
+  const injectedJavaScript = useMemo(() => `
     (function() {
       try {
         window.isExpoApp = true;
@@ -182,11 +196,11 @@ function ChainApp() {
         window.hapticFeedback = function(style) {
           window.sendToNative({ type: 'HAPTIC_FEEDBACK', style: style || 'light' });
         };
-        window.saveToken = function(token) {
-          window.sendToNative({ type: 'SAVE_TOKEN', token: token });
+        window.saveToken = function(token, session) {
+          window.sendToNative({ type: 'SAVE_TOKEN', token: token, session: session });
         };
-        window.enableBiometric = function() {
-          window.sendToNative({ type: 'ENABLE_BIOMETRIC' });
+        window.enableBiometric = function(token, session) {
+          window.sendToNative({ type: 'ENABLE_BIOMETRIC', token: token, session: session });
         };
         window.disableBiometric = function() {
           window.sendToNative({ type: 'DISABLE_BIOMETRIC' });
@@ -213,7 +227,7 @@ function ChainApp() {
       }
     })();
     true;
-  `;
+  `, [safePlatform]);
 
   const clearLoadTimer = () => {
     if (loadTimerRef.current) {
@@ -238,18 +252,22 @@ function ChainApp() {
     clearLoadTimer();
     setStatus('ok');
 
-    if (biometricToken && !redirectedRef.current && webViewRef.current) {
+    if (biometricAuth && !redirectedRef.current && webViewRef.current) {
       redirectedRef.current = true;
-      const tokenJson = JSON.stringify(biometricToken);
-      const escaped = tokenJson.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      const tokenLiteral = JSON.stringify(biometricAuth.token);
+      const sessionLiteral = JSON.stringify(biometricAuth.session);
       webViewRef.current.injectJavaScript(`
         (function(){
           try {
-            localStorage.setItem('consumerAuth', JSON.stringify({ token: ${escaped} }));
+            localStorage.setItem('consumerToken', ${tokenLiteral});
+            sessionStorage.setItem('consumerToken', ${tokenLiteral});
+            localStorage.setItem('consumerSession', ${sessionLiteral});
+            sessionStorage.setItem('consumerSession', ${sessionLiteral});
+            localStorage.setItem('consumerAuth', JSON.stringify({ token: ${tokenLiteral} }));
           } catch(e){}
           try {
-            if (window.location.pathname.indexOf('/consumer/dashboard') === -1) {
-              window.location.replace('/consumer/dashboard');
+            if (window.location.pathname.indexOf('/consumer-dashboard') === -1) {
+              window.location.replace('/consumer-dashboard');
             }
           } catch(e){}
         })();
