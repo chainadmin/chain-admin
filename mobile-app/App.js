@@ -17,9 +17,10 @@ import {
   SafeAreaProvider,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 
 const API_BASE_URL = 'https://chain-admin-production.up.railway.app';
+const CONSUMER_LOGIN_URL = `${API_BASE_URL}/consumer-login`;
 const LOAD_TIMEOUT_MS = 15000;
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -27,7 +28,6 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 function ChainApp() {
   const insets = useSafeAreaInsets();
   const [isBootstrapping, setIsBootstrapping] = useState(true);
-  const [biometricToken, setBiometricToken] = useState(null);
   const [status, setStatus] = useState('loading');
   const [reloadKey, setReloadKey] = useState(0);
   const webViewRef = useRef(null);
@@ -36,36 +36,15 @@ function ChainApp() {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      try {
-        const savedToken = await SecureStore.getItemAsync('consumerToken');
-        const biometricEnabled = await SecureStore.getItemAsync('biometricEnabled');
 
-        if (savedToken && biometricEnabled === 'true') {
-          const hasHardware = await LocalAuthentication.hasHardwareAsync();
-          const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+    const finishBootstrap = async () => {
+      if (cancelled) return;
+      setIsBootstrapping(false);
+      await SplashScreen.hideAsync().catch(() => {});
+    };
 
-          if (hasHardware && isEnrolled) {
-            const result = await LocalAuthentication.authenticateAsync({
-              promptMessage: 'Log in to Chain',
-              cancelLabel: 'Cancel',
-              disableDeviceFallback: false,
-            });
+    finishBootstrap();
 
-            if (!cancelled && result.success) {
-              setBiometricToken(savedToken);
-            }
-          }
-        }
-      } catch (error) {
-        console.log('Biometric check error:', error);
-      } finally {
-        if (!cancelled) {
-          setIsBootstrapping(false);
-          SplashScreen.hideAsync().catch(() => {});
-        }
-      }
-    })();
     return () => {
       cancelled = true;
     };
@@ -97,16 +76,28 @@ function ChainApp() {
         }
 
         case 'SAVE_TOKEN':
-          await SecureStore.setItemAsync('consumerToken', data.token);
+          if (typeof data.token === 'string' && data.token.length > 0) {
+            await SecureStore.setItemAsync('consumerToken', data.token);
+          }
+          if (typeof data.session === 'string' && data.session.length > 0) {
+            await SecureStore.setItemAsync('consumerSession', data.session);
+          }
           break;
 
         case 'ENABLE_BIOMETRIC':
           await SecureStore.setItemAsync('biometricEnabled', 'true');
+          if (typeof data.token === 'string' && data.token.length > 0) {
+            await SecureStore.setItemAsync('consumerToken', data.token);
+          }
+          if (typeof data.session === 'string' && data.session.length > 0) {
+            await SecureStore.setItemAsync('consumerSession', data.session);
+          }
           break;
 
         case 'DISABLE_BIOMETRIC':
           await SecureStore.deleteItemAsync('biometricEnabled');
           await SecureStore.deleteItemAsync('consumerToken');
+          await SecureStore.deleteItemAsync('consumerSession');
           break;
 
         case 'CHECK_BIOMETRIC': {
@@ -155,9 +146,9 @@ function ChainApp() {
 
         case 'LOGOUT':
           await SecureStore.deleteItemAsync('consumerToken');
+          await SecureStore.deleteItemAsync('consumerSession');
           await SecureStore.deleteItemAsync('biometricEnabled');
           redirectedRef.current = false;
-          setBiometricToken(null);
           break;
       }
     } catch (error) {
@@ -167,7 +158,7 @@ function ChainApp() {
 
   const safePlatform = JSON.stringify(Platform.OS);
 
-  const injectedJavaScript = `
+  const injectedJavaScript = useMemo(() => `
     (function() {
       try {
         window.isExpoApp = true;
@@ -182,11 +173,11 @@ function ChainApp() {
         window.hapticFeedback = function(style) {
           window.sendToNative({ type: 'HAPTIC_FEEDBACK', style: style || 'light' });
         };
-        window.saveToken = function(token) {
-          window.sendToNative({ type: 'SAVE_TOKEN', token: token });
+        window.saveToken = function(token, session) {
+          window.sendToNative({ type: 'SAVE_TOKEN', token: token, session: session });
         };
-        window.enableBiometric = function() {
-          window.sendToNative({ type: 'ENABLE_BIOMETRIC' });
+        window.enableBiometric = function(token, session) {
+          window.sendToNative({ type: 'ENABLE_BIOMETRIC', token: token, session: session });
         };
         window.disableBiometric = function() {
           window.sendToNative({ type: 'DISABLE_BIOMETRIC' });
@@ -213,7 +204,7 @@ function ChainApp() {
       }
     })();
     true;
-  `;
+  `, [safePlatform]);
 
   const clearLoadTimer = () => {
     if (loadTimerRef.current) {
@@ -237,25 +228,6 @@ function ChainApp() {
   const onWebViewLoadEnd = () => {
     clearLoadTimer();
     setStatus('ok');
-
-    if (biometricToken && !redirectedRef.current && webViewRef.current) {
-      redirectedRef.current = true;
-      const tokenJson = JSON.stringify(biometricToken);
-      const escaped = tokenJson.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-      webViewRef.current.injectJavaScript(`
-        (function(){
-          try {
-            localStorage.setItem('consumerAuth', JSON.stringify({ token: ${escaped} }));
-          } catch(e){}
-          try {
-            if (window.location.pathname.indexOf('/consumer/dashboard') === -1) {
-              window.location.replace('/consumer/dashboard');
-            }
-          } catch(e){}
-        })();
-        true;
-      `);
-    }
   };
 
   const onWebViewError = () => {
@@ -293,7 +265,7 @@ function ChainApp() {
       <WebView
         key={reloadKey}
         ref={webViewRef}
-        source={{ uri: `${API_BASE_URL}/consumer/login` }}
+        source={{ uri: CONSUMER_LOGIN_URL }}
         style={styles.webview}
         injectedJavaScript={injectedJavaScript}
         onMessage={handleMessage}
