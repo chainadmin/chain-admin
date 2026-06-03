@@ -20,6 +20,7 @@ import {
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 
 const API_BASE_URL = 'https://chain-admin-production.up.railway.app';
+const CONSUMER_LOGIN_URL = `${API_BASE_URL}/consumer-login`;
 const LOAD_TIMEOUT_MS = 15000;
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -36,6 +37,12 @@ function ChainApp() {
 
   useEffect(() => {
     let cancelled = false;
+
+    const finishBootstrap = async () => {
+      if (cancelled) return;
+      setIsBootstrapping(false);
+      await SplashScreen.hideAsync().catch(() => {});
+    };
     (async () => {
       try {
         const savedToken = await SecureStore.getItemAsync('consumerToken');
@@ -46,12 +53,7 @@ function ChainApp() {
           const hasHardware = await LocalAuthentication.hasHardwareAsync();
           const isEnrolled = await LocalAuthentication.isEnrolledAsync();
 
-          if (hasHardware && isEnrolled) {
-            const result = await LocalAuthentication.authenticateAsync({
-              promptMessage: 'Log in to Chain',
-              cancelLabel: 'Cancel',
-              disableDeviceFallback: false,
-            });
+    finishBootstrap();
 
             if (!cancelled && result.success) {
               setBiometricAuth({ token: savedToken, session: savedSession });
@@ -311,7 +313,7 @@ function ChainApp() {
       <WebView
         key={reloadKey}
         ref={webViewRef}
-        source={{ uri: `${API_BASE_URL}/consumer/login` }}
+        source={{ uri: CONSUMER_LOGIN_URL }}
         style={styles.webview}
         injectedJavaScript={injectedJavaScript}
         onMessage={handleMessage}

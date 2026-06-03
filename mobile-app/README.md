@@ -63,9 +63,9 @@ Run through this every time before uploading to the App Store / Play Store.
 
 ## Architecture
 
-- `App.js` — single `WebView` pointed at `${API_BASE_URL}/consumer/login` wrapped in a `loading | ok | error` state machine. Shows a friendly "Couldn't reach Chain → Try again" card if the page fails to load within 15s, errors, or returns a 5xx.
+- `App.js` — single `WebView` pointed at `${API_BASE_URL}/consumer-login` wrapped in a `loading | ok | error` state machine. Shows a friendly "Couldn't reach Chain → Try again" card if the page fails to load within 15s, errors, or returns a 5xx.
 - `client/src/lib/expo-bridge.ts` (in the main app) — web-side bridge that calls into native via `window.ReactNativeWebView.postMessage` and listens to `MessageEvent` for native → web responses.
-- Splash is held by `SplashScreen.preventAutoHideAsync()` and only hidden after the biometric check resolves, so users never see a flash of white.
+- Splash is held only until the native shell is ready to mount the WebView. Biometric checks are requested by the web login page instead of blocking native startup.
 - Notch / Dynamic Island handled by `react-native-safe-area-context`.
 - Native → web messaging uses `injectJavaScript` (current API) instead of the deprecated `webViewRef.postMessage`.
 
