@@ -10,8 +10,8 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.chainsoftware.agency",
-      "buildNumber": "2",
-      "newArchEnabled": false,
+      "buildNumber": "3",
+      "newArchEnabled": true,
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [
           {
@@ -41,8 +41,8 @@
       }
     },
     "android": {
-      "newArchEnabled": false,
-      "versionCode": 2,
+      "newArchEnabled": true,
+      "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0f1a3c"
@@ -69,11 +69,11 @@
         "expo-build-properties",
         {
           "ios": {
-            "newArchEnabled": false,
+            "newArchEnabled": true,
             "deploymentTarget": "16.0"
           },
           "android": {
-            "newArchEnabled": false
+            "newArchEnabled": true
           }
         }
       ]

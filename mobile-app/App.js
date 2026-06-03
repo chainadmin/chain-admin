@@ -28,6 +28,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 function ChainApp() {
   const insets = useSafeAreaInsets();
   const [isBootstrapping, setIsBootstrapping] = useState(true);
+  const [biometricAuth, setBiometricAuth] = useState(null);
   const [status, setStatus] = useState('loading');
   const [reloadKey, setReloadKey] = useState(0);
   const webViewRef = useRef(null);
@@ -42,9 +43,32 @@ function ChainApp() {
       setIsBootstrapping(false);
       await SplashScreen.hideAsync().catch(() => {});
     };
+    (async () => {
+      try {
+        const savedToken = await SecureStore.getItemAsync('consumerToken');
+        const savedSession = await SecureStore.getItemAsync('consumerSession');
+        const biometricEnabled = await SecureStore.getItemAsync('biometricEnabled');
+
+        if (savedToken && savedSession && biometricEnabled === 'true') {
+          const hasHardware = await LocalAuthentication.hasHardwareAsync();
+          const isEnrolled = await LocalAuthentication.isEnrolledAsync();
 
     finishBootstrap();
 
+            if (!cancelled && result.success) {
+              setBiometricAuth({ token: savedToken, session: savedSession });
+            }
+          }
+        }
+      } catch (error) {
+        console.log('Biometric check error:', error);
+      } finally {
+        if (!cancelled) {
+          setIsBootstrapping(false);
+          SplashScreen.hideAsync().catch(() => {});
+        }
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -149,6 +173,7 @@ function ChainApp() {
           await SecureStore.deleteItemAsync('consumerSession');
           await SecureStore.deleteItemAsync('biometricEnabled');
           redirectedRef.current = false;
+          setBiometricAuth(null);
           break;
       }
     } catch (error) {
@@ -228,6 +253,29 @@ function ChainApp() {
   const onWebViewLoadEnd = () => {
     clearLoadTimer();
     setStatus('ok');
+
+    if (biometricAuth && !redirectedRef.current && webViewRef.current) {
+      redirectedRef.current = true;
+      const tokenLiteral = JSON.stringify(biometricAuth.token);
+      const sessionLiteral = JSON.stringify(biometricAuth.session);
+      webViewRef.current.injectJavaScript(`
+        (function(){
+          try {
+            localStorage.setItem('consumerToken', ${tokenLiteral});
+            sessionStorage.setItem('consumerToken', ${tokenLiteral});
+            localStorage.setItem('consumerSession', ${sessionLiteral});
+            sessionStorage.setItem('consumerSession', ${sessionLiteral});
+            localStorage.setItem('consumerAuth', JSON.stringify({ token: ${tokenLiteral} }));
+          } catch(e){}
+          try {
+            if (window.location.pathname.indexOf('/consumer-dashboard') === -1) {
+              window.location.replace('/consumer-dashboard');
+            }
+          } catch(e){}
+        })();
+        true;
+      `);
+    }
   };
 
   const onWebViewError = () => {
