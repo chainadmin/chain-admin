@@ -36,8 +36,8 @@ Run through this every time before uploading to the App Store / Play Store.
 - [ ] Test on a real device:
   - [ ] App launches without a white flash (splash → login)
   - [ ] If backend is unreachable, error card with "Try again" appears (toggle airplane mode to test)
-  - [ ] Face ID / Touch ID prompt appears for returning users
-  - [ ] After login, `/consumer/dashboard` loads and stays put on rotation
+  - [ ] Face ID / Touch ID prompt appears after tapping biometric sign-in
+  - [ ] After login, `/consumer-dashboard` loads and stays put on rotation
   - [ ] Logout fully clears saved credentials
 - [ ] No `console.error` output on launch in Metro
 
@@ -63,9 +63,9 @@ Run through this every time before uploading to the App Store / Play Store.
 
 ## Architecture
 
-- `App.js` — single `WebView` pointed at `${API_BASE_URL}/consumer/login` wrapped in a `loading | ok | error` state machine. Shows a friendly "Couldn't reach Chain → Try again" card if the page fails to load within 15s, errors, or returns a 5xx.
+- `App.js` — single `WebView` pointed at `${API_BASE_URL}/consumer-login` wrapped in a `loading | ok | error` state machine. Shows a friendly "Couldn't reach Chain → Try again" card if the page fails to load within 15s, errors, or returns a 5xx.
 - `client/src/lib/expo-bridge.ts` (in the main app) — web-side bridge that calls into native via `window.ReactNativeWebView.postMessage` and listens to `MessageEvent` for native → web responses.
-- Splash is held by `SplashScreen.preventAutoHideAsync()` and only hidden after the biometric check resolves, so users never see a flash of white.
+- Splash is held by `SplashScreen.preventAutoHideAsync()` and hidden as soon as the native shell is ready; biometric prompts are initiated by the loaded web login screen instead of during native startup.
 - Notch / Dynamic Island handled by `react-native-safe-area-context`.
 - Native → web messaging uses `injectJavaScript` (current API) instead of the deprecated `webViewRef.postMessage`.
 
