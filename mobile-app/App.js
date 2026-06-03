@@ -38,11 +38,6 @@ function ChainApp() {
   useEffect(() => {
     let cancelled = false;
 
-    const finishBootstrap = async () => {
-      if (cancelled) return;
-      setIsBootstrapping(false);
-      await SplashScreen.hideAsync().catch(() => {});
-    };
     (async () => {
       try {
         const savedToken = await SecureStore.getItemAsync('consumerToken');
@@ -53,7 +48,12 @@ function ChainApp() {
           const hasHardware = await LocalAuthentication.hasHardwareAsync();
           const isEnrolled = await LocalAuthentication.isEnrolledAsync();
 
-    finishBootstrap();
+          if (hasHardware && isEnrolled) {
+            const result = await LocalAuthentication.authenticateAsync({
+              promptMessage: 'Log in to Chain',
+              cancelLabel: 'Cancel',
+              disableDeviceFallback: false,
+            });
 
             if (!cancelled && result.success) {
               setBiometricAuth({ token: savedToken, session: savedSession });

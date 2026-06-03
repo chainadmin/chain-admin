@@ -13,6 +13,29 @@ They cannot be built/installed in the Replit container (no simulators, npm insta
 blocked for subfolders). EAS Build on Expo's cloud is the only build path; `package.json`
 is the source of truth.
 
+## #1 immediate-crash cause: root component never registered
+
+**Rule:** the entry that `package.json` `main` points to MUST call
+`registerRootComponent(App)` (from `expo`). The canonical setup is `main: "index.js"`
+with `index.js` = `import { registerRootComponent } from 'expo'; import App from './App'; registerRootComponent(App);`.
+
+**Why:** if `main` points straight at `App.js`/`App.tsx` and that file only
+`export default`s the component (no `registerRootComponent`, no `index.js`, no
+`expo-router`), the JS bundle loads but nothing is registered with RN's AppRegistry, so
+there is no root view to render → instant crash on launch, BOTH platforms, regardless of
+arch/deps. `node_modules/expo/AppEntry.js` shows the required pattern (it imports
+`../../App` and registers it).
+
+**How to apply:** when an Expo app crashes instantly, FIRST check `main` and grep the repo
+for `registerRootComponent` / `AppRegistry`. If neither exists, that's the bug.
+
+## Metro export caches and can hide a NEW syntax error
+
+A clean `npx expo export` is NOT proof the current source compiles — Metro reuses a cached
+bundle (watch for an identical output `.hbc` hash across runs). Always pass `--clear` to
+force a real recompile. Changing the entry point also busts the cache. A cached bundle can
+hide a broken edit (e.g. a `try` with mangled braces / undeclared var) until `--clear`.
+
 ## Do NOT force the OLD architecture off in SDK 54 — it crashes on launch
 
 **Rule:** leave the New Architecture enabled (the SDK 54 default). Do NOT set
@@ -23,9 +46,8 @@ is the source of truth.
 apps use — especially `react-native-safe-area-context` v5, which wraps the whole app
 via `SafeAreaProvider` at the root — are built/tested for the New Architecture.
 Forcing old-arch makes that root native view fail to instantiate, so the app dies the
-instant it launches, on BOTH iOS and Android. This was misdiagnosed as a dependency
-problem for a long time; the real trigger was the old-arch override. The combination
-that works is *new-arch + SDK-matched deps*.
+instant it launches, on BOTH iOS and Android. The combination that works is
+*new-arch + SDK-matched deps*.
 
 **How to apply:** if an app crashes immediately with clean deps and a clean JS bundle,
 check for `newArchEnabled: false` first and flip it to `true` (all three places). A
@@ -48,7 +70,7 @@ screen, just dies.
 
 **Why:** native modules ship compiled code that must match the RN/SDK ABI. Pinning a
 version from a previous SDK (e.g. `react-native-safe-area-context@5.4.0` while on SDK 54,
-which wants `~5.6.0`) crashes at startup. This actually happened after a hand-added dep.
+which wants `~5.6.0`) crashes at startup.
 
 **How to apply:**
 - Authoritative expected versions for an SDK: `https://unpkg.com/expo@<version>/bundledNativeModules.json`
