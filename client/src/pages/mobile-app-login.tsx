@@ -321,7 +321,7 @@ export default function MobileAppLogin() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loading}
-                className="h-12 text-base bg-white/5 border-white/10 text-white placeholder:text-white/50"
+                className="h-12 text-base bg-slate-800 border-white/20 text-white placeholder:text-white/50"
                 style={{ colorScheme: "dark", WebkitTextFillColor: "white" }}
                 data-testid="input-email"
                 required
@@ -336,7 +336,7 @@ export default function MobileAppLogin() {
                 value={dateOfBirth}
                 onChange={(e) => setDateOfBirth(e.target.value)}
                 disabled={loading}
-                className="h-12 text-base bg-white/5 border-white/10 text-white mobile-date-input"
+                className="h-12 text-base bg-slate-800 border-white/20 text-white mobile-date-input"
                 style={{ colorScheme: "dark", WebkitTextFillColor: "white" }}
                 data-testid="input-dateofbirth"
                 required

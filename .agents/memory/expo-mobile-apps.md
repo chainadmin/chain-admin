@@ -124,3 +124,23 @@ the shared `Input` component, which would break admin inputs (white text on whit
 the input's intrinsic `size` width, or the row overflows horizontally on narrow phones.
 Native overscroll shows a white strip unless the RN `container`/`webview` backgrounds and
 `StatusBar` are set to the page's dark color (`#020617`), not `#ffffff`.
+
+## "See-through / clear spots" inputs = transparent background, NOT a text-color bug
+
+**Rule:** when a user says login/register fields look "see-through" or like "clear spots",
+the cause is a near-transparent input background (`bg-white/5` ≈ 5% opacity over the dark
+page), not invisible text. `WebkitTextFillColor` alone does NOT fix it — give the native
+inputs a SOLID visible background (`bg-slate-800 border-white/20`).
+
+**Why:** a shadcn `<Select>` on the same page looked correct while every sibling field
+looked broken — because `<Select>` renders a styled `div` (custom component), immune to
+both the iOS native-control rendering bug and the transparency. The native `<input>`s with
+`bg-white/5` were the only broken ones. Match native inputs to the working `<Select>`'s
+solid `bg-slate-800`. Keep `bg-white/5` only on card/checkbox wrappers and the "Or" divider.
+
+**How to apply:** the input class string `bg-white/5 border-white/10 text-white` is unique
+to inputs (card wrappers use `bg-white/5 backdrop-blur... border border-white/10`), so a
+scoped replace_all to `bg-slate-800 border-white/20 text-white` is safe. These pages
+(`mobile-app-login.tsx`, `mobile-app-register.tsx`) ARE what the WebView renders — the
+`/consumer-login` route only shows them when `isMobileApp` (window.isExpoApp) is true; the
+fallback `consumer-login.tsx` uses a solid `bg-slate-900/60` and does not have this bug.

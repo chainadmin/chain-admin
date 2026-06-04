@@ -222,7 +222,7 @@ export default function MobileAppRegister() {
                     style={{ colorScheme: "dark", WebkitTextFillColor: "white" }}
                     value={formData.firstName}
                     onChange={(e) => handleInputChange('firstName', e.target.value)}
-                    className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-blue-400/50 focus:ring-blue-400/20"
+                    className="bg-slate-800 border-white/20 text-white placeholder:text-white/30 focus:border-blue-400/50 focus:ring-blue-400/20"
                     placeholder="John"
                     required
                   />
@@ -237,7 +237,7 @@ export default function MobileAppRegister() {
                     style={{ colorScheme: "dark", WebkitTextFillColor: "white" }}
                     value={formData.lastName}
                     onChange={(e) => handleInputChange('lastName', e.target.value)}
-                    className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-blue-400/50 focus:ring-blue-400/20"
+                    className="bg-slate-800 border-white/20 text-white placeholder:text-white/30 focus:border-blue-400/50 focus:ring-blue-400/20"
                     placeholder="Doe"
                     required
                   />
@@ -256,7 +256,7 @@ export default function MobileAppRegister() {
                   style={{ colorScheme: "dark", WebkitTextFillColor: "white" }}
                   value={formData.email}
                   onChange={(e) => handleInputChange('email', e.target.value)}
-                  className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-blue-400/50 focus:ring-blue-400/20"
+                  className="bg-slate-800 border-white/20 text-white placeholder:text-white/30 focus:border-blue-400/50 focus:ring-blue-400/20"
                   placeholder="john@example.com"
                   required
                 />
@@ -274,7 +274,7 @@ export default function MobileAppRegister() {
                   style={{ colorScheme: "dark", WebkitTextFillColor: "white" }}
                   value={formData.phone}
                   onChange={(e) => handleInputChange('phone', e.target.value)}
-                  className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-blue-400/50 focus:ring-blue-400/20"
+                  className="bg-slate-800 border-white/20 text-white placeholder:text-white/30 focus:border-blue-400/50 focus:ring-blue-400/20"
                   placeholder="(555) 123-4567"
                   required
                 />
@@ -293,7 +293,7 @@ export default function MobileAppRegister() {
                     style={{ colorScheme: "dark", WebkitTextFillColor: "white" }}
                     value={formData.dateOfBirth}
                     onChange={(e) => handleInputChange('dateOfBirth', e.target.value)}
-                    className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-blue-400/50 focus:ring-blue-400/20 mobile-date-input"
+                    className="bg-slate-800 border-white/20 text-white placeholder:text-white/30 focus:border-blue-400/50 focus:ring-blue-400/20 mobile-date-input"
                     required
                   />
                   <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30 pointer-events-none" />
@@ -311,7 +311,7 @@ export default function MobileAppRegister() {
                   style={{ colorScheme: "dark", WebkitTextFillColor: "white" }}
                   value={formData.address}
                   onChange={(e) => handleInputChange('address', e.target.value)}
-                  className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-blue-400/50 focus:ring-blue-400/20"
+                  className="bg-slate-800 border-white/20 text-white placeholder:text-white/30 focus:border-blue-400/50 focus:ring-blue-400/20"
                   placeholder="123 Main St"
                   required
                 />
@@ -329,7 +329,7 @@ export default function MobileAppRegister() {
                     style={{ colorScheme: "dark", WebkitTextFillColor: "white" }}
                     value={formData.city}
                     onChange={(e) => handleInputChange('city', e.target.value)}
-                    className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-blue-400/50 focus:ring-blue-400/20"
+                    className="bg-slate-800 border-white/20 text-white placeholder:text-white/30 focus:border-blue-400/50 focus:ring-blue-400/20"
                     placeholder="City"
                     required
                   />
@@ -345,7 +345,7 @@ export default function MobileAppRegister() {
                     <SelectTrigger 
                       id="state"
                       data-testid="select-state"
-                      className="bg-white/5 border-white/10 text-white focus:border-blue-400/50 focus:ring-blue-400/20"
+                      className="bg-slate-800 border-white/20 text-white focus:border-blue-400/50 focus:ring-blue-400/20"
                     >
                       <SelectValue placeholder="ST" />
                     </SelectTrigger>
@@ -370,7 +370,7 @@ export default function MobileAppRegister() {
                   style={{ colorScheme: "dark", WebkitTextFillColor: "white" }}
                   value={formData.zipCode}
                   onChange={(e) => handleInputChange('zipCode', e.target.value)}
-                  className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-blue-400/50 focus:ring-blue-400/20"
+                  className="bg-slate-800 border-white/20 text-white placeholder:text-white/30 focus:border-blue-400/50 focus:ring-blue-400/20"
                   placeholder="12345"
                   maxLength={10}
                   required
