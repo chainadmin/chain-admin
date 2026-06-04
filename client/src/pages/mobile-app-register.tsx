@@ -194,8 +194,8 @@ export default function MobileAppRegister() {
       </div>
 
       {/* Registration Form */}
-      <div className="relative flex-1 flex items-start justify-center overflow-y-auto pb-8">
-        <div className="w-full max-w-md space-y-6">
+      <div className="relative z-10 flex items-start justify-center pb-8">
+        <div className="w-full max-w-md min-w-0 space-y-6">
           {/* Header */}
           <div className="text-center space-y-2">
             <div className="flex justify-center mb-4">
