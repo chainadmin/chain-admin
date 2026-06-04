@@ -103,3 +103,24 @@ Use only `["USE_BIOMETRIC", "USE_FINGERPRINT"]` — do NOT also list the
 
 `mobile-agency-app/app.json` `extra.eas.projectId` must be filled (run `eas init` once);
 an empty string fails the build.
+
+## iOS WKWebView renders dark-theme web form controls wrong
+
+The consumer app loads the dark-themed web portal in a WKWebView. On iOS, native form
+controls inside the WebView ignore Tailwind `text-white` and render with dark default
+glyphs (invisible on dark bg), and `input[type=date]` overflows its container.
+
+**Rule:** for dark inputs shown inside the iOS WebView, set inline
+`style={{ colorScheme: 'dark', WebkitTextFillColor: 'white' }}` (forces visible text);
+for date inputs also add a class with `-webkit-appearance: none; appearance: none;
+color-scheme: dark;` plus `::-webkit-datetime-edit { -webkit-text-fill-color:#fff }` and
+`::-webkit-date-and-time-value { text-align:left; margin:0 }` to stop overflow/clipping.
+
+**Why:** these are shared base components also used by the light-themed admin portal, so
+the fix must be scoped per-page (inline style / page-specific class) — never patched into
+the shared `Input` component, which would break admin inputs (white text on white).
+
+**How to apply:** grid/flex children holding inputs also need `min-w-0` to shrink below
+the input's intrinsic `size` width, or the row overflows horizontally on narrow phones.
+Native overscroll shows a white strip unless the RN `container`/`webview` backgrounds and
+`StatusBar` are set to the page's dark color (`#020617`), not `#ffffff`.

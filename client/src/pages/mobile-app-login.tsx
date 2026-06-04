@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Loader2, Fingerprint } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiCall } from "@/lib/api";
-import { persistConsumerAuth } from "@/lib/consumer-auth";
+import { persistConsumerAuth, getStoredConsumerSession, getLastAgencySlug, rememberAgencySlug } from "@/lib/consumer-auth";
 import { biometricAuth } from "@/lib/biometric-auth";
 import { enableBiometricLogin, saveAuthToken } from "@/lib/expo-bridge";
 import { pushNotificationService } from "@/lib/push-notifications";
@@ -30,8 +30,12 @@ export default function MobileAppLogin() {
   // Check for deep link agency parameter
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const agencySlug = params.get("agency");
-    
+    const agencySlug =
+      params.get("agency") ||
+      getLastAgencySlug() ||
+      getStoredConsumerSession()?.tenantSlug ||
+      null;
+
     if (agencySlug) {
       // Fetch agency branding for pre-selected agency
       apiCall("GET", `/api/public/agency-branding?slug=${encodeURIComponent(agencySlug)}`)
@@ -142,6 +146,7 @@ export default function MobileAppLogin() {
           token: data.token,
         });
         saveAuthToken(data.token, JSON.stringify(session));
+        rememberAgencySlug(data.tenant.slug);
 
         // Push notifications disabled - will be enabled after Firebase setup
         // await pushNotificationService.registerPendingToken();
@@ -242,6 +247,7 @@ export default function MobileAppLogin() {
           token: data.token,
         });
         saveAuthToken(data.token, JSON.stringify(session));
+        rememberAgencySlug(data.tenant.slug);
 
         // Save credentials for biometric authentication
         if (biometricAvailable) {
@@ -316,6 +322,7 @@ export default function MobileAppLogin() {
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loading}
                 className="h-12 text-base bg-white/5 border-white/10 text-white placeholder:text-white/50"
+                style={{ colorScheme: "dark", WebkitTextFillColor: "white" }}
                 data-testid="input-email"
                 required
               />
@@ -329,7 +336,8 @@ export default function MobileAppLogin() {
                 value={dateOfBirth}
                 onChange={(e) => setDateOfBirth(e.target.value)}
                 disabled={loading}
-                className="h-12 text-base bg-white/5 border-white/10 text-white"
+                className="h-12 text-base bg-white/5 border-white/10 text-white mobile-date-input"
+                style={{ colorScheme: "dark", WebkitTextFillColor: "white" }}
                 data-testid="input-dateofbirth"
                 required
               />

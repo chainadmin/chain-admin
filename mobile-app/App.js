@@ -309,7 +309,7 @@ function ChainApp() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar style="dark" />
+      <StatusBar style="light" />
       <WebView
         key={reloadKey}
         ref={webViewRef}
@@ -373,16 +373,17 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#020617',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: '#020617',
   },
   webview: {
     flex: 1,
+    backgroundColor: '#020617',
   },
   loadingOverlay: {
     position: 'absolute',
@@ -392,7 +393,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: '#020617',
   },
   errorOverlay: {
     position: 'absolute',

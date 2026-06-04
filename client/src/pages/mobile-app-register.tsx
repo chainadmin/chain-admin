@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { apiCall } from "@/lib/api";
-import { persistConsumerAuth } from "@/lib/consumer-auth";
+import { persistConsumerAuth, rememberAgencySlug } from "@/lib/consumer-auth";
 import { UserPlus, ArrowLeft, Calendar } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -143,6 +143,7 @@ export default function MobileAppRegister() {
             },
             token: loginData.token,
           });
+          rememberAgencySlug(loginData.tenant.slug);
 
           toast({
             title: "Welcome!",
@@ -171,7 +172,7 @@ export default function MobileAppRegister() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-950 text-white p-4">
+    <div className="flex min-h-screen flex-col overflow-x-hidden bg-slate-950 text-white p-4">
       {/* Background gradients */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute -top-32 right-0 h-96 w-96 rounded-full bg-blue-500/30 blur-3xl" />
@@ -211,13 +212,14 @@ export default function MobileAppRegister() {
             <div className="rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 p-6 space-y-4">
               {/* Name Fields */}
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
+                <div className="space-y-2 min-w-0">
                   <Label htmlFor="firstName" className="text-white/80 text-sm">
                     First Name *
                   </Label>
                   <Input
                     id="firstName"
                     data-testid="input-firstName"
+                    style={{ colorScheme: "dark", WebkitTextFillColor: "white" }}
                     value={formData.firstName}
                     onChange={(e) => handleInputChange('firstName', e.target.value)}
                     className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-blue-400/50 focus:ring-blue-400/20"
@@ -225,13 +227,14 @@ export default function MobileAppRegister() {
                     required
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 min-w-0">
                   <Label htmlFor="lastName" className="text-white/80 text-sm">
                     Last Name *
                   </Label>
                   <Input
                     id="lastName"
                     data-testid="input-lastName"
+                    style={{ colorScheme: "dark", WebkitTextFillColor: "white" }}
                     value={formData.lastName}
                     onChange={(e) => handleInputChange('lastName', e.target.value)}
                     className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-blue-400/50 focus:ring-blue-400/20"
@@ -250,6 +253,7 @@ export default function MobileAppRegister() {
                   id="email"
                   data-testid="input-email"
                   type="email"
+                  style={{ colorScheme: "dark", WebkitTextFillColor: "white" }}
                   value={formData.email}
                   onChange={(e) => handleInputChange('email', e.target.value)}
                   className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-blue-400/50 focus:ring-blue-400/20"
@@ -267,6 +271,7 @@ export default function MobileAppRegister() {
                   id="phone"
                   data-testid="input-phone"
                   type="tel"
+                  style={{ colorScheme: "dark", WebkitTextFillColor: "white" }}
                   value={formData.phone}
                   onChange={(e) => handleInputChange('phone', e.target.value)}
                   className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-blue-400/50 focus:ring-blue-400/20"
@@ -285,9 +290,10 @@ export default function MobileAppRegister() {
                     id="dateOfBirth"
                     data-testid="input-dateOfBirth"
                     type="date"
+                    style={{ colorScheme: "dark", WebkitTextFillColor: "white" }}
                     value={formData.dateOfBirth}
                     onChange={(e) => handleInputChange('dateOfBirth', e.target.value)}
-                    className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-blue-400/50 focus:ring-blue-400/20"
+                    className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-blue-400/50 focus:ring-blue-400/20 mobile-date-input"
                     required
                   />
                   <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30 pointer-events-none" />
@@ -302,6 +308,7 @@ export default function MobileAppRegister() {
                 <Input
                   id="address"
                   data-testid="input-address"
+                  style={{ colorScheme: "dark", WebkitTextFillColor: "white" }}
                   value={formData.address}
                   onChange={(e) => handleInputChange('address', e.target.value)}
                   className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-blue-400/50 focus:ring-blue-400/20"
@@ -312,13 +319,14 @@ export default function MobileAppRegister() {
 
               {/* City, State, Zip */}
               <div className="grid grid-cols-3 gap-3">
-                <div className="col-span-2 space-y-2">
+                <div className="col-span-2 space-y-2 min-w-0">
                   <Label htmlFor="city" className="text-white/80 text-sm">
                     City *
                   </Label>
                   <Input
                     id="city"
                     data-testid="input-city"
+                    style={{ colorScheme: "dark", WebkitTextFillColor: "white" }}
                     value={formData.city}
                     onChange={(e) => handleInputChange('city', e.target.value)}
                     className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-blue-400/50 focus:ring-blue-400/20"
@@ -326,7 +334,7 @@ export default function MobileAppRegister() {
                     required
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 min-w-0">
                   <Label htmlFor="state" className="text-white/80 text-sm">
                     State *
                   </Label>
@@ -359,6 +367,7 @@ export default function MobileAppRegister() {
                 <Input
                   id="zipCode"
                   data-testid="input-zipCode"
+                  style={{ colorScheme: "dark", WebkitTextFillColor: "white" }}
                   value={formData.zipCode}
                   onChange={(e) => handleInputChange('zipCode', e.target.value)}
                   className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-blue-400/50 focus:ring-blue-400/20"

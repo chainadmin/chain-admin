@@ -8,6 +8,7 @@ export interface ConsumerSession {
 
 export const CONSUMER_SESSION_KEY = "consumerSession";
 export const CONSUMER_TOKEN_KEY = "consumerToken";
+export const LAST_AGENCY_SLUG_KEY = "lastAgencySlug";
 
 function isStorageAvailable(storage: Storage | undefined): storage is Storage {
   if (!storage) {
@@ -132,4 +133,14 @@ export function persistConsumerAuth({
     sessionStored,
     tokenStored,
   };
+}
+
+export function getLastAgencySlug(): string | null {
+  return getFirstValue(LAST_AGENCY_SLUG_KEY);
+}
+
+export function rememberAgencySlug(slug: string | null | undefined): void {
+  if (slug && slug.trim().length > 0) {
+    setValue(LAST_AGENCY_SLUG_KEY, slug);
+  }
 }
