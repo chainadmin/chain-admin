@@ -183,6 +183,19 @@ function ChainApp() {
 
   const safePlatform = JSON.stringify(Platform.OS);
 
+  // Runs BEFORE the web page's own scripts execute, so the web app knows it is
+  // running inside the native app from its very first render (prevents it from
+  // falling back to the browser-only consumer pages).
+  const injectedJavaScriptBeforeContentLoaded = useMemo(() => `
+    (function() {
+      try {
+        window.isExpoApp = true;
+        window.platform = ${safePlatform};
+      } catch (e) {}
+    })();
+    true;
+  `, [safePlatform]);
+
   const injectedJavaScript = useMemo(() => `
     (function() {
       try {
@@ -315,6 +328,7 @@ function ChainApp() {
         ref={webViewRef}
         source={{ uri: CONSUMER_LOGIN_URL }}
         style={styles.webview}
+        injectedJavaScriptBeforeContentLoaded={injectedJavaScriptBeforeContentLoaded}
         injectedJavaScript={injectedJavaScript}
         onMessage={handleMessage}
         javaScriptEnabled={true}

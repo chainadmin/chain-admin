@@ -17,7 +17,12 @@ declare global {
 }
 
 export const isExpoApp = (): boolean => {
-  return typeof window !== 'undefined' && window.isExpoApp === true;
+  if (typeof window === 'undefined') return false;
+  // window.isExpoApp is set by the native shell's injected JS, but that can run
+  // AFTER the web app has already booted. window.ReactNativeWebView is provided
+  // by react-native-webview itself and is available early, so it's the reliable
+  // signal that we're running inside the native app.
+  return window.isExpoApp === true || !!window.ReactNativeWebView;
 };
 
 export const getPlatform = (): 'ios' | 'android' | 'web' => {

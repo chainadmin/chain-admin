@@ -11,9 +11,15 @@ function getServerUrl(): string {
 export const mobileConfig = {
   bundledVersion: '1.0.0',
   
-  serverUrl: getServerUrl(),
+  // Getters so detection is evaluated each time it's read (at render), not once
+  // at module load when window.ReactNativeWebView / window.isExpoApp may not be set yet.
+  get serverUrl() {
+    return getServerUrl();
+  },
   
-  isNativePlatform: isExpoApp(),
+  get isNativePlatform() {
+    return isExpoApp();
+  },
   
   endpoints: {
     versionCheck: '/api/app-version',

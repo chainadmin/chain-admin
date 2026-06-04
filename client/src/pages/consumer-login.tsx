@@ -463,7 +463,7 @@ export default function ConsumerLogin() {
                 value={form.email}
                 onChange={(e) => handleInputChange("email", e.target.value)}
                 placeholder="you@example.com"
-                className="h-12 rounded-2xl border-white/20 bg-slate-900/60 pl-12 text-base text-white placeholder:text-blue-100/50 focus-visible:ring-blue-400"
+                className="h-12 rounded-2xl border-white/20 bg-slate-900 pl-12 text-base text-white placeholder:text-blue-100/50 focus-visible:ring-blue-400"
                 data-testid="input-consumer-email"
                 required
               />
@@ -481,7 +481,7 @@ export default function ConsumerLogin() {
                 type="date"
                 value={form.dateOfBirth}
                 onChange={(e) => handleInputChange("dateOfBirth", e.target.value)}
-                className="h-12 rounded-2xl border-white/20 bg-slate-900/60 pl-12 text-base text-white placeholder:text-blue-100/50 focus-visible:ring-blue-400"
+                className="h-12 rounded-2xl border-white/20 bg-slate-900 pl-12 text-base text-white placeholder:text-blue-100/50 focus-visible:ring-blue-400"
                 data-testid="input-date-of-birth"
                 required
               />

@@ -142,5 +142,27 @@ solid `bg-slate-800`. Keep `bg-white/5` only on card/checkbox wrappers and the "
 to inputs (card wrappers use `bg-white/5 backdrop-blur... border border-white/10`), so a
 scoped replace_all to `bg-slate-800 border-white/20 text-white` is safe. These pages
 (`mobile-app-login.tsx`, `mobile-app-register.tsx`) ARE what the WebView renders — the
-`/consumer-login` route only shows them when `isMobileApp` (window.isExpoApp) is true; the
-fallback `consumer-login.tsx` uses a solid `bg-slate-900/60` and does not have this bug.
+`/consumer-login` route only shows them when `isMobileApp` is true; the fallback
+`consumer-login.tsx` / `consumer-registration.tsx` now use solid `bg-slate-900` inputs.
+
+## Native-app detection: signal must be readable on FIRST render, evaluated at read time
+
+**Rule:** to decide "are we in the native app?" the web app must detect
+`window.ReactNativeWebView` (provided by react-native-webview, present early), NOT just
+`window.isExpoApp` (set by the shell's `injectedJavaScript`). And the detection must be
+read at render time (a getter / direct `isExpoApp()` call), never cached in a
+module-load-time const.
+
+**Why:** two timing traps stack. (1) `injectedJavaScript` runs AFTER the page boots, so
+`window.isExpoApp` is still undefined during the web app's first render. (2)
+`mobileConfig.isNativePlatform = isExpoApp()` captured the value ONCE at module load →
+permanently false → App.tsx routed `/consumer-login` to the web `ConsumerLogin` page and
+never the native `MobileAppLogin`. Result: all the dark-input styling work was on pages the
+app never showed.
+
+**How to apply:** `isExpoApp()` returns `window.isExpoApp === true || !!window.ReactNativeWebView`.
+`mobileConfig.serverUrl`/`isNativePlatform` are GETTERS (re-evaluate each read), not static
+fields. Belt-and-suspenders for future native builds: set `window.isExpoApp`/`platform` via
+`injectedJavaScriptBeforeContentLoaded` (runs before page scripts) in `mobile-app/App.js`.
+The web-side getter+ReactNativeWebView fix ships via GitHub→Railway and fixes already-installed
+apps without an App Store rebuild.

@@ -284,7 +284,7 @@ export default function ConsumerRegistration() {
                 data-testid="input-firstName"
                 value={formData.firstName}
                 onChange={(e) => handleInputChange("firstName", e.target.value)}
-                className="h-11 rounded-2xl border-white/20 bg-slate-900/60 px-4 text-white placeholder:text-blue-100/50 focus-visible:ring-blue-400"
+                className="h-11 rounded-2xl border-white/20 bg-slate-900 px-4 text-white placeholder:text-blue-100/50 focus-visible:ring-blue-400"
                 required
               />
             </div>
@@ -297,7 +297,7 @@ export default function ConsumerRegistration() {
                 data-testid="input-lastName"
                 value={formData.lastName}
                 onChange={(e) => handleInputChange("lastName", e.target.value)}
-                className="h-11 rounded-2xl border-white/20 bg-slate-900/60 px-4 text-white placeholder:text-blue-100/50 focus-visible:ring-blue-400"
+                className="h-11 rounded-2xl border-white/20 bg-slate-900 px-4 text-white placeholder:text-blue-100/50 focus-visible:ring-blue-400"
                 required
               />
             </div>
@@ -314,7 +314,7 @@ export default function ConsumerRegistration() {
               value={formData.email}
               onChange={(e) => handleInputChange("email", e.target.value)}
               placeholder="you@example.com"
-              className="h-11 rounded-2xl border-white/20 bg-slate-900/60 px-4 text-white placeholder:text-blue-100/50 focus-visible:ring-blue-400"
+              className="h-11 rounded-2xl border-white/20 bg-slate-900 px-4 text-white placeholder:text-blue-100/50 focus-visible:ring-blue-400"
               required
             />
             <p className="text-xs text-blue-100/60">We’ll use this to locate your account and send secure updates.</p>
@@ -331,7 +331,7 @@ export default function ConsumerRegistration() {
               value={formData.phone}
               onChange={(e) => handleInputChange("phone", e.target.value)}
               placeholder="(555) 123-4567"
-              className="h-11 rounded-2xl border-white/20 bg-slate-900/60 px-4 text-white placeholder:text-blue-100/50 focus-visible:ring-blue-400"
+              className="h-11 rounded-2xl border-white/20 bg-slate-900 px-4 text-white placeholder:text-blue-100/50 focus-visible:ring-blue-400"
             />
             <p className="text-xs text-blue-100/60">Provide your phone number to receive text message updates.</p>
           </div>
@@ -346,7 +346,7 @@ export default function ConsumerRegistration() {
               data-testid="input-dateOfBirth"
               value={formData.dateOfBirth}
               onChange={(e) => handleInputChange("dateOfBirth", e.target.value)}
-              className="h-11 rounded-2xl border-white/20 bg-slate-900/60 px-4 text-white focus-visible:ring-blue-400"
+              className="h-11 rounded-2xl border-white/20 bg-slate-900 px-4 text-white focus-visible:ring-blue-400"
               required
             />
             <p className="text-xs text-blue-100/60">Only used to confirm your identity with your agency.</p>
@@ -373,7 +373,7 @@ export default function ConsumerRegistration() {
                 value={formData.address}
                 onChange={(e) => handleInputChange("address", e.target.value)}
                 placeholder="123 Main Street"
-                className="h-11 rounded-2xl border-white/20 bg-slate-900/60 px-4 text-white placeholder:text-blue-100/50 focus-visible:ring-blue-400"
+                className="h-11 rounded-2xl border-white/20 bg-slate-900 px-4 text-white placeholder:text-blue-100/50 focus-visible:ring-blue-400"
                 required
               />
             </div>
@@ -388,7 +388,7 @@ export default function ConsumerRegistration() {
                   data-testid="input-city"
                   value={formData.city}
                   onChange={(e) => handleInputChange("city", e.target.value)}
-                  className="h-11 rounded-2xl border-white/20 bg-slate-900/60 px-4 text-white placeholder:text-blue-100/50 focus-visible:ring-blue-400"
+                  className="h-11 rounded-2xl border-white/20 bg-slate-900 px-4 text-white placeholder:text-blue-100/50 focus-visible:ring-blue-400"
                 />
               </div>
               <div className="space-y-2">
@@ -398,7 +398,7 @@ export default function ConsumerRegistration() {
                 <Select value={formData.state} onValueChange={(value) => handleInputChange("state", value)}>
                   <SelectTrigger
                     data-testid="select-state"
-                    className="h-11 rounded-2xl border-white/20 bg-slate-900/60 px-4 text-left text-white focus:ring-blue-400"
+                    className="h-11 rounded-2xl border-white/20 bg-slate-900 px-4 text-left text-white focus:ring-blue-400"
                   >
                     <SelectValue placeholder="Select state" />
                   </SelectTrigger>
@@ -470,7 +470,7 @@ export default function ConsumerRegistration() {
                   }}
                   placeholder="12345"
                   maxLength={5}
-                  className="h-11 rounded-2xl border-white/20 bg-slate-900/60 px-4 text-white placeholder:text-blue-100/50 focus-visible:ring-blue-400"
+                  className="h-11 rounded-2xl border-white/20 bg-slate-900 px-4 text-white placeholder:text-blue-100/50 focus-visible:ring-blue-400"
                 />
               </div>
             </div>
