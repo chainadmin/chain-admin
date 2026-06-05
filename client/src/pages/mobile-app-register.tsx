@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +47,15 @@ export default function MobileAppRegister() {
     agreeToTerms: false,
     agreeToSms: false,
   });
+
+  // Remember the agency as soon as the register screen opens with a tenant param
+  // so the branded logo persists after the app is closed and reopened.
+  useEffect(() => {
+    const tenantSlug = getTenantSlug();
+    if (tenantSlug) {
+      rememberAgencySlug(tenantSlug);
+    }
+  }, []);
 
   const handleInputChange = (field: string, value: any) => {
     setFormData(prev => ({

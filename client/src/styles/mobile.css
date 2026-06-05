@@ -28,13 +28,13 @@
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
 }
 
-.ios input,
-.ios textarea {
-  /* iOS-style inputs */
-  background-color: #f2f2f7;
-  border: none;
-  border-radius: 10px;
-}
+/*
+ * NOTE: Do NOT force a background-color/border on inputs here.
+ * A previous ".ios input { background:#f2f2f7 }" rule globally overrode every
+ * input's background once the app marked itself native, turning white-on-dark
+ * fields into invisible white-on-light text. Each page now owns its own field
+ * colors; the baseline below only guarantees typed text uses the intended color.
+ */
 
 /* Android specific styles */
 .android .mobile-app {
@@ -84,6 +84,26 @@
 .mobile-app [contenteditable] {
   -webkit-user-select: text;
   user-select: text;
+}
+
+/*
+ * Native-safe input baseline: guarantee typed text is always rendered in the
+ * field's intended color on every input/textarea/select across the whole app.
+ * iOS/WebKit can otherwise grey out or hide -webkit-text-fill-color, which is
+ * what made dark-themed fields look empty while typing on device.
+ */
+.mobile-app input,
+.mobile-app textarea,
+.mobile-app select {
+  -webkit-text-fill-color: currentColor;
+  -webkit-opacity: 1;
+  opacity: 1;
+}
+
+.mobile-app input::placeholder,
+.mobile-app textarea::placeholder {
+  -webkit-text-fill-color: currentColor;
+  opacity: 0.5;
 }
 
 /* Native loading spinner */

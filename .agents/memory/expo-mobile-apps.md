@@ -145,6 +145,20 @@ scoped replace_all to `bg-slate-800 border-white/20 text-white` is safe. These p
 `/consumer-login` route only shows them when `isMobileApp` is true; the fallback
 `consumer-login.tsx` / `consumer-registration.tsx` now use solid `bg-slate-900` inputs.
 
+## A GLOBAL `.ios input` rule silently defeated every per-input dark fix
+
+**Rule:** `client/src/styles/mobile.css` had `.ios input, .ios textarea { background-color:#f2f2f7; border:none }`. `MobileOptimizations` adds the `.ios` body class only when native is detected. So once native detection started firing EARLY (see detection note below), this rule overrode every input's background app-wide → white-on-near-white = invisible text on EVERY input, not just login/register. Per-page `bg-slate-800` lost to it (`.ios input` specificity 0,1,1 beats a Tailwind bg class 0,1,0).
+
+**Why:** the rule was dormant while native detection was broken (body never got `.ios`), so the earlier "give inputs solid bg-slate-800" fix looked complete in the browser. Fixing detection activated the override and made things WORSE on device — which reads as "you only fixed iOS / nothing works." The lesson: a single global selector keyed on a platform body-class can invalidate all per-component styling the moment that class starts being applied.
+
+**How to apply:** when "every input" is broken in the native app, grep `styles/mobile.css` (and any `.ios`/`.android`/`.mobile-app` scoped CSS) for input/background/color/`-webkit-text-fill-color` overrides BEFORE touching individual pages. Fix: delete the forced bg/border; add a safe baseline `.mobile-app input,textarea,select { -webkit-text-fill-color: currentColor; opacity:1 }` so typed text always uses the field's intended color without forcing a theme. Date inputs keep their own `.mobile-date-input ::-webkit-datetime-edit { color/-webkit-text-fill-color:#fff }` rules and still win.
+
+## MobileAppLogin had no register link; agency slug only remembered post-login
+
+**Rule:** the native `mobile-app-login.tsx` is a separate page from the web `consumer-login.tsx` and does NOT inherit its links/behavior. It lacked any "Create account" entry (only reachable via the 409 auto-redirect), and `rememberAgencySlug()` ran only after successful login — so a cold app restart (deep-link `?agency=` gone) had no slug → branding fetch skipped → "C" logo placeholder.
+
+**How to apply:** native login needs its own register link → `/mobile-register?tenant=<slug>&email=` (slug from `agencyContext?.slug` OR a separately-stored resolved slug, so it survives a failed branding fetch). Persist the agency slug as soon as branding resolves on login AND when `mobile-app-register.tsx` opens with a `tenant` param — not only after auth — so `getLastAgencySlug()` rehydrates branding on restart.
+
 ## Native-app detection: signal must be readable on FIRST render, evaluated at read time
 
 **Rule:** to decide "are we in the native app?" the web app must detect

@@ -24,6 +24,7 @@ export default function MobileAppLogin() {
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [loading, setLoading] = useState(false);
   const [agencyContext, setAgencyContext] = useState<AgencyContext | null>(null);
+  const [agencySlug, setAgencySlug] = useState<string | null>(null);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricType, setBiometricType] = useState<string>("");
 
@@ -37,15 +38,22 @@ export default function MobileAppLogin() {
       null;
 
     if (agencySlug) {
+      // Keep the resolved slug even if branding fetch fails, so the
+      // "Create account" link can always forward it to registration.
+      setAgencySlug(agencySlug);
       // Fetch agency branding for pre-selected agency
       apiCall("GET", `/api/public/agency-branding?slug=${encodeURIComponent(agencySlug)}`)
         .then(res => res.json())
         .then(data => {
+          const resolvedSlug = data.agencySlug || agencySlug;
           setAgencyContext({
-            slug: data.agencySlug || agencySlug,
+            slug: resolvedSlug,
             name: data.agencyName || agencySlug,
             logoUrl: data.logoUrl || null,
           });
+          // Remember the agency as soon as branding loads (not only after login)
+          // so the logo reappears after the app is closed and reopened.
+          rememberAgencySlug(resolvedSlug);
         })
         .catch(() => {
           // Silent fail - just don't show agency branding
@@ -386,6 +394,28 @@ export default function MobileAppLogin() {
             </>
           )}
         </form>
+
+        {/* Create account */}
+        <div className="text-center">
+          <p className="text-sm text-blue-100/70">
+            Don't have an account?{" "}
+            <button
+              type="button"
+              onClick={() => {
+                const params = new URLSearchParams();
+                const tenant = agencyContext?.slug || agencySlug;
+                if (tenant) params.set("tenant", tenant);
+                if (email) params.set("email", email);
+                const qs = params.toString();
+                setLocation(`/mobile-register${qs ? `?${qs}` : ""}`);
+              }}
+              className="font-semibold text-emerald-400 underline-offset-4 hover:underline"
+              data-testid="link-create-account"
+            >
+              Create account
+            </button>
+          </p>
+        </div>
 
         {/* Footer */}
         <p className="text-center text-sm text-blue-100/70">
