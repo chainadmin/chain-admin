@@ -16,19 +16,27 @@
         "NSPrivacyAccessedAPITypes": [
           {
             "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
-            "NSPrivacyAccessedAPITypeReasons": ["CA92.1"]
+            "NSPrivacyAccessedAPITypeReasons": [
+              "CA92.1"
+            ]
           },
           {
             "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryFileTimestamp",
-            "NSPrivacyAccessedAPITypeReasons": ["C617.1"]
+            "NSPrivacyAccessedAPITypeReasons": [
+              "C617.1"
+            ]
           },
           {
             "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategorySystemBootTime",
-            "NSPrivacyAccessedAPITypeReasons": ["35F9.1"]
+            "NSPrivacyAccessedAPITypeReasons": [
+              "35F9.1"
+            ]
           },
           {
             "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryDiskSpace",
-            "NSPrivacyAccessedAPITypeReasons": ["E174.1"]
+            "NSPrivacyAccessedAPITypeReasons": [
+              "E174.1"
+            ]
           }
         ],
         "NSPrivacyTracking": false,
@@ -50,7 +58,9 @@
       "package": "com.chainsoftware.agency",
       "permissions": [
         "USE_BIOMETRIC",
-        "USE_FINGERPRINT"
+        "USE_FINGERPRINT",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
       ]
     },
     "plugins": [
@@ -81,7 +91,7 @@
     "extra": {
       "apiBaseUrl": "https://chain-admin-production.up.railway.app",
       "eas": {
-        "projectId": ""
+        "projectId": "7cf774f0-23d0-4b76-80a0-e0f887e645f2"
       }
     },
     "owner": "waypointsolutions2023"
