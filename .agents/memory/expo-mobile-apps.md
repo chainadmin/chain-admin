@@ -145,6 +145,26 @@ scoped replace_all to `bg-slate-800 border-white/20 text-white` is safe. These p
 `/consumer-login` route only shows them when `isMobileApp` is true; the fallback
 `consumer-login.tsx` / `consumer-registration.tsx` now use solid `bg-slate-900` inputs.
 
+## Phone-only (no tablet) targeting: iOS is a build flag, Android is not
+
+**Rule:** to ship a phone-only app, iOS is clean — set `ios.supportsTablet: false`
+in `app.json` (sets UIDeviceFamily to iPhone-only). Android has NO reliable
+in-build switch; do the tablet exclusion in the Google Play Console "Device
+catalog" per listing after upload.
+
+**Why:** the only in-build Android mechanism is the `<compatible-screens>`
+manifest element, which forces you to enumerate every supported screen-size +
+density combination — any density you omit silently filters out real phones, and
+Google explicitly recommends against it. `<supports-screens android:xlargeScreens>`
+does NOT filter installs (only affects compat scaling). So baking it risks
+blocking legitimate phones, which is worse than leaving tablets installable.
+
+**How to apply:** flip `supportsTablet` to false in BOTH `mobile-app/app.json`
+and `mobile-agency-app/app.json` (each has its own copy). For Android, hand the
+user the Play Console exclusion steps rather than editing the manifest. Caveat to
+state: an iPhone-only iOS app still installs on iPad in compatibility mode — Apple
+gives no way to fully block that.
+
 ## A GLOBAL `.ios input` rule silently defeated every per-input dark fix
 
 **Rule:** `client/src/styles/mobile.css` had `.ios input, .ios textarea { background-color:#f2f2f7; border:none }`. `MobileOptimizations` adds the `.ios` body class only when native is detected. So once native detection started firing EARLY (see detection note below), this rule overrode every input's background app-wide → white-on-near-white = invisible text on EVERY input, not just login/register. Per-page `bg-slate-800` lost to it (`.ios input` specificity 0,1,1 beats a Tailwind bg class 0,1,0).
