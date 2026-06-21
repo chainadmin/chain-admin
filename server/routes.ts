@@ -9638,6 +9638,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Collection Max integration
         collectionMaxEnabled: z.boolean().optional(),
         campaignIntegrationEnabled: z.boolean().optional(),
+        // Debt Manager Pro (DMP) integration
+        dmpEnabled: z.boolean().optional(),
+        dmpAutoImport: z.boolean().optional(),
+        dmpApiUrl: z.string().nullable().optional(),
+        dmpUsername: z.string().nullable().optional(),
+        dmpPassword: z.string().nullable().optional(),
       });
 
       const validatedData = settingsSchema.parse(req.body);
