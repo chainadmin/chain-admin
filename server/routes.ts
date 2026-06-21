@@ -1969,6 +1969,101 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      // DMP SYNC: If DMP is enabled (and SMAX is not), pull fresh account data
+      // from Debt Manager Pro so consumers see their CURRENT balance/status at
+      // login instead of the value stored at import time. Mirrors the SMAX loop
+      // above. A tenant uses one collection system at a time, so this only runs
+      // when SMAX is off to avoid two live loops fighting over the same account.
+      if (tenant?.id && (tenantSettings as any)?.dmpEnabled && !tenantSettings?.smaxEnabled) {
+        console.log('🔄 DMP enabled - syncing account data for consumer portal access');
+
+        const { dmpService } = await import('./dmpService');
+
+        for (const account of accountsList) {
+          // DMP account lookups are keyed by file number; skip accounts without one.
+          const dmpFilenumber = account.filenumber;
+          if (!dmpFilenumber) {
+            continue;
+          }
+
+          try {
+            console.log(`🔍 Calling DMP getAccount for: ${dmpFilenumber}`);
+            // getDmpConfig inside the service gates on dmpEnabled + apiUrl +
+            // username + password, returning null when credentials are missing,
+            // so a misconfigured tenant simply falls back to stored values.
+            const dmpAccount = await dmpService.getAccount(tenant.id, dmpFilenumber);
+
+            if (!dmpAccount) {
+              console.warn(`⚠️ DMP getAccount returned null for ${dmpFilenumber} - keeping stored values`);
+              continue;
+            }
+
+            const dmpStatus = dmpAccount.status;
+
+            // DMP returns balance already in integer cents (consistent with the
+            // DMP import path which stores balanceCents = dmpAccount.balance and
+            // divides by 100 only to display dollars). Do NOT apply SMAX-style
+            // decimal detection here or balances would be off by 100x.
+            const rawBalance = dmpAccount.balance;
+            const balanceNumber = typeof rawBalance === 'number'
+              ? rawBalance
+              : parseFloat(String(rawBalance ?? '').replace(/[^0-9.-]/g, ''));
+
+            // Guard against missing/invalid balance - update status only.
+            if (!Number.isFinite(balanceNumber)) {
+              console.warn('⚠️ DMP returned invalid/empty balance, skipping balance sync:', {
+                dmpFilenumber,
+                rawDmpBalance: rawBalance,
+                parsedValue: balanceNumber,
+              });
+              if (dmpStatus && dmpStatus !== account.status) {
+                await storage.updateAccount(account.id, { status: dmpStatus });
+                account.status = dmpStatus;
+                console.log('✅ Account status updated from DMP (balance skipped):', {
+                  dmpFilenumber,
+                  newStatus: dmpStatus,
+                });
+              }
+              continue;
+            }
+
+            // Clamp to non-negative to prevent invalid negative balances.
+            const balanceCents = Math.max(0, Math.round(balanceNumber));
+
+            console.log('💰 DMP Balance Sync:', {
+              dmpFilenumber,
+              rawDmpBalance: rawBalance,
+              normalizedCents: balanceCents,
+              currentLocalBalance: account.balanceCents,
+              dmpStatus,
+            });
+
+            // Persist + reflect in the response only when something changed.
+            if (balanceCents !== account.balanceCents ||
+                (dmpStatus && dmpStatus !== account.status)) {
+              await storage.updateAccount(account.id, {
+                balanceCents: balanceCents,
+                status: dmpStatus || account.status,
+              });
+
+              account.balanceCents = balanceCents;
+              if (dmpStatus) {
+                account.status = dmpStatus;
+              }
+
+              console.log('✅ Account updated from DMP:', {
+                dmpFilenumber,
+                newBalance: balanceCents,
+                newStatus: dmpStatus,
+              });
+            }
+          } catch (dmpError) {
+            console.error('⚠️ DMP sync error for:', dmpFilenumber, dmpError);
+            // Non-blocking - continue with stored data if DMP fails.
+          }
+        }
+      }
+
       // Get payment schedules for this consumer
       const paymentSchedules = tenant?.id ? await storage.getPaymentSchedulesByConsumer(consumer.id, tenant.id) : [];
       const activeSchedules = paymentSchedules.filter(s => s.status === 'active');
