@@ -170,8 +170,8 @@ export default function AccountDetailScreen() {
           onPress={() =>
             nav.navigate('Compose', {
               consumerId: account.consumer?.id,
-              email: account.consumer?.email,
-              phone: account.consumer?.phone,
+              email: account.consumer?.email ?? undefined,
+              phone: account.consumer?.phone ?? undefined,
               name,
             })
           }
@@ -183,7 +183,7 @@ export default function AccountDetailScreen() {
             nav.navigate('PostPayment', {
               accountId: account.id,
               consumerId: account.consumerId,
-              consumerEmail: account.consumer?.email,
+              consumerEmail: account.consumer?.email ?? undefined,
               name,
               balanceCents: account.balanceCents,
             })

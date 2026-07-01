@@ -52,7 +52,7 @@ export default function AddOnsScreen() {
       ]);
       const cat = Array.isArray(catRes.data) ? catRes.data : (catRes.data as any).addons || [];
       const mine = Array.isArray(mineRes.data) ? mineRes.data : (mineRes.data as any).tenantAddons || [];
-      setCatalog(cat.filter((a) => a.isActive));
+      setCatalog((cat as Addon[]).filter((a: Addon) => a.isActive));
       setActive(mine);
       setBillingMode(mode);
     } catch (e) {
