@@ -41,7 +41,7 @@ const screenOptions = {
 
 function tabIcon(label: string) {
   return ({ color, focused }: { color: string; focused: boolean }) => (
-    <Text style={{ fontSize: 11, color, fontWeight: focused ? '700' : '500' }}>{label}</Text>
+    <Text style={{ fontSize: 22, color, fontWeight: focused ? '800' : '600', marginBottom: -2 }}>{label}</Text>
   );
 }
 
@@ -104,16 +104,17 @@ export default function AppNavigator() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarStyle: { backgroundColor: colors.bgElevated, borderTopColor: colors.cardBorder },
+        tabBarStyle: { backgroundColor: colors.bgElevated, borderTopColor: colors.cardBorder, height: 86, paddingTop: 8, paddingBottom: 24 },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '700', marginTop: 2 },
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
       }}
     >
-      <Tab.Screen name="Dashboard" component={DashboardScreen} options={{ tabBarIcon: tabIcon('•'), tabBarLabel: 'Dashboard' }} />
-      <Tab.Screen name="Accounts" component={AccountsStack} options={{ tabBarIcon: tabIcon('▣'), tabBarLabel: 'Accounts' }} />
-      <Tab.Screen name="Messaging" component={MessagingStack} options={{ tabBarIcon: tabIcon('✉'), tabBarLabel: 'Messaging' }} />
-      <Tab.Screen name="Payments" component={PaymentsStack} options={{ tabBarIcon: tabIcon('$'), tabBarLabel: 'Payments' }} />
-      <Tab.Screen name="More" component={MoreStack} options={{ tabBarIcon: tabIcon('☰'), tabBarLabel: 'More' }} />
+      <Tab.Screen name="Dashboard" component={DashboardScreen} options={{ tabBarIcon: tabIcon('⌂'), tabBarLabel: 'Dashboard' }} />
+      <Tab.Screen name="Accounts" component={AccountsStack} options={{ tabBarIcon: tabIcon('▤'), tabBarLabel: 'Accounts' }} />
+      <Tab.Screen name="Messaging" component={MessagingStack} options={{ tabBarIcon: tabIcon('✉︎'), tabBarLabel: 'Messaging' }} />
+      <Tab.Screen name="Payments" component={PaymentsStack} options={{ tabBarIcon: tabIcon('◉'), tabBarLabel: 'Payments' }} />
+      <Tab.Screen name="More" component={MoreStack} options={{ tabBarIcon: tabIcon('•••'), tabBarLabel: 'More' }} />
     </Tab.Navigator>
   );
 }

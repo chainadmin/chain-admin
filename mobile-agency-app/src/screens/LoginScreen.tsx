@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Alert, Image, KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
-import { Button, Field, H1, Muted, Screen, Small } from '@/components/ui';
+import { Button, Card, Field, H1, H3, Muted, Screen, Small } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
 import { extractErrorMessage } from '@/navigation/types';
-import { colors, spacing } from '@/theme/colors';
+import { colors, radius, spacing } from '@/theme/colors';
 import SignupChooserScreen from './SignupChooserScreen';
 
 export default function LoginScreen() {
@@ -48,16 +48,30 @@ export default function LoginScreen() {
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
         <Screen style={{ paddingVertical: spacing.xxl }}>
           <View style={{ alignItems: 'center', marginBottom: spacing.xl }}>
-            <Image
-              source={require('../../assets/icon.png')}
-              style={{ width: 96, height: 96, borderRadius: 24, marginBottom: spacing.lg }}
-              resizeMode="contain"
-            />
+            <View
+              style={{
+                width: 112,
+                height: 112,
+                borderRadius: 32,
+                marginBottom: spacing.lg,
+                backgroundColor: colors.cardElevated,
+                borderColor: colors.cardBorderStrong,
+                borderWidth: 1,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Image
+                source={require('../../assets/icon.png')}
+                style={{ width: 88, height: 88, borderRadius: 24 }}
+                resizeMode="contain"
+              />
+            </View>
             <H1>Chain Agency</H1>
-            <Muted style={{ marginTop: 4 }}>Sign in to your agency dashboard</Muted>
+            <Muted style={{ marginTop: 6, textAlign: 'center' }}>Secure mobile command center for your agency</Muted>
           </View>
 
-          <View style={{ gap: spacing.lg }}>
+          <Card style={{ gap: spacing.lg }}>
             <Field
               label="Username or email"
               autoCapitalize="none"
@@ -74,12 +88,29 @@ export default function LoginScreen() {
               onChangeText={setPassword}
               placeholder="••••••••"
             />
-            <Button title="Sign in" onPress={onSubmit} loading={busy} fullWidth size="lg" />
-            <Small style={{ textAlign: 'center', marginTop: spacing.md }}>
+            <Button title="Sign in securely" onPress={onSubmit} loading={busy} fullWidth size="lg" />
+            <View style={{ flexDirection: 'row', gap: spacing.sm, justifyContent: 'center', flexWrap: 'wrap' }}>
+              {['Encrypted', 'Biometric-ready', 'Admin access'].map((item) => (
+                <View
+                  key={item}
+                  style={{
+                    borderRadius: radius.pill,
+                    borderWidth: 1,
+                    borderColor: colors.cardBorder,
+                    paddingHorizontal: 10,
+                    paddingVertical: 6,
+                    backgroundColor: 'rgba(255,255,255,0.04)',
+                  }}
+                >
+                  <Small style={{ color: colors.textMuted }}>{item}</Small>
+                </View>
+              ))}
+            </View>
+            <Small style={{ textAlign: 'center' }}>
               Use the same credentials as the Chain web admin.
             </Small>
 
-            <View style={{ marginTop: spacing.lg, gap: spacing.sm }}>
+            <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
               <Muted style={{ textAlign: 'center' }}>New to Chain?</Muted>
               <Button
                 title="Create an account"
@@ -91,6 +122,13 @@ export default function LoginScreen() {
                 You'll choose Pay-as-you-go (Wallet) or Subscription on the next screen.
               </Small>
             </View>
+          </Card>
+
+          <View style={{ alignItems: 'center', marginTop: spacing.xl }}>
+            <H3 style={{ fontSize: 16 }}>Built for production workflows</H3>
+            <Muted style={{ textAlign: 'center', marginTop: spacing.xs }}>
+              Review accounts, payments, messages, and wallet activity from a polished mobile workspace.
+            </Muted>
           </View>
         </Screen>
       </ScrollView>
