@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -8,6 +8,7 @@ import {
   TextInput,
   TextInputProps,
   TextProps,
+  Platform,
   View,
   ViewProps,
 } from 'react-native';
@@ -16,6 +17,8 @@ import { colors, radius, spacing, typography } from '@/theme/colors';
 export function Screen({ children, style, ...rest }: ViewProps) {
   return (
     <View style={[styles.screen, style]} {...rest}>
+      <View pointerEvents="none" style={styles.backdropGlowPrimary} />
+      <View pointerEvents="none" style={styles.backdropGlowAccent} />
       {children}
     </View>
   );
@@ -23,7 +26,7 @@ export function Screen({ children, style, ...rest }: ViewProps) {
 
 export function Card({ children, style, ...rest }: ViewProps) {
   return (
-    <View style={[styles.card, style]} {...rest}>
+    <View style={[styles.card, softShadow.card, style]} {...rest}>
       {children}
     </View>
   );
@@ -72,31 +75,51 @@ export function Button({
           borderWidth: variant === 'ghost' || variant === 'secondary' ? 1 : 0,
           paddingVertical: padV,
           paddingHorizontal: padH,
-          borderRadius: radius.md,
+          borderRadius: radius.button,
+          minHeight: size === 'sm' ? 38 : size === 'lg' ? 54 : 46,
           alignItems: 'center',
           justifyContent: 'center',
-          opacity: disabled ? 0.5 : pressed ? 0.85 : 1,
+          opacity: disabled ? 0.5 : 1,
+          transform: [{ scale: pressed ? 0.985 : 1 }],
           alignSelf: fullWidth ? 'stretch' : 'flex-start',
           flexDirection: 'row',
           gap: 8,
         },
-        typeof style === 'function' ? undefined : style,
+        variant === 'primary' && !disabled ? softShadow.button : null,
+        typeof style === 'function' ? style({ pressed }) : style,
       ]}
       {...rest}
     >
       {loading ? <ActivityIndicator color={fg} /> : null}
-      <Text style={{ color: fg, fontWeight: '600', fontSize: size === 'sm' ? 13 : 15 }}>{title}</Text>
+      <Text
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        style={{ color: fg, fontWeight: '700', fontSize: size === 'sm' ? 13 : 15, letterSpacing: 0.2, flexShrink: 1 }}
+      >
+        {title}
+      </Text>
     </Pressable>
   );
 }
 
-export function Field({ label, ...rest }: TextInputProps & { label?: string }) {
+export function Field({ label, style, onFocus, onBlur, ...rest }: TextInputProps & { label?: string }) {
+  const [focused, setFocused] = useState(false);
+
   return (
-    <View style={{ gap: 6 }}>
-      {label ? <Text style={typography.label}>{label}</Text> : null}
+    <View style={{ gap: 7 }}>
+      {label ? <Text style={[typography.label, focused ? { color: colors.primarySoft } : null]}>{label}</Text> : null}
       <TextInput
         placeholderTextColor={colors.textSubtle}
-        style={[styles.input]}
+        selectionColor={colors.primary}
+        style={[styles.input, focused && styles.inputFocused, style]}
+        onFocus={(event) => {
+          setFocused(true);
+          onFocus?.(event);
+        }}
+        onBlur={(event) => {
+          setFocused(false);
+          onBlur?.(event);
+        }}
         {...rest}
       />
     </View>
@@ -129,26 +152,40 @@ export function Pill({
   children,
   color = colors.primary,
   textColor = '#fff',
+  tone,
 }: {
   children: React.ReactNode;
   color?: string;
   textColor?: string;
+  tone?: 'success' | 'info' | 'warning' | 'danger';
 }) {
+  const toneColor = tone === 'success' ? colors.success : tone === 'info' ? colors.info : tone === 'warning' ? colors.warning : tone === 'danger' ? colors.danger : color;
+  const content = typeof children === 'string' || typeof children === 'number' ? String(children).toUpperCase() : children;
+
   return (
     <View
       style={{
-        backgroundColor: color + '22',
-        borderColor: color + '55',
+        backgroundColor: toneColor + '22',
+        borderColor: toneColor + '55',
         borderWidth: 1,
         paddingHorizontal: 10,
         paddingVertical: 4,
         borderRadius: radius.pill,
         alignSelf: 'flex-start',
+        maxWidth: '100%',
       }}
     >
-      <Text style={{ color: textColor === '#fff' ? color : textColor, fontSize: 11, fontWeight: '700' }}>
-        {String(children).toUpperCase()}
-      </Text>
+      {typeof content === 'string' ? (
+        <Text
+          numberOfLines={1}
+          ellipsizeMode="tail"
+          style={{ color: textColor === '#fff' ? toneColor : textColor, fontSize: 11, fontWeight: '700', flexShrink: 1 }}
+        >
+          {content}
+        </Text>
+      ) : (
+        content
+      )}
     </View>
   );
 }
@@ -180,6 +217,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg,
     paddingHorizontal: spacing.lg,
+    overflow: 'hidden',
   },
   card: {
     backgroundColor: colors.card,
@@ -195,7 +233,47 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     color: colors.text,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 13,
+    minHeight: 50,
     fontSize: 15,
+  },
+  inputFocused: {
+    borderColor: colors.primarySoft,
+    backgroundColor: 'rgba(14,165,233,0.10)',
+  },
+  backdropGlowPrimary: {
+    position: 'absolute',
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: 'rgba(14,165,233,0.10)',
+    top: -90,
+    right: -110,
+  },
+  backdropGlowAccent: {
+    position: 'absolute',
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: 'rgba(99,102,241,0.08)',
+    bottom: 80,
+    left: -120,
+  },
+});
+
+export const softShadow = StyleSheet.create({
+  card: {
+    shadowColor: '#000',
+    shadowOpacity: Platform.OS === 'ios' ? 0.28 : 0,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 3,
+  },
+  button: {
+    shadowColor: colors.primary,
+    shadowOpacity: Platform.OS === 'ios' ? 0.32 : 0,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
   },
 });

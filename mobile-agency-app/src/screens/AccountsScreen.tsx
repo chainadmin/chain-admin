@@ -100,13 +100,13 @@ export default function AccountsScreen() {
             return (
               <Pressable onPress={() => nav.navigate('AccountDetail', { accountId: item.id })}>
                 <Card style={{ borderLeftWidth: 3, borderLeftColor: sc }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm, alignItems: 'flex-start' }}>
+                    <View style={{ flex: 1, minWidth: 0 }}>
                       <Body style={{ fontWeight: '700' }}>{consumerName}</Body>
                       <Muted>{item.creditor || 'No creditor'}</Muted>
                       <Small style={{ marginTop: 4 }}>Acct #{item.accountNumber || '—'}</Small>
                     </View>
-                    <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                    <View style={{ alignItems: 'flex-end', gap: 6, flexShrink: 0, maxWidth: '45%' }}>
                       <Body style={{ fontWeight: '700' }}>{balance}</Body>
                       <Pill color={sc}>{item.status || 'unknown'}</Pill>
                     </View>

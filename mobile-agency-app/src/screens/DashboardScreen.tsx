@@ -22,7 +22,7 @@ function StatTile({
   accent?: string;
 }) {
   return (
-    <Card style={{ flex: 1, minWidth: '47%', borderLeftWidth: 3, borderLeftColor: accent }}>
+    <Card style={{ flexGrow: 1, flexBasis: '47%', minWidth: 0, borderLeftWidth: 3, borderLeftColor: accent }}>
       <Small>{label}</Small>
       <H3 style={{ marginTop: 6, color: '#fff' }}>{value}</H3>
     </Card>
@@ -90,7 +90,7 @@ export default function DashboardScreen() {
             borderColor: walletQ.data.lowBalance ? colors.warning : colors.primary + '55',
             borderWidth: walletQ.data.lowBalance ? 2 : 1,
           }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' }}>
               <View>
                 <Small>Wallet balance</Small>
                 <H1 style={{ marginTop: 4, color: walletQ.data.lowBalance ? colors.warning : colors.primary }}>
@@ -146,20 +146,20 @@ export default function DashboardScreen() {
             {statsQ.data?.paymentMetrics ? (
               <Card>
                 <H3>Payments (lifetime)</H3>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.md }}>
-                  <View>
+                <View style={{ flexDirection: 'row', gap: spacing.md, marginTop: spacing.md, flexWrap: 'wrap' }}>
+                  <View style={{ flexGrow: 1, flexBasis: '30%', minWidth: 90 }}>
                     <Small>Total collected</Small>
                     <H3 style={{ color: colors.success }}>
                       ${(statsQ.data.paymentMetrics.totalCollected ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </H3>
                   </View>
-                  <View>
+                  <View style={{ flexGrow: 1, flexBasis: '30%', minWidth: 90 }}>
                     <Small>Last 30 days</Small>
                     <H3 style={{ color: colors.info }}>
                       ${(statsQ.data.paymentMetrics.monthlyCollected ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </H3>
                   </View>
-                  <View>
+                  <View style={{ flexGrow: 1, flexBasis: '30%', minWidth: 90 }}>
                     <Small>Declined</Small>
                     <H3 style={{ color: colors.danger }}>{statsQ.data.paymentMetrics.declinedPayments ?? 0}</H3>
                   </View>
@@ -170,16 +170,16 @@ export default function DashboardScreen() {
             {statsQ.data?.emailMetrics || statsQ.data?.smsMetrics ? (
               <Card>
                 <H3>Communications</H3>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.md }}>
-                  <View>
+                <View style={{ flexDirection: 'row', gap: spacing.md, marginTop: spacing.md, flexWrap: 'wrap' }}>
+                  <View style={{ flexGrow: 1, flexBasis: '30%', minWidth: 90 }}>
                     <Small>Emails sent</Small>
                     <H3>{(statsQ.data?.emailMetrics?.totalSent ?? 0).toLocaleString()}</H3>
                   </View>
-                  <View>
+                  <View style={{ flexGrow: 1, flexBasis: '30%', minWidth: 90 }}>
                     <Small>SMS sent</Small>
                     <H3>{(statsQ.data?.smsMetrics?.totalSent ?? 0).toLocaleString()}</H3>
                   </View>
-                  <View>
+                  <View style={{ flexGrow: 1, flexBasis: '30%', minWidth: 90 }}>
                     <Small>Open rate</Small>
                     <H3>{statsQ.data?.emailMetrics?.openRate ?? 0}%</H3>
                   </View>
