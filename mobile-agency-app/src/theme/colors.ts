@@ -8,7 +8,7 @@
 //   --font-sans:  Open Sans, sans-serif
 //   --radius:     1.3rem (~21px)
 export const colors = {
-  bg: '#000000',
+  bg: '#05070b',
   bgElevated: '#0b0d10',
   card: '#171a1d',
   cardElevated: '#1d2125',
@@ -21,6 +21,7 @@ export const colors = {
 
   // Sidebar primary (web admin accent) — sky-500
   primary: '#0ea5e9',
+  primarySoft: '#7dd3fc',
   primaryDark: '#0284c7',
   accent: '#6366f1',
 
@@ -55,6 +56,7 @@ export const spacing = {
 export const radius = {
   sm: 10,
   md: 14,
+  button: 16,
   lg: 21,
   xl: 24,
   pill: 9999,
@@ -67,8 +69,8 @@ export const fontFamily = {
 } as const;
 
 export const typography = {
-  h1: { fontSize: 28, fontWeight: '700' as const, color: colors.text },
-  h2: { fontSize: 22, fontWeight: '700' as const, color: colors.text },
+  h1: { fontSize: 30, fontWeight: '700' as const, color: colors.text },
+  h2: { fontSize: 23, fontWeight: '700' as const, color: colors.text },
   h3: { fontSize: 18, fontWeight: '600' as const, color: colors.text },
   body: { fontSize: 15, fontWeight: '400' as const, color: colors.text },
   bodyMuted: { fontSize: 14, fontWeight: '400' as const, color: colors.textMuted },
