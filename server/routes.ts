@@ -11478,31 +11478,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const tenantSettings = await storage.getTenantSettings(tenant.id);
-      if ((tenantSettings as any)?.dmpEnabled) {
+      // DMP arrangements: DMP stores arrangements as a series of scheduled/postdated payments.
+      // Fetch payment records via getpayments and surface future-dated entries as an existing plan.
+      // Gated by dmpEnabled and NOT smaxEnabled (matching the login live-sync gate).
+      if ((tenantSettings as any)?.dmpEnabled && !tenantSettings?.smaxEnabled) {
+        const { dmpService } = await import('./dmpService');
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        // Statuses that indicate a payment already processed or dead (not upcoming)
+        const nonScheduledStatus = /paid|posted|complete|declin|cancel|void|nsf|charge.?back|refund|revers/i;
+
         for (const account of consumerAccounts) {
-          if (account.filenumber) {
-            try {
-              const { dmpService } = await import('./dmpService');
-              const dmpAccount = await dmpService.getAccount(tenant.id, account.filenumber);
-              if (dmpAccount) {
-                smaxArrangements.push({
-                  id: `dmp_${account.filenumber}`,
-                  source: 'dmp',
-                  name: 'Existing DMP Payment Arrangement',
-                  accountFileNumber: account.filenumber,
-                  accountId: account.id,
-                  planType: 'existing_dmp',
-                  monthlyPayment: dmpAccount.monthlyPayment || dmpAccount.paymentAmount,
-                  nextPaymentDate: dmpAccount.nextPaymentDate,
-                  remainingPayments: dmpAccount.remainingPayments,
-                  totalBalance: dmpAccount.balance ? dmpAccount.balance / 100 : undefined,
-                  isExisting: true,
-                  details: dmpAccount,
-                });
-              }
-            } catch (dmpError) {
-              console.error('Failed to fetch DMP account (non-blocking):', account.filenumber, dmpError);
+          if (!account.filenumber) continue;
+          try {
+            const dmpPayments = await dmpService.getPayments(tenant.id, account.filenumber);
+
+            if (!dmpPayments || !Array.isArray(dmpPayments) || dmpPayments.length === 0) {
+              console.log(`[DMP] getpayments returned no records for filenumber ${account.filenumber} — no arrangement to display`);
+              continue;
             }
+
+            // Log the response field names (values redacted) so support can verify the response shape
+            console.log(`[DMP] getpayments returned ${dmpPayments.length} record(s) for filenumber ${account.filenumber}; fields: ${Object.keys(dmpPayments[0] || {}).join(', ')}`);
+
+            // Normalize records (tolerate snake_case / alternate field names) and pick scheduled/future entries
+            const scheduledPayments = dmpPayments
+              .map((p: any) => {
+                const rawDate = p.paymentdate || p.payment_date || p.date || p.scheduleddate || p.scheduled_date;
+                const rawAmount = p.paymentamount ?? p.payment_amount ?? p.amount;
+                const status = String(p.paymentstatus || p.payment_status || p.status || '');
+                const parsedDate = rawDate ? new Date(rawDate) : null;
+                const amountNum = Number(rawAmount);
+                return {
+                  date: parsedDate && !isNaN(parsedDate.getTime()) ? parsedDate : null,
+                  // DMP amounts are in dollars (matching existing insertPayment/postPayment convention)
+                  amountCents: isFinite(amountNum) ? Math.round(amountNum * 100) : 0,
+                  status,
+                };
+              })
+              .filter(p =>
+                p.date !== null &&
+                p.date >= startOfToday &&
+                p.amountCents > 0 &&
+                !nonScheduledStatus.test(p.status)
+              )
+              .sort((a, b) => (a.date as Date).getTime() - (b.date as Date).getTime());
+
+            if (scheduledPayments.length === 0) {
+              console.log(`[DMP] getpayments returned ${dmpPayments.length} record(s) for filenumber ${account.filenumber} but none are scheduled/future-dated. DMP's getpayments endpoint may not expose postdated/scheduled payments — confirm with DMP support which endpoint returns arrangement schedules.`);
+              continue;
+            }
+
+            const nextPayment = scheduledPayments[0];
+            smaxArrangements.push({
+              id: `dmp_${account.filenumber}`,
+              source: 'dmp',
+              name: 'Existing Payment Plan',
+              accountFileNumber: account.filenumber,
+              accountId: account.id,
+              planType: 'existing_dmp',
+              // monthlyPayment is in cents (frontend formatCurrency expects cents)
+              monthlyPayment: nextPayment.amountCents,
+              nextPaymentDate: (nextPayment.date as Date).toISOString(),
+              remainingPayments: scheduledPayments.length,
+              upcomingPayments: scheduledPayments.map(p => ({
+                date: (p.date as Date).toISOString(),
+                amountCents: p.amountCents,
+              })),
+              totalScheduledCents: scheduledPayments.reduce((sum, p) => sum + p.amountCents, 0),
+              isExisting: true,
+            });
+            console.log(`[DMP] Found ${scheduledPayments.length} scheduled payment(s) for filenumber ${account.filenumber}; next on ${(nextPayment.date as Date).toISOString().split('T')[0]}`);
+          } catch (dmpError) {
+            console.error('Failed to fetch DMP payments (non-blocking):', account.filenumber, dmpError);
           }
         }
       }

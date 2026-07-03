@@ -640,6 +640,8 @@ export default function ConsumerDashboardSimple() {
   
   // Get existing SMAX arrangements for this consumer
   const existingSMAXArrangements = arrangements?.existingArrangements || [];
+  // DMP-sourced arrangements (scheduled payments pulled from Debt Manager Pro)
+  const dmpArrangements = existingSMAXArrangements.filter((arr: any) => arr.source === 'dmp');
   const hasExistingSMAXArrangement = arrangements?.hasExistingSMAXArrangement || false;
   
   // Check if selected account has existing SMAX arrangement
@@ -1571,7 +1573,7 @@ export default function ConsumerDashboardSimple() {
                 </p>
               </CardHeader>
               <CardContent className="p-6">
-                {(!paymentSchedules || !(paymentSchedules as any)?.length) ? (
+                {(!paymentSchedules || !(paymentSchedules as any)?.length) && dmpArrangements.length === 0 ? (
                   <div className="text-center py-12">
                     <Calendar className="h-12 w-12 mx-auto mb-4 text-blue-400/30" />
                     <p className="text-blue-100/70">No active payment plans</p>
@@ -1581,6 +1583,90 @@ export default function ConsumerDashboardSimple() {
                   </div>
                 ) : (
                   <div className="space-y-4">
+                    {/* Existing payment plans from Debt Manager Pro (scheduled payments) */}
+                    {dmpArrangements.map((plan: any) => {
+                      const planAccount = accountData?.accounts?.find((acct: any) => acct.id === plan.accountId);
+                      return (
+                        <div
+                          key={plan.id}
+                          className="rounded-xl border border-white/10 bg-white/5 p-6 hover:bg-white/10 transition-colors"
+                          data-testid={`dmp-payment-plan-${plan.id}`}
+                        >
+                          <div className="flex justify-between items-start mb-4">
+                            <div>
+                              <h4 className="text-white font-semibold text-lg">
+                                {planAccount?.creditor || "Payment Plan"}
+                              </h4>
+                              <p className="text-sm text-blue-100/70 mt-1">
+                                Account: {planAccount?.accountNumber || plan.accountFileNumber || "N/A"}
+                              </p>
+                            </div>
+                            <Badge className="border-emerald-400/30 bg-emerald-500/10 text-emerald-200 border">
+                              Active
+                            </Badge>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4 mt-4">
+                            <div className="rounded-lg bg-white/5 p-3">
+                              <p className="text-xs text-blue-100/60">Next Payment</p>
+                              <p className="text-white font-semibold mt-1">
+                                {plan.nextPaymentDate ? new Date(plan.nextPaymentDate).toLocaleDateString('en-US', {
+                                  month: 'long',
+                                  day: 'numeric',
+                                  year: 'numeric'
+                                }) : 'Not scheduled'}
+                              </p>
+                            </div>
+
+                            <div className="rounded-lg bg-white/5 p-3">
+                              <p className="text-xs text-blue-100/60">Payment Amount</p>
+                              <p className="text-white font-semibold mt-1">
+                                {formatCurrency(plan.monthlyPayment || 0)}
+                              </p>
+                            </div>
+                          </div>
+
+                          {plan.upcomingPayments && plan.upcomingPayments.length > 0 && (
+                            <div className="mt-4 pt-4 border-t border-white/10">
+                              <h5 className="text-sm font-semibold text-white mb-3">
+                                Upcoming Payments ({plan.upcomingPayments.length} payment{plan.upcomingPayments.length !== 1 ? 's' : ''})
+                              </h5>
+                              <div className="space-y-2 max-h-64 overflow-y-auto">
+                                {plan.upcomingPayments.map((payment: any, index: number) => (
+                                  <div
+                                    key={index}
+                                    className="flex items-center justify-between rounded bg-white/5 px-3 py-2"
+                                  >
+                                    <span className="text-sm text-blue-100/80">
+                                      {new Date(payment.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                    </span>
+                                    <span className="text-sm text-white font-semibold">
+                                      {formatCurrency(payment.amountCents || 0)}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {planAccount && (
+                            <div className="mt-4 pt-4 border-t border-white/10">
+                              <Button
+                                onClick={() => handlePayment(planAccount)}
+                                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                                data-testid={`button-pay-dmp-plan-${plan.id}`}
+                              >
+                                <DollarSign className="h-4 w-4 mr-2" />
+                                Pay Next Payment
+                              </Button>
+                              <p className="text-xs text-blue-100/50 mt-2 text-center">
+                                To change your payment plan terms, please contact us.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                     {(paymentSchedules as any[]).map((schedule: any) => (
                       <div
                         key={schedule.id}

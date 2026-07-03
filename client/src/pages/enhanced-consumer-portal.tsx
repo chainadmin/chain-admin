@@ -632,6 +632,64 @@ export default function EnhancedConsumerPortal() {
           </TabsContent>
 
           <TabsContent value="payments" className="mt-6">
+            {/* Existing payment plans pulled from Debt Manager Pro (scheduled payments) */}
+            {((arrangements as any)?.existingArrangements || []).filter((arr: any) => arr.source === 'dmp').length > 0 && (
+              <div className="space-y-4 mb-6">
+                <h3 className="text-lg font-semibold text-gray-900">Your Current Payment Plan</h3>
+                {((arrangements as any).existingArrangements as any[]).filter((arr: any) => arr.source === 'dmp').map((plan: any) => (
+                  <Card key={plan.id} className="border-emerald-200 bg-emerald-50/50" data-testid={`dmp-payment-plan-${plan.id}`}>
+                    <CardContent className="pt-6">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <h4 className="font-semibold text-gray-900">Existing Payment Plan</h4>
+                          <p className="text-sm text-gray-600 mt-1">
+                            Account: {plan.accountFileNumber || 'N/A'}
+                          </p>
+                        </div>
+                        <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Active</Badge>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="rounded-lg bg-white border p-3">
+                          <p className="text-xs text-gray-500">Next Payment</p>
+                          <p className="font-semibold text-gray-900 mt-1">
+                            {plan.nextPaymentDate ? new Date(plan.nextPaymentDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'Not scheduled'}
+                          </p>
+                        </div>
+                        <div className="rounded-lg bg-white border p-3">
+                          <p className="text-xs text-gray-500">Payment Amount</p>
+                          <p className="font-semibold text-gray-900 mt-1">
+                            {formatCurrencyFromCents(plan.monthlyPayment || 0)}
+                          </p>
+                        </div>
+                      </div>
+                      {plan.upcomingPayments && plan.upcomingPayments.length > 0 && (
+                        <div className="mt-4 pt-4 border-t">
+                          <h5 className="text-sm font-semibold text-gray-900 mb-2">
+                            Upcoming Payments ({plan.upcomingPayments.length})
+                          </h5>
+                          <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                            {plan.upcomingPayments.map((payment: any, index: number) => (
+                              <div key={index} className="flex items-center justify-between py-1.5 px-3 rounded bg-white border">
+                                <span className="text-sm text-gray-600">
+                                  {new Date(payment.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                </span>
+                                <span className="text-sm font-medium text-gray-900">
+                                  {formatCurrencyFromCents(payment.amountCents || 0)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <p className="text-xs text-gray-500 mt-3">
+                        To make a payment or change your plan, contact us or sign in on your account dashboard.
+                      </p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+
             {consumerManualPayments && (consumerManualPayments as any[]).length > 0 && (
               <div className="space-y-4 mb-6">
                 <h3 className="text-lg font-semibold text-gray-900">Scheduled Payments</h3>
@@ -676,7 +734,8 @@ export default function EnhancedConsumerPortal() {
               const regularOptions = templateOptions.filter((arr: any) => arr.planType !== 'settlement');
 
               const visibleOptionsCount = settlementOptions.length + regularOptions.length;
-              if (visibleOptionsCount === 0 && (!consumerManualPayments || (consumerManualPayments as any[]).length === 0)) {
+              const dmpPlanCount = ((arrangements as any)?.existingArrangements || []).filter((arr: any) => arr.source === 'dmp').length;
+              if (visibleOptionsCount === 0 && dmpPlanCount === 0 && (!consumerManualPayments || (consumerManualPayments as any[]).length === 0)) {
                 return (
                   <Card>
                     <CardContent className="pt-6 text-center">
