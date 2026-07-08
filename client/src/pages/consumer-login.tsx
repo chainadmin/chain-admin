@@ -609,19 +609,6 @@ export default function ConsumerLogin() {
             </div>
           </div>
         </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-blue-100/60">
-          <div className="flex items-center gap-3">
-            <a href="/terms-of-service" className="transition hover:text-white hover:underline">
-              Terms of Service
-            </a>
-            <span>•</span>
-            <a href="/privacy-policy" className="transition hover:text-white hover:underline">
-              Privacy Policy
-            </a>
-          </div>
-          <p>Secure access powered by Chain Software Group</p>
-        </div>
       </div>
     </PublicHeroLayout>
   );

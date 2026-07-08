@@ -15,6 +15,7 @@ interface PublicHeroLayoutProps {
   contentClassName?: string;
   mainContainerClassName?: string;
   disableSurface?: boolean;
+  showLegalFooter?: boolean;
 }
 
 export function PublicHeroLayout({
@@ -28,6 +29,7 @@ export function PublicHeroLayout({
   contentClassName,
   mainContainerClassName,
   disableSurface = false,
+  showLegalFooter = true,
 }: PublicHeroLayoutProps) {
   const defaultHeaderActions = (
     <>
@@ -48,14 +50,14 @@ export function PublicHeroLayout({
   );
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-white">
+    <div className="relative flex min-h-screen flex-col overflow-hidden bg-slate-950 text-white">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-32 right-0 h-96 w-96 rounded-full bg-blue-500/30 blur-3xl" />
         <div className="absolute bottom-0 left-0 h-[28rem] w-[28rem] rounded-full bg-indigo-500/20 blur-3xl" />
         <div className="absolute top-1/2 left-1/2 h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-400/10 blur-3xl" />
       </div>
 
-      <div className="relative">
+      <div className="relative flex flex-1 flex-col">
         <header className="border-b border-white/10 bg-slate-950/60 backdrop-blur">
           <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
             <div className="flex items-center gap-3">
@@ -71,7 +73,7 @@ export function PublicHeroLayout({
           </div>
         </header>
 
-        <main className={cn("px-6 py-12 sm:py-20", mainContainerClassName)}>
+        <main className={cn("flex-1 px-6 py-12 sm:py-20", mainContainerClassName)}>
           <section className="mx-auto grid max-w-6xl gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
             <div>
               {badgeText ? (
@@ -108,6 +110,23 @@ export function PublicHeroLayout({
             ) : null}
           </section>
         </main>
+
+        {showLegalFooter ? (
+          <footer className="mt-auto border-t border-white/10 bg-slate-950/70 px-6 py-5 text-xs text-blue-100/60 backdrop-blur">
+            <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 sm:flex-row">
+              <div className="flex items-center gap-3">
+                <a href="/terms-of-service" className="transition hover:text-white hover:underline">
+                  Terms of Service
+                </a>
+                <span>•</span>
+                <a href="/privacy-policy" className="transition hover:text-white hover:underline">
+                  Privacy Policy
+                </a>
+              </div>
+              <p>Secure access powered by Chain Software Group</p>
+            </div>
+          </footer>
+        ) : null}
       </div>
     </div>
   );
