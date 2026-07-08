@@ -1174,9 +1174,9 @@ export default function ConsumerDashboardSimple() {
   const contactPhone = (agencyBranding as any)?.contactPhone || tenant?.contactPhone;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div className="min-h-screen overflow-x-hidden overscroll-none bg-slate-950 text-white">
       {/* Background gradients */}
-      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+      <div className="pointer-events-none fixed inset-0 overflow-hidden bg-slate-950">
         <div className="absolute -top-32 right-0 h-96 w-96 rounded-full bg-blue-500/30 blur-3xl" />
         <div className="absolute bottom-0 left-0 h-[28rem] w-[28rem] rounded-full bg-indigo-500/20 blur-3xl" />
       </div>
@@ -1392,7 +1392,7 @@ export default function ConsumerDashboardSimple() {
           <TabsContent value="documents" className="mt-6">
             <Card className="border-white/10 bg-white/5 backdrop-blur">
               <CardHeader className="border-b border-white/10">
-                <div className="flex justify-between items-center">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <CardTitle className="flex items-center text-white">
                     <FileText className="h-5 w-5 mr-2 text-blue-400" />
                     Documents & Communications
@@ -1403,7 +1403,7 @@ export default function ConsumerDashboardSimple() {
                         onClick={() => setUploadDialogOpen(true)}
                         variant="outline"
                         size="sm"
-                        className="text-white border-white/20 hover:bg-white/10"
+                        className="w-full justify-center text-white border-white/20 hover:bg-white/10 sm:w-auto"
                         data-testid="button-upload-document"
                       >
                         <Upload className="h-4 w-4 mr-2" />
@@ -1900,22 +1900,22 @@ export default function ConsumerDashboardSimple() {
 
       {/* Contact Us Dialog */}
       <Dialog open={showContactDialog} onOpenChange={setShowContactDialog}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="max-h-[90vh] overflow-y-auto bg-slate-950 text-white border-white/20 sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Contact {agencyName}</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-white">Contact {agencyName}</DialogTitle>
+            <DialogDescription className="text-blue-100/70">
               Get in touch with us for questions about your account
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-6 py-4">
             {/* Contact Information Section */}
             <div className="space-y-3">
-              <h4 className="text-sm font-semibold">Direct Contact</h4>
+              <h4 className="text-sm font-semibold text-white">Direct Contact</h4>
               {contactPhone && (
-                <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/50 p-4">
+                <div className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/5 p-4">
                   <Phone className="h-5 w-5 text-blue-500" />
                   <div>
-                    <p className="text-sm font-medium">Phone</p>
+                    <p className="text-sm font-medium text-white">Phone</p>
                     <a href={`tel:${contactPhone}`} className="text-sm text-blue-600 hover:underline">
                       {contactPhone}
                     </a>
@@ -1923,10 +1923,10 @@ export default function ConsumerDashboardSimple() {
                 </div>
               )}
               {contactEmail && (
-                <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/50 p-4">
+                <div className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/5 p-4">
                   <Mail className="h-5 w-5 text-blue-500" />
                   <div>
-                    <p className="text-sm font-medium">Email</p>
+                    <p className="text-sm font-medium text-white">Email</p>
                     <a href={`mailto:${contactEmail}`} className="text-sm text-blue-600 hover:underline">
                       {contactEmail}
                     </a>
@@ -1934,33 +1934,33 @@ export default function ConsumerDashboardSimple() {
                 </div>
               )}
               {!contactPhone && !contactEmail && (
-                <p className="text-sm text-muted-foreground text-center py-4">
+                <p className="text-sm text-blue-100/70 text-center py-4">
                   Contact information not available. Please check your account statements or documents.
                 </p>
               )}
             </div>
 
             {/* Request Callback Section */}
-            <div className="space-y-3 pt-4 border-t">
+            <div className="space-y-3 border-t border-white/10 pt-4">
               <div className="flex items-center gap-2 mb-3">
                 <Phone className="h-5 w-5 text-blue-500" />
-                <h4 className="text-sm font-semibold">Request a Callback</h4>
+                <h4 className="text-sm font-semibold text-white">Request a Callback</h4>
               </div>
-              <p className="text-sm text-muted-foreground mb-4">
+              <p className="text-sm text-blue-100/70 mb-4">
                 We'll contact you at your preferred time
               </p>
               
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="callback-time">Preferred Time</Label>
+                  <Label htmlFor="callback-time" className="text-white">Preferred Time</Label>
                   <Select 
                     value={callbackForm.preferredTime} 
                     onValueChange={(value) => setCallbackForm({ ...callbackForm, preferredTime: value })}
                   >
-                    <SelectTrigger id="callback-time" data-testid="select-callback-time">
+                    <SelectTrigger id="callback-time" className="bg-white/5 border-white/10 text-white" data-testid="select-callback-time">
                       <SelectValue placeholder="Select a time" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="bg-slate-900 border-white/10 text-white">
                       <SelectItem value="anytime">Anytime</SelectItem>
                       <SelectItem value="morning">Morning (8 AM - 12 PM)</SelectItem>
                       <SelectItem value="afternoon">Afternoon (12 PM - 5 PM)</SelectItem>
@@ -1970,28 +1970,30 @@ export default function ConsumerDashboardSimple() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="callback-phone">Phone Number (Optional)</Label>
+                  <Label htmlFor="callback-phone" className="text-white">Phone Number (Optional)</Label>
                   <Input
                     id="callback-phone"
                     type="tel"
                     placeholder="Enter phone number"
                     value={callbackForm.phoneNumber}
                     onChange={(e) => setCallbackForm({ ...callbackForm, phoneNumber: e.target.value })}
+                    className="bg-white/5 border-white/10 text-white placeholder:text-white/50"
                     data-testid="input-callback-phone"
                   />
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-blue-100/60">
                     Leave blank to use phone number on file
                   </p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="callback-message">Message (Optional)</Label>
+                  <Label htmlFor="callback-message" className="text-white">Message (Optional)</Label>
                   <Textarea
                     id="callback-message"
                     placeholder="What would you like to discuss?"
                     value={callbackForm.message}
                     onChange={(e) => setCallbackForm({ ...callbackForm, message: e.target.value })}
                     rows={3}
+                    className="bg-white/5 border-white/10 text-white placeholder:text-white/50"
                     data-testid="textarea-callback-message"
                   />
                 </div>
@@ -1999,7 +2001,7 @@ export default function ConsumerDashboardSimple() {
                 <Button 
                   onClick={handleCallbackRequest}
                   disabled={callbackMutation.isPending}
-                  className="w-full"
+                  className="w-full bg-emerald-500 hover:bg-emerald-400 text-white"
                   data-testid="button-submit-callback"
                 >
                   {callbackMutation.isPending ? "Submitting..." : "Request Callback"}
@@ -2012,10 +2014,10 @@ export default function ConsumerDashboardSimple() {
 
       {/* Edit Profile Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto bg-slate-950 border-white/20 text-white">
           <DialogHeader>
-            <DialogTitle>Edit Your Profile</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-white">Edit Your Profile</DialogTitle>
+            <DialogDescription className="text-blue-100/70">
               Update your contact information and address
             </DialogDescription>
           </DialogHeader>
@@ -2027,6 +2029,7 @@ export default function ConsumerDashboardSimple() {
                   id="firstName"
                   value={editForm.firstName}
                   onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
+                  className="bg-white/5 border-white/10 text-white placeholder:text-white/50"
                   data-testid="input-first-name"
                 />
               </div>
@@ -2036,6 +2039,7 @@ export default function ConsumerDashboardSimple() {
                   id="lastName"
                   value={editForm.lastName}
                   onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
+                  className="bg-white/5 border-white/10 text-white placeholder:text-white/50"
                   data-testid="input-last-name"
                 />
               </div>
@@ -2047,6 +2051,7 @@ export default function ConsumerDashboardSimple() {
                 type="tel"
                 value={editForm.phone}
                 onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                className="bg-white/5 border-white/10 text-white placeholder:text-white/50"
                 data-testid="input-phone"
               />
             </div>
@@ -2056,6 +2061,7 @@ export default function ConsumerDashboardSimple() {
                 id="address"
                 value={editForm.address}
                 onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
+                className="bg-white/5 border-white/10 text-white placeholder:text-white/50"
                 data-testid="input-address"
               />
             </div>
@@ -2066,6 +2072,7 @@ export default function ConsumerDashboardSimple() {
                   id="city"
                   value={editForm.city}
                   onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
+                  className="bg-white/5 border-white/10 text-white placeholder:text-white/50"
                   data-testid="input-city"
                 />
               </div>
@@ -2076,6 +2083,7 @@ export default function ConsumerDashboardSimple() {
                   value={editForm.state}
                   onChange={(e) => setEditForm({ ...editForm, state: e.target.value })}
                   maxLength={2}
+                  className="bg-white/5 border-white/10 text-white placeholder:text-white/50"
                   data-testid="input-state"
                 />
               </div>
@@ -2086,6 +2094,7 @@ export default function ConsumerDashboardSimple() {
                 id="zipCode"
                 value={editForm.zipCode}
                 onChange={(e) => setEditForm({ ...editForm, zipCode: e.target.value })}
+                className="bg-white/5 border-white/10 text-white placeholder:text-white/50"
                 data-testid="input-zip"
               />
             </div>
@@ -2093,6 +2102,7 @@ export default function ConsumerDashboardSimple() {
           <div className="flex justify-end gap-3">
             <Button
               variant="outline"
+              className="border-white/20 text-white hover:bg-white/10"
               onClick={() => setShowEditDialog(false)}
             >
               Cancel

@@ -229,6 +229,14 @@ function ChainApp() {
         window.logout = function() {
           window.sendToNative({ type: 'LOGOUT' });
         };
+
+        var style = document.getElementById('chain-native-webview-fixes');
+        if (!style) {
+          style = document.createElement('style');
+          style.id = 'chain-native-webview-fixes';
+          style.textContent = 'html,body,#root{background:#020617!important;overscroll-behavior:none!important;} body{overflow-x:hidden!important;} [role=dialog]{max-width:calc(100vw - 24px)!important;}';
+          document.head.appendChild(style);
+        }
         window.notifyLowBalance = function() {
           window.sendToNative({ type: 'HAPTIC_FEEDBACK', style: 'heavy' });
         };
@@ -346,6 +354,9 @@ function ChainApp() {
         allowsBackForwardNavigationGestures={true}
         sharedCookiesEnabled={true}
         originWhitelist={['https://*', 'http://localhost*']}
+        bounces={false}
+        overScrollMode="never"
+        setSupportMultipleWindows={false}
       />
       {status === 'error' && (
         <View style={styles.errorOverlay}>
