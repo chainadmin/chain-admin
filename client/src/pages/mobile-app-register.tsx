@@ -203,7 +203,7 @@ export default function MobileAppRegister() {
       </div>
 
       {/* Registration Form */}
-      <div className="relative z-10 flex items-start justify-center pb-8">
+      <div className="relative z-10 flex flex-1 items-start justify-center pb-8">
         <div className="w-full max-w-md min-w-0 space-y-6">
           {/* Header */}
           <div className="text-center space-y-2">
@@ -401,7 +401,15 @@ export default function MobileAppRegister() {
                   htmlFor="agreeToTerms"
                   className="text-sm text-white/70 leading-relaxed cursor-pointer"
                 >
-                  I agree to the Terms of Service and Privacy Policy *
+                  I agree to the {" "}
+                  <a href="/terms-of-service" target="_blank" rel="noreferrer" className="text-blue-300 underline hover:text-blue-200">
+                    Terms of Service
+                  </a>{" "}
+                  and {" "}
+                  <a href="/privacy-policy" target="_blank" rel="noreferrer" className="text-blue-300 underline hover:text-blue-200">
+                    Privacy Policy
+                  </a>{" "}
+                  *
                 </Label>
               </div>
 
@@ -434,6 +442,18 @@ export default function MobileAppRegister() {
           </form>
         </div>
       </div>
+
+      <footer className="relative z-10 mt-auto border-t border-white/10 pt-4 text-xs text-blue-100/60">
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <a href="/terms-of-service" className="transition hover:text-white hover:underline">
+            Terms of Service
+          </a>
+          <span>•</span>
+          <a href="/privacy-policy" className="transition hover:text-white hover:underline">
+            Privacy Policy
+          </a>
+        </div>
+      </footer>
     </div>
   );
 }
