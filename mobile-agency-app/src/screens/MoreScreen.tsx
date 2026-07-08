@@ -38,7 +38,7 @@ export default function MoreScreen() {
             {(user?.firstName || '') + ' ' + (user?.lastName || '') || user?.username}
           </Body>
           <Muted>{user?.email}</Muted>
-          <View style={{ marginTop: 8, flexDirection: 'row', gap: 8 }}>
+          <View style={{ marginTop: 8, flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
             <Pill color={colors.info}>{user?.role || 'agent'}</Pill>
             <Pill color={colors.accent}>{tenant?.name || ''}</Pill>
           </View>

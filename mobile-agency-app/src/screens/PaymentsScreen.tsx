@@ -32,7 +32,7 @@ export default function PaymentsScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <Screen style={{ paddingTop: spacing.lg, gap: spacing.md }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' }}>
           <H1>Payments</H1>
           {walletQ.data ? (
             <Pill color={colors.primary}>{`Wallet ${formatCurrency(walletQ.data.balanceCents)}`}</Pill>
@@ -40,7 +40,7 @@ export default function PaymentsScreen() {
         </View>
         <Button title="Post a payment" onPress={() => nav.navigate('PostPayment', {})} />
 
-        <View style={{ flexDirection: 'row', gap: 8 }}>
+        <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
           {(['payments', 'arrangements'] as const).map((t) => {
             const active = tab === t;
             return (
@@ -85,8 +85,8 @@ export default function PaymentsScreen() {
             const ok = status === 'completed' || status === 'success' || status === 'succeeded';
             return (
               <Card>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm }}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
                     <Body style={{ fontWeight: '700' }}>{formatCurrency(item.amountCents)}</Body>
                     <Muted>
                       {item.consumerName ||
@@ -94,7 +94,7 @@ export default function PaymentsScreen() {
                         '—'}
                     </Muted>
                   </View>
-                  <View style={{ alignItems: 'flex-end' }}>
+                  <View style={{ alignItems: 'flex-end', flexShrink: 0, maxWidth: '45%' }}>
                     <Pill color={ok ? colors.success : status === 'failed' ? colors.danger : colors.warning}>
                       {item.status || 'pending'}
                     </Pill>
@@ -126,8 +126,8 @@ export default function PaymentsScreen() {
               status === 'failed' ? colors.danger : colors.warning;
             return (
               <Card>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <View style={{ flex: 1, paddingRight: 8 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm, alignItems: 'flex-start' }}>
+                  <View style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
                     <Body style={{ fontWeight: '700' }}>
                       {item.arrangementType ? prettyArrangement(item.arrangementType) : 'Plan'}
                       {item.frequency ? ` · ${item.frequency}` : ''}

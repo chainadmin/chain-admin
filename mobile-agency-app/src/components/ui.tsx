@@ -91,7 +91,13 @@ export function Button({
       {...rest}
     >
       {loading ? <ActivityIndicator color={fg} /> : null}
-      <Text style={{ color: fg, fontWeight: '700', fontSize: size === 'sm' ? 13 : 15, letterSpacing: 0.2 }}>{title}</Text>
+      <Text
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        style={{ color: fg, fontWeight: '700', fontSize: size === 'sm' ? 13 : 15, letterSpacing: 0.2, flexShrink: 1 }}
+      >
+        {title}
+      </Text>
     </Pressable>
   );
 }
@@ -154,6 +160,8 @@ export function Pill({
   tone?: 'success' | 'info' | 'warning' | 'danger';
 }) {
   const toneColor = tone === 'success' ? colors.success : tone === 'info' ? colors.info : tone === 'warning' ? colors.warning : tone === 'danger' ? colors.danger : color;
+  const content = typeof children === 'string' || typeof children === 'number' ? String(children).toUpperCase() : children;
+
   return (
     <View
       style={{
@@ -164,11 +172,20 @@ export function Pill({
         paddingVertical: 4,
         borderRadius: radius.pill,
         alignSelf: 'flex-start',
+        maxWidth: '100%',
       }}
     >
-      <Text style={{ color: textColor === '#fff' ? toneColor : textColor, fontSize: 11, fontWeight: '700' }}>
-        {String(children).toUpperCase()}
-      </Text>
+      {typeof content === 'string' ? (
+        <Text
+          numberOfLines={1}
+          ellipsizeMode="tail"
+          style={{ color: textColor === '#fff' ? toneColor : textColor, fontSize: 11, fontWeight: '700', flexShrink: 1 }}
+        >
+          {content}
+        </Text>
+      ) : (
+        content
+      )}
     </View>
   );
 }

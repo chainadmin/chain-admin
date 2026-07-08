@@ -69,12 +69,12 @@ export const fontFamily = {
 } as const;
 
 export const typography = {
-  h1: { fontSize: 30, fontWeight: '700' as const, color: colors.text },
-  h2: { fontSize: 23, fontWeight: '700' as const, color: colors.text },
-  h3: { fontSize: 18, fontWeight: '600' as const, color: colors.text },
-  body: { fontSize: 15, fontWeight: '400' as const, color: colors.text },
-  bodyMuted: { fontSize: 14, fontWeight: '400' as const, color: colors.textMuted },
-  small: { fontSize: 12, fontWeight: '400' as const, color: colors.textSubtle },
+  h1: { fontSize: 30, fontWeight: '700' as const, color: colors.text, flexShrink: 1 },
+  h2: { fontSize: 23, fontWeight: '700' as const, color: colors.text, flexShrink: 1 },
+  h3: { fontSize: 18, fontWeight: '600' as const, color: colors.text, flexShrink: 1 },
+  body: { fontSize: 15, fontWeight: '400' as const, color: colors.text, flexShrink: 1 },
+  bodyMuted: { fontSize: 14, fontWeight: '400' as const, color: colors.textMuted, flexShrink: 1 },
+  small: { fontSize: 12, fontWeight: '400' as const, color: colors.textSubtle, flexShrink: 1 },
   label: {
     fontSize: 12,
     fontWeight: '600' as const,
