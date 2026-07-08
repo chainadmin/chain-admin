@@ -281,14 +281,15 @@ export default function MobileAppLogin() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-slate-950 text-white p-4">
+    <div className="flex min-h-[100dvh] flex-col overflow-x-hidden bg-slate-950 text-white p-4">
       {/* Background gradients */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute -top-32 right-0 h-96 w-96 rounded-full bg-blue-500/30 blur-3xl" />
         <div className="absolute bottom-0 left-0 h-[28rem] w-[28rem] rounded-full bg-indigo-500/20 blur-3xl" />
       </div>
 
-      <div className="relative w-full max-w-md space-y-8 mt-72">
+      <main className="relative z-10 flex w-full flex-1 items-center justify-center py-8">
+        <div className="w-full max-w-md space-y-8">
         {/* Agency Logo */}
         {agencyContext?.logoUrl ? (
           <div className="flex justify-center">
@@ -417,11 +418,23 @@ export default function MobileAppLogin() {
           </p>
         </div>
 
-        {/* Footer */}
         <p className="text-center text-sm text-blue-100/70">
           Need help? Contact your agency
         </p>
-      </div>
+        </div>
+      </main>
+
+      <footer className="relative z-10 mt-auto border-t border-white/10 pt-4 text-xs text-blue-100/60">
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <a href="/terms-of-service" className="transition hover:text-white hover:underline">
+            Terms of Service
+          </a>
+          <span>•</span>
+          <a href="/privacy-policy" className="transition hover:text-white hover:underline">
+            Privacy Policy
+          </a>
+        </div>
+      </footer>
     </div>
   );
 }
