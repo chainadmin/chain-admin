@@ -22,6 +22,8 @@ export default function MobileAppLogin() {
   const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
+  const [fileNumber, setFileNumber] = useState("");
+  const [verifyMethod, setVerifyMethod] = useState<"dob" | "file">("dob");
   const [loading, setLoading] = useState(false);
   const [agencyContext, setAgencyContext] = useState<AgencyContext | null>(null);
   const [agencySlug, setAgencySlug] = useState<string | null>(null);
@@ -180,10 +182,13 @@ export default function MobileAppLogin() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!email || !dateOfBirth) {
+    const credential = verifyMethod === "dob" ? dateOfBirth : fileNumber;
+    if (!email || !credential) {
       toast({
         title: "Required Fields",
-        description: "Please enter your email and date of birth",
+        description: verifyMethod === "dob"
+          ? "Please enter your email and date of birth"
+          : "Please enter your email and file number",
         variant: "destructive",
       });
       return;
@@ -194,7 +199,7 @@ export default function MobileAppLogin() {
     try {
       const response = await apiCall("POST", "/api/mobile/auth/verify", {
         email,
-        dateOfBirth,
+        ...(verifyMethod === "dob" ? { dateOfBirth } : { fileNumber }),
       });
 
       // Parse the response body (works for both OK and error responses)
@@ -257,8 +262,9 @@ export default function MobileAppLogin() {
         saveAuthToken(data.token, JSON.stringify(session));
         rememberAgencySlug(data.tenant.slug);
 
-        // Save credentials for biometric authentication
-        if (biometricAvailable) {
+        // Save credentials for biometric authentication (only when DOB was used;
+        // biometric re-login replays the saved DOB credential)
+        if (biometricAvailable && verifyMethod === "dob" && dateOfBirth) {
           localStorage.setItem('biometric_email', email);
           localStorage.setItem('biometric_dob', dateOfBirth);
           enableBiometricLogin(data.token, JSON.stringify(session));
@@ -337,20 +343,55 @@ export default function MobileAppLogin() {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="dob" className="text-white">Date of Birth</Label>
-              <Input
-                id="dob"
-                type="date"
-                value={dateOfBirth}
-                onChange={(e) => setDateOfBirth(e.target.value)}
-                disabled={loading}
-                className="h-12 text-base bg-slate-800 border-white/20 text-white mobile-date-input"
-                style={{ colorScheme: "dark", WebkitTextFillColor: "white" }}
-                data-testid="input-dateofbirth"
-                required
-              />
-            </div>
+            {verifyMethod === "dob" ? (
+              <div className="space-y-2">
+                <Label htmlFor="dob" className="text-white">Date of Birth</Label>
+                <Input
+                  id="dob"
+                  type="date"
+                  value={dateOfBirth}
+                  onChange={(e) => setDateOfBirth(e.target.value)}
+                  disabled={loading}
+                  className="h-12 text-base bg-slate-800 border-white/20 text-white mobile-date-input"
+                  style={{ colorScheme: "dark", WebkitTextFillColor: "white" }}
+                  data-testid="input-dateofbirth"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setVerifyMethod("file")}
+                  className="text-xs font-medium text-blue-300 underline hover:text-blue-200"
+                  data-testid="button-use-file-number"
+                >
+                  Use my file number instead
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="fileNumber" className="text-white">File Number</Label>
+                <Input
+                  id="fileNumber"
+                  type="text"
+                  placeholder="Your file number"
+                  value={fileNumber}
+                  onChange={(e) => setFileNumber(e.target.value)}
+                  disabled={loading}
+                  className="h-12 text-base bg-slate-800 border-white/20 text-white placeholder:text-white/50"
+                  style={{ colorScheme: "dark", WebkitTextFillColor: "white" }}
+                  data-testid="input-filenumber"
+                  required
+                />
+                <p className="text-xs text-white/50">Your file number is on your letter — or contact us to receive it.</p>
+                <button
+                  type="button"
+                  onClick={() => setVerifyMethod("dob")}
+                  className="text-xs font-medium text-blue-300 underline hover:text-blue-200"
+                  data-testid="button-use-dob"
+                >
+                  Use my date of birth instead
+                </button>
+              </div>
+            )}
           </div>
 
           <Button

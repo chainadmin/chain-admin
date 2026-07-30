@@ -5,12 +5,15 @@ import { z } from 'zod';
 
 import { getDb } from '../_lib/db';
 import { JWT_SECRET } from '../_lib/auth';
-import { consumers, tenants } from '../../shared/schema';
+import { accounts, consumers, tenants } from '../../shared/schema';
 
 const loginSchema = z.object({
   email: z.string().email(),
-  dateOfBirth: z.string().min(1),
+  dateOfBirth: z.string().min(1).optional(),
+  fileNumber: z.string().min(1).optional(),
   tenantSlug: z.string().optional()
+}).refine(data => Boolean(data.dateOfBirth || data.fileNumber), {
+  message: 'Either date of birth or file number is required'
 });
 
 function preventCaching(res: VercelResponse) {
@@ -28,10 +31,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     preventCaching(res);
     const parsed = loginSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
-      return res.status(400).json({ message: 'Email and date of birth are required' });
+      return res.status(400).json({ message: 'Email and either date of birth or file number are required' });
     }
 
-    const { email, dateOfBirth, tenantSlug: bodyTenantSlug } = parsed.data;
+    const { email, dateOfBirth, fileNumber, tenantSlug: bodyTenantSlug } = parsed.data;
     const tenantSlug = bodyTenantSlug || (req as any)?.agencySlug;
 
     const db = await getDb();
@@ -199,11 +202,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // Compare date strings directly instead of Date objects to avoid timezone issues
-    if (!consumer.dateOfBirth) {
-      return res.status(401).json({ message: 'Date of birth verification required. Please contact your agency.' });
-    }
-
+    // Verify with either credential: DOB match OR file number match is sufficient.
     // Normalize date format (both should be YYYY-MM-DD)
     const normalizeDate = (dateStr: string) => {
       try {
@@ -219,15 +218,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     };
 
-    const normalizedProvided = normalizeDate(dateOfBirth);
-    const normalizedStored = normalizeDate(consumer.dateOfBirth);
-
-    if (!normalizedProvided || !normalizedStored) {
-      return res.status(401).json({ message: 'Invalid date format provided.' });
+    let dobVerified = false;
+    if (dateOfBirth && consumer.dateOfBirth) {
+      const normalizedProvided = normalizeDate(dateOfBirth);
+      const normalizedStored = normalizeDate(consumer.dateOfBirth);
+      dobVerified = Boolean(normalizedProvided && normalizedStored && normalizedProvided === normalizedStored);
     }
 
-    if (normalizedProvided !== normalizedStored) {
-      return res.status(401).json({ message: 'Date of birth verification failed. Please check your information.' });
+    let fileVerified = false;
+    if (!dobVerified && fileNumber) {
+      const normalizedFile = fileNumber.trim().toLowerCase();
+      if (normalizedFile) {
+        const consumerAccounts = await db
+          .select({ filenumber: accounts.filenumber, accountNumber: accounts.accountNumber })
+          .from(accounts)
+          .where(eq(accounts.consumerId, consumer.id));
+        fileVerified = consumerAccounts.some(acc =>
+          (acc.filenumber && acc.filenumber.trim().toLowerCase() === normalizedFile) ||
+          (acc.accountNumber && acc.accountNumber.trim().toLowerCase() === normalizedFile)
+        );
+      }
+    }
+
+    if (!dobVerified && !fileVerified) {
+      return res.status(401).json({
+        message: fileNumber
+          ? 'Verification failed. Please check your file number (from your letter, or contact your agency to receive it) or your date of birth.'
+          : 'Date of birth verification failed. Please check your information.'
+      });
     }
 
     if (!consumer.tenantId) {

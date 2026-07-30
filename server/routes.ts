@@ -7175,11 +7175,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         city, 
         state, 
         zipCode,
+        fileNumber,
         tenantSlug 
       } = req.body;
 
-      if (!firstName || !lastName || !email || !dateOfBirth || !address) {
-        return res.status(400).json({ message: "Name, email, date of birth, and address are required" });
+      if (!firstName || !lastName || !email || (!dateOfBirth && !fileNumber)) {
+        return res.status(400).json({ message: "Name, email, and either date of birth or file number are required" });
       }
 
       // First, check if consumer already exists. Prefer a tenant-scoped lookup so we
@@ -7219,21 +7220,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (existingConsumer) {
-        // Normalize DOB values for comparison. Missing stored DOB should not block registration.
-        const normalizedProvidedDOB = normalizeDateString(dateOfBirth);
+        // Verify the registrant against the existing record using either DOB or file number.
+        const normalizedProvidedDOB = dateOfBirth ? normalizeDateString(dateOfBirth) : null;
         const normalizedStoredDOB = normalizeDateString(existingConsumer.dateOfBirth);
         const hasStoredDOB = Boolean(normalizedStoredDOB);
-        const dobMatches = normalizedProvidedDOB && normalizedStoredDOB
-          ? normalizedProvidedDOB === normalizedStoredDOB
-          : !hasStoredDOB;
 
-        if (!normalizedProvidedDOB) {
+        if (dateOfBirth && !normalizedProvidedDOB) {
           return res.status(400).json({
             message: "Invalid date of birth format. Please use MM/DD/YYYY or YYYY-MM-DD.",
           });
         }
 
-        if (dobMatches) {
+        let verified = false;
+        if (normalizedProvidedDOB) {
+          verified = normalizedStoredDOB
+            ? normalizedProvidedDOB === normalizedStoredDOB
+            : !hasStoredDOB;
+        }
+        if (!verified && fileNumber) {
+          verified = await consumerMatchesFileNumber(existingConsumer.id, fileNumber);
+        }
+
+        if (verified) {
           // If a tenantSlug is provided and the consumer doesn't have a tenant yet, associate them
           let shouldUpdateTenant = false;
           if (tenantSlug && !existingConsumer.tenantId) {
@@ -7259,10 +7267,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const updateData: any = {
             firstName,
             lastName,
-            address,
-            city,
-            state,
-            zipCode,
+            ...(address ? { address } : {}),
+            ...(city ? { city } : {}),
+            ...(state ? { state } : {}),
+            ...(zipCode ? { zipCode } : {}),
             isRegistered: true,
             ...(emailChanged && { email: email.toLowerCase().trim() }),
             ...(shouldUpdateTenant && { tenantId: existingConsumer.tenantId })
@@ -7373,7 +7381,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         } else {
           return res.status(400).json({
-            message: "An account with this email exists, but the date of birth doesn't match. Please verify your information."
+            message: "An account with this email exists, but the verification details don't match. Please check your date of birth or file number."
           });
         }
       }
@@ -7866,7 +7874,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           role: credentials.role,
           restrictedServices: credentials.restrictedServices || [],
         },
-        process.env.JWT_SECRET || 'your-secret-key',
+        jwtSecretOrFail(),
         { expiresIn: '7d' }
       );
       
@@ -8045,20 +8053,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Consumer login route
+  // Hard-fail token signing when JWT_SECRET is missing instead of silently
+  // falling back to a guessable default key.
+  function jwtSecretOrFail(): string {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      throw new Error('JWT_SECRET is not configured - cannot sign authentication tokens');
+    }
+    return secret;
+  }
+
+  // Verify a consumer by file number: matches any of their accounts' filenumber
+  // or account number (trimmed, case-insensitive).
+  async function consumerMatchesFileNumber(consumerId: string, fileNumber: string): Promise<boolean> {
+    const normalized = String(fileNumber ?? '').trim().toLowerCase();
+    if (!normalized) return false;
+    try {
+      const consumerAccounts = await storage.getAccountsByConsumer(consumerId);
+      return consumerAccounts.some(acc =>
+        (acc.filenumber && acc.filenumber.trim().toLowerCase() === normalized) ||
+        (acc.accountNumber && acc.accountNumber.trim().toLowerCase() === normalized)
+      );
+    } catch (error) {
+      console.error('File number verification failed:', error);
+      return false;
+    }
+  }
+
   app.post('/api/consumer/login', async (req, res) => {
     try {
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       res.setHeader('Pragma', 'no-cache');
       res.setHeader('Expires', '0');
 
-      const { email, dateOfBirth, tenantSlug: bodyTenantSlug } = req.body ?? {};
+      const { email, dateOfBirth, fileNumber, tenantSlug: bodyTenantSlug } = req.body ?? {};
       const rawTenantSlug = bodyTenantSlug || (req as any).agencySlug;
       const tenantSlug = rawTenantSlug ? String(rawTenantSlug).trim().toLowerCase() : undefined;
 
-      console.log("Consumer login attempt:", { email, dateOfBirth, tenantSlug });
+      console.log("Consumer login attempt:", { email, hasDob: !!dateOfBirth, hasFileNumber: !!fileNumber, tenantSlug });
 
-      if (!email || !dateOfBirth) {
-        return res.status(400).json({ message: "Email and date of birth are required" });
+      if (!email || (!dateOfBirth && !fileNumber)) {
+        return res.status(400).json({ message: "Email and either date of birth or file number are required" });
       }
 
       const normalizedEmail = String(email).trim().toLowerCase();
@@ -8240,12 +8275,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      if (!consumer.dateOfBirth) {
-        return res.status(401).json({ message: "Date of birth verification required. Please contact your agency." });
-      }
+      // Verify with either credential: DOB match OR file number match is sufficient.
+      const dobVerified = Boolean(
+        dateOfBirth && consumer.dateOfBirth && datesMatch(dateOfBirth, consumer.dateOfBirth)
+      );
+      const fileVerified = !dobVerified && fileNumber
+        ? await consumerMatchesFileNumber(consumer.id, fileNumber)
+        : false;
 
-      if (!datesMatch(dateOfBirth, consumer.dateOfBirth)) {
-        return res.status(401).json({ message: "Date of birth verification failed. Please check your information." });
+      if (!dobVerified && !fileVerified) {
+        return res.status(401).json({
+          message: fileNumber
+            ? "Verification failed. Please check your file number (from your letter, or contact your agency to receive it) or your date of birth."
+            : "Date of birth verification failed. Please check your information.",
+        });
       }
 
       const token = jwt.sign(
@@ -8256,7 +8299,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           tenantSlug: tenant.slug,
           type: "consumer",
         },
-        process.env.JWT_SECRET || "your-secret-key",
+        jwtSecretOrFail(),
         { expiresIn: "7d" }
       );
 
@@ -8369,11 +8412,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
     
     try {
-      const { email, dateOfBirth } = req.body;
+      const { email, dateOfBirth, fileNumber } = req.body;
 
-      if (!email || !dateOfBirth) {
-        console.log('❌ [MOBILE AUTH] Missing email or dateOfBirth');
-        return res.status(400).json({ message: "Email and date of birth are required" });
+      if (!email || (!dateOfBirth && !fileNumber)) {
+        console.log('❌ [MOBILE AUTH] Missing email or verification credential');
+        return res.status(400).json({ message: "Email and either date of birth or file number are required" });
       }
 
       const normalizedEmail = String(email).trim().toLowerCase();
@@ -8382,10 +8425,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Find all consumers matching email across all agencies
-      const allConsumers = await storage.findConsumersByEmailAndDob(normalizedEmail, dateOfBirth);
+      const allConsumers = await storage.findConsumersByEmailAndDob(normalizedEmail, dateOfBirth || fileNumber);
 
-      // Filter by DOB using datesMatch for flexible date format support
-      const matches = allConsumers.filter(consumer => datesMatch(dateOfBirth, consumer.dateOfBirth));
+      // Verify by DOB (flexible date matching) or by file number
+      let matches: typeof allConsumers = [];
+      if (dateOfBirth) {
+        matches = allConsumers.filter(consumer => datesMatch(dateOfBirth, consumer.dateOfBirth));
+      }
+      if (matches.length === 0 && fileNumber) {
+        for (const consumer of allConsumers) {
+          if (await consumerMatchesFileNumber(consumer.id, fileNumber)) {
+            matches.push(consumer);
+          }
+        }
+      }
 
       if (matches.length === 0) {
         return res.status(404).json({

@@ -46,9 +46,11 @@ export default function ConsumerLogin() {
   const [form, setForm] = useState<LoginForm>({
     email: "",
     dateOfBirth: "",
+    fileNumber: "",
     agreeToSms: false,
     agreeToTerms: false,
   });
+  const [verifyMethod, setVerifyMethod] = useState<"dob" | "file">("dob");
   const [agencyContext, setAgencyContext] = useState<AgencyContext | null>(null);
   const [pendingAgencies, setPendingAgencies] = useState<AgencyContext[]>([]);
   const [agencyDialogOpen, setAgencyDialogOpen] = useState(false);
@@ -172,7 +174,8 @@ export default function ConsumerLogin() {
         "/api/consumer/login",
         {
           email: loginData.email,
-          dateOfBirth: loginData.dateOfBirth,
+          dateOfBirth: loginData.dateOfBirth || undefined,
+          fileNumber: loginData.fileNumber || undefined,
           tenantSlug
         }
       );
@@ -284,7 +287,7 @@ export default function ConsumerLogin() {
           // Invalid credentials
           toast({
             title: "Invalid Credentials",
-            description: "Please check your email and date of birth.",
+            description: "Please check your email and your date of birth or file number.",
             variant: "destructive",
           });
           return;
@@ -321,10 +324,13 @@ export default function ConsumerLogin() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!form.email || !form.dateOfBirth) {
+    const credential = verifyMethod === "dob" ? form.dateOfBirth : form.fileNumber;
+    if (!form.email || !credential) {
       toast({
         title: "Missing Information",
-        description: "Please fill in all required fields.",
+        description: verifyMethod === "dob"
+          ? "Please enter your email and date of birth."
+          : "Please enter your email and file number.",
         variant: "destructive",
       });
       return;
@@ -348,7 +354,11 @@ export default function ConsumerLogin() {
       return;
     }
 
-    loginMutation.mutate(form);
+    loginMutation.mutate({
+      ...form,
+      dateOfBirth: verifyMethod === "dob" ? form.dateOfBirth : "",
+      fileNumber: verifyMethod === "file" ? form.fileNumber : "",
+    });
   };
 
   const handleAgencySelection = useCallback(
@@ -470,24 +480,62 @@ export default function ConsumerLogin() {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="dob" className="text-sm font-medium text-blue-100">
-              Date of birth
-            </Label>
-            <div className="relative">
-              <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-200/70" />
-              <Input
-                id="dob"
-                type="date"
-                value={form.dateOfBirth}
-                onChange={(e) => handleInputChange("dateOfBirth", e.target.value)}
-                className="h-12 rounded-2xl border-white/20 bg-slate-900 pl-12 text-base text-white placeholder:text-blue-100/50 focus-visible:ring-blue-400"
-                data-testid="input-date-of-birth"
-                required
-              />
+          {verifyMethod === "dob" ? (
+            <div className="space-y-2">
+              <Label htmlFor="dob" className="text-sm font-medium text-blue-100">
+                Date of birth
+              </Label>
+              <div className="relative">
+                <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-200/70" />
+                <Input
+                  id="dob"
+                  type="date"
+                  value={form.dateOfBirth}
+                  onChange={(e) => handleInputChange("dateOfBirth", e.target.value)}
+                  className="h-12 rounded-2xl border-white/20 bg-slate-900 pl-12 text-base text-white placeholder:text-blue-100/50 focus-visible:ring-blue-400"
+                  data-testid="input-date-of-birth"
+                  required
+                />
+              </div>
+              <p className="text-xs text-blue-100/60">We use this information only to confirm your identity.</p>
+              <button
+                type="button"
+                onClick={() => setVerifyMethod("file")}
+                className="text-xs font-medium text-blue-300 underline hover:text-blue-200"
+                data-testid="button-use-file-number"
+              >
+                Use my file number instead
+              </button>
             </div>
-            <p className="text-xs text-blue-100/60">We use this information only to confirm your identity.</p>
-          </div>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="fileNumber" className="text-sm font-medium text-blue-100">
+                File number
+              </Label>
+              <div className="relative">
+                <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-200/70" />
+                <Input
+                  id="fileNumber"
+                  type="text"
+                  value={form.fileNumber}
+                  onChange={(e) => handleInputChange("fileNumber", e.target.value)}
+                  placeholder="Your file number"
+                  className="h-12 rounded-2xl border-white/20 bg-slate-900 pl-12 text-base text-white placeholder:text-blue-100/50 focus-visible:ring-blue-400"
+                  data-testid="input-file-number"
+                  required
+                />
+              </div>
+              <p className="text-xs text-blue-100/60">Your file number is on your letter — or contact us to receive it.</p>
+              <button
+                type="button"
+                onClick={() => setVerifyMethod("dob")}
+                className="text-xs font-medium text-blue-300 underline hover:text-blue-200"
+                data-testid="button-use-dob"
+              >
+                Use my date of birth instead
+              </button>
+            </div>
+          )}
 
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
             <div className="flex items-start gap-3">

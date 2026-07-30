@@ -3,17 +3,34 @@ import { getDb } from './_lib/db';
 import { insertConsumerSchema, consumers, tenants, accounts, consumerNotifications } from '../shared/schema';
 import { eq, and } from 'drizzle-orm';
 
+async function consumerOwnsFileNumber(db: any, consumerId: string, fileNumber: string): Promise<boolean> {
+  const normalized = String(fileNumber ?? '').trim().toLowerCase();
+  if (!normalized) return false;
+  const consumerAccounts = await db
+    .select({ filenumber: accounts.filenumber, accountNumber: accounts.accountNumber })
+    .from(accounts)
+    .where(eq(accounts.consumerId, consumerId));
+  return consumerAccounts.some((acc: { filenumber: string | null; accountNumber: string | null }) =>
+    (acc.filenumber && acc.filenumber.trim().toLowerCase() === normalized) ||
+    (acc.accountNumber && acc.accountNumber.trim().toLowerCase() === normalized)
+  );
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    // Parse the request body, allowing additional fields like tenantSlug
-    const { tenantSlug, ...consumerData } = req.body;
+    // Parse the request body, allowing additional fields like tenantSlug and fileNumber
+    const { tenantSlug, fileNumber, ...consumerData } = req.body;
     const parsed = insertConsumerSchema.safeParse(consumerData);
     if (!parsed.success) {
       return res.status(400).json({ error: 'Invalid registration data', details: parsed.error.errors });
+    }
+
+    if (!parsed.data.dateOfBirth && !fileNumber) {
+      return res.status(400).json({ error: 'Either date of birth or file number is required' });
     }
 
     const data = parsed.data;
@@ -60,7 +77,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (existing.isRegistered) {
         return res.status(400).json({ error: 'Consumer already registered' });
       }
-      
+
+      // Verify the registrant against the existing record using DOB or file number
+      let verified = false;
+      if (data.dateOfBirth) {
+        // Missing stored DOB should not block registration (matches Express route behavior)
+        verified = existing.dateOfBirth ? existing.dateOfBirth === data.dateOfBirth : true;
+      }
+      if (!verified && fileNumber) {
+        verified = await consumerOwnsFileNumber(db, existing.id, fileNumber);
+      }
+      if (!verified) {
+        return res.status(400).json({
+          error: "An account with this email exists, but the verification details don't match. Please check your date of birth or file number."
+        });
+      }
+
       // Update pre-created consumer with registration data
       const [updatedConsumer] = await db
         .update(consumers)

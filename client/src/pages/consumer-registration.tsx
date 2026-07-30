@@ -59,6 +59,7 @@ export default function ConsumerRegistration() {
     email: queryParams.email || "",
     phone: "",
     dateOfBirth: "",
+    fileNumber: "",
     address: "",
     city: "",
     state: "",
@@ -178,10 +179,19 @@ export default function ConsumerRegistration() {
       return;
     }
 
-    if (!formData.firstName || !formData.lastName || !formData.email || !formData.dateOfBirth || !formData.address) {
+    if (!formData.firstName || !formData.lastName || !formData.email) {
       toast({
         title: "Required Fields",
-        description: "Please fill in all required fields: name, email, date of birth, and address.",
+        description: "Please fill in all required fields: name and email.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!formData.dateOfBirth && !formData.fileNumber) {
+      toast({
+        title: "Verification Required",
+        description: "Please provide either your date of birth or your file number so we can match your account.",
         variant: "destructive",
       });
       return;
@@ -336,20 +346,42 @@ export default function ConsumerRegistration() {
             <p className="text-xs text-blue-100/60">Provide your phone number to receive text message updates.</p>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="dateOfBirth" className="text-sm font-medium text-blue-100">
-              Date of birth *
-            </Label>
-            <Input
-              id="dateOfBirth"
-              type="date"
-              data-testid="input-dateOfBirth"
-              value={formData.dateOfBirth}
-              onChange={(e) => handleInputChange("dateOfBirth", e.target.value)}
-              className="h-11 rounded-2xl border-white/20 bg-slate-900 px-4 text-white focus-visible:ring-blue-400"
-              required
-            />
-            <p className="text-xs text-blue-100/60">Only used to confirm your identity with your agency.</p>
+          <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+            <p className="text-sm font-semibold text-white">Verify your identity *</p>
+            <p className="text-xs text-blue-100/60">
+              Provide either your date of birth or your file number. Your file number is on your letter — or contact us to receive it.
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="dateOfBirth" className="text-sm font-medium text-blue-100">
+                Date of birth
+              </Label>
+              <Input
+                id="dateOfBirth"
+                type="date"
+                data-testid="input-dateOfBirth"
+                value={formData.dateOfBirth}
+                onChange={(e) => handleInputChange("dateOfBirth", e.target.value)}
+                className="h-11 rounded-2xl border-white/20 bg-slate-900 px-4 text-white focus-visible:ring-blue-400"
+              />
+            </div>
+            <div className="flex items-center gap-2 text-xs text-blue-100/50">
+              <span className="h-px flex-1 bg-white/10" />
+              or
+              <span className="h-px flex-1 bg-white/10" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="fileNumber" className="text-sm font-medium text-blue-100">
+                File number
+              </Label>
+              <Input
+                id="fileNumber"
+                data-testid="input-fileNumber"
+                value={formData.fileNumber}
+                onChange={(e) => handleInputChange("fileNumber", e.target.value)}
+                placeholder="Your file number"
+                className="h-11 rounded-2xl border-white/20 bg-slate-900 px-4 text-white placeholder:text-blue-100/50 focus-visible:ring-blue-400"
+              />
+            </div>
           </div>
 
           <div className="space-y-4">
@@ -365,7 +397,7 @@ export default function ConsumerRegistration() {
 
             <div className="space-y-2">
               <Label htmlFor="address" className="text-sm font-medium text-blue-100">
-                Street address *
+                Street address (optional)
               </Label>
               <Input
                 id="address"
@@ -374,7 +406,6 @@ export default function ConsumerRegistration() {
                 onChange={(e) => handleInputChange("address", e.target.value)}
                 placeholder="123 Main Street"
                 className="h-11 rounded-2xl border-white/20 bg-slate-900 px-4 text-white placeholder:text-blue-100/50 focus-visible:ring-blue-400"
-                required
               />
             </div>
 

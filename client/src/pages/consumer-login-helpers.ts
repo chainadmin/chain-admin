@@ -1,6 +1,7 @@
 export type LoginForm = {
   email: string;
   dateOfBirth: string;
+  fileNumber: string;
   agreeToSms: boolean;
   agreeToTerms: boolean;
 };
