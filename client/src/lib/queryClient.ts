@@ -5,7 +5,10 @@ import { getStoredConsumerToken } from "./consumer-auth";
 
 function isConsumerEndpoint(url: string): boolean {
   const normalized = url.toLowerCase();
-  return normalized.includes("/consumer/") || normalized.includes("/consumer-");
+  return normalized.includes("/consumer/") ||
+    normalized.includes("/consumer-") ||
+    normalized.includes("/signature-requests/") ||
+    normalized.includes("/signed-documents/");
 }
 
 export class ApiError extends Error {

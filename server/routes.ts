@@ -201,6 +201,39 @@ const VALIDATION_NOTICE = `Unless you notify this office within 30 days after re
 
 const ESIGN_CONSENT = `By clicking "I Agree" and signing this document electronically, you consent to conduct this transaction by electronic means. You acknowledge that your electronic signature is the legal equivalent of your manual signature and that you intend to be legally bound by the terms of this agreement. You have the right to request a paper copy of this document.`;
 
+function renderSignedDocumentHtml(fileUrl: string, signatureData: string, initialsData?: string | null): string | null {
+  const urlEncodedMatch = fileUrl.match(/^data:text\/html(?:;charset=utf-8)?,(.+)$/i);
+  const base64Match = fileUrl.match(/^data:text\/html;base64,(.+)$/i);
+  let htmlContent: string;
+
+  try {
+    if (urlEncodedMatch) {
+      htmlContent = decodeURIComponent(urlEncodedMatch[1]);
+    } else if (base64Match) {
+      htmlContent = Buffer.from(base64Match[1], 'base64').toString('utf-8');
+    } else {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+
+  const signatureHtml = `<span style="display:inline-block;border-bottom:1px solid #000;padding:2px 5px"><img src="${signatureData}" alt="Signature" style="max-width:150px;max-height:40px;height:auto;display:inline-block;vertical-align:middle" /></span>`;
+  let signedHtml = htmlContent
+    .replace(/______________/g, signatureHtml)
+    .replace(/\{\{signature\}\}/gi, signatureHtml)
+    .replace(/\{\{SIGNATURE_LINE\}\}/gi, signatureHtml);
+
+  if (initialsData) {
+    const initialsHtml = `<span style="display:inline-block;border-bottom:1px solid #000;padding:2px 5px"><img src="${initialsData}" alt="Initials" style="max-width:50px;max-height:30px;height:auto;display:inline-block;vertical-align:middle" /></span>`;
+    signedHtml = signedHtml
+      .replace(/____(?!_)/g, initialsHtml)
+      .replace(/\{\{initials?\}\}/gi, initialsHtml);
+  }
+
+  return signedHtml;
+}
+
 // Helper function to replace template variables for both email and SMS content
 function replaceTemplateVariables(
   template: string,
@@ -23602,23 +23635,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
         consentText: request.consentText || 'I agree to sign this document electronically.',
       });
 
-      // After successful signature, create a document record so it appears in consumer's Documents section
+      const signedHtml = request.document?.fileUrl
+        ? renderSignedDocumentHtml(request.document.fileUrl, signatureData, initialsData)
+        : null;
+
+      // Store a self-contained signed copy so consumers can view it from their Documents section.
       try {
-        const template = await storage.getDocumentTemplateById(request.documentId, request.tenantId);
         await storage.createDocument({
           tenantId: request.tenantId,
-          title: `Signed: ${request.title || template?.name || 'Document'}`,
+          title: `Signed: ${request.title || 'Document'}`,
           description: `Electronically signed on ${new Date().toLocaleDateString()}`,
-          fileName: `signed-${request.title || 'document'}.pdf`,
-          fileUrl: `/api/signed-documents/${result.signedDocument.id}`, // Link to the signed document
-          fileSize: 0, // Can be updated later if needed
-          mimeType: 'application/pdf',
+          fileName: `signed-${request.title || 'document'}.html`,
+          fileUrl: signedHtml
+            ? `data:text/html;charset=utf-8,${encodeURIComponent(signedHtml)}`
+            : request.document.fileUrl,
+          fileSize: signedHtml?.length || request.document.fileSize || 0,
+          mimeType: 'text/html',
           isPublic: false,
           accountId: request.accountId,
         });
       } catch (docError) {
         console.error("Error creating document record after signature:", docError);
         // Don't fail the signature if document creation fails - signature is more important
+      }
+
+      // Deliver receipt links to both parties after the legal record has been saved.
+      try {
+        const tenant = await storage.getTenant(request.tenantId);
+        const settings = await storage.getTenantSettings(request.tenantId);
+        const portalUrl = resolveConsumerPortalUrl({
+          tenantSlug: tenant?.slug,
+          consumerPortalSettings: settings?.consumerPortalSettings,
+          baseUrl: ensureBaseUrl(req),
+        });
+        const receiptHtml = `<p>The document <strong>${request.title}</strong> was electronically signed on ${new Date(result.signedDocument.signedAt).toLocaleString()}.</p><p>A signed copy is available in the customer's Documents section.</p><p><a href="${portalUrl}">Open the customer portal</a></p>`;
+
+        if (consumer.email) {
+          await emailService.sendEmail({
+            to: consumer.email,
+            subject: `Signed document copy: ${request.title}`,
+            html: `<p>Hello ${consumer.firstName || 'there'},</p>${receiptHtml}`,
+            tenantId: request.tenantId,
+            consumerId: consumer.id,
+          });
+        }
+        if (settings?.contactEmail && settings.contactEmail.toLowerCase() !== consumer.email?.toLowerCase()) {
+          await emailService.sendEmail({
+            to: settings.contactEmail,
+            subject: `Document signed: ${request.title}`,
+            html: receiptHtml,
+            tenantId: request.tenantId,
+            consumerId: consumer.id,
+          });
+        }
+      } catch (emailError) {
+        console.error("Error sending signed document receipts:", emailError);
       }
 
       res.json(result);
