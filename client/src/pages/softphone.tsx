@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
-import { Loader2, Phone, PhoneCall, PhoneOff, PhoneOutgoing, PhoneIncoming, Mic, MicOff, Volume2, VolumeX, History, LogOut, EyeOff, Building2, Download } from "lucide-react";
+import { Loader2, Phone, PhoneCall, PhoneOff, PhoneOutgoing, PhoneIncoming, Mic, MicOff, Volume2, VolumeX, History, LogOut, EyeOff, Building2, Download, Pause, ParkingCircle, UserRound } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Device, Call } from "@twilio/voice-sdk";
 
@@ -22,6 +22,19 @@ interface VoipCallLog {
   recordingUrl: string | null;
   notes: string | null;
   createdAt: string;
+}
+
+interface CallerLookup {
+  found: boolean;
+  consumer?: { firstName?: string; lastName?: string; phone?: string; email?: string };
+}
+
+interface ParkedCall {
+  id: string;
+  callerName: string;
+  callerNumber: string;
+  parkedBy: string;
+  parkedAt: string;
 }
 
 interface AgentUser {
@@ -64,9 +77,13 @@ export default function SoftphonePage() {
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
   const [agentStatus, setAgentStatus] = useState<"available" | "busy" | "away">("available");
   const [callerIdMode, setCallerIdMode] = useState<"auto" | "private" | "office">("auto");
+  const [isOnHold, setIsOnHold] = useState(false);
+  const [parkedCalls, setParkedCalls] = useState<ParkedCall[]>([]);
+  const [activeCallerName, setActiveCallerName] = useState("");
 
   const [inboundCall, setInboundCall] = useState<Call | null>(null);
   const [inboundCallerNumber, setInboundCallerNumber] = useState<string>("");
+  const [inboundCallerName, setInboundCallerName] = useState<string>("");
 
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
   const deviceRef = useRef<Device | null>(null);
@@ -163,6 +180,30 @@ export default function SoftphonePage() {
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
 
+  const lookupCallerName = async (phone: string) => {
+    if (!phone || phone === "Unknown") return "";
+    try {
+      const response = await fetch(`/api/consumers/lookup-by-phone?phone=${encodeURIComponent(phone)}`, {
+        headers: getAuthHeaders(),
+      });
+      if (!response.ok) return "";
+      const data: CallerLookup = await response.json();
+      if (!data.found || !data.consumer) return "";
+      return [data.consumer.firstName, data.consumer.lastName].filter(Boolean).join(" ").trim();
+    } catch (error) {
+      return "";
+    }
+  };
+
+  const refreshParkedCalls = async () => {
+    try {
+      const response = await fetch("/api/voip/parked-calls", { headers: getAuthHeaders() });
+      if (response.ok) setParkedCalls(await response.json());
+    } catch (error) {
+      // Park list is non-critical for placing and receiving calls.
+    }
+  };
+
   const handleAuthError = () => {
     localStorage.removeItem("softphone_token");
     localStorage.removeItem("softphone_user");
@@ -238,21 +279,27 @@ export default function SoftphonePage() {
       const callerNumber = call.parameters.From || "Unknown";
       setInboundCallerNumber(callerNumber);
       setInboundCall(call);
+      setInboundCallerName("");
+      lookupCallerName(callerNumber).then(setInboundCallerName);
 
       call.on("cancel", () => {
         setInboundCall(null);
         setInboundCallerNumber("");
+        setInboundCallerName("");
       });
 
       call.on("disconnect", () => {
         setInboundCall(null);
         setInboundCallerNumber("");
+        setInboundCallerName("");
         activeCallRef.current = null;
         setCallState("ended");
         setTimeout(() => {
           setCallState("idle");
           setDialpadNumber("");
           setIsMuted(false);
+          setIsOnHold(false);
+          setActiveCallerName("");
         }, 2000);
         queryClient.invalidateQueries({ queryKey: ["/api/voip/call-logs"] });
       });
@@ -279,9 +326,12 @@ export default function SoftphonePage() {
     inboundCall.accept();
     activeCallRef.current = inboundCall;
     setDialpadNumber(inboundCallerNumber);
+    setActiveCallerName(inboundCallerName);
+    setIsOnHold(false);
     setCallState("in-call");
     setInboundCall(null);
     setInboundCallerNumber("");
+    setInboundCallerName("");
   };
 
   const handleRejectInbound = () => {
@@ -289,6 +339,7 @@ export default function SoftphonePage() {
     inboundCall.reject();
     setInboundCall(null);
     setInboundCallerNumber("");
+    setInboundCallerName("");
   };
 
   const initiateCallMutation = useMutation({
@@ -341,6 +392,8 @@ export default function SoftphonePage() {
           setCallState("idle");
           setDialpadNumber("");
           setIsMuted(false);
+          setIsOnHold(false);
+          setActiveCallerName("");
         }, 2000);
         queryClient.invalidateQueries({ queryKey: ["/api/voip/call-logs"] });
       });
@@ -358,6 +411,8 @@ export default function SoftphonePage() {
           setCallState("idle");
           setDialpadNumber("");
           setIsMuted(false);
+          setIsOnHold(false);
+          setActiveCallerName("");
         }, 2000);
       });
 
@@ -409,9 +464,41 @@ export default function SoftphonePage() {
     }
   };
 
-  const handleCall = () => {
+  const handleCall = async () => {
     if (!dialpadNumber) return;
+    setActiveCallerName(await lookupCallerName(dialpadNumber));
+    setIsOnHold(false);
     initiateCallMutation.mutate(dialpadNumber);
+  };
+
+  const handleToggleHold = () => {
+    const nextHoldState = !isOnHold;
+    activeCallRef.current?.mute(nextHoldState || isMuted);
+    setIsOnHold(nextHoldState);
+  };
+
+  const handleParkCall = async () => {
+    if (!activeCallRef.current || callState !== "in-call") return;
+    activeCallRef.current.mute(true);
+    const response = await fetch("/api/voip/parked-calls", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      body: JSON.stringify({ callerName: activeCallerName, callerNumber: dialpadNumber }),
+    });
+    if (!response.ok) {
+      toast({ title: "Could not park call", description: "Please try again.", variant: "destructive" });
+      return;
+    }
+    await refreshParkedCalls();
+    toast({ title: "Call parked", description: "Anyone with softphone access can pick it up from Parked Calls." });
+    handleHangup();
+  };
+
+  const handlePickupParkedCall = async (parkedCall: ParkedCall) => {
+    await fetch(`/api/voip/parked-calls/${parkedCall.id}/pickup`, { method: "POST", headers: getAuthHeaders() });
+    setDialpadNumber(parkedCall.callerNumber);
+    setActiveCallerName(parkedCall.callerName);
+    await refreshParkedCalls();
   };
 
   const handleHangup = () => {
@@ -426,6 +513,14 @@ export default function SoftphonePage() {
       setIsMuted(false);
     }, 2000);
   };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      refreshParkedCalls();
+      const interval = setInterval(refreshParkedCalls, 10000);
+      return () => clearInterval(interval);
+    }
+  }, [isAuthenticated]);
 
   const handleToggleSpeaker = () => {
     const newSpeakerOn = !isSpeakerOn;
@@ -536,7 +631,8 @@ export default function SoftphonePage() {
               </div>
               <CardTitle className="text-xl">Incoming Call</CardTitle>
               <CardDescription className="text-lg font-mono font-medium text-gray-900 dark:text-white">
-                {inboundCallerNumber || "Unknown"}
+                {inboundCallerName || inboundCallerNumber || "Unknown"}
+                {inboundCallerName && <span className="block text-sm font-normal text-gray-500">{inboundCallerNumber}</span>}
               </CardDescription>
             </CardHeader>
             <CardContent className="flex gap-4 pt-4">
@@ -600,9 +696,9 @@ export default function SoftphonePage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader className="text-center pb-2">
-              <CardTitle>Dialpad</CardTitle>
+          <Card className="overflow-hidden rounded-[2rem] border-gray-900 bg-gray-950 text-white shadow-2xl">
+            <CardHeader className="text-center pb-2 bg-gray-900">
+              <CardTitle className="flex items-center justify-center gap-2"><Phone className="h-5 w-5" /> Phone</CardTitle>
               <CardDescription>
                 {callState === "idle" && "Ready to make calls"}
                 {callState === "connecting" && "Connecting..."}
@@ -616,11 +712,15 @@ export default function SoftphonePage() {
                 <Input
                   value={dialpadNumber}
                   onChange={(e) => setDialpadNumber(e.target.value)}
-                  placeholder="Enter phone number"
-                  className="text-2xl text-center font-mono tracking-wider h-14"
+                  placeholder="Caller ID / number"
+                  className="h-20 rounded-2xl border-gray-700 bg-black text-center font-mono text-2xl tracking-wider text-green-300 placeholder:text-green-700"
                   disabled={callState !== "idle"}
                 />
               </div>
+                <div className="mt-2 flex items-center justify-center gap-2 text-sm text-gray-300">
+                  <UserRound className="h-4 w-4" />
+                  <span>{activeCallerName || (dialpadNumber ? "Name not found" : "Name and number show here")}</span>
+                </div>
 
               {callState === "idle" && (
                 <>
@@ -656,7 +756,7 @@ export default function SoftphonePage() {
                       <Button
                         key={btn.digit}
                         variant="outline"
-                        className="h-16 text-xl font-medium flex flex-col items-center justify-center"
+                        className="h-16 rounded-full border-gray-700 bg-gray-800 text-xl font-medium text-white hover:bg-gray-700 flex flex-col items-center justify-center"
                         onClick={() => handleDialpadPress(btn.digit)}
                       >
                         <span className="text-2xl">{btn.digit}</span>
@@ -710,8 +810,9 @@ export default function SoftphonePage() {
                   <div className="w-20 h-20 rounded-full bg-green-600 flex items-center justify-center">
                     <PhoneCall className="h-10 w-10 text-white" />
                   </div>
-                  <p className="text-lg font-medium">{dialpadNumber}</p>
-                  <p className="text-3xl font-mono">{formatDuration(callDuration)}</p>
+                  <p className="text-lg font-medium">{activeCallerName || dialpadNumber}</p>
+                  {activeCallerName && <p className="text-sm text-gray-400">{dialpadNumber}</p>}
+                  <p className="text-3xl font-mono">{isOnHold ? "ON HOLD" : formatDuration(callDuration)}</p>
                   <div className="flex gap-4">
                     <Button
                       variant="outline"
@@ -720,6 +821,9 @@ export default function SoftphonePage() {
                       onClick={() => setIsMuted(!isMuted)}
                     >
                       {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                    </Button>
+                    <Button variant="outline" size="lg" className={isOnHold ? "bg-yellow-100 text-yellow-900" : ""} onClick={handleToggleHold}>
+                      <Pause className="h-5 w-5" />
                     </Button>
                     <Button
                       variant="outline"
@@ -734,6 +838,9 @@ export default function SoftphonePage() {
                       )}
                     </Button>
                   </div>
+                  <Button variant="outline" className="w-full" onClick={handleParkCall}>
+                    <ParkingCircle className="h-5 w-5 mr-2" /> Park call for anyone
+                  </Button>
                   <Button
                     size="lg"
                     variant="destructive"
@@ -751,6 +858,32 @@ export default function SoftphonePage() {
                     <PhoneOff className="h-10 w-10 text-gray-500" />
                   </div>
                   <p className="text-lg text-gray-500">Call ended</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ParkingCircle className="h-5 w-5" /> Parked Calls
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {parkedCalls.length === 0 ? (
+                <p className="text-sm text-gray-500">No calls are parked. Parked calls appear here for every softphone user.</p>
+              ) : (
+                <div className="space-y-2">
+                  {parkedCalls.map((parkedCall) => (
+                    <div key={parkedCall.id} className="flex items-center justify-between rounded-lg border p-3">
+                      <div>
+                        <p className="font-medium">{parkedCall.callerName || parkedCall.callerNumber}</p>
+                        {parkedCall.callerName && <p className="text-sm text-gray-500">{parkedCall.callerNumber}</p>}
+                        <p className="text-xs text-gray-400">Parked by {parkedCall.parkedBy}</p>
+                      </div>
+                      <Button size="sm" onClick={() => handlePickupParkedCall(parkedCall)}>Pick up</Button>
+                    </div>
+                  ))}
                 </div>
               )}
             </CardContent>

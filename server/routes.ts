@@ -140,6 +140,15 @@ const upload = multer({
   }
 });
 
+const parkedVoipCalls = new Map<string, {
+  id: string;
+  tenantId: string;
+  callerName: string;
+  callerNumber: string;
+  parkedBy: string;
+  parkedAt: string;
+}>();
+
 // Multer configuration for document uploads - accepts PDFs, images, Word docs, etc.
 const documentUpload = multer({
   storage: multer.memoryStorage(),
@@ -24784,6 +24793,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error getting consumer call logs:", error);
       res.status(500).json({ message: "Failed to get call logs" });
+    }
+  });
+
+  // Shared parked call list for softphone users. This exposes parked calls to every
+  // VoIP-enabled user in the tenant so any person can pick one up from the phone UI.
+  app.get('/api/voip/parked-calls', authenticateUser, async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const tenantParkedCalls = Array.from(parkedVoipCalls.values())
+        .filter((call) => call.tenantId === user.tenantId)
+        .sort((a, b) => new Date(a.parkedAt).getTime() - new Date(b.parkedAt).getTime());
+
+      res.json(tenantParkedCalls);
+    } catch (error) {
+      console.error("Error getting parked calls:", error);
+      res.status(500).json({ message: "Failed to get parked calls" });
+    }
+  });
+
+  app.post('/api/voip/parked-calls', authenticateUser, async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const isOwner = (user as any).role === 'owner' || (user as any).role === 'manager';
+      if (!isOwner && !(user as any).voipAccess) {
+        return res.status(403).json({ message: "VoIP access not enabled for this user" });
+      }
+
+      const { callerName, callerNumber } = req.body;
+      if (!callerNumber) {
+        return res.status(400).json({ message: "Caller number is required" });
+      }
+
+      const parkedCall = {
+        id: nanoid(),
+        tenantId: user.tenantId,
+        callerName: callerName || '',
+        callerNumber,
+        parkedBy: (user as any).name || (user as any).username || 'Another agent',
+        parkedAt: new Date().toISOString(),
+      };
+
+      parkedVoipCalls.set(parkedCall.id, parkedCall);
+      res.json(parkedCall);
+    } catch (error) {
+      console.error("Error parking call:", error);
+      res.status(500).json({ message: "Failed to park call" });
+    }
+  });
+
+  app.post('/api/voip/parked-calls/:id/pickup', authenticateUser, async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const parkedCall = parkedVoipCalls.get(req.params.id);
+      if (!parkedCall || parkedCall.tenantId !== user.tenantId) {
+        return res.status(404).json({ message: "Parked call not found" });
+      }
+
+      parkedVoipCalls.delete(req.params.id);
+      res.json(parkedCall);
+    } catch (error) {
+      console.error("Error picking up parked call:", error);
+      res.status(500).json({ message: "Failed to pick up parked call" });
     }
   });
 
