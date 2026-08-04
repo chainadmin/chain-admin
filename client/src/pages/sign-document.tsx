@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -29,19 +29,11 @@ export default function SignDocumentPage() {
 
   const signMutation = useMutation({
     mutationFn: async (data: { signatureData: string; initialsData: string }) => {
-      const response = await fetch(`/api/signature-requests/${requestId}/sign`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
+      const response = await apiRequest("POST", `/api/signature-requests/${requestId}/sign`, {
           signatureData: data.signatureData,
           initialsData: data.initialsData,
           legalConsent: true 
-        }),
-      });
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to sign document");
-      }
+        });
       return await response.json();
     },
     onSuccess: () => {
@@ -126,13 +118,13 @@ export default function SignDocumentPage() {
     if ('touches' in e) {
       const touch = e.touches[0];
       return {
-        x: touch.clientX - rect.left,
-        y: touch.clientY - rect.top,
+        x: (touch.clientX - rect.left) * (canvas.width / rect.width),
+        y: (touch.clientY - rect.top) * (canvas.height / rect.height),
       };
     } else {
       return {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
+        x: (e.clientX - rect.left) * (canvas.width / rect.width),
+        y: (e.clientY - rect.top) * (canvas.height / rect.height),
       };
     }
   };
@@ -309,7 +301,7 @@ export default function SignDocumentPage() {
     );
   }
 
-  if (request.status === "completed") {
+  if (request.status === "signed" || request.status === "completed") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <Card className="max-w-md shadow-lg">
@@ -355,7 +347,7 @@ export default function SignDocumentPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100">
       {/* Top Header Bar - DocuSign Style */}
       <div className="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-[1800px] mx-auto px-8 py-5">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-5">
               <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl p-2.5 shadow-md">
@@ -371,12 +363,12 @@ export default function SignDocumentPage() {
               </div>
             </div>
             <div className="flex items-center space-x-6">
-              <div className="flex items-center bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">
+              {request.expiresAt && <div className="hidden sm:flex items-center bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">
                 <Clock className="w-4 h-4 mr-2 text-amber-600" />
                 <span className="text-sm font-medium text-amber-700" data-testid="text-expiration">
                   Expires {new Date(request.expiresAt).toLocaleDateString()}
                 </span>
-              </div>
+              </div>}
             </div>
           </div>
           
@@ -391,7 +383,7 @@ export default function SignDocumentPage() {
       </div>
 
       {/* Two-Panel Layout */}
-      <div className="max-w-[1800px] mx-auto p-6">
+      <div className="max-w-[1600px] mx-auto p-3 sm:p-6">
         <div className="flex flex-col lg:flex-row gap-6 min-h-[calc(100vh-180px)]">
           {/* Left Panel - Document Viewer (65% width) */}
           <div className="flex-1 lg:w-[65%]">
@@ -407,13 +399,13 @@ export default function SignDocumentPage() {
               </div>
               
               {/* Document Content */}
-              <div className="p-8 h-[calc(100%-90px)] overflow-auto bg-slate-50">
+              <div className="p-3 sm:p-6 h-[calc(100%-90px)] overflow-auto bg-slate-50">
                 {documentUrlWithSignatures && (
                   <div className="bg-white border-2 border-slate-200 rounded-xl shadow-lg overflow-hidden">
                     <iframe
                       key={documentUrlWithSignatures}
                       src={documentUrlWithSignatures}
-                      className="w-full h-[800px]"
+                      className="w-full h-[60vh] lg:h-[720px]"
                       title="Document Content"
                       sandbox="allow-same-origin"
                       data-testid="iframe-document-content"
@@ -426,7 +418,7 @@ export default function SignDocumentPage() {
 
           {/* Right Panel - Signature Panel (35% width) */}
           <div className="lg:w-[35%]">
-            <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-8 overflow-y-auto max-h-[calc(100vh-180px)] sticky top-32">
+            <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-5 sm:p-7 lg:overflow-y-auto lg:max-h-[calc(100vh-150px)] lg:sticky lg:top-24">
               <div className="space-y-7">
               {/* Sign Here Header */}
               <div className="text-center pb-6 border-b border-slate-200">
