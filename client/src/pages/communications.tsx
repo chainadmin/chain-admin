@@ -725,6 +725,11 @@ export default function Communications() {
     enabled: !!userData,
   });
 
+  const { data: sequenceAudit, isLoading: sequenceAuditLoading, refetch: refetchSequenceAudit } = useQuery({
+    queryKey: ['/api/sequences-audit'],
+    enabled: !!userData,
+  });
+
   const { data: sequenceEnrollments } = useQuery({
     queryKey: ['/api/sequences', viewingEnrollmentsSequenceId, 'enrollments'],
     enabled: viewingEnrollmentsSequenceId !== null,
@@ -5413,6 +5418,35 @@ export default function Communications() {
           </TabsContent>
 
           <TabsContent value="sequences" className="space-y-10 text-white">
+            <Card className="border-white/15 bg-white/5 text-blue-50" data-testid="sequence-integrity-audit">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-emerald-300" /> Sequence Integrity Audit</CardTitle>
+                  <p className="mt-2 text-sm text-blue-100/70">Checks step numbering, enrollment pointers, send times, and overdue messages.</p>
+                </div>
+                <Button variant="outline" onClick={() => refetchSequenceAudit()} disabled={sequenceAuditLoading} className="border-white/20 bg-white/10 text-white hover:bg-white/20">
+                  <RefreshCw className={cn("mr-2 h-4 w-4", sequenceAuditLoading && "animate-spin")} /> Run audit
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {sequenceAuditLoading ? <p className="text-blue-100/70">Auditing sequences…</p> : sequenceAudit ? (
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Badge className={(sequenceAudit as any).healthy ? "bg-emerald-600" : "bg-amber-600"}>{(sequenceAudit as any).healthy ? "All checks passed" : "Attention required"}</Badge>
+                      <span className="text-sm text-blue-100/70">{(sequenceAudit as any).errorCount} errors · {(sequenceAudit as any).warningCount} warnings · checked {new Date((sequenceAudit as any).checkedAt).toLocaleString()}</span>
+                    </div>
+                    {(sequenceAudit as any).sequences.filter((item: any) => item.issues.length > 0).map((item: any) => (
+                      <div key={item.id} className="rounded-xl border border-amber-400/25 bg-amber-500/10 p-4">
+                        <p className="font-semibold">{item.name} <span className="font-normal text-blue-100/60">({item.stepCount} steps, {item.enrollmentCount} enrollments)</span></p>
+                        <ul className="mt-2 space-y-1 text-sm">
+                          {item.issues.map((issue: any, index: number) => <li key={index} className={issue.severity === 'error' ? 'text-rose-200' : 'text-amber-200'}>• {issue.message}</li>)}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                ) : <p className="text-blue-100/70">Sequence audit is unavailable.</p>}
+              </CardContent>
+            </Card>
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-semibold">Communication Sequences</h2>
               <Dialog open={showSequenceModal} onOpenChange={setShowSequenceModal}>
