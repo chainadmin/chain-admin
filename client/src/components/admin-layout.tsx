@@ -128,6 +128,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   
   const navigationItems = [
     { name: "Dashboard", href: buildNavHref("/dashboard"), icon: "fas fa-chart-bar" },
+    ...((tenantSettings as any)?.businessType === "higher_education" ? [{ name: "Chain Campus", href: buildNavHref("/campus"), icon: "fas fa-university" }] : []),
     { name: "Accounts", href: buildNavHref("/accounts"), icon: "fas fa-file-invoice-dollar" },
     { name: "Communications", href: buildNavHref("/communications"), icon: "fas fa-comments" },
     { name: "Inbox", href: buildNavHref("/email-inbox"), icon: "fas fa-inbox" },

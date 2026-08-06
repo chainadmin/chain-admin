@@ -7652,7 +7652,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const registrationWithCredentialsSchema = agencyTrialRegistrationSchema.extend({
         username: z.string().min(3).max(50),
         password: z.string().min(8).max(100),
-        businessType: z.enum(['call_center', 'billing_service', 'subscription_provider', 'freelancer_consultant', 'property_management']).optional().default('call_center'),
+        businessType: z.enum(['call_center', 'billing_service', 'subscription_provider', 'freelancer_consultant', 'property_management', 'nonprofit_organization', 'higher_education']).optional().default('call_center'),
         billingMode: z.enum(['subscription', 'wallet']).optional().default('subscription'),
       });
       
@@ -22149,7 +22149,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Validate input with known module IDs only
       const businessConfigSchema = z.object({
-        businessType: z.enum(['call_center', 'billing_service', 'subscription_provider', 'freelancer_consultant', 'property_management']),
+        businessType: z.enum(['call_center', 'billing_service', 'subscription_provider', 'freelancer_consultant', 'property_management', 'nonprofit_organization', 'higher_education']),
         enabledModules: z.array(z.enum(['billing', 'subscriptions', 'work_orders', 'client_crm', 'messaging_center']))
       });
       

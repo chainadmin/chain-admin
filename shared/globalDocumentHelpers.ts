@@ -10,6 +10,7 @@ export function getModuleNameForBusinessType(businessType: BusinessType): string
     freelancer_consultant: 'Client & Project Management Module',
     property_management: 'Property & Tenant Management Module',
     nonprofit_organization: 'Donor & Campaign Management Module',
+    higher_education: 'Chain Campus',
   };
 
   return moduleMap[businessType] || 'Call Center Module';
@@ -24,6 +25,7 @@ export function getModuleDescriptionForBusinessType(businessType: BusinessType):
     freelancer_consultant: 'client project tracking, time and invoice management, payment collection, and professional service delivery tools',
     property_management: 'tenant management, lease tracking, rent collection, maintenance request handling, and property communication features',
     nonprofit_organization: 'donor relationship management, donation tracking, campaign automation, volunteer coordination, and fundraising tools',
+    higher_education: 'student account management, department reporting, payment plans, campus cashiering, refunds, and student communications',
   };
 
   return descriptionMap[businessType] || descriptionMap.call_center;

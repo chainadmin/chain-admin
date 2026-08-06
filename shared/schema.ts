@@ -730,7 +730,7 @@ export const arrangementOptions = pgTable("arrangement_options", {
 export const tenantSettings = pgTable("tenant_settings", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull().unique(),
-  businessType: text("business_type").default("call_center"), // call_center, property_management, subscription_provider, freelancer_consultant, billing_service
+  businessType: text("business_type").default("call_center"), // Includes higher_education for the Chain Campus module
   privacyPolicy: text("privacy_policy"),
   termsOfService: text("terms_of_service"),
   contactEmail: text("contact_email"),
@@ -780,6 +780,7 @@ export const tenantSettings = pgTable("tenant_settings", {
   campaignIntegrationEnabled: boolean("campaign_integration_enabled").default(false),
   blockedAccountStatuses: text("blocked_account_statuses").array().default(sql`ARRAY['inactive', 'recalled', 'closed']::text[]`), // Account statuses that block communications and payments
   forceArrangement: boolean("force_arrangement").default(false), // When true, consumers must set up payment arrangement (no one-time payments)
+  campusConfig: jsonb("campus_config").default(sql`'{}'::jsonb`), // Chain Campus departments, integrations, cashiering and branding configuration
 });
 
 // External campaign integration log (Debt Manager Pro -> Chain)
