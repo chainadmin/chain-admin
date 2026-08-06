@@ -13,6 +13,7 @@ import {
   boolean,
   uuid,
   uniqueIndex,
+  foreignKey,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -217,6 +218,25 @@ export const consumers = pgTable("consumers", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Chain Campus departments live inside a university tenant. They are not tenants
+// themselves, so authentication, billing, branding, and data isolation continue
+// to be managed at the university level.
+export const campusDepartments = pgTable("campus_departments", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  code: text("code").notNull(),
+  description: text("description"),
+  color: text("color").default("#2563eb").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("campus_departments_tenant_code_unique").on(table.tenantId, table.code),
+  uniqueIndex("campus_departments_tenant_id_id_unique").on(table.tenantId, table.id),
+  index("campus_departments_tenant_idx").on(table.tenantId),
+]);
+
 // Folders for organizing accounts
 export const folders = pgTable("folders", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -235,6 +255,7 @@ export const accounts = pgTable("accounts", {
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
   consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "cascade" }).notNull(),
   folderId: uuid("folder_id").references(() => folders.id, { onDelete: "set null" }),
+  departmentId: uuid("department_id"),
   accountNumber: text("account_number"),
   filenumber: text("filenumber"), // Required for SMAX integration (nullable for migration)
   creditor: text("creditor").notNull(),
@@ -245,7 +266,14 @@ export const accounts = pgTable("accounts", {
   additionalData: jsonb("additional_data").default(sql`'{}'::jsonb`), // Store custom CSV columns
   returnedAt: timestamp("returned_at"), // Timestamp when account was moved to Returned folder (for auto-deletion after 7 days)
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("accounts_department_id_idx").on(table.departmentId),
+  foreignKey({
+    columns: [table.tenantId, table.departmentId],
+    foreignColumns: [campusDepartments.tenantId, campusDepartments.id],
+    name: "accounts_tenant_department_fk",
+  }),
+]);
 
 // Push device tokens
 export const pushDevices = pgTable("push_devices", {
@@ -1662,6 +1690,17 @@ export const agencyTrialRegistrationSchema = createInsertSchema(tenants).pick({
 });
 export const insertPlatformUserSchema = createInsertSchema(platformUsers).omit({ id: true, createdAt: true });
 export const insertConsumerSchema = createInsertSchema(consumers).omit({ id: true, createdAt: true });
+export const insertCampusDepartmentSchema = createInsertSchema(campusDepartments).omit({
+  id: true,
+  tenantId: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  name: z.string().trim().min(1).max(120),
+  code: z.string().trim().min(1).max(20).regex(/^[A-Za-z0-9_-]+$/),
+  description: z.string().trim().max(500).nullable().optional(),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+});
 export const insertAccountSchema = createInsertSchema(accounts).omit({ id: true, createdAt: true });
 export const insertEmailTemplateSchema = createInsertSchema(emailTemplates).omit({ id: true, createdAt: true });
 export const insertDocumentSchema = createInsertSchema(documents).omit({ id: true, createdAt: true, updatedAt: true });

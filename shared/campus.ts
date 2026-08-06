@@ -1,6 +1,6 @@
 export const CAMPUS_DEPARTMENTS = [
   "Admissions", "Housing", "Parking", "Dining", "Athletics", "Bookstore",
-  "Library", "Registrar", "Financial Aid", "Student Accounts",
+  "Library", "Registrar", "Financial Aid", "Student Accounts", "Continuing Education",
 ] as const;
 
 export const CAMPUS_INTEGRATIONS = [

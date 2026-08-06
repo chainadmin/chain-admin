@@ -5,7 +5,7 @@
 | Campus requirement | Existing Chain capability | Approach |
 | --- | --- | --- |
 | Students and student accounts | Consumers and accounts | Apply module terminology; keep IDs, imports, search, history and APIs. |
-| Departments | Account creditor plus tenant scoping | Introduce configurable department directory first; normalize only when department-level authorization requires it. |
+| Departments | Account creditor plus tenant scoping | Use normalized, tenant-owned Campus departments and optionally assign student accounts without creating child tenants. |
 | Payment plans and AutoPay | Arrangement options, schedules and recurring processing | Relabel for Campus; do not fork payment logic. |
 | Portal, documents, receipts and payment methods | Consumer portal, document service, payments and wallet | Reuse the existing portal and processor abstractions. |
 | Staff, roles and logs | Platform users, restricted services and event service | Add authorized-payer and department scopes through the existing permission model. |
@@ -16,7 +16,7 @@
 ## Gaps and increments
 
 1. **Module foundation (this increment):** register Higher Education terminology and proposal metadata; add tenant-scoped Campus configuration, the Campus workspace, department defaults, notification inventory, and integration interface hooks.
-2. **Department authorization:** normalize departments and memberships when row-level department access is implemented; retain university tenant boundaries.
+2. **Campus organization (Phase 1, implemented):** normalized departments belong to one university tenant, support lifecycle management, and provide a tenant-safe student-account relationship. Department user memberships remain part of the authorization increment.
 3. **Authorized payer:** add invitations, consented per-student grants, expiration/revocation, and audit events on top of portal authentication and saved payment methods.
 4. **Cashiering:** extend manual payments with shifts, receipt/reference metadata, reconciliation/deposit reports, and printable receipts.
 5. **Refund center:** add state transitions (pending through completed), approver policy, processor adapters, audit events and notifications.
