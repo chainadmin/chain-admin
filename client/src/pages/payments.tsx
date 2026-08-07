@@ -16,13 +16,18 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { CreditCard, DollarSign, TrendingUp, Clock, CheckCircle, Calendar, User, Building2, Lock, Trash2, ThumbsUp, ThumbsDown, RefreshCw, History, Check, XCircle, Search, Settings, Edit, Mail, MessageSquare, AlertTriangle, Phone } from "lucide-react";
+import { CreditCard, DollarSign, TrendingUp, Clock, CheckCircle, Calendar, User, Building2, Lock, Trash2, ThumbsUp, ThumbsDown, RefreshCw, History, Check, XCircle, Search, Settings, Edit, Mail, MessageSquare, AlertTriangle, Phone, Download } from "lucide-react";
 import { PaymentSchedulingCalendar } from "@/components/payment-scheduling-calendar";
+import { buildPaymentAuditCsv, paymentsForMonth } from "./paymentAuditHelpers";
 
 export default function Payments() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [filterStatus, setFilterStatus] = useState("all");
+  const [auditMonth, setAuditMonth] = useState(() => {
+    const date = new Date();
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+  });
   const [showPayNowModal, setShowPayNowModal] = useState(false);
   const [paymentToDelete, setPaymentToDelete] = useState<string | null>(null);
   const [selectedConsumerForArrangement, setSelectedConsumerForArrangement] = useState<any | null>(null);
@@ -427,26 +432,22 @@ export default function Payments() {
     return payment.status === filterStatus;
   }) || [];
 
-  const now = new Date();
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
-  const monthName = now.toLocaleString('en-US', { month: 'long', year: 'numeric' });
-
-  const isCurrentMonth = (dateStr: any) => {
-    if (!dateStr) return false;
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return false;
-    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-  };
-
-  const thisMonthPayments = (payments as any[])?.filter((payment: any) =>
-    isCurrentMonth(payment.processedAt || payment.createdAt) && payment.status === 'completed'
-  ) || [];
+  const auditPayments = paymentsForMonth((payments as any[]) || [], auditMonth);
+  const thisMonthPayments = auditPayments.filter((payment: any) => payment.status === 'completed');
 
   const thisMonthTotal = thisMonthPayments.reduce((sum: number, p: any) => sum + (p.amountCents || 0), 0);
-  const thisMonthFailed = (payments as any[])?.filter((payment: any) =>
-    isCurrentMonth(payment.processedAt || payment.createdAt) && payment.status === 'failed'
-  )?.length || 0;
+  const thisMonthFailed = auditPayments.filter((payment: any) => payment.status === 'failed').length;
+  const monthName = new Date(`${auditMonth}-01T12:00:00`).toLocaleString('en-US', { month: 'long', year: 'numeric' });
+
+  const downloadMonthlyAudit = () => {
+    const blob = new Blob([buildPaymentAuditCsv(auditPayments)], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `payment-audit-${auditMonth}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   const stats = (paymentStats as any) || {
     totalProcessed: 0,
@@ -562,19 +563,25 @@ export default function Payments() {
         </section>
 
         <section className={cn(glassPanelClass, "p-6")}>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-4">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/20">
                 <TrendingUp className="h-5 w-5 text-emerald-300" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-white">Processed This Month</h2>
+                <h2 className="text-lg font-semibold text-white">Monthly Payment Audit</h2>
                 <p className="text-xs text-blue-100/60">{monthName}</p>
               </div>
             </div>
-            <div className="text-right">
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <Input type="month" value={auditMonth} onChange={(event) => setAuditMonth(event.target.value)} className="w-44 border-white/20 bg-white/10 text-white" data-testid="input-audit-month" />
+              <Button variant="outline" onClick={downloadMonthlyAudit} className="border-white/20 bg-white/10 text-white hover:bg-white/20" data-testid="button-export-payment-audit">
+                <Download className="mr-2 h-4 w-4" /> Export CSV
+              </Button>
+              <div className="text-right">
               <p className="text-2xl font-bold text-emerald-300">{formatCurrency(thisMonthTotal)}</p>
-              <p className="text-xs text-blue-100/60">{thisMonthPayments.length} successful{thisMonthFailed > 0 ? ` / ${thisMonthFailed} failed` : ''}</p>
+              <p className="text-xs text-blue-100/60">{auditPayments.length} total / {thisMonthPayments.length} successful{thisMonthFailed > 0 ? ` / ${thisMonthFailed} failed` : ''}</p>
+              </div>
             </div>
           </div>
 

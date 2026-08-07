@@ -6697,6 +6697,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Read-only integrity audit for sequence configuration and active enrollment progress.
+  app.get('/api/sequences-audit', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) return res.status(403).json({ message: "No tenant access" });
+
+      const sequences = await storage.getCommunicationSequencesByTenant(tenantId);
+      const now = Date.now();
+      const results = await Promise.all(sequences.map(async (sequence: any) => {
+        const [steps, enrollments] = await Promise.all([
+          storage.getSequenceSteps(sequence.id),
+          storage.getSequenceEnrollments(sequence.id),
+        ]);
+        const issues: Array<{ severity: 'error' | 'warning'; message: string }> = [];
+        const orders = steps.map((step: any) => Number(step.stepOrder));
+        const expected = steps.map((_: any, index: number) => index + 1);
+        if (sequence.isActive && steps.length === 0) issues.push({ severity: 'error', message: 'Active sequence has no steps.' });
+        if (orders.some((order: number, index: number) => order !== expected[index])) {
+          issues.push({ severity: 'error', message: `Step order must be contiguous from 1 (found: ${orders.join(', ') || 'none'}).` });
+        }
+
+        for (const enrollment of enrollments.filter((item: any) => item.status === 'active')) {
+          const current = steps.find((step: any) => step.id === enrollment.currentStepId);
+          const consumerName = `${enrollment.consumer?.firstName || ''} ${enrollment.consumer?.lastName || ''}`.trim() || enrollment.consumerId;
+          if (!current) issues.push({ severity: 'error', message: `${consumerName}: current step is missing.` });
+          else if (Number(current.stepOrder) !== Number(enrollment.currentStepOrder)) issues.push({ severity: 'error', message: `${consumerName}: saved step number does not match the current step.` });
+          if (!enrollment.nextMessageAt) issues.push({ severity: 'warning', message: `${consumerName}: active enrollment has no next send time.` });
+          else if (new Date(enrollment.nextMessageAt).getTime() < now - 30 * 60 * 1000) issues.push({ severity: 'warning', message: `${consumerName}: next message is overdue by more than 30 minutes.` });
+        }
+        return { id: sequence.id, name: sequence.name, isActive: sequence.isActive, stepCount: steps.length, enrollmentCount: enrollments.length, issues };
+      }));
+      const errorCount = results.reduce((total, item) => total + item.issues.filter((issue) => issue.severity === 'error').length, 0);
+      const warningCount = results.reduce((total, item) => total + item.issues.filter((issue) => issue.severity === 'warning').length, 0);
+      res.json({ checkedAt: new Date().toISOString(), healthy: errorCount === 0 && warningCount === 0, errorCount, warningCount, sequences: results });
+    } catch (error) {
+      console.error("Error auditing sequences:", error);
+      res.status(500).json({ message: "Failed to audit sequences" });
+    }
+  });
+
   app.get('/api/sequences/:id', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
