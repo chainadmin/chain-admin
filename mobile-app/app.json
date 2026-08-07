@@ -37,6 +37,8 @@
       },
       "infoPlist": {
         "NSFaceIDUsageDescription": "Use Face ID to quickly and securely log in to your account",
+        "NSCameraUsageDescription": "Allow Chain to use the camera to photograph documents for upload.",
+        "NSPhotoLibraryUsageDescription": "Allow Chain to select documents and images from your photo library for upload.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
