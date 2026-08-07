@@ -44,7 +44,7 @@
     },
     "android": {
       "newArchEnabled": true,
-      "versionCode": 19,
+      "versionCode": 20,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -74,7 +74,9 @@
             "deploymentTarget": "16.0"
           },
           "android": {
-            "newArchEnabled": true
+            "newArchEnabled": true,
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36
           }
         }
       ]

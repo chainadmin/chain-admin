@@ -2,7 +2,7 @@
   "expo": {
     "name": "Chain",
     "slug": "chain",
-    "version": "1.0.0",
+    "version": "1.1.5",
     "orientation": "portrait",
     "icon": "./client/public/chain-logo.png",
     "userInterfaceStyle": "light",
@@ -22,7 +22,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.chainsoftware.platform",
-      "versionCode": 6
+      "versionCode": 20
     },
     "web": {
       "bundler": "metro",
