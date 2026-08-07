@@ -7,7 +7,8 @@ export type BusinessType =
   | 'subscription_provider' 
   | 'freelancer_consultant' 
   | 'property_management'
-  | 'nonprofit_organization';
+  | 'nonprofit_organization'
+  | 'higher_education';
 
 export interface TerminologyMap {
   // Person/Entity terms
@@ -229,6 +230,35 @@ const terminologyMaps: Record<BusinessType, TerminologyMap> = {
     statusInProgress: 'In Progress',
     statusCompleted: 'Completed',
   },
+  // Chain Campus / Higher Education
+  higher_education: {
+    consumer: 'Student',
+    consumerPlural: 'Students',
+    creditor: 'Department',
+    creditorPlural: 'Departments',
+    account: 'Student Account',
+    accountPlural: 'Student Accounts',
+    placement: 'Charge',
+    placementPlural: 'Charges',
+    balance: 'Balance',
+    payment: 'Payment',
+    paymentPlural: 'Payments',
+    settlement: 'Payment Plan',
+    settlementPlural: 'Payment Plans',
+    collect: 'Receive Payment',
+    collecting: 'Receiving Payments',
+    collection: 'Student Accounts',
+    delinquent: 'Past Due',
+    current: 'Current',
+    paidOff: 'Paid',
+    callbackRequest: 'Student Request',
+    callbackRequestPlural: 'Student Requests',
+    statusCalled: 'Contacted',
+    statusNoAnswer: 'No Response',
+    statusScheduled: 'Scheduled',
+    statusInProgress: 'In Progress',
+    statusCompleted: 'Resolved',
+  },
 };
 
 /**
@@ -257,6 +287,7 @@ export function getBusinessTypeName(businessType: BusinessType): string {
     freelancer_consultant: 'Freelancer / Consultant',
     property_management: 'Property Management',
     nonprofit_organization: 'Non-Profit Organization',
+    higher_education: 'Higher Education (Chain Campus)',
   };
   return names[businessType] || 'Debt Collection / Call Center';
 }
@@ -272,5 +303,6 @@ export function getBusinessTypes(): { value: BusinessType; label: string }[] {
     { value: 'freelancer_consultant', label: 'Freelancer / Consultant' },
     { value: 'property_management', label: 'Property Management' },
     { value: 'nonprofit_organization', label: 'Non-Profit Organization' },
+    { value: 'higher_education', label: 'Higher Education (Chain Campus)' },
   ];
 }

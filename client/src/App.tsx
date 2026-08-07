@@ -50,6 +50,7 @@ import Info from "@/pages/info";
 import Phones from "@/pages/phones";
 import Softphone from "@/pages/softphone";
 import InstallPage from "@/pages/install";
+import Campus from "@/pages/campus";
 
 function MobilePageTransition({ children }: { children: ReactNode }) {
   const [location] = useLocation();
@@ -302,7 +303,8 @@ function Router() {
         <Route key="agency-billing" path="/billing" component={Billing} />,
         <Route key="agency-settings" path="/settings" component={Settings} />,
         <Route key="agency-documents" path="/documents" component={Documents} />,
-        <Route key="agency-phones" path="/phones" component={Phones} />
+        <Route key="agency-phones" path="/phones" component={Phones} />,
+        <Route key="agency-campus" path="/campus" component={Campus} />
       );
     }
 
@@ -399,6 +401,7 @@ function Router() {
     <Route key="auth-phones" path="/phones" component={Phones} />,
     <Route key="auth-softphone" path="/softphone" component={Softphone} />,
     <Route key="auth-install" path="/install" component={InstallPage} />,
+    <Route key="auth-campus" path="/campus" component={Campus} />,
     ...createRouteElements(adminRoutePaths, GlobalAdmin, "auth-admin"),
     <Route key="auth-agency-login" path="/agency-login" component={AgencyLogin} />,
     <Route key="auth-agency-register" path="/agency-register" component={AgencyRegistration} />,

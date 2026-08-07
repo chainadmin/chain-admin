@@ -20,7 +20,7 @@ const registrationWithCredentialsSchema = agencyTrialRegistrationSchema.extend({
   username: z.string().min(3, "Username must be at least 3 characters").max(50),
   password: z.string().min(8, "Password must be at least 8 characters").max(100),
   confirmPassword: z.string(),
-  businessType: z.enum(['call_center', 'billing_service', 'subscription_provider', 'freelancer_consultant', 'property_management']).default('call_center'),
+  businessType: z.enum(['call_center', 'billing_service', 'subscription_provider', 'freelancer_consultant', 'property_management', 'nonprofit_organization', 'higher_education']).default('call_center'),
   billingMode: z.enum(['subscription', 'wallet']).default('subscription'),
 }).refine(data => data.password === data.confirmPassword, {
   message: "Passwords don't match",

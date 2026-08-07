@@ -15,6 +15,8 @@ import {
   tenants,
   tenantSettings,
   consumers,
+  campusDepartments,
+  insertCampusDepartmentSchema,
   accounts as accountsTable,
   paymentSchedules as paymentSchedulesTable,
   payments,
@@ -40,7 +42,7 @@ import {
   type SmsTracking,
 } from "@shared/schema";
 import { db } from "./db";
-import { and, eq, sql, desc, gte, lte, isNull } from "drizzle-orm";
+import { and, eq, sql, desc, gte, lte, isNull, asc } from "drizzle-orm";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
@@ -7652,7 +7654,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const registrationWithCredentialsSchema = agencyTrialRegistrationSchema.extend({
         username: z.string().min(3).max(50),
         password: z.string().min(8).max(100),
-        businessType: z.enum(['call_center', 'billing_service', 'subscription_provider', 'freelancer_consultant', 'property_management']).optional().default('call_center'),
+        businessType: z.enum(['call_center', 'billing_service', 'subscription_provider', 'freelancer_consultant', 'property_management', 'nonprofit_organization', 'higher_education']).optional().default('call_center'),
         billingMode: z.enum(['subscription', 'wallet']).optional().default('subscription'),
       });
       
@@ -9996,6 +9998,124 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error fetching campaign log detail:', error);
       res.status(500).json({ message: 'Failed to fetch campaign log' });
+    }
+  });
+
+  // Chain Campus departments are children of the authenticated university tenant.
+  // Tenant IDs are always derived from auth and never accepted from request data.
+  app.get('/api/campus/departments', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = await getTenantId(req, storage);
+      if (!tenantId) return res.status(403).json({ message: 'No tenant access' });
+
+      const [settings] = await db.select({ businessType: tenantSettings.businessType })
+        .from(tenantSettings).where(eq(tenantSettings.tenantId, tenantId)).limit(1);
+      if (settings?.businessType !== 'higher_education') {
+        return res.status(404).json({ message: 'Chain Campus is not enabled for this tenant' });
+      }
+
+      const rows = await db.select({
+        id: campusDepartments.id,
+        name: campusDepartments.name,
+        code: campusDepartments.code,
+        description: campusDepartments.description,
+        color: campusDepartments.color,
+        isActive: campusDepartments.isActive,
+        createdAt: campusDepartments.createdAt,
+        accountCount: sql<number>`count(${accountsTable.id})::int`,
+        outstandingBalanceCents: sql<number>`coalesce(sum(${accountsTable.balanceCents}) filter (where ${accountsTable.status} = 'active'), 0)::bigint`,
+      }).from(campusDepartments)
+        .leftJoin(accountsTable, and(
+          eq(accountsTable.departmentId, campusDepartments.id),
+          eq(accountsTable.tenantId, tenantId),
+        ))
+        .where(eq(campusDepartments.tenantId, tenantId))
+        .groupBy(campusDepartments.id)
+        .orderBy(asc(campusDepartments.name));
+      res.json(rows);
+    } catch (error) {
+      console.error('Error fetching Campus departments:', error);
+      res.status(500).json({ message: 'Failed to fetch departments' });
+    }
+  });
+
+  app.post('/api/campus/departments', authenticateUser, requireOwner, async (req: any, res) => {
+    try {
+      const tenantId = await getTenantId(req, storage);
+      if (!tenantId) return res.status(403).json({ message: 'No tenant access' });
+      const [settings] = await db.select({ businessType: tenantSettings.businessType })
+        .from(tenantSettings).where(eq(tenantSettings.tenantId, tenantId)).limit(1);
+      if (settings?.businessType !== 'higher_education') {
+        return res.status(404).json({ message: 'Chain Campus is not enabled for this tenant' });
+      }
+      const input = insertCampusDepartmentSchema.parse(req.body);
+      const [department] = await db.insert(campusDepartments).values({
+        ...input,
+        tenantId,
+        name: input.name.trim(),
+        code: input.code.trim().toUpperCase(),
+      }).returning();
+      res.status(201).json(department);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) return res.status(400).json({ message: 'Invalid department', errors: error.errors });
+      if (error?.code === '23505') return res.status(409).json({ message: 'Department code already exists in this university' });
+      console.error('Error creating Campus department:', error);
+      res.status(500).json({ message: 'Failed to create department' });
+    }
+  });
+
+  app.patch('/api/campus/departments/:id', authenticateUser, requireOwner, async (req: any, res) => {
+    try {
+      const tenantId = await getTenantId(req, storage);
+      if (!tenantId) return res.status(403).json({ message: 'No tenant access' });
+      const [settings] = await db.select({ businessType: tenantSettings.businessType })
+        .from(tenantSettings).where(eq(tenantSettings.tenantId, tenantId)).limit(1);
+      if (settings?.businessType !== 'higher_education') {
+        return res.status(404).json({ message: 'Chain Campus is not enabled for this tenant' });
+      }
+      const id = z.string().uuid().parse(req.params.id);
+      const input = insertCampusDepartmentSchema.partial().parse(req.body);
+      const updates = {
+        ...input,
+        ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+        ...(input.code !== undefined ? { code: input.code.trim().toUpperCase() } : {}),
+        updatedAt: new Date(),
+      };
+      const [department] = await db.update(campusDepartments).set(updates)
+        .where(and(eq(campusDepartments.id, id), eq(campusDepartments.tenantId, tenantId))).returning();
+      if (!department) return res.status(404).json({ message: 'Department not found' });
+      res.json(department);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) return res.status(400).json({ message: 'Invalid department', errors: error.errors });
+      if (error?.code === '23505') return res.status(409).json({ message: 'Department code already exists in this university' });
+      console.error('Error updating Campus department:', error);
+      res.status(500).json({ message: 'Failed to update department' });
+    }
+  });
+
+  app.delete('/api/campus/departments/:id', authenticateUser, requireOwner, async (req: any, res) => {
+    try {
+      const tenantId = await getTenantId(req, storage);
+      if (!tenantId) return res.status(403).json({ message: 'No tenant access' });
+      const [settings] = await db.select({ businessType: tenantSettings.businessType })
+        .from(tenantSettings).where(eq(tenantSettings.tenantId, tenantId)).limit(1);
+      if (settings?.businessType !== 'higher_education') {
+        return res.status(404).json({ message: 'Chain Campus is not enabled for this tenant' });
+      }
+      const id = z.string().uuid().parse(req.params.id);
+      const [usage] = await db.select({ count: sql<number>`count(*)::int` }).from(accountsTable)
+        .where(and(eq(accountsTable.tenantId, tenantId), eq(accountsTable.departmentId, id)));
+      if (usage.count > 0) {
+        return res.status(409).json({ message: 'Deactivate this department instead; student accounts are assigned to it' });
+      }
+      const [deleted] = await db.delete(campusDepartments)
+        .where(and(eq(campusDepartments.id, id), eq(campusDepartments.tenantId, tenantId))).returning({ id: campusDepartments.id });
+      if (!deleted) return res.status(404).json({ message: 'Department not found' });
+      res.status(204).send();
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ message: 'Invalid department ID' });
+      console.error('Error deleting Campus department:', error);
+      res.status(500).json({ message: 'Failed to delete department' });
     }
   });
 
@@ -22149,7 +22269,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Validate input with known module IDs only
       const businessConfigSchema = z.object({
-        businessType: z.enum(['call_center', 'billing_service', 'subscription_provider', 'freelancer_consultant', 'property_management']),
+        businessType: z.enum(['call_center', 'billing_service', 'subscription_provider', 'freelancer_consultant', 'property_management', 'nonprofit_organization', 'higher_education']),
         enabledModules: z.array(z.enum(['billing', 'subscriptions', 'work_orders', 'client_crm', 'messaging_center']))
       });
       

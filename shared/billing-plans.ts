@@ -242,6 +242,7 @@ export const businessTypePlans: Record<BusinessType, Record<MessagingPlanId, Mes
   freelancer_consultant: freelancerPlans,
   billing_service: billingServicePlans,
   nonprofit_organization: nonprofitPlans,
+  higher_education: callCenterPlans,
 };
 
 // Helper function to get plans for a specific business type
