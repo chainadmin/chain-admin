@@ -207,6 +207,7 @@ export interface IStorage {
   createTenantWithPostmark(data: {
     name: string;
     email: string;
+    businessType?: string;
     postmarkServerId: string;
     postmarkServerToken: string;
     postmarkServerName: string;
@@ -727,6 +728,7 @@ export class DatabaseStorage implements IStorage {
   async createTenantWithPostmark(data: {
     name: string;
     email: string;
+    businessType?: string;
     postmarkServerId: string;
     postmarkServerToken: string;
     postmarkServerName: string;
@@ -738,6 +740,9 @@ export class DatabaseStorage implements IStorage {
       name: data.name,
       slug: slug,
       email: data.email,
+      businessType: data.businessType || 'collection_agency',
+      portalAccessEnabled: data.businessType === 'municipality' ? false : true,
+      paymentProcessingEnabled: data.businessType === 'municipality' ? false : true,
       isTrialAccount: false, // Created by admin as paid account
       isPaidAccount: true,
       postmarkServerId: data.postmarkServerId,

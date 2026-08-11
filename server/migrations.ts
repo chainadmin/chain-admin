@@ -6,6 +6,20 @@ export async function runMigrations() {
   try {
     client = await pool.connect();
     console.log('🔄 Running database migrations...');
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tenant_departments (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        description TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE (tenant_id, name)
+      )
+    `);
+    await client.query(`ALTER TABLE agency_credentials ADD COLUMN IF NOT EXISTS department_id UUID REFERENCES tenant_departments(id) ON DELETE SET NULL`);
     
     // Add payment processor columns (USAePay, Authorize.net, and NMI)
     console.log('Adding payment processor columns...');

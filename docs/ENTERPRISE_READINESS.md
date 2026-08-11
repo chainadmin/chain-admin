@@ -2,6 +2,10 @@
 
 ## Contact access and campaigns
 
+Municipalities are ordinary isolated tenants with `business_type=municipality`; the classification does not select a different contact store or code path. They use the same paginated contact access and bounded campaign processing described below.
+
+Municipal administrators do not see the self-service Billing navigation or page. Billing jobs and invoice email delivery remain enabled for platform administrators, so hiding the tenant-facing page does not interrupt invoicing.
+
 `GET /api/consumers` is database-paginated. It accepts `limit` (maximum 500), `cursor`, `search`, `folderId`, `registration`, and `format=page`. Page responses contain `items`, `nextCursor`, and `total`; compatibility array responses also expose `X-Total-Count` and `X-Next-Cursor`.
 
 Email campaign approval returns HTTP 202 after billing reservation. The worker selects at most 500 eligible consumers, selects accounts only for those consumer IDs, builds and submits that Postmark batch, persists progress, and advances by the consumer UUID cursor. It never constructs the complete campaign audience or email payload array.

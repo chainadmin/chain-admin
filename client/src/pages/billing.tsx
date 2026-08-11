@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import AdminLayout from "@/components/admin-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -55,6 +55,7 @@ import {
 import { SiVisa, SiMastercard, SiAmericanexpress, SiDiscover } from "react-icons/si";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
+import { canTenantViewBilling } from "@shared/tenantAccess";
 
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || "");
 
@@ -374,6 +375,7 @@ function StripePayInvoiceForm({ totalBill, invoiceId, onSuccess }: { totalBill: 
 
 export default function Billing() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const queryClient = useQueryClient();
   const [updateBillingOpen, setUpdateBillingOpen] = useState(false);
   const [isSavingBilling, setIsSavingBilling] = useState(false);
@@ -429,6 +431,11 @@ export default function Billing() {
   });
   const enabledAddons = (settingsData as any)?.enabledAddons || [];
   const isTrialAccount = (settingsData as any)?.isTrialAccount ?? true;
+  const isMunicipality = !canTenantViewBilling((settingsData as any)?.businessType, (settingsData as any)?.enabledModules);
+
+  useEffect(() => {
+    if (isMunicipality) navigate('/dashboard', { replace: true });
+  }, [isMunicipality, navigate]);
 
   // Fetch VoIP billing summary
   const { data: voipBillingSummary } = useQuery<{
@@ -787,6 +794,10 @@ export default function Billing() {
       setUpdatingPlanId(null);
     }
   };
+
+  // Municipal invoices are managed and emailed by Chain; municipal users never
+  // see the self-service billing surface, including on a direct URL visit.
+  if (isMunicipality) return null;
 
   if (statsLoading || subscriptionLoading) {
     return (

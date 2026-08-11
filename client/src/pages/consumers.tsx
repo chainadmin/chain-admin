@@ -35,6 +35,10 @@ import {
 } from "@/components/ui/select";
 
 export default function Consumers() {
+  const { data: tenantSettings } = useQuery<any>({ queryKey: ['/api/settings'] });
+  const isMunicipality = tenantSettings?.businessType === 'municipality';
+  const contactLabel = isMunicipality ? 'Contact' : 'Consumer';
+  const contactsLabel = isMunicipality ? 'Contacts' : 'Consumers';
   const [selectedConsumer, setSelectedConsumer] = useState<any>(null);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showViewDialog, setShowViewDialog] = useState(false);
@@ -231,9 +235,9 @@ export default function Consumers() {
     <AdminLayout>
       <div className="py-6">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
-          <h1 className="text-2xl font-bold text-gray-900">Consumers</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{contactsLabel}</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Manage your consumer database
+            Manage your {isMunicipality ? 'resident and community contact list' : 'consumer database'}
           </p>
         </div>
 
@@ -248,7 +252,7 @@ export default function Consumers() {
                       <Users className="h-5 w-5 text-blue-600" />
                     </div>
                     <div>
-                      <p className="text-sm text-gray-500">Total Consumers</p>
+                      <p className="text-sm text-gray-500">Total {contactsLabel}</p>
                       <p className="text-2xl font-bold text-gray-900">{totalConsumers}</p>
                     </div>
                   </div>
@@ -288,7 +292,7 @@ export default function Consumers() {
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>Consumer List</CardTitle>
+                <CardTitle>{contactLabel} List</CardTitle>
                 <div className="flex items-center gap-2">
                   <Label htmlFor="registration-filter" className="text-sm text-gray-600">
                     Filter:
@@ -298,10 +302,10 @@ export default function Consumers() {
                     onValueChange={(value) => { setRegistrationFilter(value); setCursor(null); setCursorHistory([]); }}
                   >
                     <SelectTrigger id="registration-filter" className="w-[180px]" data-testid="select-registration-filter">
-                      <SelectValue placeholder="All Consumers" />
+                      <SelectValue placeholder={`All ${contactsLabel}`} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all" data-testid="option-all">All Consumers</SelectItem>
+                      <SelectItem value="all" data-testid="option-all">All {contactsLabel}</SelectItem>
                       <SelectItem value="registered" data-testid="option-registered">Registered Only</SelectItem>
                       <SelectItem value="not_registered" data-testid="option-not-registered">Not Registered</SelectItem>
                     </SelectContent>
@@ -322,8 +326,8 @@ export default function Consumers() {
               ) : filteredConsumers.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   {totalConsumers === 0 
-                    ? "No consumers found. Import account data to get started."
-                    : "No consumers match the selected filter."}
+                    ? `No ${contactsLabel.toLowerCase()} found. Import contact data to get started.`
+                    : `No ${contactsLabel.toLowerCase()} match the selected filter.`}
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -433,7 +437,7 @@ export default function Consumers() {
       <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] border-white/20 text-white">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-bold text-white">Consumer Details</DialogTitle>
+            <DialogTitle className="text-2xl font-bold text-white">{contactLabel} Details</DialogTitle>
           </DialogHeader>
           {selectedConsumer && (
             <div className="space-y-4">
@@ -532,7 +536,7 @@ export default function Consumers() {
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] border-white/20 text-white">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-bold text-white">Edit Consumer Information</DialogTitle>
+            <DialogTitle className="text-2xl font-bold text-white">Edit {contactLabel} Information</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleUpdateSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">

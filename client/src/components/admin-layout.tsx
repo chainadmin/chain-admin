@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { clearAuth } from "@/lib/cookies";
 import { useServiceAccess } from "@/hooks/useServiceAccess";
 import { MessageSquare, Mail } from "lucide-react";
+import { canTenantViewBilling } from "@shared/tenantAccess";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -94,6 +95,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     ? (user as any)?.tenantSlug || 'agency-pro'
     : (userData as any)?.platformUser?.tenant?.slug || 'agency-pro';
 
+  const showTenantBilling = canTenantViewBilling((tenantSettings as any)?.businessType, (tenantSettings as any)?.enabledModules);
+
   // Only show company section for platform owners
   const isOwner = isJwtAuth 
     ? (user as any)?.role === 'owner'
@@ -126,7 +129,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     return restrictedServices.includes(serviceKey);
   };
   
-  const navigationItems = [
+  const standardNavigationItems = [
     { name: "Dashboard", href: buildNavHref("/dashboard"), icon: "fas fa-chart-bar" },
     { name: "Accounts", href: buildNavHref("/accounts"), icon: "fas fa-file-invoice-dollar" },
     { name: "Communications", href: buildNavHref("/communications"), icon: "fas fa-comments" },
@@ -134,9 +137,30 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     { name: "Phones", href: buildNavHref("/phones"), icon: "fas fa-phone-alt" },
     { name: "Requests", href: buildNavHref("/requests"), icon: "fas fa-phone" },
     { name: "Payments", href: buildNavHref("/payments"), icon: "fas fa-credit-card" },
-    ...(isOwner ? [{ name: "Billing", href: buildNavHref("/billing"), icon: "fas fa-receipt" }] : []),
+    ...(isOwner && showTenantBilling ? [{ name: "Billing", href: buildNavHref("/billing"), icon: "fas fa-receipt" }] : []),
     { name: "Settings", href: buildNavHref("/settings"), icon: "fas fa-cog" },
   ].filter(item => !isServiceRestricted(item.name));
+
+  const municipalityNavigationItems = [
+    { name: "Dashboard", href: buildNavHref("/dashboard"), icon: "fas fa-chart-bar" },
+    { name: "Contacts", href: buildNavHref("/consumers"), icon: "fas fa-address-book" },
+    { name: "Email Campaigns", href: buildNavHref("/communications?tab=campaigns"), icon: "fas fa-envelope" },
+    { name: "SMS Campaigns", href: buildNavHref("/communications?tab=campaigns"), icon: "fas fa-comment-alt" },
+    { name: "Templates", href: buildNavHref("/communications?tab=templates"), icon: "fas fa-file-alt" },
+    { name: "Lists / Segments", href: buildNavHref("/consumers"), icon: "fas fa-list" },
+    { name: "Communications History", href: buildNavHref("/communications?tab=overview"), icon: "fas fa-history" },
+    { name: "Reports / Analytics", href: buildNavHref("/communications?tab=overview"), icon: "fas fa-chart-line" },
+    { name: "Documents", href: buildNavHref("/documents"), icon: "fas fa-file-signature" },
+    ...((tenantSettings as any)?.enabledModules?.includes('billing') ? [
+      { name: "Payments", href: buildNavHref("/payments"), icon: "fas fa-credit-card" },
+      ...(isOwner ? [{ name: "Billing", href: buildNavHref("/billing"), icon: "fas fa-receipt" }] : []),
+    ] : []),
+    ...(isOwner ? [{ name: "Users & Departments", href: buildNavHref("/municipality-admin"), icon: "fas fa-users-cog" }] : []),
+    { name: "Settings", href: buildNavHref("/settings"), icon: "fas fa-cog" },
+  ];
+  const navigationItems = (tenantSettings as any)?.businessType === 'municipality'
+    ? municipalityNavigationItems
+    : standardNavigationItems;
 
   const isActiveRoute = (href: string) => {
     return location === href;
