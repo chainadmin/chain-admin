@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { CreditCard, DollarSign, TrendingUp, Clock, CheckCircle, Calendar, User, Building2, Lock, Trash2, ThumbsUp, ThumbsDown, RefreshCw, History, Check, XCircle, Search, Settings, Edit, Mail, MessageSquare, AlertTriangle, Phone } from "lucide-react";
 import { PaymentSchedulingCalendar } from "@/components/payment-scheduling-calendar";
+import { usePaginatedConsumers } from "@/hooks/use-paginated-consumers";
 
 export default function Payments() {
   const { toast } = useToast();
@@ -61,10 +62,10 @@ export default function Payments() {
     queryKey: ["/api/payments/stats"],
   });
 
-  // Fetch consumers for payments
-  const { data: consumers } = useQuery({
-    queryKey: ["/api/consumers"],
-  });
+  // Fetch consumers in bounded pages for payment selection.
+  const [consumerSearch, setConsumerSearch] = useState("");
+  const { consumers, fetchNextPage: fetchNextConsumers, hasNextPage: hasNextConsumers, isFetchingNextPage: isFetchingNextConsumers } =
+    usePaginatedConsumers({ search: consumerSearch });
 
   // Fetch all payment schedules (pending payments)
   const { data: paymentSchedules, isLoading: schedulesLoading } = useQuery({
@@ -888,6 +889,12 @@ export default function Payments() {
                       <form onSubmit={handlePayNowSubmit} className="space-y-4">
                         <div className="space-y-2">
                           <Label className="text-sm font-semibold text-blue-100/80">Consumer Email *</Label>
+                          <Input
+                            value={consumerSearch}
+                            onChange={event => setConsumerSearch(event.target.value)}
+                            placeholder="Search consumers"
+                            className="rounded-xl border border-white/20 bg-white/10 text-blue-50"
+                          />
                           <Select
                             value={payNowForm.consumerEmail}
                             onValueChange={(value) => handlePayNowFormChange("consumerEmail", value)}
@@ -904,6 +911,11 @@ export default function Payments() {
                                   {consumer.firstName} {consumer.lastName} ({consumer.email})
                                 </SelectItem>
                               ))}
+                              {hasNextConsumers && (
+                                <Button type="button" variant="ghost" className="w-full" disabled={isFetchingNextConsumers} onClick={() => fetchNextConsumers()}>
+                                  {isFetchingNextConsumers ? 'Loading…' : 'Load more consumers'}
+                                </Button>
+                              )}
                             </SelectContent>
                           </Select>
                         </div>

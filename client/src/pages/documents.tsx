@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { FileText, CheckCircle, Clock, XCircle, Eye } from "lucide-react";
+import { usePaginatedConsumers } from "@/hooks/use-paginated-consumers";
 
 const signatureRequestSchema = z.object({
   consumerId: z.string().min(1, "Consumer is required"),
@@ -35,6 +36,7 @@ export default function DocumentsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [hasArrangementOnFile, setHasArrangementOnFile] = useState(false);
   const [selectedConsumerId, setSelectedConsumerId] = useState("");
+  const [consumerSearch, setConsumerSearch] = useState("");
 
   const form = useForm<SignatureRequestForm>({
     resolver: zodResolver(signatureRequestSchema),
@@ -51,9 +53,8 @@ export default function DocumentsPage() {
     },
   });
 
-  const { data: consumers = [] } = useQuery<any[]>({
-    queryKey: ["/api/consumers"],
-  });
+  const { consumers, fetchNextPage: fetchNextConsumers, hasNextPage: hasNextConsumers, isFetchingNextPage: isFetchingNextConsumers } =
+    usePaginatedConsumers({ search: consumerSearch, enabled: isDialogOpen });
 
   const { data: documents = [] } = useQuery<any[]>({
     queryKey: ["/api/documents"],
@@ -184,6 +185,12 @@ export default function DocumentsPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Consumer *</FormLabel>
+                      <Input
+                        value={consumerSearch}
+                        onChange={event => setConsumerSearch(event.target.value)}
+                        placeholder="Search consumers by name, email, or phone"
+                        className="mb-2"
+                      />
                       <Select 
                         onValueChange={(value) => {
                           field.onChange(value);
@@ -203,6 +210,11 @@ export default function DocumentsPage() {
                               {consumer.firstName} {consumer.lastName} - {consumer.email}
                             </SelectItem>
                           ))}
+                          {hasNextConsumers && (
+                            <Button type="button" variant="ghost" className="w-full" disabled={isFetchingNextConsumers} onClick={() => fetchNextConsumers()}>
+                              {isFetchingNextConsumers ? 'Loading…' : 'Load more consumers'}
+                            </Button>
+                          )}
                         </SelectContent>
                       </Select>
                       <FormMessage />

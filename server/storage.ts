@@ -138,7 +138,7 @@ import {
 } from "@shared/schema";
 import { messagingPlans, EMAIL_OVERAGE_RATE_PER_EMAIL, SMS_OVERAGE_RATE_PER_SEGMENT, DOCUMENT_SIGNING_ADDON_PRICE, MOBILE_APP_BRANDING_MONTHLY, AI_AUTO_RESPONSE_ADDON_PRICE, AUTO_RESPONSE_INCLUDED_RESPONSES, AUTO_RESPONSE_OVERAGE_PER_RESPONSE, type MessagingPlanId } from "@shared/billing-plans";
 import { db } from "./db";
-import { eq, and, or, desc, sql, inArray, gte, lte, isNotNull } from "drizzle-orm";
+import { eq, and, or, desc, gt, sql, inArray, gte, lte, isNotNull } from "drizzle-orm";
 import {
   ensureArrangementOptionsSchema,
   ensureDocumentsSchema,
@@ -251,7 +251,7 @@ export interface IStorage {
   markPasswordResetTokenUsed(token: string): Promise<void>;
   
   // Consumer operations
-  getConsumersByTenant(tenantId: string): Promise<Consumer[]>;
+  getConsumersByTenant(tenantId: string, options?: { cursor?: string; limit?: number }): Promise<Consumer[]>;
   getConsumer(id: string): Promise<Consumer | undefined>;
   getConsumerByEmail(email: string): Promise<Consumer | undefined>;
   getConsumersByEmail(email: string): Promise<Consumer[]>;
@@ -935,8 +935,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Consumer operations
-  async getConsumersByTenant(tenantId: string): Promise<Consumer[]> {
-    return await db.select().from(consumers).where(eq(consumers.tenantId, tenantId));
+  async getConsumersByTenant(tenantId: string, options: { cursor?: string; limit?: number } = {}): Promise<Consumer[]> {
+    const limit = Math.min(500, Math.max(1, options.limit || 500));
+    return await db.select()
+      .from(consumers)
+      .where(and(eq(consumers.tenantId, tenantId), options.cursor ? gt(consumers.id, options.cursor) : undefined))
+      .orderBy(consumers.id)
+      .limit(limit);
   }
 
   async getConsumer(id: string): Promise<Consumer | undefined> {

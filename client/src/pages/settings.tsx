@@ -47,6 +47,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import AutoResponseSettings from "@/components/auto-response-settings";
 import TeamMembersSection from "@/components/team-members-section";
+import { usePaginatedConsumers } from "@/hooks/use-paginated-consumers";
 
 export default function Settings() {
   const [showDocumentModal, setShowDocumentModal] = useState(false);
@@ -114,6 +115,7 @@ export default function Settings() {
 
   const [sendTemplateForm, setSendTemplateForm] = useState<SendTemplateFormState>({ ...emptySendTemplateForm });
   const [consumerSearchOpen, setConsumerSearchOpen] = useState(false);
+  const [consumerSearch, setConsumerSearch] = useState("");
 
   type ArrangementFormState = {
     name: string;
@@ -219,9 +221,8 @@ export default function Settings() {
     queryKey: ["/api/document-templates"],
   });
 
-  const { data: consumers = [] } = useQuery<any[]>({
-    queryKey: ["/api/consumers"],
-  });
+  const { consumers, fetchNextPage: fetchNextConsumers, hasNextPage: hasNextConsumers, isFetchingNextPage: isFetchingNextConsumers } =
+    usePaginatedConsumers({ search: consumerSearch, enabled: consumerSearchOpen });
 
   const quickStatusItems = [
     {
@@ -3618,7 +3619,12 @@ export default function Settings() {
                         </PopoverTrigger>
                         <PopoverContent className="w-[400px] p-0 border-white/10 bg-[#0f172a] text-blue-50">
                           <Command className="border-0">
-                            <CommandInput placeholder="Search consumers by name or email..." className="border-0" />
+                            <CommandInput
+                              placeholder="Search consumers by name or email..."
+                              className="border-0"
+                              value={consumerSearch}
+                              onValueChange={setConsumerSearch}
+                            />
                             <CommandList>
                               <CommandEmpty>No consumer found.</CommandEmpty>
                               <CommandGroup>
@@ -3644,6 +3650,11 @@ export default function Settings() {
                                     {consumer.firstName} {consumer.lastName} - {consumer.email}
                                   </CommandItem>
                                 ))}
+                                {hasNextConsumers && (
+                                  <CommandItem value="__load-more-consumers" onSelect={() => fetchNextConsumers()} disabled={isFetchingNextConsumers}>
+                                    {isFetchingNextConsumers ? 'Loading…' : 'Load more consumers'}
+                                  </CommandItem>
+                                )}
                               </CommandGroup>
                             </CommandList>
                           </Command>

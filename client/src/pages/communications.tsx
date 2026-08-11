@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, type RefObject, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { usePaginatedConsumers } from "@/hooks/use-paginated-consumers";
 import { useToast } from "@/hooks/use-toast";
 import AdminLayout from "@/components/admin-layout";
 import { ServiceUpsellBanner } from "@/components/service-upsell-banner";
@@ -698,9 +699,8 @@ export default function Communications() {
     queryKey: ["/api/sms-metrics"],
   });
 
-  const { data: consumers } = useQuery({
-    queryKey: ["/api/consumers"],
-  });
+  const { consumers, fetchNextPage: fetchNextConsumers, hasNextPage: hasNextConsumers, isFetchingNextPage: isFetchingNextConsumers } =
+    usePaginatedConsumers({ search: consumerSearch });
 
   const { data: callbackRequests } = useQuery({
     queryKey: ["/api/callback-requests"],
@@ -4330,20 +4330,7 @@ export default function Communications() {
                           </div>
                         ) : (
                           <div className="max-h-40 overflow-y-auto border rounded-md">
-                            {(consumers as any[])
-                              ?.filter((c: any) => {
-                                if (!consumerSearch.trim()) return true;
-                                const search = consumerSearch.toLowerCase();
-                                const fullName = `${c.firstName} ${c.lastName}`.toLowerCase();
-                                const email = (c.email || '').toLowerCase();
-                                const phone = (c.phone || '').replace(/\D/g, '');
-                                const searchDigits = consumerSearch.replace(/\D/g, '');
-                                return fullName.includes(search) || 
-                                       email.includes(search) || 
-                                       (searchDigits && phone.includes(searchDigits));
-                              })
-                              .slice(0, 10)
-                              .map((consumer: any) => {
+                            {(consumers as any[]).map((consumer: any) => {
                                 const hasContact = communicationType === "sms" ? consumer.phone : consumer.email;
                                 return (
                                   <button
@@ -4379,6 +4366,11 @@ export default function Communications() {
                                   </button>
                                 );
                               })}
+                            {hasNextConsumers && (
+                              <Button type="button" variant="ghost" className="w-full" disabled={isFetchingNextConsumers} onClick={() => fetchNextConsumers()}>
+                                {isFetchingNextConsumers ? 'Loading…' : 'Load more consumers'}
+                              </Button>
+                            )}
                             {(consumers as any[])?.length === 0 && (
                               <p className="p-3 text-sm text-gray-500 text-center">No consumers found</p>
                             )}

@@ -2035,6 +2035,28 @@ export async function runMigrations() {
       console.log(`  ⚠ wallet micros/auto-reload columns: ${err.message}`);
     }
 
+    // Enterprise capacity: configurable tenant seats and tenant-scoped Postmark routing.
+    try {
+      await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS max_active_users INTEGER NOT NULL DEFAULT 2`);
+      await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS postmark_transactional_stream TEXT DEFAULT 'outbound'`);
+      await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS postmark_broadcast_stream TEXT DEFAULT 'broadcast'`);
+      await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS postmark_inbound_address TEXT`);
+      await client.query(`ALTER TABLE tenants ADD CONSTRAINT tenants_max_active_users_positive CHECK (max_active_users > 0)`)
+        .catch(() => undefined);
+
+      // All high-volume contact access starts with tenant_id and uses a stable id cursor.
+      await client.query(`CREATE INDEX IF NOT EXISTS consumers_tenant_id_cursor_idx ON consumers (tenant_id, id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS consumers_tenant_folder_id_cursor_idx ON consumers (tenant_id, folder_id, id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS consumers_tenant_created_id_idx ON consumers (tenant_id, created_at, id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS consumers_tenant_email_search_idx ON consumers (tenant_id, LOWER(email))`);
+      await client.query(`CREATE INDEX IF NOT EXISTS consumers_tenant_name_search_idx ON consumers (tenant_id, LOWER(last_name), LOWER(first_name), id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS accounts_tenant_consumer_idx ON accounts (tenant_id, consumer_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS agency_credentials_tenant_active_idx ON agency_credentials (tenant_id, is_active)`);
+      console.log('  ✓ enterprise user/Postmark columns and contact indexes');
+    } catch (err: any) {
+      console.log(`  ⚠ enterprise capacity migration: ${err.message}`);
+    }
+
     console.log('✅ Database migrations completed successfully');
   } catch (error: any) {
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {

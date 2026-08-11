@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb } from './_lib/db';
 import { withAuth, AuthenticatedRequest, JWT_SECRET } from './_lib/auth';
-import { listConsumers, updateConsumer, deleteConsumers, ConsumerNotFoundError } from '../shared/server/consumers';
+import { paginateConsumers, updateConsumer, deleteConsumers, ConsumerNotFoundError } from '../shared/server/consumers';
 import jwt from 'jsonwebtoken';
 
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
@@ -33,8 +33,18 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
     }
 
     if (method === 'GET') {
-      const consumers = await listConsumers(db, tenantId);
-      res.status(200).json(consumers);
+      const page = await paginateConsumers(db, tenantId, {
+        limit: Number(req.query.limit) || 100,
+        cursor: typeof req.query.cursor === 'string' ? req.query.cursor : undefined,
+        search: typeof req.query.search === 'string' ? req.query.search : undefined,
+        folderId: typeof req.query.folderId === 'string' ? req.query.folderId : undefined,
+        registration: req.query.registration === 'registered' || req.query.registration === 'not_registered'
+          ? req.query.registration
+          : undefined,
+      });
+      res.setHeader('X-Total-Count', String(page.total));
+      res.setHeader('X-Next-Cursor', page.nextCursor || '');
+      res.status(200).json(req.query.format === 'page' ? page : page.items);
     } else if (method === 'PATCH') {
       // Update consumer information
       const consumerId = req.url?.split('/').pop();

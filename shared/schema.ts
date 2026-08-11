@@ -69,6 +69,10 @@ export const tenants = pgTable("tenants", {
   postmarkServerToken: text("postmark_server_token"), // Postmark server API token for sending emails
   postmarkServerName: text("postmark_server_name"), // Human-readable server name
   customSenderEmail: text("custom_sender_email"), // Custom sender email (e.g., support@agencyname.com) - must be verified in Postmark
+  postmarkTransactionalStream: text("postmark_transactional_stream").default('outbound'),
+  postmarkBroadcastStream: text("postmark_broadcast_stream").default('broadcast'),
+  postmarkInboundAddress: text("postmark_inbound_address"),
+  maxActiveUsers: integer("max_active_users").default(2).notNull(), // Includes the owner; enterprise tenants can raise this without a deployment
   // Twilio integration (each agency has their own)
   twilioAccountSid: text("twilio_account_sid"), // Twilio Account SID
   twilioAuthToken: text("twilio_auth_token"), // Twilio Auth Token (encrypted in production)

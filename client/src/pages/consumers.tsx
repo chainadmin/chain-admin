@@ -42,6 +42,9 @@ export default function Consumers() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleteConsumerId, setDeleteConsumerId] = useState<string | null>(null);
   const [registrationFilter, setRegistrationFilter] = useState<string>("all");
+  const [search, setSearch] = useState("");
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [cursorHistory, setCursorHistory] = useState<(string | null)[]>([]);
   const [editForm, setEditForm] = useState({
     firstName: "",
     lastName: "",
@@ -61,9 +64,11 @@ export default function Consumers() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: consumers, isLoading } = useQuery({
-    queryKey: ["/api/consumers"],
+  const consumerQuery = `/api/consumers?format=page&limit=100&registration=${registrationFilter}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}${search ? `&search=${encodeURIComponent(search)}` : ''}`;
+  const { data: consumerPage, isLoading } = useQuery<any>({
+    queryKey: [consumerQuery],
   });
+  const consumers = consumerPage?.items || [];
 
   // Update consumer mutation
   const updateConsumerMutation = useMutation({
@@ -215,16 +220,12 @@ export default function Consumers() {
   };
 
   // Filter consumers based on registration status
-  const filteredConsumers = (consumers as any[])?.filter((consumer) => {
-    if (registrationFilter === "registered") return consumer.isRegistered;
-    if (registrationFilter === "not_registered") return !consumer.isRegistered;
-    return true; // "all"
-  }) || [];
+  const filteredConsumers = consumers as any[];
 
   // Calculate stats
-  const totalConsumers = (consumers as any[])?.length || 0;
+  const totalConsumers = consumerPage?.total || 0;
   const registeredCount = (consumers as any[])?.filter((c: any) => c.isRegistered).length || 0;
-  const notRegisteredCount = totalConsumers - registeredCount;
+  const notRegisteredCount = (consumers as any[]).length - registeredCount;
 
   return (
     <AdminLayout>
@@ -260,7 +261,7 @@ export default function Consumers() {
                       <UserCheck className="h-5 w-5 text-green-600" />
                     </div>
                     <div>
-                      <p className="text-sm text-gray-500">Portal Registered</p>
+                      <p className="text-sm text-gray-500">Registered on This Page</p>
                       <p className="text-2xl font-bold text-gray-900">{registeredCount}</p>
                     </div>
                   </div>
@@ -273,7 +274,7 @@ export default function Consumers() {
                       <UserX className="h-5 w-5 text-gray-600" />
                     </div>
                     <div>
-                      <p className="text-sm text-gray-500">Not Registered</p>
+                      <p className="text-sm text-gray-500">Not Registered on This Page</p>
                       <p className="text-2xl font-bold text-gray-900">{notRegisteredCount}</p>
                     </div>
                   </div>
@@ -294,7 +295,7 @@ export default function Consumers() {
                   </Label>
                   <Select
                     value={registrationFilter}
-                    onValueChange={setRegistrationFilter}
+                    onValueChange={(value) => { setRegistrationFilter(value); setCursor(null); setCursorHistory([]); }}
                   >
                     <SelectTrigger id="registration-filter" className="w-[180px]" data-testid="select-registration-filter">
                       <SelectValue placeholder="All Consumers" />
@@ -307,6 +308,13 @@ export default function Consumers() {
                   </Select>
                 </div>
               </div>
+              <Input
+                className="mt-4"
+                placeholder="Search name, email, or phone"
+                value={search}
+                onChange={(event) => { setSearch(event.target.value); setCursor(null); setCursorHistory([]); }}
+                data-testid="input-consumer-search"
+              />
             </CardHeader>
             <CardContent>
               {isLoading ? (
@@ -394,6 +402,26 @@ export default function Consumers() {
                       </div>
                     </div>
                   ))}
+                  <div className="flex items-center justify-between pt-4">
+                    <Button
+                      variant="outline"
+                      disabled={cursorHistory.length === 0}
+                      onClick={() => {
+                        const history = cursorHistory.slice(0, -1);
+                        setCursor(cursorHistory[cursorHistory.length - 1] || null);
+                        setCursorHistory(history);
+                      }}
+                    >Previous</Button>
+                    <span className="text-sm text-gray-500">Showing {filteredConsumers.length} of {totalConsumers}</span>
+                    <Button
+                      variant="outline"
+                      disabled={!consumerPage?.nextCursor}
+                      onClick={() => {
+                        setCursorHistory([...cursorHistory, cursor]);
+                        setCursor(consumerPage.nextCursor);
+                      }}
+                    >Next</Button>
+                  </div>
                 </div>
               )}
             </CardContent>
