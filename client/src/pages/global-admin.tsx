@@ -30,6 +30,7 @@ export default function GlobalAdmin() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newAgencyName, setNewAgencyName] = useState('');
   const [newAgencyEmail, setNewAgencyEmail] = useState('');
+  const [newAgencyBusinessType, setNewAgencyBusinessType] = useState('collection_agency');
   
   // SMS configuration state
   const [smsConfigDialogOpen, setSmsConfigDialogOpen] = useState(false);
@@ -287,14 +288,15 @@ export default function GlobalAdmin() {
 
   // Mutation to create new agency
   const createAgencyMutation = useMutation({
-    mutationFn: async ({ name, email }: { name: string; email: string }) => {
-      return apiRequest('POST', '/api/admin/agencies', { name, email });
+    mutationFn: async ({ name, email, businessType }: { name: string; email: string; businessType: string }) => {
+      return apiRequest('POST', '/api/admin/agencies', { name, email, businessType });
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants'] });
       setIsCreateDialogOpen(false);
       setNewAgencyName('');
       setNewAgencyEmail('');
+      setNewAgencyBusinessType('collection_agency');
       toast({
         title: "Agency Created Successfully",
         description: `${data.tenant.name} has been created with dedicated Postmark email server`,
@@ -940,6 +942,7 @@ export default function GlobalAdmin() {
     createAgencyMutation.mutate({
       name: newAgencyName.trim(),
       email: newAgencyEmail.trim(),
+      businessType: newAgencyBusinessType,
     });
   };
   
@@ -1194,14 +1197,30 @@ export default function GlobalAdmin() {
               </DialogHeader>
               <div className="space-y-4 pt-4">
                 <div className="space-y-2">
-                  <Label htmlFor="agency-name">Agency Name</Label>
+                  <Label htmlFor="agency-name">Organization Name</Label>
                   <Input
                     id="agency-name"
                     value={newAgencyName}
                     onChange={(e) => setNewAgencyName(e.target.value)}
-                    placeholder="Enter agency name"
+                    placeholder="Enter organization name"
                     data-testid="input-agency-name"
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="organization-type">Organization Type</Label>
+                  <Select value={newAgencyBusinessType} onValueChange={setNewAgencyBusinessType}>
+                    <SelectTrigger id="organization-type" data-testid="select-organization-type">
+                      <SelectValue placeholder="Select organization type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="collection_agency">Collection Agency</SelectItem>
+                      <SelectItem value="call_center">Call Center</SelectItem>
+                      <SelectItem value="law_firm">Law Firm</SelectItem>
+                      <SelectItem value="municipality">Municipality</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-sm text-gray-500">This classifies the tenant; all platform features and large contact lists work the same.</p>
                 </div>
                 
                 <div className="space-y-2">
@@ -3032,6 +3051,9 @@ export default function GlobalAdmin() {
                       <div className="flex-1">
                         <div className="flex items-center space-x-3">
                           <h3 className="text-lg font-semibold text-blue-50" data-testid={`text-tenant-name-${tenant.id}`}>{tenant.name}</h3>
+                          <Badge variant="outline" className="capitalize">
+                            {(tenant.businessType || 'collection_agency').replaceAll('_', ' ')}
+                          </Badge>
                           {tenant.isTrialAccount && (
                             <Badge variant="secondary" data-testid={`badge-trial-${tenant.id}`}>Trial</Badge>
                           )}

@@ -19,6 +19,7 @@ import {
   paymentSchedules as paymentSchedulesTable,
   payments,
   agencyCredentials,
+  tenantDepartments,
   users,
   subscriptionPlans,
   subscriptions,
@@ -2791,6 +2792,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error fetching stats:", error);
       res.status(500).json({ message: "Failed to fetch stats" });
     }
+  });
+
+  // Communications-only municipal metrics use database aggregates so a
+  // 500,000-contact municipality never materializes its contact list in memory.
+  app.get('/api/municipality/dashboard-stats', authenticateUser, async (req: any, res) => {
+    const tenantId = req.user.tenantId;
+    const tenant = await storage.getTenant(tenantId);
+    if (tenant?.businessType !== 'municipality') return res.status(404).json({ message: 'Not found' });
+    const [[contactStats], [emailStats], [smsStats]] = await Promise.all([
+      db.select({ totalContacts: sql<number>`count(*)::int` }).from(consumers).where(eq(consumers.tenantId, tenantId)),
+      db.select({
+        sent: sql<number>`count(*)::int`,
+        opened: sql<number>`count(*) FILTER (WHERE ${emailLogs.openedAt} IS NOT NULL)::int`,
+        bounced: sql<number>`count(*) FILTER (WHERE ${emailLogs.bouncedAt} IS NOT NULL)::int`,
+      }).from(emailLogs).where(eq(emailLogs.tenantId, tenantId)),
+      db.select({
+        sent: sql<number>`count(*)::int`,
+        delivered: sql<number>`count(*) FILTER (WHERE ${smsTracking.status} = 'delivered')::int`,
+        failed: sql<number>`count(*) FILTER (WHERE ${smsTracking.status} = 'failed')::int`,
+      }).from(smsTracking).where(eq(smsTracking.tenantId, tenantId)),
+    ]);
+    res.json({ totalContacts: contactStats.totalContacts, email: emailStats, sms: smsStats });
   });
 
   // CSV Import route
@@ -9663,6 +9686,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         twilioCampaignId: tenant?.twilioCampaignId || '',
         customSenderEmail: tenant?.customSenderEmail || '',
         isTrialAccount: tenant?.isTrialAccount || false,
+        businessType: tenant?.businessType || 'call_center',
+        maxActiveUsers: tenant?.maxActiveUsers || 2,
         // Service access flags
         emailServiceEnabled: tenant?.emailServiceEnabled ?? true,
         smsServiceEnabled: tenant?.smsServiceEnabled ?? true,
@@ -10089,6 +10114,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Available services that can be restricted for sub-users
   const AVAILABLE_SERVICES = ['billing', 'sms', 'payments', 'import', 'reports', 'documents', 'automations', 'email'];
 
+  const requireMunicipalityOwner = async (req: any, res: Response) => {
+    if (req.user.role !== 'owner' && req.user.role !== 'platform_admin') {
+      res.status(403).json({ message: 'Only the Primary Administrator can manage departments' });
+      return null;
+    }
+    const tenant = await storage.getTenant(req.user.tenantId);
+    if (tenant?.businessType !== 'municipality') {
+      res.status(404).json({ message: 'Department management is only available to municipality tenants' });
+      return null;
+    }
+    return tenant;
+  };
+
+  app.get('/api/municipality/departments', authenticateUser, async (req: any, res) => {
+    const tenant = await storage.getTenant(req.user.tenantId);
+    if (tenant?.businessType !== 'municipality') return res.status(404).json({ message: 'Not found' });
+    const rows = await db.select().from(tenantDepartments)
+      .where(eq(tenantDepartments.tenantId, tenant.id)).orderBy(tenantDepartments.name);
+    res.json(rows);
+  });
+
+  app.post('/api/municipality/departments', authenticateUser, async (req: any, res) => {
+    const tenant = await requireMunicipalityOwner(req, res);
+    if (!tenant) return;
+    const data = z.object({ name: z.string().trim().min(1).max(100), description: z.string().trim().max(500).optional() }).parse(req.body);
+    const [row] = await db.insert(tenantDepartments).values({ tenantId: tenant.id, ...data }).returning();
+    res.status(201).json(row);
+  });
+
+  app.patch('/api/municipality/departments/:id', authenticateUser, async (req: any, res) => {
+    const tenant = await requireMunicipalityOwner(req, res);
+    if (!tenant) return;
+    const data = z.object({ name: z.string().trim().min(1).max(100).optional(), description: z.string().trim().max(500).nullable().optional(), isActive: z.boolean().optional() }).parse(req.body);
+    const [row] = await db.update(tenantDepartments).set({ ...data, updatedAt: new Date() })
+      .where(and(eq(tenantDepartments.id, req.params.id), eq(tenantDepartments.tenantId, tenant.id))).returning();
+    if (!row) return res.status(404).json({ message: 'Department not found' });
+    res.json(row);
+  });
+
+  app.delete('/api/municipality/departments/:id', authenticateUser, async (req: any, res) => {
+    const tenant = await requireMunicipalityOwner(req, res);
+    if (!tenant) return;
+    const [row] = await db.delete(tenantDepartments)
+      .where(and(eq(tenantDepartments.id, req.params.id), eq(tenantDepartments.tenantId, tenant.id))).returning();
+    if (!row) return res.status(404).json({ message: 'Department not found' });
+    res.json({ message: 'Department deleted' });
+  });
+
   // Get all team members for tenant
   app.get('/api/team-members', authenticateUser, async (req: any, res) => {
     try {
@@ -10156,9 +10229,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         lastName: z.string().optional(),
         restrictedServices: z.array(z.string()).optional(),
         voipAccess: z.boolean().optional(),
+        role: z.enum(['manager', 'agent', 'viewer', 'uploader']).optional(),
+        departmentId: z.string().uuid().nullable().optional(),
       });
 
       const data = memberSchema.parse(req.body);
+      if (data.departmentId) {
+        const [department] = await db.select({ id: tenantDepartments.id }).from(tenantDepartments)
+          .where(and(eq(tenantDepartments.id, data.departmentId), eq(tenantDepartments.tenantId, tenantId)));
+        if (!department) return res.status(400).json({ message: 'Invalid department' });
+      }
       console.log("[TEAM-MEMBERS] Validated data - username:", data.username, "email:", data.email, "voipAccess:", data.voipAccess);
       
       // Check if username already exists
@@ -10184,7 +10264,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         passwordHash,
         firstName: data.firstName || null,
         lastName: data.lastName || null,
-        role: 'agent', // Sub-users get 'agent' role, not 'owner'
+        role: data.role || 'agent',
+        departmentId: data.departmentId || null,
         isActive: true,
         restrictedServices,
         voipAccess: data.voipAccess || false,
@@ -10238,9 +10319,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isActive: z.boolean().optional(),
         restrictedServices: z.array(z.string()).optional(),
         voipAccess: z.boolean().optional(),
+        role: z.enum(['manager', 'agent', 'viewer', 'uploader']).optional(),
+        departmentId: z.string().uuid().nullable().optional(),
       });
 
       const data = updateSchema.parse(req.body);
+      if (data.departmentId) {
+        const [department] = await db.select({ id: tenantDepartments.id }).from(tenantDepartments)
+          .where(and(eq(tenantDepartments.id, data.departmentId), eq(tenantDepartments.tenantId, tenantId)));
+        if (!department) return res.status(400).json({ message: 'Invalid department' });
+      }
 
       if (data.isActive === true && existingMember.isActive === false) {
         const [tenant, credentials] = await Promise.all([
@@ -10264,6 +10352,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (data.lastName !== undefined) updates.lastName = data.lastName;
       if (data.isActive !== undefined) updates.isActive = data.isActive;
       if (data.voipAccess !== undefined) updates.voipAccess = data.voipAccess;
+      if (data.role !== undefined) updates.role = data.role;
+      if (data.departmentId !== undefined) updates.departmentId = data.departmentId;
       if (data.restrictedServices !== undefined) {
         // Ensure billing is always restricted for sub-users
         const services = data.restrictedServices;
@@ -10325,6 +10415,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error deleting team member:", error);
       res.status(500).json({ message: "Failed to delete team member" });
     }
+  });
+
+  app.post('/api/team-members/:id/password-reset', authenticateUser, async (req: any, res) => {
+    const tenantId = req.user.tenantId;
+    if (req.user.role !== 'owner' && req.user.role !== 'platform_admin') return res.status(403).json({ message: 'Only administrators can initiate password resets' });
+    const member = await storage.getAgencyCredentialsById(req.params.id);
+    if (!member || member.tenantId !== tenantId) return res.status(404).json({ message: 'Team member not found' });
+    const token = crypto.randomBytes(32).toString('hex');
+    await storage.createPasswordResetToken(member.id, token, new Date(Date.now() + 60 * 60 * 1000));
+    const baseUrl = process.env.BASE_URL || 'https://chainsoftwaregroup.com';
+    await emailService.sendEmail({
+      to: member.email,
+      subject: 'Set a new Chain password',
+      html: `<p>Hello${member.firstName ? ` ${member.firstName}` : ''},</p><p>Your organization administrator requested a password reset for your Chain account.</p><p><a href="${baseUrl}/agency/reset-password?token=${token}">Set a new password</a></p><p>This secure link expires in one hour. Your existing password has not been exposed.</p>`,
+      tag: 'password-reset',
+    });
+    res.json({ message: 'Password reset email sent' });
   });
 
   // Get available services that can be restricted
@@ -21639,11 +21746,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create new agency with Postmark server
   app.post('/api/admin/agencies', isPlatformAdmin, async (req: any, res) => {
     try {
-      const { name, email } = req.body;
-      
-      if (!name || !email) {
-        return res.status(400).json({ message: "Agency name and email are required" });
+      const creation = z.object({
+        name: z.string().trim().min(1).max(100),
+        email: z.string().trim().email(),
+        businessType: z.enum(['collection_agency', 'call_center', 'law_firm', 'municipality']).default('collection_agency'),
+      }).safeParse(req.body);
+      if (!creation.success) {
+        return res.status(400).json({ message: "Organization name, type, and a valid email are required", errors: creation.error.errors });
       }
+      const { name, email, businessType } = creation.data;
 
       // Check if agency with this email already exists
       const existingTenant = await storage.getTenantByEmail(email);
@@ -21676,6 +21787,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tenant = await storage.createTenantWithPostmark({
         name,
         email,
+        businessType,
         postmarkServerId: server.ID.toString(),
         postmarkServerToken: server.ApiTokens[0],
         postmarkServerName: server.Name,
@@ -21700,6 +21812,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           name: tenant.name,
           slug: tenant.slug,
           email: tenant.email,
+          businessType: tenant.businessType,
           postmarkServerId: tenant.postmarkServerId,
           postmarkServerName: tenant.postmarkServerName,
         },

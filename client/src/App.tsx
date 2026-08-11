@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { ComponentType, JSX, ReactNode } from "react";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { MobileOptimizations } from "@/components/mobile-optimizations";
@@ -50,6 +50,32 @@ import Info from "@/pages/info";
 import Phones from "@/pages/phones";
 import Softphone from "@/pages/softphone";
 import InstallPage from "@/pages/install";
+import MunicipalityDashboard from "@/pages/municipality-dashboard";
+import MunicipalityAdmin from "@/pages/municipality-admin";
+
+function TenantDashboard() {
+  const { data: settings, isLoading } = useQuery<any>({ queryKey: ['/api/settings'] });
+  if (isLoading) return null;
+  return settings?.businessType === 'municipality' ? <MunicipalityDashboard /> : <AdminDashboard />;
+}
+
+function TenantAccountsRoute() {
+  const { data: settings, isLoading } = useQuery<any>({ queryKey: ['/api/settings'] });
+  const [, navigate] = useLocation();
+  const blocked = settings?.businessType === 'municipality' && !settings?.enabledModules?.includes('billing');
+  useEffect(() => { if (blocked) navigate('/dashboard', { replace: true }); }, [blocked, navigate]);
+  if (isLoading || blocked) return null;
+  return <Accounts />;
+}
+
+function TenantPaymentsRoute() {
+  const { data: settings, isLoading } = useQuery<any>({ queryKey: ['/api/settings'] });
+  const [, navigate] = useLocation();
+  const blocked = settings?.businessType === 'municipality' && !settings?.enabledModules?.includes('billing');
+  useEffect(() => { if (blocked) navigate('/dashboard', { replace: true }); }, [blocked, navigate]);
+  if (isLoading || blocked) return null;
+  return <Payments />;
+}
 
 function MobilePageTransition({ children }: { children: ReactNode }) {
   const [location] = useLocation();
@@ -268,12 +294,12 @@ function Router() {
       <Route
         key="agency-dashboard"
         path="/dashboard"
-        component={isJwtAuth ? AdminDashboard : AgencyLogin}
+        component={isJwtAuth ? TenantDashboard : AgencyLogin}
       />,
       <Route
         key="agency-admin-dashboard"
         path="/admin-dashboard"
-        component={isJwtAuth ? AdminDashboard : AgencyLogin}
+        component={isJwtAuth ? TenantDashboard : AgencyLogin}
       />,
       <Route
         key="agency-register"
@@ -290,7 +316,7 @@ function Router() {
     if (isJwtAuth) {
       agencySubdomainRoutes.push(
         <Route key="agency-consumers" path="/consumers" component={Consumers} />,
-        <Route key="agency-accounts" path="/accounts" component={Accounts} />,
+        <Route key="agency-accounts" path="/accounts" component={TenantAccountsRoute} />,
         <Route
           key="agency-communications"
           path="/communications"
@@ -298,10 +324,11 @@ function Router() {
         />,
         <Route key="agency-email-inbox" path="/email-inbox" component={EmailInbox} />,
         <Route key="agency-requests" path="/requests" component={Requests} />,
-        <Route key="agency-payments" path="/payments" component={Payments} />,
+        <Route key="agency-payments" path="/payments" component={TenantPaymentsRoute} />,
         <Route key="agency-billing" path="/billing" component={Billing} />,
         <Route key="agency-settings" path="/settings" component={Settings} />,
         <Route key="agency-documents" path="/documents" component={Documents} />,
+        <Route key="agency-municipality-admin" path="/municipality-admin" component={MunicipalityAdmin} />,
         <Route key="agency-phones" path="/phones" component={Phones} />
       );
     }
@@ -384,18 +411,19 @@ function Router() {
   }
 
   const authenticatedRoutes: JSX.Element[] = [
-    <Route key="auth-home" path="/" component={AdminDashboard} />,
-    <Route key="auth-dashboard" path="/dashboard" component={AdminDashboard} />,
-    <Route key="auth-admin-dashboard" path="/admin-dashboard" component={AdminDashboard} />,
+    <Route key="auth-home" path="/" component={TenantDashboard} />,
+    <Route key="auth-dashboard" path="/dashboard" component={TenantDashboard} />,
+    <Route key="auth-admin-dashboard" path="/admin-dashboard" component={TenantDashboard} />,
     <Route key="auth-consumers" path="/consumers" component={Consumers} />,
-    <Route key="auth-accounts" path="/accounts" component={Accounts} />,
+    <Route key="auth-accounts" path="/accounts" component={TenantAccountsRoute} />,
     <Route key="auth-communications" path="/communications" component={Communications} />,
     <Route key="auth-email-inbox" path="/email-inbox" component={EmailInbox} />,
     <Route key="auth-requests" path="/requests" component={Requests} />,
-    <Route key="auth-payments" path="/payments" component={Payments} />,
+    <Route key="auth-payments" path="/payments" component={TenantPaymentsRoute} />,
     <Route key="auth-billing" path="/billing" component={Billing} />,
     <Route key="auth-settings" path="/settings" component={Settings} />,
     <Route key="auth-documents" path="/documents" component={Documents} />,
+    <Route key="auth-municipality-admin" path="/municipality-admin" component={MunicipalityAdmin} />,
     <Route key="auth-phones" path="/phones" component={Phones} />,
     <Route key="auth-softphone" path="/softphone" component={Softphone} />,
     <Route key="auth-install" path="/install" component={InstallPage} />,

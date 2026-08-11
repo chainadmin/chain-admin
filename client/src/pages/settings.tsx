@@ -1305,17 +1305,16 @@ export default function Settings() {
         </section>
 
         <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-blue-900/20 backdrop-blur">
-          <Tabs defaultValue="general" className="space-y-8">
+          <Tabs defaultValue={localSettings?.businessType === 'municipality' ? 'documents' : 'general'} className="space-y-8">
             <TabsList className={cn(
               "grid w-full grid-cols-1 gap-2 p-2 text-blue-100",
-              localSettings?.businessType === 'call_center' ? "sm:grid-cols-8" : "sm:grid-cols-7"
+              localSettings?.businessType === 'municipality' ? "sm:grid-cols-4" : localSettings?.businessType === 'call_center' ? "sm:grid-cols-8" : "sm:grid-cols-7"
             )}>
-              <TabsTrigger value="general" className="px-4 py-2">
+              {localSettings?.businessType !== 'municipality' && <><TabsTrigger value="general" className="px-4 py-2">
                 General
-              </TabsTrigger>
-              <TabsTrigger value="merchant" className="px-4 py-2">
+              </TabsTrigger><TabsTrigger value="merchant" className="px-4 py-2">
                 Payment Processing
-              </TabsTrigger>
+              </TabsTrigger></>}
               {localSettings?.businessType === 'call_center' && (
                 <TabsTrigger value="integrations" className="px-4 py-2">
                   Integrations
@@ -1324,9 +1323,9 @@ export default function Settings() {
               <TabsTrigger value="documents" className="px-4 py-2">
                 Documents
               </TabsTrigger>
-              <TabsTrigger value="arrangements" className="px-4 py-2">
+              {localSettings?.businessType !== 'municipality' && <TabsTrigger value="arrangements" className="px-4 py-2">
                 Payment Plans
-              </TabsTrigger>
+              </TabsTrigger>}
               <TabsTrigger value="privacy" className="px-4 py-2">
                 Privacy & Legal
               </TabsTrigger>
@@ -1340,7 +1339,7 @@ export default function Settings() {
               )}
             </TabsList>
 
-            <TabsContent value="general" className="space-y-6">
+            {localSettings?.businessType !== 'municipality' && <TabsContent value="general" className="space-y-6">
               <Card className={cardBaseClasses}>
                 <CardHeader className="space-y-1 text-white">
                   <CardTitle className="text-xl font-semibold text-white">Consumer Portal Settings</CardTitle>
@@ -1893,9 +1892,9 @@ export default function Settings() {
                   )}
                 </CardContent>
               </Card>
-            </TabsContent>
+            </TabsContent>}
 
-            <TabsContent value="merchant" className="space-y-6">
+            {localSettings?.businessType !== 'municipality' && <TabsContent value="merchant" className="space-y-6">
               <Card className={cardBaseClasses}>
                 <CardHeader className="space-y-1 text-white">
                   <CardTitle className="text-xl font-semibold text-white">Payment Processing Settings</CardTitle>
@@ -2260,7 +2259,7 @@ export default function Settings() {
                   </CardFooter>
                 )}
               </Card>
-            </TabsContent>
+            </TabsContent>}
 
             {localSettings?.businessType === 'call_center' && (
               <TabsContent value="integrations" className="space-y-6">
@@ -3144,16 +3143,20 @@ export default function Settings() {
                       <FileText className="h-16 w-16 mx-auto mb-4 text-blue-400/60" />
                       <h3 className="text-lg font-semibold text-blue-100 mb-2">Document Signing Not Enabled</h3>
                       <p className="text-sm text-blue-200/70 mb-6 max-w-md mx-auto">
-                        Enable document signing in Billing → Services to create professional document templates for e-signatures, payment agreements, service contracts, and authorization forms.
+                        {(localSettings as any)?.businessType === 'municipality'
+                          ? 'Contact Chain support to enable document signing for this municipality.'
+                          : 'Enable document signing in Billing → Services to create professional document templates for e-signatures, payment agreements, service contracts, and authorization forms.'}
                       </p>
-                      <Button
-                        onClick={() => {
-                          window.location.href = '/billing?tab=services';
-                        }}
-                        className="rounded-xl bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 transition hover:from-sky-400/80 hover:to-indigo-400/80"
-                      >
-                        Go to Billing Services
-                      </Button>
+                      {(localSettings as any)?.businessType !== 'municipality' && (
+                        <Button
+                          onClick={() => {
+                            window.location.href = '/billing?tab=services';
+                          }}
+                          className="rounded-xl bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 transition hover:from-sky-400/80 hover:to-indigo-400/80"
+                        >
+                          Go to Billing Services
+                        </Button>
+                      )}
                     </div>
                   ) : (
                     <div className="space-y-6">
@@ -3750,7 +3753,7 @@ export default function Settings() {
               </Dialog>
             </TabsContent>
 
-            <TabsContent value="arrangements" className="space-y-6">
+            {localSettings?.businessType !== 'municipality' && <TabsContent value="arrangements" className="space-y-6">
               {/* Minimum Monthly Payment */}
               <Card className={cardBaseClasses}>
                 <CardHeader className="text-white">
@@ -4189,7 +4192,7 @@ export default function Settings() {
                   )}
                 </CardContent>
               </Card>
-            </TabsContent>
+            </TabsContent>}
 
             <TabsContent value="privacy" className="space-y-6">
               <Card className={cardBaseClasses}>

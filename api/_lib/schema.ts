@@ -38,6 +38,7 @@ export const tenants = pgTable("tenants", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   slug: text("slug").unique().notNull(),
+  businessType: text("business_type").default('call_center'), // Tenant classification, including municipality
   brand: jsonb("brand").default(sql`'{}'::jsonb`),
   isActive: boolean("is_active").default(true), // Can be suspended by platform owner
   suspendedAt: timestamp("suspended_at"),
@@ -72,10 +73,21 @@ export const tenants = pgTable("tenants", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const tenantDepartments = pgTable("tenant_departments", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Agency credentials (for username/password auth)
 export const agencyCredentials = pgTable("agency_credentials", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  departmentId: uuid("department_id").references(() => tenantDepartments.id, { onDelete: "set null" }),
   username: text("username").unique().notNull(),
   passwordHash: text("password_hash").notNull(), // Hashed password using bcrypt
   email: text("email").notNull(),

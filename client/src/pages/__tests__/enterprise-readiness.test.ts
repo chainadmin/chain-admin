@@ -2,6 +2,14 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { activeSeatUsage, canActivateUser, processCursorBatches } from '../../../../shared/enterpriseCapacity';
 import { buildConsumersPageUrl } from '../../hooks/use-paginated-consumers';
+import { canTenantViewBilling } from '../../../../shared/tenantAccess';
+
+test('municipal tenants hide self-service billing without changing other tenant types', () => {
+  assert.equal(canTenantViewBilling('municipality'), false);
+  assert.equal(canTenantViewBilling('municipality', ['billing']), true);
+  assert.equal(canTenantViewBilling('collection_agency'), true);
+  assert.equal(canTenantViewBilling(undefined), true);
+});
 
 test('a tenant configured for 100 users accepts 66 active users and more', () => {
   const users = Array.from({ length: 66 }, () => ({ isActive: true }));

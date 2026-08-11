@@ -25,8 +25,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { UserPlus, Trash2, Edit, Users, Lock, Eye, EyeOff } from "lucide-react";
+import { UserPlus, Trash2, Edit, Users, Lock, Eye, EyeOff, KeyRound } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface TeamMember {
   id: string;
@@ -38,6 +39,7 @@ interface TeamMember {
   isActive: boolean;
   restrictedServices: string[] | null;
   voipAccess: boolean;
+  departmentId?: string | null;
   lastLoginAt: string | null;
   createdAt: string;
 }
@@ -74,15 +76,20 @@ export default function TeamMembersSection({ cardBaseClasses, inputClasses }: Te
     lastName: "",
     restrictedServices: [] as string[],
     voipAccess: false,
+    role: 'agent',
+    departmentId: '',
   });
 
   const { data: teamMembers = [], isLoading } = useQuery<TeamMember[]>({
     queryKey: ["/api/team-members"],
   });
+  const { data: settings } = useQuery<any>({ queryKey: ["/api/settings"] });
+  const isMunicipality = settings?.businessType === 'municipality';
+  const { data: departments = [] } = useQuery<any[]>({ queryKey: ["/api/municipality/departments"], enabled: isMunicipality });
 
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const res = await apiRequest("POST", "/api/team-members", data);
+      const res = await apiRequest("POST", "/api/team-members", { ...data, departmentId: data.departmentId || null });
       return res.json();
     },
     onSuccess: () => {
@@ -147,6 +154,11 @@ export default function TeamMembersSection({ cardBaseClasses, inputClasses }: Te
       });
     },
   });
+  const resetPasswordMutation = useMutation({
+    mutationFn: (id: string) => apiRequest('POST', `/api/team-members/${id}/password-reset`, {}),
+    onSuccess: () => toast({ title: 'Password reset email sent' }),
+    onError: (error: any) => toast({ title: 'Unable to send password reset', description: error.message, variant: 'destructive' }),
+  });
 
   const resetForm = () => {
     setFormData({
@@ -157,6 +169,8 @@ export default function TeamMembersSection({ cardBaseClasses, inputClasses }: Te
       lastName: "",
       restrictedServices: [],
       voipAccess: false,
+      role: 'agent',
+      departmentId: '',
     });
     setShowPassword(false);
   };
@@ -173,6 +187,8 @@ export default function TeamMembersSection({ cardBaseClasses, inputClasses }: Te
       lastName: formData.lastName,
       restrictedServices: formData.restrictedServices,
       voipAccess: formData.voipAccess,
+      role: formData.role,
+      departmentId: formData.departmentId || null,
     };
     if (formData.password) {
       updateData.password = formData.password;
@@ -195,6 +211,8 @@ export default function TeamMembersSection({ cardBaseClasses, inputClasses }: Te
       lastName: member.lastName || "",
       restrictedServices: member.restrictedServices || [],
       voipAccess: member.voipAccess || false,
+      role: member.role === 'owner' ? 'manager' : member.role,
+      departmentId: member.departmentId || '',
     });
     setShowEditModal(true);
   };
@@ -225,7 +243,8 @@ export default function TeamMembersSection({ cardBaseClasses, inputClasses }: Te
 
   const owners = teamMembers.filter(m => m.role === 'owner');
   const subUsers = teamMembers.filter(m => m.role !== 'owner');
-  const canAddSubUser = subUsers.length < 1;
+  const activeUsers = teamMembers.filter(member => member.isActive !== false).length;
+  const canAddSubUser = activeUsers < (settings?.maxActiveUsers || 2);
 
   return (
     <Card className={cardBaseClasses}>
@@ -237,7 +256,7 @@ export default function TeamMembersSection({ cardBaseClasses, inputClasses }: Te
               Team Members
             </CardTitle>
             <CardDescription className="text-blue-100/70">
-              Manage access for your team. You can add 1 additional user who will have access to all features except billing.
+              {isMunicipality ? `Manage municipal administrators and staff (${activeUsers}/${settings?.maxActiveUsers || 2} active users).` : 'Manage access for your team. Team members cannot access billing.'}
             </CardDescription>
           </div>
           {canAddSubUser && (
@@ -284,7 +303,7 @@ export default function TeamMembersSection({ cardBaseClasses, inputClasses }: Te
                     </div>
                     <Badge className="bg-amber-500/20 text-amber-200 border-amber-500/30">
                       <Lock className="h-3 w-3 mr-1" />
-                      Owner
+                      {isMunicipality ? 'Primary Administrator' : 'Owner'}
                     </Badge>
                   </div>
                 ))}
@@ -324,6 +343,7 @@ export default function TeamMembersSection({ cardBaseClasses, inputClasses }: Te
                           )}
                         </div>
                         <div className="text-sm text-blue-100/70">{member.email}</div>
+                        {isMunicipality && <div className="text-xs text-blue-100/50 mt-1">{member.role === 'manager' ? 'Administrator' : member.role === 'agent' ? 'Communications Staff' : member.role}{member.departmentId ? ` · ${departments.find((d: any) => d.id === member.departmentId)?.name || 'Department'}` : ''}</div>}
                         {member.restrictedServices && member.restrictedServices.length > 0 && (
                           <div className="text-xs text-blue-100/50 mt-1">
                             Restricted: {member.restrictedServices.filter(s => s !== 'billing').join(', ') || 'None'}
@@ -332,6 +352,7 @@ export default function TeamMembersSection({ cardBaseClasses, inputClasses }: Te
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      {isMunicipality && <Button variant="ghost" size="sm" title="Send password reset" onClick={() => resetPasswordMutation.mutate(member.id)} className="text-blue-100 hover:text-white hover:bg-white/10"><KeyRound className="h-4 w-4" /></Button>}
                       <Button
                         variant="ghost"
                         size="sm"
@@ -412,6 +433,7 @@ export default function TeamMembersSection({ cardBaseClasses, inputClasses }: Te
                 data-testid="input-username"
               />
             </div>
+            {isMunicipality && <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label className="text-blue-100">Role</Label><Select value={formData.role} onValueChange={role => setFormData(prev => ({ ...prev, role }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="manager">Administrator</SelectItem><SelectItem value="agent">Communications Staff</SelectItem><SelectItem value="viewer">Viewer</SelectItem><SelectItem value="uploader">Contact Importer</SelectItem></SelectContent></Select></div><div className="space-y-2"><Label className="text-blue-100">Department</Label><Select value={formData.departmentId || 'none'} onValueChange={departmentId => setFormData(prev => ({ ...prev, departmentId: departmentId === 'none' ? '' : departmentId }))}><SelectTrigger><SelectValue placeholder="No department" /></SelectTrigger><SelectContent><SelectItem value="none">No department</SelectItem>{departments.map((department: any) => <SelectItem key={department.id} value={department.id}>{department.name}</SelectItem>)}</SelectContent></Select></div></div>}
             <div className="space-y-2">
               <Label className="text-blue-100">Email *</Label>
               <Input
@@ -556,7 +578,8 @@ export default function TeamMembersSection({ cardBaseClasses, inputClasses }: Te
                 className={inputClasses}
               />
             </div>
-            <div className="space-y-2">
+            {isMunicipality && <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label className="text-blue-100">Role</Label><Select value={formData.role} onValueChange={role => setFormData(prev => ({ ...prev, role }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="manager">Administrator</SelectItem><SelectItem value="agent">Communications Staff</SelectItem><SelectItem value="viewer">Viewer</SelectItem><SelectItem value="uploader">Contact Importer</SelectItem></SelectContent></Select></div><div className="space-y-2"><Label className="text-blue-100">Department</Label><Select value={formData.departmentId || 'none'} onValueChange={departmentId => setFormData(prev => ({ ...prev, departmentId: departmentId === 'none' ? '' : departmentId }))}><SelectTrigger><SelectValue placeholder="No department" /></SelectTrigger><SelectContent><SelectItem value="none">No department</SelectItem>{departments.map((department: any) => <SelectItem key={department.id} value={department.id}>{department.name}</SelectItem>)}</SelectContent></Select></div></div>}
+            {!isMunicipality && <div className="space-y-2">
               <Label className="text-blue-100">New Password (leave blank to keep current)</Label>
               <div className="relative">
                 <Input
@@ -574,7 +597,7 @@ export default function TeamMembersSection({ cardBaseClasses, inputClasses }: Te
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-            </div>
+            </div>}
 
             <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
               <div>
