@@ -129,10 +129,6 @@ export default function Accounts() {
     queryKey: ["/api/folders"],
   });
 
-  const { data: consumers } = useQuery({
-    queryKey: ["/api/consumers"],
-  });
-
   const { data: emailTemplates, isLoading: emailTemplatesLoading } = useQuery({
     queryKey: ["/api/email-templates"],
     enabled: showComposeEmailDialog,
@@ -247,14 +243,9 @@ export default function Accounts() {
       } else {
         // Clear URL parameter and notify user
         window.history.replaceState({}, '', window.location.pathname);
-        // Find consumer info for the toast message
-        const consumer = (consumers as any[])?.find((c: any) => String(c.id) === String(consumerId));
-        const consumerName = consumer 
-          ? `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim() || 'This consumer'
-          : 'This consumer';
         toast({
           title: "No Accounts Found",
-          description: `${consumerName} has no accounts on file. You can create one using the "Add Account" button.`,
+          description: `This consumer has no accounts on file. You can create one using the "Add Account" button.`,
           variant: "default",
         });
       }
@@ -276,7 +267,7 @@ export default function Accounts() {
         });
       }
     }
-  }, [accounts, accountsLoading, showViewModal, selectedAccount, consumers, toast, location]);
+  }, [accounts, accountsLoading, showViewModal, selectedAccount, toast, location]);
 
   // Mutations
   const createAccountMutation = useMutation({
