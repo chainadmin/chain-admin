@@ -34,26 +34,40 @@ export interface EmailOptions {
 const DEFAULT_FROM_EMAIL = 'support@chainsoftwaregroup.com';
 
 export class EmailService {
+  private async getTenantDeliveryConfig(tenantId?: string) {
+    if (!tenantId) {
+      return null;
+    }
+    const [tenant] = await db
+      .select({
+        name: tenants.name,
+        slug: tenants.slug,
+        customSenderEmail: tenants.customSenderEmail,
+        postmarkServerToken: tenants.postmarkServerToken,
+        postmarkTransactionalStream: tenants.postmarkTransactionalStream,
+        postmarkBroadcastStream: tenants.postmarkBroadcastStream,
+        postmarkInboundAddress: tenants.postmarkInboundAddress,
+      })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1);
+    return tenant || null;
+  }
+
   async sendEmail(options: EmailOptions): Promise<{ messageId: string; success: boolean; error?: string }> {
     try {
       let fromEmail = options.from || DEFAULT_FROM_EMAIL;
       
       // If tenantId is provided, check for custom sender email
-      if (options.tenantId) {
-        const [tenant] = await db
-          .select({ customSenderEmail: tenants.customSenderEmail, slug: tenants.slug, name: tenants.name })
-          .from(tenants)
-          .where(eq(tenants.id, options.tenantId))
-          .limit(1);
+      const tenant = await this.getTenantDeliveryConfig(options.tenantId);
         
-        if (tenant) {
-          // Priority: customSenderEmail > slug-based email > provided from > default
-          if (tenant.customSenderEmail) {
-            fromEmail = tenant.customSenderEmail;
-          } else {
-            // Use slug-based email as default for tenant emails (overrides options.from)
-            fromEmail = `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>`;
-          }
+      if (tenant) {
+        // Priority: customSenderEmail > slug-based email > provided from > default
+        if (tenant.customSenderEmail) {
+          fromEmail = tenant.customSenderEmail;
+        } else {
+          // Use slug-based email as default for tenant emails (overrides options.from)
+          fromEmail = `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>`;
         }
       }
       
@@ -62,8 +76,8 @@ export class EmailService {
       const normalizedMetadata = this.normalizeMetadata(options.metadata);
 
       // Use Postmark's inbound address for all replies so they route to our webhook
-      const POSTMARK_INBOUND_EMAIL = '0f090c8f2b6c0860ffa1c36028828ba0@inbound.postmarkapp.com';
-      const replyToEmail = options.replyTo || POSTMARK_INBOUND_EMAIL;
+      const defaultInboundEmail = process.env.POSTMARK_INBOUND_EMAIL || '0f090c8f2b6c0860ffa1c36028828ba0@inbound.postmarkapp.com';
+      const replyToEmail = options.replyTo || tenant?.postmarkInboundAddress || defaultInboundEmail;
 
       const emailPayload: any = {
         From: fromEmail,
@@ -78,11 +92,12 @@ export class EmailService {
       };
       
       // Use broadcast stream for marketing/bulk emails (automations, campaigns)
-      if (options.useBroadcastStream) {
-        emailPayload.MessageStream = getBroadcastStreamId();
-      }
+      emailPayload.MessageStream = options.useBroadcastStream
+        ? tenant?.postmarkBroadcastStream || getBroadcastStreamId()
+        : tenant?.postmarkTransactionalStream || process.env.POSTMARK_TRANSACTIONAL_STREAM || 'outbound';
       
-      const result = await postmarkClient.sendEmail(emailPayload);
+      const activeClient = tenant?.postmarkServerToken ? new Client(tenant.postmarkServerToken) : postmarkClient;
+      const result = await activeClient.sendEmail(emailPayload);
 
       // Log email to database if tenantId is provided
       if (options.tenantId) {
@@ -127,6 +142,13 @@ export class EmailService {
     // Use Postmark's batch API with broadcast stream for bulk sends (up to 500 per batch)
     const batchSize = 500;
     
+    // Campaign callers pass bounded chunks. Cache configuration so a batch does
+    // not execute one tenant query per recipient.
+    const tenantConfigs = new Map<string, any>();
+    for (const tenantId of Array.from(new Set(emails.map(email => email.tenantId).filter((id): id is string => Boolean(id))))) {
+      tenantConfigs.set(tenantId, await this.getTenantDeliveryConfig(tenantId));
+    }
+
     for (let i = 0; i < emails.length; i += batchSize) {
       const batch = emails.slice(i, i + batchSize);
       
@@ -137,27 +159,21 @@ export class EmailService {
             let fromEmail = email.from || DEFAULT_FROM_EMAIL;
             
             // Get tenant-specific sender email if tenantId is provided
-            if (email.tenantId) {
-              const [tenant] = await db
-                .select({ customSenderEmail: tenants.customSenderEmail, slug: tenants.slug, name: tenants.name })
-                .from(tenants)
-                .where(eq(tenants.id, email.tenantId))
-                .limit(1);
+            const tenant = email.tenantId ? tenantConfigs.get(email.tenantId) : null;
               
-              if (tenant) {
-                if (tenant.customSenderEmail) {
-                  fromEmail = tenant.customSenderEmail;
-                } else {
-                  fromEmail = `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>`;
-                }
+            if (tenant) {
+              if (tenant.customSenderEmail) {
+                fromEmail = tenant.customSenderEmail;
+              } else {
+                fromEmail = `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>`;
               }
             }
             
             const textBody = email.text || this.htmlToText(email.html);
             const normalizedMetadata = this.normalizeMetadata(email.metadata);
             // Use Postmark's inbound address for all replies so they route to our webhook
-            const POSTMARK_INBOUND_EMAIL = '0f090c8f2b6c0860ffa1c36028828ba0@inbound.postmarkapp.com';
-            const replyToEmail = email.replyTo || POSTMARK_INBOUND_EMAIL;
+            const defaultInboundEmail = process.env.POSTMARK_INBOUND_EMAIL || '0f090c8f2b6c0860ffa1c36028828ba0@inbound.postmarkapp.com';
+            const replyToEmail = email.replyTo || tenant?.postmarkInboundAddress || defaultInboundEmail;
             
             return {
               From: fromEmail,
@@ -169,14 +185,17 @@ export class EmailService {
               Tag: email.tag,
               Metadata: normalizedMetadata,
               TrackOpens: true,
-              MessageStream: getBroadcastStreamId(), // Use broadcast stream for bulk sends
+              MessageStream: tenant?.postmarkBroadcastStream || getBroadcastStreamId(),
             };
           })
         );
 
         // Send batch via Postmark's batch API
         console.log(`📧 Sending batch of ${batchMessages.length} emails via broadcast stream...`);
-        const batchResult = await postmarkClient.sendEmailBatch(batchMessages);
+        const batchTenantId = batch.find(email => email.tenantId)?.tenantId;
+        const batchTenant = batchTenantId ? tenantConfigs.get(batchTenantId) : null;
+        const activeClient = batchTenant?.postmarkServerToken ? new Client(batchTenant.postmarkServerToken) : postmarkClient;
+        const batchResult = await activeClient.sendEmailBatch(batchMessages);
         
         // Process batch results
         for (let j = 0; j < batchResult.length; j++) {

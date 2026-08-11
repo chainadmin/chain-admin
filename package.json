@@ -9,6 +9,7 @@
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc",
     "test": "node --test --import tsx ./client/src/pages/__tests__/*.test.ts",
+    "load-test:500k": "tsx scripts/load-test-500k.ts",
     "db:push": "drizzle-kit push",
     "eas-build-post-install": "node eas-hooks/eas-build-post-install.cjs"
   },

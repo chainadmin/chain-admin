@@ -40,7 +40,7 @@ import {
   type SmsTracking,
 } from "@shared/schema";
 import { db } from "./db";
-import { and, eq, sql, desc, gte, lte, isNull } from "drizzle-orm";
+import { and, eq, sql, desc, gt, gte, inArray, lte, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
@@ -75,8 +75,9 @@ import {
   type MessagingPlanId,
 } from "@shared/billing-plans";
 import { computeALaCarteBill, computeSubscriptionBill, generateInvoiceNumber } from "./billing";
+import { canActivateUser } from "@shared/enterpriseCapacity";
 
-import { listConsumers, updateConsumer, deleteConsumers, ConsumerNotFoundError } from "@shared/server/consumers";
+import { listConsumers, paginateConsumers, updateConsumer, deleteConsumers, ConsumerNotFoundError } from "@shared/server/consumers";
 import { resolveConsumerPortalUrl } from "@shared/utils/consumerPortal";
 import { finalizeEmailHtml } from "@shared/utils/emailTemplate";
 import { ensureBaseUrl, getKnownDomainOrigins } from "@shared/utils/baseUrl";
@@ -1040,6 +1041,57 @@ async function processSmartArrangementSave(
     console.log(`🔒 Account status filter: ${targetedConsumers.length} consumers have active accounts (excluded inactive/recalled/closed)`);
 
     return { targetedConsumers, accountsData: activeAccountsData };
+  }
+
+  const EMAIL_CAMPAIGN_BATCH_SIZE = 500;
+
+  async function buildEmailCampaignAudienceConditions(
+    tenantId: string,
+    targetGroup: string,
+    folderIds: string[],
+  ) {
+    const settings = await storage.getTenantSettings(tenantId);
+    const blocked = (settings?.blockedAccountStatuses || []).map(status => status.toLowerCase());
+    const conditions: any[] = [
+      eq(consumers.tenantId, tenantId),
+      sql`EXISTS (
+        SELECT 1 FROM accounts audience_account
+        WHERE audience_account.tenant_id = ${tenantId}
+          AND audience_account.consumer_id = ${consumers.id}
+          ${blocked.length ? sql`AND (audience_account.status IS NULL OR LOWER(audience_account.status) NOT IN (${sql.join(blocked.map(status => sql`${status}`), sql`, `)}))` : sql``}
+      )`,
+    ];
+    if (targetGroup === 'folder' && folderIds.length) {
+      conditions.push(or(
+        inArray(consumers.folderId, folderIds),
+        sql`EXISTS (SELECT 1 FROM accounts folder_account WHERE folder_account.tenant_id = ${tenantId} AND folder_account.consumer_id = ${consumers.id} AND folder_account.folder_id IN (${sql.join(folderIds.map(id => sql`${id}::uuid`), sql`, `)}))`,
+      ));
+    } else if (targetGroup === 'with-balance') {
+      conditions.push(sql`EXISTS (SELECT 1 FROM accounts balance_account WHERE balance_account.tenant_id = ${tenantId} AND balance_account.consumer_id = ${consumers.id} AND balance_account.balance_cents > 0)`);
+    } else if (targetGroup === 'decline') {
+      conditions.push(sql`(${consumers.additionalData}->>'status' = 'decline' OR ${consumers.additionalData}->>'folder' = 'decline')`);
+    } else if (targetGroup === 'recent-upload') {
+      conditions.push(gte(consumers.createdAt, new Date(Date.now() - 24 * 60 * 60 * 1000)));
+    }
+    return conditions;
+  }
+
+  async function getEmailCampaignAudienceBatch(
+    tenantId: string,
+    targetGroup: string,
+    folderIds: string[],
+    cursor?: string,
+    limit = EMAIL_CAMPAIGN_BATCH_SIZE,
+  ): Promise<Consumer[]> {
+    const conditions = await buildEmailCampaignAudienceConditions(tenantId, targetGroup, folderIds);
+    if (cursor) conditions.push(gt(consumers.id, cursor));
+    return db.select().from(consumers).where(and(...conditions)).orderBy(consumers.id).limit(Math.min(500, limit));
+  }
+
+  async function countEmailCampaignAudience(tenantId: string, targetGroup: string, folderIds: string[]) {
+    const conditions = await buildEmailCampaignAudienceConditions(tenantId, targetGroup, folderIds);
+    const [row] = await db.select({ count: sql<number>`count(*)::int` }).from(consumers).where(and(...conditions));
+    return row?.count || 0;
   }
 
   async function buildTenantEmailContext(tenantId: string) {
@@ -2305,8 +2357,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const consumers = await listConsumers(db, tenantId);
-      res.json(consumers);
+      const page = await paginateConsumers(db, tenantId, {
+        limit: Number(req.query.limit) || 100,
+        cursor: typeof req.query.cursor === 'string' ? req.query.cursor : undefined,
+        search: typeof req.query.search === 'string' ? req.query.search : undefined,
+        folderId: typeof req.query.folderId === 'string' ? req.query.folderId : undefined,
+        registration: req.query.registration === 'registered' || req.query.registration === 'not_registered'
+          ? req.query.registration
+          : undefined,
+      });
+      res.setHeader('X-Total-Count', String(page.total));
+      res.setHeader('X-Next-Cursor', page.nextCursor || '');
+      res.json(req.query.format === 'page' ? page : page.items);
     } catch (error) {
       console.error("Error fetching consumers:", error);
       res.status(500).json({ message: "Failed to fetch consumers" });
@@ -4086,7 +4148,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Name, template ID, and target group are required" });
       }
 
-      const { targetedConsumers } = await resolveEmailCampaignAudience(tenantId, targetGroup, folderIds);
+      const recipientCount = await countEmailCampaignAudience(tenantId, targetGroup, folderIds);
 
       let template;
       try {
@@ -4106,15 +4168,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         templateId,
         targetGroup,
         folderId: folderIds[0] || null,
-        totalRecipients: targetedConsumers.length,
+        totalRecipients: recipientCount,
         status: 'pending_approval',
       });
 
-      console.log(`📧 Email campaign "${campaign.name}" created with ${targetedConsumers.length} targeted recipients. Awaiting approval to send.`);
+      console.log(`📧 Email campaign "${campaign.name}" created with ${recipientCount} targeted recipients. Awaiting approval to send.`);
 
       res.json({
         ...campaign,
-        totalRecipients: targetedConsumers.length,
+        totalRecipients: recipientCount,
         templateName: template.name,
         message: 'Campaign created and awaiting approval',
       });
@@ -4163,35 +4225,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Tenant not found" });
       }
 
-      const audience = await resolveEmailCampaignAudience(
-        tenantId,
-        campaign.targetGroup,
-        campaign.folderId ? [campaign.folderId] : [],
-      );
-      targetedConsumers = audience.targetedConsumers;
-      const { accountsData } = audience;
+      const folderIds = campaign.folderId ? [campaign.folderId] : [];
+      const recipientCount = await countEmailCampaignAudience(tenantId, campaign.targetGroup, folderIds);
 
-      // Wallet billing gate (Task #47): reserve estimated cost up-front so funds
-      // are atomically held; the campaign send pipeline can later commit the
-      // actual amount via walletService.commitReservation when sends complete,
-      // or refundReservation if the campaign is aborted.
+      // Reserve the maximum campaign charge before queueing. Processing below is
+      // cursor-based and never retains more than one 500-recipient page.
       const emailWalletMode = await walletService.isWalletMode(tenantId);
-      if (emailWalletMode && targetedConsumers.length > 0) {
+      if (emailWalletMode && recipientCount > 0) {
         const rates = await walletService.getRates(tenantId);
-        const estimateCents = walletService.computeChargeCents(rates.emailRateMicros, targetedConsumers.length);
+        const estimateCents = walletService.computeChargeCents(rates.emailRateMicros, recipientCount);
         try {
           await walletService.reserveFunds(
             tenantId,
             estimateCents,
-            `Email campaign reservation: ${campaign.name} (${targetedConsumers.length} recipients)`,
-            { campaignId: campaign.id, channel: 'email', recipients: targetedConsumers.length, rateMicros: rates.emailRateMicros },
+            `Email campaign reservation: ${campaign.name} (${recipientCount} recipients)`,
+            { campaignId: campaign.id, channel: 'email', recipients: recipientCount, rateMicros: rates.emailRateMicros },
           );
-          // Reservation id is recoverable by querying wallet_ledger by
-          // metadata->>campaignId — used by the send-completion reconciler.
         } catch (e: any) {
           if (e instanceof InsufficientFundsError) {
             return res.status(402).json({
-              message: `Insufficient wallet balance to send to ${targetedConsumers.length} recipients. Please top up your wallet.`,
+              message: `Insufficient wallet balance to send to ${recipientCount} recipients. Please top up your wallet.`,
               neededCents: e.neededCents,
               availableCents: e.availableCents,
             });
@@ -4200,110 +4253,100 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      const processedEmails = buildCampaignEmails({
-        campaignId: campaign.id,
-        tenantId,
-        template,
-        targetedConsumers,
-        accountsData,
-        tenantWithSettings: tenantContext.tenantWithSettings,
-        tenantBranding: tenantContext.tenantBranding,
-        tenant: tenantContext.tenant,
-      });
-
-      // Save proposed arrangements for smart arrangement variables (non-blocking)
-      // Combine subject + body so variables in either location are detected
-      const emailCampaignFullTemplate = (template.subject || '') + ' ' + (template.html || '');
-      if (detectSmartArrangementVars(emailCampaignFullTemplate).length > 0) {
-        const tenantGlobalMin = (tenantContext.tenantWithSettings as any)?.minimumMonthlyPayment || 0;
-        Promise.allSettled(
-          targetedConsumers.map(consumer => {
-            const account = accountsData.find(a => a.consumerId === consumer.id);
-            return processSmartArrangementSave(
-              emailCampaignFullTemplate,
-              consumer,
-              account,
-              tenantId,
-              tenantGlobalMin
-            );
-          })
-        ).catch(e => console.error('[SmartArrangement] Email campaign save error:', e));
-      }
-
       await storage.updateEmailCampaign(campaign.id, {
         status: 'sending',
-        totalRecipients: targetedConsumers.length,
+        totalRecipients: recipientCount,
         totalSent: 0,
         totalErrors: 0,
         completedAt: null,
       });
 
-      console.log(`✅ Email campaign "${campaign.name}" approved. Sending ${processedEmails.length} emails via Postmark in background...`);
-
-      res.json({
+      res.status(202).json({
         id: campaign.id,
         status: 'sending',
-        totalRecipients: processedEmails.length,
-        message: `Campaign approved. Sending ${processedEmails.length} emails in the background.`,
+        totalRecipients: recipientCount,
+        message: `Campaign approved and queued for cursor-based background processing.`,
       });
 
       (async () => {
+        let cursor: string | undefined;
+        let successful = 0;
+        let failed = 0;
         try {
-          let emailResults = { successful: 0, failed: 0, results: [] as any[] };
-          if (processedEmails.length > 0) {
-            emailResults = await emailService.sendBulkEmails(processedEmails);
+          while (true) {
+            const consumerBatch = await getEmailCampaignAudienceBatch(
+              tenantId,
+              campaign.targetGroup,
+              folderIds,
+              cursor,
+            );
+            if (consumerBatch.length === 0) break;
+
+            const consumerIds = consumerBatch.map(consumer => consumer.id);
+            const accountsData = await db.select()
+              .from(accountsTable)
+              .where(and(eq(accountsTable.tenantId, tenantId), inArray(accountsTable.consumerId, consumerIds)));
+            const processedEmails = buildCampaignEmails({
+              campaignId: campaign.id,
+              tenantId,
+              template,
+              targetedConsumers: consumerBatch,
+              accountsData: accountsData as any,
+              tenantWithSettings: tenantContext.tenantWithSettings,
+              tenantBranding: tenantContext.tenantBranding,
+              tenant: tenantContext.tenant,
+            });
+
+            const fullTemplate = (template.subject || '') + ' ' + (template.html || '');
+            if (detectSmartArrangementVars(fullTemplate).length > 0) {
+              const tenantGlobalMin = (tenantContext.tenantWithSettings as any)?.minimumMonthlyPayment || 0;
+              await Promise.allSettled(consumerBatch.map(consumer =>
+                processSmartArrangementSave(
+                  fullTemplate,
+                  consumer,
+                  accountsData.find(account => account.consumerId === consumer.id),
+                  tenantId,
+                  tenantGlobalMin,
+                ),
+              ));
+            }
+
+            const result = await emailService.sendBulkEmails(processedEmails);
+            successful += result.successful;
+            failed += result.failed;
+            cursor = consumerBatch[consumerBatch.length - 1].id;
+            await storage.updateEmailCampaign(campaign.id, { totalSent: successful, totalErrors: failed });
+            if (consumerBatch.length < EMAIL_CAMPAIGN_BATCH_SIZE) break;
           }
 
           await storage.updateEmailCampaign(campaign.id, {
             status: 'completed',
-            totalSent: emailResults.successful,
-            totalErrors: emailResults.failed,
-            totalRecipients: processedEmails.length,
+            totalSent: successful,
+            totalErrors: failed,
+            totalRecipients: recipientCount,
             completedAt: new Date(),
           });
 
-          // Reconcile wallet reservation: commit at the actual successful count.
-          try {
-            if (await walletService.isWalletMode(tenantId)) {
-              const reservation = await walletService.findOpenCampaignReservation(tenantId, campaign.id);
-              if (reservation) {
-                const rates = await walletService.getRates(tenantId);
-                const actualCents = walletService.computeChargeCents(rates.emailRateMicros, emailResults.successful);
-                await walletService.commitReservation(reservation.id, actualCents, 'email_send',
-                  `Email campaign "${campaign.name}": ${emailResults.successful} sent`,
-                  { campaignId: campaign.id, sent: emailResults.successful, failed: emailResults.failed });
-                walletService.maybeAutoReload(tenantId).catch(() => {});
-              }
+          if (await walletService.isWalletMode(tenantId)) {
+            const reservation = await walletService.findOpenCampaignReservation(tenantId, campaign.id);
+            if (reservation) {
+              const rates = await walletService.getRates(tenantId);
+              const actualCents = walletService.computeChargeCents(rates.emailRateMicros, successful);
+              await walletService.commitReservation(reservation.id, actualCents, 'email_send',
+                `Email campaign "${campaign.name}": ${successful} sent`,
+                { campaignId: campaign.id, sent: successful, failed });
+              walletService.maybeAutoReload(tenantId).catch(() => {});
             }
-          } catch (e) {
-            console.error('[wallet] email-campaign reconciliation failed', e);
           }
-
-          console.log(`📬 Campaign "${campaign.name}" sending complete: ${emailResults.successful} sent, ${emailResults.failed} failed`);
-          // DMP email logging is handled per-recipient inside emailService.sendBulkEmails
-          // on successful sends only — no duplicate logging needed here.
         } catch (bgError) {
-          console.error(`❌ Background email sending failed for campaign "${campaign.name}":`, bgError);
-          try {
-            await storage.updateEmailCampaign(campaign.id, {
-              status: 'failed',
-              totalRecipients: processedEmails.length,
-              completedAt: new Date(),
-            });
-          } catch (updateError) {
-            console.error('Error updating campaign status after background failure:', updateError);
-          }
-          // Refund the wallet reservation in full on hard failure
-          try {
-            if (await walletService.isWalletMode(tenantId)) {
-              const reservation = await walletService.findOpenCampaignReservation(tenantId, campaign.id);
-              if (reservation) {
-                await walletService.refundReservation(reservation.id,
-                  `Refund for failed email campaign "${campaign.name}" (campaign ${campaign.id})`);
-              }
-            }
-          } catch (e) {
-            console.error('[wallet] email-campaign refund failed', e);
+          console.error(`Background email campaign failed for "${campaign.name}":`, bgError);
+          await storage.updateEmailCampaign(campaign.id, {
+            status: 'failed', totalSent: successful, totalErrors: failed, completedAt: new Date(),
+          }).catch(() => undefined);
+          const reservation = await walletService.findOpenCampaignReservation(tenantId, campaign.id).catch(() => undefined);
+          if (reservation) {
+            await walletService.refundReservation(reservation.id,
+              `Refund for failed email campaign "${campaign.name}" (campaign ${campaign.id})`).catch(() => undefined);
           }
         }
       })();
@@ -10070,7 +10113,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Create a new sub-user (limit 1 per tenant)
+  // Create a new sub-user. The active-seat limit is tenant configuration, not a
+  // deployment-wide constant; inactive credentials do not consume a seat.
   app.post('/api/team-members', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
@@ -10088,20 +10132,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: `Only owners can manage team members. Your role: ${userRole || 'undefined'}` });
       }
 
-      // Check limit: only 1 sub-user allowed per tenant
-      const existingCount = await storage.countNonOwnerAgencyCredentials(tenantId);
-      console.log("[TEAM-MEMBERS] Existing non-owner count:", existingCount);
-      if (existingCount >= 1) {
-        // Get all credentials for debugging
-        const allCredentials = await storage.getAgencyCredentialsByTenant(tenantId);
-        const credentialSummary = allCredentials.map(c => ({ id: c.id, username: c.username, role: c.role }));
-        console.log("[TEAM-MEMBERS] All credentials for tenant:", JSON.stringify(credentialSummary));
+      const tenant = await storage.getTenant(tenantId);
+      if (!tenant) {
+        return res.status(404).json({ message: "Tenant not found" });
+      }
+      const allCredentials = await storage.getAgencyCredentialsByTenant(tenantId);
+      const { activeUsers: activeCount, maxActiveUsers, allowed } = canActivateUser(allCredentials, tenant.maxActiveUsers);
+      console.log("[TEAM-MEMBERS] Active seat usage:", activeCount, "/", maxActiveUsers);
+      if (!allowed) {
         return res.status(400).json({ 
-          message: `Maximum of 1 team member allowed per account. Current non-owner count: ${existingCount}`,
-          debug: {
-            existingCredentials: credentialSummary,
-            hint: "If your primary account shows role != 'owner', the migration may not have run. Try logging out and back in after redeployment."
-          }
+          message: `Active user limit reached (${activeCount}/${maxActiveUsers}). Deactivate a user or ask a platform administrator to increase the tenant limit.`,
+          code: 'ACTIVE_USER_LIMIT_REACHED',
+          activeUsers: activeCount,
+          maxActiveUsers,
         });
       }
 
@@ -10198,6 +10241,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       const data = updateSchema.parse(req.body);
+
+      if (data.isActive === true && existingMember.isActive === false) {
+        const [tenant, credentials] = await Promise.all([
+          storage.getTenant(tenantId),
+          storage.getAgencyCredentialsByTenant(tenantId),
+        ]);
+        const { activeUsers: activeCount, maxActiveUsers, allowed } = canActivateUser(credentials, tenant?.maxActiveUsers);
+        if (!allowed) {
+          return res.status(400).json({
+            message: `Active user limit reached (${activeCount}/${maxActiveUsers}).`,
+            code: 'ACTIVE_USER_LIMIT_REACHED',
+            activeUsers: activeCount,
+            maxActiveUsers,
+          });
+        }
+      }
       
       const updates: any = {};
       if (data.email) updates.email = data.email;
@@ -21510,6 +21569,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching agreement details:", error);
       res.status(500).json({ message: "Failed to fetch agreement details" });
+    }
+  });
+
+  // Enterprise tenant capacity and Postmark routing. Tokens are write-only and
+  // never returned by this endpoint.
+  app.patch('/api/admin/tenants/:tenantId/enterprise-config', isPlatformAdmin, async (req: any, res) => {
+    try {
+      const data = z.object({
+        maxActiveUsers: z.number().int().min(1).max(10000).optional(),
+        postmarkServerId: z.string().trim().max(128).nullable().optional(),
+        postmarkServerToken: z.string().trim().min(1).max(512).nullable().optional(),
+        postmarkServerName: z.string().trim().max(255).nullable().optional(),
+        postmarkTransactionalStream: z.string().trim().min(1).max(100).optional(),
+        postmarkBroadcastStream: z.string().trim().min(1).max(100).optional(),
+        postmarkInboundAddress: z.string().email().nullable().optional(),
+        customSenderEmail: z.string().email().nullable().optional(),
+      }).parse(req.body);
+      const tenant = await storage.updateTenant(req.params.tenantId, data as Partial<Tenant>);
+      res.json({
+        id: tenant.id,
+        maxActiveUsers: tenant.maxActiveUsers,
+        postmarkServerId: tenant.postmarkServerId,
+        postmarkServerName: tenant.postmarkServerName,
+        postmarkTransactionalStream: tenant.postmarkTransactionalStream,
+        postmarkBroadcastStream: tenant.postmarkBroadcastStream,
+        postmarkInboundAddress: tenant.postmarkInboundAddress,
+        customSenderEmail: tenant.customSenderEmail,
+        hasPostmarkServerToken: Boolean(tenant.postmarkServerToken),
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: 'Invalid enterprise configuration', errors: error.errors });
+      }
+      console.error('Error updating enterprise tenant configuration:', error);
+      res.status(500).json({ message: 'Failed to update enterprise tenant configuration' });
     }
   });
 
