@@ -21,7 +21,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { AlertCircle, LogOut, User, Building2, CreditCard, DollarSign, TrendingUp, Mail, Phone, Edit, FileText, MessageSquare, Calendar, Upload, CalendarIcon } from "lucide-react";
+import { AlertCircle, LogOut, User, Building2, CreditCard, DollarSign, TrendingUp, Mail, Phone, Edit, FileText, MessageSquare, Calendar, Upload, CalendarIcon, Settings, Trash2 } from "lucide-react";
 import { SiVisa, SiMastercard, SiAmericanexpress, SiDiscover } from "react-icons/si";
 import { format } from "date-fns";
 import chainLogo from "@/assets/chain-logo.png";
@@ -189,6 +189,10 @@ export default function ConsumerDashboardSimple() {
   const [error, setError] = useState<string | null>(null);
   const [showContactDialog, setShowContactDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showSettingsDialog, setShowSettingsDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [isDeletingAccess, setIsDeletingAccess] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<any>(null);
   const [selectedArrangement, setSelectedArrangement] = useState<any>(null);
@@ -545,6 +549,38 @@ export default function ConsumerDashboardSimple() {
     });
     // Redirect to root of subdomain (agency landing page)
     setLocation("/");
+  };
+
+  const handleDeleteOnlineAccess = async () => {
+    if (deleteConfirmation !== "DELETE") return;
+
+    setIsDeletingAccess(true);
+    try {
+      const token = getStoredConsumerToken();
+      const response = await apiCall("DELETE", "/api/consumer/account", null, token);
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result.message || "Unable to delete mobile and online access");
+      }
+
+      clearConsumerAuth();
+      queryClient.clear();
+      (window as any).logout?.();
+      setSession(null);
+      setLocation("/mobile-login");
+      toast({
+        title: "Online Access Deleted",
+        description: "Your mobile and online access has been deleted.",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Deletion Failed",
+        description: err.message || "Unable to delete mobile and online access. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeletingAccess(false);
+    }
   };
 
   // Calculation helper functions for simplified payment flow
@@ -1198,6 +1234,16 @@ export default function ConsumerDashboardSimple() {
               </div>
             </div>
             <div className="flex items-center gap-2 self-end sm:self-auto">
+              <Button
+                onClick={() => setShowSettingsDialog(true)}
+                variant="outline"
+                size="sm"
+                className="text-white border-white/20 hover:bg-white/10"
+                data-testid="button-settings"
+              >
+                <Settings className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Settings</span>
+              </Button>
               <Button
                 onClick={() => setShowContactDialog(true)}
                 variant="outline"
@@ -2013,6 +2059,76 @@ export default function ConsumerDashboardSimple() {
       </Dialog>
 
       {/* Edit Profile Dialog */}
+      <Dialog open={showSettingsDialog} onOpenChange={setShowSettingsDialog}>
+        <DialogContent className="sm:max-w-lg bg-slate-950 border-white/20 text-white">
+          <DialogHeader>
+            <DialogTitle>Account Settings</DialogTitle>
+            <DialogDescription className="text-blue-100/70">
+              Manage your mobile and online access.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4">
+            <div className="flex items-start gap-3">
+              <Trash2 className="mt-0.5 h-5 w-5 text-red-400" />
+              <div className="flex-1">
+                <h3 className="font-semibold text-white">Delete mobile/online access</h3>
+                <p className="mt-1 text-sm text-blue-100/70">
+                  This deletes your ability to sign in to this mobile app and the online consumer portal. It does not delete account, balance, payment, or other records maintained by your agency.
+                </p>
+                <Button
+                  variant="destructive"
+                  className="mt-4"
+                  onClick={() => { setShowSettingsDialog(false); setShowDeleteDialog(true); }}
+                  data-testid="button-delete-account"
+                >
+                  Delete Access
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showDeleteDialog} onOpenChange={(open) => {
+        if (!isDeletingAccess) {
+          setShowDeleteDialog(open);
+          if (!open) setDeleteConfirmation("");
+        }
+      }}>
+        <DialogContent className="sm:max-w-lg bg-slate-950 border-red-500/40 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-red-300">Delete mobile and online access?</DialogTitle>
+            <DialogDescription className="text-blue-100/70">
+              You will be signed out and will no longer be able to access this app or the online consumer portal. Your agency will continue to maintain its account, balance, payment, and legally required records. This action cannot be undone from the app.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="delete-confirmation">Type DELETE to confirm</Label>
+            <Input
+              id="delete-confirmation"
+              value={deleteConfirmation}
+              onChange={(event) => setDeleteConfirmation(event.target.value)}
+              autoComplete="off"
+              className="bg-white/5 border-white/20 text-white"
+              data-testid="input-delete-confirmation"
+            />
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)} disabled={isDeletingAccess}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteOnlineAccess}
+              disabled={deleteConfirmation !== "DELETE" || isDeletingAccess}
+              data-testid="button-confirm-delete-account"
+            >
+              {isDeletingAccess ? "Deleting..." : "Permanently Delete Access"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto bg-slate-950 border-white/20 text-white">
           <DialogHeader>

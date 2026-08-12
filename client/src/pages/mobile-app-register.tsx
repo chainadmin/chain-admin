@@ -56,10 +56,10 @@ export default function MobileAppRegister() {
     e.preventDefault();
 
     // Validation
-    if (!formData.firstName || !formData.lastName || !formData.email || !formData.phone) {
+    if (!formData.firstName || !formData.lastName || !formData.email) {
       toast({
         title: "Required Fields",
-        description: "Please fill in your name, email, and phone number.",
+        description: "Please fill in your name and email.",
         variant: "destructive",
       });
       return;
@@ -83,15 +83,6 @@ export default function MobileAppRegister() {
       return;
     }
 
-    if (!formData.agreeToSms) {
-      toast({
-        title: "SMS Consent Required",
-        description: "Please acknowledge SMS updates to continue your registration.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     const tenantSlug = getTenantSlug();
     if (!tenantSlug) {
       toast({
@@ -108,6 +99,7 @@ export default function MobileAppRegister() {
       // Submit registration
       const response = await apiCall("POST", "/api/consumer-registration", {
         ...formData,
+        phone: formData.phone.trim() || null,
         tenantSlug
       });
 
@@ -271,7 +263,7 @@ export default function MobileAppRegister() {
               {/* Phone */}
               <div className="space-y-2">
                 <Label htmlFor="phone" className="text-white/80 text-sm">
-                  Phone Number *
+                  Phone Number (Optional)
                 </Label>
                 <Input
                   id="phone"
@@ -282,7 +274,6 @@ export default function MobileAppRegister() {
                   onChange={(e) => handleInputChange('phone', e.target.value)}
                   className="bg-slate-800 border-white/20 text-white placeholder:text-white/30 focus:border-blue-400/50 focus:ring-blue-400/20"
                   placeholder="(555) 123-4567"
-                  required
                 />
               </div>
 
@@ -372,7 +363,7 @@ export default function MobileAppRegister() {
                   htmlFor="agreeToSms"
                   className="text-sm text-white/70 leading-relaxed cursor-pointer"
                 >
-                  I consent to receive SMS updates and notifications *
+                  I optionally consent to receive informational SMS updates. Consent is not a condition of registration or service. Message and data rates may apply. Reply STOP to opt out or HELP for help.
                 </Label>
               </div>
             </div>

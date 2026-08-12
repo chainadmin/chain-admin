@@ -34,6 +34,7 @@ import {
   voipPhoneNumbers,
   manualArrangements,
   manualPayments,
+  pushDevices,
   type Account,
   type Consumer,
   type Tenant,
@@ -2237,6 +2238,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating consumer profile:", error);
       res.status(500).json({ message: "Failed to update profile" });
+    }
+  });
+
+  // Delete only the consumer's self-service mobile/online access. Agency-owned
+  // account and payment records remain available to the agency and are not
+  // represented to the consumer as being deleted by this operation.
+  app.delete('/api/consumer/account', authenticateConsumer, async (req: any, res) => {
+    try {
+      const { id: consumerId, tenantId } = req.consumer;
+
+      const result = await db.transaction(async (tx) => {
+        const [consumer] = await tx
+          .select({ id: consumers.id, tenantId: consumers.tenantId, isRegistered: consumers.isRegistered })
+          .from(consumers)
+          .where(eq(consumers.id, consumerId))
+          .limit(1);
+
+        if (!consumer || consumer.tenantId !== tenantId) {
+          return null;
+        }
+
+        await tx.delete(pushDevices).where(eq(pushDevices.consumerId, consumerId));
+        await tx
+          .update(consumers)
+          .set({
+            isRegistered: false,
+            registrationDate: null,
+            registrationToken: null,
+          })
+          .where(and(eq(consumers.id, consumerId), eq(consumers.tenantId, tenantId)));
+
+        return consumer.id;
+      });
+
+      if (!result) {
+        return res.status(404).json({ message: "Consumer not found" });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Your mobile and online access has been deleted.",
+      });
+    } catch (error) {
+      console.error("Error deleting consumer online access:", error);
+      return res.status(500).json({ message: "Failed to delete mobile and online access" });
     }
   });
 

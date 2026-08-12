@@ -170,15 +170,6 @@ export default function ConsumerRegistration() {
       return;
     }
 
-    if (!formData.agreeToSms) {
-      toast({
-        title: "SMS Consent Required",
-        description: "Please acknowledge SMS updates to continue your registration.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     if (!formData.firstName || !formData.lastName || !formData.email) {
       toast({
         title: "Required Fields",
@@ -200,6 +191,7 @@ export default function ConsumerRegistration() {
     // Include the tenant slug in the registration data
     registrationMutation.mutate({
       ...formData,
+      phone: formData.phone.trim() || null,
       tenantSlug: effectiveTenantSlug
     });
   };
@@ -514,7 +506,7 @@ export default function ConsumerRegistration() {
               </div>
               <div className="flex-1 space-y-3 text-xs text-blue-100/80">
                 <div className="space-y-1">
-                  <p className="text-sm font-semibold text-white">Confirm SMS updates *</p>
+                  <p className="text-sm font-semibold text-white">SMS updates (Optional)</p>
                   <p>
                     By providing your phone number you agree to receive informational text messages from Chain Software Group. Consent is not a mandatory condition. Message frequency may vary. Msg and data rates may apply. Reply HELP for help or STOP to cancel.
                   </p>
@@ -537,7 +529,7 @@ export default function ConsumerRegistration() {
                       Consent confirmed
                     </>
                   ) : (
-                    <>I acknowledge I may receive messages from Chain Software Group</>
+                    <>Opt in to SMS updates</>
                   )}
                 </Button>
               </div>

@@ -151,6 +151,18 @@ export const authenticateConsumer: RequestHandler = async (req: any, res, next) 
       console.log('❌ Consumer auth failed: Invalid token type:', decoded.type);
       return res.status(401).json({ message: "Invalid token type" });
     }
+
+    // Consumer JWTs are stateless, so verify that online access still exists on
+    // every request. This immediately revokes previously issued tokens after a
+    // consumer deletes their mobile/online access.
+    const consumer = await storage.getConsumer(decoded.consumerId);
+    if (
+      !consumer ||
+      !consumer.isRegistered ||
+      (decoded.tenantId && consumer.tenantId !== decoded.tenantId)
+    ) {
+      return res.status(401).json({ message: "Consumer online access is no longer active" });
+    }
     
     // Attach consumer info to request
     req.consumer = {
