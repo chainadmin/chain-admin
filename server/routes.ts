@@ -77,6 +77,7 @@ import {
   type MessagingPlanId,
 } from "@shared/billing-plans";
 import { computeALaCarteBill, computeSubscriptionBill, generateInvoiceNumber } from "./billing";
+import { generateInvoicePdf } from "./invoicePdf";
 import { canActivateUser } from "@shared/enterpriseCapacity";
 
 import { listConsumers, paginateConsumers, updateConsumer, deleteConsumers, ConsumerNotFoundError } from "@shared/server/consumers";
@@ -1618,11 +1619,26 @@ async function sendChainInvoiceEmail(params: {
         <p>Log in to your billing dashboard to view details and make a payment.</p>
       </div>
     `;
+    const invoicePdf = generateInvoicePdf({
+      invoiceNumber: params.invoiceNumber,
+      tenantName: params.tenantName || 'Customer',
+      status: 'pending',
+      periodStart: params.periodStart,
+      periodEnd: params.periodEnd,
+      dueDate: params.dueDate,
+      totalAmountCents: Math.round(params.totalBill * 100),
+      lineItems: params.lineItems,
+    });
     await emailService.sendEmail({
       to: params.tenantEmail,
       subject: `Chain Invoice ${params.invoiceNumber} - $${params.totalBill.toFixed(2)} Due ${params.dueDate.toLocaleDateString()}`,
       html: emailHtml,
       tenantId: params.tenantId,
+      attachments: [{
+        name: `Chain-Invoice-${params.invoiceNumber}.pdf`,
+        content: invoicePdf,
+        contentType: 'application/pdf',
+      }],
     });
     console.log(`📧 Invoice email sent to ${params.tenantEmail} (${params.invoiceNumber})`);
   } catch (emailErr) {
@@ -19313,6 +19329,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching invoices:", error);
       res.status(500).json({ message: "Failed to fetch invoices" });
+    }
+  });
+
+  app.get('/api/billing/invoices/:invoiceId/pdf', authenticateUser, requireOwner, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) return res.status(403).json({ message: "No tenant access" });
+
+      const [result] = await db
+        .select({ invoice: invoices, tenantName: tenants.name })
+        .from(invoices)
+        .innerJoin(tenants, eq(invoices.tenantId, tenants.id))
+        .where(and(eq(invoices.id, req.params.invoiceId), eq(invoices.tenantId, tenantId)))
+        .limit(1);
+      if (!result) return res.status(404).json({ message: "Invoice not found" });
+
+      const pdf = generateInvoicePdf({
+        ...result.invoice,
+        tenantName: result.tenantName,
+        status: result.invoice.status || 'pending',
+        lineItems: result.invoice.lineItems,
+      });
+      const safeNumber = result.invoice.invoiceNumber.replace(/[^a-zA-Z0-9_-]/g, '_');
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="Chain-Invoice-${safeNumber}.pdf"`);
+      res.setHeader('Content-Length', pdf.length.toString());
+      res.send(pdf);
+    } catch (error) {
+      console.error("Error generating invoice PDF:", error);
+      res.status(500).json({ message: "Failed to generate invoice PDF" });
     }
   });
 

@@ -28,6 +28,7 @@ export interface EmailOptions {
   tenantId?: string; // For usage tracking
   consumerId?: string; // For conversation tracking - link email to consumer
   useBroadcastStream?: boolean; // Use broadcast stream for marketing/bulk emails (automations, campaigns)
+  attachments?: Array<{ name: string; content: Buffer; contentType: string }>;
 }
 
 // Default sender address - verified in Postmark
@@ -90,6 +91,13 @@ export class EmailService {
         Metadata: normalizedMetadata,
         TrackOpens: true, // Enable open tracking
       };
+      if (options.attachments?.length) {
+        emailPayload.Attachments = options.attachments.map(attachment => ({
+          Name: attachment.name,
+          Content: attachment.content.toString('base64'),
+          ContentType: attachment.contentType,
+        }));
+      }
       
       // Use broadcast stream for marketing/bulk emails (automations, campaigns)
       emailPayload.MessageStream = options.useBroadcastStream

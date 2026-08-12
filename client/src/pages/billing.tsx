@@ -1834,11 +1834,14 @@ export default function Billing() {
                                 <Button
                                   variant="outline"
                                   size="sm"
+                                  asChild
                                   data-testid={`button-download-${invoice.invoiceNumber}`}
                                   className="rounded-xl border border-white/20 bg-transparent px-4 py-2 text-xs font-semibold text-blue-100 transition hover:bg-white/10 hover:text-white"
                                 >
-                                  <Download className="mr-2 h-4 w-4" />
-                                  Download
+                                  <a href={`/api/billing/invoices/${invoice.id}/pdf`} download={`Chain-Invoice-${invoice.invoiceNumber}.pdf`}>
+                                    <Download className="mr-2 h-4 w-4" />
+                                    PDF
+                                  </a>
                                 </Button>
                               </div>
                             </div>
