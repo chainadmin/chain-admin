@@ -336,15 +336,6 @@ export default function ConsumerLogin() {
       return;
     }
 
-    if (!form.agreeToSms) {
-      toast({
-        title: "SMS Consent Required",
-        description: "Please confirm you agree to receive text messages before signing in.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     if (!form.agreeToTerms) {
       toast({
         title: "Agreement Required",
@@ -548,11 +539,11 @@ export default function ConsumerLogin() {
               />
               <div className="space-y-2 text-xs text-blue-100/80">
                 <Label htmlFor="agreeToSms" className="text-sm font-semibold text-white">
-                  I agree to receive SMS {terms.account.toLowerCase()} updates *
+                  SMS {terms.account.toLowerCase()} updates (optional)
                 </Label>
                 <p>
-                  By continuing, I confirm that I am the authorized user of this phone number and consent to receive
-                  {terms.account.toLowerCase()}-related text messages. Message and data rates may apply. Reply STOP to opt out at any time.
+                  I optionally consent to receive {terms.account.toLowerCase()}-related text messages at the phone number on file.
+                  Consent is not a condition of signing in or of service. Message and data rates may apply. Reply STOP to opt out at any time.
                 </p>
               </div>
             </div>
@@ -588,7 +579,7 @@ export default function ConsumerLogin() {
           <Button
             type="submit"
             className="h-12 w-full rounded-full bg-blue-500 text-base font-medium text-white transition hover:bg-blue-400"
-            disabled={loginMutation.isPending || !form.agreeToSms || !form.agreeToTerms}
+            disabled={loginMutation.isPending || !form.agreeToTerms}
             data-testid="button-consumer-login"
           >
             {loginMutation.isPending ? (
