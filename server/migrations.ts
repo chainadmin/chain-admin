@@ -1575,7 +1575,7 @@ export async function runMigrations() {
         SET status = 'cancelled'
         WHERE status = 'sending'
       `);
-      if (stuckResult.rowCount > 0) {
+      if ((stuckResult.rowCount ?? 0) > 0) {
         console.log(`  ✓ Marked ${stuckResult.rowCount} stuck SMS campaigns as cancelled (can be resumed)`);
       } else {
         console.log(`  ✓ No stuck SMS campaigns found`);

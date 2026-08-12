@@ -196,7 +196,10 @@ export const getCurrentUser = async (req: any) => {
     tenantId: req.user.tenantId,
     tenantSlug: req.user.tenantSlug || tenant?.slug, // Include slug from token or tenant
     tenant: tenant,
-    isJwtAuth: true
+    isJwtAuth: true,
+    role: req.user.role,
+    voipAccess: req.user.voipAccess,
+    credentialId: req.user.credentialId,
   };
 };
 

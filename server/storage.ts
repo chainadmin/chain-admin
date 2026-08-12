@@ -907,7 +907,7 @@ export class DatabaseStorage implements IStorage {
       .orderBy(agencyCredentials.createdAt);
   }
 
-  async getAgencyCredentialsByTenantAndRole(tenantId: string, role: string): Promise<SelectAgencyCredentials[]> {
+  async getAgencyCredentialsByTenantAndRole(tenantId: string, role: SelectAgencyCredentials['role']): Promise<SelectAgencyCredentials[]> {
     return await db.select()
       .from(agencyCredentials)
       .where(and(
@@ -2124,7 +2124,7 @@ export class DatabaseStorage implements IStorage {
       .where(and(...conditions));
   }
 
-  async getSmsBlockedNumbers(tenantId: string): Promise<{ phoneNumber: string; reason: string; errorCode?: string | null; errorMessage?: string | null; failureCount: number; firstFailedAt: Date; lastFailedAt: Date }[]> {
+  async getSmsBlockedNumbers(tenantId: string): Promise<{ phoneNumber: string; reason: string; errorCode?: string | null; errorMessage?: string | null; failureCount: number | null; firstFailedAt: Date | null; lastFailedAt: Date | null }[]> {
     const results = await db
       .select({
         phoneNumber: smsBlockedNumbers.phoneNumber,

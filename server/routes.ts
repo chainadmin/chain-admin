@@ -12181,7 +12181,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         processedAt: payment.processedAt,
         createdAt: payment.createdAt,
         accountCreditor: payment.accountCreditor,
-        arrangementName: payment.arrangementName,
         notes: payment.notes,
         transactionId: payment.transactionId,
       }));
@@ -15126,7 +15125,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           isRecurring: arrangement?.planType === 'fixed_monthly' || arrangement?.planType === 'range'
         });
         
-        if (shouldCreateSchedule) {
+        if (shouldCreateSchedule && arrangement) {
           console.log('🔨 Creating payment schedule...');
           // Check if consumer already has an active payment schedule for this account
           const existingSchedules = await storage.getActivePaymentSchedulesByConsumerAndAccount(consumerId, accountId, tenantId);
@@ -15418,7 +15417,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 const amountDollars = (amountCents / 100).toFixed(2);
                 const scheduleRecord = createdSchedule as any;
                 const firstPaymentDate = scheduleRecord?.startDate || paymentStartDate.toISOString().split('T')[0];
-                const consumerNameRaw = `${consumerForSmax?.firstName || ''} ${consumerForSmax?.lastName || ''}`.trim();
+                const dmpConsumer = await storage.getConsumer(consumerId);
+                const consumerNameRaw = `${dmpConsumer?.firstName || ''} ${dmpConsumer?.lastName || ''}`.trim();
 
                 await dmpService.insertAttempt(tenantId, {
                   filenumber: fileNumber,
@@ -18731,7 +18731,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           amount: amountCents / 100,
           cardNumber: cardNumber.replace(/\s/g, ''),
           expirationDate: `${expiryYear}-${expiryMonth}`,
-          cardCode: cvv,
+          cvv,
           invoice: `admin_${Date.now()}`,
           description: `Admin payment for ${consumer.firstName} ${consumer.lastName}`,
         });
@@ -25297,7 +25297,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fromNumber: formatPhoneE164(From),
         toNumber: formatPhoneE164(To),
         status: 'ringing',
-        createdAt: new Date(),
       });
 
       // Generate TwiML to ring all agents from this tenant

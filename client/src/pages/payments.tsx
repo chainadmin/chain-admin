@@ -655,7 +655,7 @@ export default function Payments() {
               <TabsTrigger value="today" data-testid="tab-today">
                 <Calendar className="w-4 h-4 mr-2" />
                 Today's Payments
-                {paymentSchedules && (() => {
+                {Boolean(paymentSchedules) && (() => {
                   const now = new Date();
                   const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
                   const todayCount = (paymentSchedules as any[]).filter((s: any) => {
