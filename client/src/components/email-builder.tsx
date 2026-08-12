@@ -47,9 +47,9 @@ export function EmailBuilder({ initialBlocks = [], onChange }: EmailBuilderProps
   };
 
   const updateBlock = (id: string, updates: Partial<EmailBlock>) => {
-    const updatedBlocks = blocks.map(b => 
+    const updatedBlocks: EmailBlock[] = blocks.map(b =>
       b.id === id ? { ...b, ...updates } : b
-    );
+    ) as EmailBlock[];
     setBlocks(updatedBlocks);
     onChange(updatedBlocks);
   };

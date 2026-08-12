@@ -87,10 +87,11 @@ class EventService extends EventEmitter {
         try {
           // Check target audience filtering
           if (sequence.targetType === 'folder' && sequence.targetFolderIds && sequence.targetFolderIds.length > 0) {
+            const targetFolderIds = sequence.targetFolderIds;
             // Check if consumer has accounts in the target folders
             const consumerAccounts = await storage.getAccountsByConsumer(payload.consumerId);
             const hasAccountInTargetFolder = consumerAccounts.some(account => 
-              sequence.targetFolderIds.includes(account.folderId)
+              account.folderId !== null && targetFolderIds.includes(account.folderId)
             );
 
             if (!hasAccountInTargetFolder) {

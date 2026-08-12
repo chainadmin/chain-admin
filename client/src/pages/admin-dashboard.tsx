@@ -95,7 +95,7 @@ export default function AdminDashboard() {
     setShowComposeEmailDialog(true);
   };
 
-  const { data: emailTemplates } = useQuery({
+  const { data: emailTemplates } = useQuery<any[]>({
     queryKey: ["/api/email-templates"],
     enabled: showComposeEmailDialog,
   });

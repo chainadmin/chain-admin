@@ -793,7 +793,6 @@ export default function Accounts() {
                     }`}
                     onClick={() => {
                       setSelectedFolderId("all");
-                      setDisplayLimit(50);
                     }}
                     data-testid="folder-all"
                   >
@@ -814,7 +813,6 @@ export default function Accounts() {
                         }`}
                         onClick={() => {
                           setSelectedFolderId(folder.id);
-                          setDisplayLimit(50);
                         }}
                         data-testid={`folder-${folder.id}`}
                       >
@@ -874,7 +872,6 @@ export default function Accounts() {
                 }`}
                 onClick={() => {
                   setRegistrationFilter("all");
-                  setDisplayLimit(50);
                 }}
                 data-testid="filter-all-registration"
               >
@@ -892,7 +889,6 @@ export default function Accounts() {
                 }`}
                 onClick={() => {
                   setRegistrationFilter("registered");
-                  setDisplayLimit(50);
                 }}
                 data-testid="filter-registered"
               >
@@ -911,7 +907,6 @@ export default function Accounts() {
                 }`}
                 onClick={() => {
                   setRegistrationFilter("not_registered");
-                  setDisplayLimit(50);
                 }}
                 data-testid="filter-not-registered"
               >
@@ -935,7 +930,6 @@ export default function Accounts() {
                 value={accountSearchText}
                 onChange={(e) => {
                   setAccountSearchText(e.target.value);
-                  setDisplayLimit(50);
                 }}
                 className="pl-9 bg-white/5 border-white/10 text-white placeholder:text-blue-100/40 rounded-xl"
                 data-testid="input-accounts-search"
