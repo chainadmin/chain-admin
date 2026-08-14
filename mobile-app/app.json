@@ -10,7 +10,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.chainsoftware.platform",
-      "buildNumber": "19",
+      "buildNumber": "20",
       "newArchEnabled": true,
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [
