@@ -1,6 +1,8 @@
 import { storage } from './storage';
+import { createHash } from 'node:crypto';
 
 interface DmpConfig {
+  tenantId: string;
   enabled: boolean;
   apiUrl: string;
   username: string;
@@ -110,6 +112,14 @@ interface DmpDisposition {
 class DebtManagerProService {
   private tokenCache: Map<string, { token: string; expires: number }> = new Map();
 
+  private tokenCacheKey(config: DmpConfig): string {
+    // Include every credential component so a password rotation (or another
+    // tenant using the same username and host) can never reuse a stale token.
+    return createHash('sha256')
+      .update(`${config.tenantId}\0${config.apiUrl}\0${config.username}\0${config.password}`)
+      .digest('hex');
+  }
+
   private async getDmpConfig(
     tenantId: string,
     overrides?: Partial<DmpConfig>
@@ -127,6 +137,7 @@ class DebtManagerProService {
       }
 
       return {
+        tenantId,
         enabled,
         apiUrl: apiUrl.replace(/\/$/, ''),
         username,
@@ -138,13 +149,15 @@ class DebtManagerProService {
     }
   }
 
-  private async authenticate(config: DmpConfig): Promise<string | null> {
-    const cacheKey = `${config.username}:${config.apiUrl}`;
+  private async authenticate(config: DmpConfig, forceRefresh = false): Promise<string | null> {
+    const cacheKey = this.tokenCacheKey(config);
     const cached = this.tokenCache.get(cacheKey);
     
-    if (cached && Date.now() < cached.expires) {
+    if (!forceRefresh && cached && Date.now() < cached.expires) {
       return cached.token;
     }
+
+    if (forceRefresh || cached) this.tokenCache.delete(cacheKey);
 
     try {
       const response = await fetch(`${config.apiUrl}/api/v2/login`, {
@@ -156,6 +169,7 @@ class DebtManagerProService {
           username: config.username,
           password: config.password,
         }),
+        signal: AbortSignal.timeout(15_000),
       });
 
       if (!response.ok) {
@@ -171,8 +185,11 @@ class DebtManagerProService {
         return null;
       }
 
-      // Cache token for 55 minutes (assuming 1 hour expiry)
-      const expiresIn = data.expires_in || 3300;
+      // Refresh one minute before the server-reported expiry. When DMP omits
+      // expiry metadata, retain the historical 55-minute cache duration.
+      const expiresIn = data.expires_in
+        ? Math.max(1, data.expires_in - 60)
+        : 3300;
       this.tokenCache.set(cacheKey, {
         token,
         expires: Date.now() + (expiresIn * 1000),
@@ -191,35 +208,41 @@ class DebtManagerProService {
     endpoint: string,
     body?: any
   ): Promise<T | null> {
-    const token = await this.authenticate(config);
-    if (!token) {
-      console.error('Failed to get DMP auth token');
-      return null;
-    }
-
     try {
       const url = `${config.apiUrl}${endpoint}`;
-      const options: RequestInit = {
-        method,
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      };
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const token = await this.authenticate(config, attempt > 0);
+        if (!token) {
+          console.error('Failed to get DMP auth token');
+          return null;
+        }
 
-      if (body && (method === 'POST' || method === 'PUT')) {
-        options.body = JSON.stringify(body);
+        const response = await fetch(url, {
+          method,
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: body !== undefined && (method === 'POST' || method === 'PUT')
+            ? JSON.stringify(body)
+            : undefined,
+          signal: AbortSignal.timeout(30_000),
+        });
+
+        // A cached token may have been revoked before its advertised expiry.
+        // Re-authenticate once rather than failing the integration operation.
+        if (response.status === 401 && attempt === 0) continue;
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`DMP API error: ${response.status} ${response.statusText}`, errorText);
+          return null;
+        }
+
+        const responseText = await response.text();
+        return responseText ? JSON.parse(responseText) as T : {} as T;
       }
-
-      const response = await fetch(url, options);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`DMP API error: ${response.status} ${response.statusText}`, errorText);
-        return null;
-      }
-
-      return await response.json();
+      return null;
     } catch (error) {
       console.error(`DMP API request failed: ${method} ${endpoint}`, error);
       return null;

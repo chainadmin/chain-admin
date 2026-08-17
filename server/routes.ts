@@ -10899,13 +10899,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get account for filenumber
       const account = await storage.getAccount(payment.accountId!);
-      if (!account) {
+      if (!account || account.tenantId !== tenantId) {
         return res.status(404).json({ success: false, message: "Account not found" });
+      }
+
+      if (!account.filenumber) {
+        return res.status(400).json({ success: false, message: "Account is not linked to a DMP file number" });
       }
 
       // Post payment to DMP
       const result = await dmpService.postPayment(tenantId, {
-        filenumber: account.filenumber || account.accountNumber || '',
+        filenumber: account.filenumber,
         amount: payment.amountCents / 100,
         date: payment.createdAt || new Date(),
         type: 'payment',
@@ -10950,12 +10954,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get account for filenumber
       const account = await storage.getAccount(accountId);
-      if (!account) {
+      if (!account || account.tenantId !== tenantId) {
         return res.status(404).json({ success: false, message: "Account not found" });
       }
 
+      if (!account.filenumber) {
+        return res.status(400).json({ success: false, message: "Account is not linked to a DMP file number" });
+      }
+
       // Post note to DMP
-      const result = await dmpService.postNote(tenantId, account.filenumber || account.accountNumber || '', {
+      const result = await dmpService.postNote(tenantId, account.filenumber, {
         content,
         type: type || 'general',
         createdBy: req.user.username || 'Chain',
@@ -10998,12 +11006,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get account for filenumber
       const account = await storage.getAccount(accountId);
-      if (!account) {
+      if (!account || account.tenantId !== tenantId) {
         return res.status(404).json({ success: false, message: "Account not found" });
       }
 
+      if (!account.filenumber) {
+        return res.status(400).json({ success: false, message: "Account is not linked to a DMP file number" });
+      }
+
       // Log communication to DMP
-      const result = await dmpService.logCommunication(tenantId, account.filenumber || account.accountNumber || '', {
+      const result = await dmpService.logCommunication(tenantId, account.filenumber, {
         type: type as 'sms' | 'email',
         content,
         direction: direction || 'outbound',
