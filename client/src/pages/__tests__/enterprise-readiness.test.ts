@@ -14,13 +14,28 @@ test('municipal tenants hide self-service billing without changing other tenant 
 test('a tenant configured for 100 users accepts 66 active users and more', () => {
   const users = Array.from({ length: 66 }, () => ({ isActive: true }));
   assert.equal(activeSeatUsage(users), 66);
-  assert.deepEqual(canActivateUser(users, 100), { allowed: true, activeUsers: 66, maxActiveUsers: 100 });
+  const capacity = canActivateUser(users, 100);
+  assert.equal(capacity.allowed, true);
+  assert.equal(capacity.activeUsers, 66);
+  assert.equal(capacity.maxActiveUsers, 100);
 });
 
 test('inactive users do not consume active seats and configured limit is enforced', () => {
   const users = [...Array.from({ length: 66 }, () => ({ isActive: true })), { isActive: false }];
   assert.equal(canActivateUser(users, 66).allowed, false);
   assert.equal(activeSeatUsage(users), 66);
+});
+
+test('municipalities include 66 users and meter rather than block additional users', () => {
+  const includedUsers = Array.from({ length: 66 }, () => ({ isActive: true }));
+  const summary = canActivateUser(includedUsers, 2, 'municipality');
+  assert.equal(summary.allowed, true);
+  assert.equal(summary.maxActiveUsers, 66);
+  assert.equal(summary.additionalBillableUsers, 0);
+  assert.equal(summary.hasUnlimitedUsers, true);
+  const overage = canActivateUser([...includedUsers, { isActive: true }, { isActive: true }], 66, 'municipality');
+  assert.equal(overage.additionalBillableUsers, 2);
+  assert.equal(overage.allowed, true);
 });
 
 test('500,000 campaign recipients are processed with no batch over 500 records', async () => {

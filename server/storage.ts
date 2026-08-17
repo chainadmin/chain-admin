@@ -660,7 +660,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTenant(tenant: InsertTenant): Promise<Tenant> {
-    const [newTenant] = await db.insert(tenants).values(tenant).returning();
+    const [newTenant] = await db.insert(tenants).values({
+      ...tenant,
+      maxActiveUsers: tenant.businessType === 'municipality' ? Math.max(66, tenant.maxActiveUsers || 66) : tenant.maxActiveUsers,
+    }).returning();
     
     // Automatically create default tenant_settings for complete isolation
     await db.insert(tenantSettings).values({
@@ -699,6 +702,7 @@ export class DatabaseStorage implements IStorage {
       slug: data.slug,
       businessType: data.businessType || 'call_center',
       billingMode: data.billingMode || 'subscription',
+      maxActiveUsers: data.businessType === 'municipality' ? 66 : 2,
       isTrialAccount: true,
       isPaidAccount: false,
       ownerFirstName: data.ownerFirstName,
@@ -743,6 +747,7 @@ export class DatabaseStorage implements IStorage {
       businessType: data.businessType || 'collection_agency',
       portalAccessEnabled: data.businessType === 'municipality' ? false : true,
       paymentProcessingEnabled: data.businessType === 'municipality' ? false : true,
+      maxActiveUsers: data.businessType === 'municipality' ? 66 : 2,
       isTrialAccount: false, // Created by admin as paid account
       isPaidAccount: true,
       postmarkServerId: data.postmarkServerId,
@@ -3047,7 +3052,10 @@ export class DatabaseStorage implements IStorage {
   // Tenant setup helper
   async setupTenantForUser(authId: string, tenantData: InsertTenant): Promise<{ tenant: Tenant; platformUser: PlatformUser }> {
     // Create tenant
-    const [tenant] = await db.insert(tenants).values(tenantData).returning();
+    const [tenant] = await db.insert(tenants).values({
+      ...tenantData,
+      maxActiveUsers: tenantData.businessType === 'municipality' ? Math.max(66, tenantData.maxActiveUsers || 66) : tenantData.maxActiveUsers,
+    }).returning();
     
     // Create platform user link
     const [platformUser] = await db.insert(platformUsers).values({

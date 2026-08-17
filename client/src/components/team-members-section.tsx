@@ -244,7 +244,9 @@ export default function TeamMembersSection({ cardBaseClasses, inputClasses }: Te
   const owners = teamMembers.filter(m => m.role === 'owner');
   const subUsers = teamMembers.filter(m => m.role !== 'owner');
   const activeUsers = teamMembers.filter(member => member.isActive !== false).length;
-  const canAddSubUser = activeUsers < (settings?.maxActiveUsers || 2);
+  const includedUsers = isMunicipality ? 66 : (settings?.maxActiveUsers || 2);
+  const additionalBillableUsers = isMunicipality ? Math.max(0, activeUsers - includedUsers) : 0;
+  const canAddSubUser = isMunicipality || activeUsers < includedUsers;
 
   return (
     <Card className={cardBaseClasses}>
@@ -256,7 +258,7 @@ export default function TeamMembersSection({ cardBaseClasses, inputClasses }: Te
               Team Members
             </CardTitle>
             <CardDescription className="text-blue-100/70">
-              {isMunicipality ? `Manage municipal administrators and staff (${activeUsers}/${settings?.maxActiveUsers || 2} active users).` : 'Manage access for your team. Team members cannot access billing.'}
+              {isMunicipality ? `${activeUsers} active users · 66 included${additionalBillableUsers ? ` · ${additionalBillableUsers} additional billable` : ''}. Additional users may be added as needed.` : 'Manage access for your team. Team members cannot access billing.'}
             </CardDescription>
           </div>
           {canAddSubUser && (

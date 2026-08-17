@@ -72,7 +72,7 @@ export const tenants = pgTable("tenants", {
   postmarkTransactionalStream: text("postmark_transactional_stream").default('outbound'),
   postmarkBroadcastStream: text("postmark_broadcast_stream").default('broadcast'),
   postmarkInboundAddress: text("postmark_inbound_address"),
-  maxActiveUsers: integer("max_active_users").default(2).notNull(), // Includes the owner; enterprise tenants can raise this without a deployment
+  maxActiveUsers: integer("max_active_users").default(2).notNull(), // Included-seat threshold; municipalities receive 66 and may add metered users above it
   // Twilio integration (each agency has their own)
   twilioAccountSid: text("twilio_account_sid"), // Twilio Account SID
   twilioAuthToken: text("twilio_auth_token"), // Twilio Auth Token (encrypted in production)
