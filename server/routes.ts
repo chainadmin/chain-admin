@@ -9742,14 +9742,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const combinedSettings = {
         ...(settings || {}),
         twilioAccountSid: tenant?.twilioAccountSid || '',
-        twilioAuthToken: tenant?.twilioAuthToken || '',
+        twilioAuthToken: tenant?.twilioAuthToken ? '••••••••' : '',
         twilioPhoneNumber: tenant?.twilioPhoneNumber || '',
         twilioBusinessName: tenant?.twilioBusinessName || '',
         twilioCampaignId: tenant?.twilioCampaignId || '',
         customSenderEmail: tenant?.customSenderEmail || '',
         isTrialAccount: tenant?.isTrialAccount || false,
         businessType: tenant?.businessType || 'call_center',
-        maxActiveUsers: tenant?.maxActiveUsers || 2,
+        maxActiveUsers: tenant?.businessType === 'municipality' ? Math.max(66, tenant?.maxActiveUsers || 66) : (tenant?.maxActiveUsers || 2),
         // Service access flags
         emailServiceEnabled: tenant?.emailServiceEnabled ?? true,
         smsServiceEnabled: tenant?.smsServiceEnabled ?? true,
@@ -9974,9 +9974,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           twilioBusinessName !== undefined || 
           twilioCampaignId !== undefined ||
           customSenderEmail !== undefined) {
+        const existingTenant = await storage.getTenant(tenantId);
+        const finalTwilioAuthToken = twilioAuthToken === '••••••••'
+          ? existingTenant?.twilioAuthToken
+          : (twilioAuthToken || null);
         await storage.updateTenantTwilioSettings(tenantId, {
           twilioAccountSid: twilioAccountSid || null,
-          twilioAuthToken: twilioAuthToken || null,
+          twilioAuthToken: finalTwilioAuthToken,
           twilioPhoneNumber: twilioPhoneNumber || null,
           twilioBusinessName: twilioBusinessName || null,
           twilioCampaignId: twilioCampaignId || null,
@@ -10272,7 +10276,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Tenant not found" });
       }
       const allCredentials = await storage.getAgencyCredentialsByTenant(tenantId);
-      const { activeUsers: activeCount, maxActiveUsers, allowed } = canActivateUser(allCredentials, tenant.maxActiveUsers);
+      const { activeUsers: activeCount, maxActiveUsers, allowed } = canActivateUser(allCredentials, tenant.maxActiveUsers, tenant.businessType);
       console.log("[TEAM-MEMBERS] Active seat usage:", activeCount, "/", maxActiveUsers);
       if (!allowed) {
         return res.status(400).json({ 
@@ -10397,7 +10401,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           storage.getTenant(tenantId),
           storage.getAgencyCredentialsByTenant(tenantId),
         ]);
-        const { activeUsers: activeCount, maxActiveUsers, allowed } = canActivateUser(credentials, tenant?.maxActiveUsers);
+        const { activeUsers: activeCount, maxActiveUsers, allowed } = canActivateUser(credentials, tenant?.maxActiveUsers, tenant?.businessType);
         if (!allowed) {
           return res.status(400).json({
             message: `Active user limit reached (${activeCount}/${maxActiveUsers}).`,

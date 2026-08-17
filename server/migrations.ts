@@ -2052,6 +2052,7 @@ export async function runMigrations() {
     // Enterprise capacity: configurable tenant seats and tenant-scoped Postmark routing.
     try {
       await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS max_active_users INTEGER NOT NULL DEFAULT 2`);
+      await client.query(`UPDATE tenants SET max_active_users = 66 WHERE business_type = 'municipality' AND max_active_users < 66`);
       await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS postmark_transactional_stream TEXT DEFAULT 'outbound'`);
       await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS postmark_broadcast_stream TEXT DEFAULT 'broadcast'`);
       await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS postmark_inbound_address TEXT`);

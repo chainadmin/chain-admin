@@ -113,7 +113,11 @@ class SmsService {
       console.error(`Error getting Twilio credentials for tenant ${tenantId}:`, error);
     }
 
-    // Fall back to default client if available
+    // Municipalities must never send through another tenant's/global Twilio account.
+    const tenant = await storage.getTenant(tenantId);
+    if (tenant?.businessType === 'municipality') return null;
+
+    // Legacy non-municipal tenants may use the platform fallback.
     return this.clients.get('default') || null;
   }
 
@@ -129,7 +133,10 @@ class SmsService {
       console.error(`Error getting Twilio phone number for tenant ${tenantId}:`, error);
     }
 
-    // Fall back to default phone number if available
+    const tenant = await storage.getTenant(tenantId);
+    if (tenant?.businessType === 'municipality') return null;
+
+    // Legacy non-municipal tenants may use the platform fallback.
     return process.env.TWILIO_PHONE_NUMBER || null;
   }
 

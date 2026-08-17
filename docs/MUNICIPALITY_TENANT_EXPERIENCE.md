@@ -14,9 +14,11 @@ Accounts, Payments, Billing, payment plans, merchant settings, payment arrangeme
 
 ## Departments and users
 
-`tenant_departments` stores administrator-defined departments. The Primary Administrator can create, edit, deactivate, and delete departments. Credentials may optionally reference a department. The existing tenant credential model remains responsible for roles, activation, deletion, passwords, tenant isolation, and configurable active-seat limits.
+`tenant_departments` stores administrator-defined departments. The Primary Administrator can create, edit, deactivate, and delete departments. Credentials may optionally reference a department. The existing tenant credential model remains responsible for roles, activation, deletion, passwords, and tenant isolation. Municipalities include 66 active users and are never blocked from adding more; active users above 66 are reported as billable overage seats.
 
 The owner is presented as the **Primary Administrator**. Municipal user roles are mapped onto the existing permission-compatible roles: Administrator (`manager`), Communications Staff (`agent`), Viewer, and Contact Importer (`uploader`). Password reset initiation emails a one-hour reset link; passwords remain hashed and are never returned to administrators.
+
+Each user email is used for account identification, administrative display, and password-reset delivery. It does not have to belong to a particular municipal domain. SMS is available only after the municipality saves its own Twilio account SID, auth token, and sending number; municipal SMS never falls back to the platform or another tenant's Twilio configuration.
 
 ## Public experience
 

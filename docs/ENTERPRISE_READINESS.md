@@ -25,7 +25,7 @@ Run the in-process bounded-memory campaign simulation with `npm test`; it proces
 
 ## Tenant user capacity
 
-`tenants.max_active_users` is the total number of concurrently active owner and non-owner credentials. The default of 2 preserves the previous owner-plus-one-team-member behavior. A platform administrator can raise a tenant to 66 or above:
+`tenants.max_active_users` is the included-seat threshold. Municipalities receive 66 included active users automatically. They may continue adding users above 66 without an administrator changing code or configuration; each active account above 66 is reported as a billable overage. Other tenant types retain their configured hard limit (default 2).
 
 ```http
 PATCH /api/admin/tenants/{tenantId}/enterprise-config
@@ -34,7 +34,7 @@ Content-Type: application/json
 {"maxActiveUsers":100}
 ```
 
-Only active users consume seats. Creation and reactivation enforce the configured value. Existing roles, service restrictions, owner-only management, authentication, and tenant-ID checks remain unchanged.
+Only active users consume seats. Existing roles, service restrictions, owner-only management, authentication, and tenant-ID checks remain unchanged. The application meters municipal overage quantity; the contracted per-user price must be applied by the invoicing integration rather than being hard-coded in seat access logic.
 
 ## Postmark configuration map
 

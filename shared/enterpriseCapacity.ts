@@ -1,4 +1,5 @@
 export const DEFAULT_MAX_ACTIVE_USERS = 2;
+export const MUNICIPALITY_INCLUDED_ACTIVE_USERS = 66;
 export const MAX_CONTACT_PAGE_SIZE = 500;
 
 export function normalizeActiveUserLimit(value: number | null | undefined): number {
@@ -9,10 +10,21 @@ export function activeSeatUsage(users: Array<{ isActive?: boolean | null }>) {
   return users.reduce((count, user) => count + (user.isActive === false ? 0 : 1), 0);
 }
 
-export function canActivateUser(users: Array<{ isActive?: boolean | null }>, configuredLimit?: number | null) {
+export function userCapacitySummary(users: Array<{ isActive?: boolean | null }>, configuredLimit?: number | null, businessType?: string | null) {
   const activeUsers = activeSeatUsage(users);
-  const maxActiveUsers = normalizeActiveUserLimit(configuredLimit);
-  return { allowed: activeUsers < maxActiveUsers, activeUsers, maxActiveUsers };
+  const isMunicipality = businessType === 'municipality';
+  const maxActiveUsers = isMunicipality ? Math.max(MUNICIPALITY_INCLUDED_ACTIVE_USERS, normalizeActiveUserLimit(configuredLimit)) : normalizeActiveUserLimit(configuredLimit);
+  return {
+    allowed: isMunicipality || activeUsers < maxActiveUsers,
+    activeUsers,
+    maxActiveUsers,
+    additionalBillableUsers: isMunicipality ? Math.max(0, activeUsers - MUNICIPALITY_INCLUDED_ACTIVE_USERS) : 0,
+    hasUnlimitedUsers: isMunicipality,
+  };
+}
+
+export function canActivateUser(users: Array<{ isActive?: boolean | null }>, configuredLimit?: number | null, businessType?: string | null) {
+  return userCapacitySummary(users, configuredLimit, businessType);
 }
 
 export async function processCursorBatches<T extends { id: string }>(options: {
