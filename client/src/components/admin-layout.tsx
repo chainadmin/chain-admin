@@ -147,6 +147,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     { name: "Email Campaigns", href: buildNavHref("/communications?tab=campaigns"), icon: "fas fa-envelope" },
     { name: "SMS Campaigns", href: buildNavHref("/communications?tab=campaigns"), icon: "fas fa-comment-alt" },
     { name: "Templates", href: buildNavHref("/communications?tab=templates"), icon: "fas fa-file-alt" },
+    { name: "Inbox", href: buildNavHref("/email-inbox"), icon: "fas fa-inbox" },
     { name: "Lists / Segments", href: buildNavHref("/consumers"), icon: "fas fa-list" },
     { name: "Communications History", href: buildNavHref("/communications?tab=overview"), icon: "fas fa-history" },
     { name: "Reports / Analytics", href: buildNavHref("/communications?tab=overview"), icon: "fas fa-chart-line" },

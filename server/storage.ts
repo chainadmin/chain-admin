@@ -303,10 +303,10 @@ export interface IStorage {
   
   // Email reply operations
   createEmailReply(reply: InsertEmailReply): Promise<EmailReply>;
-  getEmailRepliesByTenant(tenantId: string): Promise<(EmailReply & { consumerName: string; consumerEmail: string })[]>;
-  getEmailReplyById(id: string, tenantId: string): Promise<EmailReply | undefined>;
-  markEmailReplyAsRead(id: string, tenantId: string): Promise<EmailReply>;
-  deleteEmailReply(id: string, tenantId: string): Promise<void>;
+  getEmailRepliesByUser(tenantId: string, userId: string): Promise<(EmailReply & { consumerName: string; consumerEmail: string })[]>;
+  getEmailReplyById(id: string, tenantId: string, userId: string): Promise<EmailReply | undefined>;
+  markEmailReplyAsRead(id: string, tenantId: string, userId: string): Promise<EmailReply>;
+  deleteEmailReply(id: string, tenantId: string, userId: string): Promise<void>;
   
   // SMS reply operations
   createSmsReply(reply: InsertSmsReply): Promise<SmsReply>;
@@ -316,7 +316,7 @@ export interface IStorage {
   deleteSmsReply(id: string, tenantId: string): Promise<void>;
   
   // Consumer conversation operations
-  getConsumerConversation(consumerId: string, tenantId: string): Promise<{
+  getConsumerConversation(consumerId: string, tenantId: string, userId: string): Promise<{
     emails: { sent: any[]; received: any[] };
     sms: { sent: any[]; received: any[] };
   }>;
@@ -1676,12 +1676,12 @@ export class DatabaseStorage implements IStorage {
     return newReply;
   }
 
-  async getEmailRepliesByTenant(tenantId: string): Promise<(EmailReply & { consumerName: string; consumerEmail: string })[]> {
+  async getEmailRepliesByUser(tenantId: string, userId: string): Promise<(EmailReply & { consumerName: string; consumerEmail: string })[]> {
     const result = await db
       .select()
       .from(emailReplies)
       .leftJoin(consumers, eq(emailReplies.consumerId, consumers.id))
-      .where(eq(emailReplies.tenantId, tenantId))
+      .where(and(eq(emailReplies.tenantId, tenantId), eq(emailReplies.assignedUserId, userId)))
       .orderBy(desc(emailReplies.receivedAt));
 
     return result.map(row => ({
@@ -1691,26 +1691,26 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async getEmailReplyById(id: string, tenantId: string): Promise<EmailReply | undefined> {
+  async getEmailReplyById(id: string, tenantId: string, userId: string): Promise<EmailReply | undefined> {
     const [reply] = await db
       .select()
       .from(emailReplies)
-      .where(and(eq(emailReplies.id, id), eq(emailReplies.tenantId, tenantId)));
+      .where(and(eq(emailReplies.id, id), eq(emailReplies.tenantId, tenantId), eq(emailReplies.assignedUserId, userId)));
     return reply;
   }
 
-  async markEmailReplyAsRead(id: string, tenantId: string): Promise<EmailReply> {
+  async markEmailReplyAsRead(id: string, tenantId: string, userId: string): Promise<EmailReply> {
     const [updatedReply] = await db
       .update(emailReplies)
       .set({ isRead: true, readAt: new Date() })
-      .where(and(eq(emailReplies.id, id), eq(emailReplies.tenantId, tenantId)))
+      .where(and(eq(emailReplies.id, id), eq(emailReplies.tenantId, tenantId), eq(emailReplies.assignedUserId, userId)))
       .returning();
     return updatedReply;
   }
 
-  async deleteEmailReply(id: string, tenantId: string): Promise<void> {
+  async deleteEmailReply(id: string, tenantId: string, userId: string): Promise<void> {
     await db.delete(emailReplies)
-      .where(and(eq(emailReplies.id, id), eq(emailReplies.tenantId, tenantId)));
+      .where(and(eq(emailReplies.id, id), eq(emailReplies.tenantId, tenantId), eq(emailReplies.assignedUserId, userId)));
   }
 
   // SMS reply operations
@@ -4480,7 +4480,7 @@ export class DatabaseStorage implements IStorage {
     return entry;
   }
 
-  async getConsumerConversation(consumerId: string, tenantId: string): Promise<{
+  async getConsumerConversation(consumerId: string, tenantId: string, userId: string): Promise<{
     emails: { sent: any[]; received: any[] };
     sms: { sent: any[]; received: any[] };
   }> {
@@ -4503,7 +4503,8 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(emailLogs.tenantId, tenantId),
-          or(...emailConditions)
+          or(...emailConditions),
+          sql`${emailLogs.metadata}->>'senderUserId' = ${userId}`
         )
       )
       .orderBy(desc(emailLogs.sentAt));
@@ -4515,7 +4516,8 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(emailReplies.tenantId, tenantId),
-          eq(emailReplies.consumerId, consumerId)
+          eq(emailReplies.consumerId, consumerId),
+          eq(emailReplies.assignedUserId, userId)
         )
       )
       .orderBy(desc(emailReplies.receivedAt));

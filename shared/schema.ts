@@ -373,6 +373,7 @@ export const emailReplies = pgTable("email_replies", {
   htmlBody: text("html_body"),
   messageId: text("message_id"), // Postmark inbound message ID
   inReplyToMessageId: text("in_reply_to_message_id"), // Original message ID if this is a reply
+  assignedUserId: text("assigned_user_id"), // Tenant user who sent the original email; inboxes are private per user
   isRead: boolean("is_read").default(false),
   readAt: timestamp("read_at"),
   readBy: text("read_by"), // Email/username of person who read it

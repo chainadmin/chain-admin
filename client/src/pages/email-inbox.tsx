@@ -52,6 +52,7 @@ interface SmsReply {
 export default function CommunicationsInbox() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<'email' | 'sms'>('email');
+  const [emailFilter, setEmailFilter] = useState<'all' | 'unread' | 'read'>('all');
   const [selectedEmail, setSelectedEmail] = useState<EmailReply | null>(null);
   const [selectedSms, setSelectedSms] = useState<SmsReply | null>(null);
   const [showEmailReplyDialog, setShowEmailReplyDialog] = useState(false);
@@ -270,6 +271,11 @@ export default function CommunicationsInbox() {
   const unreadEmailCount = emails.filter(email => !email.isRead).length;
   const unreadSmsCount = smsMessages.filter(sms => !sms.isRead).length;
   const totalUnreadCount = unreadEmailCount + unreadSmsCount;
+  const filteredEmails = emails.filter(email => {
+    if (emailFilter === 'unread') return !email.isRead;
+    if (emailFilter === 'read') return email.isRead;
+    return true;
+  });
 
   const glassPanelClass = "rounded-3xl border border-white/15 bg-[#0b1733]/80 text-blue-50 shadow-xl shadow-blue-900/20 backdrop-blur";
 
@@ -329,6 +335,23 @@ export default function CommunicationsInbox() {
                   <CardDescription className="text-xs">
                     {emails.length} total email{emails.length !== 1 ? 's' : ''}
                   </CardDescription>
+                  <div className="flex gap-2 pt-2" role="group" aria-label="Filter emails by read status">
+                    {(['all', 'unread', 'read'] as const).map(filter => (
+                      <Button
+                        key={filter}
+                        type="button"
+                        size="sm"
+                        variant={emailFilter === filter ? 'default' : 'outline'}
+                        onClick={() => setEmailFilter(filter)}
+                        data-testid={`filter-emails-${filter}`}
+                        aria-pressed={emailFilter === filter}
+                        className="capitalize"
+                      >
+                        {filter}
+                        {filter === 'unread' && unreadEmailCount > 0 ? ` (${unreadEmailCount})` : ''}
+                      </Button>
+                    ))}
+                  </div>
                 </CardHeader>
                 <CardContent className="p-0">
                   {isLoadingEmails ? (
@@ -358,9 +381,15 @@ export default function CommunicationsInbox() {
                       <p className="text-sm font-medium text-slate-900 dark:text-white">No emails yet</p>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Inbound emails will appear here</p>
                     </div>
+                  ) : filteredEmails.length === 0 ? (
+                    <div className="p-12 text-center" data-testid="text-no-filtered-emails">
+                      <MailOpen className="w-12 h-12 mx-auto mb-3 text-slate-400 dark:text-slate-500" />
+                      <p className="text-sm font-medium text-slate-900 dark:text-white">No {emailFilter} emails</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Choose another filter to view messages</p>
+                    </div>
                   ) : (
                     <div className="divide-y divide-slate-200 dark:divide-slate-700">
-                      {emails.map((email) => (
+                      {filteredEmails.map((email) => (
                         <button
                           key={email.id}
                           onClick={() => handleEmailClick(email)}
