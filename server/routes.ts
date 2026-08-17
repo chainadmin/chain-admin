@@ -1145,6 +1145,7 @@ async function processSmartArrangementSave(
     tenantWithSettings: any;
     tenantBranding: any;
     tenant: Tenant;
+    senderUserId: string;
   }) {
     const {
       campaignId,
@@ -1155,6 +1156,7 @@ async function processSmartArrangementSave(
       tenantWithSettings,
       tenantBranding,
       tenant,
+      senderUserId,
     } = options;
 
     // Deduplicate by email address, keeping the most recent consumer record for each email
@@ -1234,6 +1236,7 @@ async function processSmartArrangementSave(
         tenantId,
         consumerId: consumer.id,
         templateId: template.id,
+        senderUserId,
       };
 
       if (consumerAccount?.accountNumber) {
@@ -2756,7 +2759,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const conversation = await storage.getConsumerConversation(req.params.id, tenantId);
+      const conversation = await storage.getConsumerConversation(req.params.id, tenantId, req.user.id);
       
       // Combine and sort all messages chronologically
       const allMessages = [
@@ -4380,6 +4383,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               tenantWithSettings: tenantContext.tenantWithSettings,
               tenantBranding: tenantContext.tenantBranding,
               tenant: tenantContext.tenant,
+              senderUserId: req.user.id,
             });
 
             const fullTemplate = (template.subject || '') + ' ' + (template.html || '');
@@ -4579,6 +4583,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         metadata: {
           type: 'individual',
           tenantId: tenantId,
+          senderUserId: req.user.id,
         },
         tenantId: tenantId, // Track email usage by tenant
       });
@@ -4719,7 +4724,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const replies = await storage.getEmailRepliesByTenant(tenantId);
+      const replies = await storage.getEmailRepliesByUser(tenantId, req.user.id);
       res.json(replies);
     } catch (error) {
       console.error("Error fetching email replies:", error);
@@ -4734,7 +4739,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const reply = await storage.getEmailReplyById(req.params.id, tenantId);
+      const reply = await storage.getEmailReplyById(req.params.id, tenantId, req.user.id);
       if (!reply) {
         return res.status(404).json({ message: "Email reply not found" });
       }
@@ -4753,7 +4758,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const reply = await storage.markEmailReplyAsRead(req.params.id, tenantId);
+      const reply = await storage.markEmailReplyAsRead(req.params.id, tenantId, req.user.id);
       res.json(reply);
     } catch (error) {
       console.error("Error marking email reply as read:", error);
@@ -4770,12 +4775,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { id } = req.params;
-      const reply = await storage.getEmailReplyById(id, tenantId);
+      const reply = await storage.getEmailReplyById(id, tenantId, req.user.id);
       if (!reply) {
         return res.status(404).json({ message: "Email reply not found" });
       }
 
-      await storage.deleteEmailReply(id, tenantId);
+      await storage.deleteEmailReply(id, tenantId, req.user.id);
       res.json({ message: "Email reply deleted successfully" });
     } catch (error) {
       console.error("Error deleting email reply:", error);
@@ -4799,7 +4804,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Get the original email
-      const originalEmail = await storage.getEmailReplyById(id, tenantId);
+      const originalEmail = await storage.getEmailReplyById(id, tenantId, req.user.id);
       if (!originalEmail) {
         return res.status(404).json({ message: "Email reply not found" });
       }
@@ -4835,6 +4840,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           type: 'reply-response',
           tenantId: tenantId,
           originalEmailId: id,
+          senderUserId: req.user.id,
         },
         tenantId: tenantId,
         consumerId: originalEmail.consumerId || undefined, // Link reply to consumer for conversation tracking
@@ -23590,6 +23596,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Find the original email by looking at In-Reply-To header to determine which tenant this belongs to
       let matchedTenant = null;
       let inReplyToMessageId = null;
+      let assignedUserId: string | null = null;
       
       // Extract In-Reply-To header from Headers array
       if (Headers && Array.isArray(Headers)) {
@@ -23603,12 +23610,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // Look up the original email in emailLogs to find the tenant
           const [originalEmail] = await db
-            .select({ tenantId: emailLogs.tenantId })
+            .select({ tenantId: emailLogs.tenantId, metadata: emailLogs.metadata })
             .from(emailLogs)
             .where(eq(emailLogs.messageId, inReplyToMessageId))
             .limit(1);
           
           if (originalEmail) {
+            const originalMetadata = originalEmail.metadata as Record<string, unknown> | null;
+            assignedUserId = typeof originalMetadata?.senderUserId === 'string'
+              ? originalMetadata.senderUserId
+              : null;
             const tenant = await storage.getTenant(originalEmail.tenantId);
             if (tenant) {
               matchedTenant = tenant;
@@ -23660,6 +23671,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           textBody: TextBody || '',
           htmlBody: HtmlBody || '',
           messageId: MessageID,
+          inReplyToMessageId,
+          assignedUserId,
           isRead: false,
         });
 

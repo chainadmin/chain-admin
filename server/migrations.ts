@@ -1874,6 +1874,15 @@ export async function runMigrations() {
       console.log(`  ⚠ campaign_log_items table (already exists or error): ${err.message}`);
     }
 
+    // Keep inbound email replies private to the user who initiated the thread.
+    try {
+      await client.query(`ALTER TABLE email_replies ADD COLUMN IF NOT EXISTS assigned_user_id text`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_email_replies_user_inbox ON email_replies(tenant_id, assigned_user_id, received_at DESC)`);
+      console.log('  ✓ email_replies per-user inbox assignment');
+    } catch (err: any) {
+      console.log(`  ⚠ email_replies per-user inbox assignment: ${err.message}`);
+    }
+
     // Add Stripe payment intent ID to invoices
     try {
       await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS stripe_payment_intent_id text`);
