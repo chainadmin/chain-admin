@@ -74,24 +74,10 @@ class SmsService {
   }
 
   constructor() {
-    this.initializeDefaultTwilio();
     // Start processing queue every 10 seconds
     setInterval(() => this.processQueue(), 10000);
     // Reset rate limit counters every minute
     setInterval(() => this.resetCounters(), 60000);
-  }
-
-  private initializeDefaultTwilio() {
-    // Initialize with default credentials if available (for backwards compatibility)
-    const accountSid = process.env.TWILIO_ACCOUNT_SID;
-    const authToken = process.env.TWILIO_AUTH_TOKEN;
-
-    if (accountSid && authToken) {
-      this.clients.set('default', twilio(accountSid, authToken));
-      console.log('Twilio SMS service initialized');
-    } else {
-      console.warn('Twilio credentials not found. SMS service will be disabled.');
-    }
   }
 
   private async getTwilioClient(tenantId: string): Promise<twilio.Twilio | null> {
@@ -113,12 +99,9 @@ class SmsService {
       console.error(`Error getting Twilio credentials for tenant ${tenantId}:`, error);
     }
 
-    // Municipalities must never send through another tenant's/global Twilio account.
-    const tenant = await storage.getTenant(tenantId);
-    if (tenant?.businessType === 'municipality') return null;
-
-    // Legacy non-municipal tenants may use the platform fallback.
-    return this.clients.get('default') || null;
+    // Every tenant must supply its own credentials. A platform/global client must
+    // never be used because it could send from phone numbers owned by somebody else.
+    return null;
   }
 
   private async getTwilioPhoneNumber(tenantId: string): Promise<string | null> {
@@ -133,11 +116,9 @@ class SmsService {
       console.error(`Error getting Twilio phone number for tenant ${tenantId}:`, error);
     }
 
-    const tenant = await storage.getTenant(tenantId);
-    if (tenant?.businessType === 'municipality') return null;
-
-    // Legacy non-municipal tenants may use the platform fallback.
-    return process.env.TWILIO_PHONE_NUMBER || null;
+    // Every tenant must supply its own sending number. There is intentionally no
+    // environment/global fallback, so missing tenant configuration fails closed.
+    return null;
   }
 
   private resetCounters() {
