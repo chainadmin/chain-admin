@@ -28,6 +28,11 @@ standard built-in landing page.
 
 ## Church and nonprofit donations
 
+This does **not** create a second church/nonprofit module or organization
+structure. It reuses the existing `nonprofit_organization` business type and its
+donor, donation, campaign, and giving-record terminology. The landing-page code
+only adds another public entry point into that existing tenant structure.
+
 Donation checkout and donor registration are separate actions. Configure the
 tenant as `nonprofit_organization` and set its **Guest Donation Checkout URL** in
 Settings. The built-in page then shows **Donate now**, which opens the church's
