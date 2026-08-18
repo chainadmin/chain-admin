@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import AdminLayout from "@/components/admin-layout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -39,8 +39,15 @@ import {
   ExternalLink,
   DollarSign,
   Info,
+  ArrowDownLeft,
+  ArrowUpRight,
+  Clock3,
+  Headphones,
+  PhoneMissed,
+  BarChart3,
 } from "lucide-react";
 import { format } from "date-fns";
+import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 interface VoipPhoneNumber {
   id: string;
@@ -96,13 +103,34 @@ interface TeamMember {
   createdAt: string;
 }
 
+interface VoipCallLog {
+  id: string;
+  direction: 'inbound' | 'outbound';
+  fromNumber: string;
+  toNumber: string;
+  status: string | null;
+  duration: number | null;
+  startedAt: string | null;
+  createdAt: string;
+}
+
+const formatDuration = (seconds: number) => {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainingSeconds = seconds % 60;
+
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${remainingSeconds}s`;
+  return `${remainingSeconds}s`;
+};
+
 const cardBaseClasses = "rounded-2xl border border-white/10 bg-white/5 text-blue-50 shadow-lg shadow-blue-900/20 backdrop-blur";
 const inputClasses = "border-white/20 bg-white/10 text-white placeholder:text-blue-100/60 focus:border-sky-400/60 focus-visible:ring-sky-400/40";
 
 export default function PhonesPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState("settings");
+  const [activeTab, setActiveTab] = useState("dashboard");
   const [showProvisionDialog, setShowProvisionDialog] = useState(false);
   const [provisionType, setProvisionType] = useState<'local' | 'toll_free'>('local');
   const [searchAreaCode, setSearchAreaCode] = useState("");
@@ -122,6 +150,52 @@ export default function PhonesPage() {
   const { data: teamMembers = [], isLoading: loadingTeamMembers } = useQuery<TeamMember[]>({
     queryKey: ["/api/team-members"],
   });
+
+  const { data: callLogs = [], isLoading: loadingCallLogs } = useQuery<VoipCallLog[]>({
+    queryKey: ["/api/voip/call-logs?limit=500"],
+  });
+
+  const callAnalytics = useMemo(() => {
+    const now = new Date();
+    const periodStart = new Date(now);
+    periodStart.setDate(periodStart.getDate() - 29);
+    periodStart.setHours(0, 0, 0, 0);
+
+    const callsInPeriod = callLogs.filter((call) => {
+      const timestamp = call.startedAt || call.createdAt;
+      return new Date(timestamp) >= periodStart;
+    });
+    const inbound = callsInPeriod.filter((call) => call.direction === 'inbound');
+    const outbound = callsInPeriod.filter((call) => call.direction === 'outbound');
+    const completed = callsInPeriod.filter((call) => call.status === 'completed');
+    const missed = inbound.filter((call) => ['busy', 'no-answer', 'failed', 'canceled'].includes(call.status || ''));
+    const totalDuration = completed.reduce((total, call) => total + (call.duration || 0), 0);
+
+    const dailyMap = new Map<string, { label: string; inbound: number; outbound: number }>();
+    for (let dayOffset = 6; dayOffset >= 0; dayOffset -= 1) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - dayOffset);
+      const key = format(date, 'yyyy-MM-dd');
+      dailyMap.set(key, { label: format(date, 'EEE'), inbound: 0, outbound: 0 });
+    }
+    callsInPeriod.forEach((call) => {
+      const key = format(new Date(call.startedAt || call.createdAt), 'yyyy-MM-dd');
+      const day = dailyMap.get(key);
+      if (day) day[call.direction] += 1;
+    });
+
+    return {
+      total: callsInPeriod.length,
+      inbound: inbound.length,
+      outbound: outbound.length,
+      missed: missed.length,
+      answerRate: inbound.length ? Math.round(((inbound.length - missed.length) / inbound.length) * 100) : 0,
+      averageDuration: completed.length ? Math.round(totalDuration / completed.length) : 0,
+      totalDuration,
+      daily: Array.from(dailyMap.values()),
+      recent: callLogs.slice(0, 8),
+    };
+  }, [callLogs]);
 
   const enableVoipMutation = useMutation({
     mutationFn: async (enabled: boolean) => {
@@ -330,7 +404,10 @@ export default function PhonesPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid grid-cols-4 w-[500px]">
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 p-1 sm:grid-cols-5 lg:w-[650px]">
+            <TabsTrigger value="dashboard" className="flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" /> Dashboard
+            </TabsTrigger>
             <TabsTrigger value="settings" className="flex items-center gap-2">
               <Settings className="h-4 w-4" /> Settings
             </TabsTrigger>
@@ -344,6 +421,97 @@ export default function PhonesPage() {
               <DollarSign className="h-4 w-4" /> Billing
             </TabsTrigger>
           </TabsList>
+
+          {/* Call Analytics Dashboard */}
+          <TabsContent value="dashboard" className="mt-6 space-y-6">
+            <div>
+              <h2 className="text-xl font-semibold text-white">Call activity</h2>
+              <p className="mt-1 text-sm text-blue-100/60">A 30-day overview of inbound and outbound phone activity.</p>
+            </div>
+
+            {loadingCallLogs ? (
+              <Card className={cardBaseClasses}>
+                <CardContent className="flex items-center justify-center py-16">
+                  <Loader2 className="h-8 w-8 animate-spin text-sky-300" />
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  <Card className={cardBaseClasses}>
+                    <CardContent className="flex items-start justify-between p-5">
+                      <div><p className="text-sm text-blue-100/60">Total calls</p><p className="mt-2 text-3xl font-bold text-white">{callAnalytics.total.toLocaleString()}</p><p className="mt-1 text-xs text-blue-100/50">Last 30 days</p></div>
+                      <div className="rounded-xl bg-sky-500/15 p-3 text-sky-300"><Phone className="h-5 w-5" /></div>
+                    </CardContent>
+                  </Card>
+                  <Card className={cardBaseClasses}>
+                    <CardContent className="flex items-start justify-between p-5">
+                      <div><p className="text-sm text-blue-100/60">Inbound</p><p className="mt-2 text-3xl font-bold text-white">{callAnalytics.inbound.toLocaleString()}</p><p className="mt-1 text-xs text-emerald-300/80">{callAnalytics.answerRate}% answer rate</p></div>
+                      <div className="rounded-xl bg-emerald-500/15 p-3 text-emerald-300"><ArrowDownLeft className="h-5 w-5" /></div>
+                    </CardContent>
+                  </Card>
+                  <Card className={cardBaseClasses}>
+                    <CardContent className="flex items-start justify-between p-5">
+                      <div><p className="text-sm text-blue-100/60">Outbound</p><p className="mt-2 text-3xl font-bold text-white">{callAnalytics.outbound.toLocaleString()}</p><p className="mt-1 text-xs text-blue-100/50">Calls placed</p></div>
+                      <div className="rounded-xl bg-violet-500/15 p-3 text-violet-300"><ArrowUpRight className="h-5 w-5" /></div>
+                    </CardContent>
+                  </Card>
+                  <Card className={cardBaseClasses}>
+                    <CardContent className="flex items-start justify-between p-5">
+                      <div><p className="text-sm text-blue-100/60">Missed inbound</p><p className="mt-2 text-3xl font-bold text-white">{callAnalytics.missed.toLocaleString()}</p><p className="mt-1 text-xs text-blue-100/50">Busy, failed, or unanswered</p></div>
+                      <div className="rounded-xl bg-rose-500/15 p-3 text-rose-300"><PhoneMissed className="h-5 w-5" /></div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
+                  <Card className={cardBaseClasses}>
+                    <CardHeader><CardTitle className="text-white">Calls this week</CardTitle><CardDescription className="text-blue-100/60">Daily inbound and outbound volume</CardDescription></CardHeader>
+                    <CardContent className="h-[300px] pl-0 sm:pl-2">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={callAnalytics.daily} margin={{ top: 8, right: 16, left: -16, bottom: 0 }}>
+                          <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                          <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#bfdbfe', fontSize: 12 }} />
+                          <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fill: '#bfdbfe', fontSize: 12 }} />
+                          <Tooltip contentStyle={{ background: '#111c33', border: '1px solid rgba(255,255,255,.12)', borderRadius: 12, color: '#fff' }} cursor={{ fill: 'rgba(255,255,255,.04)' }} />
+                          <Legend wrapperStyle={{ color: '#dbeafe', fontSize: 12 }} />
+                          <Bar dataKey="inbound" name="Inbound" fill="#34d399" radius={[5, 5, 0, 0]} />
+                          <Bar dataKey="outbound" name="Outbound" fill="#818cf8" radius={[5, 5, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  <Card className={cardBaseClasses}>
+                    <CardHeader><CardTitle className="text-white">Conversation time</CardTitle><CardDescription className="text-blue-100/60">Completed calls in the last 30 days</CardDescription></CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="rounded-xl border border-white/10 bg-white/5 p-4"><div className="flex items-center gap-2 text-sm text-blue-100/60"><Clock3 className="h-4 w-4 text-sky-300" />Total talk time</div><p className="mt-2 text-2xl font-bold text-white">{formatDuration(callAnalytics.totalDuration)}</p></div>
+                      <div className="rounded-xl border border-white/10 bg-white/5 p-4"><div className="flex items-center gap-2 text-sm text-blue-100/60"><Headphones className="h-4 w-4 text-violet-300" />Average call</div><p className="mt-2 text-2xl font-bold text-white">{formatDuration(callAnalytics.averageDuration)}</p></div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <Card className={cardBaseClasses}>
+                  <CardHeader><CardTitle className="text-white">Recent calls</CardTitle><CardDescription className="text-blue-100/60">Latest phone activity across your team</CardDescription></CardHeader>
+                  <CardContent>
+                    {callAnalytics.recent.length === 0 ? (
+                      <div className="py-10 text-center text-blue-100/60"><Phone className="mx-auto mb-3 h-10 w-10 opacity-40" /><p>No calls have been recorded yet.</p></div>
+                    ) : (
+                      <div className="overflow-x-auto"><Table>
+                        <TableHeader><TableRow className="border-white/10"><TableHead className="text-blue-100/60">Direction</TableHead><TableHead className="text-blue-100/60">From</TableHead><TableHead className="text-blue-100/60">To</TableHead><TableHead className="text-blue-100/60">Status</TableHead><TableHead className="text-blue-100/60">Duration</TableHead><TableHead className="text-right text-blue-100/60">Date</TableHead></TableRow></TableHeader>
+                        <TableBody>{callAnalytics.recent.map((call) => <TableRow key={call.id} className="border-white/10">
+                          <TableCell><span className={`inline-flex items-center gap-1.5 font-medium ${call.direction === 'inbound' ? 'text-emerald-300' : 'text-violet-300'}`}>{call.direction === 'inbound' ? <ArrowDownLeft className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}{call.direction === 'inbound' ? 'Inbound' : 'Outbound'}</span></TableCell>
+                          <TableCell className="font-mono text-blue-50">{call.fromNumber}</TableCell><TableCell className="font-mono text-blue-50">{call.toNumber}</TableCell>
+                          <TableCell><Badge className={call.status === 'completed' ? 'border-emerald-400/30 bg-emerald-500/20 text-emerald-300' : ['failed', 'busy', 'no-answer', 'canceled'].includes(call.status || '') ? 'border-rose-400/30 bg-rose-500/20 text-rose-300' : 'border-sky-400/30 bg-sky-500/20 text-sky-300'}>{(call.status || 'unknown').replace('-', ' ')}</Badge></TableCell>
+                          <TableCell className="text-blue-100/80">{formatDuration(call.duration || 0)}</TableCell><TableCell className="whitespace-nowrap text-right text-blue-100/60">{format(new Date(call.startedAt || call.createdAt), 'MMM d, h:mm a')}</TableCell>
+                        </TableRow>)}</TableBody>
+                      </Table></div>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            )}
+          </TabsContent>
 
           {/* Settings Tab */}
           <TabsContent value="settings" className="mt-6">
