@@ -1535,9 +1535,9 @@ export default function Settings() {
                   {/* Logo Upload Section */}
                   <div className="space-y-4 border-b pb-6">
                     <div>
-                      <Label className="text-base font-medium text-white">Company Logo</Label>
+                      <Label className="text-base font-medium text-white">Organization Logo</Label>
                       <p className="text-sm text-blue-100/70">
-                        Upload your company logo to display on the consumer portal
+                        Upload the logo for your company, church, nonprofit, or other organization
                       </p>
                     </div>
                     
@@ -1547,7 +1547,7 @@ export default function Settings() {
                         <div className="flex-shrink-0">
                           <img 
                             src={(settings as any).customBranding.logoUrl} 
-                            alt="Company Logo" 
+                            alt="Organization logo"
                             className="h-16 w-16 rounded-md border border-white/10 bg-white/10 object-contain"
                           />
                         </div>
@@ -1581,12 +1581,71 @@ export default function Settings() {
                     )}
                   </div>
 
+                  {/* Organization Colors */}
+                  <div className="space-y-4 border-b pb-6">
+                    <div>
+                      <Label className="text-base font-medium text-white">Organization Colors</Label>
+                      <p className="text-sm text-blue-100/70">
+                        Match the landing page accents to your website, ministry, or company brand
+                      </p>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {([
+                        { key: 'primaryColor', label: 'Primary Color', fallback: '#3B82F6' },
+                        { key: 'secondaryColor', label: 'Secondary Color', fallback: '#1E40AF' },
+                      ] as const).map(({ key, label, fallback }) => {
+                        const customBranding = (localSettings?.customBranding as any) || {};
+                        const value = customBranding[key] || fallback;
+
+                        return (
+                          <div key={key} className="space-y-2">
+                            <Label htmlFor={`branding-${key}`}>{label}</Label>
+                            <div className="flex gap-2">
+                              <Input
+                                id={`branding-${key}`}
+                                type="color"
+                                value={value}
+                                onChange={(e) => handleSettingsUpdate('customBranding', {
+                                  ...customBranding,
+                                  [key]: e.target.value,
+                                })}
+                                className="h-10 w-14 cursor-pointer border-white/20 bg-white/10 p-1"
+                                aria-label={`Choose ${label.toLowerCase()}`}
+                              />
+                              <Input
+                                key={value}
+                                defaultValue={value}
+                                onBlur={(e) => {
+                                  if (/^#[0-9a-fA-F]{6}$/.test(e.target.value)) {
+                                    handleSettingsUpdate('customBranding', {
+                                      ...customBranding,
+                                      [key]: e.target.value,
+                                    });
+                                  } else {
+                                    e.target.value = value;
+                                  }
+                                }}
+                                className={inputClasses}
+                                aria-label={`${label} hex value`}
+                                maxLength={7}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-blue-100/70">
+                      These colors are used for buttons, highlights, and gradients on your public landing page.
+                    </p>
+                  </div>
+
                   {/* Landing Page Customization Section */}
                   <div className="space-y-4 border-b pb-6">
                     <div>
                       <Label className="text-base font-medium text-white">Landing Page Welcome Message</Label>
                       <p className="text-sm text-blue-100/70">
-                        Customize the greeting consumers see when they visit your agency portal
+                        Customize the greeting people see when they visit your organization portal
                       </p>
                     </div>
                     
@@ -1595,7 +1654,7 @@ export default function Settings() {
                         <Label htmlFor="landing-headline">Main Headline</Label>
                         <Input
                           id="landing-headline"
-                          placeholder={`${(authUser as any)?.platformUser?.tenant?.name || 'Your Agency'} gives you a smarter way to stay current`}
+                          placeholder={`${(authUser as any)?.platformUser?.tenant?.name || 'Your Organization'} gives you a smarter way to stay connected`}
                           value={(localSettings?.customBranding as any)?.landingPageHeadline || ''}
                           onChange={(e) => {
                             const customBranding = (localSettings?.customBranding as any) || {};
@@ -1637,7 +1696,7 @@ export default function Settings() {
                         <Input
                           id="landing-page-url"
                           type="url"
-                          placeholder="https://yourcompany.com/portal"
+                          placeholder="https://yourorganization.org/portal"
                           value={(localSettings?.customBranding as any)?.customLandingPageUrl || ''}
                           onChange={(e) => {
                             const url = e.target.value;
@@ -1661,6 +1720,31 @@ export default function Settings() {
                           If provided, consumers will be redirected to this external URL instead of the built-in portal. Must start with http:// or https://
                         </p>
                       </div>
+
+                      {localSettings?.businessType === 'nonprofit_organization' && (
+                        <div>
+                          <Label htmlFor="donation-url">Guest Donation Checkout URL</Label>
+                          <Input
+                            id="donation-url"
+                            type="url"
+                            placeholder="https://donate.yourchurch.org"
+                            value={(localSettings?.customBranding as any)?.donationUrl || ''}
+                            onChange={(e) => {
+                              const customBranding = (localSettings?.customBranding as any) || {};
+                              handleSettingsUpdate('customBranding', {
+                                ...customBranding,
+                                donationUrl: e.target.value,
+                              });
+                            }}
+                            className={inputClasses}
+                            data-testid="input-donation-url"
+                          />
+                          <p className="mt-1 text-xs text-blue-100/70">
+                            The “Donate now” button opens this hosted checkout without requiring an account.
+                            Donor registration remains optional and is used for giving history and communication preferences.
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
 

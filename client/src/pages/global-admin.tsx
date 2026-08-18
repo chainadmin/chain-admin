@@ -1218,6 +1218,7 @@ export default function GlobalAdmin() {
                       <SelectItem value="call_center">Call Center</SelectItem>
                       <SelectItem value="law_firm">Law Firm</SelectItem>
                       <SelectItem value="municipality">Municipality</SelectItem>
+                      <SelectItem value="nonprofit_organization">Church / Nonprofit</SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-sm text-gray-500">This classifies the tenant; all platform features and large contact lists work the same.</p>
@@ -4246,6 +4247,7 @@ export default function GlobalAdmin() {
                     <SelectItem value="subscription_provider">Subscription Provider</SelectItem>
                     <SelectItem value="freelancer_consultant">Freelancer / Consultant</SelectItem>
                     <SelectItem value="property_management">Property Management</SelectItem>
+                    <SelectItem value="nonprofit_organization">Church / Nonprofit</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-sm text-blue-100/70">
