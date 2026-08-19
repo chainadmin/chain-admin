@@ -13932,7 +13932,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 remainingPayments,
                 totalPayments: totalPaymentsCalc,
                 status: 'active',
-                source: 'chain',
+                source: (settings as any)?.dmpEnabled && account.filenumber ? 'dmp' : 'chain',
+                processor: (settings as any)?.dmpEnabled && account.filenumber ? 'dmp' : 'chain',
                 smaxSynced: false,
               });
 
@@ -14024,12 +14025,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
               if ((settings as any)?.dmpEnabled && account.filenumber) {
                 try {
-                  const { dmpService } = await import('./dmpService');
                   const fileNumber = account.filenumber;
                   const arrangementName = arrangement.name || arrangement.planType;
                   const firstPaymentDate = paymentStartDate.toISOString().split('T')[0];
                   const amountDollars = (amountCents / 100).toFixed(2);
                   const consumerName = consumer ? `${consumer.firstName} ${consumer.lastName}`.trim() : '';
+
+                  const arrangementSent = await dmpService.insertPaymentArrangement(tenantId, {
+                    filenumber: fileNumber,
+                    payorname: consumerName || 'Consumer',
+                    arrangementtype: arrangementName,
+                    paymentamount: amountCents / 100,
+                    nextpaymentdate: createdSchedule.nextPaymentDate,
+                    remainingpayments: createdSchedule.remainingPayments || undefined,
+                    frequency: arrangementFrequency,
+                    cardtoken: savedPaymentMethod.paymentToken,
+                    cardlast4: savedPaymentMethod.cardLast4,
+                    cardbrand: savedPaymentMethod.cardBrand || undefined,
+                    expirymonth: savedPaymentMethod.expiryMonth || undefined,
+                    expiryyear: savedPaymentMethod.expiryYear || undefined,
+                  });
+                  if (!arrangementSent) {
+                    await storage.updatePaymentSchedule(createdSchedule.id, tenantId, { status: 'paused' });
+                    console.error('DMP arrangement creation failed; Chain schedule paused so Chain cannot run it');
+                  }
 
                   await dmpService.insertAttempt(tenantId, {
                     filenumber: fileNumber,
@@ -14485,11 +14504,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 remainingPayments,
                 totalPayments: totalPaymentsCalcNMI,
                 status: 'active',
-                source: 'chain',
+                source: (settings as any)?.dmpEnabled && account.filenumber ? 'dmp' : 'chain',
+                processor: (settings as any)?.dmpEnabled && account.filenumber ? 'dmp' : 'chain',
                 smaxSynced: false,
               });
 
               console.log('✅ Payment schedule created for NMI arrangement');
+
+              if ((settings as any)?.dmpEnabled && account.filenumber) {
+                const consumerName = consumer ? `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim() : '';
+                const arrangementSent = await dmpService.insertPaymentArrangement(tenantId, {
+                  filenumber: account.filenumber,
+                  payorname: consumerName || 'Consumer',
+                  arrangementtype: arrangement.name || arrangement.planType,
+                  paymentamount: amountCents / 100,
+                  nextpaymentdate: createdSchedule.nextPaymentDate,
+                  remainingpayments: createdSchedule.remainingPayments || undefined,
+                  frequency: arrangementFrequency,
+                  cardtoken: savedPaymentMethod.paymentToken,
+                  cardlast4: savedPaymentMethod.cardLast4,
+                  cardbrand: savedPaymentMethod.cardBrand || undefined,
+                  expirymonth: savedPaymentMethod.expiryMonth || undefined,
+                  expiryyear: savedPaymentMethod.expiryYear || undefined,
+                });
+                if (!arrangementSent) {
+                  await storage.updatePaymentSchedule(createdSchedule.id, tenantId, { status: 'paused' });
+                }
+              }
 
               // Send arrangement notification
               const consumerForNotification = await storage.getConsumer(consumerId);
@@ -15201,7 +15242,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               remainingPayments,
               totalPayments: totalPaymentsUSAePay,
               status: 'active',
-              source: 'chain',
+              source: (settings as any)?.dmpEnabled && (account as any)?.filenumber ? 'dmp' : 'chain',
+              processor: (settings as any)?.dmpEnabled && (account as any)?.filenumber ? 'dmp' : 'chain',
               smaxSynced: false,
             });
             
@@ -15439,7 +15481,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
             if ((settings as any)?.dmpEnabled && (account as any)?.filenumber) {
               try {
-                const { dmpService } = await import('./dmpService');
                 const fileNumber = (account as any).filenumber;
                 const arrangementName = arrangement.name || arrangement.planType;
                 const amountDollars = (amountCents / 100).toFixed(2);
@@ -15447,6 +15488,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 const firstPaymentDate = scheduleRecord?.startDate || paymentStartDate.toISOString().split('T')[0];
                 const dmpConsumer = await storage.getConsumer(consumerId);
                 const consumerNameRaw = `${dmpConsumer?.firstName || ''} ${dmpConsumer?.lastName || ''}`.trim();
+
+                const arrangementSent = await dmpService.insertPaymentArrangement(tenantId, {
+                  filenumber: fileNumber,
+                  payorname: consumerNameRaw || 'Consumer',
+                  arrangementtype: arrangementName,
+                  paymentamount: amountCents / 100,
+                  nextpaymentdate: scheduleRecord?.nextPaymentDate || firstPaymentDate,
+                  remainingpayments: scheduleRecord?.remainingPayments || undefined,
+                  frequency: mainArrangementFrequency || 'monthly',
+                  cardtoken: savedPaymentMethod?.paymentToken || undefined,
+                  cardlast4: savedPaymentMethod?.cardLast4 || undefined,
+                  cardbrand: savedPaymentMethod?.cardBrand || undefined,
+                  expirymonth: savedPaymentMethod?.expiryMonth || undefined,
+                  expiryyear: savedPaymentMethod?.expiryYear || undefined,
+                });
+                if (!arrangementSent && createdSchedule?.id) {
+                  await storage.updatePaymentSchedule(createdSchedule.id, tenantId, { status: 'paused' });
+                  console.error('DMP arrangement creation failed; Chain schedule paused so Chain cannot run it');
+                }
 
                 await dmpService.insertAttempt(tenantId, {
                   filenumber: fileNumber,
@@ -16183,6 +16243,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               eq(paymentSchedulesTable.status, 'active'),
               lte(paymentSchedulesTable.nextPaymentDate, today),
               sql`COALESCE(${paymentSchedulesTable.source}, 'chain') != 'smax'`,
+              sql`COALESCE(${paymentSchedulesTable.processor}, 'chain') = 'chain'`,
               ...(targetScheduleId ? [eq(paymentSchedulesTable.id, targetScheduleId)] : [])
             )
           );

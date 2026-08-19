@@ -60,6 +60,21 @@ interface DmpPaymentData {
   invoice?: string;
 }
 
+export interface DmpPaymentArrangementData {
+  filenumber: string;
+  payorname: string;
+  arrangementtype: string;
+  paymentamount: number;
+  nextpaymentdate: string;
+  remainingpayments?: number;
+  frequency?: string;
+  cardtoken?: string;
+  cardlast4?: string;
+  cardbrand?: string;
+  expirymonth?: string;
+  expiryyear?: string;
+}
+
 interface DmpAttemptData {
   filenumber: string;
   attempttype: string;
@@ -107,7 +122,7 @@ interface DmpDisposition {
   status_mapping?: string;
 }
 
-class DebtManagerProService {
+export class DebtManagerProService {
   private tokenCache: Map<string, { token: string; expires: number }> = new Map();
 
   private async getDmpConfig(
@@ -352,6 +367,43 @@ class DebtManagerProService {
 
     console.log(`[DMP] Posting payment to DMP for filenumber: ${payment.filenumber}`);
     return await this.makeRequest<any>(config, 'POST', '/api/v2/insert_payments_external', payment);
+  }
+
+  async insertPaymentArrangement(tenantId: string, arrangement: DmpPaymentArrangementData): Promise<boolean> {
+    const config = await this.getDmpConfig(tenantId);
+    if (!config) return false;
+
+    const paymentdata: Array<{ paymentamount: string; paymentdate: string }> = [];
+    const count = Math.max(1, arrangement.remainingpayments || 1);
+    const currentDate = new Date(`${arrangement.nextpaymentdate}T12:00:00Z`);
+    for (let index = 0; index < count; index++) {
+      paymentdata.push({
+        paymentamount: arrangement.paymentamount.toFixed(2),
+        paymentdate: currentDate.toISOString().slice(0, 10),
+      });
+      if (arrangement.frequency === 'weekly') currentDate.setUTCDate(currentDate.getUTCDate() + 7);
+      else if (arrangement.frequency === 'biweekly') currentDate.setUTCDate(currentDate.getUTCDate() + 14);
+      else currentDate.setUTCMonth(currentDate.getUTCMonth() + 1);
+    }
+
+    const result = await this.makeRequest<any>(config, 'POST', '/api/v2/insert_payplan_external', {
+      filenumber: arrangement.filenumber,
+      paymentdate: arrangement.nextpaymentdate,
+      payorname: arrangement.payorname || 'Consumer',
+      paymentmethod: 'CREDIT CARD',
+      paymentstatus: 'PENDING',
+      typeofpayment: 'Online',
+      cardtype: arrangement.cardbrand || 'Unknown',
+      cardnumber: arrangement.cardtoken || (arrangement.cardlast4 ? `XXXX-XXXX-XXXX-${arrangement.cardlast4}` : ''),
+      cardexpirationmonth: arrangement.expirymonth || '',
+      cardexpirationyear: arrangement.expiryyear || '',
+      paymentamount: arrangement.paymentamount.toFixed(2),
+      invoice: `CHAIN-ARR-${Date.now()}`,
+      arrangementtype: arrangement.arrangementtype,
+      paymentdata,
+    });
+
+    return result?.state === 'SUCCESS' || result?.success === true;
   }
 
   async insertAttempt(tenantId: string, attempt: DmpAttemptData): Promise<any | null> {
