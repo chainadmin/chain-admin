@@ -81,7 +81,7 @@ import {
 import { computeALaCarteBill, computeSubscriptionBill, generateInvoiceNumber } from "./billing";
 import { generateInvoicePdf } from "./invoicePdf";
 import { canActivateUser } from "@shared/enterpriseCapacity";
-import { findMatchingDmpPayment } from "./dmpPaymentReconciliation";
+import { findMatchingDmpPayment, isPostedDmpPayment, normalizeDmpPayment } from "./dmpPaymentReconciliation";
 
 import { listConsumers, paginateConsumers, updateConsumer, deleteConsumers, ConsumerNotFoundError } from "@shared/server/consumers";
 import { resolveConsumerPortalUrl } from "@shared/utils/consumerPortal";
@@ -12190,11 +12190,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Access denied" });
       }
 
-      // Get all payments for this consumer
+      // Get all payments recorded by Chain for this consumer.
       const payments = await storage.getPaymentsByConsumer(consumerId, tenant.id);
       
       // Format the response with clean data for display
-      const paymentHistory = payments.map(payment => ({
+      const paymentHistory: any[] = payments.map(payment => ({
         id: payment.id,
         amountCents: payment.amountCents,
         paymentMethod: payment.paymentMethod,
@@ -12205,6 +12205,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
         notes: payment.notes,
         transactionId: payment.transactionId,
       }));
+
+      // DMP is also a source of truth for payments posted before the tenant was
+      // connected to Chain (and payments entered directly in DMP). Merge those
+      // records into the portal history without duplicating payments that Chain
+      // posted to DMP itself. DMP failures remain non-blocking so local history
+      // is still available.
+      const tenantSettings = await storage.getTenantSettings(tenant.id);
+      if ((tenantSettings as any)?.dmpEnabled && !tenantSettings?.smaxEnabled) {
+        const consumerAccounts = await storage.getAccountsByConsumer(consumerId);
+        const localTransactionIds = new Set(
+          payments
+            .map(payment => payment.transactionId?.trim().toLowerCase())
+            .filter((id): id is string => Boolean(id)),
+        );
+        const seenCompositeKeys = new Set(
+          payments.map(payment => {
+            const date = payment.processedAt || payment.createdAt;
+            const dateOnly = date ? new Date(date).toISOString().slice(0, 10) : '';
+            return `${payment.accountId || ''}|${dateOnly}|${payment.amountCents}`;
+          }),
+        );
+
+        for (const account of consumerAccounts) {
+          if (!account.filenumber) continue;
+
+          try {
+            const dmpPayments = await dmpService.getPayments(tenant.id, account.filenumber);
+            if (!Array.isArray(dmpPayments)) continue;
+
+            dmpPayments.forEach((rawPayment: any, index: number) => {
+              const normalized = normalizeDmpPayment(rawPayment);
+              if (!isPostedDmpPayment(normalized)) return;
+
+              const normalizedTransactionId = normalized.transactionId?.toLowerCase();
+              const compositeKey = `${account.id}|${normalized.date}|${normalized.amountCents}`;
+              // Prefer DMP's stable transaction ID. Fall back to account/date/amount
+              // only when DMP omitted it, so two legitimate same-day payments with
+              // distinct transaction IDs are both retained.
+              if (normalizedTransactionId
+                ? localTransactionIds.has(normalizedTransactionId)
+                : seenCompositeKeys.has(compositeKey)) {
+                return;
+              }
+
+              if (normalizedTransactionId) localTransactionIds.add(normalizedTransactionId);
+              seenCompositeKeys.add(compositeKey);
+              const paymentMethod = String(
+                rawPayment.paymentmethod ?? rawPayment.payment_method ?? rawPayment.method ?? 'dmp',
+              ).trim() || 'dmp';
+
+              paymentHistory.push({
+                id: `dmp_${account.id}_${normalized.transactionId || `${normalized.date}_${normalized.amountCents}_${index}`}`,
+                amountCents: normalized.amountCents,
+                paymentMethod,
+                status: 'completed',
+                processedAt: `${normalized.date}T12:00:00.000Z`,
+                createdAt: `${normalized.date}T12:00:00.000Z`,
+                accountCreditor: account.creditor,
+                notes: 'Posted in Debt Manager Pro',
+                transactionId: normalized.transactionId,
+                source: 'dmp',
+              });
+            });
+          } catch (dmpError) {
+            console.error('Failed to fetch DMP payment history (non-blocking):', account.filenumber, dmpError);
+          }
+        }
+
+        paymentHistory.sort((a, b) => {
+          const aDate = new Date(a.processedAt || a.createdAt || 0).getTime();
+          const bDate = new Date(b.processedAt || b.createdAt || 0).getTime();
+          return bDate - aDate;
+        });
+      }
 
       console.log('📜 Payment history for consumer:', {
         consumerId,

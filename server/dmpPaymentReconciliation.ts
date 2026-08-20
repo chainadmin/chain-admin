@@ -6,6 +6,7 @@ export interface NormalizedDmpPayment {
 }
 
 const inactivePaymentStatus = /declin|cancel|void|nsf|charge.?back|refund|revers|fail|return/i;
+const postedPaymentStatus = /posted|paid|complete|success|settled/i;
 
 function normalizeDate(value: unknown): string | null {
   if (!value) return null;
@@ -39,6 +40,12 @@ export function normalizeDmpPayment(payment: any): NormalizedDmpPayment {
       payment?.transactionid ?? payment?.transaction_id ?? payment?.reference ?? "",
     ).trim() || null,
   };
+}
+
+/** True only for DMP records that represent a successfully posted payment. */
+export function isPostedDmpPayment(payment: NormalizedDmpPayment): boolean {
+  return payment.amountCents > 0 && payment.date !== null &&
+    postedPaymentStatus.test(payment.status) && !inactivePaymentStatus.test(payment.status);
 }
 
 /**
