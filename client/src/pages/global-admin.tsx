@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import AdminAuth from "@/components/admin-auth";
 import { TenantAgreementsPanel } from "@/components/global-admin/tenant-agreements-panel";
+import { PlatformAnnouncementsPanel } from "@/components/global-admin/platform-announcements-panel";
 import { DOCUMENT_SIGNING_ADDON_PRICE, AI_AUTO_RESPONSE_ADDON_PRICE } from "@shared/billing-plans";
 // Simple currency formatter
 const formatCurrency = (amount: number) => {
@@ -1365,6 +1366,8 @@ export default function GlobalAdmin() {
             </div>
           </div>
         )}
+
+        <PlatformAnnouncementsPanel />
 
         {/* Marketing QR Code Section */}
         <div className="mb-8 rounded-3xl border border-white/10 bg-white/5 shadow-lg shadow-blue-900/20 backdrop-blur">

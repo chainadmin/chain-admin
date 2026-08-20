@@ -20834,6 +20834,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Platform announcements are owned by Global Admin and are deliberately
+  // separate from tenant campaigns and tenant inboxes.
+  app.get('/api/admin/platform-announcements', isPlatformAdmin, async (_req, res) => {
+    const announcements = await db.execute(sql`
+      SELECT a.*,
+        (SELECT COUNT(*)::int FROM platform_announcement_replies r WHERE r.announcement_id = a.id) AS reply_count,
+        (SELECT COUNT(*)::int FROM platform_announcement_replies r WHERE r.announcement_id = a.id AND r.is_read = false) AS unread_count
+      FROM platform_announcements a ORDER BY a.created_at DESC LIMIT 50
+    `);
+    const replies = await db.execute(sql`
+      SELECT r.*, t.name AS tenant_name, t.slug AS tenant_slug,
+             c.first_name AS consumer_first_name, c.last_name AS consumer_last_name
+      FROM platform_announcement_replies r
+      JOIN tenants t ON t.id = r.tenant_id
+      LEFT JOIN consumers c ON c.id = r.consumer_id
+      ORDER BY r.received_at DESC LIMIT 100
+    `);
+    res.json({ announcements: announcements.rows, replies: replies.rows });
+  });
+
+  app.post('/api/admin/platform-announcements', isPlatformAdmin, async (req, res) => {
+    try {
+      const payload = z.object({
+        subject: z.string().trim().min(1).max(200),
+        message: z.string().trim().min(1).max(100000),
+      }).parse(req.body);
+      const recipients = await db.select({
+        consumerId: consumers.id,
+        email: consumers.email,
+        firstName: consumers.firstName,
+        lastName: consumers.lastName,
+        tenantId: tenants.id,
+        tenantName: tenants.name,
+        tenantSlug: tenants.slug,
+      }).from(consumers).innerJoin(tenants, eq(consumers.tenantId, tenants.id))
+        .where(and(eq(tenants.isActive, true), sql`${consumers.email} IS NOT NULL AND BTRIM(${consumers.email}) <> ''`));
+
+      if (recipients.length === 0) {
+        return res.status(400).json({ message: 'There are no eligible customer email addresses to receive this announcement' });
+      }
+
+      const [announcement] = (await db.execute(sql`
+        INSERT INTO platform_announcements (subject, html_body, recipient_count)
+        VALUES (${payload.subject}, ${payload.message}, ${recipients.length})
+        RETURNING id
+      `)).rows as Array<{ id: string }>;
+      const escape = (value: string) => value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]!));
+      const emails = recipients.map(recipient => {
+        const portalUrl = `${ensureBaseUrl(process.env.REPLIT_DOMAINS, recipient.tenantSlug)}/consumer-login?agency=${encodeURIComponent(recipient.tenantSlug)}`;
+        const personalized = payload.message
+          .replace(/\{\{firstName\}\}/gi, recipient.firstName || '')
+          .replace(/\{\{lastName\}\}/gi, recipient.lastName || '')
+          .replace(/\{\{agencyName\}\}/gi, recipient.tenantName)
+          .replace(/\{\{tenantSlug\}\}/gi, recipient.tenantSlug)
+          .replace(/\{\{consumerPortalLink\}\}/gi, portalUrl)
+          .replace(/\{\{appDownloadLink\}\}/gi, `${ensureBaseUrl(process.env.REPLIT_DOMAINS, recipient.tenantSlug)}/${recipient.tenantSlug}/app`);
+        return {
+          to: recipient.email!,
+          from: 'Chain Software <support@chainsoftwaregroup.com>',
+          subject: payload.subject,
+          html: `<div style="font-family:Arial,sans-serif;line-height:1.6">${escape(personalized).replace(/\n/g, '<br>')}</div>`,
+          tag: 'platform-announcement',
+          useBroadcastStream: true,
+          metadata: { platformAnnouncementId: announcement.id, tenantSlug: recipient.tenantSlug },
+        };
+      });
+      const result = await emailService.sendBulkEmails(emails);
+      for (let index = 0; index < result.results.length; index++) {
+        const delivery = result.results[index];
+        const recipient = recipients[index];
+        await db.execute(sql`
+          INSERT INTO platform_announcement_deliveries
+            (announcement_id, tenant_id, consumer_id, recipient_email, message_id, status, error_message)
+          VALUES (${announcement.id}, ${recipient.tenantId}, ${recipient.consumerId}, ${recipient.email!},
+                  ${delivery.messageId || null}, ${delivery.success ? 'sent' : 'failed'}, ${delivery.error || null})
+        `);
+      }
+      await db.execute(sql`UPDATE platform_announcements SET sent_count = ${result.successful}, failed_count = ${result.failed}, sent_at = NOW() WHERE id = ${announcement.id}`);
+      res.json({ id: announcement.id, recipients: recipients.length, sent: result.successful, failed: result.failed });
+    } catch (error) {
+      console.error('Platform announcement failed:', error);
+      res.status(error instanceof z.ZodError ? 400 : 500).json({ message: error instanceof z.ZodError ? error.issues[0]?.message : 'Failed to send platform announcement' });
+    }
+  });
+
+  app.patch('/api/admin/platform-announcement-replies/:id/read', isPlatformAdmin, async (req, res) => {
+    await db.execute(sql`UPDATE platform_announcement_replies SET is_read = true WHERE id = ${req.params.id}`);
+    res.json({ success: true });
+  });
+
   // Get platform-wide statistics
   app.get('/api/admin/stats', isPlatformAdmin, async (req: any, res) => {
     try {
@@ -23729,6 +23819,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const rawValue = inReplyToHeader.Value || '';
           inReplyToMessageId = rawValue.replace(/[<>]/g, '').split('@')[0];
           console.log('📎 In-Reply-To (normalized):', inReplyToMessageId);
+
+          // Replies to platform announcements belong exclusively to the
+          // Global Admin inbox, never to a tenant conversation.
+          const [platformDelivery] = (await db.execute(sql`
+            SELECT id, announcement_id, tenant_id, consumer_id
+            FROM platform_announcement_deliveries
+            WHERE message_id = ${inReplyToMessageId}
+            LIMIT 1
+          `)).rows as Array<{ id: string; announcement_id: string; tenant_id: string; consumer_id: string | null }>;
+          if (platformDelivery) {
+            await db.execute(sql`
+              INSERT INTO platform_announcement_replies
+                (announcement_id, delivery_id, tenant_id, consumer_id, from_email, subject,
+                 text_body, html_body, message_id, in_reply_to_message_id)
+              VALUES (${platformDelivery.announcement_id}, ${platformDelivery.id}, ${platformDelivery.tenant_id},
+                      ${platformDelivery.consumer_id}, ${fromEmail}, ${Subject || '(No Subject)'},
+                      ${TextBody || ''}, ${HtmlBody || ''}, ${MessageID || null}, ${inReplyToMessageId})
+            `);
+            console.log('✅ Routed platform announcement reply to Global Admin inbox');
+            return res.status(200).json({ message: 'Platform announcement reply received' });
+          }
           
           // Look up the original email in emailLogs to find the tenant
           const [originalEmail] = await db

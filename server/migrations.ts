@@ -8,6 +8,50 @@ export async function runMigrations() {
     console.log('🔄 Running database migrations...');
 
     await client.query(`
+      CREATE TABLE IF NOT EXISTS platform_announcements (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        subject TEXT NOT NULL,
+        html_body TEXT NOT NULL,
+        recipient_count INTEGER NOT NULL DEFAULT 0,
+        sent_count INTEGER NOT NULL DEFAULT 0,
+        failed_count INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW(),
+        sent_at TIMESTAMP
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS platform_announcement_deliveries (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        announcement_id UUID NOT NULL REFERENCES platform_announcements(id) ON DELETE CASCADE,
+        tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        consumer_id UUID REFERENCES consumers(id) ON DELETE SET NULL,
+        recipient_email TEXT NOT NULL,
+        message_id TEXT,
+        status TEXT NOT NULL DEFAULT 'sent',
+        error_message TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS platform_announcement_message_idx ON platform_announcement_deliveries(message_id)`);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS platform_announcement_replies (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        announcement_id UUID NOT NULL REFERENCES platform_announcements(id) ON DELETE CASCADE,
+        delivery_id UUID REFERENCES platform_announcement_deliveries(id) ON DELETE SET NULL,
+        tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        consumer_id UUID REFERENCES consumers(id) ON DELETE SET NULL,
+        from_email TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        text_body TEXT,
+        html_body TEXT,
+        message_id TEXT,
+        in_reply_to_message_id TEXT,
+        is_read BOOLEAN NOT NULL DEFAULT false,
+        received_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS tenant_departments (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
