@@ -2,6 +2,7 @@ import type { Express, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage, type IStorage } from "./storage";
 import { ACCOUNT_STATUSES, isAccountStatus } from "../shared/constants";
+import { ANDROID_APP_URL, IOS_APP_URL } from "../shared/constants/appStoreLinks";
 import { voipStorage } from "./voipStorage";
 import { authenticateUser, authenticateConsumer, getCurrentUser, requireEmailService, requireSmsService, requirePortalAccess, requirePaymentProcessing, requireOwner, requireServiceAccess } from "./authMiddleware";
 import { postmarkServerService } from "./postmarkServerService";
@@ -277,8 +278,6 @@ function replaceTemplateVariables(
   });
 
   // App download URLs - platform-wide
-  const ANDROID_APP_URL = 'https://play.google.com/store/apps/details?id=com.chainsoftware.platform';
-  const IOS_APP_URL = ''; // Will be added when iOS app is ready
   const universalAppLink = sanitizedBaseUrl ? `${baseProtocol}${sanitizedBaseUrl}/app` : '';
   
   const unsubscribeBase = sanitizedBaseUrl ? `${baseProtocol}${sanitizedBaseUrl}/unsubscribe` : '';
@@ -505,9 +504,9 @@ function replaceTemplateVariables(
     // App download variables
     universalAppLink,
     androidDownload: ANDROID_APP_URL,
-    iosDownload: IOS_APP_URL || '#',
+    iosDownload: IOS_APP_URL,
     // Legacy support for old variable name
-    appDownloadLink: ANDROID_APP_URL,
+    appDownloadLink: universalAppLink || ANDROID_APP_URL,
     agencyName: tenant?.name || '',
     agencyEmail: (tenant as any)?.contactEmail || tenant?.email || '',
     agencyPhone: (tenant as any)?.contactPhone || tenant?.phoneNumber || tenant?.twilioPhoneNumber || '',
@@ -607,8 +606,8 @@ function replaceTemplateVariables(
     // App download variables (snake_case aliases)
     universal_app_link: universalAppLink,
     android_download: ANDROID_APP_URL,
-    ios_download: IOS_APP_URL || '#',
-    app_download_link: ANDROID_APP_URL, // Legacy
+    ios_download: IOS_APP_URL,
+    app_download_link: universalAppLink || ANDROID_APP_URL, // Legacy
     agency_name: tenant?.name || '',
     agency_email: (tenant as any)?.contactEmail || tenant?.email || '',
     agency_phone: (tenant as any)?.contactPhone || tenant?.phoneNumber || tenant?.twilioPhoneNumber || '',
@@ -9005,9 +9004,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const userAgent = req.headers['user-agent'] || '';
     
     // Platform-wide app store URLs
-    const ANDROID_APP_URL = 'https://play.google.com/store/apps/details?id=com.chainsoftware.platform';
-    const IOS_APP_URL = ''; // Will be added when iOS app is ready
-    
     // Detect device type
     const isAndroid = /android/i.test(userAgent);
     const isIOS = /iphone|ipad|ipod/i.test(userAgent);
@@ -9144,9 +9140,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     // Platform-wide app store URLs (same app for all tenants)
-    const ANDROID_APP_URL = 'https://play.google.com/store/apps/details?id=com.chainsoftware.platform';
-    const IOS_APP_URL = ''; // Will be added when iOS app is ready
-    
     // Detect device type
     const isAndroid = /android/i.test(userAgent);
     const isIOS = /iphone|ipad|ipod/i.test(userAgent);
@@ -24314,8 +24307,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       version: '1.0.0',
       minVersion: '1.0.0',
       forceUpdate: false,
-      updateUrl: 'https://apps.apple.com/app/chain', // Update with real URLs
-      androidUpdateUrl: 'https://play.google.com/store/apps/details?id=com.chaincomms.platform',
+      updateUrl: IOS_APP_URL,
+      androidUpdateUrl: ANDROID_APP_URL,
       releaseNotes: 'Bug fixes and performance improvements'
     });
   });

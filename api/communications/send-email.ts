@@ -9,6 +9,7 @@ import { accounts, consumers, emailLogs, emailTemplates, tenants, tenantSettings
 import { resolveConsumerPortalUrl } from '@shared/utils/consumerPortal';
 import { finalizeEmailHtml } from '@shared/utils/emailTemplate';
 import { ensureBaseUrl, resolveBaseUrl } from '@shared/utils/baseUrl';
+import { ANDROID_APP_URL, IOS_APP_URL } from '@shared/constants/appStoreLinks';
 
 const DEFAULT_FROM_EMAIL = 'support@chainsoftwaregroup.com';
 
@@ -117,8 +118,6 @@ function replaceTemplateVariables(
   });
 
   // App download URLs - platform-wide
-  const ANDROID_APP_URL = 'https://play.google.com/store/apps/details?id=com.chainsoftware.platform';
-  const IOS_APP_URL = ''; // Will be added when iOS app is ready
   const universalAppLink = sanitizedBaseUrl ? `${baseProtocol}${sanitizedBaseUrl}/app` : '';
 
   const firstName = consumer?.firstName || '';
@@ -160,9 +159,9 @@ function replaceTemplateVariables(
     // App download variables
     universalAppLink,
     androidDownload: ANDROID_APP_URL,
-    iosDownload: IOS_APP_URL || '#', // Use # placeholder when iOS not ready
+    iosDownload: IOS_APP_URL,
     // Legacy support for old variable name
-    appDownloadLink: ANDROID_APP_URL,
+    appDownloadLink: universalAppLink || ANDROID_APP_URL,
     agencyName: tenant?.name || '',
     agencyEmail: tenant?.email || '',
     agencyPhone: tenant?.phoneNumber || tenant?.twilioPhoneNumber || '',
@@ -178,8 +177,8 @@ function replaceTemplateVariables(
     // Snake_case aliases for app download variables
     universal_app_link: universalAppLink,
     android_download: ANDROID_APP_URL,
-    ios_download: IOS_APP_URL || '#',
-    app_download_link: ANDROID_APP_URL,
+    ios_download: IOS_APP_URL,
+    app_download_link: universalAppLink || ANDROID_APP_URL,
   };
 
   let processedTemplate = template;
