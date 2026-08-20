@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { findMatchingDmpPayment, normalizeDmpPayment } from "./dmpPaymentReconciliation";
+import { findMatchingDmpPayment, isPostedDmpPayment, normalizeDmpPayment } from "./dmpPaymentReconciliation";
 
 test("normalizes alternate DMP payment fields", () => {
   assert.deepEqual(
@@ -34,4 +34,22 @@ test("does not match another amount, date, or an inactive payment", () => {
     { paymentdate: "2026-08-19", paymentamount: 50, paymentstatus: "DECLINED" },
   ];
   assert.equal(findMatchingDmpPayment(records, "2026-08-19", 5000), null);
+});
+
+test("identifies only successfully posted DMP payments for customer history", () => {
+  for (const status of ["POSTED", "PAID", "COMPLETED", "SUCCESS", "SETTLED"]) {
+    assert.equal(isPostedDmpPayment(normalizeDmpPayment({
+      paymentdate: "2026-08-19",
+      paymentamount: 50,
+      paymentstatus: status,
+    })), true);
+  }
+
+  for (const status of ["PENDING", "SCHEDULED", "DECLINED", "REFUNDED", "REVERSED"]) {
+    assert.equal(isPostedDmpPayment(normalizeDmpPayment({
+      paymentdate: "2026-08-19",
+      paymentamount: 50,
+      paymentstatus: status,
+    })), false);
+  }
 });
