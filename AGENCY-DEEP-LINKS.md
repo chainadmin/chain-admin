@@ -58,7 +58,7 @@ https://chainsoftwaregroup.com/consumer-login?agency=first-recovery
 ```
 Download our mobile app:
 [Download for iPhone]
-https://apps.apple.com/app/chain-consumer-portal
+https://apps.apple.com/us/app/chain-software/id6758159236
 
 After installing, tap here to access your Waypoint Solutions account:
 https://chainsoftwaregroup.com/consumer-login?agency=waypoint-solutions
