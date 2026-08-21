@@ -23836,6 +23836,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               VALUES (${platformDelivery.announcement_id}, ${platformDelivery.id}, ${platformDelivery.tenant_id},
                       ${platformDelivery.consumer_id}, ${fromEmail}, ${Subject || '(No Subject)'},
                       ${TextBody || ''}, ${HtmlBody || ''}, ${MessageID || null}, ${inReplyToMessageId})
+              ON CONFLICT (message_id) WHERE message_id IS NOT NULL DO NOTHING
             `);
             console.log('✅ Routed platform announcement reply to Global Admin inbox');
             return res.status(200).json({ message: 'Platform announcement reply received' });

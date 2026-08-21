@@ -50,6 +50,21 @@ export async function runMigrations() {
         received_at TIMESTAMP DEFAULT NOW()
       )
     `);
+    // Postmark retries inbound webhooks when it does not receive a successful
+    // response. Keep those retries from creating duplicate inbox entries while
+    // preserving replies created before MessageID was available.
+    await client.query(`
+      DELETE FROM platform_announcement_replies duplicate
+      USING platform_announcement_replies original
+      WHERE duplicate.message_id IS NOT NULL
+        AND duplicate.message_id = original.message_id
+        AND duplicate.id > original.id
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS platform_announcement_reply_message_idx
+      ON platform_announcement_replies(message_id)
+      WHERE message_id IS NOT NULL
+    `);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS tenant_departments (
