@@ -17,6 +17,7 @@ export const authenticateUser: RequestHandler = async (req: any, res, next) => {
       // For regular JWT auth, fetch from database but use JWT role as fallback
       let userRole = decoded.role || 'owner';
       let restrictedServices: string[] = [];
+      let voipAccess = false;
       
       // Only fetch credentials for non-impersonation sessions
       if (!decoded.isImpersonation) {
@@ -24,6 +25,7 @@ export const authenticateUser: RequestHandler = async (req: any, res, next) => {
         if (userCredentials) {
           userRole = userCredentials.role || 'owner';
           restrictedServices = userCredentials.restrictedServices || [];
+          voipAccess = userCredentials.voipAccess === true;
         }
       }
       
@@ -37,6 +39,7 @@ export const authenticateUser: RequestHandler = async (req: any, res, next) => {
         isImpersonation: decoded.isImpersonation || false,
         role: userRole,
         restrictedServices: restrictedServices,
+        voipAccess,
         claims: {
           sub: decoded.userId
         }
@@ -117,6 +120,25 @@ export const authenticateUser: RequestHandler = async (req: any, res, next) => {
   
   // No authentication found
   return res.status(401).json({ message: "Unauthorized" });
+};
+
+/** Enforces the shared Voice entitlement in addition to per-user Voice access. */
+export const requireVoiceProduct: RequestHandler = async (req: any, res, next) => {
+  try {
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) return res.status(401).json({ message: "Unauthorized" });
+    const tenant = await storage.getTenant(tenantId);
+    if (!tenant) return res.status(404).json({ message: "Tenant not found" });
+    // Existing Chain tenants remain backwards-compatible. Chiamo is explicitly provisioned.
+    const hasProduct = tenant.chainCoreEnabled !== false || tenant.chiamoConnectEnabled === true;
+    if (!hasProduct || tenant.voipEnabled === false) {
+      return res.status(403).json({ message: "Business Phone is not enabled for this organization" });
+    }
+    return next();
+  } catch (error) {
+    console.error("Error checking Voice product access:", error);
+    return res.status(500).json({ message: "Error checking product access" });
+  }
 };
 
 // Consumer authentication middleware

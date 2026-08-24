@@ -52,6 +52,8 @@ import Softphone from "@/pages/softphone";
 import InstallPage from "@/pages/install";
 import MunicipalityDashboard from "@/pages/municipality-dashboard";
 import MunicipalityAdmin from "@/pages/municipality-admin";
+import { detectBrand } from "@/config/brands";
+import { ChiamoLanding, ChiamoLogin, ChiamoShell } from "@/chiamo/chiamo";
 
 function TenantDashboard() {
   const { data: settings, isLoading } = useQuery<any>({ queryKey: ['/api/settings'] });
@@ -264,6 +266,26 @@ function Router() {
         <Route key="web-loading" path="/:rest*" component={LoadingScreen} />
       </Switch>
     );
+  }
+
+  // Chiamo is a distinct customer experience while retaining shared auth and Voice APIs.
+  if (detectBrand() === "chiamo") {
+    if (!isAuthenticated) {
+      return <Switch>
+        <Route path="/agency-login" component={ChiamoLogin} />
+        <Route path="/login" component={ChiamoLogin} />
+        <Route path="/agency/forgot-password" component={AgencyForgotPassword} />
+        <Route path="/privacy-policy" component={PrivacyPolicy} />
+        <Route path="/terms-of-service" component={TermsOfService} />
+        <Route path="/:rest*" component={ChiamoLanding} />
+      </Switch>;
+    }
+    const chiamoRoutes = ["/dashboard","/phone","/call-logs","/voicemail","/recordings","/numbers","/users","/settings","/more-services"];
+    return <Switch>
+      <Route path="/softphone" component={Softphone} />
+      {chiamoRoutes.map(path => <Route key={path} path={path}>{() => <ChiamoShell page={path} />}</Route>)}
+      <Route path="/:rest*">{() => <ChiamoShell page="/dashboard" />}</Route>
+    </Switch>;
   }
 
   if (agencySlug && !isMainDomain) {

@@ -46,6 +46,8 @@ export const tenants = pgTable("tenants", {
   slug: text("slug").unique().notNull(),
   businessType: text("business_type").default('call_center'), // Tenant classification: call_center, collection_agency, law_firm, or municipality
   brand: jsonb("brand").default(sql`'{}'::jsonb`),
+  chainCoreEnabled: boolean("chain_core_enabled").default(true).notNull(),
+  chiamoConnectEnabled: boolean("chiamo_connect_enabled").default(false).notNull(),
   isActive: boolean("is_active").default(true), // Can be suspended by platform owner
   suspendedAt: timestamp("suspended_at"),
   suspensionReason: text("suspension_reason"),

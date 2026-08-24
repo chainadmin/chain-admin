@@ -4,7 +4,7 @@ import { storage, type IStorage } from "./storage";
 import { ACCOUNT_STATUSES, isAccountStatus } from "../shared/constants";
 import { ANDROID_APP_URL, IOS_APP_URL } from "../shared/constants/appStoreLinks";
 import { voipStorage } from "./voipStorage";
-import { authenticateUser, authenticateConsumer, getCurrentUser, requireEmailService, requireSmsService, requirePortalAccess, requirePaymentProcessing, requireOwner, requireServiceAccess } from "./authMiddleware";
+import { authenticateUser, authenticateConsumer, getCurrentUser, requireEmailService, requireSmsService, requirePortalAccess, requirePaymentProcessing, requireOwner, requireServiceAccess, requireVoiceProduct } from "./authMiddleware";
 import { postmarkServerService } from "./postmarkServerService";
 import {
   insertConsumerSchema,
@@ -1652,6 +1652,18 @@ async function sendChainInvoiceEmail(params: {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/v2', externalApiRouter);
+  // The Chiamo customer origin is Voice-only. This server-side boundary prevents
+  // manually entered Chain API URLs from bypassing the separate product shell.
+  app.use('/api', (req, res, next) => {
+    const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(':')[0].toLowerCase();
+    const chiamoDomain = (process.env.CHIAMO_DOMAIN || 'chiamoconnect.com').toLowerCase();
+    const chiamoAppDomain = (process.env.CHIAMO_APP_DOMAIN || `app.${chiamoDomain}`).toLowerCase();
+    const isChiamoOrigin = host === chiamoDomain || host === chiamoAppDomain || host.endsWith(`.${chiamoDomain}`);
+    if (!isChiamoOrigin) return next();
+    const allowed = ['/agency/', '/auth/', '/voip/', '/voice/', '/team-members', '/settings', '/health'];
+    if (allowed.some(prefix => req.path === prefix || req.path.startsWith(prefix))) return next();
+    return res.status(403).json({ message: 'This Chain service is not included with Chiamo Connect.' });
+  });
   // Request/Response logger - log all incoming requests and outgoing responses for debugging
   app.use((req, res, next) => {
     const startTime = Date.now();
@@ -8020,6 +8032,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           message: "This agency account has been suspended.", 
           suspensionReason: tenant.suspensionReason 
         });
+      }
+
+      if (req.body.product === 'chiamo' && tenant.chiamoConnectEnabled !== true) {
+        return res.status(403).json({ message: "Chiamo Connect is not enabled for this organization." });
       }
       
       // Update last login time
@@ -24845,6 +24861,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // =====================================================
   // VoIP Phone Routes
   // =====================================================
+
+  // All customer Voice endpoints share one entitlement gate. Provider webhooks remain
+  // below under /api/voice and continue to use provider signature/account validation.
+  app.use('/api/voip', authenticateUser, requireVoiceProduct);
 
   // Generate Twilio Voice token for browser-based calling
   app.get('/api/voip/token', authenticateUser, async (req, res) => {
