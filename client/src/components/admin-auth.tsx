@@ -30,7 +30,10 @@ export default function AdminAuth({ onAuthenticated }: AdminAuthProps) {
         body: JSON.stringify({ username, password }),
       });
 
-      const data = await response.json();
+      const contentType = response.headers.get("content-type") ?? "";
+      const data = contentType.includes("application/json")
+        ? await response.json()
+        : { message: "Administrative login is unavailable on this server." };
 
       if (response.ok && data.success) {
         // Store authentication token in sessionStorage

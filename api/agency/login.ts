@@ -3,11 +3,12 @@ import { getDb } from '../_lib/db';
 import { agencyCredentials, users, platformUsers, tenants } from '../../shared/schema';
 import { generateToken } from '../_lib/auth';
 import bcrypt from 'bcryptjs';
-import { eq, or } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
+import { normalizeLoginIdentifier } from '../../shared/utils/loginNormalization';
 
 const loginSchema = z.object({
-  username: z.string().min(1),
+  username: z.string().trim().min(1),
   password: z.string()
 });
 
@@ -26,27 +27,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const db = await getDb();
 
     // Get agency credentials (username can be either username or email)
-    const normalizedUsername = username.trim();
+    const normalizedUsername = normalizeLoginIdentifier(username);
 
     const [credentials] = await db
       .select()
       .from(agencyCredentials)
       .where(
-        or(
-          eq(agencyCredentials.username, normalizedUsername),
-          eq(agencyCredentials.email, normalizedUsername)
-        )
+        sql`LOWER(TRIM(${agencyCredentials.username})) = ${normalizedUsername}
+          OR LOWER(TRIM(${agencyCredentials.email})) = ${normalizedUsername}`
       )
       .limit(1);
 
     if (!credentials) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(401).json({ message: 'Invalid username or password' });
+    }
+
+    if (credentials.isActive === false) {
+      return res.status(403).json({ message: 'Account has been deactivated. Please contact support.' });
     }
 
     // Verify password
     const isValid = await bcrypt.compare(password, credentials.passwordHash);
     if (!isValid) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(401).json({ message: 'Invalid username or password' });
     }
 
     // Get or create user  
@@ -153,4 +156,3 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(500).json({ error: 'Failed to login' });
   }
 }
-

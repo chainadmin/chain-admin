@@ -9,6 +9,7 @@ import {
   type LoginMutationPayload,
   type LoginForm,
 } from "../consumer-login-helpers";
+import { loginDatesMatch, normalizeLoginIdentifier } from "../../../../shared/utils/loginNormalization";
 
 test("selecting an agency persists the choice before retrying login", async () => {
   const chosenAgency: AgencyContext = {
@@ -20,7 +21,9 @@ test("selecting an agency persists the choice before retrying login", async () =
   const form: LoginForm = {
     email: "alpha@example.com",
     dateOfBirth: "2000-01-01",
+    fileNumber: "",
     agreeToSms: true,
+    agreeToTerms: true,
   };
 
   const events: string[] = [];
@@ -42,10 +45,23 @@ test("selecting an agency persists the choice before retrying login", async () =
     {
       email: form.email,
       dateOfBirth: form.dateOfBirth,
+      fileNumber: form.fileNumber,
       agreeToSms: form.agreeToSms,
+      agreeToTerms: form.agreeToTerms,
       tenantSlug: chosenAgency.slug,
     },
   ]);
+});
+
+test("consumer verification accepts common stored DOB formats without timezone shifts", () => {
+  assert.equal(loginDatesMatch("2000-01-02", "01/02/2000"), true);
+  assert.equal(loginDatesMatch("2000-01-02", "2000-01-02T00:00:00.000Z"), true);
+  assert.equal(loginDatesMatch("2000-01-02", "2000-02-01"), false);
+  assert.equal(loginDatesMatch("2023-02-29", "2023-02-29"), false);
+});
+
+test("login identifiers ignore accidental whitespace and casing", () => {
+  assert.equal(normalizeLoginIdentifier("  User@Example.COM "), "user@example.com");
 });
 
 test("agency context is written to both storage layers when available", () => {
