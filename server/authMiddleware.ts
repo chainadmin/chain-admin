@@ -135,6 +135,18 @@ export const requireVoiceProduct: RequestHandler = async (req: any, res, next) =
     if (!hasProduct || tenant.voipEnabled === false) {
       return res.status(403).json({ message: "Business Phone is not enabled for this organization" });
     }
+    if (tenant.chiamoConnectEnabled === true) {
+      const { getChiamoPhoneSystemAccess } = await import("./chiamoAccess");
+      const access = await getChiamoPhoneSystemAccess(tenantId);
+      if (!access.allowed) {
+        return res.status(402).json({
+          message: access.reason === "BILLING_INACTIVE"
+            ? "The Chiamo phone system is unavailable because billing is not active."
+            : "The Chiamo phone system is disabled for this organization.",
+          code: access.reason,
+        });
+      }
+    }
     return next();
   } catch (error) {
     console.error("Error checking Voice product access:", error);

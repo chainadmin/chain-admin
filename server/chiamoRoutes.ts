@@ -82,6 +82,13 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
   app.put("/api/admin/chiamo/tenants/:tenantId/billing", isPlatformAdmin, async (req, res) => {
     const value = z.object({ planId: z.enum(["starter", "business", "professional", "enterprise"]), customBasePriceCents: z.number().int().min(0).nullable().optional(), includedUsers: z.number().int().positive().nullable().optional(), additionalUserPriceCents: z.number().int().min(0).nullable().optional(), additionalNumberPriceCents: z.number().int().min(0).optional(), smsAddonEnabled: z.boolean(), smsAllowance: z.number().int().min(0).optional(), smsOverageMicros: z.number().int().min(0).optional(), customCharges: z.array(z.object({ name: z.string(), cents: z.number().int() })).optional(), discounts: z.array(z.object({ name: z.string(), cents: z.number().int() })).optional(), billingStatus: z.enum(chiamoBillingStatuses), startDate: z.string().nullable().optional(), nextBillingDate: z.string().nullable().optional(), notes: z.string().nullable().optional() }).parse(req.body);
     const [subscription] = await db.insert(chiamoSubscriptions).values({ tenantId: req.params.tenantId, ...value }).onConflictDoUpdate({ target: chiamoSubscriptions.tenantId, set: { ...value, updatedAt: new Date() } }).returning();
+    // Nonpayment disables the complete phone system immediately. SMS remains a
+    // separate add-on, but cannot bypass account/billing suspension.
+    if (["PAST_DUE", "SUSPENDED", "CANCELLED"].includes(value.billingStatus)) {
+      await db.insert(chiamoServiceConfigurations).values({ tenantId:req.params.tenantId, voiceEnabled:false, inboundEnabled:false, outboundEnabled:false, recordingEnabled:false, voicemailEnabled:false, routingEnabled:false, ivrEnabled:false })
+        .onConflictDoUpdate({ target:chiamoServiceConfigurations.tenantId, set:{ voiceEnabled:false, inboundEnabled:false, outboundEnabled:false, recordingEnabled:false, voicemailEnabled:false, routingEnabled:false, ivrEnabled:false, updatedAt:new Date() } });
+      await db.update(tenants).set({ voipEnabled:false }).where(and(eq(tenants.id,req.params.tenantId),eq(tenants.chiamoConnectEnabled,true)));
+    }
     res.json(subscription);
   });
   app.post("/api/admin/chiamo/leads/:id/resend-notification", isPlatformAdmin, async (req, res) => {
@@ -107,9 +114,15 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
     res.json({ counts: { newLeads: leads.filter(x=>x.status==='NEW').length, awaitingContact: leads.filter(x=>['NEW','CONTACTED'].includes(x.status)).length, qualified: leads.filter(x=>x.status==='QUALIFIED').length, setupInProgress: customers.filter(x=>x.service?.setupStatus!=='COMPLETE').length, activeCustomers: customers.filter(x=>x.service?.accountActive).length, awaitingNumber: customers.filter(x=>!x.service?.setupChecklist?.phoneNumberAssigned).length, awaitingSms: customers.filter(x=>x.subscription?.smsAddonEnabled&&!x.service?.smsEnabled).length, billingIssues: customers.filter(x=>['PAST_DUE','SUSPENDED'].includes(x.subscription?.billingStatus||'')).length }, recentActivity: leads.slice(0,10) });
   });
   app.put("/api/admin/chiamo/customers/:tenantId/services", isPlatformAdmin, async (req, res) => {
-    const value = z.object({ accountActive:z.boolean().optional(), customerLoginEnabled:z.boolean().optional(), voiceEnabled:z.boolean().optional(), inboundEnabled:z.boolean().optional(), outboundEnabled:z.boolean().optional(), recordingEnabled:z.boolean().optional(), voicemailEnabled:z.boolean().optional(), routingEnabled:z.boolean().optional(), ivrEnabled:z.boolean().optional(), smsEnabled:z.boolean().optional(), smsStatus:z.enum(chiamoSmsStatuses).optional(), setupStatus:z.enum(['NOT_STARTED','IN_PROGRESS','COMPLETE']).optional(), setupChecklist:z.record(z.boolean()).optional(), testStatuses:z.record(z.enum(chiamoTestStatuses)).optional(), providerNotes:z.string().max(10000).nullable().optional(), internalNotes:z.string().max(10000).nullable().optional() }).parse(req.body);
-    const [config] = await db.insert(chiamoServiceConfigurations).values({ tenantId:req.params.tenantId,...value }).onConflictDoUpdate({target:chiamoServiceConfigurations.tenantId,set:{...value,updatedAt:new Date()}}).returning();
-    // Mirror only the established shared Voice gate; fine-grained Chiamo gates remain in this configuration.
+    const value = z.object({ accountActive:z.boolean().optional(), customerLoginEnabled:z.boolean().optional(), voiceEnabled:z.boolean().optional(), smsEnabled:z.boolean().optional(), smsStatus:z.enum(chiamoSmsStatuses).optional(), setupStatus:z.enum(['NOT_STARTED','IN_PROGRESS','COMPLETE']).optional(), setupChecklist:z.record(z.boolean()).optional(), testStatuses:z.record(z.enum(chiamoTestStatuses)).optional(), providerNotes:z.string().max(10000).nullable().optional(), internalNotes:z.string().max(10000).nullable().optional() }).parse(req.body);
+    if (value.voiceEnabled === true) {
+      const [subscription] = await db.select({ billingStatus:chiamoSubscriptions.billingStatus }).from(chiamoSubscriptions).where(eq(chiamoSubscriptions.tenantId,req.params.tenantId)).limit(1);
+      if (subscription?.billingStatus !== "ACTIVE") return res.status(409).json({ message:"Billing must be ACTIVE before the Chiamo phone system can be enabled.", code:"BILLING_INACTIVE" });
+    }
+    const bundledVoice = value.voiceEnabled === undefined ? {} : { voiceEnabled:value.voiceEnabled, inboundEnabled:value.voiceEnabled, outboundEnabled:value.voiceEnabled, recordingEnabled:value.voiceEnabled, voicemailEnabled:value.voiceEnabled, routingEnabled:value.voiceEnabled, ivrEnabled:value.voiceEnabled };
+    const normalized = { ...value, ...bundledVoice };
+    const [config] = await db.insert(chiamoServiceConfigurations).values({ tenantId:req.params.tenantId,...normalized }).onConflictDoUpdate({target:chiamoServiceConfigurations.tenantId,set:{...normalized,updatedAt:new Date()}}).returning();
+    // Chiamo Voice is sold and suspended as one complete phone system.
     if (value.voiceEnabled !== undefined) await db.update(tenants).set({voipEnabled:value.voiceEnabled}).where(and(eq(tenants.id,req.params.tenantId),eq(tenants.chiamoConnectEnabled,true)));
     res.json(config);
   });

@@ -25650,6 +25650,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/voice/outbound', async (req, res) => {
     try {
       const { To, From, CallSid } = req.body;
+      // Twilio Client identities are tenantId_userId. Enforce Chiamo billing and
+      // the single bundled phone-system switch again at the provider boundary.
+      const clientTenantId = typeof From === 'string' && From.startsWith('client:') ? From.slice(7).split('_')[0] : null;
+      if (clientTenantId) {
+        const { getChiamoPhoneSystemAccess } = await import('./chiamoAccess');
+        const access = await getChiamoPhoneSystemAccess(clientTenantId);
+        if (access.isChiamo && !access.allowed) {
+          res.type('text/xml');
+          return res.send('<Response><Say>Your Chiamo phone system is not active.</Say><Hangup/></Response>');
+        }
+      }
       
       const { generateTwiML } = await import('./twilioVoiceService');
       
@@ -25682,6 +25693,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.type('text/xml');
         res.send('<Response><Say>This number is not configured. Goodbye.</Say></Response>');
         return;
+      }
+
+      const { getChiamoPhoneSystemAccess } = await import('./chiamoAccess');
+      const phoneAccess = await getChiamoPhoneSystemAccess(tenantId);
+      if (phoneAccess.isChiamo && !phoneAccess.allowed) {
+        res.type('text/xml');
+        return res.send('<Response><Say>This phone system is not currently active.</Say><Hangup/></Response>');
       }
 
       // Get all agents with VoIP access for this tenant
