@@ -26,6 +26,8 @@ const formatCurrency = (amount: number) => {
 export default function GlobalAdmin() {
   const { toast } = useToast();
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+  const chiamoLeadsQuery = useQuery<any[]>({ queryKey: ['/api/admin/chiamo/leads'], enabled: isAdminAuthenticated });
+  const chiamoUsageQuery = useQuery<any>({ queryKey: ['/api/admin/chiamo/usage'], enabled: isAdminAuthenticated });
   
   // Form state for creating new agency
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -1280,6 +1282,11 @@ export default function GlobalAdmin() {
           </Dialog>
           </div>
         </div>
+        <section className="mb-8 rounded-xl border border-emerald-400/20 bg-[#101a2d] p-6 text-blue-50">
+          <div className="flex items-center justify-between"><div><p className="text-xs font-bold tracking-[.18em] text-emerald-400">CHIAMO CONNECT</p><h2 className="mt-1 text-2xl font-bold">Leads &amp; profitability review</h2></div><Badge className="bg-emerald-600">Admin only</Badge></div>
+          <h3 className="mt-6 font-bold">Chiamo Leads</h3><div className="mt-3 overflow-x-auto"><table className="w-full min-w-[900px] text-left text-sm"><thead className="text-blue-200/70"><tr>{['Date','Business','Contact','Phone','Email','Users Needed','Plan Interest','Texting Interest','Status','Assigned To'].map(h=><th className="p-2">{h}</th>)}</tr></thead><tbody>{(chiamoLeadsQuery.data||[]).map(l=><tr className="border-t border-white/10"><td className="p-2">{new Date(l.createdAt).toLocaleDateString()}</td><td className="p-2 font-semibold">{l.businessName}</td><td className="p-2">{l.firstName} {l.lastName}</td><td className="p-2">{l.businessPhone}</td><td className="p-2">{l.businessEmail}</td><td className="p-2">{l.phoneUsersNeeded}</td><td className="p-2">{l.planInterest}</td><td className="p-2">{l.textingInterest?'Yes':'No'}</td><td className="p-2">{l.status}</td><td className="p-2">{l.assignedTo||'Unassigned'}</td></tr>)}</tbody></table>{!chiamoLeadsQuery.data?.length&&<p className="py-5 text-blue-200/60">No Chiamo inquiries yet.</p>}</div>
+          <h3 className="mt-8 font-bold">Monthly voice usage &amp; estimated margin</h3><div className="mt-3 overflow-x-auto"><table className="w-full min-w-[1000px] text-left text-sm"><thead className="text-blue-200/70"><tr>{['Organization','Plan','Revenue','Users','Numbers','Inbound','Outbound','Total Minutes','Recording Cost','Voice Cost','Number Cost','Gross Margin','Usage Flag'].map(h=><th className="p-2">{h}</th>)}</tr></thead><tbody>{(chiamoUsageQuery.data?.organizations||[]).map((o:any)=><tr className="border-t border-white/10"><td className="p-2 font-semibold">{o.organization}</td><td className="p-2">{o.plan||'Pending'}</td><td className="p-2">{formatCurrency((o.revenue||0)/100)}</td><td className="p-2">{o.users}</td><td className="p-2">{o.phoneNumbers}</td><td className="p-2">{Math.ceil(o.inboundSeconds/60)} min</td><td className="p-2">{Math.ceil(o.outboundSeconds/60)} min</td><td className="p-2">{o.totalMinutes}</td><td className="p-2">{formatCurrency(o.estimatedRecordingCostCents/100)}</td><td className="p-2">{formatCurrency(o.estimatedVoiceProviderCostCents/100)}</td><td className="p-2">{formatCurrency(o.estimatedPhoneNumberCostCents/100)}</td><td className="p-2">{formatCurrency(o.estimatedGrossMarginCents/100)}</td><td className="p-2"><Badge variant="outline">{o.usageLevel}</Badge></td></tr>)}</tbody></table></div>
+        </section>
 
         {/* Platform Stats */}
         {statsLoading ? (

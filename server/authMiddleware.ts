@@ -39,6 +39,7 @@ export const authenticateUser: RequestHandler = async (req: any, res, next) => {
         isImpersonation: decoded.isImpersonation || false,
         role: userRole,
         restrictedServices: restrictedServices,
+        product: decoded.product || 'chain',
         voipAccess,
         claims: {
           sub: decoded.userId
