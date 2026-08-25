@@ -58,6 +58,7 @@ import { eventService } from "./eventService";
 import { uploadLogo } from "./r2Storage";
 import externalApiRouter from "./external-api";
 import { registerWalletRoutes } from "./walletRoutes";
+import { registerChiamoRoutes } from "./chiamoRoutes";
 import { walletService, InsufficientFundsError } from "./walletService";
 import { AuthnetService } from "./authnetService";
 import bcrypt from "bcryptjs";
@@ -1657,10 +1658,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api', (req, res, next) => {
     const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(':')[0].toLowerCase();
     const chiamoDomain = (process.env.CHIAMO_DOMAIN || 'chiamoconnect.com').toLowerCase();
-    const chiamoAppDomain = (process.env.CHIAMO_APP_DOMAIN || `app.${chiamoDomain}`).toLowerCase();
+    const chiamoAppDomain = (process.env.CHIAMO_APP_DOMAIN || chiamoDomain).toLowerCase();
+    const allowed = ['/agency/', '/auth/', '/voip/', '/voice/', '/team-members', '/settings', '/health', '/chiamo/'];
     const isChiamoOrigin = host === chiamoDomain || host === chiamoAppDomain || host.endsWith(`.${chiamoDomain}`);
-    if (!isChiamoOrigin) return next();
-    const allowed = ['/agency/', '/auth/', '/voip/', '/voice/', '/team-members', '/settings', '/health'];
+    // A Chiamo-issued token stays constrained even if replayed against a Chain host.
+    let isChiamoToken = false;
+    const bearer = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : '';
+    if (bearer) {
+      try { isChiamoToken = (jwt.verify(bearer, process.env.JWT_SECRET || 'your-secret-key') as any).product === 'chiamo'; } catch { /* normal auth returns the appropriate error */ }
+    }
+    if (!isChiamoOrigin && !isChiamoToken) return next();
     if (allowed.some(prefix => req.path === prefix || req.path.startsWith(prefix))) return next();
     return res.status(403).json({ message: 'This Chain service is not included with Chiamo Connect.' });
   });
@@ -8066,6 +8073,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           email: credentials.email,
           role: credentials.role,
           restrictedServices: credentials.restrictedServices || [],
+          product: req.body.product === 'chiamo' ? 'chiamo' : 'chain',
         },
         jwtSecretOrFail(),
         { expiresIn: '7d' }
@@ -20444,6 +20452,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     next();
   };
+
+  registerChiamoRoutes(app, isPlatformAdmin);
 
   // Impersonate tenant (Global Admin only) - generates a JWT token to log in as any tenant
   app.post('/api/admin/impersonate-tenant/:tenantId', isPlatformAdmin, async (req: any, res) => {
