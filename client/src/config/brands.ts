@@ -29,7 +29,7 @@ export const brands: Record<ProductBrand, BrandConfiguration> = {
     legalCompany: "Chain Software Group LLC",
     domain: env.VITE_CHIAMO_DOMAIN || "chiamoconnect.com",
     appDomain: env.VITE_CHIAMO_APP_DOMAIN || "chiamoconnect.com",
-    supportEmail: env.VITE_CHIAMO_SUPPORT_EMAIL || "support@chainsoftwaregroup.com",
+    supportEmail: env.VITE_CHIAMO_SUPPORT_EMAIL || "support@chiamoconnect.com",
     logo: "/chiamo-logo.svg", favicon: "/chiamo-favicon.svg",
     colors: { primary: "#10b981", secondary: "#082f49", accent: "#67e8f9" },
     typography: { heading: "Inter, sans-serif", body: "Inter, sans-serif" },

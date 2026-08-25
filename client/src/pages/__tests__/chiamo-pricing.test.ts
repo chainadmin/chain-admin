@@ -8,7 +8,7 @@ test("Chiamo plans remain isolated at approved initial prices", () => {
   ]);
   assert.equal(chiamoTextingAddon.monthlyPriceCents, 12500);
   assert.equal(chiamoTextingAddon.includedSegments, 3500);
-  assert.equal(CHIAMO_SUPPORT_EMAIL, "support@chainsoftwaregroup.com");
+  assert.equal(CHIAMO_SUPPORT_EMAIL, "support@chiamoconnect.com");
 });
 
 test("Business example is $599 and has no voice-minute line item", () => {
