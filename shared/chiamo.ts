@@ -7,7 +7,10 @@ export const chiamoPlans = [
 ] as const;
 
 export const chiamoTextingAddon = { monthlyPriceCents: 12500, includedSegments: 3500 } as const;
-export const chiamoLeadStatuses = ["NEW", "CONTACTED", "QUALIFIED", "SETUP IN PROGRESS", "CONVERTED", "NOT INTERESTED", "CLOSED"] as const;
+export const chiamoLeadStatuses = ["NEW", "CONTACTED", "QUALIFIED", "SETUP_IN_PROGRESS", "CONVERTED", "NOT_INTERESTED", "CLOSED"] as const;
+export const chiamoBillingStatuses = ["PENDING_SETUP", "ACTIVE", "PAST_DUE", "SUSPENDED", "CANCELLED"] as const;
+export const chiamoSmsStatuses = ["NOT_REQUESTED", "REQUESTED", "REGISTRATION_REQUIRED", "REGISTRATION_PENDING", "ACTIVE", "FAILED", "SUSPENDED"] as const;
+export const chiamoTestStatuses = ["NOT_TESTED", "PASSED", "FAILED"] as const;
 export const chiamoUsageLevels = ["NORMAL", "ELEVATED", "HIGH", "REVIEW REQUIRED"] as const;
 
 export function calculateChiamoMonthlyService(planId: string, users: number, texting: boolean, customBasePriceCents?: number | null) {

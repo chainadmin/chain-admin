@@ -41,6 +41,7 @@ import TermsOfService from "@/pages/terms-of-service";
 import SmsOptInDisclosure from "@/pages/sms-opt-in";
 import TenantSetup from "@/components/tenant-setup";
 import GlobalAdmin from "@/pages/global-admin";
+import ChiamoAdmin from "@/pages/chiamo-admin";
 import TenantAgreement from "@/pages/tenant-agreement";
 import EmailTest from "@/pages/email-test";
 import FixDatabase from "@/pages/fix-db";
@@ -104,6 +105,7 @@ function Router() {
   const { toast } = useToast();
   const isMobileApp = mobileConfig.isNativePlatform;
   const pathname = window.location.pathname;
+  const chiamoAdminRoutePaths = ["/admin/chiamo", "/admin/chiamo/"] as const;
   const adminRoutePaths = ["/admin", "/admin/", "/Admin", "/Admin/", "/global-admin", "/global-admin/"] as const;
   const createRouteElements = (
     paths: readonly string[],
@@ -421,6 +423,7 @@ function Router() {
       <Route key="public-sign" path="/sign/:requestId" component={SignDocument} />,
       <Route key="public-softphone" path="/softphone" component={Softphone} />,
       <Route key="public-install" path="/install" component={InstallPage} />,
+      ...createRouteElements(chiamoAdminRoutePaths, ChiamoAdmin, "public-chiamo-admin"),
       ...createRouteElements(adminRoutePaths, GlobalAdmin, "public-admin"),
       <Route key="public-fallback" path="/:rest*" component={NotFound} />
     ];
@@ -453,6 +456,7 @@ function Router() {
     <Route key="auth-phones" path="/phones" component={Phones} />,
     <Route key="auth-softphone" path="/softphone" component={Softphone} />,
     <Route key="auth-install" path="/install" component={InstallPage} />,
+    ...createRouteElements(chiamoAdminRoutePaths, ChiamoAdmin, "auth-chiamo-admin"),
     ...createRouteElements(adminRoutePaths, GlobalAdmin, "auth-admin"),
     <Route key="auth-agency-login" path="/agency-login" component={AgencyLogin} />,
     <Route key="auth-agency-register" path="/agency-register" component={AgencyRegistration} />,
