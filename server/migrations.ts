@@ -2117,6 +2117,16 @@ export async function runMigrations() {
       console.log(`  ⚠ wallet micros/auto-reload columns: ${err.message}`);
     }
 
+    // Product entitlements are part of every Drizzle tenant selection, including
+    // customer and administrator login. Ensure they exist before serving traffic.
+    try {
+      await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS chain_core_enabled BOOLEAN NOT NULL DEFAULT TRUE`);
+      await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS chiamo_connect_enabled BOOLEAN NOT NULL DEFAULT FALSE`);
+      console.log('  ✓ tenant product entitlement columns');
+    } catch (err: any) {
+      console.log(`  ⚠ tenant product entitlement columns: ${err.message}`);
+    }
+
     // Enterprise capacity: configurable tenant seats and tenant-scoped Postmark routing.
     try {
       await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS max_active_users INTEGER NOT NULL DEFAULT 2`);

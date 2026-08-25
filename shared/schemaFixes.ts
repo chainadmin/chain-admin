@@ -8,6 +8,7 @@ let arrangementOptionsSchemaPromise: Promise<void> | null = null;
 let documentsSchemaPromise: Promise<void> | null = null;
 let tenantSettingsSchemaPromise: Promise<void> | null = null;
 let proposedArrangementsSchemaPromise: Promise<void> | null = null;
+let tenantProductEntitlementsSchemaPromise: Promise<void> | null = null;
 
 const runWithRetryReset = (fn: () => Promise<void>, assign: (value: Promise<void> | null) => void) => {
   return fn().catch(error => {
@@ -173,7 +174,38 @@ export function ensureProposedArrangementsSchema(db: DrizzleDatabase): Promise<v
   return proposedArrangementsSchemaPromise;
 }
 
+/**
+ * Keep tenant reads compatible when an application deployment reaches the
+ * database before the product-entitlements migration has been applied.
+ *
+ * Drizzle selects every declared tenant column for `select()` calls. A missing
+ * entitlement column therefore prevented otherwise unrelated customer and
+ * administrator login queries from reading their tenant record.
+ */
+export function ensureTenantProductEntitlementsSchema(db: DrizzleDatabase): Promise<void> {
+  if (!tenantProductEntitlementsSchemaPromise) {
+    tenantProductEntitlementsSchemaPromise = runWithRetryReset(async () => {
+      await db.execute(sql`
+        ALTER TABLE tenants
+        ADD COLUMN IF NOT EXISTS chain_core_enabled boolean NOT NULL DEFAULT true
+      `);
+
+      await db.execute(sql`
+        ALTER TABLE tenants
+        ADD COLUMN IF NOT EXISTS chiamo_connect_enabled boolean NOT NULL DEFAULT false
+      `);
+    }, value => {
+      tenantProductEntitlementsSchemaPromise = value;
+    });
+  }
+
+  return tenantProductEntitlementsSchemaPromise;
+}
+
 export async function ensureCoreSchema(db: DrizzleDatabase): Promise<void> {
+  // Tenant columns are required by authentication, so repair them before the
+  // other feature-specific schema checks.
+  await ensureTenantProductEntitlementsSchema(db);
   await ensureTenantSettingsSchema(db);
   await ensureDocumentsSchema(db);
   await ensureArrangementOptionsSchema(db);

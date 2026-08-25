@@ -20384,14 +20384,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { username, password } = req.body;
       
-      // Environment variables allow credential rotation while preserving the
-      // existing deployment credentials when they have not been configured.
-      const adminUsername = process.env.ADMIN_USERNAME || 'ChainAdmin';
-      const adminPassword = process.env.ADMIN_PASSWORD || 'W@yp0intsolutions';
-      const usernameMatches = typeof username === 'string' && username.trim() === adminUsername;
-      const passwordMatches = typeof password === 'string' && password === adminPassword;
-
-      if (usernameMatches && passwordMatches) {
+      // Hardcoded admin credentials (same as frontend)
+      if (username === 'ChainAdmin' && password === 'W@yp0intsolutions') {
         if (!process.env.JWT_SECRET) {
           return res.status(500).json({ message: "Server configuration error" });
         }

@@ -6,13 +6,12 @@ import { z } from 'zod';
 import { getDb } from '../_lib/db';
 import { JWT_SECRET } from '../_lib/auth';
 import { accounts, consumers, tenants } from '../../shared/schema';
-import { loginDatesMatch, normalizeLoginIdentifier } from '../../shared/utils/loginNormalization';
 
 const loginSchema = z.object({
-  email: z.string().trim().email(),
+  email: z.string().email(),
   dateOfBirth: z.string().min(1).optional(),
   fileNumber: z.string().min(1).optional(),
-  tenantSlug: z.string().trim().optional()
+  tenantSlug: z.string().optional()
 }).refine(data => Boolean(data.dateOfBirth || data.fileNumber), {
   message: 'Either date of birth or file number is required'
 });
@@ -36,8 +35,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const { email, dateOfBirth, fileNumber, tenantSlug: bodyTenantSlug } = parsed.data;
-    const normalizedEmail = normalizeLoginIdentifier(email);
-    const tenantSlug = (bodyTenantSlug || (req as any)?.agencySlug)?.trim().toLowerCase();
+    const tenantSlug = bodyTenantSlug || (req as any)?.agencySlug;
 
     const db = await getDb();
 
@@ -63,7 +61,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .where(
           and(
             eq(consumers.tenantId, tenant.id),
-            sql`LOWER(TRIM(${consumers.email})) = ${normalizedEmail}`
+            sql`LOWER(${consumers.email}) = LOWER(${email})`
           )
         )
         .limit(1);
@@ -85,7 +83,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         })
         .from(consumers)
         .leftJoin(tenants, eq(consumers.tenantId, tenants.id))
-        .where(sql`LOWER(TRIM(${consumers.email})) = ${normalizedEmail}`);
+        .where(sql`LOWER(${consumers.email}) = LOWER(${email})`);
 
       if (consumerRows.length === 0) {
         return res.status(404).json({
@@ -204,9 +202,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
+    // Verify with either credential: DOB match OR file number match is sufficient.
+    // Normalize date format (both should be YYYY-MM-DD)
+    const normalizeDate = (dateStr: string) => {
+      try {
+        // Create date object to validate, then extract components to avoid timezone issues
+        const date = new Date(dateStr);
+        if (Number.isNaN(date.getTime())) {
+          return null;
+        }
+        // Return in YYYY-MM-DD format
+        return date.toISOString().split('T')[0];
+      } catch {
+        return null;
+      }
+    };
+
     let dobVerified = false;
     if (dateOfBirth && consumer.dateOfBirth) {
-      dobVerified = loginDatesMatch(dateOfBirth, consumer.dateOfBirth);
+      const normalizedProvided = normalizeDate(dateOfBirth);
+      const normalizedStored = normalizeDate(consumer.dateOfBirth);
+      dobVerified = Boolean(normalizedProvided && normalizedStored && normalizedProvided === normalizedStored);
     }
 
     let fileVerified = false;
