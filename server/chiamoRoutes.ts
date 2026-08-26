@@ -1,6 +1,8 @@
 import type { Express, RequestHandler } from "express";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { z } from "zod";
+import bcrypt from "bcryptjs";
+import crypto from "node:crypto";
 import { db } from "./db";
 import { emailService } from "./emailService";
 import { storage } from "./storage";
@@ -45,7 +47,7 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
     const [subscription] = await db.select().from(chiamoSubscriptions).where(eq(chiamoSubscriptions.tenantId, tenant.id)).limit(1);
     const [{ count: userCount }] = await db.select({ count: sql<number>`count(*)::int` }).from(agencyCredentials).where(and(eq(agencyCredentials.tenantId, tenant.id), eq(agencyCredentials.isActive, true)));
     const [{ count: numberCount }] = await db.select({ count: sql<number>`count(*)::int` }).from(voipPhoneNumbers).where(and(eq(voipPhoneNumbers.tenantId, tenant.id), eq(voipPhoneNumbers.isActive, true)));
-    const calculation = subscription ? calculateChiamoMonthlyService(subscription.planId, userCount, subscription.smsAddonEnabled, subscription.customBasePriceCents) : null;
+    const calculation = subscription ? calculateChiamoMonthlyService(subscription.planId, userCount, subscription.smsAddonEnabled, subscription) : null;
     res.json({ tenant: { name: tenant.name, chiamoSmsEnabled: service?.smsEnabled === true }, service, subscription, userCount, numberCount, calculation, supportEmail: CHIAMO_SUPPORT_EMAIL });
   });
 
@@ -79,6 +81,42 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
     if (!lead) return res.status(404).json({ message: "Lead not found" });
     res.json(lead);
   });
+  app.post("/api/admin/chiamo/leads/:id/convert", isPlatformAdmin, async (req, res) => {
+    const input = z.object({
+      company: z.object({ businessName:z.string().trim().min(1).max(200), firstName:z.string().trim().min(1).max(100), lastName:z.string().trim().min(1).max(100), email:z.string().email(), phone:z.string().trim().min(7).max(40) }),
+      planId: z.enum(["starter","business","professional","enterprise"]), customBasePriceCents:z.number().int().min(0).nullable().optional(), includedUsers:z.number().int().positive(), initialActiveUsers:z.number().int().positive(), additionalUserPriceCents:z.number().int().min(0),
+      requiredNumberCount:z.number().int().min(0), numbersToPort:z.string().max(2000).optional(), voiceEnabled:z.boolean(), smsEnabled:z.boolean(), smsStatus:z.enum(chiamoSmsStatuses), smsAllowance:z.number().int().min(0).default(3500), smsOverageMicros:z.number().int().min(0).default(0),
+      billingStatus:z.enum(chiamoBillingStatuses), startDate:z.string().nullable().optional(), nextBillingDate:z.string().nullable().optional(), billingNotes:z.string().max(10000).nullable().optional(),
+    }).parse(req.body);
+    const [lead] = await db.select().from(chiamoLeads).where(eq(chiamoLeads.id, req.params.id)).limit(1);
+    if (!lead) return res.status(404).json({ message:"Lead not found" });
+    if (lead.convertedTenantId) return res.status(409).json({ message:"Lead has already been converted", tenantId:lead.convertedTenantId });
+    if (input.smsEnabled && input.smsStatus !== "ACTIVE") return res.status(409).json({ message:"SMS cannot be enabled before registration and compliance are ACTIVE." });
+    if (input.voiceEnabled && input.billingStatus !== "ACTIVE") return res.status(409).json({ message:"Billing must be ACTIVE before Voice can be enabled." });
+    const slugBase = input.company.businessName.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,40) || "chiamo";
+    const existing = await storage.getTenantByEmail(input.company.email);
+    const result = await db.transaction(async tx => {
+      let tenant = existing;
+      if (!tenant) [tenant] = await tx.insert(tenants).values({ name:input.company.businessName, slug:`${slugBase}-${crypto.randomBytes(3).toString("hex")}`, businessName:input.company.businessName, email:input.company.email.toLowerCase(), phoneNumber:input.company.phone, ownerFirstName:input.company.firstName, ownerLastName:input.company.lastName, businessType:"call_center", chainCoreEnabled:false, chiamoConnectEnabled:true, voipEnabled:input.voiceEnabled, smsServiceEnabled:input.smsEnabled, maxActiveUsers:input.includedUsers, isTrialAccount:false, isPaidAccount:input.billingStatus==="ACTIVE" }).returning();
+      else [tenant] = await tx.update(tenants).set({ chiamoConnectEnabled:true, voipEnabled:input.voiceEnabled, maxActiveUsers:input.includedUsers }).where(eq(tenants.id,tenant.id)).returning();
+      const existingUser = await tx.select().from(agencyCredentials).where(eq(agencyCredentials.email,input.company.email.toLowerCase())).limit(1);
+      let credential = existingUser[0];
+      if (!credential) {
+        const passwordHash = await bcrypt.hash(crypto.randomBytes(48).toString("base64url"), 10);
+        [credential] = await tx.insert(agencyCredentials).values({ tenantId:tenant.id, username:input.company.email.toLowerCase(), email:input.company.email.toLowerCase(), firstName:input.company.firstName, lastName:input.company.lastName, role:"owner", passwordHash, voipAccess:input.voiceEnabled }).returning();
+      }
+      await tx.insert(chiamoSubscriptions).values({ tenantId:tenant.id, planId:input.planId, customBasePriceCents:input.customBasePriceCents, includedUsers:input.includedUsers, additionalUserPriceCents:input.additionalUserPriceCents, smsAddonEnabled:input.smsEnabled, smsAllowance:input.smsAllowance, smsOverageMicros:input.smsOverageMicros, billingStatus:input.billingStatus, startDate:input.startDate, nextBillingDate:input.nextBillingDate, notes:input.billingNotes }).onConflictDoUpdate({ target:chiamoSubscriptions.tenantId, set:{ planId:input.planId, customBasePriceCents:input.customBasePriceCents, includedUsers:input.includedUsers, additionalUserPriceCents:input.additionalUserPriceCents, smsAddonEnabled:input.smsEnabled, smsAllowance:input.smsAllowance, smsOverageMicros:input.smsOverageMicros, billingStatus:input.billingStatus, startDate:input.startDate, nextBillingDate:input.nextBillingDate, notes:input.billingNotes, updatedAt:new Date() } });
+      await tx.insert(chiamoServiceConfigurations).values({ tenantId:tenant.id, accountActive:true, customerLoginEnabled:false, voiceEnabled:input.voiceEnabled, inboundEnabled:input.voiceEnabled, outboundEnabled:input.voiceEnabled, voicemailEnabled:input.voiceEnabled, recordingEnabled:input.voiceEnabled, routingEnabled:input.voiceEnabled, ivrEnabled:input.voiceEnabled, smsEnabled:input.smsEnabled, smsStatus:input.smsStatus, setupStatus:"IN_PROGRESS", setupChecklist:{ businessVerified:true, planSelected:true, billingConfigured:true, primaryUserCreated:true, additionalUsersCreated:input.initialActiveUsers<=1, phoneNumberAssigned:input.requiredNumberCount===0, portCompleted:!input.numbersToPort, voiceProviderConfigured:false, outboundCallingTested:false, inboundCallingTested:false, voicemailTested:false, recordingTested:false, smsRequested:input.smsStatus!=="NOT_REQUESTED", smsRegistrationComplete:input.smsStatus==="ACTIVE", smsSendingTested:false, smsReceivingTested:false, customerInvitationSent:false, customerLoginConfirmed:false, setupComplete:false } }).onConflictDoNothing();
+      await tx.update(chiamoLeads).set({ status:"CONVERTED", convertedTenantId:tenant.id }).where(eq(chiamoLeads.id,lead.id));
+      return { tenant, credential };
+    });
+    const token = crypto.randomBytes(32).toString("hex");
+    await storage.createPasswordResetToken(result.credential.id, token, new Date(Date.now()+24*60*60*1000));
+    const invitationUrl = `${process.env.BASE_URL || "https://chainsoftwaregroup.com"}/agency/reset-password?token=${token}`;
+    const notification = await emailService.sendEmail({ to:input.company.email, subject:"Your Chiamo Connect account is ready", html:`<p>Hello ${input.company.firstName},</p><p>Your Chiamo Connect account is ready.</p><p><a href="${invitationUrl}">Set your password securely</a>. This invitation expires in 24 hours.</p>`, tag:"chiamo-invitation" });
+    if (notification.success) await db.update(chiamoServiceConfigurations).set({ invitationSentAt:new Date(), setupChecklist:sql`setup_checklist || '{"customerInvitationSent":true}'::jsonb` }).where(eq(chiamoServiceConfigurations.tenantId,result.tenant.id));
+    res.status(201).json({ tenantId:result.tenant.id, invitationSent:notification.success });
+  });
   app.put("/api/admin/chiamo/tenants/:tenantId/billing", isPlatformAdmin, async (req, res) => {
     const value = z.object({ planId: z.enum(["starter", "business", "professional", "enterprise"]), customBasePriceCents: z.number().int().min(0).nullable().optional(), includedUsers: z.number().int().positive().nullable().optional(), additionalUserPriceCents: z.number().int().min(0).nullable().optional(), additionalNumberPriceCents: z.number().int().min(0).optional(), smsAddonEnabled: z.boolean(), smsAllowance: z.number().int().min(0).optional(), smsOverageMicros: z.number().int().min(0).optional(), customCharges: z.array(z.object({ name: z.string(), cents: z.number().int() })).optional(), discounts: z.array(z.object({ name: z.string(), cents: z.number().int() })).optional(), billingStatus: z.enum(chiamoBillingStatuses), startDate: z.string().nullable().optional(), nextBillingDate: z.string().nullable().optional(), notes: z.string().nullable().optional() }).parse(req.body);
     const [subscription] = await db.insert(chiamoSubscriptions).values({ tenantId: req.params.tenantId, ...value }).onConflictDoUpdate({ target: chiamoSubscriptions.tenantId, set: { ...value, updatedAt: new Date() } }).returning();
@@ -103,7 +141,7 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
     const enriched = await Promise.all(rows.map(async row => {
       const [{ users }] = await db.select({ users: sql<number>`count(*)::int` }).from(agencyCredentials).where(and(eq(agencyCredentials.tenantId,row.tenant.id),eq(agencyCredentials.isActive,true)));
       const [{ numbers }] = await db.select({ numbers: sql<number>`count(*)::int` }).from(voipPhoneNumbers).where(and(eq(voipPhoneNumbers.tenantId,row.tenant.id),eq(voipPhoneNumbers.isActive,true)));
-      const calc = row.subscription ? calculateChiamoMonthlyService(row.subscription.planId, users, row.subscription.smsAddonEnabled, row.subscription.customBasePriceCents) : null;
+      const calc = row.subscription ? calculateChiamoMonthlyService(row.subscription.planId, users, row.subscription.smsAddonEnabled, row.subscription) : null;
       return { ...row, users, numbers, estimatedMonthlyCents: calc?.totalCents || 0 };
     }));
     res.json(enriched);
